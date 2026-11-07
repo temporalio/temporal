@@ -22,12 +22,12 @@ func TestGate_BlocksUntilReleased(t *testing.T) {
 	require.NoError(t, g.waitForArrived(context.Background(), 1))
 	require.Equal(t, 1, g.numArrived())
 
-	require.Never(t, func() bool {
+	await.RequireHoldsTrue(t, func() bool {
 		select {
 		case <-done:
-			return true
-		default:
 			return false
+		default:
+			return true
 		}
 	}, 50*time.Millisecond, time.Millisecond)
 

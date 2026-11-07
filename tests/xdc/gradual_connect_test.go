@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -91,8 +92,8 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAndRecovers() {
 		}
 	}
 	s.startAndCompleteGradualConnectWorkflow(ctx, active, ns, shedWorkflowID)
-	s.Require().Never(func() bool {
-		return s.gradualConnectWorkflowExists(ctx, standby, ns, shedWorkflowID)
+	await.RequireHolds(ctx, s.T(), func(at *await.T) {
+		require.False(at, s.gradualConnectWorkflowExists(at.Context(), standby, ns, shedWorkflowID))
 	}, 3*time.Second, 200*time.Millisecond)
 
 	s.updateNamespaceClustersWithReplicationConfigs(
