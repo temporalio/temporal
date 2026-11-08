@@ -28,6 +28,16 @@ message NamespaceInfo {
   string description = 4;
   string owner = 5;
   map<string, string> data = 6;
+  NamespaceRestoreInfo restore_info = 7;
+}
+
+message NamespaceRestoreInfo {
+  // Part of the restore job's workflow ID. The job updates this record only while it matches.
+  string restore_id = 1;
+  string host_cluster = 2;
+  temporal.api.enums.v1.NamespaceRestoreState state = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp close_time = 5;
 }
 
 message NamespaceConfig {
