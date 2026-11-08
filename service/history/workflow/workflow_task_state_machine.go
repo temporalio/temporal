@@ -18,6 +18,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -178,6 +179,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	startedClock *clockspb.VectorClock,
 ) (*historyi.WorkflowTaskInfo, error) {
 	// When this function is called from ApplyEvents, workflowTask is nil.
 	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
@@ -210,6 +212,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		Attempt:                     workflowTask.Attempt,
 		AttemptsSinceLastSuccess:    workflowTask.AttemptsSinceLastSuccess,
 		StartedTime:                 startedTime,
+		StartedClock:                startedClock,
 		ScheduledTime:               workflowTask.ScheduledTime,
 		TaskQueue:                   workflowTask.TaskQueue,
 		OriginalScheduledTime:       workflowTask.OriginalScheduledTime,
@@ -607,6 +610,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		startedEventID = startedEvent.GetEventId()
 	}
 
+	var startedClock *clockspb.VectorClock
+	if m.ms.config.EnableWorkflowTaskStartedClock() {
+		if startedClock, err = m.ms.shard.NewVectorClock(); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	workflowTask, err = m.ApplyWorkflowTaskStartedEvent(
 		workflowTask,
 		m.ms.GetCurrentVersion(),
@@ -619,6 +629,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		versioningStamp,
 		redirectCounter,
 		suggestContinueAsNewReasons,
+		startedClock,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -1158,6 +1169,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
 	}
+	m.ms.executionInfo.WorkflowTaskStartedClock = common.CloneProto(workflowTask.StartedClock)
 	m.ms.executionInfo.WorkflowTaskWorkerControlQueue = workflowTask.WorkerControlQueue
 	if !workflowTask.ScheduledTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
@@ -1300,6 +1312,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		Attempt:                     m.ms.executionInfo.WorkflowTaskAttempt,
 		AttemptsSinceLastSuccess:    m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess,
 		StartedTime:                 m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
+		StartedClock:                m.ms.executionInfo.WorkflowTaskStartedClock,
 		WorkerControlQueue:          m.ms.executionInfo.WorkflowTaskWorkerControlQueue,
 		ScheduledTime:               m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
 		TaskQueue:                   m.ms.CurrentTaskQueue(),

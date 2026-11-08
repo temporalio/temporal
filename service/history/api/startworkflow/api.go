@@ -1059,6 +1059,10 @@ func (s *Starter) generateResponse(
 	if err != nil {
 		return nil, err
 	}
+	tokenClock := workflowTaskInfo.StartedClock
+	if tokenClock == nil {
+		tokenClock = clock
+	}
 
 	taskToken := tasktoken.NewWorkflowTaskToken(
 		s.namespace.ID().String(),
@@ -1068,7 +1072,7 @@ func (s *Starter) generateResponse(
 		workflowTaskInfo.StartedEventID,
 		timestamppb.New(workflowTaskInfo.StartedTime),
 		workflowTaskInfo.Attempt,
-		clock,
+		tokenClock,
 		workflowTaskInfo.Version,
 	)
 	serializedToken, err := tokenSerializer.Serialize(taskToken)

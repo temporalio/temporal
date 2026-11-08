@@ -16,18 +16,23 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -36,6 +41,7 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -330,4 +336,46 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 			require.True(t, starter.grantEagerWorkflowDispatch(context.Background()))
 		})
 	}
+}
+
+func TestGenerateResponse_EagerTaskTokenUsesStartedClock(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	shardContext := historyi.NewMockShardContext(ctrl)
+	shardContext.EXPECT().NewVectorClock().Return(&clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 99}, nil).AnyTimes()
+	starter := &Starter{
+		shardContext:    shardContext,
+		tokenSerializer: tasktoken.NewSerializer(),
+		namespace:       tests.LocalNamespaceEntry,
+		request: &historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId:            "workflow-id",
+				RequestEagerExecution: true,
+			},
+		},
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		WorkflowTaskScheduledEventId: 2,
+		WorkflowTaskStartedEventId:   3,
+		WorkflowTaskStartedTime:      timestamppb.New(time.Unix(100, 0)),
+		WorkflowTaskAttempt:          1,
+		WorkflowTaskVersion:          5,
+		WorkflowTaskStartedClock:     &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42},
+	}
+	workflowTaskInfo := &historyi.WorkflowTaskInfo{
+		ScheduledEventID: executionInfo.WorkflowTaskScheduledEventId,
+		StartedEventID:   executionInfo.WorkflowTaskStartedEventId,
+		StartedTime:      executionInfo.WorkflowTaskStartedTime.AsTime(),
+		Attempt:          executionInfo.WorkflowTaskAttempt,
+		Version:          executionInfo.WorkflowTaskVersion,
+		StartedClock:     executionInfo.WorkflowTaskStartedClock,
+	}
+
+	resp, err := starter.generateResponse("run-id", "run-id", workflowTaskInfo, nil)
+	require.NoError(t, err)
+	workerToken, err := tasktoken.NewSerializer().Deserialize(resp.GetEagerWorkflowTask().GetTaskToken())
+	require.NoError(t, err)
+	key := definition.NewWorkflowKey(tests.NamespaceID.String(), "workflow-id", "run-id")
+	protorequire.ProtoEqual(t, workflow.NewStartedWorkflowTaskToken(key, executionInfo), workerToken)
 }
