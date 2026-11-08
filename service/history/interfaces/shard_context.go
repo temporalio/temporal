@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -54,6 +55,7 @@ type (
 
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)
 		GetHistoryClient() historyservice.HistoryServiceClient
+		GetMatchingClient() (matchingservice.MatchingServiceClient, error)
 		GetPayloadSerializer() serialization.Serializer
 
 		GetSearchAttributesProvider() searchattribute.Provider
