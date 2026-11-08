@@ -75,13 +75,18 @@ func (c *sqliteConnector) Connect(ctx context.Context) (driver.Conn, error) {
 
 type sqliteConn struct {
 	sqlitedriver.Conn
-	closed bool
+	closed     bool
+	statements map[string]sqliteStatement
 }
 
 func (c *sqliteConn) Close() error {
-	err := c.Conn.Close()
 	c.closed = true
-	return err
+	var err error
+	for query, stmt := range c.statements {
+		err = errors.Join(err, stmt.Close())
+		delete(c.statements, query)
+	}
+	return errors.Join(err, c.Conn.Close())
 }
 
 // database/sql needs both interfaces to reuse the connection after a cancelled transaction.
@@ -101,6 +106,13 @@ func (c *sqliteConn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *sqliteConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if stmt, ok := c.statements[query]; ok {
+		delete(c.statements, query)
+		return &sqliteStmt{sqliteStatement: stmt, conn: c, query: query}, nil
+	}
 	stmt, err := c.Conn.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -109,7 +121,19 @@ func (c *sqliteConn) PrepareContext(ctx context.Context, query string) (driver.S
 	if !ok {
 		return nil, errors.Join(fmt.Errorf("unexpected SQLite statement type %T", stmt), stmt.Close())
 	}
-	return &sqliteStmt{sqliteStatement: native}, nil
+	switch query {
+	case getExecutionQuery, lockExecutionQueryBase, lockCurrentExecutionJoinExecutionsQuery, getHistoryImmediateTasksQuery:
+		return &sqliteStmt{sqliteStatement: native, conn: c, query: query}, nil
+	default:
+		return &sqliteStmt{sqliteStatement: native}, nil
+	}
+}
+
+func (c *sqliteConn) CheckNamedValue(arg *driver.NamedValue) error {
+	if checker, ok := c.Conn.(driver.NamedValueChecker); ok {
+		return checker.CheckNamedValue(arg)
+	}
+	return driver.ErrSkip
 }
 
 func (c *sqliteConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
@@ -124,10 +148,37 @@ type sqliteStatement interface {
 	driver.StmtExecContext
 	driver.StmtQueryContext
 	driver.NamedValueChecker
+	Reset() error
+	ClearBindings() error
 }
 
 type sqliteStmt struct {
 	sqliteStatement
+	conn  *sqliteConn
+	query string
+}
+
+func (s *sqliteStmt) Close() error {
+	stmt := s.sqliteStatement
+	if stmt == nil {
+		return nil
+	}
+	s.sqliteStatement = nil
+	if s.conn == nil || s.conn.closed {
+		return stmt.Close()
+	}
+	if _, ok := s.conn.statements[s.query]; ok {
+		return stmt.Close()
+	}
+	if err := errors.Join(stmt.Reset(), stmt.ClearBindings()); err != nil {
+		return errors.Join(err, stmt.Close())
+	}
+	if s.conn.statements == nil {
+		s.conn.statements = make(map[string]sqliteStatement)
+	}
+	// Keep at most one idle statement per hot query; in-use statements stay with their callers.
+	s.conn.statements[s.query] = stmt
+	return nil
 }
 
 func (s *sqliteStmt) CheckNamedValue(arg *driver.NamedValue) error {
