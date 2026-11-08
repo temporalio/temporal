@@ -1055,9 +1055,15 @@ func (s *Starter) generateResponse(
 		}, nil
 	}
 
-	clock, err := shardCtx.NewVectorClock()
-	if err != nil {
-		return nil, err
+	tokenClock := workflowTaskInfo.StartedClock
+	if tokenClock == nil {
+		// TODO(experimental@whn): not expected since this request started the workflow task; if hit, the
+		// token clock isn't stored and WHN can't be sent for this workflow task.
+		var err error
+		tokenClock, err = shardCtx.NewVectorClock()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewWorkflowTaskToken(
@@ -1068,7 +1074,7 @@ func (s *Starter) generateResponse(
 		workflowTaskInfo.StartedEventID,
 		timestamppb.New(workflowTaskInfo.StartedTime),
 		workflowTaskInfo.Attempt,
-		clock,
+		tokenClock,
 		workflowTaskInfo.Version,
 	)
 	serializedToken, err := tokenSerializer.Serialize(taskToken)
@@ -1078,7 +1084,7 @@ func (s *Starter) generateResponse(
 	return &historyservice.StartWorkflowExecutionResponse{
 		RunId:               runID,
 		FirstExecutionRunId: firstExecutionRunID,
-		Clock:               clock,
+		Clock:               tokenClock,
 		Started:             true,
 		Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Link:                s.generateStartedEventRefLink(runID),
