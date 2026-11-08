@@ -1596,6 +1596,17 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 		BusinessId:        businessID,
 		Mutation:          mutation,
 	})
+	if err != nil && !mutation.GetShadow() {
+		// A start or poll error does not prove the mutation failed: the component
+		// may still commit locally and fan out. The business ID correlates it.
+		d.logger.Warn(
+			"namespace replication authoritative trigger RPC did not complete",
+			tag.WorkflowNamespaceID(mutation.GetNamespaceDetail().GetInfo().GetId()),
+			tag.NewStringTag("business_id", businessID),
+			tag.Operation(mutation.GetOperation().String()),
+			tag.Error(err),
+		)
+	}
 	return err
 }
 
