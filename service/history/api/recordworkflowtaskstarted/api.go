@@ -177,11 +177,22 @@ func Invoke(
 				return nil, err
 			}
 
+			whnCapable := req.PollRequest.GetCapabilities().GetSupportsWorkflowHeartbeatNotification() &&
+				req.PollRequest.GetWorkerControlTaskQueue() != ""
+			if whnCapable {
+				startedClock, err := shardContext.NewVectorClock()
+				if err != nil {
+					return nil, err
+				}
+				mutableState.SetWorkflowTaskStartedClock(startedClock)
+				workflowTask.StartedClock = startedClock
+				mutableState.SetWorkflowTaskWorkerControlTaskQueue(req.PollRequest.GetWorkerControlTaskQueue())
+			}
+
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-				// A speculative workflow task can remain in memory only if starting it did not
-				// produce changes that need to be persisted. Otherwise, closing the transaction
-				// converts it to a normal workflow task and persists all of the changes.
-				updateAction.Noop = !mutableState.IsDirty()
+				// Persist the token clock for a WHN-capable worker. This converts a speculative
+				// workflow task to a normal one.
+				updateAction.Noop = !mutableState.IsDirty() && !whnCapable
 			} else {
 				// Start the deployment transition here only for a normal WFT. For a speculative WFT,
 				// even when dirty mutable state causes the start to be persisted, the transition can
@@ -437,6 +448,7 @@ func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	response.ScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
 	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
 	response.Version = workflowTask.Version
+	response.Clock = workflowTask.StartedClock
 
 	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
 	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
