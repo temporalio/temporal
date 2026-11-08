@@ -397,9 +397,14 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
-	if err != nil {
-		return nil, h.convertError(err)
+	// TODO(experimental@whn): Clock is nil only when a same-request-ID retry returns an already started
+	// workflow task that was started before the upgrade or rebuilt by MutableStateRebuilder; WHN can't be
+	// sent for it.
+	if response.Clock == nil {
+		response.Clock, err = shardContext.NewVectorClock()
+		if err != nil {
+			return nil, h.convertError(err)
+		}
 	}
 	return response, nil
 }

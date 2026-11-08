@@ -442,6 +442,7 @@ func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	response.ScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
 	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
 	response.Version = workflowTask.Version
+	response.Clock = workflowTask.StartedClock
 
 	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
 	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)

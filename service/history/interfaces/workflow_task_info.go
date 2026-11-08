@@ -5,6 +5,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -33,6 +34,8 @@ type WorkflowTaskInfo struct {
 	// Also used for recording latency metrics
 	ScheduledTime time.Time
 	StartedTime   time.Time
+	// StartedClock is the shard clock in the task token sent to the worker. Nil means it is unknown.
+	StartedClock *clockspb.VectorClock
 	// WorkerControlQueue is set only when the worker that started this task supports workflow heartbeat notifications.
 	WorkerControlQueue string
 	// OriginalScheduledTime is to record the first scheduled workflow task during workflow task heartbeat.
