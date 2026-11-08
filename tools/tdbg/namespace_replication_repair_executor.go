@@ -14,6 +14,8 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -76,12 +78,75 @@ type namespaceReplicationRepairApplyResult struct {
 
 type namespaceReplicationRepairer struct {
 	verifier *namespaceReplicationVerifier
+	// client is the source frontend: the source is written directly, and peers
+	// are written through its ApplyRemoteClusterNamespaceRepair relay.
+	client     adminservice.AdminServiceClient
+	rpcTimeout time.Duration
+}
+
+var errNamespaceReplicationRepairRelayUnsupported = errors.New(
+	"the source frontend does not support ApplyRemoteClusterNamespaceRepair; upgrade it before repairing replicas",
+)
+
+// namespaceRepairEndpoint applies an operator-repair mutation to one cluster and
+// reads the namespace back by ID.
+type namespaceRepairEndpoint interface {
+	Apply(ctx context.Context, request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error)
+	ReadByID(ctx context.Context, id string) (*adminservice.GetNamespaceResponse, error)
+}
+
+type sourceRepairEndpoint struct {
+	repairer *namespaceReplicationRepairer
+}
+
+func (e sourceRepairEndpoint) Apply(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	return namespaceReplicationRPCCall(ctx, e.repairer.rpcTimeout, func(rpcCtx context.Context) (*adminservice.ApplyNamespaceMutationResponse, error) {
+		return e.repairer.client.ApplyNamespaceMutation(rpcCtx, request)
+	})
+}
+
+func (e sourceRepairEndpoint) ReadByID(ctx context.Context, id string) (*adminservice.GetNamespaceResponse, error) {
+	return e.repairer.verifier.reader.SourceNamespaceByID(ctx, id)
+}
+
+type peerRepairEndpoint struct {
+	repairer *namespaceReplicationRepairer
+	cluster  string
+}
+
+func (e peerRepairEndpoint) Apply(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	response, err := namespaceReplicationRPCCall(ctx, e.repairer.rpcTimeout, func(rpcCtx context.Context) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+		return e.repairer.client.ApplyRemoteClusterNamespaceRepair(rpcCtx, &adminservice.ApplyRemoteClusterNamespaceRepairRequest{
+			ClusterName: e.cluster,
+			Mutation:    request,
+		})
+	})
+	if err != nil {
+		if grpcstatus.Code(err) == codes.Unimplemented {
+			return nil, fmt.Errorf("%w: %v", errNamespaceReplicationRepairRelayUnsupported, err)
+		}
+		return nil, err
+	}
+	if response.GetClusterName() != e.cluster {
+		return nil, fmt.Errorf("cluster identity mismatch: expected %q, got %q", e.cluster, response.GetClusterName())
+	}
+	return response.GetResponse(), nil
+}
+
+func (e peerRepairEndpoint) ReadByID(ctx context.Context, id string) (*adminservice.GetNamespaceResponse, error) {
+	return e.repairer.verifier.reader.PeerNamespaceByID(ctx, e.cluster, id)
 }
 
 func (r *namespaceReplicationRepairer) Execute(
 	ctx context.Context,
 	request namespaceReplicationRepairExecutionRequest,
-) (_ *namespaceReplicationRepairExecutionResult, retErr error) {
+) (*namespaceReplicationRepairExecutionResult, error) {
 	if request.Plan == nil {
 		return nil, errors.New("repair execution requires an executable frozen plan")
 	}
@@ -97,26 +162,18 @@ func (r *namespaceReplicationRepairer) Execute(
 		return result, err
 	}
 
-	sourceConnection, err := r.verifier.clients.OpenSource(request.VerifyRequest.SourceAddress)
-	if err != nil {
-		return result, fmt.Errorf("connect to source for repair: %w", err)
-	}
-	defer func() {
-		retErr = errors.Join(retErr, sourceConnection.closer.Close())
-	}()
-
 	effectiveCutoff, err := effectiveRepairCutoff(request.ReconcileBefore, request.Observation.sourceSnapshot.GetObservationTime())
 	if err != nil {
 		return result, err
 	}
 	result.EffectiveCutoff = effectiveCutoff
 
-	frozenSource, err := r.freezeRepairSource(ctx, sourceConnection.client, request)
+	frozenSource, err := r.freezeRepairSource(ctx, request)
 	if err != nil {
 		return result, err
 	}
 
-	preparedSource, err := r.prepareRepairSource(ctx, sourceConnection.client, request, frozenSource, &result.Source)
+	preparedSource, err := r.prepareRepairSource(ctx, request, frozenSource, &result.Source)
 	if err != nil {
 		return result, err
 	}
@@ -129,7 +186,6 @@ func (r *namespaceReplicationRepairer) Execute(
 	}
 	reconciliation, reconcileErr := r.reconcileRepairComponents(
 		ctx,
-		sourceConnection.client,
 		request,
 		effectiveCutoff,
 		finalObservation,
@@ -197,15 +253,9 @@ func effectiveRepairCutoff(requested *time.Time, observedAt *timestamppb.Timesta
 
 func (r *namespaceReplicationRepairer) freezeRepairSource(
 	ctx context.Context,
-	client adminservice.AdminServiceClient,
 	request namespaceReplicationRepairExecutionRequest,
 ) (*adminservice.GetNamespaceResponse, error) {
-	frozen, err := getNamespace(
-		ctx,
-		r.verifier.rpcTimeout,
-		client,
-		namespaceReplicationSelector{ID: request.Plan.NamespaceID},
-	)
+	frozen, err := r.verifier.reader.SourceNamespaceByID(ctx, request.Plan.NamespaceID)
 	if err != nil {
 		return nil, fmt.Errorf("freeze source namespace: %w", err)
 	}
@@ -225,7 +275,6 @@ func (r *namespaceReplicationRepairer) freezeRepairSource(
 
 func (r *namespaceReplicationRepairer) prepareRepairSource(
 	ctx context.Context,
-	client adminservice.AdminServiceClient,
 	request namespaceReplicationRepairExecutionRequest,
 	frozen *adminservice.GetNamespaceResponse,
 	result *namespaceReplicationRepairApplyResult,
@@ -244,7 +293,7 @@ func (r *namespaceReplicationRepairer) prepareRepairSource(
 		return nil, err
 	}
 	task.ConfigVersion = request.Plan.ProposedSourceConfigVersion
-	prepared, err := r.applyRepairAndReadback(ctx, client, request, task, result)
+	prepared, err := r.applyRepairAndReadback(ctx, sourceRepairEndpoint{repairer: r}, request, task, result)
 	if err != nil {
 		result.Error = err.Error()
 		return nil, fmt.Errorf("prepare source: %w", err)
@@ -271,7 +320,6 @@ func (r *namespaceReplicationRepairer) applyRepairTargets(
 
 func (r *namespaceReplicationRepairer) reconcileRepairComponents(
 	ctx context.Context,
-	client adminservice.AdminServiceClient,
 	request namespaceReplicationRepairExecutionRequest,
 	cutoff time.Time,
 	finalObservation *namespaceReplicationObservation,
@@ -296,9 +344,9 @@ func (r *namespaceReplicationRepairer) reconcileRepairComponents(
 	for {
 		page, err := namespaceReplicationRPCCall(
 			ctx,
-			r.verifier.rpcTimeout,
+			r.rpcTimeout,
 			func(rpcCtx context.Context) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
-				return client.ReconcileNamespaceMutationComponents(rpcCtx, requestRPC)
+				return r.client.ReconcileNamespaceMutationComponents(rpcCtx, requestRPC)
 			},
 		)
 		if err != nil {
@@ -363,27 +411,14 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 ) (result namespaceReplicationRepairApplyResult) {
 	result.Cluster = clusterPlan.Cluster
 	result.Action = clusterPlan.Action
-	address := request.Observation.clusterAddresses[clusterPlan.Cluster]
-	connection, err := r.verifier.clients.OpenTarget(address)
-	if err != nil {
-		result.Error = fmt.Sprintf("connect: %v", err)
-		return result
-	}
-	defer func() {
-		if err := connection.closer.Close(); err != nil && result.Error == "" {
-			result.Error = fmt.Sprintf("close connection: %v", err)
-			result.Readback = false
-		}
-	}()
-
 	target := request.Observation.targetSnapshots[clusterPlan.Cluster]
-	freshTarget, err := getNamespace(ctx, r.verifier.rpcTimeout, connection.client, namespaceReplicationSelector{ID: request.Plan.NamespaceID})
+	freshTarget, err := r.verifier.reader.PeerNamespaceByID(ctx, clusterPlan.Cluster, request.Plan.NamespaceID)
 	if clusterPlan.Action == namespaceReplicationRepairActionCreate {
 		if !isNamespaceNotFound(err) {
 			result.Error = "target appeared or could not be checked after planning; rerun verification"
 			return result
 		}
-		_, nameErr := getNamespace(ctx, r.verifier.rpcTimeout, connection.client, namespaceReplicationSelector{Name: preparedSource.GetInfo().GetName()})
+		_, nameErr := r.verifier.reader.PeerNamespaceByName(ctx, clusterPlan.Cluster, preparedSource.GetInfo().GetName())
 		if !isNamespaceNotFound(nameErr) {
 			result.Error = "target namespace name appeared or could not be checked after planning; rerun verification"
 			return result
@@ -410,7 +445,7 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 		result.Error = err.Error()
 		return result
 	}
-	_, err = r.applyRepairAndReadback(ctx, connection.client, request, task, &result)
+	_, err = r.applyRepairAndReadback(ctx, peerRepairEndpoint{repairer: r, cluster: clusterPlan.Cluster}, request, task, &result)
 	if err != nil {
 		result.Error = err.Error()
 	}
@@ -419,12 +454,12 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 
 func (r *namespaceReplicationRepairer) applyRepairAndReadback(
 	ctx context.Context,
-	client adminservice.AdminServiceClient,
+	endpoint namespaceRepairEndpoint,
 	request namespaceReplicationRepairExecutionRequest,
 	task *replicationspb.NamespaceTaskAttributes,
 	result *namespaceReplicationRepairApplyResult,
 ) (*adminservice.GetNamespaceResponse, error) {
-	outcome, err := r.applyRepairTask(ctx, client, request, task)
+	outcome, err := r.applyRepairTask(ctx, endpoint, request, task)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +469,7 @@ func (r *namespaceReplicationRepairer) applyRepairAndReadback(
 	if !acceptableNamespaceRepairOutcome(result.Action, outcome) {
 		return nil, fmt.Errorf("unexpected apply outcome %s", outcome)
 	}
-	actual, err := getNamespace(ctx, r.verifier.rpcTimeout, client, namespaceReplicationSelector{ID: task.GetId()})
+	actual, err := endpoint.ReadByID(ctx, task.GetId())
 	if err != nil {
 		return nil, fmt.Errorf("read back namespace: %w", err)
 	}
@@ -447,7 +482,7 @@ func (r *namespaceReplicationRepairer) applyRepairAndReadback(
 
 func (r *namespaceReplicationRepairer) applyRepairTask(
 	ctx context.Context,
-	client adminservice.AdminServiceClient,
+	endpoint namespaceRepairEndpoint,
 	request namespaceReplicationRepairExecutionRequest,
 	task *replicationspb.NamespaceTaskAttributes,
 ) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
@@ -455,21 +490,15 @@ func (r *namespaceReplicationRepairer) applyRepairTask(
 	if err != nil {
 		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED, err
 	}
-	response, err := namespaceReplicationRPCCall(
-		ctx,
-		r.verifier.rpcTimeout,
-		func(rpcCtx context.Context) (*adminservice.ApplyNamespaceMutationResponse, error) {
-			return client.ApplyNamespaceMutation(rpcCtx, &adminservice.ApplyNamespaceMutationRequest{
-				SourceCluster:        request.Plan.SourceCluster,
-				NamespaceTaskPayload: payload,
-				Attribution: &adminservice.NamespaceMutationAttribution{
-					Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
-					RepairId: request.Plan.RepairID,
-					Reason:   request.Reason,
-				},
-			})
+	response, err := endpoint.Apply(ctx, &adminservice.ApplyNamespaceMutationRequest{
+		SourceCluster:        request.Plan.SourceCluster,
+		NamespaceTaskPayload: payload,
+		Attribution: &adminservice.NamespaceMutationAttribution{
+			Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+			RepairId: request.Plan.RepairID,
+			Reason:   request.Reason,
 		},
-	)
+	})
 	if err != nil {
 		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED, err
 	}

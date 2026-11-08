@@ -21,6 +21,8 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -36,10 +38,10 @@ func TestNamespaceRepairInvalidSourceReturnsBlockedJSON(t *testing.T) {
 				source.ReplicationConfig.State = enumspb.REPLICATION_STATE_HANDOVER
 			}
 			factory := &testNamespaceReplicationCLIClientFactory{
-				sourceAddress: "source-address", clients: map[string]*testNamespaceReplicationAdminClient{"source-address": testNamespaceReplicationSourceClient(source)},
+				clients: map[string]*testNamespaceReplicationAdminClient{"source": testNamespaceReplicationSourceClient(source)},
 			}
 			app, output := testNamespaceReplicationCLIApp(factory)
-			err := app.Run([]string{"tdbg", "namespace", "replication", "repair", "--namespace", "namespace", "--print-json"})
+			err := app.Run([]string{"tdbg", "namespace", "replication", "repair", "--namespace-id", "namespace-id", "--print-json"})
 			var exit cli.ExitCoder
 			require.ErrorAs(t, err, &exit)
 			require.Equal(t, 2, exit.ExitCode())
@@ -57,10 +59,9 @@ func TestNamespaceReplicationRepairCommandDryRun(t *testing.T) {
 	target := proto.CloneOf(source)
 	target.Info.Description = "divergent"
 	factory := &testNamespaceReplicationCLIClientFactory{
-		sourceAddress: "configured-source-address",
 		clients: map[string]*testNamespaceReplicationAdminClient{
-			"configured-source-address": testNamespaceReplicationSourceClient(source),
-			"override-address":          testNamespaceReplicationTargetClient("cluster-b", target),
+			"source":    testNamespaceReplicationSourceClient(source),
+			"cluster-b": testNamespaceReplicationTargetClient("cluster-b", target),
 		},
 	}
 	app, output := testNamespaceReplicationCLIApp(factory)
@@ -70,8 +71,7 @@ func TestNamespaceReplicationRepairCommandDryRun(t *testing.T) {
 		"namespace",
 		"replication",
 		"repair",
-		"--namespace", "namespace",
-		"--cluster-address", "cluster-b=override-address",
+		"--namespace-id", "namespace-id",
 	})
 	require.NoError(t, err)
 	require.Contains(t, output.String(), namespaceReplicationRepairStatusPlanned)
@@ -97,10 +97,9 @@ func TestNamespaceReplicationRepairCommandExecute(t *testing.T) {
 		return &adminservice.ReconcileNamespaceMutationComponentsResponse{}, nil
 	}
 	factory := &testNamespaceReplicationCLIClientFactory{
-		sourceAddress: "configured-source-address",
 		clients: map[string]*testNamespaceReplicationAdminClient{
-			"configured-source-address": sourceClient,
-			"override-address":          targetClient,
+			"source":    sourceClient,
+			"cluster-b": targetClient,
 		},
 	}
 	app, output := testNamespaceReplicationCLIApp(factory)
@@ -111,8 +110,7 @@ func TestNamespaceReplicationRepairCommandExecute(t *testing.T) {
 		"namespace",
 		"replication",
 		"repair",
-		"--namespace", "namespace",
-		"--cluster-address", "cluster-b=override-address",
+		"--namespace-id", "namespace-id",
 		"--reason", "operator test",
 		"--execute",
 	})
@@ -504,11 +502,10 @@ func TestNamespaceReplicationRepairerExecutesAndReconciles(t *testing.T) {
 		}, nil
 	}
 
-	provider := &testNamespaceReplicationClientProvider{clients: map[string]*testNamespaceReplicationAdminClient{
-		"source-address":    sourceClient,
-		"cluster-b-address": targetClient,
-	}}
-	verifier := newNamespaceReplicationVerifier(provider, namespaceReplicationOptions{})
+	verifier := testNamespaceReplicationVerifierWithClients(nil, map[string]*testNamespaceReplicationAdminClient{
+		"source":    sourceClient,
+		"cluster-b": targetClient,
+	})
 	verifier.now = func() time.Time { return time.Unix(100, 0).UTC() }
 	verifyRequest := testNamespaceReplicationVerifyRequest()
 	observation, err := verifier.observe(context.Background(), verifyRequest)
@@ -518,7 +515,7 @@ func TestNamespaceReplicationRepairerExecutesAndReconciles(t *testing.T) {
 	require.Equal(t, int64(11), plan.ProposedSourceConfigVersion)
 	require.Equal(t, []string{namespaceReplicationWarningInitialHistory}, plan.Clusters[0].Warnings)
 
-	repairer := &namespaceReplicationRepairer{verifier: verifier}
+	repairer := testRepairerFor(verifier)
 	result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest: verifyRequest,
 		Observation:   observation,
@@ -556,8 +553,7 @@ func TestNamespaceReplicationRepairerReturnsCompletedReconciliationPagesOnLaterF
 			return nil, nil
 		}
 	}
-	verifier := newNamespaceReplicationVerifier(&testNamespaceReplicationClientProvider{}, namespaceReplicationOptions{})
-	repairer := &namespaceReplicationRepairer{verifier: verifier}
+	repairer := &namespaceReplicationRepairer{client: client, rpcTimeout: time.Second}
 	request := namespaceReplicationRepairExecutionRequest{
 		Observation: &namespaceReplicationObservation{result: &namespaceReplicationVerificationResult{
 			SourceCluster:    "cluster-a",
@@ -570,7 +566,6 @@ func TestNamespaceReplicationRepairerReturnsCompletedReconciliationPagesOnLaterF
 
 	result, err := repairer.reconcileRepairComponents(
 		context.Background(),
-		client,
 		request,
 		time.Unix(100, 0),
 		&namespaceReplicationObservation{sourceStable: true, sourceSnapshot: testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20), result: request.Observation.result},
@@ -605,12 +600,11 @@ func TestNamespaceReplicationRepairerReconcilesOnlyIndividuallyVerifiedPeers(t *
 		return &adminservice.ReconcileNamespaceMutationComponentsResponse{}, nil
 	}
 
-	provider := &testNamespaceReplicationClientProvider{clients: map[string]*testNamespaceReplicationAdminClient{
-		"source-address":    sourceClient,
-		"cluster-b-address": targetBClient,
-		"cluster-c-address": targetCClient,
-	}}
-	verifier := newNamespaceReplicationVerifier(provider, namespaceReplicationOptions{})
+	verifier := testNamespaceReplicationVerifierWithClients(nil, map[string]*testNamespaceReplicationAdminClient{
+		"source":    sourceClient,
+		"cluster-b": targetBClient,
+		"cluster-c": targetCClient,
+	})
 	verifyRequest := testNamespaceReplicationVerifyRequest()
 	observation, err := verifier.observe(context.Background(), verifyRequest)
 	require.NoError(t, err)
@@ -618,7 +612,7 @@ func TestNamespaceReplicationRepairerReconcilesOnlyIndividuallyVerifiedPeers(t *
 	require.NoError(t, err)
 	require.Equal(t, namespaceReplicationRepairActionNone, plan.SourceAction)
 
-	repairer := &namespaceReplicationRepairer{verifier: verifier}
+	repairer := testRepairerFor(verifier)
 	result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest: verifyRequest,
 		Observation:   observation,
@@ -673,11 +667,10 @@ func TestNamespaceReplicationRepairerCreatesMissingTarget(t *testing.T) {
 				reconciliationRequest = proto.CloneOf(request)
 				return &adminservice.ReconcileNamespaceMutationComponentsResponse{}, nil
 			}
-			provider := &testNamespaceReplicationClientProvider{clients: map[string]*testNamespaceReplicationAdminClient{
-				"source-address":    sourceClient,
-				"cluster-b-address": targetClient,
-			}}
-			verifier := newNamespaceReplicationVerifier(provider, namespaceReplicationOptions{})
+			verifier := testNamespaceReplicationVerifierWithClients(nil, map[string]*testNamespaceReplicationAdminClient{
+				"source":    sourceClient,
+				"cluster-b": targetClient,
+			})
 			verifyRequest := testNamespaceReplicationVerifyRequest()
 			observation, err := verifier.observe(context.Background(), verifyRequest)
 			require.NoError(t, err)
@@ -685,7 +678,7 @@ func TestNamespaceReplicationRepairerCreatesMissingTarget(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, namespaceReplicationRepairActionCreate, plan.Clusters[0].Action)
 
-			repairer := &namespaceReplicationRepairer{verifier: verifier}
+			repairer := testRepairerFor(verifier)
 			result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 				VerifyRequest: verifyRequest,
 				Observation:   observation,
@@ -712,7 +705,7 @@ func TestNamespaceReplicationRepairerAbortsWhenSourceChangesAfterPlanning(t *tes
 	require.NoError(t, err)
 	source.Info.Description = "changed after planning"
 
-	repairer := &namespaceReplicationRepairer{verifier: verifier}
+	repairer := testRepairerFor(verifier)
 	result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest: verifyRequest,
 		Observation:   observation,
@@ -744,7 +737,7 @@ func TestReconciliationRequiresStableFinalObservation(t *testing.T) {
 		sourceSnapshot: testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, version, 20),
 	}
 	r := &namespaceReplicationRepairer{}
-	_, err := r.reconcileRepairComponents(t.Context(), nil, namespaceReplicationRepairExecutionRequest{}, time.Time{}, observation)
+	_, err := r.reconcileRepairComponents(t.Context(), namespaceReplicationRepairExecutionRequest{}, time.Time{}, observation)
 	require.ErrorContains(t, err, "stable final source observation")
 
 	observation.sourceStable = true
@@ -760,7 +753,7 @@ func TestNamespaceReplicationRepairerRejectsLaterCutoff(t *testing.T) {
 	plan, err := planNamespaceReplicationRepair(observation, "repair-id", time.Unix(100, 0))
 	require.NoError(t, err)
 
-	repairer := &namespaceReplicationRepairer{verifier: verifier}
+	repairer := testRepairerFor(verifier)
 	later := time.Unix(102, 0).UTC()
 	_, err = repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest:   testNamespaceReplicationVerifyRequest(),
@@ -797,7 +790,8 @@ func TestRepairRequiresMatchingReadbackAfterStaleSuccess(t *testing.T) {
 		{name: "wrong config", mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Description = "other" }, wantError: "config readback"},
 		{name: "wrong config version", mutate: func(r *adminservice.GetNamespaceResponse) { r.ConfigVersion++ }, wantError: "config version readback"},
 		{name: "wrong failover version", mutate: func(r *adminservice.GetNamespaceResponse) { r.FailoverVersion++ }, wantError: "failover version readback"},
-		{name: "wrong identity", mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Id = "other-id" }, wantError: "config readback"},
+		// The read-back by ID rejects another namespace before comparing config.
+		{name: "wrong identity", mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Id = "other-id" }, wantError: "response has a different namespace ID"},
 		{name: "not global", mutate: func(r *adminservice.GetNamespaceResponse) { r.IsGlobalNamespace = false }, wantError: "not global"},
 		{name: "not admitted", outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED, wantError: "unexpected apply outcome"},
 	} {
@@ -818,9 +812,9 @@ func TestRepairRequiresMatchingReadbackAfterStaleSuccess(t *testing.T) {
 				}
 				return &adminservice.ApplyNamespaceMutationResponse{Outcome: outcome}, nil
 			}
-			r := &namespaceReplicationRepairer{verifier: &namespaceReplicationVerifier{rpcTimeout: time.Second}}
+			r := testRepairerFor(testNamespaceReplicationVerifierWithClients(expected, map[string]*testNamespaceReplicationAdminClient{"cluster-b": client}))
 			result := namespaceReplicationRepairApplyResult{Action: namespaceReplicationRepairActionCreate}
-			_, err = r.applyRepairAndReadback(t.Context(), client, namespaceReplicationRepairExecutionRequest{
+			_, err = r.applyRepairAndReadback(t.Context(), peerRepairEndpoint{repairer: r, cluster: "cluster-b"}, namespaceReplicationRepairExecutionRequest{
 				Plan: &namespaceReplicationRepairPlan{SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
 			}, task, &result)
 			require.ErrorContains(t, err, test.wantError)
@@ -845,9 +839,9 @@ func TestRepairCreateRejectsNameCollisionAfterPlanning(t *testing.T) {
 		t.Fatal("repair must not write after a name collision")
 		return nil, nil
 	}
-	r := &namespaceReplicationRepairer{verifier: testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b-address": client})}
+	r := testRepairerFor(testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b": client}))
 	result := r.applyTargetRepair(t.Context(), namespaceReplicationRepairExecutionRequest{
-		Observation: &namespaceReplicationObservation{clusterAddresses: map[string]string{"cluster-b": "cluster-b-address"}},
+		Observation: &namespaceReplicationObservation{},
 		Plan:        &namespaceReplicationRepairPlan{NamespaceID: "namespace-id", SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
 	}, source, namespaceReplicationClusterRepairPlan{Cluster: "cluster-b", Action: namespaceReplicationRepairActionCreate})
 	require.Contains(t, result.Error, "namespace name appeared")
@@ -878,11 +872,11 @@ func TestRepairRefreshesTargetBeforeWriting(t *testing.T) {
 				applyRepairTaskToSnapshot(target, task)
 				return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
 			}
-			verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b-address": client})
+			verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b": client})
 			verifier.dataKeysToIgnore = map[string]struct{}{"local-key": {}}
-			r := &namespaceReplicationRepairer{verifier: verifier}
+			r := testRepairerFor(verifier)
 			result := r.applyTargetRepair(t.Context(), namespaceReplicationRepairExecutionRequest{
-				Observation: &namespaceReplicationObservation{clusterAddresses: map[string]string{"cluster-b": "cluster-b-address"}, targetSnapshots: map[string]*adminservice.GetNamespaceResponse{"cluster-b": frozen}},
+				Observation: &namespaceReplicationObservation{targetSnapshots: map[string]*adminservice.GetNamespaceResponse{"cluster-b": frozen}},
 				Plan:        &namespaceReplicationRepairPlan{NamespaceID: "namespace-id", SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
 			}, source, namespaceReplicationClusterRepairPlan{Cluster: "cluster-b", Action: namespaceReplicationRepairActionApplySource})
 			require.Equal(t, !versionChanged, applied)
@@ -916,7 +910,68 @@ func applyRepairTaskToSnapshot(
 	snapshot.ConfigVersion = task.GetConfigVersion()
 	snapshot.FailoverVersion = task.GetFailoverVersion()
 	snapshot.FailoverHistory = make([]*replicationpb.FailoverStatus, 0, len(task.GetFailoverHistory()))
-	for _, status := range task.GetFailoverHistory() {
-		snapshot.FailoverHistory = append(snapshot.FailoverHistory, proto.CloneOf(status))
+	for _, failoverStatus := range task.GetFailoverHistory() {
+		snapshot.FailoverHistory = append(snapshot.FailoverHistory, proto.CloneOf(failoverStatus))
+	}
+}
+
+// testRepairerFor builds a repairer over the verifier's source client, which
+// relays peer reads and writes as the server does.
+func testRepairerFor(verifier *namespaceReplicationVerifier) *namespaceReplicationRepairer {
+	reader := verifier.reader.(adminNamespaceReplicationReader)
+	return &namespaceReplicationRepairer{verifier: verifier, client: reader.client, rpcTimeout: reader.rpcTimeout}
+}
+
+func TestPeerRepairEndpointWritesThroughRelay(t *testing.T) {
+	t.Parallel()
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 11, 20)
+	mutation := &adminservice.ApplyNamespaceMutationRequest{
+		SourceCluster: "cluster-a",
+		Attribution:   &adminservice.NamespaceMutationAttribution{Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR},
+	}
+	for _, test := range []struct {
+		name      string
+		relay     func(*adminservice.ApplyRemoteClusterNamespaceRepairRequest) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error)
+		wantError string
+	}{
+		{
+			name: "relays to the named peer",
+			relay: func(request *adminservice.ApplyRemoteClusterNamespaceRepairRequest) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+				require.Equal(t, "cluster-b", request.GetClusterName())
+				require.True(t, proto.Equal(mutation, request.GetMutation()))
+				return &adminservice.ApplyRemoteClusterNamespaceRepairResponse{
+					ClusterName: "cluster-b",
+					Response:    &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED},
+				}, nil
+			},
+		},
+		{
+			name: "source frontend without the relay",
+			relay: func(*adminservice.ApplyRemoteClusterNamespaceRepairRequest) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+				return nil, status.Error(codes.Unimplemented, "unknown method ApplyRemoteClusterNamespaceRepair")
+			},
+			wantError: errNamespaceReplicationRepairRelayUnsupported.Error(),
+		},
+		{
+			name: "relay reports another cluster",
+			relay: func(*adminservice.ApplyRemoteClusterNamespaceRepairRequest) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+				return &adminservice.ApplyRemoteClusterNamespaceRepairResponse{ClusterName: "cluster-c"}, nil
+			},
+			wantError: `cluster identity mismatch: expected "cluster-b", got "cluster-c"`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			sourceClient := testNamespaceReplicationSourceClient(source)
+			sourceClient.remoteClusterRepairFn = test.relay
+			r := testRepairerFor(testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"source": sourceClient}))
+			response, err := peerRepairEndpoint{repairer: r, cluster: "cluster-b"}.Apply(t.Context(), mutation)
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
+		})
 	}
 }

@@ -1363,8 +1363,10 @@ func TestApplyLocalTask_Execute_RetryBudgetBoundary(t *testing.T) {
 			} else {
 				require.Len(t, pendingAge, 1)
 				require.Equal(t, max(tc.elapsed, 0), pendingAge[0].Value)
+				require.NotContains(t, pendingAge[0].Tags, metrics.NamespaceTag("").Key)
 				if tc.wantThreshold {
 					require.Len(t, thresholdExceeded, 1)
+					require.Equal(t, mutation.GetNamespaceDetail().GetInfo().GetName(), thresholdExceeded[0].Tags[metrics.NamespaceTag("").Key])
 				} else {
 					require.Empty(t, thresholdExceeded)
 				}
@@ -2014,7 +2016,8 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 				peerRetryMaximumInterval:    func() time.Duration { return 20 * time.Second },
 				peerRetryExpirationInterval: func() time.Duration { return retryExpiration },
 			}
-			ref := env.start(env.mutationUpdate("cellB"), func(c *NamespaceMutationComponent) {
+			mutation := env.mutationUpdate("cellB")
+			ref := env.start(mutation, func(c *NamespaceMutationComponent) {
 				c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
 				peer := c.PeerApply["cellB"]
 				peer.AttemptCount = 2
@@ -2079,8 +2082,10 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 			} else {
 				require.Len(t, pendingAge, 1)
 				require.Equal(t, max(tc.elapsed, 0), pendingAge[0].Value)
+				require.NotContains(t, pendingAge[0].Tags, metrics.NamespaceTag("").Key)
 				if tc.wantThreshold {
 					require.Len(t, thresholdExceeded, 1)
+					require.Equal(t, mutation.GetNamespaceDetail().GetInfo().GetName(), thresholdExceeded[0].Tags[metrics.NamespaceTag("").Key])
 				} else {
 					require.Empty(t, thresholdExceeded)
 				}

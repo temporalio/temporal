@@ -43,12 +43,13 @@ func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, record
 		metrics.OperationTag(nsreplication.OperationMetricValue(request.Operation)), metrics.OutcomeTag(outcome),
 		metrics.StringTag("mode", mode), metrics.StringTag("apply_stage", "peer"),
 	}
+	// Counters carry the namespace; per-namespace durations are in lifecycle events.
+	counterTags := append(tags, metrics.NamespaceTag(request.Detail.GetInfo().GetName()))
 	if h.metricsHandler != nil {
-		counterTags := append(tags, metrics.NamespaceTag(request.Detail.GetInfo().GetName()))
 		metrics.NamespaceReplicationCHASMApplyOutcomes.With(h.metricsHandler).Record(1, counterTags...)
 		metrics.NamespaceReplicationCHASMApplyLatency.With(h.metricsHandler).Record(duration, tags...)
 	}
-	pendingAge, endToEndDuration := h.recordPeerDurations(recorded, saveErr, tags)
+	pendingAge, endToEndDuration := h.recordPeerDurations(recorded, saveErr, tags, counterTags)
 	// Metrics cover scheduled retries; wide events describe committed terminal
 	// outcomes or failures to persist an attempt's outcome.
 	if saveErr == nil && (recorded.retryScheduled || !recorded.stateUpdated) {
@@ -108,7 +109,7 @@ func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, record
 func (h *applyPeerTaskHandler) recordPeerDurations(
 	recorded peerOutcomeRecord,
 	saveErr error,
-	tags []metrics.Tag,
+	tags, counterTags []metrics.Tag,
 ) (pendingAge, endToEndDuration *time.Duration) {
 	if saveErr != nil || !recorded.stateUpdated {
 		return nil, nil
@@ -130,7 +131,7 @@ func (h *applyPeerTaskHandler) recordPeerDurations(
 	if pendingAge != nil && recorded.retryScheduled {
 		metrics.NamespaceReplicationCHASMPeerPendingAge.With(h.metricsHandler).Record(*pendingAge, tags...)
 		if *pendingAge >= pendingAlertThreshold {
-			metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(h.metricsHandler).Record(1, tags...)
+			metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(h.metricsHandler).Record(1, counterTags...)
 		}
 	}
 	return pendingAge, endToEndDuration

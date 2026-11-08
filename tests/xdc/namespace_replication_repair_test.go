@@ -125,3 +125,51 @@ func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairWithoutPeerTransp
 		return false
 	}, replicationWaitTime, replicationCheckInterval)
 }
+
+// TestOperatorRepairThroughSourceRelay repairs a peer that CHASM delivery could
+// not reach by relaying the operator repair through the active cluster's
+// frontend, as tdbg does, over real gRPC on both hops.
+func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairThroughSourceRelay() {
+	ctx, cancel := context.WithTimeout(s.T().Context(), testTimeout)
+	defer cancel()
+	active, standby := s.clusters[0], s.clusters[1]
+	cleanup := active.OverrideDynamicConfig(s.T(), dynamicconfig.NamespaceReplicationTransportMode, dynamicconfig.NamespaceReplicationTransportModeCHASM)
+	defer cleanup()
+	s.failApplyRequests.Store(true)
+	defer s.failApplyRequests.Store(false)
+	name := "repair-relay-" + uuid.NewString()
+	_, err := active.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace: name, IsGlobalNamespace: true, ActiveClusterName: active.ClusterName(),
+		Clusters:                         []*replicationpb.ClusterReplicationConfig{{ClusterName: active.ClusterName()}, {ClusterName: standby.ClusterName()}},
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+	})
+	s.Require().NoError(err)
+	failed := s.receiveObservedApply(ctx, name)
+	s.Require().Error(failed.err)
+	task := s.decodeNamespaceTask(failed.request)
+	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_UPDATE
+	payload, err := nsreplication.MarshalNamespaceTask(task)
+	s.Require().NoError(err)
+
+	// The relay refuses anything that is not an operator repair.
+	_, err = active.AdminClient().ApplyRemoteClusterNamespaceRepair(ctx, &adminservice.ApplyRemoteClusterNamespaceRepairRequest{
+		ClusterName: standby.ClusterName(),
+		Mutation:    &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload, SourceCluster: active.ClusterName()},
+	})
+	s.Require().Error(err)
+	s.Require().Contains(err.Error(), "only operator-repair mutations are relayed")
+
+	response, err := active.AdminClient().ApplyRemoteClusterNamespaceRepair(ctx, &adminservice.ApplyRemoteClusterNamespaceRepairRequest{
+		ClusterName: standby.ClusterName(),
+		Mutation: &adminservice.ApplyNamespaceMutationRequest{
+			NamespaceTaskPayload: payload, SourceCluster: active.ClusterName(),
+			Attribution: &adminservice.NamespaceMutationAttribution{
+				Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR, RepairId: "xdc-relay-repair", Reason: "peer transport unavailable",
+			},
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(standby.ClusterName(), response.GetClusterName())
+	s.Require().Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED, response.GetResponse().GetOutcome())
+	s.requirePersistedNamespace(ctx, standby, name)
+}

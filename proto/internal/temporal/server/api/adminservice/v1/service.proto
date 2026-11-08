@@ -186,6 +186,23 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // GetRemoteClusterNamespace reads a namespace from a connected remote cluster
+  // through this cluster's remote-cluster client, so operator tools can compare
+  // replicas while talking only to their local frontend. It is read-only and
+  // verifies the remote cluster's identity before reading the namespace.
+  rpc GetRemoteClusterNamespace(GetRemoteClusterNamespaceRequest) returns (GetRemoteClusterNamespaceResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
+  // ApplyRemoteClusterNamespaceRepair relays an operator-repair namespace
+  // mutation to a connected remote cluster through this cluster's remote-cluster
+  // client, so repair tools write peers while talking only to their local
+  // frontend. It verifies the remote cluster's identity before writing and
+  // refuses mutations that are not attributed to operator repair.
+  rpc ApplyRemoteClusterNamespaceRepair(ApplyRemoteClusterNamespaceRepairRequest) returns (ApplyRemoteClusterNamespaceRepairResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   rpc GetDLQTasks(GetDLQTasksRequest) returns (GetDLQTasksResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }

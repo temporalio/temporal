@@ -49,6 +49,16 @@ func (c *clientImpl) ApplyNamespaceMutation(
 	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
 }
 
+func (c *clientImpl) ApplyRemoteClusterNamespaceRepair(
+	ctx context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ApplyRemoteClusterNamespaceRepair(ctx, request, opts...)
+}
+
 func (c *clientImpl) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -217,6 +227,16 @@ func (c *clientImpl) GetNamespaceReplicationMessages(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetRemoteClusterNamespace(
+	ctx context.Context,
+	request *adminservice.GetRemoteClusterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetRemoteClusterNamespaceResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetRemoteClusterNamespace(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetReplicationMessages(

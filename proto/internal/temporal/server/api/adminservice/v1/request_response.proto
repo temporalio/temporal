@@ -72,6 +72,9 @@ message DescribeMutableStateResponse {
   // DatabaseMutableState is always available,
   // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
   temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 4;
+  // Storage usage on this cluster as of the time of the request: the stored counters plus the
+  // interval since this cluster's last state transition. Equals the stored counters once closed.
+  temporal.server.api.persistence.v1.StorageUsage current_storage_usage = 5;
 }
 
 // At least one of the parameters needs to be provided.
@@ -431,6 +434,9 @@ message RefreshWorkflowTasksRequest {
   string archetype = 4;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 5;
+  // If non-zero, refresh only once the shard owner's registry has the namespace REGISTERED at this
+  // ConfigVersion or later.
+  int64 min_namespace_config_version = 6;
 }
 
 message RefreshWorkflowTasksResponse {}
@@ -507,6 +513,45 @@ message GetNamespaceResponse {
   // Server time captured before reading this snapshot. Repair uses this as a
   // conservative reconciliation cutoff instead of the operator's clock.
   google.protobuf.Timestamp observation_time = 10;
+}
+
+message GetRemoteClusterNamespaceRequest {
+  // Name of the connected remote cluster to read from. It must not be the
+  // current cluster.
+  string cluster_name = 1;
+  // The selector fields are deliberately not named namespace or namespace_id:
+  // frontend interceptors treat requests with those getters as scoped to a
+  // local namespace (validation, rate limiting, handover, redirection), but
+  // this request reads a namespace on another cluster.
+  oneof selector {
+    string remote_namespace_name = 2;
+    string remote_namespace_id = 3;
+  }
+}
+
+message GetRemoteClusterNamespaceResponse {
+  // The remote cluster's own name, as reported by its DescribeCluster. It
+  // always equals the requested cluster name.
+  string cluster_name = 1;
+  // The remote cluster's GetNamespace response, unchanged.
+  GetNamespaceResponse namespace = 2;
+}
+
+message ApplyRemoteClusterNamespaceRepairRequest {
+  // Name of the connected remote cluster to write. It must not be the current
+  // cluster.
+  string cluster_name = 1;
+  // The mutation to apply on the remote cluster, unchanged. Its attribution
+  // origin must be operator repair, and it must not be a shadow request.
+  ApplyNamespaceMutationRequest mutation = 2;
+}
+
+message ApplyRemoteClusterNamespaceRepairResponse {
+  // The remote cluster's own name, as reported by its DescribeCluster. It
+  // always equals the requested cluster name.
+  string cluster_name = 1;
+  // The remote cluster's ApplyNamespaceMutation response, unchanged.
+  ApplyNamespaceMutationResponse response = 2;
 }
 
 message GetDLQTasksRequest {

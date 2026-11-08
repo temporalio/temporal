@@ -32,21 +32,20 @@ func newNamespaceReplicationCommands(
 				{
 					Name:  "verify",
 					Usage: "Compare a global namespace across its configured clusters",
-					Description: "Uses the selected active source to discover current replicas; removed peers are not inspected. " +
-						"Target TLS certificates must match the hostname in the discovered or overridden address; --tls-server-name applies only to the source.",
+					Description: "Selects the namespace by ID because namespace names can be reused. " +
+						"Run it against the namespace's active cluster; removed peers are not inspected. " +
+						"Peers are read through that cluster's frontend, so only --address and its TLS settings are needed.",
 					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:  FlagNamespaceID,
+							Usage: "Namespace ID (required)",
+						},
+						// Hidden so that a namespace name gets an explanatory error
+						// instead of an undefined-flag error.
 						&cli.StringFlag{
 							Name:    FlagNamespace,
 							Aliases: FlagNamespaceAlias,
-							Usage:   "Namespace name (must be explicitly supplied here, globally, or through TEMPORAL_CLI_NAMESPACE)",
-						},
-						&cli.StringFlag{
-							Name:  FlagNamespaceID,
-							Usage: "Namespace ID",
-						},
-						&cli.StringSliceFlag{
-							Name:  FlagClusterAddress,
-							Usage: "Override a target frontend address as <cluster>=<host:port>; may be repeated",
+							Hidden:  true,
 						},
 						&cli.BoolFlag{
 							Name:  FlagPrintJSON,
@@ -61,20 +60,19 @@ func newNamespaceReplicationCommands(
 					Name:  "repair",
 					Usage: "Plan or execute guarded namespace replication repair",
 					Description: "Repairs current replicas and reconciles eligible historical CHASM deliveries. " +
-						"SUCCEEDED does not imply former replicas were synchronized; deliveries to removed peers are abandoned without inspecting or updating them.",
+						"SUCCEEDED does not imply former replicas were synchronized; deliveries to removed peers are abandoned without inspecting or updating them. " +
+						"Selects the namespace by ID; run it against the namespace's active cluster, whose frontend reads and writes peers.",
 					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:  FlagNamespaceID,
+							Usage: "Namespace ID (required)",
+						},
+						// Hidden so that a namespace name gets an explanatory error
+						// instead of an undefined-flag error.
 						&cli.StringFlag{
 							Name:    FlagNamespace,
 							Aliases: FlagNamespaceAlias,
-							Usage:   "Namespace name",
-						},
-						&cli.StringFlag{
-							Name:  FlagNamespaceID,
-							Usage: "Namespace ID",
-						},
-						&cli.StringSliceFlag{
-							Name:  FlagClusterAddress,
-							Usage: "Override a target frontend address as <cluster>=<host:port>; may be repeated",
+							Hidden:  true,
 						},
 						&cli.StringFlag{
 							Name:  FlagReason,
@@ -113,17 +111,9 @@ func repairNamespaceReplication(
 	options namespaceReplicationOptions,
 	prompter *Prompter,
 ) error {
-	selector, err := namespaceReplicationSelectorFromCLI(c)
+	namespaceID, err := namespaceReplicationNamespaceIDFromCLI(c)
 	if err != nil {
 		return cli.Exit(err.Error(), 2)
-	}
-	overrides, err := parseNamespaceReplicationAddressOverrides(c.StringSlice(FlagClusterAddress))
-	if err != nil {
-		return cli.Exit(err.Error(), 2)
-	}
-	namespaceReplicationFactory, ok := clientFactory.(namespaceReplicationClientFactory)
-	if !ok {
-		return cli.Exit("configured tdbg client factory does not support per-cluster addresses", 2)
 	}
 	var reconcileBefore *time.Time
 	if value := strings.TrimSpace(c.String(FlagReconcileBefore)); value != "" {
@@ -139,16 +129,13 @@ func repairNamespaceReplication(
 		return cli.Exit("--reason is required with --execute", 2)
 	}
 
-	verifier := newNamespaceReplicationVerifier(cliNamespaceReplicationAdminClientProvider{
-		cliContext: c,
-		factory:    namespaceReplicationFactory,
+	client := clientFactory.AdminClient(c)
+	rpcTimeout := namespaceReplicationRPCTimeout(c)
+	verifier := newNamespaceReplicationVerifier(adminNamespaceReplicationReader{
+		client:     client,
+		rpcTimeout: rpcTimeout,
 	}, options)
-	verifier.rpcTimeout = namespaceReplicationRPCTimeout(c)
-	verifyRequest := namespaceReplicationVerifyRequest{
-		SourceAddress:    namespaceReplicationFactory.FrontendAddress(c),
-		Selector:         selector,
-		AddressOverrides: overrides,
-	}
+	verifyRequest := namespaceReplicationVerifyRequest{NamespaceID: namespaceID}
 	observation, err := verifier.observe(c.Context, verifyRequest)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("verify before repair: %v", err), 2)
@@ -189,7 +176,7 @@ func repairNamespaceReplication(
 	} else {
 		prompter.Prompt(prompt)
 	}
-	repairer := &namespaceReplicationRepairer{verifier: verifier}
+	repairer := &namespaceReplicationRepairer{verifier: verifier, client: client, rpcTimeout: rpcTimeout}
 	result, executeErr := repairer.Execute(c.Context, namespaceReplicationRepairExecutionRequest{
 		VerifyRequest:   verifyRequest,
 		Observation:     observation,
@@ -402,29 +389,15 @@ func verifyNamespaceReplication(
 	clientFactory ClientFactory,
 	options namespaceReplicationOptions,
 ) error {
-	selector, err := namespaceReplicationSelectorFromCLI(c)
+	namespaceID, err := namespaceReplicationNamespaceIDFromCLI(c)
 	if err != nil {
 		return cli.Exit(err.Error(), 2)
 	}
-	overrides, err := parseNamespaceReplicationAddressOverrides(c.StringSlice(FlagClusterAddress))
-	if err != nil {
-		return cli.Exit(err.Error(), 2)
-	}
-	namespaceReplicationFactory, ok := clientFactory.(namespaceReplicationClientFactory)
-	if !ok {
-		return cli.Exit("configured tdbg client factory does not support per-cluster addresses", 2)
-	}
-
-	verifier := newNamespaceReplicationVerifier(cliNamespaceReplicationAdminClientProvider{
-		cliContext: c,
-		factory:    namespaceReplicationFactory,
+	verifier := newNamespaceReplicationVerifier(adminNamespaceReplicationReader{
+		client:     clientFactory.AdminClient(c),
+		rpcTimeout: namespaceReplicationRPCTimeout(c),
 	}, options)
-	verifier.rpcTimeout = namespaceReplicationRPCTimeout(c)
-	result, err := verifier.Verify(c.Context, namespaceReplicationVerifyRequest{
-		SourceAddress:    namespaceReplicationFactory.FrontendAddress(c),
-		Selector:         selector,
-		AddressOverrides: overrides,
-	})
+	result, err := verifier.Verify(c.Context, namespaceReplicationVerifyRequest{NamespaceID: namespaceID})
 	if err != nil {
 		if result != nil {
 			if result.StatusDetail != "" {
@@ -460,43 +433,26 @@ func namespaceReplicationRPCTimeout(c *cli.Context) time.Duration {
 	return timeout
 }
 
-func namespaceReplicationSelectorFromCLI(c *cli.Context) (namespaceReplicationSelector, error) {
-	name := strings.TrimSpace(c.String(FlagNamespace))
-	// Local selectors take precedence over an inherited namespace. Without a
-	// local selector, accept an explicit global namespace but not its default.
-	if !c.IsSet(FlagNamespace) && !c.IsSet(FlagNamespaceID) {
-		for _, parent := range c.Lineage()[1:] {
-			if parent.IsSet(FlagNamespace) {
-				name = strings.TrimSpace(parent.String(FlagNamespace))
-				break
-			}
-		}
-	}
-	id := strings.TrimSpace(c.String(FlagNamespaceID))
-	if name == "" && id == "" {
-		return namespaceReplicationSelector{}, errors.New("exactly one of --namespace or --namespace-id is required")
-	}
-	if name != "" && id != "" {
-		return namespaceReplicationSelector{}, errors.New("--namespace and --namespace-id are mutually exclusive")
-	}
-	return namespaceReplicationSelector{Name: name, ID: id}, nil
-}
+var errNamespaceReplicationNameSelector = errors.New(
+	"select the namespace with --namespace-id; namespace names can be reused, so --namespace and TEMPORAL_CLI_NAMESPACE are not accepted",
+)
 
-func parseNamespaceReplicationAddressOverrides(values []string) (map[string]string, error) {
-	overrides := make(map[string]string, len(values))
-	for _, value := range values {
-		cluster, address, found := strings.Cut(value, "=")
-		cluster = strings.TrimSpace(cluster)
-		address = strings.TrimSpace(address)
-		if !found || cluster == "" || address == "" {
-			return nil, fmt.Errorf("invalid --%s value %q; expected <cluster>=<host:port>", FlagClusterAddress, value)
-		}
-		if _, exists := overrides[cluster]; exists {
-			return nil, fmt.Errorf("duplicate --%s override for cluster %q", FlagClusterAddress, cluster)
-		}
-		overrides[cluster] = address
+// namespaceReplicationNamespaceIDFromCLI returns the required namespace ID. An
+// inherited --namespace or TEMPORAL_CLI_NAMESPACE is ignored when the ID is
+// supplied, matching how local selectors take precedence elsewhere in tdbg.
+func namespaceReplicationNamespaceIDFromCLI(c *cli.Context) (string, error) {
+	if c.IsSet(FlagNamespace) {
+		return "", errNamespaceReplicationNameSelector
 	}
-	return overrides, nil
+	if id := strings.TrimSpace(c.String(FlagNamespaceID)); id != "" {
+		return id, nil
+	}
+	for _, parent := range c.Lineage()[1:] {
+		if parent.IsSet(FlagNamespace) {
+			return "", errNamespaceReplicationNameSelector
+		}
+	}
+	return "", errors.New("--namespace-id is required")
 }
 
 func printNamespaceReplicationVerification(

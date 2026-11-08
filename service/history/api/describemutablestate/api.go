@@ -63,5 +63,6 @@ func Invoke(
 	}
 
 	response.DatabaseMutableState = mutableState.CloneToProto()
+	response.CurrentStorageUsage = mutableState.CurrentStorageUsage()
 	return response, nil
 }

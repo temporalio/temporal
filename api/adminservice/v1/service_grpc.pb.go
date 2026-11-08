@@ -53,6 +53,8 @@ const (
 	AdminService_DeleteWorkflowExecution_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
 	AdminService_StreamWorkflowReplicationMessages_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/StreamWorkflowReplicationMessages"
 	AdminService_GetNamespace_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/GetNamespace"
+	AdminService_GetRemoteClusterNamespace_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/GetRemoteClusterNamespace"
+	AdminService_ApplyRemoteClusterNamespaceRepair_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/ApplyRemoteClusterNamespaceRepair"
 	AdminService_GetDLQTasks_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/GetDLQTasks"
 	AdminService_PurgeDLQTasks_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQTasks"
 	AdminService_MergeDLQTasks_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQTasks"
@@ -154,6 +156,17 @@ type AdminServiceClient interface {
 	DeleteWorkflowExecution(ctx context.Context, in *DeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*DeleteWorkflowExecutionResponse, error)
 	StreamWorkflowReplicationMessages(ctx context.Context, opts ...grpc.CallOption) (AdminService_StreamWorkflowReplicationMessagesClient, error)
 	GetNamespace(ctx context.Context, in *GetNamespaceRequest, opts ...grpc.CallOption) (*GetNamespaceResponse, error)
+	// GetRemoteClusterNamespace reads a namespace from a connected remote cluster
+	// through this cluster's remote-cluster client, so operator tools can compare
+	// replicas while talking only to their local frontend. It is read-only and
+	// verifies the remote cluster's identity before reading the namespace.
+	GetRemoteClusterNamespace(ctx context.Context, in *GetRemoteClusterNamespaceRequest, opts ...grpc.CallOption) (*GetRemoteClusterNamespaceResponse, error)
+	// ApplyRemoteClusterNamespaceRepair relays an operator-repair namespace
+	// mutation to a connected remote cluster through this cluster's remote-cluster
+	// client, so repair tools write peers while talking only to their local
+	// frontend. It verifies the remote cluster's identity before writing and
+	// refuses mutations that are not attributed to operator repair.
+	ApplyRemoteClusterNamespaceRepair(ctx context.Context, in *ApplyRemoteClusterNamespaceRepairRequest, opts ...grpc.CallOption) (*ApplyRemoteClusterNamespaceRepairResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
 	//     aip.dev/not-precedent:  --)
@@ -511,6 +524,24 @@ func (c *adminServiceClient) GetNamespace(ctx context.Context, in *GetNamespaceR
 	return out, nil
 }
 
+func (c *adminServiceClient) GetRemoteClusterNamespace(ctx context.Context, in *GetRemoteClusterNamespaceRequest, opts ...grpc.CallOption) (*GetRemoteClusterNamespaceResponse, error) {
+	out := new(GetRemoteClusterNamespaceResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetRemoteClusterNamespace_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ApplyRemoteClusterNamespaceRepair(ctx context.Context, in *ApplyRemoteClusterNamespaceRepairRequest, opts ...grpc.CallOption) (*ApplyRemoteClusterNamespaceRepairResponse, error) {
+	out := new(ApplyRemoteClusterNamespaceRepairResponse)
+	err := c.cc.Invoke(ctx, AdminService_ApplyRemoteClusterNamespaceRepair_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error) {
 	out := new(GetDLQTasksResponse)
 	err := c.cc.Invoke(ctx, AdminService_GetDLQTasks_FullMethodName, in, out, opts...)
@@ -746,6 +777,17 @@ type AdminServiceServer interface {
 	DeleteWorkflowExecution(context.Context, *DeleteWorkflowExecutionRequest) (*DeleteWorkflowExecutionResponse, error)
 	StreamWorkflowReplicationMessages(AdminService_StreamWorkflowReplicationMessagesServer) error
 	GetNamespace(context.Context, *GetNamespaceRequest) (*GetNamespaceResponse, error)
+	// GetRemoteClusterNamespace reads a namespace from a connected remote cluster
+	// through this cluster's remote-cluster client, so operator tools can compare
+	// replicas while talking only to their local frontend. It is read-only and
+	// verifies the remote cluster's identity before reading the namespace.
+	GetRemoteClusterNamespace(context.Context, *GetRemoteClusterNamespaceRequest) (*GetRemoteClusterNamespaceResponse, error)
+	// ApplyRemoteClusterNamespaceRepair relays an operator-repair namespace
+	// mutation to a connected remote cluster through this cluster's remote-cluster
+	// client, so repair tools write peers while talking only to their local
+	// frontend. It verifies the remote cluster's identity before writing and
+	// refuses mutations that are not attributed to operator repair.
+	ApplyRemoteClusterNamespaceRepair(context.Context, *ApplyRemoteClusterNamespaceRepairRequest) (*ApplyRemoteClusterNamespaceRepairResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
 	//     aip.dev/not-precedent:  --)
@@ -879,6 +921,12 @@ func (UnimplementedAdminServiceServer) StreamWorkflowReplicationMessages(AdminSe
 }
 func (UnimplementedAdminServiceServer) GetNamespace(context.Context, *GetNamespaceRequest) (*GetNamespaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNamespace not implemented")
+}
+func (UnimplementedAdminServiceServer) GetRemoteClusterNamespace(context.Context, *GetRemoteClusterNamespaceRequest) (*GetRemoteClusterNamespaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRemoteClusterNamespace not implemented")
+}
+func (UnimplementedAdminServiceServer) ApplyRemoteClusterNamespaceRepair(context.Context, *ApplyRemoteClusterNamespaceRepairRequest) (*ApplyRemoteClusterNamespaceRepairResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyRemoteClusterNamespaceRepair not implemented")
 }
 func (UnimplementedAdminServiceServer) GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQTasks not implemented")
@@ -1546,6 +1594,42 @@ func _AdminService_GetNamespace_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_GetRemoteClusterNamespace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRemoteClusterNamespaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetRemoteClusterNamespace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetRemoteClusterNamespace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetRemoteClusterNamespace(ctx, req.(*GetRemoteClusterNamespaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ApplyRemoteClusterNamespaceRepair_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyRemoteClusterNamespaceRepairRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ApplyRemoteClusterNamespaceRepair(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ApplyRemoteClusterNamespaceRepair_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ApplyRemoteClusterNamespaceRepair(ctx, req.(*ApplyRemoteClusterNamespaceRepairRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_GetDLQTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDLQTasksRequest)
 	if err := dec(in); err != nil {
@@ -1986,6 +2070,14 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetNamespace",
 			Handler:    _AdminService_GetNamespace_Handler,
+		},
+		{
+			MethodName: "GetRemoteClusterNamespace",
+			Handler:    _AdminService_GetRemoteClusterNamespace_Handler,
+		},
+		{
+			MethodName: "ApplyRemoteClusterNamespaceRepair",
+			Handler:    _AdminService_ApplyRemoteClusterNamespaceRepair_Handler,
 		},
 		{
 			MethodName: "GetDLQTasks",
