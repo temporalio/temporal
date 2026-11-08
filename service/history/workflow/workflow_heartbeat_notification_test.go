@@ -1,8 +1,11 @@
 package workflow
 
 import (
+	"context"
 	"strconv"
 	"testing"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -209,11 +212,9 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 			}
 			shard := historyi.NewMockShardContext(controller)
 			if tc.firstType != "" {
-				shard.EXPECT().GetConfig().Return(&configs.Config{
-					WorkflowHeartbeatNotificationRolloutPercent: func(string) int { return 0 },
-				})
+				mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
 			}
-			workflowContext.handleWorkflowHeartbeatNotification(shard, newEvents)
+			workflowContext.handleWorkflowHeartbeatNotification(context.Background(), shard, newEvents)
 
 			buffered := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 			require.Len(t, buffered, len(tc.bufferedTypes))
