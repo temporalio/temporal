@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -549,9 +550,7 @@ func TestNamespaceReplicationVerifierPeerReadsThroughRelay(t *testing.T) {
 			sourceClient := testNamespaceReplicationSourceClient(source)
 			sourceClient.remoteClusterNamespaceFn = test.relay
 			clients := map[string]*testNamespaceReplicationAdminClient{"source": sourceClient}
-			for cluster, peer := range test.peers {
-				clients[cluster] = peer
-			}
+			maps.Copy(clients, test.peers)
 			verifier := testNamespaceReplicationVerifierWithClients(source, clients)
 
 			result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
