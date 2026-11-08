@@ -129,6 +129,91 @@ func TestCreateLocalFrontendGRPCConnection_ConfiguredKeepAliveOptions(t *testing
 	require.True(t, params.PermitWithoutStream)
 }
 
+func TestCreateLocalFrontendGRPCConnection_FallbackToFrontendService(t *testing.T) {
+	t.Parallel()
+
+	keepAliveTime := 30 * time.Second
+	keepAliveTimeout := 10 * time.Second
+	permitWithoutStream := true
+
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			string(primitives.FrontendService): {
+				RPC: config.RPC{
+					ClientConnectionConfig: config.ClientConnectionConfig{
+						KeepAliveClientConfig: &config.KeepAliveClientParameters{
+							Time:                &keepAliveTime,
+							Timeout:             &keepAliveTimeout,
+							PermitWithoutStream: &permitWithoutStream,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	f := NewFactory(cfg, primitives.FrontendService, log.NewNoopLogger(),
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+	f.EnableInternodeClientKeepalive = true
+
+	conn := f.CreateLocalFrontendGRPCConnection()
+	require.NotNil(t, conn)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	params, ok := getClientConnKeepaliveParams(conn)
+	require.True(t, ok, "expected keepalive parameters to be present on ClientConn")
+	require.Equal(t, keepAliveTime, params.Time)
+	require.Equal(t, keepAliveTimeout, params.Timeout)
+	require.True(t, params.PermitWithoutStream)
+}
+
+func TestCreateLocalFrontendGRPCConnection_PrefersInternalFrontendService(t *testing.T) {
+	t.Parallel()
+
+	ifeKeepAliveTime := 50 * time.Second
+	ifeKeepAliveTimeout := 25 * time.Second
+	feKeepAliveTime := 10 * time.Second
+	feKeepAliveTimeout := 5 * time.Second
+
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			string(primitives.InternalFrontendService): {
+				RPC: config.RPC{
+					ClientConnectionConfig: config.ClientConnectionConfig{
+						KeepAliveClientConfig: &config.KeepAliveClientParameters{
+							Time:    &ifeKeepAliveTime,
+							Timeout: &ifeKeepAliveTimeout,
+						},
+					},
+				},
+			},
+			string(primitives.FrontendService): {
+				RPC: config.RPC{
+					ClientConnectionConfig: config.ClientConnectionConfig{
+						KeepAliveClientConfig: &config.KeepAliveClientParameters{
+							Time:    &feKeepAliveTime,
+							Timeout: &feKeepAliveTimeout,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	f := NewFactory(cfg, primitives.FrontendService, log.NewNoopLogger(),
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+	f.EnableInternodeClientKeepalive = true
+
+	conn := f.CreateLocalFrontendGRPCConnection()
+	require.NotNil(t, conn)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	params, ok := getClientConnKeepaliveParams(conn)
+	require.True(t, ok, "expected keepalive parameters to be present on ClientConn")
+	require.Equal(t, ifeKeepAliveTime, params.Time)
+	require.Equal(t, ifeKeepAliveTimeout, params.Timeout)
+}
+
 func getClientConnKeepaliveParams(conn *grpc.ClientConn) (keepalive.ClientParameters, bool) {
 	val := reflect.ValueOf(conn).Elem()
 	kpField := val.FieldByName("keepaliveParams")
