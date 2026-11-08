@@ -25,7 +25,6 @@ var (
 	FlagContextTimeout             = "context-timeout"
 	FlagContextTimeoutAlias        = []string{"ct"}
 	FlagCluster                    = "cluster"
-	FlagClusterAddress             = "cluster-address"
 	FlagTargetCluster              = "target-cluster"
 	FlagPageSize                   = "pagesize"
 	FlagFrom                       = "from"

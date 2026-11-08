@@ -303,6 +303,20 @@ func (c *metricClient) GetNamespaceReplicationMessages(
 	return c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) GetRemoteClusterNamespace(
+	ctx context.Context,
+	request *adminservice.GetRemoteClusterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetRemoteClusterNamespaceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetRemoteClusterNamespace")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetRemoteClusterNamespace(ctx, request, opts...)
+}
+
 func (c *metricClient) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
