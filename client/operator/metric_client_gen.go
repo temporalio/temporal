@@ -79,6 +79,20 @@ func (c *metricClient) DeleteNexusEndpoint(
 	return c.client.DeleteNexusEndpoint(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeNamespaceRestore(
+	ctx context.Context,
+	request *operatorservice.DescribeNamespaceRestoreRequest,
+	opts ...grpc.CallOption,
+) (_ *operatorservice.DescribeNamespaceRestoreResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "OperatorClientDescribeNamespaceRestore")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeNamespaceRestore(ctx, request, opts...)
+}
+
 func (c *metricClient) GetNexusEndpoint(
 	ctx context.Context,
 	request *operatorservice.GetNexusEndpointRequest,
@@ -161,6 +175,34 @@ func (c *metricClient) RemoveSearchAttributes(
 	}()
 
 	return c.client.RemoveSearchAttributes(ctx, request, opts...)
+}
+
+func (c *metricClient) RestoreNamespace(
+	ctx context.Context,
+	request *operatorservice.RestoreNamespaceRequest,
+	opts ...grpc.CallOption,
+) (_ *operatorservice.RestoreNamespaceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "OperatorClientRestoreNamespace")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RestoreNamespace(ctx, request, opts...)
+}
+
+func (c *metricClient) SoftDeleteNamespace(
+	ctx context.Context,
+	request *operatorservice.SoftDeleteNamespaceRequest,
+	opts ...grpc.CallOption,
+) (_ *operatorservice.SoftDeleteNamespaceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "OperatorClientSoftDeleteNamespace")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.SoftDeleteNamespace(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateNexusEndpoint(
