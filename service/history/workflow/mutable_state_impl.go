@@ -7038,7 +7038,7 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	// check workflow rules
 	if !ai.Paused {
-		ActivityMatchWorkflowRules(ms, ms.timeSource, ms.logger, ai)
+		ActivityMatchWorkflowRules(ms, ms.shard.GetTimeSource(), ms.logger, ai)
 	}
 
 	// if activity is paused
