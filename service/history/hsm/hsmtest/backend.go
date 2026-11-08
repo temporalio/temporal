@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,10 +14,21 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type NodeBackend struct {
-	Events []*historypb.HistoryEvent
+	Events         []*historypb.HistoryEvent
+	WorkflowTimeFn func() time.Time
+}
+
+func (n *NodeBackend) Now() time.Time {
+	if n.WorkflowTimeFn == nil {
+		// Keep an unconfigured test clock deterministic. Returning wall time here can hide
+		// accidental mixing of workflow time and wall-clock time in executor tests.
+		return time.Time{}
+	}
+	return n.WorkflowTimeFn()
 }
 
 func (n *NodeBackend) GetCurrentVersion() int64 {
@@ -37,6 +49,9 @@ func (n *NodeBackend) GetNamespaceEntry() *namespace.Namespace {
 
 func (n *NodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
 	event := &historypb.HistoryEvent{EventType: t, EventId: 2}
+	if n.WorkflowTimeFn != nil {
+		event.EventTime = timestamppb.New(n.Now())
+	}
 	setAttributes(event)
 	n.Events = append(n.Events, event)
 	return event

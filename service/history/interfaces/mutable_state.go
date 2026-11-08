@@ -321,6 +321,9 @@ type (
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)
+		// CurrentStorageUsage returns this cluster's storage usage as of now, including the interval since
+		// its last closed transaction that is not accrued yet. It does not modify the mutable state.
+		CurrentStorageUsage() *persistencespb.StorageUsage
 
 		GetExternalPayloadSize() int64
 		AddExternalPayloadSize(size int64)
