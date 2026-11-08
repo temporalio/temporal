@@ -2991,8 +2991,11 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return nil, err
 	}
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
-	defer cancel()
+	if request.GetTaskQueue().GetKind() != enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS {
+		var cancel context.CancelFunc
+		ctx, cancel = contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
+		defer cancel()
+	}
 
 	// First allocate a result channel and register it so that when the task is completed locally (without forwarding) the
 	// result can be sent on this channel.
