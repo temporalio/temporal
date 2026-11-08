@@ -1374,6 +1374,8 @@ var (
 		"workflow_heartbeat_notification_estimated_first_buffered_input",
 		WithDescription("The first buffered event to initiate a workflow-heartbeat notification."),
 	)
+	WorkflowHeartbeatNotificationDeliveryLatency = NewTimerDef("workflow_task_heartbeat_notification_delivery_latency")
+	WorkflowHeartbeatNotificationResults         = NewCounterDef("workflow_task_heartbeat_notification_results")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
