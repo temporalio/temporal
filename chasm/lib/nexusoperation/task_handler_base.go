@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -50,6 +51,7 @@ type InvocationTaskHandlerOptions struct {
 	HTTPTraceProvider commonnexus.HTTPClientTraceProvider
 	HistoryClient     resource.HistoryClient
 	ChasmRegistry     *chasm.Registry
+	LinkValidator     commonlinks.Validator
 }
 
 func (o InvocationTaskHandlerOptions) toBase() nexusTaskHandlerBase {
@@ -63,6 +65,7 @@ func (o InvocationTaskHandlerOptions) toBase() nexusTaskHandlerBase {
 		httpTraceProvider: o.HTTPTraceProvider,
 		historyClient:     o.HistoryClient,
 		chasmRegistry:     o.ChasmRegistry,
+		linkValidator:     o.LinkValidator,
 	}
 }
 
@@ -77,6 +80,7 @@ type nexusTaskHandlerBase struct {
 	httpTraceProvider commonnexus.HTTPClientTraceProvider
 	historyClient     resource.HistoryClient
 	chasmRegistry     *chasm.Registry
+	linkValidator     commonlinks.Validator
 }
 
 func (b *nexusTaskHandlerBase) buildCallbackURL(

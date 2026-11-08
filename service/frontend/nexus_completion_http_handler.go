@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -60,6 +61,7 @@ type nexusCompletionHandler struct {
 	RedirectionInterceptor               *interceptor.Redirection
 	ForwardingClients                    *cluster.FrontendHTTPClientCache
 	HTTPTraceProvider                    commonnexus.HTTPClientTraceProvider
+	LinkValidator                        commonlinks.Validator
 	clientVersionChecker                 headers.VersionChecker
 	preProcessErrorsCounter              metrics.CounterIface
 }
@@ -86,6 +88,7 @@ func newNexusCompletionHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	forwardingClients *cluster.FrontendHTTPClientCache,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
+	linkValidator commonlinks.Validator,
 ) *nexusCompletionHandler {
 	return &nexusCompletionHandler{
 		ClusterMetadata:                      clusterMetadata,
@@ -105,6 +108,7 @@ func newNexusCompletionHandler(
 		RedirectionInterceptor:               redirectionInterceptor,
 		ForwardingClients:                    forwardingClients,
 		HTTPTraceProvider:                    httpTraceProvider,
+		LinkValidator:                        linkValidator,
 		clientVersionChecker:                 headers.NewDefaultVersionChecker(),
 		preProcessErrorsCounter:              metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 	}
@@ -209,7 +213,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
-	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, logger)
+	links := commonnexus.ConvertAndSanitizeHandlerLinks(r.Links, ns.Name().String(), h.LinkValidator, logger)
 
 	var successPayload *commonpb.Payload
 	switch r.State { // nolint:exhaustive

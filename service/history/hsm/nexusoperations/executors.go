@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -71,6 +72,7 @@ type TaskExecutorOptions struct {
 	HistoryClient          resource.HistoryClient
 	ChasmRegistry          *chasm.Registry
 	TestHooks              testhooks.TestHooks
+	LinkValidator          commonlinks.Validator
 }
 
 func RegisterExecutor(
@@ -433,7 +435,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			err = e.saveStartedResult(node, operation, result)
 		default:
 			// Operation completed synchronously. Store the result and update the state machine.
-			links := commonnexus.ConvertNexusLinksToProtoLinks(result.Links, e.Logger)
+			links := commonnexus.ConvertAndSanitizeHandlerLinks(result.Links, node.NamespaceName(), e.LinkValidator, e.Logger)
 			err = handleSuccessfulOperationResult(node, operation, result.Successful, links)
 		}
 		if err != nil {
@@ -467,7 +469,7 @@ func (e taskExecutor) saveStartedResult(node *hsm.Node, operation Operation, res
 	if err != nil {
 		return err
 	}
-	links := commonnexus.ConvertNexusLinksToProtoLinks(result.Links, e.Logger)
+	links := commonnexus.ConvertAndSanitizeHandlerLinks(result.Links, node.NamespaceName(), e.LinkValidator, e.Logger)
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
 		// nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
