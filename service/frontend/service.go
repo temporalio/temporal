@@ -238,9 +238,6 @@ type Config struct {
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
 	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 
-	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
-
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -441,9 +438,6 @@ func NewConfig(
 		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
 		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
 		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
-
-		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
-		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
 		CallbackEndpointConfigs:      chasmcallback.AllowedAddresses.Get(dc),
 		WorkflowEnabledCallbackKinds: chasmworkflow.EnabledCallbackKinds.Get(dc),

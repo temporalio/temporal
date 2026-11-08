@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/callbacks"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -54,7 +55,7 @@ func NewFrontendHandler(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 	callbackValidator callbacks.Validator,
-	linkValidator *linkValidator,
+	linkValidator commonlinks.Validator,
 ) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
