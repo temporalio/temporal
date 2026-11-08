@@ -45,6 +45,10 @@ type (
 		ackLevel         fairLevel                      // inclusive: task exactly at ackLevel _has_ been acked
 		atEnd            bool                           // whether we believe outstandingTasks represents the entire queue right now
 
+		// Completed tasks already excluded by a backlog count reset. Consume these before
+		// applying ack deltas to avoid subtracting the same completions twice.
+		acksExcludedFromBacklog int64
+
 		// Small cache of acked task levels that were evicted from outstandingTasks. When tasks
 		// are evicted from memory, we lose track of which ones were already acked. This cache
 		// helps avoid reprocessing tasks that we know were already acked but whose ack was
@@ -268,6 +272,7 @@ func (tr *fairTaskReader) readTasksImpl() {
 		// ack level would have been pinned here, we may be able to advance it now (if it's not
 		// explicitly pinned by another write)
 		tr.advanceAckLevelLocked()
+		tr.maybeResetBacklogCountLocked()
 	}
 
 	// If a backoff timer fired while readPending was still true, its maybeReadTasksLocked call
@@ -325,19 +330,21 @@ func (tr *fairTaskReader) addTaskToMatcher(task *internalTask) {
 		return
 	}
 
-	if drop, retry := tr.addErrorBehavior(err); drop {
-		task.finish(taskFinishResult{})
-	} else if retry {
-		// This should only be due to persistence problems. Retry in a new goroutine
-		// to not block other tasks, up to some concurrency limit.
-		if tr.addRetries.Acquire(tr.backlogMgr.tqCtx, 1) != nil {
-			return
-		}
-		go tr.retryAddAfterError(task)
+	if dropReason := tr.addErrorBehavior(err); dropReason != dropReasonUnspecified {
+		task.finish(dropReason)
+		return
 	}
+	// This should only be due to persistence problems. Retry in a new goroutine
+	// to not block other tasks, up to some concurrency limit.
+	if tr.addRetries.Acquire(tr.backlogMgr.tqCtx, 1) != nil {
+		return
+	}
+	go tr.retryAddAfterError(task)
 }
 
-func (tr *fairTaskReader) addErrorBehavior(err error) (drop, retry bool) {
+// addErrorBehavior takes an error from addSpooledTask and returns either:
+// dropReasonUnspecified to retry the add (in a while), or another dropReason to drop the task.
+func (tr *fairTaskReader) addErrorBehavior(err error) dropReason {
 	// addSpooledTask can only fail due to:
 	// - the task queue is closed (errTaskQueueClosed or context.Canceled)
 	// - ValidateDeployment failed (InvalidArgument)
@@ -347,20 +354,22 @@ func (tr *fairTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
 		// maybe we tried to add a task to a versioned queue as it was unloading, and have to
 		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
-		return false, true
+		return dropReasonUnspecified // retry
 	}
 	if _, ok := errors.AsType[*serviceerrors.StickyWorkerUnavailable](err); ok {
-		return true, false // drop the task
+		return dropReasonStickyWorkerUnavailable // drop the task
 	}
-	var invalid *serviceerror.InvalidArgument
-	var internal *serviceerror.Internal
-	if errors.As(err, &invalid) || errors.As(err, &internal) {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
-		return true, false // drop the task
+		return dropReasonInvalid // drop the task
+	}
+	if _, ok := errors.AsType[*serviceerror.Internal](err); ok {
+		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
+		return dropReasonInternalError // drop the task
 	}
 	// For any other error (this should be very rare), we can retry.
 	tr.throttledLogger.Error("retryable error processing spooled task", tag.Error(err))
-	return false, true
+	return dropReasonUnspecified // retry
 }
 
 func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
@@ -374,17 +383,19 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 		tr.backlogMgr.tqCtx,
 		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(taskFinishResult{})
+				task.finish(dropReasonExpiredMemory)
 				return nil
 			}
 			err := tr.backlogMgr.addSpooledTask(task)
-			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(taskFinishResult{})
-			} else if retry {
-				metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
-				return err
+			if err == nil {
+				return nil
 			}
-			return nil
+			if dropReason := tr.addErrorBehavior(err); dropReason != dropReasonUnspecified {
+				task.finish(dropReason)
+				return nil
+			}
+			metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
+			return err
 		},
 		addErrorRetryPolicy,
 		nil,
@@ -555,10 +566,8 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.atEnd = true
 	}
 
-	// If we're at the end, then outstandingTasks is the whole queue so we can set count.
-	if count := tr.knownCountLocked(); count >= 0 {
-		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
-	}
+	// If we're at the end and all writes are accounted for, we can set the count.
+	tr.maybeResetBacklogCountLocked()
 
 	return created
 
@@ -602,6 +611,9 @@ func (tr *fairTaskReader) isDrained() bool {
 	return tr.atEnd && tr.loadedTasks == 0
 }
 
+// Returns true if the ack level is pinned (which happens during the whole lifecycle of a
+// write, so we ensure we don't delete just-written tasks), or if it's unpinned but we haven't
+// merged the tasks that were just written into outstandingTasks yet.
 func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
 	return tr.ackLevelPinnedByWriter || len(tr.newlyWrittenTasks) > 0
 }
@@ -629,8 +641,13 @@ func (tr *fairTaskReader) advanceAckLevelLocked() {
 		tr.numToGC += int(numAcked)
 		tr.maybeGCLocked()
 
+		// Apply the exclusions to the next acks. If these are different tasks,
+		// the estimate remains conservative until the excluded tasks are acked.
+		excluded := min(numAcked, tr.acksExcludedFromBacklog)
+		tr.acksExcludedFromBacklog -= excluded
+		countDelta := excluded - numAcked
 		tr.backlogMgr.db.updateFairAckLevel(
-			tr.subqueue, tr.ackLevel, -numAcked, tr.knownCountLocked(), tr.backlogAge.oldestTime())
+			tr.subqueue, tr.ackLevel, countDelta, tr.knownCountForResetLocked(), tr.backlogAge.oldestTime())
 	}
 }
 
@@ -658,6 +675,7 @@ func (tr *fairTaskReader) unpinAckLevel(writeErr error) {
 	softassert.That(tr.logger, tr.ackLevelPinnedByWriter, "ack level wasn't pinned")
 	tr.ackLevelPinnedByWriter = false
 	tr.advanceAckLevelLocked()
+	tr.maybeResetBacklogCountLocked()
 }
 
 func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
@@ -666,11 +684,28 @@ func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
 	return tr.readLevel, tr.ackLevel
 }
 
-func (tr *fairTaskReader) knownCountLocked() int64 {
-	if tr.atEnd {
+// knownCountForResetLocked returns the backlog count if we know it, or -1 if we don't. The
+// caller must write a known count to the db: it excludes completed tasks above the ack level,
+// so this also records those in acksExcludedFromBacklog.
+func (tr *fairTaskReader) knownCountForResetLocked() int64 {
+	// Pending writes may have incremented the backlog count without being merged into
+	// outstandingTasks yet. Do not overwrite their increments with the reader's count.
+	if tr.atEnd && !tr.ackLevelPinnedLocked() {
+		tr.acksExcludedFromBacklog = tr.completedTaskCountLocked()
 		return int64(tr.loadedTasks)
 	}
 	return -1
+}
+
+func (tr *fairTaskReader) maybeResetBacklogCountLocked() {
+	if count := tr.knownCountForResetLocked(); count >= 0 {
+		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
+	}
+}
+
+// completedTaskCountLocked counts known completions above the ack level, including evicted acks.
+func (tr *fairTaskReader) completedTaskCountLocked() int64 {
+	return int64(tr.outstandingTasks.Len() - tr.loadedTasks + tr.evictedAcks.Len())
 }
 
 // gc

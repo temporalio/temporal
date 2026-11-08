@@ -12,6 +12,7 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) *clientImpl {
@@ -21,7 +22,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) *clientImpl {
 
 	serverURL, err := url.Parse(server.URL)
 	require.NoError(t, err)
-	c, err := newClient(&Config{URL: *serverURL, DisableGzip: true}, server.Client(), log.NewNoopLogger())
+	c, err := newClient(&esconfig.Config{URL: *serverURL, DisableGzip: true}, server.Client(), log.NewNoopLogger())
 	require.NoError(t, err)
 	return c
 }
@@ -44,17 +45,26 @@ func TestCount(t *testing.T) {
 			expectedCount: 42,
 		},
 		{
-			name: "all shard failures are rejections",
+			name: "all shard failures are rejections (Elasticsearch)",
 			response: `{"count": 10, "_shards": {"total": 2, "successful": 1, "skipped": 0, "failed": 1, "failures": [
-				{"shard": 0, "index": "test-index", "status": "TOO_MANY_REQUESTS", "reason": {"type": "es_rejected_execution_exception", "reason": "rejected"}}
+				{"shard": 0, "index": "test-index", "node": "node-1", "reason": {"type": "es_rejected_execution_exception", "reason": "rejected"}}
+			]}}`,
+			expectedStatus: http.StatusTooManyRequests,
+		},
+		{
+			name: "all shard failures are rejections (OpenSearch)",
+			response: `{"count": 21, "_shards": {"total": 8, "successful": 5, "skipped": 0, "failed": 3, "failures": [
+				{"shard": 3, "index": "test-index", "node": "node-1", "reason": {"type": "rejected_execution_exception", "reason": "rejected"}},
+				{"shard": 6, "index": "test-index", "node": "node-2", "reason": {"type": "rejected_execution_exception", "reason": "rejected"}},
+				{"shard": 7, "index": "test-index", "node": "node-1", "reason": {"type": "rejected_execution_exception", "reason": "rejected"}}
 			]}}`,
 			expectedStatus: http.StatusTooManyRequests,
 		},
 		{
 			name: "mixed shard failures",
 			response: `{"count": 10, "_shards": {"total": 3, "successful": 1, "skipped": 0, "failed": 2, "failures": [
-				{"shard": 0, "index": "test-index", "status": "TOO_MANY_REQUESTS", "reason": {"type": "es_rejected_execution_exception", "reason": "rejected"}},
-				{"shard": 1, "index": "test-index", "status": "INTERNAL_SERVER_ERROR", "reason": {"type": "node_disconnected_exception", "reason": "disconnected"}}
+				{"shard": 0, "index": "test-index", "node": "node-1", "reason": {"type": "rejected_execution_exception", "reason": "rejected"}},
+				{"shard": 1, "index": "test-index", "node": "node-2", "reason": {"type": "node_disconnected_exception", "reason": "disconnected"}}
 			]}}`,
 			expectedStatus: http.StatusServiceUnavailable,
 		},

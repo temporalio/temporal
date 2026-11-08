@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm/lib/workflow"
 )
 
 var (
@@ -113,11 +114,12 @@ var (
 	errWorkerVersioningV1_0NotAllowed         = serviceerror.NewPermissionDenied("Worker versioning v0.1 (Version Set-based, deprecated) is disabled on this namespace.", "")
 	errWorkerVersioningV2_0NotAllowed         = serviceerror.NewPermissionDenied("Worker versioning v0.2 (Rules-based, deprecated) is disabled on this namespace.", "")
 	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
+	errOldWorkerVersioningPollerNotAllowed    = serviceerror.NewPermissionDenied("Deprecated worker versioning pollers are disabled on this namespace.", "")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 
-	errWorkflowTimeSkippingNotEnabled          = serviceerror.NewUnimplemented("Workflow time skipping is not enabled for the namespace.")
-	errScheduleTimeSkippingNotEnabled          = serviceerror.NewUnimplemented("Schedule time skipping is not enabled for the namespace.")
+	errWorkflowTimeSkippingNotEnabled          = workflow.ErrWorkflowTimeSkippingNotEnabled
+	errScheduleTimeSkippingNotEnabled          = serviceerror.NewPermissionDenied("schedule time skipping is not enabled for the namespace", "")
 	errTimeSkippingStatePropagationNotInternal = serviceerror.NewPermissionDenied("Time skipping state propagation is reserved for internal Temporal services.", "")
-	errTimeSkippingFastForwardIDNotSet         = serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward_id must be set")
+	errTimeSkippingFastForwardIDNotSet         = workflow.ErrTimeSkippingFastForwardIDNotSet
 )

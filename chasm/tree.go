@@ -225,7 +225,7 @@ type (
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
-		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
@@ -244,6 +244,7 @@ type (
 		Now() time.Time
 		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 		IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool
+		TimeSkippingMaxAccumulatedDuration() time.Duration
 		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
 	}
 
@@ -1022,6 +1023,13 @@ func (n *Node) syncSubComponents() error {
 			}
 			collectionNode.setValueState(min(valueStateNeedSerialize, collectionNode.valueState))
 			childrenToKeep[field.name] = struct{}{}
+		}
+	}
+
+	// Framework-owned children of the root are not backed by a component field, keep them explicitly.
+	if n.parent == nil {
+		for _, name := range reservedRootChildren {
+			childrenToKeep[name] = struct{}{}
 		}
 	}
 
@@ -2565,12 +2573,12 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	archetypeID ArchetypeID,
 ) error {
 	if firstPureTask == nil {
-		n.backend.DeleteCHASMPureTasks(tasks.MaximumKey.FireTime)
+		n.backend.DeletePhysicalCHASMPureTasks(tasks.MaximumKey.FireTime)
 		return nil
 	}
 
 	firstPureTaskScheduledTime := firstPureTask.ScheduledTime.AsTime()
-	n.backend.DeleteCHASMPureTasks(firstPureTaskScheduledTime)
+	n.backend.DeletePhysicalCHASMPureTasks(firstPureTaskScheduledTime)
 
 	if firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 		return nil
@@ -4220,7 +4228,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		n.logger.Error(
 			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
-		return serviceerror.NewInternal("time skipping is not enabled for current execution type")
+		return serviceerror.NewInternal("time skipping is not implemented for current execution type")
 	}
 
 	// runtime check
@@ -4231,6 +4239,18 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	}
 	transition := n.defaultFindNextTargetTime()
 	if !transition.IsValid() {
+		return nil
+	}
+	accumulatedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	maxDuration := n.backend.TimeSkippingMaxAccumulatedDuration()
+	if transition.GetSkippedDuration() > maxDuration-accumulatedDuration {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
+			1, metrics.ArchetypeTag(archetypeName))
+		n.logger.Warn("chasm time skipping exceeds maximum accumulated duration",
+			tag.Archetype(archetypeName),
+			tag.Duration("accumulated-skipped-duration", accumulatedDuration),
+			tag.Duration("proposed-skipped-duration", transition.GetSkippedDuration()),
+			tag.Duration("maximum-accumulated-skipped-duration", maxDuration))
 		return nil
 	}
 

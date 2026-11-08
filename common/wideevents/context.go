@@ -30,7 +30,7 @@ func ReplicationTaskOriginFromContext(ctx context.Context) ReplicationTaskOrigin
 type NamespaceReplicationTaskContext struct {
 	SourceCluster string
 	TargetCluster string
-	SourceTaskID  int64
+	SourceTaskID  *int64
 	AttemptCount  int
 	EventData     NamespaceReplicationTaskEventData
 }

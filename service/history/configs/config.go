@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -33,6 +32,7 @@ type Config struct {
 	PersistenceDynamicRateLimitingParams        dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 	PersistenceQPSBurstRatio                    dynamicconfig.FloatPropertyFn
+	EnableHistoryNodeTransactionIDValidation    dynamicconfig.BoolPropertyFn
 
 	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -78,8 +78,6 @@ type Config struct {
 	EnableTransitionHistory                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnablePrincipalPropagation                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerUpdateID                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -136,6 +134,8 @@ type Config struct {
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
+	TaskThrottleController dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
+
 	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay      dynamicconfig.DurationPropertyFn
@@ -168,6 +168,8 @@ type Config struct {
 	TimerProcessorMaxTimeShift                       dynamicconfig.DurationPropertyFn
 	TimerQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	RetentionTimerJitterDuration                     dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionGlobal                      dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionLocal                       dynamicconfig.DurationPropertyFn
 
 	MemoryTimerProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 
@@ -218,6 +220,8 @@ type Config struct {
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumRequestIDsPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RequestIDMaxAge                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	EnableChasmRequestIDDataNode     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaximumRequestIDsInChasmDataNode dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
@@ -360,7 +364,7 @@ type Config struct {
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 	ReplicationStreamMaxLifetime                        dynamicconfig.DurationPropertyFn
 	ReplicationStreamMaxLifetimeJitter                  dynamicconfig.FloatPropertyFn
-	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HistoryReplicationRateLimiter                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[dynamicconfig.HistoryReplicationRateLimiterSettings]
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -415,6 +419,7 @@ type Config struct {
 	WorkerCommandsDispatchTimeout     dynamicconfig.DurationPropertyFn
 	WorkerCommandsMaxAttempts         dynamicconfig.IntPropertyFn
 	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowEagerDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
@@ -486,8 +491,9 @@ type Config struct {
 	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
 
 	// Time-Skipping related settings
-	WorkflowTimeSkippingEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	CHASMSchedulerTimeSkippingEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowTimeSkippingEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	CHASMSchedulerTimeSkippingEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingMaxAccumulatedDuration dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -524,6 +530,8 @@ func NewConfig(
 		MaxAutoResetPoints:                     dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:             dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 
+		EnableHistoryNodeTransactionIDValidation: dynamicconfig.EnableHistoryNodeTransactionIDValidation.Get(dc),
+
 		MaxLocalParentWorkflowVerificationDuration: dynamicconfig.MaxLocalParentWorkflowVerificationDuration.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
@@ -552,8 +560,6 @@ func NewConfig(
 		EnableTransitionHistory:                    dynamicconfig.EnableTransitionHistory.Get(dc),
 		EnablePrincipalPropagation:                 dynamicconfig.EnablePrincipalPropagation.Get(dc),
 		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		MaxCallbacksPerExecution:                   callback.MaxPerExecution.Get(dc),
-		MaxCallbacksPerUpdateID:                    dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSkipPersistence:                 dynamicconfig.EnableCHASMSkipPersistence.Get(dc),
 		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),
@@ -608,6 +614,7 @@ func NewConfig(
 		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
+		TaskThrottleController:                               dynamicconfig.TaskThrottleController.Get(dc),
 		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
 		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
 		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
@@ -635,6 +642,8 @@ func NewConfig(
 		TimerProcessorMaxTimeShift:                       dynamicconfig.TimerProcessorMaxTimeShift.Get(dc),
 		TransferQueueMaxReaderCount:                      dynamicconfig.TransferQueueMaxReaderCount.Get(dc),
 		RetentionTimerJitterDuration:                     dynamicconfig.RetentionTimerJitterDuration.Get(dc),
+		NamespaceMinRetentionGlobal:                      dynamicconfig.NamespaceMinRetentionGlobal.Get(dc),
+		NamespaceMinRetentionLocal:                       dynamicconfig.NamespaceMinRetentionLocal.Get(dc),
 
 		MemoryTimerProcessorSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
 
@@ -708,13 +717,15 @@ func NewConfig(
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 		ReplicationStreamMaxLifetime:                        dynamicconfig.ReplicationStreamMaxLifetime.Get(dc),
 		ReplicationStreamMaxLifetimeJitter:                  dynamicconfig.ReplicationStreamMaxLifetimeJitter.Get(dc),
-		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
+		HistoryReplicationRateLimiter:                       dynamicconfig.HistoryReplicationRateLimiter.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
 		MaximumRequestIDsPerExecution:    dynamicconfig.MaximumRequestIDsPerExecution.Get(dc),
 		RequestIDMaxAge:                  dynamicconfig.RequestIDMaxAge.Get(dc),
+		EnableChasmRequestIDDataNode:     dynamicconfig.EnableChasmRequestIDDataNode.Get(dc),
+		MaximumRequestIDsInChasmDataNode: dynamicconfig.MaximumRequestIDsInChasmDataNode.Get(dc),
 		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
 		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),
@@ -851,6 +862,7 @@ func NewConfig(
 		WorkerCommandsDispatchTimeout:     dynamicconfig.WorkerCommandsDispatchTimeout.Get(dc),
 		WorkerCommandsMaxAttempts:         dynamicconfig.WorkerCommandsMaxAttempts.Get(dc),
 		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		EnableWorkflowEagerDispatchCheck:  dynamicconfig.EnableWorkflowEagerDispatchCheck.Get(dc),
 		NamespaceCacheRefreshInterval:     dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 
 		// Archival related
@@ -929,8 +941,9 @@ func NewConfig(
 		WorkflowTaskCompletionBufferNewPaginationRatio: dynamicconfig.WorkflowTaskCompletionBufferNewPaginationRatio.Get(dc),
 
 		// Time-Skipping related settings
-		CHASMSchedulerTimeSkippingEnabled: dynamicconfig.CHASMSchedulerTimeSkippingEnabled.Get(dc),
-		WorkflowTimeSkippingEnabled:       dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
+		CHASMSchedulerTimeSkippingEnabled:  dynamicconfig.CHASMSchedulerTimeSkippingEnabled.Get(dc),
+		WorkflowTimeSkippingEnabled:        dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
+		TimeSkippingMaxAccumulatedDuration: dynamicconfig.TimeSkippingMaxAccumulatedDuration.Get(dc),
 	}
 
 	return cfg

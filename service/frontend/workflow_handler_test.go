@@ -52,13 +52,14 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -132,6 +133,131 @@ func TestWorkflowHandlerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestValidatePollVersioningInfo(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		capabilities           *commonpb.WorkerVersionCapabilities
+		deploymentOptions      *deploymentpb.WorkerDeploymentOptions
+		blockOldPollers        bool
+		expectDeprecated       bool
+		expectedVersion        string
+		expectedAction         string
+		expectPermissionDenied bool
+	}{
+		{
+			name: "unversioned poller",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId: "build-id",
+			},
+		},
+		{
+			name: "v0.1 or v0.2 poller allowed",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "build-id",
+				UseVersioning: true,
+			},
+			expectDeprecated: true,
+			expectedVersion:  deprecatedWorkerVersioningV1OrV2,
+			expectedAction:   deprecatedWorkerVersioningPollAllowed,
+		},
+		{
+			name: "v0.3 poller allowed",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "deployment-series",
+			},
+			expectDeprecated: true,
+			expectedVersion:  deprecatedWorkerVersioningV3,
+			expectedAction:   deprecatedWorkerVersioningPollAllowed,
+		},
+		{
+			name: "current versioned poller not classified as deprecated",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "legacy-build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "legacy-deployment-series",
+			},
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       "deployment",
+				BuildId:              "build-id",
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
+			blockOldPollers: true,
+		},
+		{
+			name: "v0.1 or v0.2 poller blocked",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "build-id",
+				UseVersioning: true,
+			},
+			blockOldPollers:        true,
+			expectDeprecated:       true,
+			expectedVersion:        deprecatedWorkerVersioningV1OrV2,
+			expectedAction:         deprecatedWorkerVersioningPollBlocked,
+			expectPermissionDenied: true,
+		},
+		{
+			name: "v0.3 poller blocked",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "deployment-series",
+			},
+			blockOldPollers:        true,
+			expectDeprecated:       true,
+			expectedVersion:        deprecatedWorkerVersioningV3,
+			expectedAction:         deprecatedWorkerVersioningPollBlocked,
+			expectPermissionDenied: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+			config.BlockOldVersioningPollers = dc.GetBoolPropertyFnFilteredByNamespace(tc.blockOldPollers)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			ctx := interceptor.AddTelemetryContext(context.Background(), metricsHandler)
+			handler := &WorkflowHandler{
+				config: config,
+				logger: log.NewNoopLogger(),
+			}
+
+			err := handler.validatePollVersioningInfo(
+				ctx,
+				"namespace",
+				tc.capabilities,
+				tc.deploymentOptions,
+				&taskqueuepb.TaskQueue{Name: "task-queue"},
+			)
+			if tc.expectPermissionDenied {
+				var permissionDenied *serviceerror.PermissionDenied
+				require.ErrorAs(t, err, &permissionDenied)
+				require.ErrorIs(t, err, errOldWorkerVersioningPollerNotAllowed)
+			} else {
+				require.NoError(t, err)
+			}
+
+			recordings := capture.SnapshotMetric(metrics.DeprecatedWorkerVersioningPollCounter.Name())
+			if !tc.expectDeprecated {
+				require.Empty(t, recordings)
+				return
+			}
+			require.Equal(t, []*metricstest.CapturedRecording{
+				{
+					Value: int64(1),
+					Tags: map[string]string{
+						"action_type":               tc.expectedAction,
+						"worker_versioning_version": tc.expectedVersion,
+					},
+				},
+			}, recordings)
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) SetupSuite() {
 }
 
@@ -166,7 +292,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 
 	s.tokenSerializer = tasktoken.NewSerializer()
 
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName}).AnyTimes()
 	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 }
 
@@ -243,10 +369,14 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,
 		workflow.NewValidator(
-			workflow.NewConfig(dc.NewNoopCollection()),
+			workflow.NewConfig(dc.NewCollection(dc.StaticClient{
+				dc.WorkflowTimeSkippingEnabled.Key(): config.WorkflowTimeSkippingEnabled(s.testNamespace.String()),
+			}, log.NewNoopLogger())),
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
 		),
+		nil,
+		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -2579,7 +2709,7 @@ func (s *WorkflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(esconfig.PersistenceName).AnyTimes()
 
 	query := "WorkflowId = 'wid'"
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
@@ -4226,91 +4356,19 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
-func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
-	var unimplementedErr *serviceerror.Unimplemented
-	var invalidArgumentErr *serviceerror.InvalidArgument
-
-	// nil config is valid
-	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(nil, s.testNamespace))
-
-	// config with enabled=false but dynamic config disabled returns error
-	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
-
-	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
-
-	// config with enabled=false and dynamic config enabled is valid
-	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
-
-	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
-
-	// fast_forward set while enabled=false is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: false, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
-
-	// negative fast_forward duration is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * -10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
-
-	// fast_forward set without a fast_forward_id is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10)}}, s.testNamespace), &invalidArgumentErr)
-
-	// a blank (whitespace-only) fast_forward_id is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "  "}}, s.testNamespace), &invalidArgumentErr)
-
-	// fast_forward with a valid fast_forward_id is accepted
-	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace))
-
-	// MaxSkipPerSession is populated from dynamic config: a per-namespace override wins for that
-	// namespace, a constraint-less (per-cell) value is the fallback for other namespaces, and a
-	// value already set on the request is left untouched.
-	const otherNamespace = "other-namespace"
-	maxSkipClient := dc.StaticClient{
-		dc.WorkflowTimeSkippingEnabled.Key(): true,
-		dc.TimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
-			{Value: 42}, // per-cell (constraint-less) value
-			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
-		},
-	}
-	maxSkipWH := s.getWorkflowHandler(NewConfig(dc.NewCollection(maxSkipClient, log.NewNoopLogger()), numHistoryShards))
-
-	// namespace with a per-namespace override uses that value
-	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
-	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, s.testNamespace))
-	s.Require().Equal(int32(7), tsc.GetMaxSessionSkipCount())
-
-	// namespace without a per-namespace setting falls back to the per-cell value
-	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
-	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
-	s.Require().Equal(int32(42), tsc.GetMaxSessionSkipCount())
-
-	// a value already on the request is preserved, not overwritten by dynamic config
-	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
-	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, s.testNamespace))
-	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
-}
-
 func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	config := s.newConfig()
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
-	s.Require().ErrorIs(
-		wh.validateAndPopulateScheduleTimeSkippingConfig(
-			&schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
-			s.testNamespace,
-			true,
-		),
-		errScheduleTimeSkippingNotEnabled,
+	err := wh.validateAndPopulateScheduleTimeSkippingConfig(
+		&schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+		s.testNamespace,
+		true,
 	)
+	s.Require().ErrorIs(err, errScheduleTimeSkippingNotEnabled)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.Require().ErrorAs(err, &permissionDenied)
 
 	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh = s.getWorkflowHandler(config)
@@ -4343,7 +4401,6 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 			}
 		})
 	}
-
 	patchWithConfig := &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}}
 	s.Require().NoError(wh.validateAndPopulateScheduleTimeSkippingConfig(nil, s.testNamespace, false))
 	s.Require().ErrorIs(
@@ -4449,6 +4506,27 @@ func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
 		s.ErrorIs(err, errWorkflowIDNotSet)
 	})
 
+	for _, tc := range []struct {
+		name  string
+		runID string
+	}{
+		{name: "valid run id", runID: "deadbeef-c001-4567-890a-bcdef0123456"},
+		{name: "malformed run id", runID: "invalid-run-id"},
+	} {
+		s.Run(tc.name+" is rejected as unsupported", func() {
+			req := newReq("ff-id")
+			req.WorkflowExecution = &commonpb.WorkflowExecution{
+				WorkflowId: "wf-id",
+				RunId:      tc.runID,
+			}
+			resp, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), req)
+			s.Require().Nil(resp)
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().ErrorContains(err, "polling workflow execution time skipping for a specific run ID is not supported")
+		})
+	}
+
 	s.Run("disabled dynamic config is rejected", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 		_, err := handler(false).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
@@ -4540,8 +4618,8 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled
 	s.Equal("Update-with-Start could not be executed.", err.Error())
 	var multiOpErr *serviceerror.MultiOperationExecution
 	s.ErrorAs(err, &multiOpErr)
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(multiOpErr.OperationErrors()[0], &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(multiOpErr.OperationErrors()[0], &permissionDenied)
 	s.ErrorContains(multiOpErr.OperationErrors()[0], errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4620,8 +4698,8 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisable
 	}
 
 	_, err := wh.StartWorkflowExecution(context.Background(), req)
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4657,7 +4735,6 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	config := s.newConfig()
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:          s.testNamespace.String(),
@@ -4669,8 +4746,8 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	}
 
 	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4684,7 +4761,8 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
 	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), mock.MatchedBy(func(req *historyservice.SignalWithStartWorkflowExecutionRequest) bool {
-		return req.SignalWithStartRequest.GetTimeSkippingConfig().GetEnabled()
+		timeSkippingConfig := req.SignalWithStartRequest.GetTimeSkippingConfig()
+		return timeSkippingConfig.GetEnabled() && timeSkippingConfig.GetMaxSessionSkipCount() == int32(config.TimeSkippingMaxSkipPerSession(s.testNamespace.String()))
 	})).Return(&historyservice.SignalWithStartWorkflowExecutionResponse{Started: true}, nil)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -4728,8 +4806,8 @@ func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisable
 			},
 		},
 	})
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4768,8 +4846,8 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkippi
 			},
 		},
 	})
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4797,8 +4875,8 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOper
 			},
 		},
 	})
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -6761,8 +6839,8 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 	})
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 

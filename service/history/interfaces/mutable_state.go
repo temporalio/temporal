@@ -139,6 +139,15 @@ type (
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(updateID string, failure *failurepb.Failure) error
 		AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error)
+		// ValidateCallbackAddition checks that attaching the given completion callbacks would not
+		// breach the execution's aggregate callback limits. Callbacks are validated only by the
+		// request handlers that introduce them, never where they are attached:
+		//   - api.NewWorkflowWithSignal, for every workflow start
+		//   - startworkflow, for callbacks attached to an existing workflow on conflict
+		//   - updateworkflow, for an Update's callbacks, before it is sent to a worker
+		// inFlight holds the callbacks of Updates admitted but not yet accepted, which must be
+		// reserved against the limits; see update.Registry.InFlightCallbacks.
+		ValidateCallbackAddition(inFlight []chasmworkflow.CallbackAddition, addition chasmworkflow.CallbackAddition) error
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
@@ -312,6 +321,9 @@ type (
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)
+		// CurrentStorageUsage returns this cluster's storage usage as of now, including the interval since
+		// its last closed transaction that is not accrued yet. It does not modify the mutable state.
+		CurrentStorageUsage() *persistencespb.StorageUsage
 
 		GetExternalPayloadSize() int64
 		AddExternalPayloadSize(size int64)
@@ -326,7 +338,7 @@ type (
 		// against wall-clock time.
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
-		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
 
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)

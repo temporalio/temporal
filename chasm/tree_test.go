@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -6368,6 +6369,27 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Equal(3, s.nodeBackend.NumTasksAdded(), "two side-effect tasks and the earliest pure task are regenerated")
 		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
 			"pure-task deletion is anchored at the earliest pure scheduled time")
+	})
+
+	s.Run("AccumulatedDurationCap_RejectsTransition", func() {
+		root := gateRoot(true)
+		executionInfo(&persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		})
+		s.nodeBackend.HandleTimeSkippingMaxAccumulatedDuration = func() time.Duration { return 90 * time.Minute }
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		root.metricsHandler = metricsHandler
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Nil(recorded)
+		s.Zero(s.nodeBackend.NumTasksAdded())
+		s.Require().Len(capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()], 1)
 	})
 
 	s.Run("FastForwardReached_RecordsTransitionWithoutRegeneratingTasks", func() {

@@ -257,6 +257,7 @@ func newMatchingEngine(
 		hostInfoProvider:    mockHostInfoProvider,
 		serviceResolver:     mockServiceResolver,
 		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
+		routeChecksCh:       make(chan struct{}, 1),
 		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:          clock.NewRealTimeSource(),
 		visibilityManager:   mockVisibilityManager,
@@ -2689,7 +2690,6 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsC
 }
 
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClockedCurrent() {
-	captureHandler := s.captureDroppedOnEngine()
 	clockedCurrent := &persistencespb.TaskQueueUserData{
 		Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -2697,13 +2697,11 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 		},
 	}
 	tests := []struct {
-		name        string
-		incoming    *persistencespb.TaskQueueUserData
-		wantDropped bool
+		name     string
+		incoming *persistencespb.TaskQueueUserData
 	}{
 		{
-			name:        "clockless incoming",
-			wantDropped: true,
+			name: "clockless incoming",
 			incoming: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
@@ -2711,8 +2709,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 			},
 		},
 		{
-			name:        "older clocked incoming",
-			wantDropped: true,
+			name: "older clocked incoming",
 			incoming: &persistencespb.TaskQueueUserData{
 				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -2726,18 +2723,10 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 		s.Run(test.name, func() {
 			taskQueue := uuid.NewString()
 			s.seedTaskQueueUserData(taskQueue, clockedCurrent)
-			capture := captureHandler.StartCapture()
-			defer captureHandler.StopCapture(capture)
 
 			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
 
 			protorequire.ProtoEqual(s.T(), clockedCurrent, got)
-			recordings := capture.Snapshot()[metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.Name()]
-			if test.wantDropped {
-				s.Len(recordings, 1)
-			} else {
-				s.Empty(recordings)
-			}
 		})
 	}
 }
@@ -3115,7 +3104,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 		s.NoError(err)
 		s.Equal("wf", task.event.Data.WorkflowId)
 		s.Equal(int64(123), task.event.Data.ScheduledEventId)
-		task.finish(taskFinishResult{consumedToken: true})
+		task.finish(nil)
 		wg.Done()
 	}()
 
@@ -3224,7 +3213,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	s.Require().NoError(err)
 	s.Equal("wf", task.event.Data.WorkflowId)
 	s.Equal(int64(123), task.event.Data.ScheduledEventId)
-	task.finish(taskFinishResult{consumedToken: true})
+	task.finish(nil)
 }
 
 type mockRoutingMatchingClient struct {
@@ -3241,11 +3230,17 @@ func (m mockRoutingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return hosts[n%len(hosts)].GetAddress(), nil
 }
 
+func (m mockRoutingMatchingClient) NextRouteChange(p tqid.Partition) time.Time {
+	key, n := p.RoutingKey(0)
+	return m.sr.NextLookupChange(key, n+1)
+}
+
 func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	// need to create a new engine for this test to customize mockServiceResolver
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(gomock.Any(), gomock.Any()).Return(time.Time{}).AnyTimes()
 
 	// add Route to MockMatchingServiceClient
 	routingClient := mockRoutingMatchingClient{
@@ -3303,6 +3298,143 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	}
 	s.True(isLoaded(p1))
 	s.False(isLoaded(p2))
+}
+
+func (s *matchingEngineSuite) TestUnloadDuringGradualMembershipChange() {
+	// need to create a new engine for this test to customize mockServiceResolver
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+
+	routingClient := mockRoutingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		sr:                        s.mockServiceResolver,
+	}
+
+	self := s.mockHostInfoProvider.HostInfo()
+	other := membership.NewHostInfoFromAddress("other")
+
+	config := s.newConfig()
+	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+
+	e := newMatchingEngine(config, s.v1TaskManager, s.fairTaskManager, s.mockHistoryClient,
+		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
+	e.Start()
+	defer e.Stop()
+
+	newPartition := func() tqid.Partition {
+		p, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.NewString(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		s.NoError(err)
+		return p
+	}
+	load := func(p tqid.Partition) {
+		_, _, err := e.getTaskQueuePartitionManager(context.Background(), p, true, loadCauseUnspecified)
+		s.NoError(err)
+	}
+
+	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1).Return(time.Time{}).AnyTimes()
+
+	// p2 and p3 move away partway through a gradual change, without a membership changed
+	// event. p1 doesn't move.
+	var gradual atomic.Bool
+	now := time.Now()
+	expectPartition := func(p tqid.Partition, switchAt time.Time, lookups *atomic.Int32) {
+		moved := func() bool { return !switchAt.IsZero() && !time.Now().Before(switchAt) }
+		key, n := p.RoutingKey(0)
+		s.mockServiceResolver.EXPECT().NextLookupChange(key, n+1).DoAndReturn(func(string, int) time.Time {
+			if !gradual.Load() || switchAt.IsZero() || moved() {
+				return time.Time{}
+			}
+			return switchAt
+		}).AnyTimes()
+		s.mockServiceResolver.EXPECT().LookupN(key, n+1).DoAndReturn(func(string, int) []membership.HostInfo {
+			lookups.Add(1)
+			if moved() {
+				return []membership.HostInfo{other}
+			}
+			return []membership.HostInfo{self}
+		}).AnyTimes()
+	}
+	p1, p2, p3 := newPartition(), newPartition(), newPartition()
+	var p1Lookups, p2Lookups, p3Lookups atomic.Int32
+	expectPartition(p1, time.Time{}, &p1Lookups)
+	expectPartition(p2, now.Add(time.Second), &p2Lookups)
+	expectPartition(p3, now.Add(1500*time.Millisecond), &p3Lookups)
+
+	load(p1)
+	load(p2)
+
+	// one event for the start of the gradual change, which finds p2's switch time
+	gradual.Store(true)
+	e.membershipChangedCh <- nil
+	await.RequireTrue(s.T(), func() bool { return p1Lookups.Load() > 0 }, time.Second, 10*time.Millisecond)
+
+	// p3 is loaded after that, so it's found by the load path
+	load(p3)
+
+	s.Len(e.getTaskQueuePartitions(1000), 3, "nothing should be unloaded yet")
+	s.Zero(p3Lookups.Load())
+
+	await.RequireTruef(s.T(), func() bool {
+		return len(e.getTaskQueuePartitions(1000)) == 1
+	}, 5*time.Second, 10*time.Millisecond, "p2 and p3 should have been unloaded at their switch times")
+
+	tqm, _, err := e.getTaskQueuePartitionManager(context.Background(), p1, false, loadCauseUnspecified)
+	s.NoError(err)
+	s.NotNil(tqm)
+	s.Equal(int32(1), p1Lookups.Load(), "p1 should only have been checked on the membership event")
+}
+
+func (s *matchingEngineSuite) TestNexusEndpointsOwnershipDuringGradualMembershipChange() {
+	// need to create a new engine for this test to customize mockServiceResolver
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+
+	routingClient := mockRoutingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		sr:                        s.mockServiceResolver,
+	}
+
+	self := s.mockHostInfoProvider.HostInfo()
+	other := membership.NewHostInfoFromAddress("other")
+
+	config := s.newConfig()
+	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+
+	e := newMatchingEngine(config, s.v1TaskManager, s.fairTaskManager, s.mockHistoryClient,
+		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
+	e.Start()
+	defer e.Stop()
+
+	// The endpoints table moves away partway through a gradual change, without a membership
+	// changed event.
+	switchAt := time.Now().Add(500 * time.Millisecond)
+	moved := func() bool { return !time.Now().Before(switchAt) }
+	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).DoAndReturn(func(string) (membership.HostInfo, error) {
+		if moved() {
+			return other, nil
+		}
+		return self, nil
+	}).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1).DoAndReturn(func(string, int) time.Time {
+		if moved() {
+			return time.Time{}
+		}
+		return switchAt
+	}).AnyTimes()
+
+	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
+	s.NoError(err)
+	s.True(isOwner)
+
+	// one event for the start of the gradual change, which finds the switch time
+	e.membershipChangedCh <- nil
+
+	await.Rcv(s.T(), ownershipLostCh)
 }
 
 func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {
@@ -3715,23 +3847,36 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
-	backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
-
-	// Only count tasks above the ack level: acked tasks may not have been gc'ed yet.
 	db := ptqMgr.backlogMgr.getDB()
-	db.Lock()
-	ackLevel := fairLevel{id: db.subqueues[subqueueZero].AckLevel}
 	if s.fairness {
-		ackLevel = fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
-	}
-	db.Unlock()
-	dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
+		bm := ptqMgr.backlogMgr.(*fairBacklogManagerImpl)
+		bm.subqueueLock.Lock()
+		tr := bm.subqueues[subqueueZero]
+		bm.subqueueLock.Unlock()
+		tr.lock.Lock()
+		defer tr.lock.Unlock()
 
-	if s.fairness {
-		// Relax this condition for fairBacklogManager: it can sometimes reset backlog count on
-		// read, making it more accurate in theory, but breaking this test's assumptions.
-		s.InDelta(dbTasks, backlogCount, 2)
+		db.Lock()
+		backlogCount := db.subqueues[subqueueZero].ApproximateBacklogCount
+		ackLevel := fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
+		db.Unlock()
+		dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
+		completedTasks := tr.completedTaskCountLocked()
+
+		// Completed tasks above the ack level may already be excluded from the estimate.
+		// Require enough backlog for the remaining dispatches, allowing a conservative overestimate.
+		s.LessOrEqual(completedTasks, dbTasks)
+		s.GreaterOrEqual(backlogCount, dbTasks-completedTasks)
+		// This upper bound only holds because these tests don't inject CreateTasks faults.
+		// A write that fails without definitely failing (e.g. Unavailable) leaves the count
+		// incremented even if no task was written, so the count could legitimately exceed dbTasks.
+		s.LessOrEqual(backlogCount, dbTasks)
 	} else {
+		backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
+		db.Lock()
+		ackLevel := fairLevel{id: db.subqueues[subqueueZero].AckLevel}
+		db.Unlock()
+		dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
 		s.LessOrEqual(dbTasks, backlogCount)
 	}
 }
@@ -5138,11 +5283,15 @@ func (q *testQueueData) persistenceStats() testQueuePersistenceStats {
 }
 
 func (m *testTaskManager) CreateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CreateTaskQueueRequest,
 ) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5163,11 +5312,15 @@ func (m *testTaskManager) CreateTaskQueue(
 }
 
 func (m *testTaskManager) UpdateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.UpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5188,9 +5341,13 @@ func (m *testTaskManager) UpdateTaskQueue(
 }
 
 func (m *testTaskManager) GetTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTaskQueueRequest,
 ) (*persistence.GetTaskQueueResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	tlm := m.getQueueData(request.TaskQueue, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -5219,13 +5376,17 @@ func (m *testTaskManager) getTaskCountAbove(q *PhysicalTaskQueueKey, level fairL
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
 	if m.fairness && request.ExclusiveMaxPass < 1 {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
 	} else if !m.fairness && (request.ExclusiveMaxPass != 0 || request.ConditionRangeID != 0) {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
+	}
+
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
 	}
 
 	m.delay()
@@ -5293,13 +5454,17 @@ func (m *testTaskManager) fault(method, err string) bool {
 }
 
 func (m *testTaskManager) CreateTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	namespaceID := request.TaskQueueInfo.Data.GetNamespaceId()
 	taskQueue := request.TaskQueueInfo.Data.Name
 	taskType := request.TaskQueueInfo.Data.TaskType
 	rangeID := request.TaskQueueInfo.RangeID
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5366,7 +5531,7 @@ func (m *testTaskManager) CreateTasks(
 }
 
 func (m *testTaskManager) GetTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
 	m.logger.Debug("testTaskManager.GetTasks", tag.Value(request))
@@ -5375,6 +5540,10 @@ func (m *testTaskManager) GetTasks(
 		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue")
 	} else if !m.fairness && request.InclusiveMinPass != 0 {
 		return nil, serviceerror.NewInternal("invalid GetTasks request on queue")
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	m.delay()

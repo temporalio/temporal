@@ -13,9 +13,10 @@ import (
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 )
 
-func NewEsClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*elastic.Client, error) {
+func NewEsClient(cfg *esconfig.Config, httpClient *http.Client, logger log.Logger) (*elastic.Client, error) {
 	var urls []string
 	if len(cfg.URLs) > 0 {
 		urls = make([]string, len(cfg.URLs))
@@ -94,7 +95,7 @@ type (
 var _ Client = (*clientImpl)(nil)
 
 // newClient create a ES client
-func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
+func newClient(cfg *esconfig.Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
 	esClient, err := NewEsClient(cfg, httpClient, logger)
 	if err != nil {
 		return nil, err
@@ -185,14 +186,14 @@ func newShardFailuresError(shards *elastic.ShardsInfo) *elastic.Error {
 		if f == nil {
 			continue
 		}
-		if f.Status != "TOO_MANY_REQUESTS" && f.Reason["type"] != "es_rejected_execution_exception" {
+		// Shard failures don't include a status field, so it's derived from the reason type.
+		if !isRejectedExecutionType(f.Reason["type"]) {
 			status = http.StatusServiceUnavailable
 		}
 		failedShards = append(failedShards, map[string]any{
 			"shard":  f.Shard,
 			"index":  f.Index,
 			"node":   f.Node,
-			"status": f.Status,
 			"reason": f.Reason,
 		})
 	}
@@ -204,6 +205,15 @@ func newShardFailuresError(shards *elastic.ShardsInfo) *elastic.Error {
 			FailedShards: failedShards,
 		},
 	}
+}
+
+func isRejectedExecutionType(reasonType any) bool {
+	switch reasonType {
+	case "es_rejected_execution_exception", // Elasticsearch
+		"rejected_execution_exception": // OpenSearch
+		return true
+	}
+	return false
 }
 
 func (c *clientImpl) CountGroupBy(

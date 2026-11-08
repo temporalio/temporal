@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -176,7 +177,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	s.Equal(t, pres.task)
 
 	// finish task
-	pres.task.finish(taskFinishResult{consumedToken: true})
+	pres.task.finish(nil)
 	s.True(gotResponse)
 
 	// one more, context should time out again. note two contexts this time.
@@ -292,7 +293,7 @@ func (s *MatcherDataSuite) TestQuery() {
 	s.True(pres.task.isQuery())
 	// wake up getResponse. use some error just to check it's passed through.
 	someError := errors.New("some error")
-	pres.task.finish(taskFinishResult{err: someError, consumedToken: true})
+	pres.task.finish(someError)
 
 	resp := <-respC
 	s.False(resp.forwarded)
@@ -307,7 +308,7 @@ func (s *MatcherDataSuite) TestQueryForwardNil() {
 	s.NotNil(pres.task)
 	s.True(pres.task.isQuery())
 	var fres *matchingservice.QueryWorkflowResponse
-	pres.task.finishForward(fres, nil, true)
+	pres.task.finishForward(fres, nil)
 
 	resp := <-respC
 	s.True(resp.forwarded)
@@ -326,7 +327,7 @@ func (s *MatcherDataSuite) TestQueryForwardError() {
 	s.True(pres.task.isQuery())
 	var fres *matchingservice.QueryWorkflowResponse
 	someError := errors.New("some error")
-	pres.task.finishForward(fres, someError, true)
+	pres.task.finishForward(fres, someError)
 
 	resp := <-respC
 	s.True(resp.forwarded)
@@ -343,7 +344,7 @@ func (s *MatcherDataSuite) TestQueryForwardResponse() {
 	fres := &matchingservice.QueryWorkflowResponse{
 		QueryResult: payloads.EncodeString("ok"),
 	}
-	pres.task.finishForward(fres, nil, true)
+	pres.task.finishForward(fres, nil)
 
 	resp := <-respC
 	s.True(resp.forwarded)
@@ -359,7 +360,7 @@ func (s *MatcherDataSuite) TestTaskForward() {
 		pres := s.md.EnqueuePollerAndWait(nil, poller)
 		s.NotNil(pres.task)
 		// use some error just to check it's passed through
-		pres.task.finishForward(nil, someError, true)
+		pres.task.finishForward(nil, someError)
 	}()
 	// two normal pollers
 	go s.pollFakeTime(time.Second)
@@ -486,7 +487,7 @@ func (s *MatcherDataSuite) TestPerKeyRateLimitDoesNotBlockOtherKeys() {
 	s.Require().NoError(s.md.EnqueueTaskNoWait(task1a))
 	res := s.pollFakeTime(time.Second)
 	s.Equal(task1a, res.task)
-	res.task.finish(taskFinishResult{consumedToken: true})
+	res.task.finish(nil)
 
 	// Now key1 is limited; add another key1 task (high priority) and a key2 task (lower priority).
 	task1b := s.newBacklogTaskWithPriority(2, 0, nil, key1)
@@ -529,8 +530,8 @@ func (s *MatcherDataSuite) TestPerKeyRateLimitRecycleWakesBlockedMatch() {
 	}()
 	s.waitForPollers(1)
 
-	// Finish task1a with consumedToken=false, which recycles the key1 token and should unblock task1b.
-	res.task.finish(taskFinishResult{consumedToken: false})
+	// Drop task1a, which recycles the key1 token and should unblock task1b.
+	res.task.finish(dropReasonInvalid)
 
 	// The parked poller should now match task1b without any fake-time advancement.
 	select {
@@ -995,6 +996,32 @@ func (s *MatcherDataSuite) TestFindMatch() {
 	}
 }
 
+func TestPollerListOrdering(t *testing.T) {
+	p := pollerList{logger: testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)}
+	start := time.Unix(1, 0)
+	pollers := []*waitingPoller{
+		{taskForwarderType: validatorTaskForwarder, startTime: start},
+		{taskForwarderType: parentTaskForwarder, startTime: start.Add(2 * time.Second)},
+		{taskForwarderType: notTaskForwarder, startTime: start.Add(6 * time.Second)},
+		{taskForwarderType: validatorTaskForwarder, startTime: start},
+		{taskForwarderType: notTaskForwarder, startTime: start.Add(4 * time.Second)},
+		{taskForwarderType: parentTaskForwarder, startTime: start.Add(time.Second)},
+	}
+	for _, poller := range pollers {
+		p.Add(poller)
+	}
+
+	expected := []*waitingPoller{pollers[4], pollers[2], pollers[5], pollers[1], pollers[0], pollers[3]}
+	at := p.head
+	for _, poller := range expected {
+		require.Same(t, poller, at)
+		at = at.next
+	}
+	require.Nil(t, at)
+	require.Same(t, expected[len(expected)-1], p.tail)
+	require.Equal(t, len(pollers), p.Len())
+}
+
 func TestCheckConstants(t *testing.T) {
 	// 1000 to leave room for further adjustments
 	assert.Greater(t, pollForwarderPriority, 1000*maxPriorityLevels)
@@ -1110,7 +1137,7 @@ func FuzzMatcherData(f *testing.F) {
 					res := md.EnqueuePollerAndWait(nil, &waitingPoller{taskForwarderType: parentTaskForwarder})
 					softassert.That(md.logger, res.ctxErr == nil && res.task != nil, "")
 					ts.Sleep(sleepTime)
-					res.task.finishForward(nil, nil, true)
+					res.task.finishForward(nil, nil)
 				}()
 
 			case ops - 1: // jump ahead, just to speed things up

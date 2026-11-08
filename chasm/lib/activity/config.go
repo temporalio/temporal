@@ -1,7 +1,6 @@
 package activity
 
 import (
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -68,6 +67,7 @@ type Config struct {
 	BreakdownMetricsByTaskQueue               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
 	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityEagerDispatchCheck          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCancelActivityWorkerCommand         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
 	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableEagerStart                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -75,7 +75,6 @@ type Config struct {
 	LongPollBuffer                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                          dynamicconfig.IntPropertyFn
-	MaxCallbacksPerExecution                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy                dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	MaxUserMetadataDetailsSize                dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -92,6 +91,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		DefaultActivityRetryPolicy:                dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		EnableActivityEagerDispatchCheck:          dynamicconfig.EnableActivityEagerDispatchCheck.Get(dc),
 		EnableCallbacks:                           EnableCallbacks.Get(dc),
+		EnableCancelActivityWorkerCommand:         dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
 		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
 		Enabled:                                   Enabled.Get(dc),
 		EnableEagerStart:                          EnableEagerStart.Get(dc),
@@ -100,7 +100,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		LongPollTimeout:                           LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
 		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
-		MaxCallbacksPerExecution:                  callback.MaxPerExecution.Get(dc),
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
 		MaxUserMetadataDetailsSize:                dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),

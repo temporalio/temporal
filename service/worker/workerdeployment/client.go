@@ -380,13 +380,14 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	if err != nil {
 		return err
 	}
-	return d.handleRegisterVersionFailures(outcome)
+	return d.handleRegisterVersionFailures(namespaceEntry.Name(), outcome)
 }
 
-func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {
-	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType ||
-		failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-		return newResourceExhaustedError(failure.GetMessage())
+func (d *ClientImpl) handleRegisterVersionFailures(nsName namespace.Name, outcome *updatepb.Outcome) error {
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
+		return d.newResourceExhaustedError(nsName, metrics.WorkerDeploymentLimitTaskQueuesPerVersion, failure.GetMessage())
+	} else if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		return d.newResourceExhaustedError(nsName, metrics.WorkerDeploymentLimitVersionsPerDeployment, failure.GetMessage())
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {
@@ -395,7 +396,8 @@ func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) er
 	return nil
 }
 
-func newResourceExhaustedError(message string) *serviceerror.ResourceExhausted {
+func (d *ClientImpl) newResourceExhaustedError(nsName namespace.Name, limitType metrics.WorkerDeploymentLimitType, message string) *serviceerror.ResourceExhausted {
+	d.recordLimitExceeded(nsName, limitType)
 	return &serviceerror.ResourceExhausted{
 		Message: message,
 		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -403,12 +405,20 @@ func newResourceExhaustedError(message string) *serviceerror.ResourceExhausted {
 	}
 }
 
-func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome, deploymentName, buildID string) error {
+func (d *ClientImpl) recordLimitExceeded(nsName namespace.Name, limitType metrics.WorkerDeploymentLimitType) {
+	metrics.WorkerDeploymentLimitExceeded.With(d.metricsHandler).Record(1,
+		metrics.NamespaceTag(nsName.String()), metrics.WorkerDeploymentLimitTypeTag(limitType))
+}
+
+func (d *ClientImpl) handleUpdateVersionFailures(nsName namespace.Name, outcome *updatepb.Outcome, deploymentName, buildID string) error {
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
+		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+			d.recordLimitExceeded(nsName, metrics.WorkerDeploymentLimitVersionsPerDeployment)
+		}
 		return serviceerror.NewInternal(failure.Message)
 	}
 	return nil
@@ -904,9 +914,9 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
-	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
+	} else if updateErr := d.handleUpdateVersionFailures(namespaceEntry.Name(), outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
-	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
+	} else if registerErr := d.handleRegisterVersionFailures(namespaceEntry.Name(), outcome); registerErr != nil {
 		return nil, registerErr
 	}
 
@@ -1023,9 +1033,9 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
-	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
+	} else if updateErr := d.handleUpdateVersionFailures(namespaceEntry.Name(), outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
-	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
+	} else if registerErr := d.handleRegisterVersionFailures(namespaceEntry.Name(), outcome); registerErr != nil {
 		return nil, registerErr
 	}
 
@@ -1189,7 +1199,7 @@ func (d *ClientImpl) CreateWorkerDeployment(
 	}
 	limit := d.maxDeployments(namespaceEntry.Name().String())
 	if count >= int64(limit) {
-		return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+		return nil, d.newResourceExhaustedError(namespaceEntry.Name(), metrics.WorkerDeploymentLimitDeploymentsPerNamespace, fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 	}
 
 	// Start the deployment workflow
@@ -1352,7 +1362,7 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 			return serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentVersionAlreadyExists, version))
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-			return newResourceExhaustedError(failure.GetMessage())
+			return d.newResourceExhaustedError(namespaceEntry.Name(), metrics.WorkerDeploymentLimitVersionsPerDeployment, failure.GetMessage())
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
 			return serviceerror.NewInvalidArgument(failure.GetMessage())
@@ -1519,7 +1529,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		}
 		limit := d.maxDeployments(namespaceEntry.Name().String())
 		if count >= int64(limit) {
-			return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+			return nil, d.newResourceExhaustedError(namespaceEntry.Name(), metrics.WorkerDeploymentLimitDeploymentsPerNamespace, fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 		}
 	}
 
@@ -2041,7 +2051,17 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to a non-retryable error
-		return temporal.NewNonRetryableApplicationError(failure.Message, errMaxTaskQueuesInVersionType, serviceerror.NewFailedPrecondition(failure.Message))
+		var details deploymentspb.MaxTaskQueuesInVersionFailureDetails
+		if err := sdk.PreferProtoDataConverter.FromPayloads(failure.GetApplicationFailureInfo().GetDetails(), &details); err != nil {
+			d.logger.Error("failed to decode max task queues failure details", tag.Error(err))
+			return temporal.NewNonRetryableApplicationError(failure.Message, errMaxTaskQueuesInVersionType, serviceerror.NewFailedPrecondition(failure.Message))
+		}
+		return temporal.NewNonRetryableApplicationError(
+			failure.Message,
+			errMaxTaskQueuesInVersionType,
+			serviceerror.NewFailedPrecondition(failure.Message),
+			&details,
+		)
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {

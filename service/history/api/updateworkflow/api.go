@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
@@ -178,6 +179,10 @@ func (u *Updater) applyRequest(
 		return nil, consts.ErrWorkflowClosing
 	}
 
+	if err := validateCallbacks(ctx, updateReg, ms, updateRequest); err != nil {
+		return nil, err
+	}
+
 	var (
 		alreadyExisted bool
 		err            error
@@ -189,15 +194,9 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 
-	callbacksAttached, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
+	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
 	if err != nil {
 		return nil, err
-	}
-	if callbacksAttached {
-		return &api.UpdateWorkflowAction{
-			Noop:               false,
-			CreateWorkflowTask: false,
-		}, nil
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
@@ -205,7 +204,9 @@ func (u *Updater) applyRequest(
 	// If update is duplicate, then WT for this update was already created.
 	if alreadyExisted || ms.HasPendingWorkflowTask() {
 		return &api.UpdateWorkflowAction{
-			Noop:               true,
+			// Persist only the event written by AttachCallbacks, if any. Persisting mutable state
+			// otherwise would convert a speculative workflow task to a normal one.
+			Noop:               !eventWritten,
 			CreateWorkflowTask: false,
 		}, nil
 	}
@@ -301,6 +302,38 @@ func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link 
 			},
 		},
 	}
+}
+
+// validateCallbacks rejects completion callbacks that would breach the execution's limits
+// before the Update reaches the worker: once the worker has accepted it, its callbacks are
+// attached without further checks. Callbacks of other Updates still in flight are reserved
+// against the limits; see update.Registry.InFlightCallbacks.
+func validateCallbacks(
+	ctx context.Context,
+	updateReg update.Registry,
+	ms historyi.MutableState,
+	updateRequest *updatepb.Request,
+) error {
+	if len(updateRequest.GetCompletionCallbacks()) == 0 {
+		return nil
+	}
+	updateID := updateRequest.GetMeta().GetUpdateId()
+
+	// A request for an Update that has already completed receives its outcome synchronously and
+	// attaches nothing, so it must get that outcome rather than a limit error.
+	if upd := updateReg.Find(ctx, updateID); upd != nil && upd.IsCompleted() {
+		return nil
+	}
+
+	inFlight, err := updateReg.InFlightCallbacks()
+	if err != nil {
+		return err
+	}
+	return ms.ValidateCallbackAddition(inFlight, chasmworkflow.CallbackAddition{
+		UpdateID:  updateID,
+		RequestID: updateRequest.GetRequestId(),
+		Callbacks: updateRequest.GetCompletionCallbacks(),
+	})
 }
 
 func (u *Updater) OnSuccess(

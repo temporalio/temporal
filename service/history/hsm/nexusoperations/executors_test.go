@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -73,6 +75,7 @@ func mustToPayload(t *testing.T, input any) *commonpb.Payload {
 }
 
 func TestProcessInvocationTask(t *testing.T) {
+	workflowNow := time.Date(2027, time.January, 1, 12, 0, 0, 0, time.UTC)
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
 		WorkflowId: "handler-wf-id",
@@ -101,6 +104,8 @@ func TestProcessInvocationTask(t *testing.T) {
 		startToCloseTimeout        time.Duration
 		schedToStartTimeout        time.Duration
 		destinationDown            bool
+		expectDeleted              bool
+		endpointLookupDelay        time.Duration
 		// httpCallerErr, when set, fails the outbound HTTP call with this error instead of
 		// performing a real request.
 		httpCallerErr error
@@ -148,7 +153,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "pending",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
+				require.Equal(t, workflowNow, op.StartedTime.AsTime(),
+					"start-to-close deadlines must be anchored to workflow logical time")
 				require.Len(t, events, 1)
+				require.Equal(t, events[0].GetEventTime().AsTime(), op.StartedTime.AsTime(),
+					"operation state and started history event must use the same timestamp")
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, events[0].EventType)
 				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: 1,
@@ -163,6 +172,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				// Async start emits schedule-to-start; no terminal outcome counter yet.
 				scheduleToStart := snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()]
 				require.Len(t, scheduleToStart, 1)
+				require.Equal(t, time.Duration(0), scheduleToStart[0].Value)
 				require.Equal(t, "namespace-name", scheduleToStart[0].Tags["namespace"])
 				require.Equal(t, "endpoint", scheduleToStart[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", scheduleToStart[0].Tags["workflowType"])
@@ -219,8 +229,12 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, "endpoint", successCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", successCount[0].Tags["workflowType"])
 				// Sync success never started, so schedule-to-start (not start-to-close) is recorded.
-				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
-				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()], 1)
+				scheduleToClose := snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()]
+				require.Len(t, scheduleToClose, 1)
+				require.Equal(t, time.Duration(0), scheduleToClose[0].Value)
+				scheduleToStart := snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()]
+				require.Len(t, scheduleToStart, 1)
+				require.Equal(t, time.Duration(0), scheduleToStart[0].Value)
 				require.Empty(t, snapshot[chasmnexus.NexusOperationStartToCloseLatency.Name()])
 			},
 		},
@@ -379,6 +393,8 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
+				require.Equal(t, workflowNow, op.LastAttemptCompleteTime.AsTime(),
+					"retry deadlines must be anchored to workflow logical time")
 				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "internal server error", op.LastAttemptFailure.Message)
 				require.Empty(t, events)
@@ -477,6 +493,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		},
 		{
 			name:                  "ScheduleToCloseTimeout less than MinRequestTimeout",
+			expectDeleted:         true,
 			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
 			destinationDown:       false,
@@ -488,6 +505,28 @@ func TestProcessInvocationTask(t *testing.T) {
 				failure := events[0].GetNexusOperationTimedOutEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetTimeoutFailureInfo())
 				require.Equal(t, "operation timed out", failure.Message)
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				recordings := snapshot[chasmnexus.NexusOperationTimeoutCount.Name()]
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String(), recordings[0].Tags["timeout_type"])
+				scheduleToClose := snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()]
+				require.Len(t, scheduleToClose, 1)
+				require.Equal(t, time.Duration(0), scheduleToClose[0].Value)
+			},
+		},
+		{
+			name:                  "endpoint lookup consumes ScheduleToCloseTimeout",
+			expectDeleted:         true,
+			requestTimeout:        time.Hour,
+			schedToCloseTimeout:   time.Second,
+			endpointLookupDelay:   2 * time.Second,
+			onStartOperation:      nil,
+			expectedMetricOutcome: "operation-timeout",
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+				require.Len(t, events, 1)
 			},
 		},
 		{
@@ -583,7 +622,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			event := mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+			event := mustNewScheduledEvent(workflowNow, &historypb.NexusOperationScheduledEventAttributes{
 				ScheduleToCloseTimeout: durationpb.New(tc.schedToCloseTimeout),
 				ScheduleToStartTimeout: durationpb.New(tc.schedToStartTimeout),
 				StartToCloseTimeout:    durationpb.New(tc.startToCloseTimeout),
@@ -595,8 +634,10 @@ func TestProcessInvocationTask(t *testing.T) {
 				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
 			}
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
+			backend.WorkflowTimeFn = func() time.Time { return workflowNow }
 			node := newOperationNode(t, backend, backend.Events[0])
-			env := fakeEnv{node}
+			wallNow := workflowNow.Add(-time.Hour)
+			env := fakeEnv{node: node, nowFn: func() time.Time { return wallNow }}
 			if tc.cancelBeforeStart {
 				op, err := hsm.MachineData[nexusoperations.Operation](node)
 				require.NoError(t, err)
@@ -643,6 +684,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			endpointReg := nexustest.FakeEndpointRegistry{
 				OnGetByID: func(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error) {
 					require.Equal(t, "endpoint-id", endpointID)
+					wallNow = wallNow.Add(tc.endpointLookupDelay)
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
@@ -651,6 +693,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
 					require.Equal(t, "endpoint", endpointName)
 					require.Equal(t, "ns-id", namespaceID.String())
+					wallNow = wallNow.Add(tc.endpointLookupDelay)
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
@@ -707,6 +750,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, op, backend.Events[1:]) // Ignore the original scheduled event.
+			if tc.expectDeleted {
+				_, err = node.Parent.Child([]hsm.Key{node.Key})
+				require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+			}
 			if tc.checkCallerMetrics != nil {
 				tc.checkCallerMetrics(t, capture.Snapshot())
 			}
@@ -726,7 +773,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
 		ScheduleToCloseTimeout: durationpb.New(time.Hour),
 	}))
-	env := fakeEnv{node}
+	env := fakeEnv{node: node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 	err := hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -757,7 +804,7 @@ func TestProcessTimeoutTask(t *testing.T) {
 	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
 		ScheduleToCloseTimeout: durationpb.New(time.Hour),
 	}))
-	env := fakeEnv{node}
+	env := fakeEnv{node: node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
@@ -770,6 +817,8 @@ func TestProcessTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
@@ -797,7 +846,31 @@ func TestProcessTimeoutTask(t *testing.T) {
 	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
 }
 
+func TestProcessTimeoutTaskDoesNotEmitMetricWhenDeletionFails(t *testing.T) {
+	reg := newRegistry(t)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), nil))
+	// A parent without the operation makes deletion fail after the timeout transition.
+	node.Parent = newRoot(t, backend)
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+		MetricsHandler: captureHandler,
+		Config:         &nexusoperations.Config{},
+	}))
+
+	err := reg.ExecuteTimerTask(fakeEnv{node: node}, node, nexusoperations.ScheduleToCloseTimeoutTask{})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+	require.Empty(t, capture.Snapshot()[chasmnexus.NexusOperationTimeoutCount.Name()])
+}
+
 func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
+	workflowNow := time.Date(2027, time.January, 1, 12, 0, 0, 0, time.UTC)
+	scheduledTime := workflowNow.Add(-time.Minute)
+	startedTime := workflowNow.Add(-30 * time.Second)
+	wallNow := workflowNow.Add(-time.Hour)
+
 	testCases := []struct {
 		name             string
 		started          bool // transition the operation to STARTED before timing out
@@ -827,17 +900,17 @@ func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := newRegistry(t)
-			backend := &hsmtest.NodeBackend{}
-			node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+			backend := &hsmtest.NodeBackend{WorkflowTimeFn: func() time.Time { return workflowNow }}
+			node := newOperationNode(t, backend, mustNewScheduledEvent(scheduledTime, &historypb.NexusOperationScheduledEventAttributes{
 				ScheduleToCloseTimeout: durationpb.New(time.Hour),
 			}))
-			env := fakeEnv{node}
+			env := fakeEnv{node: node, nowFn: func() time.Time { return wallNow }}
 
 			if tc.started {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 						Node:       node,
-						Time:       time.Now(),
+						Time:       startedTime,
 						Attributes: &historypb.NexusOperationStartedEventAttributes{OperationToken: "token"},
 					})
 				}))
@@ -876,11 +949,16 @@ func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
 			// operation had started: start-to-close when started, schedule-to-start otherwise.
 			scheduleToClose := snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()]
 			require.Len(t, scheduleToClose, 1)
+			require.Equal(t, time.Minute, scheduleToClose[0].Value)
 			if tc.started {
-				require.Len(t, snapshot[chasmnexus.NexusOperationStartToCloseLatency.Name()], 1)
+				startToClose := snapshot[chasmnexus.NexusOperationStartToCloseLatency.Name()]
+				require.Len(t, startToClose, 1)
+				require.Equal(t, 30*time.Second, startToClose[0].Value)
 				require.Empty(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()])
 			} else {
-				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()], 1)
+				scheduleToStart := snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()]
+				require.Len(t, scheduleToStart, 1)
+				require.Equal(t, time.Minute, scheduleToStart[0].Value)
 				require.Empty(t, snapshot[chasmnexus.NexusOperationStartToCloseLatency.Name()])
 			}
 
@@ -907,7 +985,7 @@ func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
 		ScheduleToCloseTimeout: durationpb.New(time.Hour),
 	}))
-	env := fakeEnv{node}
+	env := fakeEnv{node: node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
@@ -920,6 +998,8 @@ func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
@@ -953,7 +1033,7 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
 		ScheduleToCloseTimeout: durationpb.New(time.Hour),
 	}))
-	env := fakeEnv{node}
+	env := fakeEnv{node: node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
@@ -979,6 +1059,8 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	// Should have TIMED_OUT event (STARTED event is not added by the transition)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
@@ -998,6 +1080,7 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 }
 
 func TestProcessCancelationTask(t *testing.T) {
+	workflowNow := time.Date(2027, time.January, 1, 13, 0, 0, 0, time.UTC)
 	cases := []struct {
 		name                        string
 		endpointNotFound            bool
@@ -1010,6 +1093,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		destinationDown             bool
 		header                      map[string]string
 		disableNewFailureWireFormat bool
+		endpointLookupDelay         time.Duration
 	}{
 		{
 			name:            "failure",
@@ -1093,6 +1177,8 @@ func TestProcessCancelationTask(t *testing.T) {
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
+				require.Equal(t, workflowNow, c.LastAttemptCompleteTime.AsTime(),
+					"cancellation retry deadlines must be anchored to workflow logical time")
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "internal server error", c.LastAttemptFailure.Message)
 			},
@@ -1139,6 +1225,18 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
+			name:                  "endpoint lookup consumes StartToCloseTimeout",
+			requestTimeout:        time.Hour,
+			startToCloseTimeout:   2 * time.Second,
+			endpointLookupDelay:   2 * time.Second,
+			onCancelOperation:     nil,
+			expectedMetricOutcome: "operation-timeout",
+			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
+				require.Contains(t, c.LastAttemptFailure.Message, "not enough time to execute another request before StartToClose timeout")
+			},
+		},
+		{
 			name:              "endpoint not found",
 			endpointNotFound:  true,
 			requestTimeout:    time.Hour,
@@ -1161,7 +1259,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			event := mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+			event := mustNewScheduledEvent(workflowNow.Add(-time.Second), &historypb.NexusOperationScheduledEventAttributes{
 				ScheduleToCloseTimeout: durationpb.New(tc.schedToCloseTimeout),
 				StartToCloseTimeout:    durationpb.New(tc.startToCloseTimeout),
 			})
@@ -1169,23 +1267,25 @@ func TestProcessCancelationTask(t *testing.T) {
 				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
 			}
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
+			backend.WorkflowTimeFn = func() time.Time { return workflowNow }
 			node := newOperationNode(t, backend, backend.Events[0])
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
-				Time: time.Now(),
+				Time: workflowNow.Add(-time.Second),
 				Attributes: &historypb.NexusOperationStartedEventAttributes{
 					OperationToken: "op-token",
 				},
 				Node: node,
 			})
 			require.NoError(t, err)
-			_, err = op.Cancel(node, time.Now(), 0)
+			_, err = op.Cancel(node, workflowNow, 0)
 			require.NoError(t, err)
 			node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 			require.NoError(t, err)
 
-			env := fakeEnv{node}
+			wallNow := workflowNow.Add(-time.Hour)
+			env := fakeEnv{node: node, nowFn: func() time.Time { return wallNow }}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
@@ -1212,6 +1312,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			endpointReg := nexustest.FakeEndpointRegistry{
 				OnGetByID: func(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error) {
 					require.Equal(t, "endpoint-id", endpointID)
+					wallNow = wallNow.Add(tc.endpointLookupDelay)
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
@@ -1220,6 +1321,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
 					require.Equal(t, "endpoint", endpointName)
 					require.Equal(t, "ns-id", namespaceID.String())
+					wallNow = wallNow.Add(tc.endpointLookupDelay)
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
@@ -1268,6 +1370,8 @@ func TestProcessCancelationTask(t *testing.T) {
 			cancelation, err := hsm.MachineData[nexusoperations.Cancelation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, cancelation)
+			require.Equal(t, workflowNow, cancelation.LastAttemptCompleteTime.AsTime(),
+				"cancellation attempt timestamps must be anchored to workflow logical time")
 		})
 	}
 }
@@ -1300,7 +1404,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 	require.NoError(t, err)
 
-	env := fakeEnv{node}
+	env := fakeEnv{node: node}
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 	namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
@@ -1485,7 +1589,7 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 			node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 			require.NoError(t, err)
 
-			env := fakeEnv{node}
+			env := fakeEnv{node: node}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
@@ -1581,7 +1685,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	env := fakeEnv{node}
+	env := fakeEnv{node: node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
@@ -1897,7 +2001,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 			event.GetNexusOperationScheduledEventAttributes().Endpoint = commonnexus.SystemEndpoint
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
 			node := newOperationNode(t, backend, backend.Events[0])
-			env := fakeEnv{node}
+			env := fakeEnv{node: node}
 
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
@@ -1976,5 +2080,19 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				tc.checkCallerMetrics(t, capture.Snapshot())
 			}
 		})
+	}
+}
+
+// tasks.Tags can't import this package, so it matches these task types by their "nexusoperations." prefix.
+// This test fails if they are renamed without updating tasks.Tags.
+func TestOutboundTasksTaggedAsCallerOutbound(t *testing.T) {
+	for _, taskType := range []string{
+		nexusoperations.TaskTypeInvocation,
+		nexusoperations.TaskTypeCancelation,
+	} {
+		task := &tasks.StateMachineOutboundTask{
+			StateMachineTask: tasks.StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: taskType}},
+		}
+		require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound, taskType)
 	}
 }
