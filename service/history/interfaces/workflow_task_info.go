@@ -5,6 +5,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -71,6 +72,14 @@ type WorkflowTaskInfo struct {
 	// Incrementing Stamp will ensure that the standby clusters reschedule the transfer tasks properly.
 	// Stamp is NOT scoped within a single wft, and it should never be decremented in the lifetime of the whole execution.
 	Stamp int32
+
+	// StartedClock is the shard clock in the task token matching sent to the worker. It is nil for a
+	// workflow task started by RespondWorkflowTaskCompleted, whose token is built with a nil clock.
+	StartedClock *clockspb.VectorClock
+	// WorkerControlTaskQueue is set only when the worker that started this workflow task supports
+	// workflow heartbeat notifications.
+	// TODO(whn): decide where this lives; it is in memory only and lost when mutable state is reloaded.
+	WorkerControlTaskQueue string
 }
 
 type WorkflowTaskCompletionLimits struct {

@@ -18,6 +18,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1168,6 +1169,8 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
+	m.ms.executionInfo.WorkflowTaskStartedClock = common.CloneProto(workflowTask.StartedClock)
+	m.ms.workflowTaskWorkerControlTaskQueue = workflowTask.WorkerControlTaskQueue
 
 	m.ms.workflowTaskUpdated = true
 
@@ -1182,6 +1185,15 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 		tag.Attempt(workflowTask.Attempt),
 		tag.WorkflowStartedTimestamp(workflowTask.StartedTime),
 		tag.WorkflowTaskType(workflowTask.Type.String()))
+}
+
+func (m *workflowTaskStateMachine) SetWorkflowTaskStartedClock(startedClock *clockspb.VectorClock) {
+	m.ms.executionInfo.WorkflowTaskStartedClock = common.CloneProto(startedClock)
+	m.ms.workflowTaskUpdated = true
+}
+
+func (m *workflowTaskStateMachine) SetWorkflowTaskWorkerControlTaskQueue(workerControlTaskQueue string) {
+	m.ms.workflowTaskWorkerControlTaskQueue = workerControlTaskQueue
 }
 
 func (m *workflowTaskStateMachine) HasPendingWorkflowTask() bool {
@@ -1307,6 +1319,8 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		ScheduleToStartTimeoutTask:  m.ms.GetWorkflowTaskScheduleToStartTimeoutTask(),
 		StartToCloseTimeoutTask:     m.ms.GetWorkflowTaskStartToCloseTimeoutTask(),
 		Stamp:                       m.ms.executionInfo.WorkflowTaskStamp,
+		StartedClock:                m.ms.executionInfo.WorkflowTaskStartedClock,
+		WorkerControlTaskQueue:      m.ms.workflowTaskWorkerControlTaskQueue,
 	}
 
 	return wft

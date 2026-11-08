@@ -120,14 +120,15 @@ type (
 	}
 
 	pollMetadata struct {
-		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
-		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
-		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
-		conditions                *matchingservice.PollConditions
-		forwardedFrom             string
-		localPollStartTime        time.Time
-		workerInstanceKey         string
-		workerControlTaskQueue    string
+		taskQueueMetadata             *taskqueuepb.TaskQueueMetadata
+		workerVersionCapabilities     *commonpb.WorkerVersionCapabilities
+		deploymentOptions             *deploymentpb.WorkerDeploymentOptions
+		conditions                    *matchingservice.PollConditions
+		forwardedFrom                 string
+		localPollStartTime            time.Time
+		workerInstanceKey             string
+		workerControlTaskQueue        string
+		workflowHeartbeatCapabilities *workflowservice.PollWorkflowTaskQueueRequest_Capabilities
 	}
 
 	userDataUpdate struct {
@@ -958,12 +959,13 @@ pollLoop:
 			return nil, err
 		}
 		pollMetadata := &pollMetadata{
-			workerVersionCapabilities: request.WorkerVersionCapabilities,
-			deploymentOptions:         request.DeploymentOptions,
-			forwardedFrom:             req.ForwardedSource,
-			conditions:                req.Conditions,
-			workerInstanceKey:         request.WorkerInstanceKey,
-			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			workerVersionCapabilities:     request.WorkerVersionCapabilities, //nolint:staticcheck // SA1019: Retain legacy Build ID versioning metadata.
+			deploymentOptions:             request.DeploymentOptions,
+			forwardedFrom:                 req.ForwardedSource,
+			conditions:                    req.Conditions,
+			workerInstanceKey:             request.WorkerInstanceKey,
+			workerControlTaskQueue:        request.WorkerControlTaskQueue,
+			workflowHeartbeatCapabilities: request.Capabilities,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {

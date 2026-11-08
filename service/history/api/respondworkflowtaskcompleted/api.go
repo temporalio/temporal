@@ -664,6 +664,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			if err != nil {
 				return nil, err
 			}
+			// The new Workflow Task is returned to the same worker without a Matching poll.
+			ms.SetWorkflowTaskWorkerControlTaskQueue(currentWorkflowTask.WorkerControlTaskQueue)
 		}
 	}
 
@@ -794,6 +796,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if err != nil {
 			return nil, err
 		}
+		// The speculative Workflow Task is also returned to the completing worker.
+		ms.SetWorkflowTaskWorkerControlTaskQueue(currentWorkflowTask.WorkerControlTaskQueue)
 	}
 
 	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry)
