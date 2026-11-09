@@ -98,9 +98,8 @@ type (
 		// proto and this rate is only used internally, for poller scaling decisions. Exposing it via
 		// DescribeTaskQueue would mean moving it there and adding a proto field.
 		tasksSyncMatched map[priorityKey]*taskTracker
-		// tasksEagerGranted counts GrantEagerDispatch grants. Granted tasks go straight to a worker
-		// without passing through this queue, so they are kept out of the trackers used by the v2
-		// poller scaling signals. A grant that history ends up not using is still counted.
+		// tasksEagerGranted counts permissions issued by GrantEagerDispatch, including unused grants.
+		// These counts are separate from the task rates used for poller scaling.
 		tasksEagerGranted map[priorityKey]*taskTracker
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker

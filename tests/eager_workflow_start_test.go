@@ -266,10 +266,28 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_MatchingGrant() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowEagerDispatchCheck, true))
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, time.Duration(0)),
+	)
 	response := s.startEagerWorkflow(env, &workflowservice.StartWorkflowExecutionRequest{})
 	task := response.GetEagerWorkflowTask()
 	s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+
+	s.Await(func(s *EagerWorkflowTestSuite) {
+		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     s.defaultTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			ReportStats:   true,
+		})
+		s.NoError(err)
+		stats := response.GetStats()
+		s.Greater(stats.GetEagerDispatchRate(), float32(0))
+		s.Zero(stats.GetTasksAddRate())
+		s.Zero(stats.GetTasksDispatchRate())
+		s.Zero(stats.GetApproximateBacklogCount())
+	}, 10*time.Second, 100*time.Millisecond)
 
 	s.respondWorkflowTaskCompleted(env, task, "ok")
 	// Verify workflow completes and client can get the result

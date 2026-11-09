@@ -317,6 +317,10 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchRecordsGrantsOnTargetQ
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimitGrant() {
 	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
+	queue := s.newStrictEagerDispatchPhysicalQueue(0)
+	queue.EXPECT().RecordEagerGrant(priorityKey(0), int32(1)).Times(1)
+	partitionMgr.defaultQueueFuture = future.NewFuture[physicalTaskQueueManager]()
+	partitionMgr.defaultQueueFuture.Set(queue, nil)
 
 	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{Count: 3},
@@ -331,6 +335,10 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimi
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchGrantsHigherPriorityFirst() {
 	partitionMgr := s.newEagerDispatchPartitionManager(0, nil)
+	queue := s.newStrictEagerDispatchPhysicalQueue(0)
+	queue.EXPECT().RecordEagerGrant(priorityKey(2), int32(1)).Times(1)
+	partitionMgr.defaultQueueFuture = future.NewFuture[physicalTaskQueueManager]()
+	partitionMgr.defaultQueueFuture.Set(queue, nil)
 	partitionMgr.rateLimitManager = &rateLimitManager{
 		config:          partitionMgr.config,
 		timeSource:      clock.NewEventTimeSource().Update(time.Now()),
