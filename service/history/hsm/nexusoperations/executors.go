@@ -340,6 +340,12 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	e.logCallFailure(traceCtx, callErr, failureSource)
 
+	if e.Config.EnableOutboundTaskThrottleController() && e.Config.TaskThrottleControllerSettings().Enabled {
+		if retryErr := commonnexus.CallerRPSLimitError(callErr); retryErr != nil {
+			return retryErr
+		}
+	}
+
 	err = e.saveResult(ctx, env, ref, result, callErr)
 
 	if callErr != nil && isDestinationDown(callErr) {
@@ -821,6 +827,12 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
 	e.logCallFailure(traceCtx, callErr, failureSource)
+
+	if e.Config.EnableOutboundTaskThrottleController() && e.Config.TaskThrottleControllerSettings().Enabled {
+		if retryErr := commonnexus.CallerRPSLimitError(callErr); retryErr != nil {
+			return retryErr
+		}
+	}
 
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
 
