@@ -125,6 +125,17 @@ func (d *ExecutionStore) UpdateWorkflowExecution(
 	return d.MutableStateStore.UpdateWorkflowExecution(ctx, request)
 }
 
+// SubmitWorkflowExecutionUpdate writes synchronously and returns a completed receipt.
+func (d *ExecutionStore) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *p.InternalUpdateWorkflowExecutionRequest,
+) (p.WorkflowExecutionUpdateReceipt, error) {
+	if err := d.UpdateWorkflowExecution(ctx, request); err != nil {
+		return nil, err
+	}
+	return p.CompletedWorkflowExecutionUpdateReceipt{}, nil
+}
+
 func (d *ExecutionStore) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *p.InternalConflictResolveWorkflowExecutionRequest,

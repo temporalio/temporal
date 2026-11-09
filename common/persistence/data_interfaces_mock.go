@@ -591,6 +591,22 @@ func (mr *MockExecutionManagerMockRecorder) SetWorkflowExecution(ctx, request an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).SetWorkflowExecution), ctx, request)
 }
 
+// SubmitWorkflowExecutionUpdate mocks base method.
+func (m *MockExecutionManager) SubmitWorkflowExecutionUpdate(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitWorkflowExecutionUpdate", ctx, request)
+	ret0, _ := ret[0].(*UpdateWorkflowExecutionResponse)
+	ret1, _ := ret[1].(WorkflowExecutionUpdateReceipt)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// SubmitWorkflowExecutionUpdate indicates an expected call of SubmitWorkflowExecutionUpdate.
+func (mr *MockExecutionManagerMockRecorder) SubmitWorkflowExecutionUpdate(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitWorkflowExecutionUpdate", reflect.TypeOf((*MockExecutionManager)(nil).SubmitWorkflowExecutionUpdate), ctx, request)
+}
+
 // TrimHistoryBranch mocks base method.
 func (m *MockExecutionManager) TrimHistoryBranch(ctx context.Context, request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()

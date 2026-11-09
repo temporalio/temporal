@@ -113,6 +113,27 @@ func (r *HistoryTaskRecorder) UpdateWorkflowExecution(
 	return resp, err
 }
 
+func (r *HistoryTaskRecorder) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, persistence.WorkflowExecutionUpdateReceipt, error) {
+	resp, receipt, err := r.delegate.SubmitWorkflowExecutionUpdate(ctx, request)
+	if err != nil {
+		return nil, nil, err
+	}
+	return resp, persistence.ObserveWorkflowExecutionUpdate(receipt, func(_ context.Context, err error) {
+		if err == nil {
+			r.recordTasks(
+				request.ShardID,
+				request.RangeID,
+				request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
+				request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId,
+				request.UpdateWorkflowMutation.Tasks,
+			)
+		}
+	}), nil
+}
+
 func (r *HistoryTaskRecorder) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,

@@ -950,6 +950,48 @@ func (d telemetryExecutionStore) SetWorkflowExecution(ctx context.Context, reque
 	return
 }
 
+// SubmitWorkflowExecutionUpdate wraps ExecutionStore.SubmitWorkflowExecutionUpdate.
+func (d telemetryExecutionStore) SubmitWorkflowExecutionUpdate(ctx context.Context, request *_sourcePersistence.InternalUpdateWorkflowExecutionRequest) (w1 _sourcePersistence.WorkflowExecutionUpdateReceipt, err error) {
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/SubmitWorkflowExecutionUpdate",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("SubmitWorkflowExecutionUpdate"),
+		))
+	defer span.End()
+
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
+
+	w1, err = d.ExecutionStore.SubmitWorkflowExecutionUpdate(ctx, request)
+	if err != nil {
+		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalUpdateWorkflowExecutionRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(w1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize _sourcePersistence.WorkflowExecutionUpdateReceipt for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
+	}
+
+	return
+}
+
 // UpdateWorkflowExecution wraps ExecutionStore.UpdateWorkflowExecution.
 func (d telemetryExecutionStore) UpdateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalUpdateWorkflowExecutionRequest) (err error) {
 	ctx, span := d.tracer.Start(

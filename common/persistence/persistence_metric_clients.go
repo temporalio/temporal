@@ -290,6 +290,29 @@ func (p *executionPersistenceClient) SetWorkflowExecution(
 	return p.persistence.SetWorkflowExecution(ctx, request)
 }
 
+// SubmitWorkflowExecutionUpdate records the same request metrics as UpdateWorkflowExecution,
+// measured from submission until the first Wait on the receipt returns.
+func (p *executionPersistenceClient) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	record := func(_ context.Context, err error) {
+		p.healthSignals.Record(request.ShardID, time.Since(startTime), err)
+		workflowID := request.UpdateWorkflowMutation.ExecutionInfo.GetWorkflowId()
+		runID := request.UpdateWorkflowMutation.ExecutionState.GetRunId()
+		p.recordRequestMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, time.Since(startTime), err)
+		p.recordDataLossMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, err, workflowID, runID)
+	}
+	response, receipt, err := p.persistence.SubmitWorkflowExecutionUpdate(ctx, request)
+	if err != nil {
+		record(ctx, err)
+		return nil, nil, err
+	}
+	return response, ObserveWorkflowExecutionUpdate(receipt, record), nil
+}
+
 func (p *executionPersistenceClient) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,

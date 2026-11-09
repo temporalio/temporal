@@ -1304,6 +1304,21 @@ func (mr *MockExecutionStoreMockRecorder) SetWorkflowExecution(ctx, request any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).SetWorkflowExecution), ctx, request)
 }
 
+// SubmitWorkflowExecutionUpdate mocks base method.
+func (m *MockExecutionStore) SubmitWorkflowExecutionUpdate(ctx context.Context, request *persistence.InternalUpdateWorkflowExecutionRequest) (persistence.WorkflowExecutionUpdateReceipt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitWorkflowExecutionUpdate", ctx, request)
+	ret0, _ := ret[0].(persistence.WorkflowExecutionUpdateReceipt)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SubmitWorkflowExecutionUpdate indicates an expected call of SubmitWorkflowExecutionUpdate.
+func (mr *MockExecutionStoreMockRecorder) SubmitWorkflowExecutionUpdate(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitWorkflowExecutionUpdate", reflect.TypeOf((*MockExecutionStore)(nil).SubmitWorkflowExecutionUpdate), ctx, request)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockExecutionStore) UpdateWorkflowExecution(ctx context.Context, request *persistence.InternalUpdateWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()

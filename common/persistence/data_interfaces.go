@@ -1148,6 +1148,13 @@ type (
 
 		CreateWorkflowExecution(ctx context.Context, request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
+		// SubmitWorkflowExecutionUpdate starts an update without a new run and returns before it is
+		// durable. ctx bounds only the submission. The caller must not modify request until the
+		// receipt's Wait returns. A submission error has the same meaning as an
+		// UpdateWorkflowExecution error. A write accepted under request.RangeID must not become
+		// durable after the shard's range moves past it, so a reader after a range renewal sees
+		// every write that will ever succeed.
+		SubmitWorkflowExecutionUpdate(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error)
 		ConflictResolveWorkflowExecution(ctx context.Context, request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(ctx context.Context, request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(ctx context.Context, request *DeleteCurrentWorkflowExecutionRequest) error

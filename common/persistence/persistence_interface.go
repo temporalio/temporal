@@ -128,6 +128,8 @@ type (
 		// The below three APIs are related to serialization/deserialization
 		CreateWorkflowExecution(ctx context.Context, request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(ctx context.Context, request *InternalUpdateWorkflowExecutionRequest) error
+		// SubmitWorkflowExecutionUpdate has the contract of ExecutionManager.SubmitWorkflowExecutionUpdate.
+		SubmitWorkflowExecutionUpdate(ctx context.Context, request *InternalUpdateWorkflowExecutionRequest) (WorkflowExecutionUpdateReceipt, error)
 		ConflictResolveWorkflowExecution(ctx context.Context, request *InternalConflictResolveWorkflowExecutionRequest) error
 
 		DeleteWorkflowExecution(ctx context.Context, request *DeleteWorkflowExecutionRequest) error

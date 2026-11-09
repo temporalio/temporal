@@ -357,6 +357,17 @@ func (m *sqlExecutionStore) UpdateWorkflowExecution(
 		})
 }
 
+// SubmitWorkflowExecutionUpdate writes synchronously and returns a completed receipt.
+func (m *sqlExecutionStore) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *p.InternalUpdateWorkflowExecutionRequest,
+) (p.WorkflowExecutionUpdateReceipt, error) {
+	if err := m.UpdateWorkflowExecution(ctx, request); err != nil {
+		return nil, err
+	}
+	return p.CompletedWorkflowExecutionUpdateReceipt{}, nil
+}
+
 func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 	ctx context.Context,
 	tx sqlplugin.Tx,

@@ -133,6 +133,10 @@ func (r *historySizeRollback) revertOnError(err *error) {
 	if *err == nil {
 		return
 	}
+	r.revert()
+}
+
+func (r *historySizeRollback) revert() {
 	for _, a := range r.applied {
 		a.stats.HistorySize -= a.delta
 	}
@@ -212,14 +216,33 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 func (m *executionManagerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,
-) (_ *UpdateWorkflowExecutionResponse, retErr error) {
+) (*UpdateWorkflowExecutionResponse, error) {
+	response, _, err := m.updateWorkflowExecution(ctx, request, false)
+	return response, err
+}
+
+func (m *executionManagerImpl) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error) {
+	if request.NewWorkflowSnapshot != nil || len(request.NewWorkflowEvents) != 0 {
+		return nil, nil, &InvalidPersistenceRequestError{Msg: "workflow execution update submission does not support a new run"}
+	}
+	return m.updateWorkflowExecution(ctx, request, true)
+}
+
+func (m *executionManagerImpl) updateWorkflowExecution(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+	submit bool,
+) (_ *UpdateWorkflowExecutionResponse, _ WorkflowExecutionUpdateReceipt, retErr error) {
 
 	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "UpdateWorkflowExecution")
 	updateMutation := request.UpdateWorkflowMutation
 	newSnapshot := request.NewWorkflowSnapshot
 	if newSnapshot != nil && request.CheckRunAlreadyExists && !m.storeChecksRunAlreadyExists {
 		if err := m.assertRunNotExists(ctx, request.ShardID, archetypeID, newSnapshot.ExecutionState, newSnapshot.ExecutionInfo); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -233,7 +256,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		request.UpdateWorkflowEvents,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rollback.add(updateMutation.ExecutionInfo.ExecutionStats, updateWorkflowHistoryDiff.SizeDiff)
 
@@ -248,7 +271,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 			request.NewWorkflowEvents,
 		)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		rollback.add(newSnapshot.ExecutionInfo.ExecutionStats, newWorkflowHistoryDiff.SizeDiff)
 	}
@@ -258,24 +281,24 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		updateMutation,
 		newSnapshot,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := ValidateUpdateWorkflowStateStatus(
 		updateMutation.ExecutionState.State,
 		updateMutation.ExecutionState.Status,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	serializedWorkflowMutation, err := m.SerializeWorkflowMutation(&updateMutation)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var serializedNewWorkflowSnapshot *InternalWorkflowSnapshot
 	if newSnapshot != nil {
 		serializedNewWorkflowSnapshot, err = m.SerializeWorkflowSnapshot(newSnapshot)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -295,38 +318,58 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		NewWorkflowNewEvents:    newWorkflowNewEvents,
 	}
 
-	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
-	switch err.(type) {
-	case nil:
-		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
-		m.addXDCCacheKV(updateWorkflowXDCKVs)
-		m.addXDCCacheKV(newWorkflowXDCKVs)
-		return &UpdateWorkflowExecutionResponse{
-			UpdateMutableStateStats: *statusOfInternalWorkflowMutation(
-				&newRequest.UpdateWorkflowMutation,
-				updateWorkflowHistoryDiff,
-			),
-			NewMutableStateStats: statusOfInternalWorkflowSnapshot(
-				newRequest.NewWorkflowSnapshot,
-				newWorkflowHistoryDiff,
-			),
-		}, nil
-	case *CurrentWorkflowConditionFailedError,
-		*WorkflowConditionFailedError,
-		*WorkflowRunAlreadyExistsError,
-		*ConditionFailedError:
-		m.trimHistoryNode(
-			ctx,
-			request.ShardID,
-			updateMutation.ExecutionInfo.NamespaceId,
-			updateMutation.ExecutionInfo.WorkflowId,
-			updateMutation.ExecutionState.RunId,
-			archetypeID,
-		)
-		return nil, err
-	default:
-		return nil, err
+	response := &UpdateWorkflowExecutionResponse{
+		UpdateMutableStateStats: *statusOfInternalWorkflowMutation(
+			&newRequest.UpdateWorkflowMutation,
+			updateWorkflowHistoryDiff,
+		),
+		NewMutableStateStats: statusOfInternalWorkflowSnapshot(
+			newRequest.NewWorkflowSnapshot,
+			newWorkflowHistoryDiff,
+		),
 	}
+	complete := func(ctx context.Context, err error) {
+		switch err.(type) {
+		case nil:
+			m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
+			m.addXDCCacheKV(updateWorkflowXDCKVs)
+			m.addXDCCacheKV(newWorkflowXDCKVs)
+		case *CurrentWorkflowConditionFailedError,
+			*WorkflowConditionFailedError,
+			*WorkflowRunAlreadyExistsError,
+			*ConditionFailedError:
+			m.trimHistoryNode(
+				ctx,
+				request.ShardID,
+				updateMutation.ExecutionInfo.NamespaceId,
+				updateMutation.ExecutionInfo.WorkflowId,
+				updateMutation.ExecutionState.RunId,
+				archetypeID,
+			)
+		default:
+			// The write may have succeeded, so there is nothing to clean up.
+		}
+	}
+
+	if submit {
+		receipt, err := m.persistence.SubmitWorkflowExecutionUpdate(ctx, newRequest)
+		if err != nil {
+			complete(ctx, err)
+			return nil, nil, err
+		}
+		return response, ObserveWorkflowExecutionUpdate(receipt, func(ctx context.Context, err error) {
+			if err != nil {
+				rollback.revert()
+			}
+			complete(ctx, err)
+		}), nil
+	}
+	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
+	complete(ctx, err)
+	if err != nil {
+		return nil, nil, err
+	}
+	return response, nil, nil
 }
 
 // deleteHistoryTasks iterates over provided task keys and completes them when the dynamic config
