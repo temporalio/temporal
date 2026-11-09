@@ -135,9 +135,11 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			// this request ID, so both attach calls are no-ops there.
 			func(a *Activity, mutableContext chasm.MutableContext, _ *workflowservice.StartActivityExecutionRequest) (any, error) {
 				if attachCallbacks {
-					existing := a.RequestData.Get(mutableContext).GetPropagatedNexusSerializationContext()
-					incoming := frontendReq.GetPropagatedNexusSerializationContext()
-					nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
+					if !callback.HasCallbacksForRequest(a, requestID) {
+						existing := a.RequestData.Get(mutableContext).GetPropagatedNexusSerializationContext()
+						incoming := frontendReq.GetPropagatedNexusSerializationContext()
+						nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
+					}
 
 					regTime := timestamppb.New(mutableContext.Now(a))
 					err := callback.ValidateAndAttach(mutableContext, a, requestID, regTime, cbs, frontendReq.GetNamespace(), h.callbackValidator, callback.WithReusedRequestID())
@@ -192,7 +194,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		metrics.ActivityEagerExecutionCounter.With(eagerActivityMetricsHandler(h.metricsHandler, h.config, frontendReq)).Record(1)
 	}
 
-	// nexusContextMatch is also set when updateFn runs on a new activity, so only an existing one counts.
 	if !created && nexusContextMatch != "" {
 		metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1,
 			metrics.NamespaceTag(frontendReq.GetNamespace()),

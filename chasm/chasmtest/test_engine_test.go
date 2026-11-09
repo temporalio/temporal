@@ -265,6 +265,42 @@ func TestStartExecutionDeduplicatesUpdateRequestID(t *testing.T) {
 	require.Equal(t, 0, startCount)
 }
 
+func TestUpdateWithStartDeduplicatesRequestID(t *testing.T) {
+	e, ref := startStore(t, 0, chasm.WithRequestID("create-request-id"))
+	startKey := ref.ExecutionKey
+	startKey.RunID = ""
+	updateCount := 0
+	updateWithStart := func(requestID string, conflictPolicy chasm.BusinessIDConflictPolicy) chasm.UpdateWithStartExecutionResult[any] {
+		result, err := chasm.UpdateWithStartExecution(
+			engineContext(e),
+			startKey,
+			func(chasm.MutableContext, any) (*tests.PayloadStore, error) {
+				t.Fatal("startFn should not be called when the execution is running")
+				return nil, nil
+			},
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, nil
+			},
+			nil,
+			chasm.WithRequestID(requestID),
+			chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, conflictPolicy),
+		)
+		require.NoError(t, err)
+		require.False(t, result.Created)
+		require.Equal(t, ref.ExecutionKey, result.ExecutionKey)
+		return result
+	}
+
+	updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting)
+	require.Equal(t, 1, updateCount)
+
+	updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting)
+	updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyFail)
+	updateWithStart("create-request-id", chasm.BusinessIDConflictPolicyFail)
+	require.Equal(t, 1, updateCount)
+}
+
 func startStore(
 	t *testing.T,
 	ttl time.Duration,

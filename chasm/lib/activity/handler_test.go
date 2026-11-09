@@ -224,6 +224,13 @@ func TestStartActivityExecution_UseExistingMetric(t *testing.T) {
 	require.False(t, resp.GetStarted())
 	require.Equal(t, 2, callbackCount(ctx, t))
 	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityUseExisting.Name()), 1)
+
+	// A retry of an attach that already succeeded does not count again.
+	resp, err = startWithAttach(ctx, h, "request-2", enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING)
+	require.NoError(t, err)
+	require.False(t, resp.GetStarted())
+	require.Equal(t, 2, callbackCount(ctx, t))
+	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityUseExisting.Name()), 1)
 }
 
 // TestStartActivityExecution_FailRejectsAttach verifies that under ACTIVITY_ID_CONFLICT_POLICY_FAIL,

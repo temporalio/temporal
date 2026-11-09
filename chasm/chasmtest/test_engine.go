@@ -198,13 +198,25 @@ func (e *Engine) UpdateWithStartExecution(
 
 	current, hasCurrent := e.currentExecutions[bKey]
 	if hasCurrent {
+		if _, ok := current.requestIDs[options.RequestID]; options.RequestID != "" && ok {
+			serializedRef, err := current.node.Ref(current.root)
+			if err != nil {
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
+			}
+			return chasm.EngineUpdateWithStartExecutionResult{
+				ExecutionKey: current.key,
+				ExecutionRef: serializedRef,
+				Created:      false,
+			}, nil
+		}
+
 		switch current.backend.GetExecutionState().State {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 			// Updating a running execution reuses it, so the conflict policy must allow that.
 			if err := conflictPolicyAllowsUpdate(ref, current, options.ConflictPolicy); err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
-			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, "")
+			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, options.RequestID)
 			if err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
