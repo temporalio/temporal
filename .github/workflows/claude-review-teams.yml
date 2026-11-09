@@ -1,13 +1,14 @@
 # Reviews PRs from opted-in team members or Claude review labels with Claude.
 #
-# Uses `pull_request_target` so the workflow has access to secrets even when
-# a PR is opened from a fork. This is safe ONLY because the
-# `check-review-eligibility` job gates the review job behind trusted user
-# checks.
+# Uses `pull_request`: GitHub blocks `pull_request_target` in public
+# repositories by default from December 2, 2026. Under `pull_request`, PRs
+# from forks and bot actors get no secrets, so only PRs from branches of this
+# repository are reviewed. The `check-review-eligibility` job still gates the
+# review job behind trusted user checks.
 name: Claude review for opted-in PRs
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, ready_for_review, labeled]
 
 env:
@@ -21,15 +22,19 @@ env:
 jobs:
   check-review-eligibility:
     if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !endsWith(github.actor, '[bot]') &&
       (
-        github.event.action != 'labeled' &&
-        github.event.pull_request.draft == false
-      ) ||
-      (
-        github.event.action == 'labeled' &&
         (
-          github.event.label.name == 'request-claude-review' ||
-          github.event.label.name == 'skip-claude-review'
+          github.event.action != 'labeled' &&
+          github.event.pull_request.draft == false
+        ) ||
+        (
+          github.event.action == 'labeled' &&
+          (
+            github.event.label.name == 'request-claude-review' ||
+            github.event.label.name == 'skip-claude-review'
+          )
         )
       )
     runs-on: ubuntu-24.04-arm
@@ -226,7 +231,12 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      # Under `pull_request` the default checkout is the PR's merge commit. Check
+      # out the base so the review instructions come from the base branch, not
+      # from the PR under review.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
