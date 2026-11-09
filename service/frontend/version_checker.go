@@ -31,15 +31,11 @@ type VersionChecker struct {
 	clusterMetadataManager persistence.ClusterMetadataManager
 	mu                     sync.Mutex
 	started                bool
-	shuttingDown           bool
-	stopOnce               sync.Once
+	stopped                bool
 	sdkVersionRecorder     *interceptor.SDKVersionInterceptor
 	versionInfoCaller      versioninfo.Caller
 	versionCheckContext    context.Context
 	cancelVersionCheck     context.CancelFunc
-	shutdownCheckContext   context.Context
-	cancelShutdownCheck    context.CancelFunc
-	shutdownResponse       *versioninfo.VersionCheckResponse
 }
 
 func NewVersionChecker(
@@ -49,8 +45,7 @@ func NewVersionChecker(
 	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 	logger log.SnTaggedLogger,
 ) *VersionChecker {
-	shutdownCtx, cancelShutdown := context.WithCancel(headers.SetCallerInfo(context.Background(), headers.SystemBackgroundHighCallerInfo))
-	ctx, cancel := context.WithCancel(shutdownCtx)
+	ctx, cancel := context.WithCancel(headers.SetCallerInfo(context.Background(), headers.SystemBackgroundHighCallerInfo))
 	return &VersionChecker{
 		config:                 config,
 		logger:                 logger,
@@ -61,59 +56,57 @@ func NewVersionChecker(
 		versionInfoCaller:      versioninfo.NewCaller(),
 		versionCheckContext:    ctx,
 		cancelVersionCheck:     cancel,
-		shutdownCheckContext:   shutdownCtx,
-		cancelShutdownCheck:    cancelShutdown,
 	}
 }
 
 func (vc *VersionChecker) Start() {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
-	if vc.started || vc.shuttingDown || !vc.config.EnableServerVersionCheck() {
+	if vc.started || vc.stopped || !vc.config.EnableServerVersionCheck() {
 		return
 	}
 	vc.started = true
 	go vc.versionCheckLoop(vc.versionCheckContext)
 }
 
-func (vc *VersionChecker) InitiateShutdown() {
-	vc.mu.Lock()
-	defer vc.mu.Unlock()
-	if vc.shuttingDown {
-		return
-	}
-	vc.shuttingDown = true
-	vc.cancelVersionCheck()
-	if !vc.started {
-		close(vc.doneChan)
-	}
-}
-
 func (vc *VersionChecker) Stop() {
-	vc.stopOnce.Do(func() {
-		vc.InitiateShutdown()
-		vc.cancelShutdownCheck()
-		<-vc.doneChan
-		if vc.shutdownResponse != nil {
-			vc.logVersionInfo(vc.shutdownResponse)
+	vc.mu.Lock()
+	if !vc.stopped {
+		vc.stopped = true
+		vc.cancelVersionCheck()
+		if !vc.started {
+			close(vc.doneChan)
 		}
-	})
+	}
+	vc.mu.Unlock()
+	<-vc.doneChan
 }
 
 func (vc *VersionChecker) versionCheckLoop(
 	ctx context.Context,
 ) {
 	defer close(vc.doneChan)
-	timer := time.NewTicker(VersionCheckInterval)
+	startedAt := time.Now()
+	schedule := []time.Duration{
+		5 * time.Minute, 30 * time.Minute, time.Hour, 4 * time.Hour, VersionCheckInterval,
+	}
+	nextCheckAfter := schedule[0]
+	timer := time.NewTimer(nextCheckAfter)
 	defer timer.Stop()
 	vc.performVersionCheck(ctx)
 	for {
 		select {
 		case <-ctx.Done():
-			vc.shutdownResponse = vc.checkVersion(vc.shutdownCheckContext, true)
 			return
 		case <-timer.C:
 			vc.performVersionCheck(ctx)
+			if len(schedule) > 1 {
+				schedule = schedule[1:]
+				nextCheckAfter = schedule[0]
+			} else {
+				nextCheckAfter += VersionCheckInterval
+			}
+			timer.Reset(time.Until(startedAt.Add(nextCheckAfter)))
 		}
 	}
 }
@@ -121,18 +114,10 @@ func (vc *VersionChecker) versionCheckLoop(
 func (vc *VersionChecker) performVersionCheck(
 	ctx context.Context,
 ) {
-	vc.checkVersion(ctx, false)
-}
-
-func (vc *VersionChecker) checkVersion(ctx context.Context, shutdown bool) *versioninfo.VersionCheckResponse {
 	if ctx.Err() != nil || !vc.config.EnableServerVersionCheck() {
-		return nil
+		return
 	}
-	checkType := "periodic"
-	if shutdown {
-		checkType = "shutdown"
-	}
-	metricsHandler := vc.metricsHandler.WithTags(metrics.VersionCheckTypeTag(checkType))
+	metricsHandler := vc.metricsHandler
 	startTime := time.Now().UTC()
 	defer func() {
 		if ctx.Err() != context.Canceled {
@@ -144,43 +129,35 @@ func (vc *VersionChecker) checkVersion(ctx context.Context, shutdown bool) *vers
 		if ctx.Err() != context.Canceled {
 			metrics.VersionCheckFailedCount.With(metricsHandler).Record(1)
 		}
-		return nil
+		return
 	}
 
-	if !shutdown && !isUpdateNeeded(metadata) {
-		return nil
+	if !isUpdateNeeded(metadata) {
+		return
 	}
 
 	req, err := vc.createVersionCheckRequest(metadata)
 	if err != nil {
 		metrics.VersionCheckFailedCount.With(metricsHandler).Record(1)
-		return nil
+		return
 	}
 	resp, err := vc.getVersionInfo(ctx, req)
 	if err != nil {
-		if ctx.Err() == context.Canceled {
-			// Include observations from the canceled check in the final report.
-			for _, sdk := range req.SDKInfo {
-				vc.sdkVersionRecorder.RecordSDKInfo(sdk.Name, sdk.Version)
-			}
-		} else {
+		if ctx.Err() != context.Canceled {
 			metrics.VersionCheckRequestFailedCount.With(metricsHandler).Record(1)
 			metrics.VersionCheckFailedCount.With(metricsHandler).Record(1)
 		}
-		return nil
+		return
 	}
-	if !shutdown {
-		vc.logVersionInfo(resp)
-	}
-	err = vc.saveVersionInfo(ctx, resp, shutdown)
+	vc.logVersionInfo(resp)
+	err = vc.saveVersionInfo(ctx, resp)
 	if err != nil {
 		if ctx.Err() != context.Canceled {
 			metrics.VersionCheckFailedCount.With(metricsHandler).Record(1)
 		}
-		return resp
+		return
 	}
 	metrics.VersionCheckSuccessCount.With(metricsHandler).Record(1)
-	return resp
 }
 
 func (vc *VersionChecker) logVersionInfo(resp *versioninfo.VersionCheckResponse) {
@@ -259,7 +236,7 @@ func (vc *VersionChecker) getVersionInfo(ctx context.Context, req *versioninfo.V
 	return vc.versionInfoCaller.Call(ctx, req)
 }
 
-func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse, ignoreConflict bool) error {
+func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse) error {
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
 		return err
@@ -275,7 +252,7 @@ func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo
 	if err != nil {
 		return err
 	}
-	if !saved && !ignoreConflict {
+	if !saved {
 		return serviceerror.NewUnavailable("version info update hasn't been applied")
 	}
 	return nil

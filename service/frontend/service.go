@@ -576,7 +576,6 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
-	s.versionChecker.InitiateShutdown()
 	// initiate graceful shutdown:
 	// 1. Fail rpc health check, this will cause client side load balancer to stop forwarding requests to this node
 	// 2. wait for failure detection time
@@ -597,6 +596,7 @@ func (s *Service) Stop() {
 	s.handler.Stop()
 	s.operatorHandler.Stop()
 	s.adminHandler.Stop()
+	s.versionChecker.Stop()
 	s.visibilityManager.Close()
 
 	s.logger.Info("ShutdownHandler: Draining traffic")
@@ -616,7 +616,6 @@ func (s *Service) Stop() {
 		})
 	}
 	wg.Wait()
-	s.versionChecker.Stop()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(s.logger)
