@@ -5,7 +5,6 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
@@ -29,14 +28,10 @@ var OperationContextKey = operationContextKeyType{}
 // DestinationBlockedFn reports whether the outbound queue is blocking an endpoint.
 type DestinationBlockedFn func(namespaceID string, destination string) bool
 
-// DestinationThrottledFn reports whether the caller RPS budget is limiting a destination.
-type DestinationThrottledFn func(namespaceName namespace.Name, destination string) bool
-
 // OperationContext holds dependencies injected into the chasm.Context for use by Operation methods.
 type OperationContext struct {
-	DestinationBlocked   DestinationBlockedFn
-	DestinationThrottled DestinationThrottledFn
-	MetricTagConfig      dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	DestinationBlocked DestinationBlockedFn
+	MetricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 }
 
 // Library registers the Nexus operation components and tasks. The history service builds it with newLibrary, which
@@ -46,9 +41,8 @@ type OperationContext struct {
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	destinationBlocked   DestinationBlockedFn
-	destinationThrottled DestinationThrottledFn
-	metricTagConfig      dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	destinationBlocked DestinationBlockedFn
+	metricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 
 	handler *handler
 
@@ -75,14 +69,12 @@ type libraryParams struct {
 	CancellationBackoffTaskHandler             *cancellationBackoffTaskHandler
 	DynamicConfig                              *dynamicconfig.Collection
 	DestinationBlocked                         DestinationBlockedFn
-	DestinationThrottled                       DestinationThrottledFn
 }
 
 func newLibrary(params libraryParams) *Library {
 	return &Library{
 		metricTagConfig:                            MetricTagConfiguration.Get(params.DynamicConfig),
 		destinationBlocked:                         params.DestinationBlocked,
-		destinationThrottled:                       params.DestinationThrottled,
 		handler:                                    params.Handler,
 		operationBackoffTaskHandler:                params.OperationBackoffTaskHandler,
 		operationInvocationTaskHandler:             params.OperationInvocationTaskHandler,
@@ -116,9 +108,8 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 			chasm.WithBusinessIDAlias("OperationId"),
 			chasm.WithContextValues(map[any]any{
 				OperationContextKey: &OperationContext{
-					MetricTagConfig:      l.metricTagConfig,
-					DestinationBlocked:   l.destinationBlocked,
-					DestinationThrottled: l.destinationThrottled,
+					MetricTagConfig:    l.metricTagConfig,
+					DestinationBlocked: l.destinationBlocked,
 				},
 			}),
 		),

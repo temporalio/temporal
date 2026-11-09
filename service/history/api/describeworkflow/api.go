@@ -19,7 +19,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -66,7 +65,6 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-	destinationThrottled chasmnexus.DestinationThrottledFn,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -363,7 +361,6 @@ func Invoke(
 		executionInfo,
 		executionState,
 		outboundQueueCBPool,
-		destinationThrottled,
 		shard.GetLogger(),
 	)
 	if err != nil {
@@ -595,10 +592,8 @@ func buildPendingNexusOperationInfosFromHSM(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-	destinationThrottled chasmnexus.DestinationThrottledFn,
 	logger log.Logger,
 ) ([]*workflowpb.PendingNexusOperationInfo, error) {
-	namespaceName := mutableState.GetNamespaceEntry().Name()
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
 	result := make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
@@ -615,7 +610,7 @@ func buildPendingNexusOperationInfosFromHSM(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, namespaceName, node, op, outboundQueueCBPool, destinationThrottled)
+		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, outboundQueueCBPool)
 		if err != nil {
 			logger.Error(
 				"failed to build Nexus operation info while building describe response",
@@ -638,11 +633,9 @@ func buildPendingNexusOperationInfosFromHSM(
 
 func buildPendingNexusOperationInfo(
 	namespaceID namespace.ID,
-	namespaceName namespace.Name,
 	node *hsm.Node,
 	op nexusoperations.Operation,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-	destinationThrottled chasmnexus.DestinationThrottledFn,
 ) (*workflowpb.PendingNexusOperationInfo, error) {
 	var state enumspb.PendingNexusOperationState
 	switch op.State() {
@@ -672,13 +665,10 @@ func buildPendingNexusOperationInfo(
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
-		} else if destinationThrottled(namespaceName, op.Endpoint) {
-			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
-			blockedReason = "Requests from this namespace to the endpoint are being rate limited."
 		}
 	}
 
-	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, namespaceName, node, op, outboundQueueCBPool, destinationThrottled)
+	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, node, op, outboundQueueCBPool)
 	if err != nil {
 		return nil, err
 	}
@@ -713,11 +703,9 @@ func buildPendingNexusOperationInfo(
 
 func buildNexusOperationCancellationInfo(
 	namespaceID namespace.ID,
-	namespaceName namespace.Name,
 	node *hsm.Node,
 	op nexusoperations.Operation,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-	destinationThrottled chasmnexus.DestinationThrottledFn,
 ) (*workflowpb.NexusOperationCancellationInfo, error) {
 	cancelation, err := op.Cancelation(node)
 	if err != nil {
@@ -738,9 +726,6 @@ func buildNexusOperationCancellationInfo(
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
-		} else if destinationThrottled(namespaceName, op.Endpoint) {
-			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
-			blockedReason = "Requests from this namespace to the endpoint are being rate limited."
 		}
 	}
 
