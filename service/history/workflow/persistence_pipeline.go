@@ -33,9 +33,23 @@ type submission struct {
 	failoverVersion int64
 	request         *persistence.UpdateWorkflowExecutionRequest
 	completion      *future.FutureImpl[struct{}]
-	historySize     int64
-	bytes           int
-	taskTargets     map[tasks.Category][]tasks.Task
+	// dequeued is closed when the submission leaves pending, by a claim or by invalidation.
+	dequeued    chan struct{}
+	historySize int64
+	bytes       int
+	taskTargets map[tasks.Category][]tasks.Task
+}
+
+// commitGroup is one claimed write. Groups publish in claim order.
+type commitGroup struct {
+	members []*submission
+	request *persistence.UpdateWorkflowExecutionRequest
+	// sizeDiff is the history size the write adds, known once submission returns.
+	sizeDiff int64
+	// dependencyFailed is set when an earlier in-flight group failed, so this group must
+	// publish as failed even if its own write succeeds.
+	dependencyFailed bool
+	inFlightAtClaim  int
 }
 
 type operation struct {
@@ -46,10 +60,14 @@ type operation struct {
 }
 
 type persistencePipeline struct {
-	mu                       sync.Mutex
-	err                      error
-	inFlight                 []*submission
-	pending                  []*submission
+	mu          sync.Mutex
+	err         error
+	inFlight    []*commitGroup
+	pending     []*submission
+	maxInFlight int
+	// dispatching is set while a claimed group is being submitted, so groups reach the store
+	// in claim order and with known history size diffs.
+	dispatching              bool
 	committedDBRecordVersion int64
 	committedHistorySize     int64
 	outstandingHistorySize   int64
@@ -94,9 +112,22 @@ func (p *persistencePipeline) tail() *submission {
 		return p.pending[len(p.pending)-1]
 	}
 	if len(p.inFlight) != 0 {
-		return p.inFlight[len(p.inFlight)-1]
+		members := p.inFlight[len(p.inFlight)-1].members
+		return members[len(members)-1]
 	}
 	return nil
+}
+
+func (p *persistencePipeline) submissions() int {
+	count := len(p.pending)
+	for _, g := range p.inFlight {
+		count += len(g.members)
+	}
+	return count
+}
+
+func (p *persistencePipeline) canClaim() bool {
+	return !p.dispatching && len(p.inFlight) < p.maxInFlight
 }
 
 func (c *ContextImpl) PersistenceFuture() future.Future[struct{}] {
@@ -195,7 +226,7 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 	p := c.pipeline
 	for {
 		p.mu.Lock()
-		blocked := len(p.waiters) != 0 || len(p.pending)+len(p.inFlight) >= maxPipelineSubmissions
+		blocked := len(p.waiters) != 0 || p.submissions() >= maxPipelineSubmissions
 		invalid := p.err != nil
 		changed := p.changed
 		p.mu.Unlock()
@@ -214,7 +245,7 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 			return err
 		}
 		p.mu.Lock()
-		blocked = len(p.waiters) != 0 || p.err != nil || len(p.pending)+len(p.inFlight) >= maxPipelineSubmissions
+		blocked = len(p.waiters) != 0 || p.err != nil || p.submissions() >= maxPipelineSubmissions
 		p.mu.Unlock()
 		if blocked {
 			c.lock.Release(1)
@@ -237,6 +268,7 @@ func (p *persistencePipeline) invalidate(start int, err error) {
 			result = canceled
 		}
 		s.completion.Set(struct{}{}, result)
+		close(s.dequeued)
 		p.outstandingHistorySize -= s.historySize
 	}
 	p.pending = p.pending[:start]
@@ -263,7 +295,7 @@ func (p *persistencePipeline) submit(ctx context.Context, failoverVersion int64,
 	if queuedBytes > maxPipelineBytes {
 		return nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "workflow persistence pipeline is full")
 	}
-	s := &submission{ctx: ctx, failoverVersion: failoverVersion, request: owned, completion: future.NewFuture[struct{}](), historySize: historySize, bytes: size, taskTargets: request.UpdateWorkflowMutation.Tasks}
+	s := &submission{ctx: ctx, failoverVersion: failoverVersion, request: owned, completion: future.NewFuture[struct{}](), dequeued: make(chan struct{}), historySize: historySize, bytes: size, taskTargets: request.UpdateWorkflowMutation.Tasks}
 	if !p.pinned && p.acquirePin != nil {
 		p.acquirePin()
 		p.pinned = true
@@ -308,8 +340,8 @@ func (c *ContextImpl) completeSubmission(s *submission) error {
 			}
 			return err
 		}
-		if index == 0 && len(p.inFlight) == 0 {
-			request, err := p.claimHead(s)
+		if index == 0 && p.canClaim() {
+			group, err := p.claimHead(s)
 			if err != nil {
 				p.invalidate(0, err)
 				release := p.releaseIdlePin()
@@ -320,30 +352,30 @@ func (c *ContextImpl) completeSubmission(s *submission) error {
 				continue
 			}
 			p.mu.Unlock()
-			c.executePersistenceGroup(s, request)
+			c.executePersistenceGroup(group)
 			continue
 		}
-		predecessor := p.predecessor(index)
+		// The head waits for a claim slot. Later submissions wait for their predecessor to
+		// leave pending.
+		var next <-chan struct{}
+		switch {
+		case index == 0:
+			next = p.changed
+		case index > 0:
+			next = p.pending[index-1].dequeued
+		default:
+			// Claimed members wait only for their group to publish.
+		}
 		p.mu.Unlock()
 		select {
 		case <-s.completion.Done():
-		case <-predecessor:
+		case <-next:
 		case <-s.ctx.Done():
 		}
 	}
 }
 
-func (p *persistencePipeline) predecessor(index int) <-chan struct{} {
-	if index > 0 {
-		return p.pending[index-1].completion.Done()
-	}
-	if index == 0 && len(p.inFlight) != 0 {
-		return p.inFlight[len(p.inFlight)-1].completion.Done()
-	}
-	return nil
-}
-
-func (p *persistencePipeline) claimHead(s *submission) (*persistence.UpdateWorkflowExecutionRequest, error) {
+func (p *persistencePipeline) claimHead(s *submission) (*commitGroup, error) {
 	request, _, _, err := clonePipelineRequest(s.request)
 	if err != nil {
 		return nil, err
@@ -366,15 +398,33 @@ func (p *persistencePipeline) claimHead(s *submission) (*persistence.UpdateWorkf
 		count++
 		size += next.bytes
 	}
-	request.UpdateWorkflowMutation.DBRecordVersion = p.committedDBRecordVersion + 1
-	request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize = p.committedHistorySize
-	p.inFlight = slices.Clone(p.pending[:count])
+	// A group builds on the last dispatched group, whose size diff is known because
+	// dispatching is serialized.
+	version, historySize := p.committedDBRecordVersion, p.committedHistorySize
+	for _, g := range p.inFlight {
+		version = g.request.UpdateWorkflowMutation.DBRecordVersion
+		historySize += g.sizeDiff
+	}
+	request.UpdateWorkflowMutation.DBRecordVersion = version + 1
+	request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize = historySize
+	group := &commitGroup{members: slices.Clone(p.pending[:count]), request: request}
+	for _, member := range group.members {
+		close(member.dequeued)
+	}
+	p.inFlight = append(p.inFlight, group)
+	group.inFlightAtClaim = len(p.inFlight)
 	p.pending = p.pending[count:]
+	p.dispatching = p.maxInFlight > 1
 	p.notify()
-	return request, nil
+	return group, nil
 }
 
-func (c *ContextImpl) executePersistenceGroup(first *submission, request *persistence.UpdateWorkflowExecutionRequest) {
+func (c *ContextImpl) executePersistenceGroup(group *commitGroup) {
+	if c.pipeline.maxInFlight > 1 {
+		c.submitPersistenceGroup(group)
+		return
+	}
+	first, request := group.members[0], group.request
 	shard := c.pipelineShard
 	ctx, cancel := context.WithTimeout(rpc.CopyContextValues(shard.GetLifecycleContext(), first.ctx), c.config.ShardIOTimeout())
 	defer cancel()
@@ -392,9 +442,97 @@ func (c *ContextImpl) executePersistenceGroup(first *submission, request *persis
 	}
 	// Publication must settle a claimed write even when the shard or caller is canceled.
 	_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
+	c.publishPersistenceGroup(group, delta, err)
+	c.lock.Release(1)
+	if recovered != nil {
+		panic(recovered) //nolint:forbidigo // Preserve the original panic after settling accepted writes.
+	}
+}
+
+// submitPersistenceGroup writes a group through the asynchronous submit API. Submission is
+// serialized by the dispatching flag; waiting for durability is not, so several groups can be
+// in flight. Groups still publish in claim order.
+func (c *ContextImpl) submitPersistenceGroup(group *commitGroup) {
+	first, request := group.members[0], group.request
+	shard := c.pipelineShard
+	p := c.pipeline
+	metrics.WorkflowPersistencePipelineInFlight.With(c.metricsHandler).Record(int64(group.inFlightAtClaim))
+	ctx, cancel := context.WithTimeout(rpc.CopyContextValues(shard.GetLifecycleContext(), first.ctx), c.config.ShardIOTimeout())
+	defer cancel()
+	var delta int64
+	var wait func(context.Context) error
+	var err error
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		delta, wait, err = NewTransaction(shard).SubmitWorkflowExecutionUpdate(ctx, request.Mode, request.ArchetypeID,
+			first.failoverVersion, &request.UpdateWorkflowMutation, request.UpdateWorkflowEvents,
+			request.ArchetypeID == chasm.WorkflowArchetypeID)
+	}()
+	if recovered != nil {
+		err = serviceerror.NewInternal("workflow persistence panicked")
+	}
+	p.mu.Lock()
+	p.dispatching = false
+	group.sizeDiff = delta
+	if err != nil {
+		p.failInFlightSuffix(group)
+	}
+	p.notify()
+	p.mu.Unlock()
+
+	if err == nil {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					recovered = r
+					err = serviceerror.NewInternal("workflow persistence panicked")
+				}
+			}()
+			err = wait(ctx)
+		}()
+		if err != nil {
+			p.mu.Lock()
+			p.failInFlightSuffix(group)
+			p.mu.Unlock()
+		}
+	}
+
+	p.mu.Lock()
+	for p.inFlight[0] != group {
+		changed := p.changed
+		p.mu.Unlock()
+		<-changed
+		p.mu.Lock()
+	}
+	if err == nil && group.dependencyFailed {
+		err = pipelineDependencyError()
+	}
+	p.mu.Unlock()
+	// Publication must settle a claimed write even when the shard or caller is canceled.
+	_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
+	c.publishPersistenceGroup(group, delta, err)
+	c.lock.Release(1)
+	if recovered != nil {
+		panic(recovered) //nolint:forbidigo // Preserve the original panic after settling accepted writes.
+	}
+}
+
+// failInFlightSuffix stops new claims and marks every group claimed after failed as dependent
+// on a failed write. It must be called with p.mu held.
+func (p *persistencePipeline) failInFlightSuffix(failed *commitGroup) {
+	p.invalidate(0, pipelineDependencyError())
+	for i := slices.Index(p.inFlight, failed) + 1; i < len(p.inFlight); i++ {
+		p.inFlight[i].dependencyFailed = true
+	}
+}
+
+// publishPersistenceGroup settles the first in-flight group. The caller must hold the workflow lock.
+func (c *ContextImpl) publishPersistenceGroup(group *commitGroup, delta int64, err error) {
+	request := group.request
 	p := c.pipeline
 	p.mu.Lock()
-	members := p.inFlight
+	members := group.members
 	if err == nil {
 		p.committedDBRecordVersion = request.UpdateWorkflowMutation.DBRecordVersion
 		p.committedHistorySize += delta
@@ -410,7 +548,7 @@ func (c *ContextImpl) executePersistenceGroup(first *submission, request *persis
 			}
 		}
 	} else {
-		p.invalidate(0, pipelineDependencyError())
+		p.failInFlightSuffix(group)
 	}
 	for _, s := range members {
 		p.outstandingHistorySize -= s.historySize
@@ -430,7 +568,7 @@ func (c *ContextImpl) executePersistenceGroup(first *submission, request *persis
 	if c.config.HistoryCacheLimitSizeBased {
 		p.cacheSize.Store(int64(c.cacheSizeLocked()))
 	}
-	p.inFlight = nil
+	p.inFlight = p.inFlight[1:]
 	for _, s := range members {
 		s.completion.Set(struct{}{}, err)
 	}
@@ -442,10 +580,6 @@ func (c *ContextImpl) executePersistenceGroup(first *submission, request *persis
 	metrics.WorkflowPersistencePipelineBatchSize.With(c.metricsHandler).Record(int64(len(members)))
 	if release != nil {
 		release()
-	}
-	c.lock.Release(1)
-	if recovered != nil {
-		panic(recovered) //nolint:forbidigo // Preserve the original panic after settling accepted writes.
 	}
 }
 

@@ -222,6 +222,54 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	return updateHistorySizeDiff, newHistorySizeDiff, nil
 }
 
+// SubmitWorkflowExecutionUpdate submits an update without a new run and returns its history size diff.
+// The returned wait function blocks until the update is durable and then sends the notifications and
+// metrics that UpdateWorkflowExecution sends after its write.
+func (t *TransactionImpl) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	updateMode persistence.UpdateWorkflowMode,
+	archetypeID chasm.ArchetypeID,
+	failoverVersion int64,
+	mutation *persistence.WorkflowMutation,
+	eventsSeq []*persistence.WorkflowEvents,
+	isWorkflow bool,
+) (int64, func(context.Context) error, error) {
+
+	engine, err := t.shard.GetEngine(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	request := &persistence.UpdateWorkflowExecutionRequest{
+		ShardID:                t.shard.GetShardID(),
+		Mode:                   updateMode,
+		ArchetypeID:            archetypeID,
+		UpdateWorkflowMutation: *mutation,
+		UpdateWorkflowEvents:   eventsSeq,
+	}
+	complete := func(resp *persistence.UpdateWorkflowExecutionResponse, err error) error {
+		if persistence.OperationPossiblySucceeded(err) {
+			NotifyOnExecutionMutation(engine, archetypeID, mutation)
+		}
+		if err != nil {
+			logUpdateWorkflowExecutionFailure(t.shard, request, err)
+			return err
+		}
+		emitUpdateWorkflowExecutionMetrics(t.shard, failoverVersion, nil, request, resp, isWorkflow)
+		if err := NotifyNewHistoryMutationEvent(engine, mutation); err != nil {
+			t.logger.Error("unable to notify workflow mutation", tag.Error(err))
+		}
+		return nil
+	}
+	resp, receipt, err := t.shard.SubmitWorkflowExecutionUpdate(ctx, request)
+	if err != nil {
+		return 0, nil, complete(nil, err)
+	}
+	wait := func(ctx context.Context) error {
+		return complete(resp, receipt.Wait(ctx))
+	}
+	return int64(resp.UpdateMutableStateStats.HistoryStatistics.SizeDiff), wait, nil
+}
+
 func (t *TransactionImpl) SetWorkflowExecution(
 	ctx context.Context,
 	archetypeID chasm.ArchetypeID,
@@ -525,17 +573,37 @@ func updateWorkflowExecution(
 
 	resp, err := shardContext.UpdateWorkflowExecution(ctx, request)
 	if err != nil {
-		shardContext.GetLogger().Error(
-			"Update workflow execution operation failed.",
-			tag.WorkflowNamespaceID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
-			tag.WorkflowID(request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId),
-			tag.WorkflowRunID(request.UpdateWorkflowMutation.ExecutionState.RunId),
-			tag.StoreOperationUpdateWorkflowExecution,
-			tag.Error(err),
-		)
+		logUpdateWorkflowExecutionFailure(shardContext, request, err)
 		return nil, err
 	}
 
+	emitUpdateWorkflowExecutionMetrics(shardContext, updateWorkflowFailoverVersion, newWorkflowFailoverVersion, request, resp, isWorkflow)
+	return resp, nil
+}
+
+func logUpdateWorkflowExecutionFailure(
+	shardContext historyi.ShardContext,
+	request *persistence.UpdateWorkflowExecutionRequest,
+	err error,
+) {
+	shardContext.GetLogger().Error(
+		"Update workflow execution operation failed.",
+		tag.WorkflowNamespaceID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
+		tag.WorkflowID(request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId),
+		tag.WorkflowRunID(request.UpdateWorkflowMutation.ExecutionState.RunId),
+		tag.StoreOperationUpdateWorkflowExecution,
+		tag.Error(err),
+	)
+}
+
+func emitUpdateWorkflowExecutionMetrics(
+	shardContext historyi.ShardContext,
+	updateWorkflowFailoverVersion int64,
+	newWorkflowFailoverVersion *int64,
+	request *persistence.UpdateWorkflowExecutionRequest,
+	resp *persistence.UpdateWorkflowExecutionResponse,
+	isWorkflow bool,
+) {
 	if namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
 	); err == nil {
@@ -564,8 +632,6 @@ func updateWorkflowExecution(
 			),
 		)
 	}
-
-	return resp, nil
 }
 
 func setWorkflowExecution(

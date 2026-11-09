@@ -152,7 +152,11 @@ func NewContext(
 		testHooks:         testHooks,
 	}
 	if config.WorkflowPersistencePipeline {
-		contextImpl.pipeline = &persistencePipeline{changed: make(chan struct{}), coalescing: config.WorkflowPersistenceCoalescing}
+		contextImpl.pipeline = &persistencePipeline{
+			changed:     make(chan struct{}),
+			coalescing:  config.WorkflowPersistenceCoalescing,
+			maxInFlight: max(config.WorkflowPersistencePipelineMaxInFlight, 1),
+		}
 		contextImpl.pipeline.cacheSize.Store(1)
 	}
 	softassert.That(

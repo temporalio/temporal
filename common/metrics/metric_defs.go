@@ -741,6 +741,7 @@ var (
 	WorkflowPersistencePipelineWrites      = NewCounterDef("workflow_persistence_pipeline_writes")
 	WorkflowPersistencePipelineSubmissions = NewCounterDef("workflow_persistence_pipeline_submissions")
 	WorkflowPersistencePipelineBatchSize   = NewDimensionlessHistogramDef("workflow_persistence_pipeline_batch_size")
+	WorkflowPersistencePipelineInFlight    = NewDimensionlessHistogramDef("workflow_persistence_pipeline_in_flight_groups")
 	HistorySize                            = NewBytesHistogramDef("history_size")
 	HistoryCount                           = NewDimensionlessHistogramDef("history_count")
 	TasksCompletedPerShardInfoUpdate       = NewDimensionlessHistogramDef("tasks_per_shardinfo_update")
