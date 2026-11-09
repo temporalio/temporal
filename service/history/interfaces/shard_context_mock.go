@@ -827,6 +827,22 @@ func (mr *MockShardContextMockRecorder) StateMachineRegistry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineRegistry", reflect.TypeOf((*MockShardContext)(nil).StateMachineRegistry))
 }
 
+// SubmitWorkflowExecutionUpdate mocks base method.
+func (m *MockShardContext) SubmitWorkflowExecutionUpdate(ctx context.Context, request *persistence0.UpdateWorkflowExecutionRequest) (*persistence0.UpdateWorkflowExecutionResponse, persistence0.WorkflowExecutionUpdateReceipt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitWorkflowExecutionUpdate", ctx, request)
+	ret0, _ := ret[0].(*persistence0.UpdateWorkflowExecutionResponse)
+	ret1, _ := ret[1].(persistence0.WorkflowExecutionUpdateReceipt)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// SubmitWorkflowExecutionUpdate indicates an expected call of SubmitWorkflowExecutionUpdate.
+func (mr *MockShardContextMockRecorder) SubmitWorkflowExecutionUpdate(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitWorkflowExecutionUpdate", reflect.TypeOf((*MockShardContext)(nil).SubmitWorkflowExecutionUpdate), ctx, request)
+}
+
 // UnloadForOwnershipLost mocks base method.
 func (m *MockShardContext) UnloadForOwnershipLost() {
 	m.ctrl.T.Helper()
@@ -1741,6 +1757,22 @@ func (m *MockControllableContext) StateMachineRegistry() *hsm.Registry {
 func (mr *MockControllableContextMockRecorder) StateMachineRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineRegistry", reflect.TypeOf((*MockControllableContext)(nil).StateMachineRegistry))
+}
+
+// SubmitWorkflowExecutionUpdate mocks base method.
+func (m *MockControllableContext) SubmitWorkflowExecutionUpdate(ctx context.Context, request *persistence0.UpdateWorkflowExecutionRequest) (*persistence0.UpdateWorkflowExecutionResponse, persistence0.WorkflowExecutionUpdateReceipt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitWorkflowExecutionUpdate", ctx, request)
+	ret0, _ := ret[0].(*persistence0.UpdateWorkflowExecutionResponse)
+	ret1, _ := ret[1].(persistence0.WorkflowExecutionUpdateReceipt)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// SubmitWorkflowExecutionUpdate indicates an expected call of SubmitWorkflowExecutionUpdate.
+func (mr *MockControllableContextMockRecorder) SubmitWorkflowExecutionUpdate(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitWorkflowExecutionUpdate", reflect.TypeOf((*MockControllableContext)(nil).SubmitWorkflowExecutionUpdate), ctx, request)
 }
 
 // UnloadForOwnershipLost mocks base method.

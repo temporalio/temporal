@@ -600,6 +600,73 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	return resp, nil
 }
 
+// SubmitWorkflowExecutionUpdate assigns task keys and the RangeID as UpdateWorkflowExecution does,
+// but holds the IO semaphore only while submitting. The first Wait on the returned receipt completes
+// task tracking and write error handling, so the owner must call Wait even when it gives up early.
+func (s *ContextImpl) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, persistence.WorkflowExecutionUpdateReceipt, error) {
+	if request.NewWorkflowSnapshot != nil || len(request.NewWorkflowEvents) != 0 {
+		return nil, nil, &persistence.InvalidPersistenceRequestError{Msg: "workflow execution update submission does not support a new run"}
+	}
+	if err := s.validateWorkflowEventsTransactionIDs(ctx, request.UpdateWorkflowEvents); err != nil {
+		return nil, nil, err
+	}
+
+	// do not try to get namespace cache within shard lock
+	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
+		return nil, nil, err
+	}
+	defer s.ioSemaphoreRelease()
+
+	s.wLock()
+
+	ctx, cancel, err := s.newDetachedContext(ctx)
+	if err != nil {
+		s.wUnlock()
+		return nil, nil, err
+	}
+	defer cancel()
+
+	if err := s.errorByState(); err != nil {
+		s.wUnlock()
+		return nil, nil, err
+	}
+
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name(), request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId); err != nil {
+		s.wUnlock()
+		return nil, nil, err
+	}
+
+	requestCompletionFn, err := s.taskKeyManager.setAndTrackTaskKeys(request.UpdateWorkflowMutation.Tasks)
+	if err != nil {
+		s.wUnlock()
+		return nil, nil, err
+	}
+	s.updateCloseTaskIDs(request.UpdateWorkflowMutation.ExecutionInfo, request.UpdateWorkflowMutation.Tasks)
+
+	rangeID := s.getRangeIDLocked()
+	request.RangeID = rangeID
+	s.wUnlock()
+
+	resp, receipt, err := s.executionManager.SubmitWorkflowExecutionUpdate(ctx, request)
+	if err != nil {
+		requestCompletionFn(err)
+		return nil, nil, s.handleWriteError(rangeID, err)
+	}
+	return resp, persistence.ObserveWorkflowExecutionUpdate(receipt, func(_ context.Context, err error) {
+		requestCompletionFn(err)
+		_ = s.handleWriteError(rangeID, err)
+	}), nil
+}
+
 func (s *ContextImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,

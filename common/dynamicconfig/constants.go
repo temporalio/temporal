@@ -2008,6 +2008,10 @@ See DynamicRateLimitingParams comments for more details.`,
 		"history.workflowPersistenceCoalescing", false,
 		`Coalesce ready workflow persistence submissions at dispatch. Requires pipelining and history service restart.`,
 	)
+	WorkflowPersistencePipelineMaxInFlight = NewGlobalIntSetting(
+		"history.workflowPersistencePipelineMaxInFlight", 1,
+		`Maximum workflow persistence commit groups in flight per execution. Values above 1 submit groups asynchronously and need a store that pipelines them. Requires pipelining and history service restart.`,
+	)
 	HistoryCacheSizeBasedLimit = NewGlobalBoolSetting(
 		"history.cacheSizeBasedLimit",
 		false,
