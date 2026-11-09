@@ -231,28 +231,6 @@ jobs:
         with:
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
           path: pr-head
-      # The API key expires and is rotated by hand. Without this check, a rejected key surfaces as
-      # "Claude did not return structured_output", which reads like a review failure.
-      - name: Check the Anthropic API key
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          set -euo pipefail
-          status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
-            -H "x-api-key: ${ANTHROPIC_API_KEY}" -H "anthropic-version: 2023-06-01" \
-            https://api.anthropic.com/v1/models) || true
-          case "$status" in
-            200)
-              echo "The Anthropic API key is valid."
-              ;;
-            401|403)
-              echo "::error title=Anthropic API key rejected::The ANTHROPIC_API_KEY secret was rejected (HTTP ${status}); it has likely expired and needs to be rotated."
-              exit 1
-              ;;
-            *)
-              echo "::warning title=Anthropic API key not checked::GET /v1/models returned HTTP ${status}; continuing with the review."
-              ;;
-          esac
       - name: Claude PR review
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -374,20 +352,6 @@ jobs:
                 }
               }
             }'
-      # Claude's output is hidden in the log. When it failed before calling the model, its result is an
-      # error from the CLI, not model output, so it is safe to show.
-      - name: Report why Claude failed
-        if: ${{ failure() && steps.claude.outcome == 'failure' }}
-        env:
-          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
-        run: |
-          file="${EXECUTION_FILE:-${RUNNER_TEMP}/claude-execution-output.json}"
-          [ -f "$file" ] || exit 0
-          jq -r 'if type == "array" then . else [.] end
-            | map(select(.type == "result")) | last // empty
-            | select(.is_error and ((.modelUsage // {}) | length == 0))
-            | "::error title=Claude failed before calling the model::"
-              + ((.result // .subtype) | tostring | gsub("\\s+"; " ") | .[0:300])' "$file" || true
       - name: Save review findings
         if: ${{ !cancelled() && steps.claude.outputs.structured_output != '' }}
         env:
