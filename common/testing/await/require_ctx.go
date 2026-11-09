@@ -120,6 +120,7 @@ func run(
 
 		// Run attempt.
 		res := runAttempt(t, condition, attemptCancel, funcName, cancellable)
+		// Capture the error before cleanup; attemptCancel marks every attempt canceled.
 		attemptErr := attemptCtx.Err()
 		attemptCancel()
 		if res.panicVal != nil {
