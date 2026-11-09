@@ -58,7 +58,7 @@ func TestRefreshCloseTaskParentVerification(t *testing.T) {
 							queues.ToPersistenceScope(queues.NewScope(
 								queues.NewRange(tasks.NewImmediateKey(25), tasks.NewImmediateKey(75)),
 								predicates.Universal[tasks.Task](),
-							)),
+							), nil),
 						}},
 					}
 				}

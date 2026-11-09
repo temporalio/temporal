@@ -18,16 +18,31 @@ type (
 		entries           [][]byte
 		unresolvedIndexes int
 	}
+
+	namespaceIDTableBuilder struct {
+		next    int32
+		indexes map[string]int32
+		table   [][]byte
+	}
 )
 
 func ToPersistenceQueueState(
 	queueState *queueState,
+	compact bool,
 ) *persistencespb.QueueState {
+	var builder *namespaceIDTableBuilder
+	if compact {
+		builder = newNamespaceIDTableBuilder()
+	}
 	readerStates := make(map[int64]*persistencespb.QueueReaderState)
-	for id, scopes := range queueState.readerScopes {
+	readerIDs := expmaps.Keys(queueState.readerScopes)
+	// Table slots are assigned in first-encounter order, so map order would reorder the table.
+	slices.Sort(readerIDs)
+	for _, id := range readerIDs {
+		scopes := queueState.readerScopes[id]
 		persistenceScopes := make([]*persistencespb.QueueSliceScope, 0, len(scopes))
 		for _, scope := range scopes {
-			persistenceScopes = append(persistenceScopes, ToPersistenceScope(scope))
+			persistenceScopes = append(persistenceScopes, ToPersistenceScope(scope, builder))
 		}
 		readerStates[id] = &persistencespb.QueueReaderState{
 			Scopes: persistenceScopes,
@@ -37,6 +52,7 @@ func ToPersistenceQueueState(
 	return &persistencespb.QueueState{
 		ReaderStates:                 readerStates,
 		ExclusiveReaderHighWatermark: ToPersistenceTaskKey(queueState.exclusiveReaderHighWatermark),
+		NamespaceIdTable:             builder.entries(),
 	}
 }
 
@@ -81,10 +97,11 @@ func FromPersistenceQueueState(
 
 func ToPersistenceScope(
 	scope Scope,
+	builder *namespaceIDTableBuilder,
 ) *persistencespb.QueueSliceScope {
 	return &persistencespb.QueueSliceScope{
 		Range:     ToPersistenceRange(scope.Range),
-		Predicate: ToPersistencePredicate(scope.Predicate),
+		Predicate: ToPersistencePredicate(scope.Predicate, builder),
 	}
 }
 
@@ -135,6 +152,7 @@ func FromPersistenceTaskKey(
 
 func ToPersistencePredicate(
 	predicate tasks.Predicate,
+	builder *namespaceIDTableBuilder,
 ) *persistencespb.Predicate {
 	switch predicate := predicate.(type) {
 	case *predicates.UniversalImpl[tasks.Task]:
@@ -142,13 +160,13 @@ func ToPersistencePredicate(
 	case *predicates.EmptyImpl[tasks.Task]:
 		return ToPersistenceEmptyPredicate(predicate)
 	case *predicates.AndImpl[tasks.Task]:
-		return ToPersistenceAndPredicate(predicate)
+		return ToPersistenceAndPredicate(predicate, builder)
 	case *predicates.OrImpl[tasks.Task]:
-		return ToPersistenceOrPredicate(predicate)
+		return ToPersistenceOrPredicate(predicate, builder)
 	case *predicates.NotImpl[tasks.Task]:
-		return ToPersistenceNotPredicate(predicate)
+		return ToPersistenceNotPredicate(predicate, builder)
 	case *tasks.NamespacePredicate:
-		return ToPersistenceNamespaceIDPredicate(predicate)
+		return ToPersistenceNamespaceIDPredicate(predicate, builder)
 	case *tasks.TypePredicate:
 		return ToPersistenceTaskTypePredicate(predicate)
 	case *tasks.DestinationPredicate:
@@ -224,10 +242,11 @@ func FromPersistenceEmptyPredicate(
 
 func ToPersistenceAndPredicate(
 	andPredicate *predicates.AndImpl[tasks.Task],
+	builder *namespaceIDTableBuilder,
 ) *persistencespb.Predicate {
 	persistencePredicates := make([]*persistencespb.Predicate, 0, len(andPredicate.Predicates))
 	for _, p := range andPredicate.Predicates {
-		persistencePredicates = append(persistencePredicates, ToPersistencePredicate(p))
+		persistencePredicates = append(persistencePredicates, ToPersistencePredicate(p, builder))
 	}
 
 	return &persistencespb.Predicate{
@@ -254,10 +273,11 @@ func FromPersistenceAndPredicate(
 
 func ToPersistenceOrPredicate(
 	orPredicate *predicates.OrImpl[tasks.Task],
+	builder *namespaceIDTableBuilder,
 ) *persistencespb.Predicate {
 	persistencePredicates := make([]*persistencespb.Predicate, 0, len(orPredicate.Predicates))
 	for _, p := range orPredicate.Predicates {
-		persistencePredicates = append(persistencePredicates, ToPersistencePredicate(p))
+		persistencePredicates = append(persistencePredicates, ToPersistencePredicate(p, builder))
 	}
 
 	return &persistencespb.Predicate{
@@ -284,12 +304,13 @@ func FromPersistenceOrPredicate(
 
 func ToPersistenceNotPredicate(
 	notPredicate *predicates.NotImpl[tasks.Task],
+	builder *namespaceIDTableBuilder,
 ) *persistencespb.Predicate {
 	return &persistencespb.Predicate{
 		PredicateType: enumsspb.PREDICATE_TYPE_NOT,
 		Attributes: &persistencespb.Predicate_NotPredicateAttributes{
 			NotPredicateAttributes: &persistencespb.NotPredicateAttributes{
-				Predicate: ToPersistencePredicate(notPredicate.Predicate),
+				Predicate: ToPersistencePredicate(notPredicate.Predicate, builder),
 			},
 		},
 	}
@@ -304,12 +325,26 @@ func FromPersistenceNotPredicate(
 
 func ToPersistenceNamespaceIDPredicate(
 	namespaceIDPredicate *tasks.NamespacePredicate,
+	builder *namespaceIDTableBuilder,
 ) *persistencespb.Predicate {
+	namespaceIDs := expmaps.Keys(namespaceIDPredicate.NamespaceIDs)
+	// Map order would give equal predicates different bytes, which breaks grouping and table stability.
+	slices.Sort(namespaceIDs)
+	var plainIDs []string
+	var indexes []int32
+	for _, id := range namespaceIDs {
+		if index, ok := builder.intern(id); ok {
+			indexes = append(indexes, index)
+		} else {
+			plainIDs = append(plainIDs, id)
+		}
+	}
 	return &persistencespb.Predicate{
 		PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
 		Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 			NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-				NamespaceIds: expmaps.Keys(namespaceIDPredicate.NamespaceIDs),
+				NamespaceIds:       plainIDs,
+				NamespaceIdIndexes: indexes,
 			},
 		},
 	}
@@ -330,6 +365,35 @@ func FromPersistenceNamespaceIDPredicate(
 
 func newNamespaceIDTable(entries [][]byte) *namespaceIDTable {
 	return &namespaceIDTable{entries: entries}
+}
+
+func newNamespaceIDTableBuilder() *namespaceIDTableBuilder {
+	return &namespaceIDTableBuilder{indexes: make(map[string]int32)}
+}
+
+func (b *namespaceIDTableBuilder) intern(id string) (int32, bool) {
+	if b == nil {
+		return 0, false
+	}
+	parsed, err := uuid.Parse(id)
+	if err != nil || parsed.String() != id {
+		return 0, false
+	}
+	if index, ok := b.indexes[id]; ok {
+		return index, true
+	}
+	index := b.next
+	b.next++
+	b.indexes[id] = index
+	b.table = append(b.table, parsed[:])
+	return index, true
+}
+
+func (b *namespaceIDTableBuilder) entries() [][]byte {
+	if b == nil {
+		return nil
+	}
+	return b.table
 }
 
 func (t *namespaceIDTable) unresolvedIndexCount() int {

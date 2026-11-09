@@ -421,7 +421,7 @@ func (p *queueBase) updateQueueState(
 	err := p.shard.SetQueueState(p.category, tasksCompleted, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
-	}))
+	}, false))
 	if err != nil {
 		metrics.AckLevelUpdateFailedCounter.With(p.metricsHandler).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
