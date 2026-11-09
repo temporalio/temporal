@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gocql/gocql"
-	"github.com/stretchr/testify/assert"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -49,11 +49,12 @@ func TestSessionEmitsMetricOnRefreshThrottle(t *testing.T) {
 	controller.Finish()
 }
 
-func TestPanicCapture(t *testing.T) {
-	_, err := initSession(log.NewNoopLogger(), func() (*gocql.ClusterConfig, error) {
+func TestInvalidHostGeneratesError(t *testing.T) {
+	_, err := initSession(func() (*gocql.ClusterConfig, error) {
 		return &gocql.ClusterConfig{Hosts: []string{"0.0.0.0"}}, nil
 	}, metrics.NoopMetricsHandler)
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "panic:")
+	require.Error(t, err)
+	// This used to panic, but now should simply return an error.
+	require.Contains(t, err.Error(), "invalid host address")
 }

@@ -3,7 +3,7 @@ package gocql
 import (
 	"encoding/binary"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 	"go.temporal.io/server/chasm"
 )
 

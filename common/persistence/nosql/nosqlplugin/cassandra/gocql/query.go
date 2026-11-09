@@ -3,17 +3,20 @@ package gocql
 import (
 	"context"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 )
 
 var _ Query = (*query)(nil)
 
 type (
 	query struct {
-		session    *session
-		gocqlQuery *gocql.Query
+		session       *session
+		gocqlQuery    *gocql.Query
+		tracerFactory TracerFactory
 	}
 )
+
+var _ Query = &query{}
 
 func newQuery(
 	session *session,
@@ -25,86 +28,106 @@ func newQuery(
 	}
 }
 
-func (q *query) Exec() (retError error) {
-	defer func() { q.session.handleError(retError) }()
+// with returns a copy of q that wraps gocqlQuery and keeps q's session and tracer factory.
+func (q *query) with(gocqlQuery *gocql.Query) *query {
+	return &query{
+		session:       q.session,
+		gocqlQuery:    gocqlQuery,
+		tracerFactory: q.tracerFactory,
+	}
+}
 
-	return q.gocqlQuery.Exec()
+func (q *query) Exec(ctx context.Context) (retError error) {
+	defer func() { q.session.handleError(retError) }()
+	q.maybeTrace(ctx)
+	return q.gocqlQuery.ExecContext(ctx)
 }
 
 func (q *query) Scan(
+	ctx context.Context,
 	dest ...any,
 ) (retError error) {
 	defer func() { q.session.handleError(retError) }()
-
-	return q.gocqlQuery.Scan(dest...)
+	q.maybeTrace(ctx)
+	return q.gocqlQuery.ScanContext(ctx, dest...)
 }
 
 func (q *query) ScanCAS(
+	ctx context.Context,
 	dest ...any,
 ) (_ bool, retError error) {
 	defer func() { q.session.handleError(retError) }()
-
-	return q.gocqlQuery.ScanCAS(dest...)
+	q.maybeTrace(ctx)
+	return q.gocqlQuery.ScanCASContext(ctx, dest...)
 }
 
 func (q *query) MapScan(
+	ctx context.Context,
 	m map[string]any,
 ) (retError error) {
 	defer func() { q.session.handleError(retError) }()
-
-	return q.gocqlQuery.MapScan(m)
+	q.maybeTrace(ctx)
+	return q.gocqlQuery.MapScanContext(ctx, m)
 }
 
 func (q *query) MapScanCAS(
+	ctx context.Context,
 	dest map[string]any,
 ) (_ bool, retError error) {
 	defer func() { q.session.handleError(retError) }()
-
-	return q.gocqlQuery.MapScanCAS(dest)
+	q.maybeTrace(ctx)
+	return q.gocqlQuery.MapScanCASContext(ctx, dest)
 }
 
-func (q *query) Iter() Iter {
-	iter := q.gocqlQuery.Iter()
+func (q *query) Iter(ctx context.Context) Iter {
+	q.maybeTrace(ctx)
+	iter := q.gocqlQuery.IterContext(ctx)
 	return newIter(q.session, iter)
 }
 
 func (q *query) PageSize(n int) Query {
 	q.gocqlQuery.PageSize(n)
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) PageState(state []byte) Query {
 	q.gocqlQuery.PageState(state)
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) Consistency(c Consistency) Query {
 	q.gocqlQuery.Consistency(mustConvertConsistency(c))
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) WithTimestamp(timestamp int64) Query {
 	q.gocqlQuery.WithTimestamp(timestamp)
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
-func (q *query) WithContext(ctx context.Context) Query {
-	q2 := q.gocqlQuery.WithContext(ctx)
-	if q2 == nil {
-		return nil
-	}
-	return newQuery(q.session, q2)
+func (q *query) WithTrace(tr TracerFactory) Query {
+	q.tracerFactory = tr
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) Bind(v ...any) Query {
 	q.gocqlQuery.Bind(v...)
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) Idempotent(value bool) Query {
-	return newQuery(q.session, q.gocqlQuery.Idempotent(value))
+	return q.with(q.gocqlQuery.Idempotent(value))
 }
 
 func (q *query) SetSpeculativeExecutionPolicy(policy SpeculativeExecutionPolicy) Query {
-	return newQuery(q.session, q.gocqlQuery.SetSpeculativeExecutionPolicy(policy))
+	return q.with(q.gocqlQuery.SetSpeculativeExecutionPolicy(policy))
+}
+
+func (q *query) maybeTrace(ctx context.Context) {
+	if q.tracerFactory != nil {
+		tr := q.tracerFactory.GetTracerForQuery(ctx, q.gocqlQuery)
+		if tr != nil {
+			q.gocqlQuery.Trace(tr)
+		}
+	}
 }
