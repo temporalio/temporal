@@ -75,6 +75,7 @@ Before writing, reviewing, or running tests, read and follow the [testing guide]
 ## 7. Consistency with Codebase
 
 - Do not introduce new third-party libraries unless specifically requested.
+- For any code that handles time, verify that timestamps and clock readings use the same clock before comparisons or arithmetic. Mutable state uses logical time; `ShardContext` uses physical time. Convert explicitly when crossing these boundaries.
 - Check existing imports and `go.mod` before assuming a library is available.
 - Code follows the patterns already established in the codebase. For example, libraries pass the frontend request through as other libraries do.
 - Existing utilities are reused before new ones are created.
@@ -157,6 +158,12 @@ Report concrete `nit` and `small` findings selectively, and consolidate related 
 
 ### Time Skipping
 
+- Verify that history tasks added directly through `ShardContext.AddTasks`
+  use physical time. Convert task timestamps in logical time to physical
+  time by subtracting the execution's `AccumulatedSkippedDuration` before
+  adding them. Check for missing or duplicate conversions when bypassing
+  `MutableState.AddTasks`, which already converts scheduled-task visibility
+  times.
 - Verify that workflow or mutable-state logic uses `ms.Now()` instead of
   `shard.Now()` when it needs the execution's current time.
 - Check comparisons between execution timestamps and history-task

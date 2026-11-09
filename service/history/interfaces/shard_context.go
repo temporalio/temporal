@@ -92,6 +92,11 @@ type (
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) (int, error)
 		AppendRawHistoryEvents(ctx context.Context, request *persistence.AppendRawHistoryNodesRequest) (*persistence.AppendHistoryNodesResponse, error)
 
+		// AddTasks adds history tasks whose visibility times are already in physical time.
+		// It has no mutable-state information and cannot perform time-skipping conversions.
+		// Callers must convert logical visibility times using MutableState.ToRealTimeWithCurrentOffset,
+		// which subtracts the execution's AccumulatedSkippedDuration.
+		// Scheduled tasks added through MutableState.AddTasks are already converted.
 		AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error
 		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
 		GetHistoryTasks(ctx context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error)
