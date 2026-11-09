@@ -204,7 +204,7 @@ func Invoke(
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		p, err := workflow.GetPendingActivityInfo(ctx, shard, mutableState, ai)
+		p, err := workflow.GetPendingActivityInfo(ctx, mutableState, ai)
 		if err != nil {
 			return nil, err
 		}

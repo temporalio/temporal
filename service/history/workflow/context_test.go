@@ -633,7 +633,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_AttemptIsolation() {
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 2, intermediatePage(0, "attempt2")))
 
 	// Attempt 1's final page can no longer find its buffer.
-	_, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(1, nil))
+	_, _, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(1, nil))
 	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
 	s.ErrorAs(err, &bufferLost)
 }
@@ -646,7 +646,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_GapDetection() {
 
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "p0")))
 	// Page 1 never buffered; final page claims pages 0 and 1 preceded it.
-	_, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(2, nil))
+	_, _, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(2, nil))
 	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
 	s.ErrorAs(err, &bufferLost)
 }
@@ -661,7 +661,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_Idempotency() {
 	// Resend page 0 with different content; first write must win.
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "second")))
 
-	merged, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(1, intermediatePage(1, "final").Commands))
+	merged, _, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(1, intermediatePage(1, "final").Commands))
 	s.NoError(err)
 	s.Len(merged, 1)
 	s.Equal("first", merged[0].GetRecordMarkerCommandAttributes().GetMarkerName())
@@ -676,7 +676,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_PageCountLimit() {
 	s.ErrorAs(err, &invalidArgument)
 
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "p0")))
-	_, err = s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(maxWorkflowTaskCompletionPages, nil))
+	_, _, err = s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(maxWorkflowTaskCompletionPages, nil))
 	s.ErrorAs(err, &invalidArgument)
 }
 
@@ -756,8 +756,9 @@ func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitDropsPartialBuffer()
 	s.Equal(processLimit-page0Size, budget.Used())
 }
 
-// TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear verifies the process counter
-// goes back to zero after a successful merge
+// TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear verifies that a successful merge
+// keeps the buffer reservation until the returned release func is called, and that
+// Clear() releases a buffer that was not merged
 func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear() {
 	budget := limiter.NewKeyedBytesLimiter()
 	s.workflowContext.paginationLimiter = budget
@@ -767,16 +768,45 @@ func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear() 
 
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(1, "p1")))
-	s.Positive(budget.Used())
+	reserved := budget.Used()
+	s.Positive(reserved)
 
-	_, err := s.workflowContext.GetMergedTaskCompletionPages(10, 1, finalPage(2, nil))
+	_, release, err := s.workflowContext.GetMergedTaskCompletionPages(10, 1, finalPage(2, nil))
 	s.NoError(err)
+	s.Nil(s.workflowContext.taskCompletionBuffer)
+
+	// The reservation outlives the buffer until the transaction is persisted.
+	s.workflowContext.reconcileTaskCompletionBuffer()
+	s.workflowContext.Clear()
+	s.Equal(reserved, budget.Used())
+
+	release()
 	s.Equal(int64(0), budget.Used())
 
 	// And after Clear() of a fresh buffer.
+	s.setTaskCompletionBufferSizeLimit(0)
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
 	s.Positive(budget.Used())
 	s.workflowContext.Clear()
+	s.Equal(int64(0), budget.Used())
+}
+
+// TestTaskCompletionBuffer_BudgetReleasedOnFailedMerge verifies that a merge that fails
+// with BufferLost releases the buffer reservation right away
+func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnFailedMerge() {
+	budget := limiter.NewKeyedBytesLimiter()
+	s.workflowContext.paginationLimiter = budget
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
+	s.Positive(budget.Used())
+
+	// Page 1 was never buffered.
+	_, release, err := s.workflowContext.GetMergedTaskCompletionPages(10, 1, finalPage(2, nil))
+	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+	s.ErrorAs(err, &bufferLost)
+	s.Nil(release)
+	s.Nil(s.workflowContext.taskCompletionBuffer)
 	s.Equal(int64(0), budget.Used())
 }
 

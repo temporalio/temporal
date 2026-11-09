@@ -575,6 +575,9 @@ func (d *namespaceHandler) UpdateNamespace(
 			config.VisibilityArchivalUri = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
+			if len(updatedConfig.BadBinaries.GetBinaries()) > 0 {
+				configurationChanged = true
+			}
 			maxLength := d.config.MaxBadBinaries(updateRequest.GetNamespace())
 			// only do merging
 			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UTC())
@@ -1067,7 +1070,7 @@ func (d *namespaceHandler) removeOldestExpiredWorkflowRule(nsName string, rules 
 		if expirationTime == nil {
 			continue
 		}
-		if !found || expirationTime.AsTime().Before(oldestTime) {
+		if expirationTime.AsTime().Before(oldestTime) {
 			oldestTime = expirationTime.AsTime()
 			oldestKey = key
 			found = true
@@ -1593,6 +1596,17 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 		BusinessId:        businessID,
 		Mutation:          mutation,
 	})
+	if err != nil && !mutation.GetShadow() {
+		// A start or poll error does not prove the mutation failed: the component
+		// may still commit locally and fan out. The business ID correlates it.
+		d.logger.Warn(
+			"namespace replication authoritative trigger RPC did not complete",
+			tag.WorkflowNamespaceID(mutation.GetNamespaceDetail().GetInfo().GetId()),
+			tag.NewStringTag("business_id", businessID),
+			tag.Operation(mutation.GetOperation().String()),
+			tag.Error(err),
+		)
+	}
 	return err
 }
 

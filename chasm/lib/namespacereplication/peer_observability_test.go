@@ -204,6 +204,7 @@ func TestPeerApplyObservability(t *testing.T) {
 				threshold := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name())
 				if tc.age >= time.Minute {
 					require.Len(t, threshold, 1)
+					require.Equal(t, mutation.GetNamespaceDetail().GetInfo().GetName(), threshold[0].Tags["namespace"])
 				} else {
 					require.Empty(t, threshold)
 				}
