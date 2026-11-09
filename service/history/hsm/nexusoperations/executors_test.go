@@ -2181,7 +2181,7 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 						})
 					},
 				}))
-				err = registry.ExecuteImmediateTask(t.Context(), fakeEnv{node}, hsm.Ref{
+				err = registry.ExecuteImmediateTask(t.Context(), fakeEnv{node: node}, hsm.Ref{
 					WorkflowKey:     definition.NewWorkflowKey("ns-id", "workflow", "run"),
 					StateMachineRef: &persistencespb.StateMachineRef{},
 				}, task)
