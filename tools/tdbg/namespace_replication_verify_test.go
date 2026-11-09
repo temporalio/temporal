@@ -27,6 +27,7 @@ import (
 )
 
 func TestNamespaceReplicationVerifier_Status(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		sourceVersion     int64
@@ -131,6 +132,7 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, test.sourceVersion, 20)
 			var target *adminservice.GetNamespaceResponse
 			if !test.missing {
@@ -168,6 +170,7 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 }
 
 func TestNamespaceReplicationVerifier_ObserveCapturesReusableState(t *testing.T) {
+	t.Parallel()
 	source := testNamespaceResponse(
 		"namespace",
 		"namespace-id",
@@ -327,6 +330,7 @@ func TestNamespaceReplicationVerifierUnrelatedNotFoundBlocks(t *testing.T) {
 }
 
 func TestNamespaceReplicationVerifier_IgnoresConfiguredNamespaceDataKeys(t *testing.T) {
+	t.Parallel()
 	const ignoredKey = "__MCNConfig"
 
 	tests := []struct {
@@ -362,6 +366,7 @@ func TestNamespaceReplicationVerifier_IgnoresConfiguredNamespaceDataKeys(t *test
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 			source.Info.Data = map[string]string{
 				ignoredKey:           "source-value",
@@ -391,6 +396,7 @@ func TestNamespaceReplicationVerifier_IgnoresConfiguredNamespaceDataKeys(t *test
 }
 
 func TestNamespaceReplicationVerifier_NameCollisionBlocksRepair(t *testing.T) {
+	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	nameCollision := testNamespaceResponse("namespace", "other-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	client := testNamespaceReplicationTargetClient("cluster-b", nil)
@@ -610,6 +616,7 @@ func TestNamespaceReplicationVerifierRejectsSourceWithDifferentID(t *testing.T) 
 }
 
 func TestNamespaceReplicationVerifier_WireNamespaceNotFoundRequiresRepair(t *testing.T) {
+	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	client := testNamespaceReplicationTargetClient("cluster-b", nil)
 	client.getNamespaceFn = func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
@@ -626,6 +633,7 @@ func TestNamespaceReplicationVerifier_WireNamespaceNotFoundRequiresRepair(t *tes
 }
 
 func TestNamespaceReplicationVerifier_UnavailableTargetBlocksRepair(t *testing.T) {
+	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{})
 
@@ -636,6 +644,7 @@ func TestNamespaceReplicationVerifier_UnavailableTargetBlocksRepair(t *testing.T
 }
 
 func TestNamespaceReplicationVerifier_SourceMovementIsInconclusive(t *testing.T) {
+	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	moved := proto.Clone(source).(*adminservice.GetNamespaceResponse)
 	moved.ConfigVersion++
@@ -661,6 +670,7 @@ func TestNamespaceReplicationVerifier_SourceMovementIsInconclusive(t *testing.T)
 }
 
 func TestValidateSourceNamespace(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		mutate   func(*adminservice.GetNamespaceResponse)
@@ -697,6 +707,7 @@ func TestValidateSourceNamespace(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			response := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a"}, 1, 1)
 			test.mutate(response)
 			require.ErrorContains(t, validateSourceNamespace(response, "cluster-a"), test.contains)
@@ -705,6 +716,7 @@ func TestValidateSourceNamespace(t *testing.T) {
 }
 
 func TestValidateExpectedClusters(t *testing.T) {
+	t.Parallel()
 	response := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-b", "cluster-a"}, 1, 1)
 	clusters, err := validateExpectedClusters(response, "cluster-a")
 	require.NoError(t, err)
@@ -723,6 +735,7 @@ func TestValidateExpectedClusters(t *testing.T) {
 }
 
 func TestNamespaceReplicationProjectionsCoverReplicatedFields(t *testing.T) {
+	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	tests := []struct {
 		name           string
@@ -764,6 +777,7 @@ func TestNamespaceReplicationProjectionsCoverReplicatedFields(t *testing.T) {
 	require.NoError(t, err)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
 			test.mutate(target)
 			targetConfig, targetFailover, err := namespaceReplicationProjections(target, nil)
@@ -795,6 +809,7 @@ func TestNamespaceReplicationProjectionsCoverReplicatedFields(t *testing.T) {
 }
 
 func TestNamespaceReplicationProjectionsDiscardNestedUnknownFields(t *testing.T) {
+	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
 	unknown := protowire.AppendTag(nil, 1000, protowire.VarintType)
@@ -828,6 +843,7 @@ func TestNamespaceReplicationProjectionsDiscardNestedUnknownFields(t *testing.T)
 }
 
 func TestTDBGExitCode(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, 1, tdbgExitCode(errors.New("ordinary")))
 	require.Equal(t, 2, tdbgExitCode(cli.Exit("blocked", 2)))
 	require.Equal(t, namespaceReplicationRepairRequiredExitCode, tdbgExitCode(cli.Exit(
@@ -837,6 +853,7 @@ func TestTDBGExitCode(t *testing.T) {
 }
 
 func TestNamespaceReplicationVerificationJSONRedactsNamespaceValues(t *testing.T) {
+	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 11, 20)
 	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
 	target.ConfigVersion = 10
@@ -853,6 +870,8 @@ func TestNamespaceReplicationVerificationJSONRedactsNamespaceValues(t *testing.T
 	require.Contains(t, string(payload), "info.description")
 }
 
+// The CLI tests below run sequentially: running a urfave/cli app mutates tdbg's
+// shared global flag definitions, so parallel apps would race.
 func TestNamespaceReplicationVerifyRequiresNamespaceID(t *testing.T) {
 	app := NewCliApp()
 	app.Writer = &bytes.Buffer{}
