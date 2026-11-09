@@ -350,6 +350,33 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.ErrorContains(t, tc.handler.workflowTaskFailedCause.causeErr, "exceeds size limit")
 	})
 
+	t.Run("complete workflow result too large", func(t *testing.T) {
+		var tc testconf
+		t.Log("setting max blob size to zero")
+		setup(t, &tc, setupOpts{blobSizeLimit: 0})
+		command := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: &commonpb.Payloads{
+						Payloads: []*commonpb.Payload{{Data: []byte("larger than the blob size limit")}},
+					},
+				},
+			},
+		}
+
+		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
+		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.NoError(t, err)
+		require.NotNil(t, tc.handler.workflowTaskFailedCause)
+		require.Equal(t,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES,
+			tc.handler.workflowTaskFailedCause.failedCause)
+		require.ErrorContains(t, tc.handler.workflowTaskFailedCause.causeErr, "exceeds size limit")
+	})
+
 	t.Run("message for unsupported protocol", func(t *testing.T) {
 		var tc testconf
 		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
