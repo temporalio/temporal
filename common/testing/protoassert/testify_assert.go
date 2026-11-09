@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/temporalproto"
+	"go.temporal.io/server/common/testing/protodiff"
 )
 
 func formatListDiff(listA, listB any, extraA, extraB any) string {
@@ -46,7 +46,7 @@ func diffLists(listA, listB any) (extraA, extraB []any) {
 			if visited[j] {
 				continue
 			}
-			if temporalproto.DeepEqual(bValue.Index(j).Interface(), element) {
+			if protodiff.Equal(bValue.Index(j).Interface(), element) {
 				visited[j] = true
 				found = true
 				break

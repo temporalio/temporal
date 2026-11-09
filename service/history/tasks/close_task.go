@@ -13,11 +13,12 @@ var _ Task = (*CloseExecutionTask)(nil)
 type (
 	CloseExecutionTask struct {
 		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
-		DeleteAfterClose    bool
-		DeleteProcessStage  DeleteWorkflowExecutionStage
+		VisibilityTimestamp    time.Time
+		TaskID                 int64
+		Version                int64
+		SkipParentVerification bool
+		DeleteAfterClose       bool
+		DeleteProcessStage     DeleteWorkflowExecutionStage
 	}
 )
 

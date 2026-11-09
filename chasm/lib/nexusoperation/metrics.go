@@ -33,6 +33,11 @@ var NexusOperationTimeoutCount = metrics.NewCounterDef(
 	metrics.WithDescription("Nexus Operations that timed out before completion."),
 )
 
+var HeaderPrefixUsageCounter = metrics.NewCounterDef(
+	"nexus_header_prefix_usage",
+	metrics.WithDescription("Nexus Operation requests with header keys that start with a tracked or rejected prefix, tagged by prefix and by whether the request was rejected."),
+)
+
 var NexusOperationScheduleToCloseLatency = metrics.NewTimerDef(
 	"nexus_operation_schedule_to_close_latency",
 	metrics.WithDescription("Duration from Nexus Operation scheduled time to terminal state."),

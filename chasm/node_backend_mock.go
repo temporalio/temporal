@@ -43,6 +43,8 @@ type MockNodeBackend struct {
 	HandleGetNamespaceEntry                   func() *namespace.Namespace
 	HandleEndpointRegistry                    func() EndpointRegistry
 	HandleSetTimeSkippingConfig               func(config *commonpb.TimeSkippingConfig)
+	HandleIsTimeSkippingFeatureEnabled        func(archetypeID ArchetypeID) bool
+	HandleTimeSkippingMaxAccumulatedDuration  func() time.Duration
 	HandleNow                                 func() time.Time
 	HandleRecordTimeSkippingTransition        func(transition *TimeSkippingTransition)
 
@@ -84,6 +86,20 @@ func (m *MockNodeBackend) ChasmSkipPersistenceEnabled() bool {
 		return m.HandleChasmSkipPersistenceEnabled()
 	}
 	return false
+}
+
+func (m *MockNodeBackend) IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool {
+	if m.HandleIsTimeSkippingFeatureEnabled != nil {
+		return m.HandleIsTimeSkippingFeatureEnabled(archetypeID)
+	}
+	return false
+}
+
+func (m *MockNodeBackend) TimeSkippingMaxAccumulatedDuration() time.Duration {
+	if m.HandleTimeSkippingMaxAccumulatedDuration != nil {
+		return m.HandleTimeSkippingMaxAccumulatedDuration()
+	}
+	return 10 * 365 * 24 * time.Hour
 }
 
 func (m *MockNodeBackend) ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int {
@@ -140,11 +156,11 @@ func (m *MockNodeBackend) AddTasks(ts ...tasks.Task) {
 	}
 }
 
-func (m *MockNodeBackend) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+func (m *MockNodeBackend) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.DeletePureTaskCalls = append(m.DeletePureTaskCalls, maxScheduledTime)
+	m.DeletePureTaskCalls = append(m.DeletePureTaskCalls, maxLogicalScheduledTime)
 }
 
 func (m *MockNodeBackend) LastDeletePureTaskCall() time.Time {

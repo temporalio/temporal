@@ -120,6 +120,9 @@ var (
 		// Nexus metrics are an exception since they use the information from the request.
 		"metricsClient.history.StartNexusOperation":  true,
 		"metricsClient.history.CancelNexusOperation": true,
+
+		// Eager grants consume tokens, so failures after admission must not be retried.
+		"retryableClient.matching.GrantEagerDispatch": true,
 	}
 	// loadBalancedMethods are the matching methods that load balance across the
 	// partitions of a task queue instead of routing to one given partition. They get a

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
@@ -91,7 +92,7 @@ type Interceptor struct {
 	authExtraHeaderName          string
 	exposeAuthorizerErrors       dynamicconfig.BoolPropertyFn
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
-	enablePrincipalPropagation   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	enablePrincipalHeader        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	disableStreamingAuthorizer   dynamicconfig.BoolPropertyFn
 }
 
@@ -107,7 +108,7 @@ func NewInterceptor(
 	authExtraHeaderName string,
 	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn,
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn,
-	enablePrincipalPropagation dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enablePrincipalHeader dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	disableStreamingAuthorizer dynamicconfig.BoolPropertyFn,
 ) *Interceptor {
 	return &Interceptor{
@@ -121,7 +122,7 @@ func NewInterceptor(
 		audienceGetter:               audienceGetter,
 		exposeAuthorizerErrors:       exposeAuthorizerErrors,
 		enableCrossNamespaceCommands: enableCrossNamespaceCommands,
-		enablePrincipalPropagation:   enablePrincipalPropagation,
+		enablePrincipalHeader:        enablePrincipalHeader,
 		disableStreamingAuthorizer:   disableStreamingAuthorizer,
 	}
 }
@@ -146,7 +147,9 @@ func (a *Interceptor) Intercept(
 		var err error
 		claims, err = a.GetClaims(authInfo)
 		if err != nil {
-			a.logger.Error("Authorization error", tag.Error(err))
+			a.logger.Error("Authorization error", append(
+				logtags.NexusStage(req, info.FullMethod),
+				tag.Error(err))...)
 			// return a generic error to the caller without disclosing details
 			return nil, errUnauthorized
 		}
@@ -172,7 +175,7 @@ func (a *Interceptor) Intercept(
 		if err != nil {
 			return nil, err
 		}
-		if a.enablePrincipalPropagation != nil && a.enablePrincipalPropagation(namespace) && principal != nil {
+		if a.enablePrincipalHeader != nil && a.enablePrincipalHeader(namespace) && principal != nil {
 			ctx = headers.SetPrincipal(ctx, principal)
 		}
 
@@ -313,7 +316,9 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 	metrics.ServiceAuthorizationLatency.With(mh).Record(time.Since(startTime))
 	if err != nil {
 		metrics.ServiceErrAuthorizeFailedCounter.With(mh).Record(1)
-		a.logger.Error("Authorization error", tag.Error(err))
+		a.logger.Error("Authorization error", append(
+			logtags.NexusStage(ct.Request, ct.APIName),
+			tag.Error(err))...)
 		if a.exposeAuthorizerErrors() {
 			return nil, err
 		}

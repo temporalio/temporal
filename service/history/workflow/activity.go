@@ -92,11 +92,10 @@ func UpdateActivityInfoForRetries(
 
 func GetPendingActivityInfo(
 	ctx context.Context, // only used as a passthrough to GetActivityType
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 ) (*workflowpb.PendingActivityInfo, error) {
-	now := shardContext.GetTimeSource().Now().UTC()
+	now := mutableState.Now().UTC()
 
 	p := &workflowpb.PendingActivityInfo{
 		ActivityId:                  ai.ActivityId,
@@ -279,7 +278,6 @@ func PauseActivity(
 
 func ResetActivity(
 	ctx context.Context,
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	activityId string,
 	resetHeartbeats bool,
@@ -367,7 +365,7 @@ func ResetActivity(
 				ai.LastHeartbeatUpdateTime = nil
 			}
 
-			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			scheduleTime := ms.Now().UTC()
 			if jitter != 0 {
 				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
 				scheduleTime = scheduleTime.Add(randomOffset)
@@ -393,7 +391,6 @@ func unpauseActivityInfo(ai *persistencespb.ActivityInfo) {
 }
 
 func UnpauseActivity(
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	resetAttempts bool,
@@ -413,7 +410,7 @@ func UnpauseActivity(
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			scheduleTime := ms.Now().UTC()
 			if jitter != 0 {
 				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
 				scheduleTime = scheduleTime.Add(randomOffset)
@@ -432,7 +429,6 @@ func UnpauseActivity(
 }
 
 func UnpauseActivityWithResume(
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
@@ -444,7 +440,7 @@ func UnpauseActivityWithResume(
 
 		// regenerate the retry task if needed
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms, shardContext); err != nil {
+			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms); err != nil {
 				return err
 			}
 		}
@@ -457,7 +453,6 @@ func UnpauseActivityWithResume(
 }
 
 func UnpauseActivityWithReset(
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
@@ -471,7 +466,7 @@ func UnpauseActivityWithReset(
 		activityInfo.Attempt = 1
 
 		if needRegenerateRetryTask(activityInfo, scheduleNewRun) {
-			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms, shardContext); err != nil {
+			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms); err != nil {
 				return err
 			}
 		}
@@ -493,10 +488,10 @@ func regenerateActivityRetryTask(
 	scheduleNewRun bool,
 	jitter time.Duration,
 	ms historyi.MutableState,
-	shardContext historyi.ShardContext) error {
+) error {
 	scheduleTime := activityInfo.ScheduledTime.AsTime()
 	if scheduleNewRun {
-		scheduleTime = shardContext.GetTimeSource().Now().UTC()
+		scheduleTime = ms.Now().UTC()
 		if jitter != 0 {
 			randomOffset := time.Duration(rand.Int63n(int64(jitter)))
 			scheduleTime = scheduleTime.Add(randomOffset)

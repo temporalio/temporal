@@ -65,7 +65,14 @@ type (
 		chasmMapper   *chasm.VisibilitySearchAttributesMapper
 		archetypeID   chasm.ArchetypeID
 
-		seenNamespaceDivision bool
+		// queryTime is the reference time used to resolve NOW() expressions. When zero,
+		// getQueryTime() falls back to time.Now().UTC() at resolution time.
+		queryTime time.Time
+
+		// If disableDefaultNsDivision is true, don't auto add TemporalNamespaceDivision
+		// filter if missing.
+		disableDefaultNsDivision bool
+		seenNamespaceDivision    bool
 
 		// seenIllegalFieldName tracks illegal usage of field names in filters.
 		// Eg: Keyword01 is a field name to be mapped to an alias. Using it directly
@@ -159,8 +166,9 @@ func NewQueryConverter[ExprT any](
 		saTypeMap:     saTypeMap,
 		saMapper:      saMapper,
 
-		seenNamespaceDivision: false,
-		seenIllegalFieldName:  false,
+		disableDefaultNsDivision: false,
+		seenNamespaceDivision:    false,
+		seenIllegalFieldName:     false,
 
 		metricsHandler: metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String())),
 		logger:         logger,
@@ -178,6 +186,23 @@ func (c *QueryConverter[ExprT]) WithSearchAttributeInterceptor(
 	return c
 }
 
+// WithQueryTime sets the reference time used to resolve NOW() expressions in the query.
+// When not set, NOW() resolves to time.Now().UTC() at the time the query is converted.
+func (c *QueryConverter[ExprT]) WithQueryTime(t time.Time) *QueryConverter[ExprT] {
+	c.queryTime = t.UTC()
+	return c
+}
+
+// getQueryTime returns the configured query time. If no query time was set via WithQueryTime,
+// it computes time.Now().UTC() once on first call and caches it, so that all NOW()
+// expressions within a single query evaluate to the same timestamp.
+func (c *QueryConverter[ExprT]) getQueryTime() time.Time {
+	if c.queryTime.IsZero() {
+		c.queryTime = time.Now().UTC()
+	}
+	return c.queryTime
+}
+
 func (c *QueryConverter[ExprT]) WithChasmMapper(
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *QueryConverter[ExprT] {
@@ -189,6 +214,11 @@ func (c *QueryConverter[ExprT]) WithArchetypeID(
 	archetypeID chasm.ArchetypeID,
 ) *QueryConverter[ExprT] {
 	c.archetypeID = archetypeID
+	return c
+}
+
+func (c *QueryConverter[ExprT]) WithDisableDefaultNamespaceDivision() *QueryConverter[ExprT] {
+	c.disableDefaultNsDivision = true
 	return c
 }
 
@@ -220,13 +250,13 @@ func (c *QueryConverter[ExprT]) Convert(
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
 	// try setting the namespace division filter based on the archetype ID,
 	// else filter by null (no division).
-	var namespaceDivisionExpr ExprT
-	if !c.seenNamespaceDivision {
+	if !c.seenNamespaceDivision && !c.disableDefaultNsDivision {
 		nsDivisionCol := NamespaceDivisionSAColumn()
 		if err := c.saInterceptor.Intercept(nsDivisionCol); err != nil {
 			return nil, err
 		}
 
+		var namespaceDivisionExpr ExprT
 		if c.archetypeID != chasm.UnspecifiedArchetypeID {
 			// For CHASM queries, filter by archetype ID
 			namespaceDivisionExpr, err = c.storeQC.ConvertComparisonExpr(
@@ -244,11 +274,11 @@ func (c *QueryConverter[ExprT]) Convert(
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
-	if err != nil {
-		return nil, err
+		queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return queryParams, nil
@@ -553,9 +583,12 @@ func (c *QueryConverter[ExprT]) isIllegalFieldName(
 	if saAlias != saFieldName || !sadefs.IsPreallocatedCSAFieldName(saAlias, saType) {
 		return false
 	}
-	// Check if the alias actually has the same name as the field name.
-	fieldName, err := c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
-	return err != nil || fieldName != saAlias
+	if c.saMapper != nil {
+		// Check if the alias actually has the same name as the field name.
+		fieldName, err := c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
+		return err != nil || fieldName != saAlias
+	}
+	return true
 }
 
 func (c *QueryConverter[ExprT]) parseValueExpr(
@@ -625,7 +658,23 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 	case *sqlparser.GroupConcatExpr:
 		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
-		return nil, NewConverterError("%s: nested func", NotSupportedErrMessage)
+		// Allow NOW() as a value, e.g. StartTime > NOW().
+		if saType != enumspb.INDEXED_VALUE_TYPE_DATETIME {
+			return nil, NewConverterError(
+				"%s: function calls are only supported with Datetime search attributes",
+				NotSupportedErrMessage,
+			)
+		}
+		return c.parseDatetimeValueExpr(e)
+	case *sqlparser.BinaryExpr:
+		// Allow NOW() +/- 'duration', e.g. StartTime > NOW() - '5h'.
+		if saType != enumspb.INDEXED_VALUE_TYPE_DATETIME {
+			return nil, NewConverterError(
+				"%s: binary operators are only supported with Datetime search attributes",
+				NotSupportedErrMessage,
+			)
+		}
+		return c.parseDatetimeValueExpr(e)
 	case *sqlparser.ColName:
 		return nil, NewConverterError(
 			"%s: column name on the right side of comparison expression (did you forget to quote %q?)",
@@ -639,6 +688,83 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 			expr,
 		)
 	}
+}
+
+// parseDatetimeValueExpr evaluates a NOW() or NOW() +/- 'duration' expression relative to the
+// query time, and formats the result as a Datetime value.
+func (c *QueryConverter[ExprT]) parseDatetimeValueExpr(expr sqlparser.Expr) (any, error) {
+	t, err := evalDatetimeExpr(expr, c.getQueryTime())
+	if err != nil {
+		return nil, err
+	}
+	return t.UTC().Format(c.storeQC.GetDatetimeFormat()), nil
+}
+
+// evalDatetimeExpr evaluates NOW() to queryTime, and NOW() +/- 'duration' to queryTime shifted
+// by the duration. Any other expression is an error.
+func evalDatetimeExpr(expr sqlparser.Expr, queryTime time.Time) (time.Time, error) {
+	unsupportedErr := NewConverterError(
+		"%s: expression %q, only NOW() and NOW() +/- 'duration' are supported",
+		NotSupportedErrMessage,
+		sqlparser.String(expr),
+	)
+	switch e := expr.(type) {
+	case *sqlparser.FuncExpr:
+		return resolveNowFunc(e, queryTime)
+	case *sqlparser.BinaryExpr:
+		// Only a single offset applied directly to NOW() is supported.
+		funcExpr, ok := e.Left.(*sqlparser.FuncExpr)
+		if !ok {
+			return time.Time{}, unsupportedErr
+		}
+		now, err := resolveNowFunc(funcExpr, queryTime)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if e.Operator != sqlparser.PlusStr && e.Operator != sqlparser.MinusStr {
+			return time.Time{}, NewConverterError(
+				"%s: operator %q in %q, only + and - are supported",
+				NotSupportedErrMessage,
+				e.Operator,
+				sqlparser.String(expr),
+			)
+		}
+		sqlVal, ok := e.Right.(*sqlparser.SQLVal)
+		if !ok || (sqlVal.Type != sqlparser.StrVal && sqlVal.Type != sqlparser.IntVal) {
+			return time.Time{}, NewConverterError(
+				"%s: duration offset in %q must be a quoted string or integer nanoseconds, e.g. NOW() - '5h' or NOW() - 300000000000",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		duration, err := ParseDurationStr(string(sqlVal.Val))
+		if err != nil {
+			return time.Time{}, NewConverterError(
+				"%s: invalid duration in %q: %v",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+				err,
+			)
+		}
+		if e.Operator == sqlparser.MinusStr {
+			duration = -duration
+		}
+		return now.Add(duration), nil
+	default:
+		return time.Time{}, unsupportedErr
+	}
+}
+
+// resolveNowFunc returns queryTime if funcExpr is NOW(), and an error for any other function.
+func resolveNowFunc(funcExpr *sqlparser.FuncExpr, queryTime time.Time) (time.Time, error) {
+	if !funcExpr.Qualifier.IsEmpty() || !funcExpr.Name.EqualString("now") || len(funcExpr.Exprs) != 0 {
+		return time.Time{}, NewConverterError(
+			"%s: function %q",
+			NotSupportedErrMessage,
+			sqlparser.String(funcExpr),
+		)
+	}
+	return queryTime, nil
 }
 
 // parseSQLVal handles values for specific search attributes.
@@ -812,7 +938,7 @@ func parseExecutionDurationValue(value any) (int64, error) {
 	case int64:
 		return v, nil
 	case string:
-		duration, err := ParseExecutionDurationStr(v)
+		duration, err := ParseDurationStr(v)
 		if err != nil {
 			return 0, NewConverterError(
 				"%s: invalid duration value for search attribute %s: %v",

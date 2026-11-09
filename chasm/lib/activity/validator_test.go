@@ -837,16 +837,16 @@ func TestValidateStandaloneUserMetadata(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			h := &frontendHandler{
 				config: &Config{
 					BlobSizeLimitError:         defaultBlobSizeLimitError,
 					BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
 					DefaultActivityRetryPolicy: getDefaultRetrySettings,
 					MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
-					MaxUserMetadataSummarySize: func(string) int { return test.summaryLimit },
-					MaxUserMetadataDetailsSize: func(string) int { return test.detailsLimit },
+					MaxUserMetadataSummarySize: func(string) int { return testCase.summaryLimit },
+					MaxUserMetadataDetailsSize: func(string) int { return testCase.detailsLimit },
 				},
 				linkValidator: newLinkValidator(
 					defaultMaxLinksPerRequest,
@@ -861,16 +861,16 @@ func TestValidateStandaloneUserMetadata(t *testing.T) {
 				ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
 				StartToCloseTimeout: durationpb.New(10 * time.Second),
-				UserMetadata:        test.metadata,
+				UserMetadata:        testCase.metadata,
 			}
 			_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
-			if test.errContains == "" {
+			if testCase.errContains == "" {
 				require.NoError(t, err)
 				return
 			}
 			var invalidArgument *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgument)
-			require.ErrorContains(t, err, test.errContains)
+			require.ErrorContains(t, err, testCase.errContains)
 		})
 	}
 }

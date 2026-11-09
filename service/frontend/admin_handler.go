@@ -2,11 +2,13 @@ package frontend
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -42,6 +44,7 @@ import (
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/operator"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -51,6 +54,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
@@ -70,6 +74,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -91,8 +96,9 @@ type (
 		numberOfHistoryShards      int32
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
+		namespaceMutationExecutor  nsreplication.MutationTaskExecutor
 		eventSerializer            serialization.Serializer
-		visibilityMgr              manager.VisibilityManager
+		visibilityMgr              manager.AdminVisibilityManager
 		persistenceExecutionName   string
 		namespaceReplicationQueue  persistence.NamespaceReplicationQueue
 		taskManager                persistence.TaskManager
@@ -112,6 +118,7 @@ type (
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
+		metricsHandler             metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -124,7 +131,7 @@ type (
 		Config                              *Config
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		visibilityMgr                       manager.VisibilityManager
+		visibilityMgr                       manager.AdminVisibilityManager
 		Logger                              log.Logger
 		EventLogger                         otellog.Logger
 		TaskManager                         persistence.TaskManager
@@ -147,6 +154,7 @@ type (
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
+		MetricsHandler                      metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -161,6 +169,7 @@ var _ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
+	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
 ) *AdminHandler {
 	historyHealthChecker := NewHealthChecker(
 		primitives.HistoryService,
@@ -179,6 +188,7 @@ func NewAdminHandler(
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
 		config:                     args.Config,
 		namespaceDLQHandler:        namespaceDLQHandler,
+		namespaceMutationExecutor:  namespaceMutationExecutor,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
@@ -202,6 +212,7 @@ func NewAdminHandler(
 		matchingClient:             args.matchingClient,
 		chasmRegistry:              args.ChasmRegistry,
 		schedulerClient:            args.SchedulerClient,
+		metricsHandler:             args.MetricsHandler,
 	}
 }
 
@@ -481,6 +492,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		HistoryAddr:          historyAddr,
 		DatabaseMutableState: historyResponse.GetDatabaseMutableState(),
 		CacheMutableState:    historyResponse.GetCacheMutableState(),
+		CurrentStorageUsage:  historyResponse.GetCurrentStorageUsage(),
 	}, nil
 }
 
@@ -1031,6 +1043,155 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 		return nil, err
 	}
 	return &adminservice.GetReplicationMessagesResponse{ShardMessages: resp.GetShardMessages()}, nil
+}
+
+func (adh *AdminHandler) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+	startTime := time.Now()
+	defer log.CapturePanic(adh.logger, &retError)
+	var payloadTask, legacyTask *replicationspb.NamespaceTaskAttributes
+	var comparisonPanic error
+	comparisonOutcome, comparisonReason := "error", "invalid_request"
+	defer func() {
+		if comparisonPanic != nil {
+			retError = comparisonPanic
+			comparisonOutcome, comparisonReason = "error", "panic"
+		}
+		if request.GetShadow() {
+			adh.recordShadowReceiveComparison(request, payloadTask, legacyTask, comparisonOutcome, comparisonReason, retError)
+		}
+	}()
+	// Recover comparison panics before recording the RPC outcome.
+	defer log.CapturePanic(adh.logger, &comparisonPanic)
+
+	if request == nil {
+		return nil, serviceerror.NewInvalidArgument("request is required")
+	}
+	// Shadow must expose the same feature prerequisite as authoritative applies.
+	if !adh.clusterMetadata.IsGlobalNamespaceEnabled() {
+		comparisonReason = "global_namespace_disabled"
+		return nil, serviceerror.NewFailedPrecondition("global namespace replication is disabled on this cluster")
+	}
+	if request.GetRemovedPeer() && request.GetShadow() {
+		return nil, serviceerror.NewInvalidArgument("removed_peer is only valid for authoritative updates")
+	}
+	if len(request.GetNamespaceTaskPayload()) == 0 {
+		comparisonReason = "missing_payload"
+		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+	}
+	if request.GetShadow() && len(request.GetShadowLegacyTaskPayload()) == 0 {
+		comparisonReason = "missing_legacy_reference"
+		return nil, serviceerror.NewInvalidArgument("shadow_legacy_task_payload is required")
+	}
+	if request.GetShadow() {
+		comparisonReason = "invalid_legacy_reference"
+		legacyTask = &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
+			legacyTask = nil
+			return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
+		}
+	}
+
+	payloadTask = &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+		payloadTask = nil
+		comparisonOutcome, comparisonReason = "error", "invalid_payload"
+		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+	}
+	if !request.GetShadow() {
+		ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
+			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
+			Transport: nsreplication.CHASMReplicationTransport,
+		})
+		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
+		// CHASM deliveries can arrive out of order. Persist a removal even when this
+		// peer has not received its earlier addition: the config version fences
+		// that delayed addition. Otherwise it can create stale membership after
+		// the source has stopped targeting this peer. Legacy never sets this marker.
+		if request.GetRemovedPeer() {
+			clusters := payloadTask.GetReplicationConfig().GetClusters()
+			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
+				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
+					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
+				}) {
+				err := serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+				return nil, err
+			}
+		}
+		// Absorb transient Unavailable errors, including cell-wide metadata CAS
+		// contention and an UPDATE losing a missing-row CREATE race to an older
+		// snapshot. ExecuteWithOutcome converts that duplicate to Unavailable so
+		// the next attempt applies the newer update through apply-if-higher.
+		// Returning Unavailable signals a destination failure at the source and
+		// can open the shared destination circuit breaker, delaying other mutations.
+		// Each attempt rereads metadata; durable retries remain in CHASM.
+		policy := backoff.NewExponentialRetryPolicy(20 * time.Millisecond).
+			WithBackoffCoefficient(2).
+			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
+		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
+			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
+				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer()},
+			})
+		}, policy, func(err error) bool {
+			_, retryable := errors.AsType[*serviceerror.Unavailable](err)
+			return retryable
+		})
+		if err != nil {
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+			return nil, err
+		}
+		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
+		if err != nil {
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+			return nil, err
+		}
+		adh.observeAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime)
+		return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
+	}
+	// Compare the byte payloads after decoding with the same schema. The typed
+	// gRPC field can encode unknown map fields in a different order.
+	if proto.Equal(legacyTask, payloadTask) {
+		comparisonOutcome, comparisonReason = "match", "none"
+		return &adminservice.ApplyNamespaceMutationResponse{
+			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+		}, nil
+	}
+	comparisonOutcome, comparisonReason = "mismatch", "legacy_payload_mismatch"
+	adh.logger.Warn(
+		"namespace replication shadow receive mismatch",
+		tag.WorkflowNamespaceID(legacyTask.GetId()),
+		tag.NewStringTag("reason", "legacy_payload_mismatch"),
+		tag.NewStringsTag("differing_fields", nsreplication.DifferingNamespaceTaskFields(legacyTask, payloadTask)),
+		tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))),
+		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload()))),
+	)
+
+	return &adminservice.ApplyNamespaceMutationResponse{
+		Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+	}, nil
+}
+
+// Three total receiver attempts bound transient retries within the RPC deadline.
+const namespaceMutationApplyMaxAttempts = 3
+
+func namespaceMutationResponseOutcome(outcome nsreplication.ApplyOutcome) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
+	switch outcome {
+	case nsreplication.ApplyOutcomeCreated:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED, nil
+	case nsreplication.ApplyOutcomeApplied:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, nil
+	case nsreplication.ApplyOutcomeNoOpStale:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE, nil
+	case nsreplication.ApplyOutcomeDuplicate:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE, nil
+	case nsreplication.ApplyOutcomeNotAdmitted:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED, nil
+	default:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED, serviceerror.NewInternalf("unknown namespace mutation outcome: %v", outcome)
+	}
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
@@ -2238,9 +2399,10 @@ func (adh *AdminHandler) getDLQWorkflowID(
 
 // validateAndResolveArchetypeID validates the archetype and archetypeID fields and returns the resolved archetype ID.
 // It performs the following checks:
-// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry
-// 2. If both archetypeID and archetype are specified, validates they match each other
-// 3. If only archetype is specified, converts it to an ID
+// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry.
+// 2. If both archetypeID and archetype are specified, validates they match each other.
+// 3. If only archetype is specified, converts it to an ID.
+// 4. If neither is specified (archetypeID is zero and archetype is empty), defaults to WorkflowArchetypeID.
 func (adh *AdminHandler) validateAndResolveArchetypeID(
 	archetype chasm.Archetype,
 	archetypeID uint32,
@@ -2432,4 +2594,36 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 		return nil, err
 	}
 	return &adminservice.MigrateScheduleResponse{}, nil
+}
+
+func (adh *AdminHandler) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+) (_ *adminservice.ListExecutionsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	pageSize := request.GetPageSize()
+	maxPageSize := int32(adh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if pageSize <= 0 || pageSize > maxPageSize {
+		request.PageSize = maxPageSize
+	}
+
+	return adh.visibilityMgr.AdminListExecutions(ctx, request)
+}
+
+func (adh *AdminHandler) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+) (_ *adminservice.CountExecutionsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	return adh.visibilityMgr.AdminCountExecutions(ctx, request)
 }

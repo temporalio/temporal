@@ -6,6 +6,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -14,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
@@ -58,6 +60,9 @@ type Updater struct {
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
 	requestIDLink *commonpb.Link
+	// nexusSerializationContext is a copy of the Update's Nexus serialization context, captured in ApplyRequest
+	// because it must be read while holding the workflow lease.
+	nexusSerializationContext *nexuspb.PropagatedSerializationContext
 }
 
 func NewUpdater(
@@ -114,6 +119,7 @@ func (u *Updater) ApplyRequest(
 	if err != nil {
 		return nil, err
 	}
+	u.nexusSerializationContext = common.CloneProto(u.upd.NexusSerializationContext())
 	// Capture the anticipated link for the response after the request has been applied.
 	// If the request itself fails/is rejected, OnSuccess will link to the workflow itself instead.
 	u.requestIDLink = u.captureRequestIDLink(ms)
@@ -173,6 +179,10 @@ func (u *Updater) applyRequest(
 		return nil, consts.ErrWorkflowClosing
 	}
 
+	if err := validateCallbacks(ctx, updateReg, ms, updateRequest); err != nil {
+		return nil, err
+	}
+
 	var (
 		alreadyExisted bool
 		err            error
@@ -184,15 +194,9 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 
-	callbacksAttached, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
+	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
 	if err != nil {
 		return nil, err
-	}
-	if callbacksAttached {
-		return &api.UpdateWorkflowAction{
-			Noop:               false,
-			CreateWorkflowTask: false,
-		}, nil
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
@@ -200,7 +204,9 @@ func (u *Updater) applyRequest(
 	// If update is duplicate, then WT for this update was already created.
 	if alreadyExisted || ms.HasPendingWorkflowTask() {
 		return &api.UpdateWorkflowAction{
-			Noop:               true,
+			// Persist only the event written by AttachCallbacks, if any. Persisting mutable state
+			// otherwise would convert a speculative workflow task to a normal one.
+			Noop:               !eventWritten,
 			CreateWorkflowTask: false,
 		}, nil
 	}
@@ -298,6 +304,38 @@ func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link 
 	}
 }
 
+// validateCallbacks rejects completion callbacks that would breach the execution's limits
+// before the Update reaches the worker: once the worker has accepted it, its callbacks are
+// attached without further checks. Callbacks of other Updates still in flight are reserved
+// against the limits; see update.Registry.InFlightCallbacks.
+func validateCallbacks(
+	ctx context.Context,
+	updateReg update.Registry,
+	ms historyi.MutableState,
+	updateRequest *updatepb.Request,
+) error {
+	if len(updateRequest.GetCompletionCallbacks()) == 0 {
+		return nil
+	}
+	updateID := updateRequest.GetMeta().GetUpdateId()
+
+	// A request for an Update that has already completed receives its outcome synchronously and
+	// attaches nothing, so it must get that outcome rather than a limit error.
+	if upd := updateReg.Find(ctx, updateID); upd != nil && upd.IsCompleted() {
+		return nil
+	}
+
+	inFlight, err := updateReg.InFlightCallbacks()
+	if err != nil {
+		return err
+	}
+	return ms.ValidateCallbackAddition(inFlight, chasmworkflow.CallbackAddition{
+		UpdateID:  updateID,
+		RequestID: updateRequest.GetRequestId(),
+		Callbacks: updateRequest.GetCompletionCallbacks(),
+	})
+}
+
 func (u *Updater) OnSuccess(
 	ctx context.Context,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
@@ -347,7 +385,7 @@ func (u *Updater) OnSuccess(
 	if err != nil {
 		return nil, err
 	}
-	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage)
+	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage, u.nexusSerializationContext)
 
 	resp.Response.Link = u.responseLink(status)
 	return resp, nil
@@ -434,6 +472,7 @@ func (u *Updater) CreateResponse(
 	wfKey definition.WorkflowKey,
 	outcome *updatepb.Outcome,
 	stage enumspb.UpdateWorkflowExecutionLifecycleStage,
+	nexusSerializationContext *nexuspb.PropagatedSerializationContext,
 ) *historyservice.UpdateWorkflowExecutionResponse {
 	return &historyservice.UpdateWorkflowExecutionResponse{
 		Response: &workflowservice.UpdateWorkflowExecutionResponse{
@@ -444,8 +483,9 @@ func (u *Updater) CreateResponse(
 				},
 				UpdateId: u.req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
 			},
-			Outcome: outcome,
-			Stage:   stage,
+			Outcome:                             outcome,
+			Stage:                               stage,
+			PropagatedNexusSerializationContext: nexusSerializationContext,
 		},
 	}
 }

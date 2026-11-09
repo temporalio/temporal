@@ -1028,13 +1028,13 @@ func (m *workflowTaskStateMachine) recordTimeoutTasksForDeletion(workflowTask *h
 	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
 	if task := workflowTask.ScheduleToStartTimeoutTask; task != nil {
 		key := task.GetKey()
-		if key.FireTime.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
+		if key.FireTime.Sub(m.ms.ToRealTimeWithCurrentOffset(workflowTask.ScheduledTime)) < maxWorkflowTaskTimeoutToDelete {
 			m.ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(m.ms.BestEffortDeleteTasks[tasks.CategoryTimer], key)
 		}
 	}
 	if task := workflowTask.StartToCloseTimeoutTask; task != nil {
 		key := task.GetKey()
-		if key.FireTime.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
+		if key.FireTime.Sub(m.ms.ToRealTimeWithCurrentOffset(workflowTask.StartedTime)) < maxWorkflowTaskTimeoutToDelete {
 			m.ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(m.ms.BestEffortDeleteTasks[tasks.CategoryTimer], key)
 		}
 	}
@@ -1558,6 +1558,10 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	if wtAlreadyStarted := wt.StartedEventID != common.EmptyEventID; wtAlreadyStarted {
 		// If WT was already started then started event is written to the history and
 		// timeout timer task (for START_TO_CLOSE timeout) is created.
+		var versioningStamp *commonpb.WorkerVersionStamp
+		if wt.BuildId != "" {
+			versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: wt.BuildId}
+		}
 
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEvent.EventId,
@@ -1566,7 +1570,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.StartedTime,
 			wt.SuggestContinueAsNew,
 			wt.HistorySizeBytes,
-			nil,
+			versioningStamp,
 			wt.BuildIdRedirectCounter,
 			wt.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),

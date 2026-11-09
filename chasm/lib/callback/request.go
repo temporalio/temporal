@@ -68,7 +68,9 @@ func routeSystemCallbackRequest(
 
 		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(namespaceID))
 		if err != nil {
-			logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(namespaceID), tag.Error(err))
+			logger.Error("failed to get namespace for nexus completion request",
+				tag.TargetNamespaceID(namespaceID),
+				tag.Error(err))
 			if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", namespaceID)
 			}
