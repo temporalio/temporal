@@ -17,6 +17,8 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/payload"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -266,4 +268,95 @@ func TestDecodePayloads(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, mustParseTime("2026-05-19T18:00:00Z"), actual)
 	})
+}
+
+// adaptivePageClient exercises both list APIs with the same response sequence.
+type adaptivePageClient struct {
+	workflowservice.WorkflowServiceClient
+	errors        []error
+	tokens        [][]byte
+	sizes         []int32
+	requestTokens [][]byte
+	queries       []string
+}
+
+func (c *adaptivePageClient) next(size int32, token []byte) ([]byte, error) {
+	i := len(c.sizes)
+	c.sizes = append(c.sizes, size)
+	c.requestTokens = append(c.requestTokens, token)
+	if i < len(c.errors) && c.errors[i] != nil {
+		return nil, c.errors[i]
+	}
+	if i < len(c.tokens) {
+		return c.tokens[i], nil
+	}
+	return nil, nil
+}
+
+func (c *adaptivePageClient) ListSchedules(_ context.Context, req *workflowservice.ListSchedulesRequest, _ ...grpc.CallOption) (*workflowservice.ListSchedulesResponse, error) {
+	token, err := c.next(req.MaximumPageSize, req.NextPageToken)
+	return &workflowservice.ListSchedulesResponse{NextPageToken: token}, err
+}
+
+func (c *adaptivePageClient) ListWorkflowExecutions(_ context.Context, req *workflowservice.ListWorkflowExecutionsRequest, _ ...grpc.CallOption) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+	c.queries = append(c.queries, req.Query)
+	token, err := c.next(req.PageSize, req.NextPageToken)
+	return &workflowservice.ListWorkflowExecutionsResponse{NextPageToken: token}, err
+}
+
+func TestAdaptiveListPageSizes(t *testing.T) {
+	t.Parallel()
+	oversized := status.Error(codes.ResourceExhausted, "grpc: received message larger than max (5078617 vs. 4194304)")
+	for _, api := range []string{"schedules", "executions"} {
+		t.Run(api, func(t *testing.T) {
+			t.Parallel()
+			run := func(t *testing.T, client *adaptivePageClient) error {
+				t.Helper()
+				retrier := &grpcRetrier{log: io.Discard, policy: backoff.NewExponentialRetryPolicy(time.Nanosecond).WithMaximumAttempts(2)}
+				limiter := &countingLimiter{}
+				defer func() { require.Equal(t, len(client.sizes), limiter.waits) }()
+				if api == "schedules" {
+					loader := &grpcScheduleLoader{client: client, retrier: retrier, listLimiter: limiter}
+					return loader.ListScheduleIDs(t.Context(), "ns", func(string) error { return nil })
+				}
+				loader := &grpcExecutionLoader{client: client, retrier: retrier, limiter: limiter}
+				_, err := loader.ListExecutions(t.Context(), "ns", []string{"schedule"}, mustParseTime("2026-05-19T18:00:00Z"), mustParseTime("2026-05-19T22:00:00Z"))
+				return err
+			}
+			t.Run("reduces on the same page and retains reduced size", func(t *testing.T) {
+				t.Parallel()
+				client := &adaptivePageClient{
+					errors: []error{nil, oversized, oversized, nil, nil},
+					tokens: [][]byte{[]byte("page2"), nil, nil, []byte("page3"), nil},
+				}
+				require.NoError(t, run(t, client))
+				require.Equal(t, []int32{1000, 1000, 500, 250, 250}, client.sizes)
+				require.Equal(t, [][]byte{nil, []byte("page2"), []byte("page2"), []byte("page2"), []byte("page3")}, client.requestTokens)
+				for _, query := range client.queries {
+					require.Equal(t, client.queries[0], query)
+				}
+			})
+			t.Run("stops at one without retrying oversized response", func(t *testing.T) {
+				t.Parallel()
+				client := &adaptivePageClient{errors: []error{oversized, oversized, oversized, oversized, oversized, oversized, oversized, oversized, oversized, oversized}}
+				err := run(t, client)
+				require.ErrorContains(t, err, "page size 1")
+				require.ErrorIs(t, err, oversized)
+				require.Equal(t, []int32{1000, 500, 250, 125, 62, 31, 15, 7, 3, 1}, client.sizes)
+			})
+			t.Run("rate limits retry without reducing size", func(t *testing.T) {
+				t.Parallel()
+				client := &adaptivePageClient{errors: []error{status.Error(codes.ResourceExhausted, "namespace rate limit exceeded"), nil}}
+				require.NoError(t, run(t, client))
+				require.Equal(t, []int32{1000, 1000}, client.sizes)
+			})
+			t.Run("other errors are preserved", func(t *testing.T) {
+				t.Parallel()
+				failure := serviceerror.NewInvalidArgument("invalid query")
+				client := &adaptivePageClient{errors: []error{failure}}
+				require.ErrorIs(t, run(t, client), failure)
+				require.Equal(t, []int32{1000}, client.sizes)
+			})
+		})
+	}
 }
