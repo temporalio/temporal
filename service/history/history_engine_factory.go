@@ -3,6 +3,7 @@ package history
 import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
@@ -50,6 +51,7 @@ type (
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 		ChasmWorkflowRegistry           *chasmworkflow.Registry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		DestinationThrottled            chasmnexus.DestinationThrottledFn
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
@@ -93,6 +95,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.CommandHandlerRegistry,
 		f.ChasmWorkflowRegistry,
 		f.OutboundQueueCBPool,
+		f.DestinationThrottled,
 		f.PersistenceRateLimiter,
 		f.TestHooks,
 		f.ChasmEngine,
