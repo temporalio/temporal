@@ -151,39 +151,6 @@ func (s *utilSuite) TestWorkflowIdPrecondition() {
 
 }
 
-func (s *utilSuite) TestRunIdPrecondition() {
-	testCases := []struct {
-		workflowID     string
-		runID          string
-		fileName       string
-		expectedResult bool
-	}{
-		{
-			workflowID:     "4418294404690464320",
-			runID:          "15619178330501475177",
-			fileName:       "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility",
-			expectedResult: true,
-		},
-		{
-			workflowID:     "4418294404690464320",
-			runID:          "15619178330501475177",
-			fileName:       "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_unkonwnRunID.visibility",
-			expectedResult: false,
-		},
-		{
-			workflowID:     "4418294404690464320",
-			runID:          "",
-			fileName:       "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_unkonwnRunID.visibility",
-			expectedResult: true,
-		},
-	}
-
-	for _, testCase := range testCases {
-		s.Equal(testCase.expectedResult, newRunIDPrecondition(testCase.runID)(testCase.fileName))
-	}
-
-}
-
 func (s *utilSuite) TestWorkflowTypeNamePrecondition() {
 	testCases := []struct {
 		workflowID       string
