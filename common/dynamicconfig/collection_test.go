@@ -97,6 +97,18 @@ func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
 	s.Equal("efg", value(ns))
 }
 
+func (s *collectionSuite) TestWorkflowHeartbeatNotificationInputTypes() {
+	value := dynamicconfig.WorkflowHeartbeatNotificationInputTypes.Get(s.cln)
+	ns := "testNamespace"
+	s.Empty(value(ns))
+
+	s.client.SetValue("history.workflowHeartbeatNotificationInputTypes", []any{})
+	s.Empty(value(ns))
+
+	s.client.SetValue("history.workflowHeartbeatNotificationInputTypes", []any{"signal"})
+	s.Equal([]string{"signal"}, value(ns))
+}
+
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
 	namespaceID := namespace.ID("testNamespaceID")
 	setting := dynamicconfig.NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")

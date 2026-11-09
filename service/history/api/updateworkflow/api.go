@@ -121,6 +121,7 @@ func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string)
 		return
 	}
 
+	// Rollout settings control WHN dispatch, while these metrics count all admitted Updates buffered behind a task.
 	handler := u.shardCtx.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.WorkflowContextScope),
 		metrics.NamespaceTag(namespaceName),
@@ -130,7 +131,7 @@ func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string)
 
 	if u.firstBufferedForWorkflowHeartbeatNotification {
 		metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
-		workflow.SendWorkflowHeartbeatNotification(u.shardCtx, namespaceName)
+		workflow.SendWorkflowHeartbeatNotification(u.shardCtx, namespaceName, workflow.WorkflowHeartbeatNotificationUpdateAdmittedMetricTag)
 	}
 }
 
