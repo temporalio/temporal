@@ -1,5 +1,3 @@
-//go:build !(gomad && wasip1 && wasm)
-
 package softassert
 
 import "testing"
