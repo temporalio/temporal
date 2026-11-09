@@ -179,9 +179,10 @@ func (h *CompletionHandler) Handle(
 	result *commonpb.Payload,
 	opFailedError *nexus.OperationError,
 ) error {
-	// The initial version of the completion token did not include a request ID.
-	// Only retry Access without a run ID if the request ID is not empty.
-	isRetryableNotFoundErr := requestID != ""
+	if requestID == "" {
+		return serviceerror.NewNotFound("operation not found")
+	}
+	isRetryableNotFoundErr := true
 	// emitMetrics is populated inside the Access closure and invoked only after the write
 	// transaction commits successfully, so a failed commit (which retries the completion) does not
 	// double-count the metric. See operationMetricsHandler's doc comment.
@@ -194,6 +195,10 @@ func (h *CompletionHandler) Handle(
 		if err != nil {
 			return err
 		}
+		if operation.RequestId != requestID {
+			isRetryableNotFoundErr = false
+			return serviceerror.NewNotFound("operation not found")
+		}
 		// If the operation has not started yet, this completion arrived before the start response and
 		// fabricateStartedEventIfMissing will transition it to started below; the executor never emitted
 		// schedule-to-start in that case, so we emit it here.
@@ -201,11 +206,6 @@ func (h *CompletionHandler) Handle(
 		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
 			return err
 		}
-		if requestID != "" && operation.RequestId != requestID {
-			isRetryableNotFoundErr = false
-			return serviceerror.NewNotFound("operation not found")
-		}
-
 		if opFailedError != nil {
 			err = handleOperationError(node, operation, opFailedError)
 		} else {
