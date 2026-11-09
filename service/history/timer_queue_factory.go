@@ -206,6 +206,7 @@ func (f *timerQueueFactory) CreateQueue(
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
+			CompactQueueState:                   f.Config.EnableQueueStateCompaction,
 		},
 		f.HostReaderRateLimiter,
 		logger,

@@ -101,6 +101,7 @@ type (
 		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountMultiplier        dynamicconfig.FloatPropertyFn
 		ShrinkPredicateMaxPendingKeys       dynamicconfig.IntPropertyFn
+		CompactQueueState                   dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -118,6 +119,9 @@ func newQueueBase(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *queueBase {
+	if options.CompactQueueState == nil {
+		panic("queues.Options.CompactQueueState must be set, usually from the history config's EnableQueueStateCompaction")
+	}
 	var readerScopes map[int64][]Scope
 	var exclusiveReaderHighWatermark tasks.Key
 	if persistenceState, ok := shard.GetQueueState(category); ok {
@@ -418,10 +422,12 @@ func (p *queueBase) updateQueueState(
 		}
 	}
 
+	// Replication state is written through UpdateReplicationQueueReaderState, never here, so compaction
+	// cannot reach the replication code that reads persisted scopes by position.
 	err := p.shard.SetQueueState(p.category, tasksCompleted, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
-	}, false))
+	}, p.options.CompactQueueState()))
 	if err != nil {
 		metrics.AckLevelUpdateFailedCounter.With(p.metricsHandler).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)

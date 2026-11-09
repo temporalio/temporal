@@ -308,6 +308,9 @@ func (f *outboundQueueFactory) CreateQueue(
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
+			// Outbound predicates never hold namespace IDs, so the table is a no-op here; predicate
+			// grouping applies to them as it does to any other queue.
+			CompactQueueState: f.Config.EnableQueueStateCompaction,
 		},
 		f.hostReaderRateLimiter,
 		queues.GrouperStateMachineNamespaceIDAndDestination{},
