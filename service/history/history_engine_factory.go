@@ -51,7 +51,7 @@ type (
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 		ChasmWorkflowRegistry           *chasmworkflow.Registry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
-		DestinationThrottled            chasmnexus.DestinationThrottledFn
+		DestinationThrottled            chasmnexus.DestinationThrottledFn `optional:"true"`
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
@@ -95,10 +95,10 @@ func (f *historyEngineFactory) CreateEngine(
 		f.CommandHandlerRegistry,
 		f.ChasmWorkflowRegistry,
 		f.OutboundQueueCBPool,
-		f.DestinationThrottled,
 		f.PersistenceRateLimiter,
 		f.TestHooks,
 		f.ChasmEngine,
 		WithWorkflowResendScheduler(f.WorkflowResendScheduler),
+		WithDestinationThrottled(f.DestinationThrottled),
 	)
 }

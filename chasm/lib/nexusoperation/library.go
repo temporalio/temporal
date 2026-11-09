@@ -75,7 +75,7 @@ type libraryParams struct {
 	CancellationBackoffTaskHandler             *cancellationBackoffTaskHandler
 	DynamicConfig                              *dynamicconfig.Collection
 	DestinationBlocked                         DestinationBlockedFn
-	DestinationThrottled                       DestinationThrottledFn
+	DestinationThrottled                       DestinationThrottledFn `optional:"true"`
 }
 
 func newLibrary(params libraryParams) *Library {

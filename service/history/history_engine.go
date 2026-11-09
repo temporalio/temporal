@@ -107,6 +107,7 @@ import (
 type (
 	engineOptions struct {
 		workflowResendScheduler workflowresend.Scheduler
+		destinationThrottled    chasmnexus.DestinationThrottledFn
 	}
 
 	// EngineOption adds optional history engine dependencies without adding required parameters.
@@ -172,6 +173,13 @@ func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOptio
 	}
 }
 
+// WithDestinationThrottled reports caller RPS throttling in Describe responses.
+func WithDestinationThrottled(fn chasmnexus.DestinationThrottledFn) EngineOption {
+	return func(options *engineOptions) {
+		options.destinationThrottled = fn
+	}
+}
+
 func applyEngineOptions(options []EngineOption) engineOptions {
 	var result engineOptions
 	for _, option := range options {
@@ -207,7 +215,6 @@ func NewEngineWithShardContext(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-	destinationThrottled chasmnexus.DestinationThrottledFn,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
@@ -265,7 +272,7 @@ func NewEngineWithShardContext(
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
-		destinationThrottled:       destinationThrottled,
+		destinationThrottled:       engineOptions.destinationThrottled,
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
 		versionCache:               versionCache,

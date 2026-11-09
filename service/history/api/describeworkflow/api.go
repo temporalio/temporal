@@ -672,7 +672,7 @@ func buildPendingNexusOperationInfo(
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
-		} else if destinationThrottled(namespaceName, op.Endpoint) {
+		} else if destinationThrottled != nil && destinationThrottled(namespaceName, op.Endpoint) {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 			blockedReason = "Requests from this namespace to the endpoint are being rate limited."
 		}
@@ -738,7 +738,7 @@ func buildNexusOperationCancellationInfo(
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
-		} else if destinationThrottled(namespaceName, op.Endpoint) {
+		} else if destinationThrottled != nil && destinationThrottled(namespaceName, op.Endpoint) {
 			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 			blockedReason = "Requests from this namespace to the endpoint are being rate limited."
 		}
