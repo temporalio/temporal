@@ -1147,14 +1147,28 @@ func TestQueueStateRoundTrip_CompactForm(t *testing.T) {
 	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a").String()
 	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b").String()
 	c := uuid.MustParse("00000000-0000-0000-0000-00000000000c").String()
+	d := uuid.MustParse("00000000-0000-0000-0000-00000000000d").String()
 	namespaces := func(ids ...string) tasks.Predicate { return tasks.NewNamespacePredicate(ids) }
-	scopeWith := func(predicate tasks.Predicate) Scope { return NewScope(NewRandomRange(), predicate) }
+	// A reader's scopes ascend by range, as they do in a running queue, so the reader's sort on
+	// restore cannot reorder them.
+	scopeAt := func(i int, predicate tasks.Predicate) Scope {
+		return NewScope(NewRange(
+			tasks.NewKey(time.Unix(0, int64(i)*10+10).UTC(), 0),
+			tasks.NewKey(time.Unix(0, int64(i)*10+15).UTC(), 0),
+		), predicate)
+	}
+	outbound := func(group string) tasks.Predicate {
+		return tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+			{TaskGroup: group, NamespaceID: "n1", Destination: "d1"},
+		})
+	}
 
 	tests := []struct {
 		name string
 		// readers maps reader ID to the predicate of each of its scopes.
-		readers          map[int64][]tasks.Predicate
-		wantTableEntries int
+		readers             map[int64][]tasks.Predicate
+		wantTableEntries    int
+		wantPredicateGroups int
 	}{
 		{
 			name:    "universal only",
@@ -1202,6 +1216,44 @@ func TestQueueStateRoundTrip_CompactForm(t *testing.T) {
 			name:    "a reader with no scopes",
 			readers: map[int64][]tasks.Predicate{1: {}},
 		},
+		{
+			name: "scopes alternating between two predicates",
+			readers: map[int64][]tasks.Predicate{1: {
+				namespaces(a, b), namespaces(c), namespaces(a, b), namespaces(c),
+			}},
+			wantTableEntries:    3,
+			wantPredicateGroups: 2,
+		},
+		{
+			name: "one predicate on every scope",
+			readers: map[int64][]tasks.Predicate{1: {
+				namespaces(a, b), namespaces(a, b), namespaces(a, b),
+			}},
+			wantTableEntries:    2,
+			wantPredicateGroups: 1,
+		},
+		{
+			name: "a group between plain scopes",
+			readers: map[int64][]tasks.Predicate{1: {
+				namespaces(c), namespaces(a, b), namespaces(d), namespaces(a, b),
+			}},
+			wantTableEntries:    4,
+			wantPredicateGroups: 1,
+		},
+		{
+			name: "a reader with a group beside a reader without",
+			readers: map[int64][]tasks.Predicate{
+				1: {namespaces(a, b), namespaces(a, b)},
+				2: {namespaces(c), namespaces(d)},
+			},
+			wantTableEntries:    4,
+			wantPredicateGroups: 1,
+		},
+		{
+			name:                "a repeated outbound predicate",
+			readers:             map[int64][]tasks.Predicate{1: {outbound("g1"), outbound("g2"), outbound("g1")}},
+			wantPredicateGroups: 1,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1211,8 +1263,8 @@ func TestQueueStateRoundTrip_CompactForm(t *testing.T) {
 			}
 			for readerID, readerPredicates := range tc.readers {
 				scopes := []Scope{}
-				for _, predicate := range readerPredicates {
-					scopes = append(scopes, scopeWith(predicate))
+				for i, predicate := range readerPredicates {
+					scopes = append(scopes, scopeAt(i, predicate))
 				}
 				state.readerScopes[readerID] = scopes
 			}
@@ -1220,7 +1272,22 @@ func TestQueueStateRoundTrip_CompactForm(t *testing.T) {
 			persisted := ToPersistenceQueueState(state, true)
 
 			require.Len(t, persisted.NamespaceIdTable, tc.wantTableEntries, "the compact form was written")
-			require.Equal(t, state, FromPersistenceQueueState(persisted), "reading it back gives the same state")
+			groups := 0
+			for _, readerState := range persisted.ReaderStates {
+				groups += len(readerState.PredicateGroups)
+			}
+			require.Equal(t, tc.wantPredicateGroups, groups, "predicate groups written across all readers")
+
+			restored := FromPersistenceQueueState(persisted)
+
+			require.Equal(t, state, restored, "reading it back gives the same state")
+			// queue_base takes scopes[0] as a reader's lowest key, so restored scopes must be range-ordered.
+			for readerID, scopes := range restored.readerScopes {
+				for i := 1; i < len(scopes); i++ {
+					require.LessOrEqual(t, scopes[i-1].Range.InclusiveMin.CompareTo(scopes[i].Range.InclusiveMin), 0,
+						"reader %d scope %d starts before scope %d", readerID, i, i-1)
+				}
+			}
 		})
 	}
 }
@@ -1261,6 +1328,199 @@ func TestToPersistenceQueueState_NotCompactWritesTheOldForm(t *testing.T) {
 	}
 }
 
+func TestToPersistenceQueueState_CompactGroupsScopes(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	c := uuid.MustParse("00000000-0000-0000-0000-00000000000c")
+	d := uuid.MustParse("00000000-0000-0000-0000-00000000000d")
+	namespaces := func(ids ...uuid.UUID) tasks.Predicate {
+		strs := make([]string, 0, len(ids))
+		for _, id := range ids {
+			strs = append(strs, id.String())
+		}
+		return tasks.NewNamespacePredicate(strs)
+	}
+
+	type rangeBounds struct{ Min, Max int64 }
+	type inputScope struct {
+		Range     rangeBounds
+		Predicate tasks.Predicate
+	}
+	// plainScope and predicateGroup describe the persisted form; Indexes are table slots.
+	type plainScope struct {
+		Range   rangeBounds
+		Indexes []int32
+	}
+	type predicateGroup struct {
+		Indexes []int32
+		Ranges  []rangeBounds
+	}
+	// Ranges ascend in every case; ordering is 2.5c's concern.
+	tests := []struct {
+		name       string
+		scopes     []inputScope
+		wantPlain  []plainScope
+		wantGroups []predicateGroup
+	}{
+		{
+			name: "scopes sharing a predicate form one group and none stay plain",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(a, b)},
+				{rangeBounds{30, 40}, namespaces(a, b)},
+				{rangeBounds{50, 60}, namespaces(a, b)},
+			},
+			wantGroups: []predicateGroup{{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {30, 40}, {50, 60}}}},
+		},
+		{
+			name: "a predicate held by one scope stays plain beside a group",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(a, b)},
+				{rangeBounds{30, 40}, namespaces(a, b)},
+				{rangeBounds{50, 60}, namespaces(c)},
+			},
+			wantPlain:  []plainScope{{Range: rangeBounds{50, 60}, Indexes: []int32{2}}},
+			wantGroups: []predicateGroup{{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {30, 40}}}},
+		},
+		{
+			name: "a lone first predicate stays plain and a shared predicate appearing later is grouped",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(c)},
+				{rangeBounds{30, 40}, namespaces(a, b)},
+				{rangeBounds{50, 60}, namespaces(d)},
+				{rangeBounds{70, 80}, namespaces(a, b)},
+			},
+			wantPlain: []plainScope{
+				{Range: rangeBounds{10, 20}, Indexes: []int32{0}},
+				{Range: rangeBounds{50, 60}, Indexes: []int32{3}},
+			},
+			wantGroups: []predicateGroup{{Indexes: []int32{1, 2}, Ranges: []rangeBounds{{30, 40}, {70, 80}}}},
+		},
+		{
+			name: "scopes that share no predicate stay plain and write no group",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(c)},
+				{rangeBounds{30, 40}, namespaces(d)},
+			},
+			wantPlain: []plainScope{
+				{Range: rangeBounds{10, 20}, Indexes: []int32{0}},
+				{Range: rangeBounds{30, 40}, Indexes: []int32{1}},
+			},
+		},
+		{
+			name: "two different shared predicates each form their own group",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(a, b)},
+				{rangeBounds{30, 40}, namespaces(c)},
+				{rangeBounds{50, 60}, namespaces(a, b)},
+				{rangeBounds{70, 80}, namespaces(c)},
+			},
+			wantGroups: []predicateGroup{
+				{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {50, 60}}},
+				{Indexes: []int32{2}, Ranges: []rangeBounds{{30, 40}, {70, 80}}},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			scopes := make([]Scope, 0, len(tc.scopes))
+			for _, s := range tc.scopes {
+				scopes = append(scopes, NewScope(
+					NewRange(tasks.NewImmediateKey(s.Range.Min), tasks.NewImmediateKey(s.Range.Max)),
+					s.Predicate,
+				))
+			}
+			state := &queueState{
+				readerScopes:                 map[int64][]Scope{1: scopes},
+				exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+			}
+
+			reader := ToPersistenceQueueState(state, true).ReaderStates[1]
+
+			var gotPlain []plainScope
+			for _, scope := range reader.Scopes {
+				gotPlain = append(gotPlain, plainScope{
+					Range:   rangeBounds{scope.Range.InclusiveMin.TaskId, scope.Range.ExclusiveMax.TaskId},
+					Indexes: scope.GetPredicate().GetNamespaceIdPredicateAttributes().GetNamespaceIdIndexes(),
+				})
+			}
+			var gotGroups []predicateGroup
+			for _, group := range reader.PredicateGroups {
+				var ranges []rangeBounds
+				for _, r := range group.Ranges {
+					ranges = append(ranges, rangeBounds{r.InclusiveMin.TaskId, r.ExclusiveMax.TaskId})
+				}
+				gotGroups = append(gotGroups, predicateGroup{
+					Indexes: group.GetPredicate().GetNamespaceIdPredicateAttributes().GetNamespaceIdIndexes(),
+					Ranges:  ranges,
+				})
+			}
+			require.Equal(t, tc.wantPlain, gotPlain, "scopes written plain")
+			require.Equal(t, tc.wantGroups, gotGroups, "predicate groups written")
+		})
+	}
+}
+
+func TestToPersistenceQueueState_CompactGroupsNonNamespacePredicates(t *testing.T) {
+	// One entry per set: these predicates keep entries in a map, so two or more would serialize
+	// in a varying order and make the comparison flaky.
+	tests := []struct {
+		name   string
+		shared tasks.Predicate
+		other  tasks.Predicate
+	}{
+		{
+			name: "outbound task",
+			shared: tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+				{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
+			}),
+			other: tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+				{TaskGroup: "g2", NamespaceID: "n2", Destination: "d2"},
+			}),
+		},
+		{
+			name:   "outbound task group",
+			shared: tasks.NewOutboundTaskGroupPredicate([]string{"g1"}),
+			other:  tasks.NewOutboundTaskGroupPredicate([]string{"g2"}),
+		},
+		{
+			name:   "destination",
+			shared: tasks.NewDestinationPredicate([]string{"d1"}),
+			other:  tasks.NewDestinationPredicate([]string{"d2"}),
+		},
+		{
+			name:   "task type",
+			shared: tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT}),
+			other:  tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT}),
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			state := &queueState{
+				readerScopes: map[int64][]Scope{
+					1: {
+						NewScope(NewRange(tasks.NewImmediateKey(10), tasks.NewImmediateKey(20)), tc.shared),
+						NewScope(NewRange(tasks.NewImmediateKey(30), tasks.NewImmediateKey(40)), tc.other),
+						NewScope(NewRange(tasks.NewImmediateKey(50), tasks.NewImmediateKey(60)), tc.shared),
+					},
+				},
+				exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+			}
+
+			reader := ToPersistenceQueueState(state, true).ReaderStates[1]
+
+			require.Len(t, reader.Scopes, 1, "the predicate held by one scope stays plain")
+			require.Equal(t, int64(30), reader.Scopes[0].Range.InclusiveMin.TaskId)
+			require.Len(t, reader.PredicateGroups, 1, "the repeated %s predicate forms one group", tc.name)
+			group := reader.PredicateGroups[0]
+			require.True(t, proto.Equal(ToPersistencePredicate(tc.shared, nil), group.Predicate),
+				"the group's predicate is the shared one: want %v, got %v", ToPersistencePredicate(tc.shared, nil), group.Predicate)
+			require.Len(t, group.Ranges, 2, "the group holds the two ranges that share it")
+			require.Equal(t, int64(10), group.Ranges[0].InclusiveMin.TaskId)
+			require.Equal(t, int64(50), group.Ranges[1].InclusiveMin.TaskId)
+		})
+	}
+}
+
 func TestToPersistenceQueueState_CompactFormIsSmaller(t *testing.T) {
 	const namespaceCount = 20
 	var namespaces [namespaceCount]string
@@ -1291,6 +1551,26 @@ func TestToPersistenceQueueState_CompactFormIsSmaller(t *testing.T) {
 	t.Logf("plain %d bytes, compact %d bytes, %.1f%% smaller",
 		len(plain), len(compact), 100*float64(len(plain)-len(compact))/float64(len(plain)))
 	require.Less(t, len(compact), len(plain), "compact is %d bytes, plain is %d bytes", len(compact), len(plain))
+}
+
+func TestToPersistenceQueueState_NotCompactDoesNotGroup(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	shared := func() tasks.Predicate { return tasks.NewNamespacePredicate([]string{a.String(), b.String()}) }
+	state := &queueState{
+		readerScopes: map[int64][]Scope{
+			1: {
+				NewScope(NewRange(tasks.NewImmediateKey(10), tasks.NewImmediateKey(20)), shared()),
+				NewScope(NewRange(tasks.NewImmediateKey(30), tasks.NewImmediateKey(40)), shared()),
+			},
+		},
+		exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+	}
+
+	reader := ToPersistenceQueueState(state, false).ReaderStates[1]
+
+	require.Empty(t, reader.PredicateGroups, "two scopes share a predicate, but compaction is off, so no group")
+	require.Len(t, reader.Scopes, 2, "both scopes stay plain")
 }
 
 func TestToPersistenceQueueState_CompactTableFollowsAscendingReaderID(t *testing.T) {

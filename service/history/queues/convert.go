@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -44,9 +45,13 @@ func ToPersistenceQueueState(
 		for _, scope := range scopes {
 			persistenceScopes = append(persistenceScopes, ToPersistenceScope(scope, builder))
 		}
-		readerStates[id] = &persistencespb.QueueReaderState{
+		readerState := &persistencespb.QueueReaderState{
 			Scopes: persistenceScopes,
 		}
+		if compact {
+			readerState.Scopes, readerState.PredicateGroups = groupScopesByPredicate(persistenceScopes)
+		}
+		readerStates[id] = readerState
 	}
 
 	return &persistencespb.QueueState{
@@ -54,6 +59,39 @@ func ToPersistenceQueueState(
 		ExclusiveReaderHighWatermark: ToPersistenceTaskKey(queueState.exclusiveReaderHighWatermark),
 		NamespaceIdTable:             builder.entries(),
 	}
+}
+
+// groupScopesByPredicate groups the scopes whose predicate another scope repeats and returns the
+// rest plain, since a group of one saves nothing. Scopes keep their order, so a reader's ranges
+// stay ascending.
+func groupScopesByPredicate(
+	scopes []*persistencespb.QueueSliceScope,
+) ([]*persistencespb.QueueSliceScope, []*persistencespb.QueueSlicePredicateGroup) {
+	var plain []*persistencespb.QueueSliceScope
+	var groups []*persistencespb.QueueSlicePredicateGroup
+	groupFor := func(predicate *persistencespb.Predicate) *persistencespb.QueueSlicePredicateGroup {
+		for _, group := range groups {
+			if proto.Equal(group.Predicate, predicate) {
+				return group
+			}
+		}
+		return nil
+	}
+	for i, scope := range scopes {
+		for _, later := range scopes[i+1:] {
+			if groupFor(scope.Predicate) == nil && proto.Equal(scope.Predicate, later.Predicate) {
+				groups = append(groups, &persistencespb.QueueSlicePredicateGroup{Predicate: scope.Predicate})
+			}
+		}
+	}
+	for _, scope := range scopes {
+		if group := groupFor(scope.Predicate); group != nil {
+			group.Ranges = append(group.Ranges, scope.Range)
+		} else {
+			plain = append(plain, scope)
+		}
+	}
+	return plain, groups
 }
 
 func FromPersistenceQueueState(
