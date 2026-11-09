@@ -1342,14 +1342,22 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 
 func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	namespaceID := "someId"
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: cluster.TestCurrentClusterName,
+		State:       enumspb.NAMESPACE_RESTORE_STATE_RUNNING,
+		StartTime:   timestamppb.New(time.Unix(100, 0)),
+	}
 	nsResponse := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			FailoverVersion: 1,
 			Info: &persistencespb.NamespaceInfo{
-				Id:    namespaceID,
-				Name:  "another random namespace name",
-				State: enumspb.NAMESPACE_STATE_DELETED,
-				Data:  make(map[string]string)},
+				Id:          namespaceID,
+				Name:        "another random namespace name",
+				State:       enumspb.NAMESPACE_STATE_DELETED,
+				Data:        make(map[string]string),
+				RestoreInfo: restoreInfo,
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -1375,6 +1383,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
+	protorequire.ProtoEqual(s.T(), restoreInfo, resp.GetRestoreInfo())
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {

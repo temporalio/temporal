@@ -103,7 +103,6 @@ func deletedNS(id, name, activeCluster string) *namespace.Namespace {
 	)
 }
 
-// softDeletedNS builds a local namespace in the SOFT_DELETED state, which ListAllNamespaces skips.
 func softDeletedNS(id, name, activeCluster string) *namespace.Namespace {
 	return namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: id, Name: name, State: enumspb.NAMESPACE_STATE_SOFT_DELETED},

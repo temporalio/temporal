@@ -301,7 +301,8 @@ func (w *perNamespaceWorker) setWorkerOptions(opts sdkworker.Options) {
 func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, newCount *int, newOpts *sdkworker.Options) {
 	w.lock.Lock()
 
-	if ns != nil {
+	// Callbacks run concurrently and can arrive out of order; keep the newest namespace.
+	if ns != nil && ns.NotificationVersion() >= w.ns.NotificationVersion() {
 		w.ns = ns
 		// The name inside of *ns, which was used to initialize the logger, can change, but
 		// don't update w.logger here, otherwise we'd have to hold w.lock just to log.
@@ -333,10 +334,6 @@ func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, new
 // refresh the worker again at a later time.
 func (w *perNamespaceWorker) handleError(err error) {
 	if err == nil {
-		return
-	}
-	if errors.Is(err, errNoWorkerNeeded) {
-		w.stopWorkerAndResetTimer()
 		return
 	}
 
@@ -376,6 +373,10 @@ func (w *perNamespaceWorker) handleError(err error) {
 // Returning noWorkerNeeded means any existing worker should be stopped.
 func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	defer func() {
+		if errors.Is(retErr, errNoWorkerNeeded) {
+			w.stopWorkerIfCurrent(args.ns)
+			return
+		}
 		w.handleError(retErr)
 	}()
 
@@ -545,10 +546,25 @@ func (w *perNamespaceWorker) stopWorker() {
 	w.stopWorkerLocked()
 }
 
+// stopWorkerIfCurrent does nothing if the namespace changed after ns was read; the newer refresh decides.
+func (w *perNamespaceWorker) stopWorkerIfCurrent(ns *namespace.Namespace) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	if ns != w.ns {
+		return
+	}
+	w.stopWorkerAndResetTimerLocked()
+}
+
 func (w *perNamespaceWorker) stopWorkerAndResetTimer() {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	w.stopWorkerAndResetTimerLocked()
+}
+
+func (w *perNamespaceWorker) stopWorkerAndResetTimerLocked() {
 	w.stopWorkerLocked()
 	w.retrier.Reset()
 	// Note that we only reset reserved here, not in stopWorkerLocked: if we did it there, we

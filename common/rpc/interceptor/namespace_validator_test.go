@@ -229,7 +229,6 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 			method:      api.OperatorServicePrefix + "DeleteNamespace",
 			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
 		},
-		// SOFT_DELETED
 		{
 			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
 			expectedErr: &serviceerror.NamespaceInvalidState{},
@@ -1139,7 +1138,6 @@ func (s *namespaceValidatorSuite) Test_Intercept_AdminVisibilityRequests_Namespa
 	}
 }
 
-// The namespace lifecycle APIs accept the namespace by ID as well as by name, like DeleteNamespace.
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_LifecycleRequestsByID() {
 	testCases := []struct {
 		method string

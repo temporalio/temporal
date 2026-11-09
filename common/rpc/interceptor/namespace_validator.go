@@ -48,13 +48,12 @@ var (
 		api.WorkflowServicePrefix + "StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
 		api.OperatorServicePrefix + "DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
-		// SOFT_DELETED is allowed so a repeated call is idempotent.
+		// SOFT_DELETED makes retries idempotent.
 		api.OperatorServicePrefix + "SoftDeleteNamespace": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
-		// REGISTERED is allowed so a restore can be retried after its state change already applied.
+		// REGISTERED lets a partly applied restore be retried.
 		api.OperatorServicePrefix + "RestoreNamespace":         {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
 		api.OperatorServicePrefix + "DescribeNamespaceRestore": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
-		// Migration and failover of a soft-deleted namespace go through UpdateNamespace; the
-		// namespace handler rejects any state change out of SOFT_DELETED.
+		// SOFT_DELETED allows failover and migration; the handler rejects state changes.
 		api.WorkflowServicePrefix + "UpdateNamespace": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
 		api.NexusServicePrefix + "DispatchNexusTask":  {enumspb.NAMESPACE_STATE_REGISTERED},
 	}

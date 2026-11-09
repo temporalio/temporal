@@ -1322,8 +1322,6 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.NoError(s.namespaceReplicator.Execute(s.T().Context(), task))
 }
 
-// A delayed soft delete that arrives after a newer update, such as a restore, must not change
-// the namespace.
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_StaleSoftDeleteIgnored() {
 	id := uuid.NewString()
 	name := "restored-namespace"

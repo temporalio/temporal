@@ -809,8 +809,6 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_DeletedNotReplicated(
 	s.Require().NoError(err)
 }
 
-// Unlike DELETED, a soft-deleted namespace replicates, and the task carries the restore record,
-// which the public NamespaceInfo has no field for.
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_SoftDeletedReplicatedWithRestoreInfo() {
 	restoreInfo := &persistencespb.NamespaceRestoreInfo{
 		RestoreId:   "restore-id",

@@ -408,6 +408,27 @@ func (s *namespaceHandlerCommonSuite) TestDeprecateNamespaceEventUsesPersistedAf
 	s.Require().NotEqual(failoverEndTime.AsTime().Format(time.RFC3339), after["failover_end_time"])
 }
 
+func (s *namespaceHandlerCommonSuite) TestDeprecateNamespace_SoftDeleted_Rejected() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "namespace"}).Return(
+		&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    "namespace-id",
+				Name:  "namespace",
+				State: enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		}},
+		nil,
+	)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err := s.handler.DeprecateNamespace(context.Background(), &workflowservice.DeprecateNamespaceRequest{Namespace: "namespace"})
+	s.ErrorIs(err, errInvalidNamespaceStateUpdate)
+}
+
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
 	out := s.handler.mergeNamespaceData(
 		map[string]string{
@@ -2529,8 +2550,6 @@ func (s *namespaceHandlerCommonSuite) softDeletedNamespaceResponse(nid string, n
 	}
 }
 
-// Updates other than a state change are allowed on a soft-deleted namespace, and keep it soft-deleted
-// on every cluster.
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_SoftDeleted_StaysSoftDeleted() {
 	testCases := []struct {
 		name    string
@@ -2591,7 +2610,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_SoftDeleted_StaysSoftD
 	}
 }
 
-// UpdateNamespace can't move a namespace out of SOFT_DELETED.
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_SoftDeleted_RejectsStateChange() {
 	name := "soft-deleted-ns"
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
@@ -2607,7 +2625,43 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_SoftDeleted_RejectsSta
 	s.ErrorIs(err, errInvalidNamespaceStateUpdate)
 }
 
-// SOFT_DELETED is entered and left only through the OperatorService lifecycle APIs.
+func (s *namespaceHandlerCommonSuite) TestValidateReplicationStateUpdate_NamespaceState() {
+	testCases := []struct {
+		nsState  enumspb.NamespaceState
+		oldState enumspb.ReplicationState
+		newState enumspb.ReplicationState
+		allowed  bool
+	}{
+		{nsState: enumspb.NAMESPACE_STATE_REGISTERED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_SOFT_DELETED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_SOFT_DELETED, oldState: enumspb.REPLICATION_STATE_HANDOVER, newState: enumspb.REPLICATION_STATE_NORMAL, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_DEPRECATED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: false},
+	}
+	for _, tc := range testCases {
+		err := validateReplicationStateUpdate(
+			&persistence.GetNamespaceResponse{
+				Namespace: &persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{State: tc.nsState},
+					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+						State:    tc.oldState,
+						Clusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+					},
+				},
+				IsGlobalNamespace: true,
+			},
+			&workflowservice.UpdateNamespaceRequest{
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{State: tc.newState},
+			},
+		)
+		if tc.allowed {
+			s.NoError(err, "%v: %v -> %v", tc.nsState, tc.oldState, tc.newState)
+		} else {
+			var invalidArg *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArg, "%v: %v -> %v", tc.nsState, tc.oldState, tc.newState)
+		}
+	}
+}
+
 func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
 	testCases := []struct {
 		oldState enumspb.NamespaceState
