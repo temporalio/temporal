@@ -1091,7 +1091,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	// WorkflowTask and HSM(only nexusoperations) timer tasks won't be regenerated
 	// because time skipping pauses when there is in-flight work. Activity retry
 	// timers are the exception: an activity in retry backoff does not block skipping,
-	// so its retry timer must be re-stamped against the new accumulated skip (see (5)).
+	// so its retry and timeout timers must be re-stamped against the new accumulated skip (see (5)).
 	//
 	// NOTE: blocks (1)-(4) below construct their tasks inline rather than calling the
 	// canonical generators (GenerateUserTimerTasks, GenerateWorkflowStartTasks,
@@ -1179,16 +1179,28 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	// now-relative check would wrongly exclude the activity whose timer needs re-stamping.
 	// The structural check (not started, has retry policy, attempt > 1) is sufficient:
 	// the idle gate already ensures every pending activity is a failed retry when we get here.
+	hasActivityRetry := false
 	for _, ai := range r.mutableState.GetPendingActivityInfos() {
 		if activityPendingRetry(ai) {
+			// Existing timeout tasks use the previous offset. Clear their flags so
+			// the timer sequence can recreate them as each deadline becomes earliest.
+			if ai.TimerTaskStatus != TimerTaskStatusNone {
+				if err := r.mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, TimerTaskStatusNone, nil); err != nil {
+					return err
+				}
+			}
 			if err := r.GenerateActivityRetryTasks(ai); err != nil {
 				return err
 			}
+			hasActivityRetry = true
 		}
 	}
+	if hasActivityRetry {
+		return r.GenerateActivityTimerTasks()
+	}
 
-	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
-	// are treated as a part of in-flight nexus operation and won't be regenerated.
+	// Generic StateMachineTimerTask (nexus HSM) and WorkflowTaskTimeoutTask
+	// are treated as in-flight work and won't be regenerated.
 	// DeleteHistoryEventTask is not impacted by time skipping, and doesn't need regeneration.
 	return nil
 }

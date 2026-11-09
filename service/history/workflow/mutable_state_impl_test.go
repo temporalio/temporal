@@ -8687,6 +8687,147 @@ func (s *mutableStateSuite) TestAddTasks_SubtractsSkipFromTimerTasks() {
 	s.Equal(virtualTime, inserted[tasks.CategoryTransfer][0].GetVisibilityTime())
 }
 
+func (s *mutableStateSuite) TestRegenerateActivityTimeoutAfterTimeSkipping() {
+	physicalNow := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	s.mutableState.timeSource = clock.NewEventTimeSource().Update(physicalNow)
+	deadline := physicalNow.Add(time.Hour)
+	ai := &persistencespb.ActivityInfo{
+		ScheduledEventId:       5,
+		FirstScheduledTime:     timestamppb.New(physicalNow),
+		ScheduledTime:          timestamppb.New(physicalNow.Add(30 * time.Minute)),
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+		HasRetryPolicy:         true,
+		Attempt:                2,
+		Stamp:                  7,
+		TimerTaskStatus:        TimerTaskStatusCreatedScheduleToClose,
+	}
+	s.mutableState.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
+	s.mutableState.AddTasks(&tasks.ActivityTimeoutTask{
+		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: deadline,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		EventID:             ai.ScheduledEventId,
+		Attempt:             ai.Attempt,
+		Stamp:               ai.Stamp,
+	})
+	originalTasks := s.mutableState.PopTasks()
+
+	const skipped = 30 * time.Minute
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(skipped),
+	}
+	s.mutableState.wrapTimeSourceWithTimeSkipping()
+	generator := NewTaskGenerator(nil, nil, s.mutableState, s.mockConfig, nil, s.logger)
+	s.NoError(generator.RegenerateTimerTasksForTimeSkipping())
+	s.Equal(map[tasks.Category][]tasks.Task{
+		tasks.CategoryTimer: {
+			&tasks.ActivityRetryTimerTask{
+				WorkflowKey:         s.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: physicalNow,
+				EventID:             ai.ScheduledEventId,
+				Attempt:             ai.Attempt,
+				Stamp:               ai.Stamp,
+			},
+			&tasks.ActivityTimeoutTask{
+				WorkflowKey:         s.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: deadline.Add(-skipped),
+				TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				EventID:             ai.ScheduledEventId,
+				Attempt:             ai.Attempt,
+				Stamp:               ai.Stamp,
+			},
+		},
+	}, s.mutableState.PopTasks())
+	s.Equal(deadline, originalTasks[tasks.CategoryTimer][0].GetVisibilityTime())
+	s.Equal(int32(TimerTaskStatusCreatedScheduleToClose), ai.TimerTaskStatus)
+}
+
+func (s *mutableStateSuite) TestRegenerateActivityTimeoutsCreatesOnlyEarliest() {
+	physicalNow := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	const skipped = 30 * time.Minute
+	s.mutableState.timeSource = clock.NewEventTimeSource().Update(physicalNow)
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(skipped),
+	}
+	s.mutableState.wrapTimeSourceWithTimeSkipping()
+	var expectedRetries []tasks.Task
+	for eventID := int64(1); eventID <= 3; eventID++ {
+		ai := &persistencespb.ActivityInfo{
+			ScheduledEventId:       eventID,
+			FirstScheduledTime:     timestamppb.New(physicalNow),
+			ScheduledTime:          timestamppb.New(physicalNow.Add(skipped)),
+			ScheduleToCloseTimeout: durationpb.New(time.Duration(eventID) * time.Hour),
+			HasRetryPolicy:         true,
+			Attempt:                2,
+			Stamp:                  7,
+			TimerTaskStatus:        TimerTaskStatusCreatedScheduleToClose,
+		}
+		s.mutableState.pendingActivityInfoIDs[eventID] = ai
+		expectedRetries = append(expectedRetries, &tasks.ActivityRetryTimerTask{
+			WorkflowKey:         s.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: physicalNow,
+			EventID:             eventID,
+			Attempt:             ai.Attempt,
+			Stamp:               ai.Stamp,
+		})
+	}
+	generator := NewTaskGenerator(nil, nil, s.mutableState, s.mockConfig, nil, s.logger)
+	s.NoError(generator.RegenerateTimerTasksForTimeSkipping())
+	for eventID := int64(1); eventID <= 3; eventID++ {
+		expectedTimeout := &tasks.ActivityTimeoutTask{
+			WorkflowKey:         s.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: physicalNow.Add(time.Duration(eventID)*time.Hour - skipped),
+			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			EventID:             eventID,
+			Attempt:             2,
+			Stamp:               7,
+		}
+		if eventID == 1 {
+			s.ElementsMatch(append(expectedRetries, expectedTimeout), s.mutableState.PopTasks()[tasks.CategoryTimer])
+		} else {
+			created, err := NewTimerSequence(s.mutableState).CreateNextActivityTimer()
+			s.NoError(err)
+			s.True(created, "the next timeout must not be blocked by the previous offset's timer-created flag")
+			s.Equal([]tasks.Task{expectedTimeout}, s.mutableState.PopTasks()[tasks.CategoryTimer])
+		}
+		// Completing the earliest activity allows the timer sequence to schedule the next one.
+		delete(s.mutableState.pendingActivityInfoIDs, eventID)
+	}
+}
+
+func (s *mutableStateSuite) TestRegenerateActivityTimeoutsSkipsNonRetryActivities() {
+	for _, tc := range []struct {
+		name    string
+		attempt int32
+		started int64
+		paused  bool
+	}{
+		{name: "initial attempt", attempt: 1},
+		{name: "running activity", attempt: 2, started: 10},
+		{name: "paused activity", attempt: 2, paused: true},
+	} {
+		s.Run(tc.name, func() {
+			s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			}
+			ai := &persistencespb.ActivityInfo{
+				ScheduledEventId:       5,
+				StartedEventId:         tc.started,
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
+				HasRetryPolicy:         true,
+				Attempt:                tc.attempt,
+				Paused:                 tc.paused,
+				TimerTaskStatus:        TimerTaskStatusCreatedScheduleToClose,
+			}
+			s.mutableState.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
+			generator := NewTaskGenerator(nil, nil, s.mutableState, s.mockConfig, nil, s.logger)
+			s.NoError(generator.RegenerateTimerTasksForTimeSkipping())
+			s.Empty(s.mutableState.PopTasks())
+			s.Equal(int32(TimerTaskStatusCreatedScheduleToClose), ai.TimerTaskStatus)
+		})
+	}
+}
+
 // TestAddCompletedWorkflowEvent_ArchivalConvertsVirtualToWall exercises the full
 // close→archival path end-to-end: starting a workflow with accumulated skip
 // installs the time-skipping wrapper on the MS time source, the close event is
@@ -8829,7 +8970,7 @@ func (s *mutableStateSuite) TestSetSpeculativeWorkflowTaskTimeoutTask_SubtractsS
 // TestAccumulatedSkippedDuration_NilSafety pins the contract that the unexported
 // accumulatedSkippedDuration helper never panics regardless of how much of the proto chain is
 // nil, and returns 0 whenever time-skipping is not configured. AddTasks,
-// SetSpeculativeWorkflowTaskTimeoutTask, and ToRealTimeWithCurrentOffset all rely on this; if it panicked or
+// SetSpeculativeWorkflowTaskTimeoutTask, and ToPhysicalTimeWithCurrentTimeSkippingOffset all rely on this; if it panicked or
 // returned non-zero on a nil chain, every non-time-skipping workflow would break.
 func (s *mutableStateSuite) TestAccumulatedSkippedDuration_NilSafety() {
 	s.Run("ExecutionInfoNil", func() {
@@ -9865,18 +10006,57 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 	}
 }
 
-// TestToRealTimeWithCurrentOffset covers both skipped and unskipped executions.
-func (s *mutableStateSuite) TestToRealTimeWithCurrentOffset() {
-	virtualTime := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+func (s *mutableStateSuite) TestToLogicalTimeWithCurrentTimeSkippingOffset() {
+	physicalTime := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		info     *persistencespb.TimeSkippingInfo
+		input    time.Time
+		expected time.Time
+	}{
+		{name: "no time skipping info", input: physicalTime, expected: physicalTime},
+		{name: "no skipped duration", info: &persistencespb.TimeSkippingInfo{}, input: physicalTime, expected: physicalTime},
+		{
+			name: "disabled time skipping retains offset",
+			info: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			},
+			input:    physicalTime,
+			expected: physicalTime.Add(time.Hour),
+		},
+		{
+			name: "zero time remains unset",
+			info: &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(time.Hour)},
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.mutableState.executionInfo.TimeSkippingInfo = tc.info
+			s.Equal(tc.expected, s.mutableState.ToLogicalTimeWithCurrentTimeSkippingOffset(tc.input))
+			s.Equal(tc.input, s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(s.mutableState.ToLogicalTimeWithCurrentTimeSkippingOffset(tc.input)))
+		})
+	}
+	s.Run("uses updated offset", func() {
+		info := &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(time.Hour)}
+		s.mutableState.executionInfo.TimeSkippingInfo = info
+		s.Equal(physicalTime.Add(time.Hour), s.mutableState.ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime))
+		info.AccumulatedSkippedDuration = durationpb.New(2 * time.Hour)
+		s.Equal(physicalTime.Add(2*time.Hour), s.mutableState.ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime))
+	})
+}
+
+// TestToPhysicalTimeWithCurrentTimeSkippingOffset covers both skipped and unskipped executions.
+func (s *mutableStateSuite) TestToPhysicalTimeWithCurrentTimeSkippingOffset() {
+	logicalTime := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
 	s.Run("IdentityWhenTimeSkippingInfoNil", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		s.Equal(virtualTime, s.mutableState.ToRealTimeWithCurrentOffset(virtualTime))
+		s.Equal(logicalTime, s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime))
 	})
 	s.Run("IdentityWhenTimeSkippingInfoWithNilAccumulatedSkippedDuration", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.Equal(virtualTime, s.mutableState.ToRealTimeWithCurrentOffset(virtualTime))
+		s.Equal(logicalTime, s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime))
 	})
 	s.Run("SubtractsAccumulatedSkip", func() {
 		accum := time.Hour
@@ -9884,19 +10064,19 @@ func (s *mutableStateSuite) TestToRealTimeWithCurrentOffset() {
 			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 			AccumulatedSkippedDuration: durationpb.New(accum),
 		}
-		s.Equal(virtualTime.Add(-accum), s.mutableState.ToRealTimeWithCurrentOffset(virtualTime))
+		s.Equal(logicalTime.Add(-accum), s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime))
 	})
 	s.Run("ZeroInputReturnedUnchangedEvenUnderSkip", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
-		s.True(s.mutableState.ToRealTimeWithCurrentOffset(time.Time{}).IsZero())
+		s.True(s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(time.Time{}).IsZero())
 	})
-	s.Run("RoundTripsWithNowYieldsWallClock", func() {
-		// The defining contract of the virtual-time frame: ToRealTimeWithCurrentOffset ∘ Now is
-		// the identity to wall clock. AddTasks relies on this to stamp timer
-		// VisibilityTimestamps that fire at the right real moment after a skip.
+	s.Run("RoundTripsWithNowYieldsPhysicalTime", func() {
+		// The defining contract of the logical-time frame: ToPhysicalTimeWithCurrentTimeSkippingOffset ∘ Now is
+		// the identity to physical time. AddTasks relies on this to stamp timer
+		// VisibilityTimestamps that fire at the right physical time after a skip.
 		fixedBase := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
 		ts := clock.NewEventTimeSource()
 		ts.Update(fixedBase)
@@ -9906,18 +10086,18 @@ func (s *mutableStateSuite) TestToRealTimeWithCurrentOffset() {
 		}
 		s.mutableState.wrapTimeSourceWithTimeSkipping()
 
-		s.Equal(fixedBase, s.mutableState.ToRealTimeWithCurrentOffset(s.mutableState.Now()))
+		s.Equal(fixedBase, s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(s.mutableState.Now()))
 	})
-	s.Run("PastVirtualTimeStillSubtractsAccumulated", func() {
+	s.Run("PastLogicalTimeStillSubtractsAccumulated", func() {
 		// The conversion always uses the current offset, even for a past input.
 		accum := 4 * time.Hour
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			AccumulatedSkippedDuration: durationpb.New(accum),
 		}
 		past := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-		s.Equal(past.Add(-accum), s.mutableState.ToRealTimeWithCurrentOffset(past))
+		s.Equal(past.Add(-accum), s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(past))
 	})
-	s.Run("ToRealTimeDoesNotMutateState", func() {
+	s.Run("ToPhysicalTimeDoesNotMutateState", func() {
 		ts := clock.NewEventTimeSource()
 		ts.Update(time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC))
 		s.mutableState.timeSource = ts
@@ -9928,7 +10108,7 @@ func (s *mutableStateSuite) TestToRealTimeWithCurrentOffset() {
 		tsiBefore := proto.Clone(s.mutableState.executionInfo.TimeSkippingInfo).(*persistencespb.TimeSkippingInfo)
 		nowBefore := s.mutableState.timeSource.Now()
 
-		_ = s.mutableState.ToRealTimeWithCurrentOffset(virtualTime)
+		_ = s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime)
 
 		s.Equal(nowBefore, s.mutableState.timeSource.Now())
 		s.True(proto.Equal(tsiBefore, s.mutableState.executionInfo.TimeSkippingInfo))
