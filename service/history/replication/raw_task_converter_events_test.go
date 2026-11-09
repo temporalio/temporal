@@ -195,7 +195,7 @@ func TestSyncTaskIncludesPersistedEvents(t *testing.T) {
 				shardID: 2, eventBlobCache: cache, executionManager: executionManager,
 				replicationCache: progress, syncStateRetriever: retriever, logger: logger,
 			}
-			result, err := converter.convert(ctx, task, 3, nil, mutableState, func(error) { released = true })
+			result, err := converter.convert(ctx, task, 3, nil, mutableState, func(err error) error { released = true; return err })
 			if tc.readError != nil {
 				require.ErrorIs(t, err, tc.readError)
 				require.Nil(t, result)
