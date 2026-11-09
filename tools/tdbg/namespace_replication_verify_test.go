@@ -26,7 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestNamespaceReplicationVerifier_Status(t *testing.T) {
+func TestNamespaceReplicationVerifierStatus(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name              string
@@ -40,6 +40,7 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 		wantFailoverMatch string
 		wantDifference    string
 		wantError         string
+		wantDetail        string
 	}{
 		{
 			name:          "healthy with harmless normalization and version skew",
@@ -103,6 +104,7 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 			wantConfigMatch:   namespaceReplicationMatchMatch,
 			wantFailoverMatch: namespaceReplicationMatchMismatch,
 			wantDifference:    "replication.active_cluster",
+			wantDetail:        "replicas block safe repair: cluster-b (failover state differs from the source)",
 		},
 		{
 			name:          "target failover version ahead",
@@ -115,6 +117,7 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 			wantPresence:      namespaceReplicationPresencePresent,
 			wantConfigMatch:   namespaceReplicationMatchMatch,
 			wantFailoverMatch: namespaceReplicationMatchMatch,
+			wantDetail:        "replicas block safe repair: cluster-b (failover version 21 is ahead of the source's 20)",
 		},
 		{
 			name:          "local target",
@@ -127,6 +130,7 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 			wantPresence:   namespaceReplicationPresencePresent,
 			wantDifference: "namespace.is_global",
 			wantError:      "not global",
+			wantDetail:     "replicas block safe repair: cluster-b (target namespace is not global)",
 		},
 	}
 
@@ -162,6 +166,7 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 			if test.wantError != "" {
 				require.Contains(t, cluster.Error, test.wantError)
 			}
+			require.Equal(t, test.wantDetail, result.StatusDetail)
 			if test.wantStatus == namespaceReplicationStatusHealthy {
 				require.Equal(t, result.SourceConfigFingerprint, cluster.ConfigFingerprint)
 			}
@@ -169,7 +174,7 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 	}
 }
 
-func TestNamespaceReplicationVerifier_ObserveCapturesReusableState(t *testing.T) {
+func TestNamespaceReplicationVerifierObserveCapturesReusableState(t *testing.T) {
 	t.Parallel()
 	source := testNamespaceResponse(
 		"namespace",
@@ -329,7 +334,7 @@ func TestNamespaceReplicationVerifierUnrelatedNotFoundBlocks(t *testing.T) {
 	require.Equal(t, namespaceReplicationPresenceUnavailable, result.Clusters[1].Presence)
 }
 
-func TestNamespaceReplicationVerifier_IgnoresConfiguredNamespaceDataKeys(t *testing.T) {
+func TestNamespaceReplicationVerifierIgnoresConfiguredNamespaceDataKeys(t *testing.T) {
 	t.Parallel()
 	const ignoredKey = "__MCNConfig"
 
@@ -395,7 +400,7 @@ func TestNamespaceReplicationVerifier_IgnoresConfiguredNamespaceDataKeys(t *test
 	}
 }
 
-func TestNamespaceReplicationVerifier_NameCollisionBlocksRepair(t *testing.T) {
+func TestNamespaceReplicationVerifierNameCollisionBlocksRepair(t *testing.T) {
 	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	nameCollision := testNamespaceResponse("namespace", "other-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
@@ -415,6 +420,50 @@ func TestNamespaceReplicationVerifier_NameCollisionBlocksRepair(t *testing.T) {
 	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
 	require.Equal(t, namespaceReplicationPresenceNameCollision, result.Clusters[1].Presence)
 	require.NotContains(t, result.Clusters[1].Error, "other-id")
+}
+
+func TestNamespaceReplicationVerifierCrossChecksNamespaceName(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		expected   string
+		wantStatus string
+		wantDetail string
+	}{
+		{name: "not given", wantStatus: namespaceReplicationStatusHealthy},
+		{name: "matches", expected: "namespace", wantStatus: namespaceReplicationStatusHealthy},
+		{name: "differs", expected: "other", wantStatus: namespaceReplicationStatusBlocked, wantDetail: `namespace ID "namespace-id" belongs to namespace "namespace", not "other"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			peer := testNamespaceReplicationTargetClient("cluster-b", proto.CloneOf(source))
+			peerReads := 0
+			getNamespace := peer.getNamespaceFn
+			peer.getNamespaceFn = func(request *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+				peerReads++
+				return getNamespace(request)
+			}
+			verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{
+				"cluster-b": peer,
+			})
+			request := testNamespaceReplicationVerifyRequest()
+			request.ExpectedNamespaceName = test.expected
+
+			result, err := verifier.Verify(context.Background(), request)
+			require.NoError(t, err)
+			require.Equal(t, test.wantStatus, result.Status)
+			require.Equal(t, test.wantDetail, result.StatusDetail)
+			require.Equal(t, "namespace", result.NamespaceName)
+			if test.wantDetail != "" {
+				// A mismatch stops before any peer is read.
+				require.Zero(t, peerReads)
+				require.Empty(t, result.Clusters)
+			} else {
+				require.NotZero(t, peerReads)
+			}
+		})
+	}
 }
 
 func TestNamespaceReplicationVerifierIdentifiesReplicaByID(t *testing.T) {
@@ -533,7 +582,7 @@ func TestNamespaceReplicationVerifierPeerReadsThroughRelay(t *testing.T) {
 			relay: func(*adminservice.GetRemoteClusterNamespaceRequest) (*adminservice.GetRemoteClusterNamespaceResponse, error) {
 				return &adminservice.GetRemoteClusterNamespaceResponse{ClusterName: "cluster-c", Namespace: proto.CloneOf(source)}, nil
 			},
-			wantDetail: "one or more replicas block safe repair",
+			wantDetail: "replicas block safe repair: cluster-b (UNAVAILABLE)",
 			wantError:  `lookup namespace by ID: cluster identity mismatch: expected "cluster-b", got "cluster-c"`,
 		},
 		{
@@ -541,13 +590,13 @@ func TestNamespaceReplicationVerifierPeerReadsThroughRelay(t *testing.T) {
 			// The relay checks identity first, so this must not look like MISSING.
 			name:       "metadata routes to another cluster without the namespace",
 			peers:      map[string]*testNamespaceReplicationAdminClient{"cluster-b": testNamespaceReplicationTargetClient("cluster-c", nil)},
-			wantDetail: "one or more replicas block safe repair",
+			wantDetail: "replicas block safe repair: cluster-b (UNAVAILABLE)",
 			wantError:  `remote cluster identity mismatch: expected "cluster-b", got "cluster-c"`,
 		},
 		{
 			name:       "unknown peer",
 			peers:      map[string]*testNamespaceReplicationAdminClient{},
-			wantDetail: "one or more replicas block safe repair",
+			wantDetail: "replicas block safe repair: cluster-b (UNAVAILABLE)",
 			wantError:  `unknown remote cluster "cluster-b"`,
 		},
 	} {
@@ -581,7 +630,7 @@ func TestNamespaceReplicationVerifierRejectsSourceWithDifferentID(t *testing.T) 
 		wantNamespace bool
 	}{
 		{name: "first read", badRead: 1, wantErr: "read source namespace: response has a different namespace ID", wantStatus: namespaceReplicationStatusBlocked},
-		{name: "final read", badRead: 2, wantStatus: namespaceReplicationStatusInconclusiveSourceChanged, wantDetail: "final source read failed: response has a different namespace ID", wantNamespace: true},
+		{name: "final read", badRead: 2, wantStatus: namespaceReplicationStatusInconclusiveSourceChanged, wantDetail: "re-read source namespace after scanning replicas: response has a different namespace ID", wantNamespace: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -615,7 +664,7 @@ func TestNamespaceReplicationVerifierRejectsSourceWithDifferentID(t *testing.T) 
 	}
 }
 
-func TestNamespaceReplicationVerifier_WireNamespaceNotFoundRequiresRepair(t *testing.T) {
+func TestNamespaceReplicationVerifierWireNamespaceNotFoundRequiresRepair(t *testing.T) {
 	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	client := testNamespaceReplicationTargetClient("cluster-b", nil)
@@ -632,7 +681,7 @@ func TestNamespaceReplicationVerifier_WireNamespaceNotFoundRequiresRepair(t *tes
 	require.Equal(t, namespaceReplicationPresenceMissing, result.Clusters[1].Presence)
 }
 
-func TestNamespaceReplicationVerifier_UnavailableTargetBlocksRepair(t *testing.T) {
+func TestNamespaceReplicationVerifierUnavailableTargetBlocksRepair(t *testing.T) {
 	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{})
@@ -643,7 +692,7 @@ func TestNamespaceReplicationVerifier_UnavailableTargetBlocksRepair(t *testing.T
 	require.Equal(t, namespaceReplicationPresenceUnavailable, result.Clusters[1].Presence)
 }
 
-func TestNamespaceReplicationVerifier_SourceMovementIsInconclusive(t *testing.T) {
+func TestNamespaceReplicationVerifierSourceMovementIsInconclusive(t *testing.T) {
 	t.Parallel()
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	moved := proto.Clone(source).(*adminservice.GetNamespaceResponse)
@@ -890,14 +939,18 @@ func TestNamespaceReplicationVerifyNamespaceFlags(t *testing.T) {
 		global    []string
 		local     []string
 		wantError string
+		wantCalls int
 	}{
 		{name: "ID", local: []string{"--namespace-id", "namespace-id"}},
 		{name: "ID ignores inherited name", global: []string{"-n", "other"}, local: []string{"--namespace-id", "namespace-id"}},
-		{name: "global name", global: []string{"--namespace", "namespace"}, wantError: "select the namespace with --namespace-id"},
-		{name: "global alias", global: []string{"-n", "namespace"}, wantError: "select the namespace with --namespace-id"},
-		{name: "local name", local: []string{"--namespace", "namespace"}, wantError: "select the namespace with --namespace-id"},
-		{name: "local alias", local: []string{"-n", "namespace"}, wantError: "select the namespace with --namespace-id"},
-		{name: "local name with ID", local: []string{"--namespace", "namespace", "--namespace-id", "namespace-id"}, wantError: "select the namespace with --namespace-id"},
+		{name: "ID with matching name", local: []string{"--namespace", "namespace", "--namespace-id", "namespace-id"}},
+		{name: "ID with matching alias", local: []string{"-n", "namespace", "--namespace-id", "namespace-id"}},
+		{name: "ID with blank name", local: []string{"--namespace", " ", "--namespace-id", "namespace-id"}, wantError: "--namespace is blank"},
+		{name: "ID with mismatched name", local: []string{"--namespace", "other", "--namespace-id", "namespace-id"}, wantError: "blocked", wantCalls: 1},
+		{name: "global name", global: []string{"--namespace", "namespace"}, wantError: "a namespace name alone is not accepted"},
+		{name: "global alias", global: []string{"-n", "namespace"}, wantError: "a namespace name alone is not accepted"},
+		{name: "local name", local: []string{"--namespace", "namespace"}, wantError: "a namespace name alone is not accepted"},
+		{name: "local alias", local: []string{"-n", "namespace"}, wantError: "a namespace name alone is not accepted"},
 		{name: "blank ID", local: []string{"--namespace-id", " "}, wantError: "--namespace-id is required"},
 		{name: "no implicit default", wantError: "--namespace-id is required"},
 	} {
@@ -919,7 +972,7 @@ func TestNamespaceReplicationVerifyNamespaceFlags(t *testing.T) {
 			if test.wantError != "" {
 				require.ErrorContains(t, err, test.wantError)
 				require.Equal(t, 2, tdbgExitCode(err))
-				require.Zero(t, factory.adminClientCalls)
+				require.Equal(t, test.wantCalls, factory.adminClientCalls)
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, 1, factory.adminClientCalls)
@@ -935,7 +988,7 @@ func TestNamespaceReplicationVerifyNamespaceEnvironment(t *testing.T) {
 		args      []string
 		wantError string
 	}{
-		{name: "environment name rejected", args: []string{"tdbg", "namespace", "replication", "verify"}, wantError: "select the namespace with --namespace-id"},
+		{name: "environment name rejected", args: []string{"tdbg", "namespace", "replication", "verify"}, wantError: "a namespace name alone is not accepted"},
 		{name: "ID ignores environment", args: []string{"tdbg", "namespace", "replication", "verify", "--namespace-id", "namespace-id"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -983,12 +1036,6 @@ func TestNamespaceReplicationVerifyCommandReadsPeersThroughSource(t *testing.T) 
 	var result namespaceReplicationVerificationResult
 	require.NoError(t, json.Unmarshal(output.Bytes(), &result))
 	require.Equal(t, namespaceReplicationStatusHealthy, result.Status)
-}
-
-func TestNamespaceReplicationVerifyRejectsClusterAddressFlag(t *testing.T) {
-	app, _ := testNamespaceReplicationCLIApp(&testNamespaceReplicationCLIClientFactory{})
-	err := app.Run([]string{"tdbg", "namespace", "replication", "verify", "--namespace-id", "namespace-id", "--cluster-address", "cluster-b=host:7233"})
-	require.ErrorContains(t, err, "flag provided but not defined: -cluster-address")
 }
 
 func TestNamespaceReplicationVerifyCommandPrintsBlockedResult(t *testing.T) {

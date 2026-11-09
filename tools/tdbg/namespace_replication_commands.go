@@ -29,7 +29,7 @@ func newNamespaceReplicationCommands(
 				{
 					Name:  "verify",
 					Usage: "Compare a global namespace across its configured clusters",
-					Description: "Selects the namespace by ID because namespace names can be reused. " +
+					Description: "Selects the namespace by ID because namespace names can be reused; --namespace only cross-checks it. " +
 						"Run it against the namespace's active cluster; removed peers are not inspected. " +
 						"Peers are read through that cluster's frontend, so only --address and its TLS settings are needed.",
 					Flags: []cli.Flag{
@@ -37,12 +37,10 @@ func newNamespaceReplicationCommands(
 							Name:  FlagNamespaceID,
 							Usage: "Namespace ID (required)",
 						},
-						// Hidden so that a namespace name gets an explanatory error
-						// instead of an undefined-flag error.
 						&cli.StringFlag{
 							Name:    FlagNamespace,
 							Aliases: FlagNamespaceAlias,
-							Hidden:  true,
+							Usage:   "Optional namespace name to cross-check against --namespace-id; it never selects the namespace, and a --namespace before the subcommand is ignored",
 						},
 						&cli.BoolFlag{
 							Name:  FlagPrintJSON,
@@ -63,7 +61,7 @@ func verifyNamespaceReplication(
 	clientFactory ClientFactory,
 	options namespaceReplicationOptions,
 ) error {
-	namespaceID, err := namespaceReplicationNamespaceIDFromCLI(c)
+	verifyRequest, err := namespaceReplicationVerifyRequestFromCLI(c)
 	if err != nil {
 		return cli.Exit(err.Error(), 2)
 	}
@@ -71,7 +69,7 @@ func verifyNamespaceReplication(
 		client:     clientFactory.AdminClient(c),
 		rpcTimeout: namespaceReplicationRPCTimeout(c),
 	}, options)
-	result, err := verifier.Verify(c.Context, namespaceReplicationVerifyRequest{NamespaceID: namespaceID})
+	result, err := verifier.Verify(c.Context, verifyRequest)
 	if err != nil {
 		if result != nil {
 			if result.StatusDetail != "" {
@@ -100,33 +98,36 @@ func verifyNamespaceReplication(
 }
 
 func namespaceReplicationRPCTimeout(c *cli.Context) time.Duration {
-	timeout := defaultContextTimeout
-	if c.IsSet(FlagContextTimeout) {
-		timeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
-	}
-	return timeout
+	return contextTimeout(c, defaultContextTimeout)
 }
 
 var errNamespaceReplicationNameSelector = errors.New(
-	"select the namespace with --namespace-id; namespace names can be reused, so --namespace and TEMPORAL_CLI_NAMESPACE are not accepted",
+	"--namespace-id is required; a namespace name alone is not accepted because names can be reused",
 )
 
-// namespaceReplicationNamespaceIDFromCLI returns the required namespace ID. An
-// inherited --namespace or TEMPORAL_CLI_NAMESPACE is ignored when the ID is
-// supplied, matching how local selectors take precedence elsewhere in tdbg.
-func namespaceReplicationNamespaceIDFromCLI(c *cli.Context) (string, error) {
+// namespaceReplicationVerifyRequestFromCLI reads the required namespace ID and
+// the optional name to cross-check it against. Only a --namespace given on this
+// command is cross-checked; an inherited --namespace or TEMPORAL_CLI_NAMESPACE
+// is ignored when the ID is supplied, matching how local selectors take
+// precedence elsewhere in tdbg.
+func namespaceReplicationVerifyRequestFromCLI(c *cli.Context) (namespaceReplicationVerifyRequest, error) {
+	id := strings.TrimSpace(c.String(FlagNamespaceID))
+	if id == "" {
+		for _, ancestor := range c.Lineage() {
+			if ancestor.IsSet(FlagNamespace) {
+				return namespaceReplicationVerifyRequest{}, errNamespaceReplicationNameSelector
+			}
+		}
+		return namespaceReplicationVerifyRequest{}, errors.New("--namespace-id is required")
+	}
+	request := namespaceReplicationVerifyRequest{NamespaceID: id}
 	if c.IsSet(FlagNamespace) {
-		return "", errNamespaceReplicationNameSelector
-	}
-	if id := strings.TrimSpace(c.String(FlagNamespaceID)); id != "" {
-		return id, nil
-	}
-	for _, parent := range c.Lineage()[1:] {
-		if parent.IsSet(FlagNamespace) {
-			return "", errNamespaceReplicationNameSelector
+		request.ExpectedNamespaceName = strings.TrimSpace(c.String(FlagNamespace))
+		if request.ExpectedNamespaceName == "" {
+			return namespaceReplicationVerifyRequest{}, errors.New("--namespace is blank; omit it or give the namespace name")
 		}
 	}
-	return "", errors.New("--namespace-id is required")
+	return request, nil
 }
 
 func printNamespaceReplicationVerification(

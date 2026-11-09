@@ -184,11 +184,15 @@ func newContext(c *cli.Context) (context.Context, context.CancelFunc) {
 }
 
 func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if c.IsSet(FlagContextTimeout) {
-		timeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
-	}
+	return context.WithTimeout(c.Context, contextTimeout(c, timeout))
+}
 
-	return context.WithTimeout(c.Context, timeout)
+// contextTimeout returns --context-timeout when set, otherwise the default.
+func contextTimeout(c *cli.Context, defaultTimeout time.Duration) time.Duration {
+	if c.IsSet(FlagContextTimeout) {
+		return time.Duration(c.Int(FlagContextTimeout)) * time.Second
+	}
+	return defaultTimeout
 }
 
 func StringToEnum(search string, candidates map[string]int32) (int32, error) {
