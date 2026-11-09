@@ -45,13 +45,16 @@ func TestWorkflowPersistencePipeline(t *testing.T) {
 	for _, mode := range []struct {
 		name                 string
 		pipeline, coalescing bool
+		maxInFlight          int
 	}{
-		{"off", false, false}, {"pipeline", true, false}, {"coalescing", true, true},
+		{"off", false, false, 1}, {"pipeline", true, false, 1}, {"coalescing", true, true, 1},
+		{"inflight", true, false, 4}, {"inflight-coalescing", true, true, 4},
 	} {
 		t.Run(mode.name, func(t *testing.T) {
 			env := testcore.NewEnv(t,
 				testcore.WithDynamicConfig(dynamicconfig.WorkflowPersistencePipeline, mode.pipeline),
 				testcore.WithDynamicConfig(dynamicconfig.WorkflowPersistenceCoalescing, mode.coalescing),
+				testcore.WithDynamicConfig(dynamicconfig.WorkflowPersistencePipelineMaxInFlight, mode.maxInFlight),
 				testcore.WithDynamicConfig(dynamicconfig.FrontendRPS, 100000),
 				testcore.WithDynamicConfig(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 100000),
 				testcore.WithDynamicConfig(dynamicconfig.HistoryRPS, 100000),
