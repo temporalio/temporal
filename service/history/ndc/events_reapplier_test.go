@@ -276,14 +276,14 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 				attr.GetRequest(),
 				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			).Return(event, nil)
-			msCurrent.EXPECT().GetUpdateOutcome(gomock.Any(), attr.GetRequest().GetMeta().GetUpdateId()).Return(nil, serviceerror.NewNotFound(""))
+			msCurrent.EXPECT().GetCompletedUpdate(gomock.Any(), attr.GetRequest().GetMeta().GetUpdateId()).Return(nil, serviceerror.NewNotFound(""))
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
 			msCurrent.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetAcceptedRequest(),
 				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
 			).Return(event, nil)
-			msCurrent.EXPECT().GetUpdateOutcome(gomock.Any(), attr.GetProtocolInstanceId()).Return(nil, serviceerror.NewNotFound(""))
+			msCurrent.EXPECT().GetCompletedUpdate(gomock.Any(), attr.GetProtocolInstanceId()).Return(nil, serviceerror.NewNotFound(""))
 		}
 		msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 		msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)

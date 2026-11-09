@@ -230,6 +230,22 @@ func WorkerVersioningVersionTag(featureVersion string) Tag {
 	return Tag{Key: workerVersioningVersion, Value: featureVersion}
 }
 
+// WorkerDeploymentLimitType identifies the limit that rejected a worker deployment request.
+type WorkerDeploymentLimitType string
+
+const (
+	workerDeploymentLimitTypeTagName = "limit_type"
+
+	WorkerDeploymentLimitTaskQueuesPerVersion    WorkerDeploymentLimitType = "task_queues"
+	WorkerDeploymentLimitVersionsPerDeployment   WorkerDeploymentLimitType = "versions"
+	WorkerDeploymentLimitVersionsPerTaskQueue    WorkerDeploymentLimitType = "versions_per_task_queue"
+	WorkerDeploymentLimitDeploymentsPerNamespace WorkerDeploymentLimitType = "deployments"
+)
+
+func WorkerDeploymentLimitTypeTag(limitType WorkerDeploymentLimitType) Tag {
+	return Tag{Key: workerDeploymentLimitTypeTagName, Value: string(limitType)}
+}
+
 func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {
 	if !versionBreakdown {
 		deploymentName = ""

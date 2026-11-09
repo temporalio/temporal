@@ -1525,8 +1525,8 @@ var (
 	PollerScaleDecisionCounter = NewCounterDef(
 		"poller_scale_decision",
 		WithDescription(
-			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
-				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
+			"Count of poller scaling decisions made by a physical task queue manager. Emitted unless the "+
+				"dynamic config matching.enablePollerScalingDecisionMetrics is disabled. Dimensions: namespace, taskqueue, "+
 				"task_type, partition, decision (scale_up/scale_down/hold), "+
 				"reason (idle/delay/ratio/rate_limited/task_queue_rate_limited)"),
 	)
@@ -1697,6 +1697,14 @@ var (
 		"namespace_replication_chasm_peer_pending_threshold_exceeded",
 		WithDescription("Persisted peer retries at or beyond the one-minute pending-age threshold."),
 	)
+	NamespaceReplicationCHASMLocalPendingAge = NewTimerDef(
+		"namespace_replication_chasm_local_pending_age",
+		WithDescription("Age of an unresolved authoritative CHASM local apply when a retry is durably scheduled."),
+	)
+	NamespaceReplicationCHASMLocalPendingThresholdExceeded = NewCounterDef(
+		"namespace_replication_chasm_local_pending_threshold_exceeded",
+		WithDescription("The number of authoritative CHASM local retries durably scheduled after the local apply has been pending for at least one minute."),
+	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",
 		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),
@@ -1833,6 +1841,10 @@ var (
 	)
 
 	// Worker Versioning
+	WorkerDeploymentLimitExceeded = NewCounterDef(
+		"worker_deployment_limit_exceeded",
+		WithDescription("Worker deployment requests rejected by a limit. limit_type is task_queues (per version), versions (per deployment), versions_per_task_queue, or deployments (per namespace)."),
+	)
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
 	WorkerDeploymentVersionCreated                    = NewCounterDef("worker_deployment_version_created")
 	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")
