@@ -1,12 +1,13 @@
 package workflow
 
 import (
+	"slices"
+	"strings"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/metrics"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"slices"
-	"strings"
 )
 
 // WorkflowHeartbeatNotificationUpdateAdmittedEventType identifies an admitted Update before it has a history event.
