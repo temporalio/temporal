@@ -25,7 +25,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -84,7 +84,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 			Serializer:     serialization.NewSerializer(),
 		},
 		&visibility.ManagerConfig{
-			EsProcessorConfig: &elasticsearch.ProcessorConfig{
+			EsProcessorConfig: &esconfig.ProcessorConfig{
 				IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(10),
 				ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(2),
 				ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),

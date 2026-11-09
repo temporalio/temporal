@@ -70,6 +70,9 @@ message DescribeMutableStateResponse {
   // DatabaseMutableState is always available,
   // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
   temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 4;
+  // Storage usage on this cluster as of the time of the request: the stored counters plus the
+  // interval since this cluster's last state transition. Equals the stored counters once closed.
+  temporal.server.api.persistence.v1.StorageUsage current_storage_usage = 5;
 }
 
 // At least one of the parameters needs to be provided.
@@ -211,7 +214,19 @@ message ApplyNamespaceMutationRequest {
   // Shadow requests validate transport equivalence but never mutate receiver state.
   bool shadow = 2;
 
-  // Fields 4-7 are used by observability metadata in the shadow metrics change.
+  reserved 3;
+  reserved "fingerprint";
+
+  // Source cluster initiating the delivery.
+  string source_cluster = 4;
+  // Source CHASM component business ID for correlation.
+  string component_business_id = 5;
+  // Source CHASM component run ID for correlation.
+  string component_run_id = 6;
+  // One-based component-managed peer retry attempt, not a physical delivery count.
+  // Task redelivery and transport retries may reuse the same number.
+  int32 attempt_count = 7;
+
   // Exact deterministic protobuf encoding of NamespaceTaskAttributes. The receiver
   // decodes this payload with its local schema for shadow comparison.
   bytes namespace_task_payload = 8;
@@ -219,6 +234,11 @@ message ApplyNamespaceMutationRequest {
   // Original legacy NamespaceTaskAttributes encoding prepared by frontend.
   // Shadow requests compare this reference with the decoded namespace_task_payload.
   bytes shadow_legacy_task_payload = 9;
+
+  // Authoritative UPDATE delivered to a peer removed from the cluster list.
+  // The default admission policy retains this snapshot even when the namespace
+  // is absent, so its config version fences delayed older additions.
+  bool removed_peer = 10;
 }
 
 message ApplyNamespaceMutationResponse {
@@ -409,6 +429,9 @@ message RefreshWorkflowTasksRequest {
   string archetype = 4;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 5;
+  // If non-zero, refresh only once the shard owner's registry has the namespace REGISTERED at this
+  // ConfigVersion or later.
+  int64 min_namespace_config_version = 6;
 }
 
 message RefreshWorkflowTasksResponse {}

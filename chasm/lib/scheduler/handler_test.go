@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
@@ -192,4 +193,79 @@ func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 	require.ErrorIs(t, err, scheduler.ErrSentinelBlocked)
 	var unavailableErr *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailableErr)
+}
+
+func TestHandler_PatchSchedule_DedupsRequestID(t *testing.T) {
+	e := newSchedulerTestEngine(t, defaultSchedule())
+	h := scheduler.NewTestHandler(e.logger)
+	patch := func(requestID string) {
+		_, err := h.PatchSchedule(e.engineCtx, &schedulerpb.PatchScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.PatchScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Patch: &schedulepb.SchedulePatch{
+					TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+				},
+				RequestId: requestID,
+			},
+		})
+		require.NoError(t, err)
+	}
+	// The test engine runs tasks inline, so each applied trigger has already become one buffered start.
+	requireBufferedStarts := func(expected int) {
+		require.NoError(t, e.readScheduler(func(s *scheduler.Scheduler, ctx chasm.Context) error {
+			require.Len(t, s.Invoker.Get(ctx).BufferedStarts, expected)
+			return nil
+		}))
+	}
+
+	patch("patch-1")
+	requireBufferedStarts(1)
+
+	// A retry with the same request ID succeeds without triggering again.
+	patch("patch-1")
+	requireBufferedStarts(1)
+
+	patch("patch-2")
+	requireBufferedStarts(2)
+
+	// Requests without a request ID are never deduped.
+	patch("")
+	patch("")
+	requireBufferedStarts(4)
+}
+
+func TestHandler_UpdateSchedule_DedupsRequestID(t *testing.T) {
+	e := newSchedulerTestEngine(t, defaultSchedule())
+	h := scheduler.NewTestHandler(e.logger)
+	describeResp, err := h.DescribeSchedule(e.engineCtx, &schedulerpb.DescribeScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
+	})
+	require.NoError(t, err)
+	conflictToken := describeResp.GetFrontendResponse().GetConflictToken()
+	update := func(requestID string) error {
+		_, err := h.UpdateSchedule(e.engineCtx, &schedulerpb.UpdateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.UpdateScheduleRequest{
+				Namespace:     namespace,
+				ScheduleId:    scheduleID,
+				Schedule:      defaultSchedule(),
+				ConflictToken: conflictToken,
+				RequestId:     requestID,
+			},
+		})
+		return err
+	}
+
+	require.NoError(t, update("update-1"))
+
+	// The first update changed the conflict token, so only dedup lets the retry succeed.
+	require.NoError(t, update("update-1"))
+
+	require.ErrorIs(t, update("update-2"), scheduler.ErrConflictTokenMismatch)
 }

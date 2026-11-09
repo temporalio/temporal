@@ -1881,6 +1881,14 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		nil,
 		gomock.Any(),
 	).Return(syncResult, nil)
+	eventBatches := []*commonpb.DataBlob{{Data: []byte("task events")}}
+	s.executionManager.EXPECT().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+		BranchToken: versionHistory.BranchToken,
+		MinEventID:  firstEventID,
+		MaxEventID:  nextEventID,
+		PageSize:    1,
+		ShardID:     s.shardContext.GetShardID(),
+	}).Return(&persistence.ReadRawHistoryBranchResponse{HistoryEventBlobs: eventBatches}, nil)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
 	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
 	s.NoError(err)
@@ -1890,6 +1898,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
 				VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{
+					EventBatches: eventBatches,
 					StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
 						SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
 							State: syncResult.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State,

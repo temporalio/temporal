@@ -33,8 +33,13 @@ type (
 		membershipMonitor membership.Monitor
 		metricsHandler    metrics.Handler
 		healthServer      *health.Server
+		readinessCtx      context.Context
 		readinessCancel   context.CancelFunc
 		chasmRegistry     *chasm.Registry
+
+		// membershipJoinCancel interrupts the startup membership join delay, if any.
+		membershipJoinCtx    context.Context
+		membershipJoinCancel context.CancelFunc
 	}
 )
 
@@ -50,6 +55,8 @@ func NewService(
 	healthServer *health.Server,
 	chasmRegistry *chasm.Registry,
 ) *Service {
+	readinessCtx, readinessCancel := context.WithCancel(context.Background())
+	membershipJoinCtx, membershipJoinCancel := context.WithCancel(context.Background())
 	return &Service{
 		server:            server,
 		handler:           handler,
@@ -61,6 +68,11 @@ func NewService(
 		metricsHandler:    metricsHandler,
 		healthServer:      healthServer,
 		chasmRegistry:     chasmRegistry,
+		readinessCtx:      readinessCtx,
+		readinessCancel:   readinessCancel,
+
+		membershipJoinCtx:    membershipJoinCtx,
+		membershipJoinCancel: membershipJoinCancel,
 	}
 }
 
@@ -78,12 +90,10 @@ func (s *Service) Start() {
 
 	// start as NOT_SERVING, update to SERVING after initial shards acquired
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
-	readinessCtx, readinessCancel := context.WithCancel(context.Background())
-	s.readinessCancel = readinessCancel
 	go func() {
-		if s.handler.controller.InitialShardsAcquired(readinessCtx) == nil {
+		if s.handler.controller.InitialShardsAcquired(s.readinessCtx) == nil {
 			// add a few seconds for stabilization
-			if util.InterruptibleSleep(readinessCtx, 5*time.Second) == nil {
+			if util.InterruptibleSleep(s.readinessCtx, 5*time.Second) == nil {
 				s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 			}
 		}
@@ -100,6 +110,8 @@ func (s *Service) Start() {
 
 	// As soon as we join membership, other hosts will send requests for shards that we own,
 	// so we should try to start this after starting the gRPC server.
+	// If Stop runs first, its eviction prevents the membership monitor from joining even if
+	// Start is called afterwards; Stop also cancels the delay so this goroutine exits promptly.
 	go func() {
 		if delay := s.config.StartupMembershipJoinDelay(); delay > 0 {
 			// In some situations, like rolling upgrades of the history service,
@@ -107,7 +119,10 @@ func (s *Service) Start() {
 			// caused by another history instance terminating with this instance starting.
 			s.logger.Info("history start: delaying before membership start",
 				tag.Duration("startupMembershipJoinDelay", delay))
-			time.Sleep(delay)
+			if util.InterruptibleSleep(s.membershipJoinCtx, delay) != nil {
+				s.logger.Info("history start: stopped during membership join delay, not joining membership")
+				return
+			}
 		}
 		s.membershipMonitor.Start()
 	}()
@@ -117,6 +132,8 @@ func (s *Service) Start() {
 func (s *Service) Stop() {
 	s.readinessCancel()
 
+	s.membershipJoinCancel()
+
 	// remove self from membership ring and wait for traffic to drain
 	var err error
 	var waitTime time.Duration
@@ -124,7 +141,7 @@ func (s *Service) Stop() {
 		propagation := s.membershipMonitor.ApproximateMaxPropagationTime()
 		asOf := util.NextAlignedTime(time.Now().Add(propagation), align)
 		s.logger.Info("ShutdownHandler: Evicting self from membership ring as of", tag.Timestamp(asOf))
-		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf)
+		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf, 0)
 	} else {
 		s.logger.Info("ShutdownHandler: Evicting self from membership ring immediately")
 		err = s.membershipMonitor.EvictSelf()

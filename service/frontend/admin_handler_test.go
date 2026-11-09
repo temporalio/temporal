@@ -54,7 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
@@ -147,6 +147,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClientFactory = s.mockResource.ClientFactory
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
+	s.mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockAdminVisibilityMgr = s.mockResource.AdminVisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
@@ -215,6 +216,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		nil, // metricsHandler
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -231,7 +233,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetLogger(),
 		testhooks.TestHooks{},
 	)
-	s.handler = NewAdminHandler(args, namespaceDLQHandler)
+	s.handler = NewAdminHandler(args, namespaceDLQHandler, nsreplication.NewMockMutationTaskExecutor(s.controller))
 	s.handler.Start()
 }
 
@@ -355,10 +357,10 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload()
 	s.Require().ErrorContains(err, "decode namespace_task_payload")
 }
 
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsAuthoritativeRequest() {
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsMissingPayload() {
 	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{})
-	var failedPrecondition *serviceerror.FailedPrecondition
-	s.ErrorAs(err, &failedPrecondition)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutationRejectsInvalidLegacyReference() {
@@ -1161,7 +1163,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -1199,7 +1201,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{

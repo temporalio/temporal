@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	otellog "go.opentelemetry.io/otel/log"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -13,7 +14,6 @@ import (
 	"go.temporal.io/server/chasm/lib/namespacereplication"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
@@ -114,6 +114,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
+	fx.Provide(RetryDelayFloorInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
@@ -139,6 +140,7 @@ var Module = fx.Options(
 	fx.Provide(CallbackValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
+	fx.Provide(NamespaceMutationTaskExecutorProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
@@ -153,11 +155,9 @@ var Module = fx.Options(
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
-	fx.Provide(chasmnexus.NewFrontendHandler),
-	chasmnexus.Module,
+	chasmnexus.FrontendModule,
 	chasmscheduler.Module,
 	chasmworkflow.Module,
 	chasmcallback.Module,
@@ -260,6 +260,7 @@ func GrpcServerOptionsProvider(
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	businessIDInterceptor *interceptor.RoutingKeyInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
+	retryDelayFloorInterceptor *interceptor.RetryDelayFloorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
@@ -319,6 +320,8 @@ func GrpcServerOptionsProvider(
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
+		// Keep this outside telemetry so error metrics see the original limiter errors.
+		retryDelayFloorInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
@@ -704,6 +707,22 @@ func NamespaceRateLimitInterceptorProvider(
 	)
 }
 
+func RetryDelayFloorInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) *interceptor.RetryDelayFloorInterceptor {
+	return interceptor.NewRetryDelayFloorInterceptor(
+		namespaceRegistry,
+		serviceConfig.ResourceExhaustedRetryDelayFloor,
+		metricsHandler,
+		[]*serviceerror.ResourceExhausted{
+			interceptor.ErrNamespaceRateLimitServerBusy,
+			interceptor.ErrNamespaceCountLimitServerBusy,
+		},
+	)
+}
+
 func NamespaceCountLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
@@ -864,7 +883,9 @@ func AdminHandlerProvider(
 	chasmRegistry *chasm.Registry,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
+	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -894,10 +915,37 @@ func AdminHandlerProvider(
 		chasmRegistry,
 		namespaceDataMerger,
 		schedulerClient,
+		metricsHandler,
 		taskCategoryRegistry,
 		matchingClient,
 	}
-	return NewAdminHandler(args, namespaceDLQHandler)
+	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)
+}
+
+func NamespaceMutationTaskExecutorProvider(
+	configuration *Config,
+	clusterMetadata cluster.Metadata,
+	persistenceMetadataManager persistence.MetadataManager,
+	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
+	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
+	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
+) nsreplication.MutationTaskExecutor {
+	return nsreplication.NewMutationTaskExecutor(
+		clusterMetadata.GetCurrentClusterName(),
+		persistenceMetadataManager,
+		namespaceDataMerger,
+		namespaceAdmitter,
+		logger,
+		testHooks,
+		nsreplication.WithNamespaceReplicationMetrics(metricsHandler),
+		nsreplication.WithNamespaceReplicationLifecycleEvents(
+			eventLogger,
+			configuration.EmitNamespaceLifecycleEvents,
+		),
+	)
 }
 
 // NamespaceDLQHandlerProvider provides the default namespace DLQ message handler.
@@ -1065,6 +1113,7 @@ func HandlerProvider(
 			saValidator,
 		),
 		chasmNsReplClient,
+		metricsHandler,
 	)
 	return wfHandler
 }
