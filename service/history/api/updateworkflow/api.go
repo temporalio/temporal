@@ -111,6 +111,7 @@ func (u *Updater) Invoke(
 		return nil, err
 	}
 	if u.bufferedForWorkflowHeartbeatNotification {
+		// Rollout settings control WHN dispatch, while these metrics count all admitted Updates buffered behind a task.
 		handler := u.shardCtx.GetMetricsHandler().WithTags(
 			metrics.NamespaceTag(u.req.Request.Namespace),
 			metrics.StringTag("event_type", workflow.WorkflowHeartbeatNotificationUpdateAdmittedEventType),
@@ -118,7 +119,7 @@ func (u *Updater) Invoke(
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
 		if u.firstBufferedForWorkflowHeartbeatNotification {
 			metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
-			workflow.SendWorkflowHeartbeatNotification(u.shardCtx, u.req.Request.Namespace)
+			workflow.SendWorkflowHeartbeatNotification(u.shardCtx, u.req.Request.Namespace, workflow.WorkflowHeartbeatNotificationUpdateAdmittedEventType)
 		}
 	}
 

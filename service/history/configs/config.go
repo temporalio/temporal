@@ -422,7 +422,8 @@ type Config struct {
 	EnableWorkflowEagerDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 
-	EnableWorkflowHeartbeatNotification dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowHeartbeatNotification     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowHeartbeatNotificationInputTypes dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
@@ -867,7 +868,8 @@ func NewConfig(
 		EnableWorkflowEagerDispatchCheck:  dynamicconfig.EnableWorkflowEagerDispatchCheck.Get(dc),
 		NamespaceCacheRefreshInterval:     dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 
-		EnableWorkflowHeartbeatNotification: dynamicconfig.EnableWorkflowHeartbeatNotification.Get(dc),
+		EnableWorkflowHeartbeatNotification:     dynamicconfig.EnableWorkflowHeartbeatNotification.Get(dc),
+		WorkflowHeartbeatNotificationInputTypes: dynamicconfig.WorkflowHeartbeatNotificationInputTypes.Get(dc),
 
 		// Archival related
 		ArchivalTaskBatchSize:                               dynamicconfig.ArchivalTaskBatchSize.Get(dc),
