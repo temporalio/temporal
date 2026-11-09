@@ -76,6 +76,7 @@ func newCancellationTaskTestEnv(
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
 				),
+				EnableOutboundTaskThrottleController: dynamicconfig.GetBoolPropertyFn(false),
 			},
 			namespaceRegistry: nsRegistry,
 			metricsHandler:    metricsHandler,

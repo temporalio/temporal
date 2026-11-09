@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -1166,6 +1167,68 @@ func TestDeploymentVersionMonitorNotStartedWhenVersionAppearsAfterRegistration(t
 	require.NoError(t, err)
 	require.True(t, deploymentClient.called)
 	require.False(t, tqMgr.deploymentVersionMonitorRunning.Load())
+}
+
+// Count only registrations rejected by matching's task queue version limit.
+// At the limit, registration must still reach the deployment client so it can forget old versions.
+func TestTaskQueueVersionLimitReachedMetricIsEmitted(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		overLimit bool
+	}{
+		{name: "at limit allows registration"},
+		{name: "over limit records rejection", overLimit: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			deployment := &deploymentpb.Deployment{SeriesName: "deployment", BuildId: "new-build"}
+			ns, tqMgr, deploymentClient := setupVersionedTQManager(t, deployment, nil)
+			tqMgr.partitionMgr.engine.config.MaxVersionsInTaskQueue = dynamicconfig.GetIntPropertyFnFilteredByNamespace(1)
+			handler := metricstest.NewCaptureHandler()
+			tqMgr.partitionMgr.engine.metricsHandler = handler
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			// The poller's new build is absent; existing drained versions still count toward the limit.
+			data := userDataWithDeploymentVersion(deployment.SeriesName, "old-build")
+			versions := data.Data.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData[deployment.SeriesName].Versions
+			versions["old-build"].Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
+			if tc.overLimit {
+				versions["other-build"] = &deploymentspb.WorkerDeploymentVersionData{Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED}
+			}
+			tqMgr.partitionMgr.userDataManager.(*mockUserDataManager).data = data
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			// Cancel when registration is called so the test doesn't wait for user data.
+			deploymentClient.onRegister = cancel
+
+			err := tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, &pollMetadata{
+				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+					DeploymentName:       deployment.SeriesName,
+					BuildId:              deployment.BuildId,
+				},
+			})
+
+			recordings := capture.SnapshotMetric(metrics.WorkerDeploymentLimitExceeded.Name())
+			if tc.overLimit {
+				var exhausted *serviceerror.ResourceExhausted
+				require.ErrorAs(t, err, &exhausted)
+				require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, exhausted.Cause)
+				require.False(t, deploymentClient.called)
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+				require.Equal(t, map[string]string{"namespace": ns.Name().String(), "limit_type": "versions_per_task_queue"}, recordings[0].Tags)
+			} else {
+				require.ErrorIs(t, err, context.Canceled)
+				require.True(t, deploymentClient.called)
+				require.Empty(t, recordings)
+			}
+		})
+	}
 }
 
 // setupVersionedTQManager creates a physicalTaskQueueManagerImpl for a versioned

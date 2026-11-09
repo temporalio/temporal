@@ -86,6 +86,21 @@ func (c *retryableClient) DeleteNexusEndpoint(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeNamespaceRestore(
+	ctx context.Context,
+	request *operatorservice.DescribeNamespaceRestoreRequest,
+	opts ...grpc.CallOption,
+) (*operatorservice.DescribeNamespaceRestoreResponse, error) {
+	var resp *operatorservice.DescribeNamespaceRestoreResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeNamespaceRestore(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetNexusEndpoint(
 	ctx context.Context,
 	request *operatorservice.GetNexusEndpointRequest,
@@ -170,6 +185,36 @@ func (c *retryableClient) RemoveSearchAttributes(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RemoveSearchAttributes(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RestoreNamespace(
+	ctx context.Context,
+	request *operatorservice.RestoreNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*operatorservice.RestoreNamespaceResponse, error) {
+	var resp *operatorservice.RestoreNamespaceResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RestoreNamespace(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) SoftDeleteNamespace(
+	ctx context.Context,
+	request *operatorservice.SoftDeleteNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*operatorservice.SoftDeleteNamespaceResponse, error) {
+	var resp *operatorservice.SoftDeleteNamespaceResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.SoftDeleteNamespace(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
