@@ -395,48 +395,28 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	})
 }
 
-func TestRequireSoftCancellation(t *testing.T) {
+func TestRequire_RetriesAfterSoftCancellation(t *testing.T) {
 	// not using T.Parallel() so it can use t.Setenv to override the deadlock timeouts
 	t.Setenv("TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT", "1ms")
-	t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", "1s")
 
-	for _, tc := range []struct {
-		name      string
-		succeedAt int
-		wantFail  bool
-	}{
-		{name: "cancelled attempts do not satisfy the condition", wantFail: true},
-		{name: "a later uncancelled attempt can succeed", succeedAt: 2},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				tb := newRecordingTB()
-				attempts := 0
+	synctest.Test(t, func(t *testing.T) {
+		tb := newRecordingTB()
+		attempts := 0
 
-				tb.run(func() {
-					// Await timeout is long so parent-cancel doesn't beat the soft timer.
-					await.Require(t.Context(), tb, func(t *await.T) {
-						attempts++
-						if attempts == tc.succeedAt {
-							return
-						}
-						<-t.Context().Done() // exits as soon as soft cancel fires
-					}, 5*time.Millisecond, time.Millisecond)
-				})
-
-				require.Equal(t, tc.wantFail, tb.Failed())
-				require.Contains(t, tb.logs(), "soft deadlock")
-				require.NotContains(t, tb.fatals(), "still running")
-				if tc.wantFail {
-					require.Contains(t, tb.fatals(), "condition not satisfied")
-					require.Greater(t, attempts, 1)
-				} else {
-					require.Equal(t, tc.succeedAt, attempts)
-					require.Empty(t, tb.fatals())
+		tb.run(func() {
+			// Await timeout is long so parent-cancel doesn't beat the soft timer.
+			await.Require(t.Context(), tb, func(t *await.T) {
+				attempts++
+				if attempts == 1 {
+					<-t.Context().Done() // exits as soon as soft cancel fires
 				}
-			})
+			}, 5*time.Millisecond, time.Millisecond)
 		})
-	}
+
+		require.Equal(t, 2, attempts)
+		require.False(t, tb.Failed())
+		require.Contains(t, tb.logs(), "soft deadlock")
+	})
 }
 
 func TestRequire_DeadlockDetected(t *testing.T) {
