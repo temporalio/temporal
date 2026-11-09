@@ -1070,7 +1070,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 
 		timers := s.mutableState.PopTasks()[tasks.CategoryTimer]
 		s.Require().Len(timers, 1, "an enabled config with a pending target schedules a fast-forward timer")
-		s.WithinDuration(s.mutableState.ToRealTimeWithCurrentOffset(fastForward.GetTargetTime().AsTime()), timers[0].GetVisibilityTime(), 0)
+		s.WithinDuration(s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(fastForward.GetTargetTime().AsTime()), timers[0].GetVisibilityTime(), 0)
 	})
 
 	s.Run("FuturePropagatedTarget_SchedulesTimer", func() {
@@ -1095,7 +1095,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		timers := s.mutableState.PopTasks()[tasks.CategoryTimer]
 		s.Require().Len(timers, 1, "a future target schedules a fast-forward timer")
 		// AddTasks converts the virtual target to real wall-clock (minus accumulated skip).
-		s.Equal(s.mutableState.ToRealTimeWithCurrentOffset(propagatedTarget), timers[0].GetVisibilityTime())
+		s.Equal(s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(propagatedTarget), timers[0].GetVisibilityTime())
 	})
 
 	s.Run("FuturePropagatedTargetDisabledConfig_NoTimer", func() {
