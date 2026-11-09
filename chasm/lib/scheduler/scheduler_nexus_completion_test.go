@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -70,7 +71,7 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 	require.NotNil(t, lastCompletion)
 
 	if tc.completion.GetSuccess() != nil {
-		require.Equal(t, tc.completion.GetSuccess(), lastCompletion.GetSuccess())
+		protorequire.ProtoEqual(t, tc.completion.GetSuccess(), lastCompletion.GetSuccess())
 	} else if tc.completion.GetFailure() != nil {
 		require.NotNil(t, lastCompletion.GetFailure())
 	}

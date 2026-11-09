@@ -13,6 +13,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -77,7 +78,10 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 		},
 	}
 	searchAttrs := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}}
-	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}}
+	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{
+		"Memo":                    {Data: []byte("memo")},
+		legacyScheduleInfoMemoKey: {Data: []byte("schedule-info")},
+	}}
 
 	req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
 
@@ -120,6 +124,9 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 			require.Equal(t, "wf-2", start.WorkflowId)
 			require.Equal(t, "run-2", start.RunId)
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.Completed.Status)
+			require.Nil(t, start.NominalTime)
+			require.Equal(t, now.Add(-time.Hour), start.ActualTime.AsTime())
+			require.Equal(t, now.Add(-time.Millisecond), start.StartTime.AsTime())
 		default:
 			t.Fatalf("unexpected buffered start state: RunId=%q, Completed=%v", start.RunId, start.Completed)
 		}
@@ -143,7 +150,8 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 
 	// Search attributes and memo: user-defined SAs are preserved as-is.
 	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
-	require.Equal(t, memo.GetFields(), migrationState.Memo)
+	require.Equal(t, map[string]*commonpb.Payload{"Memo": memo.GetFields()["Memo"]}, migrationState.Memo)
+	require.Contains(t, memo.GetFields(), legacyScheduleInfoMemoKey, "source memo must not be mutated")
 }
 
 func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {
@@ -487,8 +495,8 @@ func TestLastCompletionResultSelectsFirstPayload(t *testing.T) {
 				return
 			}
 			first := tc.legacy.GetPayloads()[0]
-			require.Equal(t, first, v2.Success)
-			require.Equal(t, []*commonpb.Payload{first}, v1.GetPayloads())
+			protorequire.ProtoEqual(t, first, v2.Success)
+			protorequire.ProtoSliceEqual(t, []*commonpb.Payload{first}, v1.GetPayloads())
 			require.NotSame(t, first, v1.GetPayloads()[0])
 		})
 	}
