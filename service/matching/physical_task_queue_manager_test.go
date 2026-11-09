@@ -435,18 +435,18 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpAddRateExceedsDispa
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpUsesDefaultRatioThreshold() {
-	// defaultTestConfig pins the add-to-dispatch ratio threshold to 1.2 (the server default is
-	// 1.05), so a ratio just below it should not scale up while a ratio just above it should.
+	// defaultTestConfig pins the add-to-dispatch ratio threshold to 1.2, so a ratio just below it
+	// should not scale up while a ratio just above it should.
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
 
-	// 110/100 = 1.1, below the 1.2 default.
+	// 110/100 = 1.1, below the 1.2 threshold.
 	belowThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return belowThreshold })
 	s.Nil(decision)
 
-	// 130/100 = 1.3, above the 1.2 default.
+	// 130/100 = 1.3, above the 1.2 threshold.
 	aboveThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 130, TasksDispatchRate: 100}
 	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return aboveThreshold })
 	s.NotNil(decision)
@@ -622,7 +622,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimit
 	s.Nil(decision)
 }
 
-// enablePollerScaleDecisionMetrics swaps in a capturing metrics handler and turns on the opt-in
+// enablePollerScaleDecisionMetrics swaps in a capturing metrics handler and turns on the
 // poller_scale_decision metric for the manager under test, returning the handler for assertions.
 func (s *PhysicalTaskQueueManagerTestSuite) enablePollerScaleDecisionMetrics() *metricstest.CaptureHandler {
 	handler := metricstest.NewCaptureHandler()
@@ -719,10 +719,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricNoSigna
 	s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricDisabledByDefault() {
-	// The opt-in config defaults to false, so no metric should be emitted.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricNotEmittedWhenDisabled() {
 	handler := metricstest.NewCaptureHandler()
 	s.tqMgr.metricsHandler = handler
+	s.tqMgr.partitionMgr.config.EnablePollerScalingDecisionMetrics = func() bool { return false }
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
 
