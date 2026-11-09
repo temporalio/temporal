@@ -430,6 +430,13 @@ comma := ,
 EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
 EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
 EXCLUDED_PACKAGES_temporal_with_s3store := github.com/aws/aws-sdk-go-v2/service/s3
+EXCLUDED_PACKAGES_temporal_with_worker_controller := \
+	go.temporal.io/auto-scaled-workers/wci/workercomponent \
+	github.com/aws/aws-sdk-go-v2/service/lambda \
+	github.com/aws/aws-sdk-go-v2/service/ecs \
+	github.com/aws/aws-sdk-go-v2/service/bedrockagentcore \
+	github.com/aws/aws-sdk-go-v2/service/bedrockagentcorecontrol \
+	cloud.google.com/go/run/apiv2
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)

@@ -200,6 +200,9 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 }
 
 func (a *VersionActivities) DescribeWorkerControllerInstanceStatus(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.ComputeStatus, error) {
+	if err := checkWorkerControllerAvailable(); err != nil {
+		return nil, wciClientErrorToActivityError(err)
+	}
 	resp, _, err := a.WorkerControllerInstanceClient.DescribeWorkerControllerInstance(ctx, a.namespace, &deploymentpb.WorkerDeploymentVersion{DeploymentName: version.GetDeploymentName(), BuildId: version.GetBuildId()})
 	if err != nil {
 		if common.IsNotFoundError(err) {
@@ -213,6 +216,9 @@ func (a *VersionActivities) DescribeWorkerControllerInstanceStatus(ctx context.C
 }
 
 func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
+	if err := checkWorkerControllerAvailable(); err != nil {
+		return nil, wciClientErrorToActivityError(err)
+	}
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
 	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
 	if err != nil {
@@ -222,5 +228,5 @@ func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, 
 }
 
 func (a *VersionActivities) DeleteWorkerControllerInstance(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
-	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
+	return deleteWorkerControllerInstance(ctx, a.WorkerControllerInstanceClient, a.namespace, input.GetVersion(), input.GetIdentity())
 }
