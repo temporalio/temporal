@@ -3209,7 +3209,6 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdatePathVersionConflic
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, higherVersion).
 		Return("remote-cluster").AnyTimes()
 
-	updateFnCalled := false
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
@@ -3218,17 +3217,118 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdatePathVersionConflic
 			return nil, nil
 		},
 		func(ctx chasm.MutableContext, component chasm.Component) error {
-			// updateFn is called before the version conflict is detected during persist.
-			updateFnCalled = true
-			tc, ok := component.(*testComponent)
-			s.True(ok)
-			tc.ActivityInfo.ActivityId = "updated"
+			s.Fail("updateFn should not be called when the namespace is not active on this cluster")
 			return nil
 		},
 		useExistingPolicy,
 	)
-	s.True(updateFnCalled, "updateFn should be called before version conflict is detected")
-	s.Error(err)
+	var namespaceNotActive *serviceerror.NamespaceNotActive
+	s.ErrorAs(err, &namespaceNotActive)
+}
+
+// TestUpdateWithStartExecution_ExistingClosed_NamespaceNotActive verifies that when the closed current run
+// was last written at a newer failover version, UpdateWithStart neither creates a new run nor applies the
+// reuse policy on this stale cluster.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed_NamespaceNotActive() {
+	for name, reusePolicy := range map[string]chasm.BusinessIDReusePolicy{
+		"AllowDuplicate":  chasm.BusinessIDReusePolicyAllowDuplicate,
+		"RejectDuplicate": chasm.BusinessIDReusePolicyRejectDuplicate,
+	} {
+		s.Run(name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			executionKey := chasm.ExecutionKey{
+				NamespaceID: string(tests.NamespaceID),
+				BusinessID:  tv.WorkflowID(),
+			}
+
+			state := s.buildPersistenceMutableState(
+				chasm.ExecutionKey{
+					NamespaceID: executionKey.NamespaceID,
+					BusinessID:  executionKey.BusinessID,
+					RunID:       tv.RunID(),
+				},
+				&persistencespb.ActivityInfo{ActivityId: tv.ActivityID()},
+				enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				nil,
+			)
+			higherVersion := s.namespaceEntry.FailoverVersion(executionKey.BusinessID) + 100
+			state.ExecutionInfo.TransitionHistory = []*persistencespb.VersionedTransition{{
+				NamespaceFailoverVersion: higherVersion,
+				TransitionCount:          testTransitionCount,
+			}}
+
+			s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetCurrentExecutionResponse{RunID: tv.RunID()}, nil).Times(2)
+			s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
+			s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, higherVersion).
+				Return("remote-cluster").AnyTimes()
+
+			_, err := s.engine.UpdateWithStartExecution(
+				context.Background(),
+				chasm.NewComponentRef[*testComponent](executionKey),
+				func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+					return &testComponent{ActivityInfo: &persistencespb.ActivityInfo{ActivityId: tv.Any().String()}}, nil
+				},
+				func(ctx chasm.MutableContext, component chasm.Component) error {
+					return nil
+				},
+				chasm.WithBusinessIDPolicy(reusePolicy, chasm.BusinessIDConflictPolicyFail),
+			)
+			var namespaceNotActive *serviceerror.NamespaceNotActive
+			s.ErrorAs(err, &namespaceNotActive)
+		})
+	}
+}
+
+// TestUpdateWithStartExecution_ExistingRunning_ConflictPolicyFail_NamespaceNotActive verifies that
+// conflict-policy rejection does not hide that the request is being processed on a stale cluster.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_ConflictPolicyFail_NamespaceNotActive() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+
+	state := s.buildPersistenceMutableState(
+		chasm.ExecutionKey{
+			NamespaceID: executionKey.NamespaceID,
+			BusinessID:  executionKey.BusinessID,
+			RunID:       tv.RunID(),
+		},
+		&persistencespb.ActivityInfo{ActivityId: tv.ActivityID()},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		nil,
+	)
+	higherVersion := s.namespaceEntry.FailoverVersion(executionKey.BusinessID) + 100
+	state.ExecutionInfo.TransitionHistory = []*persistencespb.VersionedTransition{{
+		NamespaceFailoverVersion: higherVersion,
+		TransitionCount:          testTransitionCount,
+	}}
+
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: tv.RunID()}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, higherVersion).
+		Return("remote-cluster").AnyTimes()
+
+	_, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			s.Fail("startFn should not be called when execution is running")
+			return nil, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			s.Fail("updateFn should not be called under BusinessIDConflictPolicyFail")
+			return nil
+		},
+	)
 	var namespaceNotActive *serviceerror.NamespaceNotActive
 	s.ErrorAs(err, &namespaceNotActive)
 }

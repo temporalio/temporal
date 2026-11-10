@@ -361,14 +361,8 @@ func (e *ChasmEngine) updateWithStartExecution(
 			}
 		}
 
-		// Updating a running execution reuses it, so the conflict policy must allow that.
 		if mutableState.IsWorkflowExecutionRunning() {
-			err := conflictPolicyAllowsUpdate(
-				executionRef.BusinessID,
-				currentExecutionInfoFromMutableState(mutableState),
-				options.ConflictPolicy,
-			)
-			if err != nil {
+			if err := runningExecutionAllowsUpdate(shardContext, executionRef, mutableState, options.ConflictPolicy); err != nil {
 				executionLease.GetReleaseFn()(nil)
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
@@ -1168,20 +1162,15 @@ func (e *ChasmEngine) handleExecutionConflict(
 		}, nil
 	}
 
-	// Verify failover version and make sure it won't go backwards even if the case of split brain.
 	mutableState := newExecutionParams.mutableState
-	nsEntry := mutableState.GetNamespaceEntry()
-	if mutableState.GetCurrentVersion() < currentRunInfo.LastWriteVersion {
-		clusterMetadata := shardContext.GetClusterMetadata()
-		clusterName := clusterMetadata.ClusterNameForFailoverVersion(
-			nsEntry.IsGlobalNamespace(),
-			currentRunInfo.LastWriteVersion,
-		)
-		return chasm.StartExecutionResult{}, serviceerror.NewNamespaceNotActive(
-			nsEntry.Name().String(),
-			clusterMetadata.GetCurrentClusterName(),
-			clusterName,
-		)
+	err := checkNamespaceActive(
+		shardContext,
+		mutableState.GetNamespaceEntry(),
+		mutableState.GetCurrentVersion(),
+		currentRunInfo.LastWriteVersion,
+	)
+	if err != nil {
+		return chasm.StartExecutionResult{}, err
 	}
 
 	switch currentRunInfo.State {
@@ -1194,6 +1183,46 @@ func (e *ChasmEngine) handleExecutionConflict(
 			fmt.Sprintf("unexpected current run state when creating new execution: %v", currentRunInfo.State),
 		)
 	}
+}
+
+func checkNamespaceActive(
+	shardContext historyi.ShardContext,
+	nsEntry *namespace.Namespace,
+	localVersion int64,
+	lastWriteVersion int64,
+) error {
+	if localVersion >= lastWriteVersion {
+		return nil
+	}
+	clusterMetadata := shardContext.GetClusterMetadata()
+	return serviceerror.NewNamespaceNotActive(
+		nsEntry.Name().String(),
+		clusterMetadata.GetCurrentClusterName(),
+		clusterMetadata.ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(), lastWriteVersion),
+	)
+}
+
+func runningExecutionAllowsUpdate(
+	shardContext historyi.ShardContext,
+	executionRef chasm.ComponentRef,
+	mutableState historyi.MutableState,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	nsEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(executionRef.NamespaceID))
+	if err != nil {
+		return err
+	}
+	currentRunInfo := currentExecutionInfoFromMutableState(mutableState)
+	err = checkNamespaceActive(
+		shardContext,
+		nsEntry,
+		nsEntry.FailoverVersion(executionRef.BusinessID),
+		currentRunInfo.LastWriteVersion,
+	)
+	if err != nil {
+		return err
+	}
+	return conflictPolicyAllowsUpdate(executionRef.BusinessID, currentRunInfo, conflictPolicy)
 }
 
 // newConflictPolicyFailErr returns the error for a start that BusinessIDConflictPolicyFail rejects
