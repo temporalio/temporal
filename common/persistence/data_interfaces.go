@@ -1148,12 +1148,20 @@ type (
 
 		CreateWorkflowExecution(ctx context.Context, request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
-		// SubmitWorkflowExecutionUpdate starts an update without a new run and returns before it is
-		// durable. ctx bounds only the submission. The caller must not modify request until the
-		// receipt's Wait returns. A submission error has the same meaning as an
-		// UpdateWorkflowExecution error. A write accepted under request.RangeID must not become
-		// durable after the shard's range moves past it, so a reader after a range renewal sees
-		// every write that will ever succeed.
+		// SubmitWorkflowExecutionUpdate starts the write UpdateWorkflowExecution makes and returns
+		// before the write is durable. The receipt's Wait reports the outcome. This method only
+		// updates an existing run, so NewWorkflowSnapshot and NewWorkflowEvents must be empty.
+		//
+		// The caller must not modify the request until Wait returns. ctx bounds this call, not the
+		// wait for durability. An error from this call means what an UpdateWorkflowExecution error
+		// means. The response is computed from the request, so all of UpdateMutableStateStats,
+		// including HistoryStatistics.SizeDiff, is set when this call returns, and
+		// NewMutableStateStats is nil. Those stats describe a write that happens only if Wait
+		// returns nil.
+		//
+		// Implementations must not let a write accepted under request.RangeID become durable after
+		// the shard's range moves past it. History renews the range when Wait times out and then
+		// rereads the execution, so that read must see every write that can still succeed.
 		SubmitWorkflowExecutionUpdate(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error)
 		ConflictResolveWorkflowExecution(ctx context.Context, request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(ctx context.Context, request *DeleteWorkflowExecutionRequest) error
