@@ -135,10 +135,10 @@ func TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask(t *test
 	await.Require(t.Context(), t, func(t *await.T) {
 		buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 		require.Len(t, buffered, 1)
-		require.Equal(t, "EVENT_TYPE_TIMER_FIRED", buffered[0].Tags["input_type"])
+		require.Equal(t, "EVENT_TYPE_TIMER_FIRED", buffered[0].Tags["event_type"])
 		first := capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
 		require.Len(t, first, 1)
-		require.Equal(t, "EVENT_TYPE_TIMER_FIRED", first[0].Tags["input_type"])
+		require.Equal(t, "EVENT_TYPE_TIMER_FIRED", first[0].Tags["event_type"])
 	}, 10*time.Second, 100*time.Millisecond)
 
 	_, err = env.TaskPoller().HandleWorkflowTask(tv, resp.GetWorkflowTask(),
@@ -250,7 +250,7 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		recordings := capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
 		s.Len(recordings, 1)
 		if len(recordings) == 1 {
-			s.Equal("EVENT_TYPE_ACTIVITY_TASK_COMPLETED", recordings[0].Tags["input_type"])
+			s.Equal("EVENT_TYPE_ACTIVITY_TASK_COMPLETED", recordings[0].Tags["event_type"])
 		}
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -276,7 +276,7 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		recordings := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 		actual := make(map[string]int, len(recordings))
 		for _, recording := range recordings {
-			actual[recording.Tags["input_type"]] += int(recording.Value.(int64))
+			actual[recording.Tags["event_type"]] += int(recording.Value.(int64))
 		}
 		s.Equal(expected, actual)
 		s.Len(capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name()), 1)

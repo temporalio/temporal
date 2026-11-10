@@ -72,7 +72,7 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(c.MutableState.GetNamespaceEntry().Name().String()))
 
 	for _, eventType := range eventTypes {
-		inputHandler := handler.WithTags(metrics.StringTag("input_type", eventType))
+		inputHandler := handler.WithTags(metrics.StringTag("event_type", eventType))
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(inputHandler).Record(1)
 		if firstBufferedInput {
 			metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(inputHandler).Record(1)
