@@ -32,17 +32,18 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	second := workerHeartbeatForGroup(env.Tv().Any().String(), groupKey)
 	other := workerHeartbeatForGroup(env.Tv().Any().String(), otherGroupKey)
 
-	// Workers sharing a grouping key renew one lease; mixed groups get separate runs.
-	sendWorkerHeartbeats(t, env, first, second, other)
+	// Workers sharing a grouping key renew one lease; another group has its own run.
+	sendWorkerHeartbeats(t, env, first, second)
+	sendWorkerHeartbeats(t, env, other)
 	group, ctx, err := fetchWorkerGroup(t.Context(), env, groupKey, "")
 	require.NoError(t, err)
 	require.Len(t, group.Workers, 2)
 	require.Contains(t, group.Workers, first.WorkerInstanceKey)
 	require.Contains(t, group.Workers, second.WorkerInstanceKey)
-	require.Equal(t, groupKey, group.WorkerGroupingKey)
-	otherGroup, _, err := fetchWorkerGroup(t.Context(), env, otherGroupKey, "")
+	require.Equal(t, groupKey, ctx.ExecutionKey().BusinessID)
+	otherGroup, otherCtx, err := fetchWorkerGroup(t.Context(), env, otherGroupKey, "")
 	require.NoError(t, err)
-	require.Equal(t, otherGroupKey, otherGroup.WorkerGroupingKey)
+	require.Equal(t, otherGroupKey, otherCtx.ExecutionKey().BusinessID)
 	require.Contains(t, otherGroup.Workers, other.WorkerInstanceKey)
 	firstRunID := ctx.ExecutionKey().RunID
 	firstDeadline := group.LeaseExpirationTime.AsTime()
@@ -62,6 +63,29 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, first.WorkerIdentity, response.GetWorkerInfo().GetWorkerHeartbeat().GetWorkerIdentity())
+}
+
+// TestWorkerHeartbeatRejectsMixedGroups verifies that an invalid batch cannot
+// create durable state for either group.
+func TestWorkerHeartbeatRejectsMixedGroups(t *testing.T) {
+	t.Parallel()
+	env := newWorkerHeartbeatEnv(t, true, time.Minute)
+	first := workerHeartbeatForGroup("worker-1", "group-1")
+	second := workerHeartbeatForGroup("worker-2", "group-2")
+
+	_, err := env.FrontendClient().RecordWorkerHeartbeat(t.Context(), &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace:       env.Namespace().String(),
+		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{first, second},
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+
+	// Reject the whole batch before creating or renewing a worker group.
+	for _, key := range []string{"group-1", "group-2"} {
+		_, _, err := fetchWorkerGroup(t.Context(), env, key, "")
+		var notFound *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFound)
+	}
 }
 
 // TestWorkerHeartbeatExpiryAndReconnect verifies that the current run closes when
@@ -117,7 +141,7 @@ func TestWorkerHeartbeatWithoutDurableTracking(t *testing.T) {
 			})
 			require.NoError(t, err)
 			_, err = env.AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
-				Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: tc.businessID}, Archetype: chasmworker.Archetype,
+				Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: tc.businessID}, ArchetypeId: chasm.GenerateTypeID(chasmworker.Archetype),
 			})
 			var notFound *serviceerror.NotFound
 			require.ErrorAs(t, err, &notFound)
@@ -132,8 +156,8 @@ func newWorkerHeartbeatEnv(t *testing.T, enabled bool, heartbeatTimeout time.Dur
 		testcore.WithWorkerService("delete namespace workflow"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableDurableWorkerHeartbeats, enabled),
-		testcore.WithDynamicConfig(dynamicconfig.MinWorkerHeartbeatTimeout, heartbeatTimeout),
+		testcore.WithDynamicConfig(chasmworker.EnableDurableWorkerHeartbeats, enabled),
+		testcore.WithDynamicConfig(chasmworker.MinWorkerHeartbeatTimeout, heartbeatTimeout),
 		testcore.WithDynamicConfig(dynamicconfig.TimerProcessorMaxPollInterval, 100*time.Millisecond),
 		testcore.WithDynamicConfig(dynamicconfig.TimerProcessorMaxPollIntervalJitterCoefficient, 0.0),
 	)
@@ -153,7 +177,7 @@ func sendWorkerHeartbeats(t *testing.T, env *testcore.TestEnv, heartbeats ...*wo
 
 func fetchWorkerGroup(ctx context.Context, env *testcore.TestEnv, key, runID string) (*chasmworker.WorkerGroup, chasm.Context, error) {
 	response, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: key, RunId: runID}, Archetype: chasmworker.Archetype,
+		Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: key, RunId: runID}, ArchetypeId: chasm.GenerateTypeID(chasmworker.Archetype),
 	})
 	if err != nil {
 		return nil, nil, err

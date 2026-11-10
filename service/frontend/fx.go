@@ -92,10 +92,7 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	chasmtests.Module,
-	// Register persisted worker types for admin inspection.
-	fx.Invoke(func(registry *chasm.Registry) error {
-		return registry.Register(chasmworker.NewNilLibrary())
-	}),
+	chasmworker.FrontendModule,
 	scheduler.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
@@ -162,7 +159,6 @@ var Module = fx.Options(
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
-	fx.Provide(workerstatepb.NewWorkerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
 	chasmnexus.FrontendModule,
 	chasmscheduler.Module,

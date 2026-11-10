@@ -26,21 +26,21 @@ func TestLivenessHeartbeatRequestOmitsMetadata(t *testing.T) {
 		Identity:  "client-identity",
 		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
 			worker,
-			{WorkerInstanceKey: "worker-2", HostInfo: &workerpb.WorkerHostInfo{WorkerGroupingKey: "group-2"}},
+			{WorkerInstanceKey: "worker-2", HostInfo: &workerpb.WorkerHostInfo{WorkerGroupingKey: "group-1"}},
 		},
 	}
 	original := common.CloneProto(request)
 
-	// Forward only the selected group's worker keys and routing information.
-	got := newLivenessHeartbeatRequest(request, "group-1", []*workerpb.WorkerHeartbeat{worker})
+	// Forward the worker keys and routing information for the whole batch.
+	got := newLivenessHeartbeatRequest(request, "group-1")
 	protorequire.ProtoEqual(t, &workflowservice.RecordWorkerHeartbeatRequest{
 		Namespace:  request.Namespace,
 		Identity:   request.Identity,
 		ResourceId: "group-1",
-		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{{
-			WorkerInstanceKey: "worker-1",
-			HostInfo:          &workerpb.WorkerHostInfo{WorkerGroupingKey: "group-1"},
-		}},
+		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "worker-1"},
+			{WorkerInstanceKey: "worker-2"},
+		},
 	}, got)
 
 	// Matching still needs the original metadata for every worker.

@@ -7777,6 +7777,7 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 		return nil, err
 	}
 
+	// When durable tracking is disabled, workers are still tracked in the in-memory registry.
 	if wh.config.EnableDurableWorkerHeartbeats(namespaceName.String()) {
 		if err := wh.recordDurableWorkerHeartbeats(ctx, namespaceID.String(), request); err != nil {
 			return nil, err
@@ -7786,37 +7787,36 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
 }
 
-// recordDurableWorkerHeartbeats forwards each group to its worker state machine.
+// recordDurableWorkerHeartbeats renews the shared lease for the workers in the request.
 func (wh *WorkflowHandler) recordDurableWorkerHeartbeats(ctx context.Context, namespaceID string, request *workflowservice.RecordWorkerHeartbeatRequest) error {
-	// SDK heartbeats are normally grouped already. Regroup for robustness so
-	// mixed-group requests reach the correct worker state machines.
-	groups := make(map[string][]*workerpb.WorkerHeartbeat)
-	for _, heartbeat := range request.GetWorkerHeartbeat() {
-		groupingKey := heartbeat.GetHostInfo().GetWorkerGroupingKey()
-		// Handle older SDKs that don't set a grouping key.
-		if groupingKey != "" {
-			groups[groupingKey] = append(groups[groupingKey], heartbeat)
+	heartbeats := request.GetWorkerHeartbeat()
+	if len(heartbeats) == 0 {
+		return nil
+	}
+	groupingKey := heartbeats[0].GetHostInfo().GetWorkerGroupingKey()
+	for _, heartbeat := range heartbeats[1:] {
+		if heartbeat.GetHostInfo().GetWorkerGroupingKey() != groupingKey {
+			return serviceerror.NewInvalidArgument("worker heartbeats must have the same grouping key")
 		}
 	}
-	for groupingKey, heartbeats := range groups {
-		_, err := wh.workerClient.RecordHeartbeat(ctx, &workerstatepb.RecordHeartbeatRequest{
-			NamespaceId:       namespaceID,
-			FrontendRequest:   newLivenessHeartbeatRequest(request, groupingKey, heartbeats),
-			WorkerGroupingKey: groupingKey,
-		})
-		if err != nil {
-			return err
-		}
+	// Handle older SDKs that don't set a grouping key.
+	if groupingKey == "" {
+		return nil
 	}
-	return nil
+	_, err := wh.workerClient.RecordHeartbeat(ctx, &workerstatepb.RecordHeartbeatRequest{
+		NamespaceId:       namespaceID,
+		FrontendRequest:   newLivenessHeartbeatRequest(request, groupingKey),
+		WorkerGroupingKey: groupingKey,
+	})
+	return err
 }
 
 // Only liveness is tracked for now. Omit worker metadata to reduce copying and RPC size.
 func newLivenessHeartbeatRequest(
 	request *workflowservice.RecordWorkerHeartbeatRequest,
 	groupingKey string,
-	heartbeats []*workerpb.WorkerHeartbeat,
 ) *workflowservice.RecordWorkerHeartbeatRequest {
+	heartbeats := request.GetWorkerHeartbeat()
 	groupRequest := &workflowservice.RecordWorkerHeartbeatRequest{
 		Namespace:       request.GetNamespace(),
 		Identity:        request.GetIdentity(),
@@ -7826,7 +7826,6 @@ func newLivenessHeartbeatRequest(
 	for _, heartbeat := range heartbeats {
 		groupRequest.WorkerHeartbeat = append(groupRequest.WorkerHeartbeat, &workerpb.WorkerHeartbeat{
 			WorkerInstanceKey: heartbeat.GetWorkerInstanceKey(),
-			HostInfo:          &workerpb.WorkerHostInfo{WorkerGroupingKey: groupingKey},
 		})
 	}
 	return groupRequest

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmworker "go.temporal.io/server/chasm/lib/worker"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -458,7 +459,7 @@ func NewConfig(
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
 		MaxWorkflowRulesPerNamespace:            dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
-		EnableDurableWorkerHeartbeats:           dynamicconfig.EnableDurableWorkerHeartbeats.Get(dc),
+		EnableDurableWorkerHeartbeats:           chasmworker.EnableDurableWorkerHeartbeats.Get(dc),
 		WorkerHeartbeatsEnabled:                 dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
 		EnableCancelWorkerPollsOnShutdown:       dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
 		EnableMatchingFanOutForPollCancellation: dynamicconfig.EnableMatchingFanOutForPollCancellation.Get(dc),
