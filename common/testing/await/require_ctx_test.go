@@ -123,6 +123,24 @@ func TestRequire_SetsTimeoutContextDeadline(t *testing.T) {
 	require.Greater(t, time.Until(shortDeadline), shortTimeout-200*time.Millisecond)
 }
 
+func TestRequire_ExtendsCachedTestContextPastActiveExpiration(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		ctx := testcontext.For(t)
+		completeAt := time.Now().Add(testcontext.DefaultTimeout() + time.Second)
+
+		await.Require(ctx, t, func(t *await.T) {
+			if time.Now().Before(completeAt) {
+				t.Error("not ready")
+			}
+		}, testcontext.DefaultTimeout()+5*time.Second, testcontext.DefaultTimeout()+time.Second)
+
+		require.Same(t, ctx, testcontext.For(t))
+		require.NoError(t, ctx.Err())
+	})
+}
+
 func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 	t.Parallel()
 
