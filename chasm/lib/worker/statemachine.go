@@ -22,6 +22,7 @@ var transitionActiveHeartbeat = chasm.NewTransition(
 		g.updateWorkers(ctx, event.heartbeats)
 		deadline := ctx.Now(g).Add(event.leaseDuration)
 		g.LeaseExpirationTime = timestamppb.New(deadline)
+		// Replace the previous expiry task so the group closes at the renewed deadline.
 		ctx.AddTask(g, chasm.TaskAttributes{ScheduledTime: deadline}, &workerstatepb.LeaseExpiryTask{})
 		return nil
 	},

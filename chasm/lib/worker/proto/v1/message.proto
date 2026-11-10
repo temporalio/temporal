@@ -8,8 +8,6 @@ option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerp
 
 // WorkerGroupState owns the shared lease for workers heartbeating together.
 message WorkerGroupState {
-  // SDK-generated grouping key, also used as the CHASM Business ID.
-  string worker_grouping_key = 1;
   // Lifecycle of the group run. Individual workers may stop while the group stays active.
   WorkerGroupStatus status = 2;
   // Lease deadline computed using CHASM's clock and the supplied lease duration.

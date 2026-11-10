@@ -12,13 +12,10 @@ type leaseExpiryTaskExecutor struct {
 func (e *leaseExpiryTaskExecutor) Validate(
 	_ chasm.Context,
 	group *WorkerGroup,
-	invocation chasm.TaskInvocation,
+	_ chasm.TaskInvocation,
 	_ *workerpb.LeaseExpiryTask,
 ) (bool, error) {
-	// Ignore expiry tasks whose deadline no longer matches the current lease.
-	// The lease has already been extended, so this task must not close the group.
-	return group.Status == workerpb.WORKER_GROUP_STATUS_ACTIVE &&
-		invocation.ScheduledTime.Equal(group.GetLeaseExpirationTime().AsTime()), nil
+	return group.Status == workerpb.WORKER_GROUP_STATUS_ACTIVE, nil
 }
 
 func (e *leaseExpiryTaskExecutor) Execute(

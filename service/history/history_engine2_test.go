@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -86,6 +87,11 @@ import (
 )
 
 type (
+	replacementEventCheckingShard struct {
+		historyi.ShardContext
+		checkLocksReleased func()
+	}
+
 	engine2Suite struct {
 		suite.Suite
 		*require.Assertions
@@ -116,6 +122,11 @@ type (
 		tv            *testvars.TestVars
 	}
 )
+
+func (s *replacementEventCheckingShard) GetEventLogger() otellog.Logger {
+	s.checkLocksReleased()
+	return s.ShardContext.GetEventLogger()
+}
 
 // noopWorkerDeploymentClient is a minimal stub for workerdeployment.Client used in tests.
 // Only SignalVersionReactivation is implemented since it's the only method referenced
@@ -1831,6 +1842,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameRequestID() 
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RequestDedup() {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	s.setupStartWorkflowExecutionForRunning()
 	startRequest := makeMockStartRequest(
 		s.tv,
@@ -1845,9 +1857,44 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RequestDe
 	s.NoError(err)
 	s.True(resp.Started)
 	s.Equal(s.tv.RunID(), resp.GetRunId())
+	s.Empty(parentChildRecords(s.parentChildEventCapture))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_PostCommitObservability() {
+	for _, tc := range []struct {
+		name       string
+		emitEvents bool
+	}{
+		{name: "wide events enabled", emitEvents: true},
+		{name: "wide events disabled"},
+	} {
+		s.Run(tc.name, func() {
+			s.testOrphanedChildReplacementPostCommitObservability(tc.emitEvents)
+		})
+	}
+}
+
+func (s *engine2Suite) testOrphanedChildReplacementPostCommitObservability(emitEvents bool) {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(emitEvents)
+	locksChecked := false
+	s.historyEngine.shardContext = &replacementEventCheckingShard{
+		ShardContext: s.mockShard,
+		checkLocksReleased: func() {
+			ctx, cancel := context.WithTimeout(s.T().Context(), time.Second)
+			defer cancel()
+			release, err := s.workflowCache.GetOrCreateCurrentExecution(
+				ctx, s.mockShard, s.tv.NamespaceID(), s.tv.WorkflowID(), chasm.WorkflowArchetypeID, locks.PriorityHigh,
+			)
+			s.NoError(err, "the workflow-ID lock must be released before emitting")
+			release(nil)
+			_, release, err = s.workflowCache.GetOrCreateWorkflowExecution(
+				ctx, s.mockShard, s.tv.NamespaceID(), s.tv.WorkflowExecution(), locks.PriorityHigh,
+			)
+			s.NoError(err, "the orphan run lock must be released before emitting")
+			release(nil)
+			locksChecked = true
+		},
+	}
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -1914,6 +1961,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_PostCommi
 	s.ErrorIs(err, persistenceErr)
 	s.Nil(resp)
 	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
+	s.Empty(parentChildRecords(s.parentChildEventCapture), "failed persistence must not emit a replacement event")
+	s.False(locksChecked)
 
 	resp, err = s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 	s.NoError(err)
@@ -1923,9 +1972,39 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_PostCommi
 	s.Len(recordings, 1)
 	s.Equal(int64(1), recordings[0].Value)
 	s.Equal("replaced", recordings[0].Tags["outcome"])
+	wideRecords := parentChildRecords(s.parentChildEventCapture)
+	s.Equal(emitEvents, locksChecked)
+	if !emitEvents {
+		s.Empty(wideRecords)
+		return
+	}
+	s.Len(wideRecords, 1)
+	attributes := wideEventAttributes(wideRecords[0])
+	s.Equal(string(wideevents.ReplicationApplied), attributes["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeReplaced, attributes["outcome"].AsString())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION.String(), attributes["task_type"].AsString())
+	s.Equal(s.tv.NamespaceID().String(), attributes["namespace_id"].AsString())
+	s.Equal(s.tv.WorkflowID(), attributes["workflow_id"].AsString())
+	s.Equal(s.tv.RunID(), attributes["run_id"].AsString())
+	s.Equal(resp.GetRunId(), attributes["new_run_id"].AsString())
+	s.Equal(parentExecution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
+	s.Equal(parentExecution.GetRunId(), attributes["parent_run_id"].AsString())
+	s.Equal(int64(72), attributes["parent_initiated_id"].AsInt64())
+	s.Equal(map[string]any{
+		"event_type":                           wideevents.ParentChildLifecycleEventType,
+		"phase":                                wideevents.ParentChildPhaseOrphanedChildReplacement,
+		"outcome":                              wideevents.ParentChildOutcomeReplaced,
+		"child_workflow_state":                 enumsspb.WORKFLOW_EXECUTION_STATE_CREATED.String(),
+		"child_workflow_status":                enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		"first_workflow_task_scheduled":        false,
+		"parent_initiated_version":             float64(892),
+		"replacement_parent_initiated_id":      float64(75),
+		"replacement_parent_initiated_version": float64(925),
+	}, wideEventDetails(wideRecords[0]))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_ClosedAfterSnapshot() {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -1990,6 +2069,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_ClosedAft
 	s.Len(recordings, 1)
 	s.Equal(int64(1), recordings[0].Value)
 	s.Equal("rejected_race_closed", recordings[0].Tags["outcome"])
+	s.Empty(parentChildRecords(s.parentChildEventCapture))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameAttachedRequestID() {
@@ -2029,6 +2109,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_PolicyFail() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_IgnoresCompletedSnapshot() {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -2048,9 +2129,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_IgnoresCo
 	s.ErrorAs(err, &expectedErr)
 	s.Nil(resp)
 	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
+	s.Empty(parentChildRecords(s.parentChildEventCapture))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_IgnoresRunningSnapshot() {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -2066,6 +2149,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_IgnoresRu
 	s.ErrorAs(err, &expectedErr)
 	s.Nil(resp)
 	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
+	s.Empty(parentChildRecords(s.parentChildEventCapture))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
