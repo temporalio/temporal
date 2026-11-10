@@ -125,6 +125,15 @@ func For(tb testing.TB, opts ...Option) context.Context {
 	return st.current
 }
 
+// Name returns the owning test's name, or an empty string for a foreign context.
+func Name(ctx context.Context) string {
+	st, ok := ctx.Value(ownerKey{}).(*contextState)
+	if !ok {
+		return ""
+	}
+	return st.owner.Name()
+}
+
 // Option configures the test context returned by [For].
 type Option func(*config)
 
@@ -209,8 +218,8 @@ func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Durat
 		return ctx
 	}
 
-	st, _ := ctx.Value(ownerKey{}).(*contextState)
-	if st == nil {
+	st, ok := ctx.Value(ownerKey{}).(*contextState)
+	if !ok {
 		// ctx isn't derived from any test context - e.g. one built directly
 		// from context.Background(), or tb.Context() itself - so there is
 		// nothing to extend.

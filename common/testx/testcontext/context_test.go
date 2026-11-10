@@ -42,6 +42,44 @@ func TestWithTimeout(t *testing.T) {
 	})
 }
 
+func TestName(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		context func(*testing.T) context.Context
+		foreign bool
+	}{
+		{name: "foreign", context: func(t *testing.T) context.Context { return t.Context() }, foreign: true},
+		{name: "test", context: func(t *testing.T) context.Context { return For(t) }},
+		{name: "derived", context: func(t *testing.T) context.Context { return context.WithoutCancel(For(t)) }},
+		{name: "extended", context: func(t *testing.T) context.Context {
+			return EnsureRemaining(For(t), t, DefaultTimeout()+time.Second)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := tc.context(t)
+			if tc.foreign {
+				require.Empty(t, Name(ctx))
+			} else {
+				require.Equal(t, t.Name(), Name(ctx))
+			}
+		})
+	}
+
+	t.Run("parent context in child test", func(t *testing.T) {
+		t.Parallel()
+		ctx := For(t)
+		name := t.Name()
+		t.Run("child", func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, name, Name(ctx))
+			require.Equal(t, t.Name(), Name(For(t)))
+		})
+	})
+}
+
 func TestContextDecorators(t *testing.T) {
 	t.Parallel()
 
