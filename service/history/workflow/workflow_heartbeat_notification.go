@@ -209,8 +209,6 @@ func SendWorkflowHeartbeatNotification(
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 300*time.Millisecond)
-		defer cancel()
 		matchingClient, err := shardCtx.GetMatchingClient()
 		if err != nil {
 			shardCtx.GetLogger().Warn("Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
@@ -230,7 +228,7 @@ func SendWorkflowHeartbeatNotification(
 			shardCtx.GetLogger().Warn("Unable to encode workflow heartbeat notification", tag.Error(err))
 			return
 		}
-		matchCtx, matchCancel := context.WithTimeout(ctx, 200*time.Millisecond)
+		matchCtx, matchCancel := context.WithTimeout(context.WithoutCancel(ctx), 1500*time.Millisecond)
 		defer matchCancel()
 		_, err = matchingClient.DispatchNexusTask(matchCtx, &matchingservice.DispatchNexusTaskRequest{
 			NamespaceId: notification.namespaceID,
