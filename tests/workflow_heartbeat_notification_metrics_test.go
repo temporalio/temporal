@@ -303,7 +303,7 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 	}()
 	s.Await(func(s *NexusWorkflowTestSuite) {
 		for _, recording := range capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name()) {
-			if recording.Tags["input_type"] == "UPDATE_ADMITTED" {
+			if recording.Tags["event_type"] == "UPDATE_ADMITTED" {
 				return
 			}
 		}

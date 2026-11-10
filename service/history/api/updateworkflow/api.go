@@ -113,7 +113,7 @@ func (u *Updater) Invoke(
 	if u.bufferedForWorkflowHeartbeatNotification {
 		handler := u.shardCtx.GetMetricsHandler().WithTags(
 			metrics.NamespaceTag(u.req.Request.Namespace),
-			metrics.StringTag("input_type", workflow.WorkflowHeartbeatNotificationUpdateAdmittedInputType),
+			metrics.StringTag("event_type", workflow.WorkflowHeartbeatNotificationUpdateAdmittedEventType),
 		)
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
 		if u.firstBufferedForWorkflowHeartbeatNotification {

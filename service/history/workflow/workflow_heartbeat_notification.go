@@ -6,8 +6,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-// WorkflowHeartbeatNotificationUpdateAdmittedInputType identifies an Update waiting in the Registry.
-const WorkflowHeartbeatNotificationUpdateAdmittedInputType = "UPDATE_ADMITTED"
+// WorkflowHeartbeatNotificationUpdateAdmittedEventType identifies an admitted Update before it has a history event.
+const WorkflowHeartbeatNotificationUpdateAdmittedEventType = "UPDATE_ADMITTED"
 
 // IsWorkflowHeartbeatNotificationInputType reports whether an event type is eligible for a Workflow Task heartbeat notification.
 // Buffering alone does not make an event eligible; for example, ActivityTaskStarted records progress but does not normally require a new Workflow Task.
