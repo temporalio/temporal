@@ -356,6 +356,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 					ExecutionKey: existingRef.ExecutionKey,
 					ExecutionRef: serializedRef,
 					Created:      false,
+					Deduplicated: true,
 				}, nil
 			}
 		}
@@ -389,7 +390,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 			}, nil
 		}
 
-		executionKey, newExecutionRef, created, err := e.startNewForClosedExecution(
+		return e.startNewForClosedExecution(
 			ctx,
 			shardContext,
 			executionLease,
@@ -399,14 +400,6 @@ func (e *ChasmEngine) updateWithStartExecution(
 			updateFn,
 			options,
 		)
-		if err != nil {
-			return chasm.EngineUpdateWithStartExecutionResult{}, err
-		}
-		return chasm.EngineUpdateWithStartExecutionResult{
-			ExecutionKey: executionKey,
-			ExecutionRef: newExecutionRef,
-			Created:      created,
-		}, nil
 	case *serviceerror.NotFound:
 		executionKey, newExecutionRef, created, err := e.startAndUpdateExecution(
 			ctx,
@@ -461,7 +454,7 @@ func (e *ChasmEngine) startNewForClosedExecution(
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
-) (chasm.ExecutionKey, []byte, bool, error) {
+) (chasm.EngineUpdateWithStartExecutionResult, error) {
 	newExecutionParams, err := e.createNewExecutionWithUpdate(
 		ctx,
 		shardContext,
@@ -472,13 +465,24 @@ func (e *ChasmEngine) startNewForClosedExecution(
 		options,
 	)
 	if err != nil {
-		return chasm.ExecutionKey{}, nil, false, err
+		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
 	currentRunInfo := currentExecutionInfoFromMutableState(executionLease.GetMutableState())
+	// handleExecutionConflict returns the closed run without creating newExecutionParams when the
+	// request ID was already used on it.
+	_, deduplicated := currentRunInfo.RequestIDs[options.RequestID]
 
 	result, err := e.handleExecutionConflict(ctx, shardContext, newExecutionParams, currentRunInfo, options)
-	return result.ExecutionKey, result.ExecutionRef, result.Created, err
+	if err != nil {
+		return chasm.EngineUpdateWithStartExecutionResult{}, err
+	}
+	return chasm.EngineUpdateWithStartExecutionResult{
+		ExecutionKey: result.ExecutionKey,
+		ExecutionRef: result.ExecutionRef,
+		Created:      result.Created,
+		Deduplicated: deduplicated,
+	}, nil
 }
 
 // applyUpdateWithLease applies an update function to a component within a held lease,

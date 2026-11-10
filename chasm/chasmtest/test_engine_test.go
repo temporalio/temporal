@@ -292,12 +292,12 @@ func TestUpdateWithStartDeduplicatesRequestID(t *testing.T) {
 		return result
 	}
 
-	updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting)
+	require.False(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting).Deduplicated)
 	require.Equal(t, 1, updateCount)
 
-	updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting)
-	updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyFail)
-	updateWithStart("create-request-id", chasm.BusinessIDConflictPolicyFail)
+	require.True(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting).Deduplicated)
+	require.True(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyFail).Deduplicated)
+	require.True(t, updateWithStart("create-request-id", chasm.BusinessIDConflictPolicyFail).Deduplicated)
 	require.Equal(t, 1, updateCount)
 }
 

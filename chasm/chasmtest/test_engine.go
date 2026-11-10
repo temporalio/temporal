@@ -207,6 +207,7 @@ func (e *Engine) UpdateWithStartExecution(
 				ExecutionKey: current.key,
 				ExecutionRef: serializedRef,
 				Created:      false,
+				Deduplicated: true,
 			}, nil
 		}
 

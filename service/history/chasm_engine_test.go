@@ -2198,6 +2198,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_RequestI
 	result, err := updateWithStart()
 	s.NoError(err)
 	s.False(result.Created)
+	s.False(result.Deduplicated)
 	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
 	s.Equal(1, updateCount)
 
@@ -2205,6 +2206,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_RequestI
 	retryResult, err := updateWithStart()
 	s.NoError(err)
 	s.False(retryResult.Created)
+	s.True(retryResult.Deduplicated)
 	s.Equal(tv.RunID(), retryResult.ExecutionKey.RunID)
 	retryRef, err := chasm.DeserializeComponentRef(retryResult.ExecutionRef)
 	s.NoError(err)
@@ -2622,6 +2624,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_AssumeNew_ExistingRunnin
 	)
 	s.NoError(err)
 	s.False(result.Created)
+	s.False(result.Deduplicated)
 	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
 	// startFn and updateFn ran once on the discarded new execution; updateFn ran again on the existing one.
 	s.Equal(1, startFnCalls)
@@ -2938,6 +2941,117 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 	deserializedRef, err := chasm.DeserializeComponentRef(result.ExecutionRef)
 	s.NoError(err)
 	s.Equal(result.ExecutionKey, deserializedRef.ExecutionKey)
+}
+
+// TestUpdateWithStartExecution_AssumeNew_ExistingRunning_RequestIDDedup verifies that when the create
+// conflicts with a running execution that already used the request ID, the result is deduplicated and
+// UpdateOutput is not the output updateFn returned for the discarded new execution.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_AssumeNew_ExistingRunning_RequestIDDedup() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	requestID := tv.RequestID()
+
+	state := s.buildPersistenceMutableState(
+		chasm.ExecutionKey{NamespaceID: executionKey.NamespaceID, BusinessID: executionKey.BusinessID, RunID: tv.RunID()},
+		&persistencespb.ActivityInfo{ActivityId: tv.ActivityID()},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		nil,
+	)
+	state.ExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+	}
+	gomock.InOrder(
+		s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(nil, &persistence.CurrentWorkflowConditionFailedError{
+				Msg:    "current workflow condition failed",
+				RunID:  tv.RunID(),
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			}).Times(1),
+		s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetCurrentExecutionResponse{RunID: tv.RunID()}, nil).Times(1),
+		s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1),
+	)
+	// No UpdateWorkflowExecution.
+
+	updateFnCalls := 0
+	result, err := chasm.UpdateWithStartExecution(
+		chasm.NewEngineContext(context.Background(), s.engine),
+		executionKey,
+		func(ctx chasm.MutableContext, _ any) (*testComponent, error) {
+			return &testComponent{ActivityInfo: &persistencespb.ActivityInfo{ActivityId: tv.Any().String()}}, nil
+		},
+		func(tc *testComponent, ctx chasm.MutableContext, _ any) (string, error) {
+			updateFnCalls++
+			return "output-of-" + tc.ActivityInfo.ActivityId, nil
+		},
+		nil,
+		chasm.WithAssumeNew(),
+		chasm.WithStartRequestID(requestID),
+		useExistingPolicy,
+	)
+	s.NoError(err)
+	s.False(result.Created)
+	s.True(result.Deduplicated)
+	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
+	s.Equal(1, updateFnCalls, "updateFn ran only on the discarded new execution")
+	s.Empty(result.UpdateOutput)
+}
+
+// TestUpdateWithStartExecution_ExistingClosed_RequestIDDedup verifies that a retried request ID on a closed
+// execution returns that execution as deduplicated, without creating a new run or returning the output
+// updateFn returned for the discarded new execution.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed_RequestIDDedup() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	requestID := tv.RequestID()
+
+	state := s.buildPersistenceMutableState(
+		chasm.ExecutionKey{NamespaceID: executionKey.NamespaceID, BusinessID: executionKey.BusinessID, RunID: tv.RunID()},
+		&persistencespb.ActivityInfo{ActivityId: tv.ActivityID()},
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		nil,
+	)
+	state.ExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+	}
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: tv.RunID()}, nil).Times(2)
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
+	// No CreateWorkflowExecution.
+
+	updateFnCalls := 0
+	result, err := chasm.UpdateWithStartExecution(
+		chasm.NewEngineContext(context.Background(), s.engine),
+		executionKey,
+		func(ctx chasm.MutableContext, _ any) (*testComponent, error) {
+			return &testComponent{ActivityInfo: &persistencespb.ActivityInfo{ActivityId: tv.Any().String()}}, nil
+		},
+		func(tc *testComponent, ctx chasm.MutableContext, _ any) (string, error) {
+			updateFnCalls++
+			return "output-of-" + tc.ActivityInfo.ActivityId, nil
+		},
+		nil,
+		chasm.WithStartRequestID(requestID),
+	)
+	s.NoError(err)
+	s.False(result.Created)
+	s.True(result.Deduplicated)
+	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
+	s.Equal(1, updateFnCalls, "updateFn ran only on the discarded new execution")
+	s.Empty(result.UpdateOutput)
 }
 
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnError() {
