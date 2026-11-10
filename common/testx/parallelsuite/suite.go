@@ -312,10 +312,7 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 
 func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect.Method {
 	expectedNumIn := 1 + len(args)
-	inheritedType := structType.Field(0).Type
-	if inheritedType.Kind() != reflect.Pointer {
-		inheritedType = reflect.PointerTo(inheritedType)
-	}
+	inheritedType := embeddedSuiteType(structType)
 
 	for method := range ptrType.Methods() {
 		name := method.Name
@@ -367,4 +364,12 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 		methods = append(methods, method)
 	}
 	return methods
+}
+
+func embeddedSuiteType(structType reflect.Type) reflect.Type {
+	typ := structType.Field(0).Type
+	if typ.Kind() != reflect.Pointer {
+		typ = reflect.PointerTo(typ)
+	}
+	return typ
 }
