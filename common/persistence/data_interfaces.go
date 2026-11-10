@@ -383,6 +383,8 @@ type (
 		DeleteChasmNodes          map[string]struct{}
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
+		// FlushedBufferedEvents is used for metrics after persistence succeeds. It is not persisted.
+		FlushedBufferedEvents []*historypb.HistoryEvent
 
 		Tasks                 map[tasks.Category][]tasks.Task
 		BestEffortDeleteTasks map[tasks.Category][]tasks.Key

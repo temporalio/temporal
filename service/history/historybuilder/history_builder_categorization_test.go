@@ -302,6 +302,21 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 	})
 }
 
+func TestHistoryBuilderTracksFlushedBufferedEvents(t *testing.T) {
+	t.Parallel()
+	dbEvent := &historypb.HistoryEvent{EventId: common.BufferedEventID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}
+	memEvent := &historypb.HistoryEvent{EventId: common.BufferedEventID, EventType: enumspb.EVENT_TYPE_TIMER_FIRED}
+	hb := newHistoryBuilderFromConfig(builderConfig{nextEventId: 42, dbBufferBatch: []*historypb.HistoryEvent{dbEvent}})
+	hb.memBufferBatch = []*historypb.HistoryEvent{memEvent}
+	hb.FlushBufferToCurrentBatch()
+
+	mutation, err := hb.Finish(false)
+	require.NoError(t, err)
+	require.Equal(t, []*historypb.HistoryEvent{dbEvent, memEvent}, mutation.FlushedBufferedEvents)
+	require.Equal(t, int64(42), dbEvent.GetEventId())
+	require.Equal(t, int64(43), memEvent.GetEventId())
+}
+
 func TestHistoryBuilder_Finish(t *testing.T) {
 
 	t.Run("finish empty", func(t *testing.T) {

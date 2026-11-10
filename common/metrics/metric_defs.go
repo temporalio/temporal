@@ -1365,6 +1365,7 @@ var (
 		"workflow_task_completion_buffer_lost",
 		WithDescription("Paginated workflow task completions aborted because the buffer was lost."),
 	)
+	WorkflowBufferedInputFlushLatency = NewTimerDef("workflow_buffered_input_flush_latency")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")

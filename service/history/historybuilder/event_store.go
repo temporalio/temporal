@@ -28,9 +28,10 @@ type EventStore struct {
 	dbClearBuffer bool
 
 	// in mem events
-	memEventsBatches [][]*historypb.HistoryEvent
-	memLatestBatch   []*historypb.HistoryEvent
-	memBufferBatch   []*historypb.HistoryEvent
+	memEventsBatches   [][]*historypb.HistoryEvent
+	memLatestBatch     []*historypb.HistoryEvent
+	memBufferBatch     []*historypb.HistoryEvent
+	flushedBufferBatch []*historypb.HistoryEvent
 
 	// Cumulative serialized size in bytes of events currently in memLatestBatch.
 	// When appending the next event would push this above
@@ -189,6 +190,7 @@ func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[string]in
 	// 0th reorder events in case casandra reorder the buffered events
 	// TODO eventually remove this ordering
 	bufferBatch = b.reorderBuffer(bufferBatch)
+	b.flushedBufferBatch = append(b.flushedBufferBatch, bufferBatch...)
 
 	// 1st assign event ID
 	for _, event := range bufferBatch {
@@ -250,6 +252,7 @@ func (b *EventStore) Finish(
 
 	return &HistoryMutation{
 		DBEventsBatches:        dbEventsBatches,
+		FlushedBufferedEvents:  b.flushedBufferBatch,
 		DBClearBuffer:          dbClearBuffer,
 		DBBufferBatch:          dbBufferBatch,
 		MemBufferBatch:         memBufferBatch,

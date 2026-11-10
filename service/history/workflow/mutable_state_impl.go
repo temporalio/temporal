@@ -7790,6 +7790,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		DeleteChasmNodes:          result.chasmNodesMutation.DeletedNodes,
 		NewBufferedEvents:         result.bufferEvents,
 		ClearBufferedEvents:       result.clearBuffer,
+		FlushedBufferedEvents:     result.flushedBufferedEvents,
 
 		Tasks:                 ms.InsertTasks,
 		BestEffortDeleteTasks: ms.BestEffortDeleteTasks,
@@ -7891,11 +7892,12 @@ func (ms *MutableStateImpl) updateMemo(
 }
 
 type closeTransactionResult struct {
-	workflowEventsSeq  []*persistence.WorkflowEvents
-	bufferEvents       []*historypb.HistoryEvent
-	clearBuffer        bool
-	checksum           *persistencespb.Checksum
-	chasmNodesMutation chasm.NodesMutation
+	workflowEventsSeq     []*persistence.WorkflowEvents
+	bufferEvents          []*historypb.HistoryEvent
+	flushedBufferedEvents []*historypb.HistoryEvent
+	clearBuffer           bool
+	checksum              *persistencespb.Checksum
+	chasmNodesMutation    chasm.NodesMutation
 }
 
 func (ms *MutableStateImpl) SetContextMetadata(
@@ -7959,7 +7961,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	// the latter might fail the workflow task and buffered events must be flushed afterwards.
 	// We need to save the value of ms.isStateDirty() before calling closeTransactionPrepareEvents
 	// because flushing the buffered events might change the dirty state.
-	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	workflowEventsSeq, eventBatches, bufferEvents, flushedBufferedEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -8042,11 +8044,12 @@ func (ms *MutableStateImpl) closeTransaction(
 	}
 
 	return closeTransactionResult{
-		workflowEventsSeq:  workflowEventsSeq,
-		bufferEvents:       bufferEvents,
-		clearBuffer:        clearBuffer,
-		checksum:           checksum,
-		chasmNodesMutation: chasmNodesMutation,
+		workflowEventsSeq:     workflowEventsSeq,
+		bufferEvents:          bufferEvents,
+		flushedBufferedEvents: flushedBufferedEvents,
+		clearBuffer:           clearBuffer,
+		checksum:              checksum,
+		chasmNodesMutation:    chasmNodesMutation,
 	}, nil
 }
 
@@ -8803,15 +8806,15 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 
 func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	transactionPolicy historyi.TransactionPolicy,
-) ([]*persistence.WorkflowEvents, [][]*historypb.HistoryEvent, []*historypb.HistoryEvent, bool, error) {
+) (workflowEventSequences []*persistence.WorkflowEvents, batches [][]*historypb.HistoryEvent, newBufferedEvents, flushedBufferedEvents []*historypb.HistoryEvent, clearBufferedEvents bool, err error) {
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, nil, false, err
 	}
 
 	historyMutation, err := ms.hBuilder.Finish(!ms.HasStartedWorkflowTask())
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, nil, false, err
 	}
 
 	// TODO @wxing1292 need more refactoring to make the logic clean
@@ -8824,7 +8827,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
 	historyNodeTxnIDs, err := ms.shard.GenerateTaskIDs(len(newEventsBatches))
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, nil, false, err
 	}
 	for index, eventBatch := range newEventsBatches {
 		workflowEventsSeq[index] = &persistence.WorkflowEvents{
@@ -8843,7 +8846,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		if ms.config.ExternalPayloadsEnabled(ms.GetNamespaceEntry().Name().String()) {
 			externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch, ms.metricsHandler)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, nil, nil, false, err
 			}
 			ms.AddExternalPayloadSize(externalPayloadSize)
 			ms.AddExternalPayloadCount(externalPayloadCount)
@@ -8854,7 +8857,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		transactionPolicy,
 		workflowEventsSeq,
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, nil, false, err
 	}
 
 	if len(workflowEventsSeq) > 0 {
@@ -8864,11 +8867,11 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 			lastEvent,
 			transactionPolicy,
 		); err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, nil, false, err
 		}
 	}
 
-	return workflowEventsSeq, newEventsBatches, newBufferBatch, clearBuffer, nil
+	return workflowEventsSeq, newEventsBatches, newBufferBatch, historyMutation.FlushedBufferedEvents, clearBuffer, nil
 }
 
 func (ms *MutableStateImpl) eventsToReplicationTask(
