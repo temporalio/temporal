@@ -4,7 +4,7 @@
 # repositories by default from December 2, 2026. Under `pull_request`, PRs
 # from forks and bot actors get no secrets, so only PRs from branches of this
 # repository are reviewed. The `check-review-eligibility` job still gates the
-# review job behind trusted user checks.
+# review job behind the opt-in labels and review teams.
 name: Claude review for opted-in PRs
 
 on:
@@ -52,11 +52,9 @@ jobs:
           app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          # Least-privilege: members:read for team-membership lookups,
-          # pull-requests:read for PR metadata, and
+          # Least-privilege: members:read for team-membership lookups and
           # issues:read for PR label lookups.
           permission-members: read
-          permission-pull-requests: read
           permission-issues: read
       - id: resolve
         env:
@@ -80,7 +78,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           AUTHOR: ${{ steps.resolve.outputs.author }}
-          EVENT_ACTOR: ${{ github.actor }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_LABEL_NAME: ${{ github.event.label.name }}
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
@@ -111,59 +108,6 @@ jobs:
           has_label() {
             printf '%s\n' "$labels" | awk -v label="$1" 'tolower($0) == tolower(label) { found = 1 } END { exit !found }'
           }
-
-          require_org_member() {
-            user="$1"
-            role="$2"
-
-            echo "Checking temporalio organization membership for ${role} ${user}"
-            if response=$(gh api \
-                -H "Accept: application/vnd.github+json" \
-                "/orgs/temporalio/memberships/${user}" 2>&1); then
-              if [ "$(echo "$response" | jq -r '.state')" != "active" ]; then
-                skip_review "${role} is not an active temporalio organization member"
-              fi
-            elif echo "$response" | grep -q "HTTP 404"; then
-              skip_review "${role} is not a temporalio organization member"
-            else
-              echo "Unexpected error checking temporalio organization membership for ${role} ${user}: ${response}" >&2
-              exit 1
-            fi
-            echo "${role} ${user} is an active temporalio organization member"
-          }
-
-          require_repo_write() {
-            user="$1"
-            role="$2"
-
-            echo "Checking repository write permission for ${role} ${user}"
-            if response=$(gh api \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${REPO}/collaborators/${user}/permission" 2>&1); then
-              permission=$(echo "$response" | jq -r '.permission')
-              case "$permission" in
-                admin|write)
-                  echo "${role} ${user} has repository ${permission} permission"
-                  ;;
-                *)
-                  skip_review "${role} has repository ${permission} permission, not write/admin"
-                  ;;
-              esac
-            elif echo "$response" | grep -q "HTTP 404"; then
-              skip_review "${role} is not a repository collaborator"
-            else
-              echo "Unexpected error checking repository permission for ${role} ${user}: ${response}" >&2
-              exit 1
-            fi
-          }
-
-          if [ "$EVENT_ACTION" = "labeled" ]; then
-            require_org_member "$EVENT_ACTOR" "labeler"
-            require_repo_write "$EVENT_ACTOR" "labeler"
-          else
-            require_org_member "$AUTHOR" "author"
-            require_repo_write "$AUTHOR" "author"
-          fi
 
           echo "Fetching labels for PR #${PR_NUMBER}"
           labels=$(gh api -H "Accept: application/vnd.github+json" \
