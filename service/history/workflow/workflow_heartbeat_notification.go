@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/base64"
 	"slices"
 	"strings"
 	"time"
@@ -276,34 +277,45 @@ func SendWorkflowHeartbeatNotification(
 				tag.Error(err))
 			return
 		}
-		outcome = classifyWorkflowHeartbeatNotificationResponse(response)
+		var currentTaskToken []byte
+		outcome, currentTaskToken = classifyWorkflowHeartbeatNotificationResponse(response)
+		if outcome == workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH.String() {
+			shardCtx.GetLogger().Info("Workflow heartbeat notification task token mismatch",
+				tag.WorkflowNamespace(notification.namespaceName),
+				tag.WorkflowID(notification.workflowKey.WorkflowID),
+				tag.WorkflowRunID(notification.workflowKey.RunID),
+				tag.NewStringTag("event_type", notification.inputEventTypeName),
+				tag.NewStringTag("notification_task_token", base64.StdEncoding.EncodeToString(notification.taskToken)),
+				tag.NewStringTag("current_task_token", base64.StdEncoding.EncodeToString(currentTaskToken)),
+			)
+		}
 	}()
 }
 
-func classifyWorkflowHeartbeatNotificationResponse(response *matchingservice.DispatchNexusTaskResponse) string {
+func classifyWorkflowHeartbeatNotificationResponse(response *matchingservice.DispatchNexusTaskResponse) (string, []byte) {
 	if response.GetRequestTimeout() != nil {
-		return "request_timeout"
+		return "request_timeout", nil
 	}
 	if response.GetFailure() != nil || (response.GetOutcome() != nil && response.GetResponse() == nil) {
-		return "worker_error"
+		return "worker_error", nil
 	}
 	payload := response.GetResponse().GetStartOperation().GetSyncSuccess().GetPayload()
 	if payload == nil {
-		return "invalid_response"
+		return "invalid_response", nil
 	}
 	var commandResponse workerservicepb.ExecuteCommandsResponse
 	if err := proto.Unmarshal(payload.GetData(), &commandResponse); err != nil || len(commandResponse.GetResults()) != 1 {
-		return "invalid_response"
+		return "invalid_response", nil
 	}
 	result := commandResponse.GetResults()[0].GetWorkflowHeartbeatNotification()
 	if result == nil {
-		return "invalid_response"
+		return "invalid_response", nil
 	}
 	outcome, ok := workerpb.WorkflowHeartbeatNotificationResult_Outcome_name[int32(result.GetOutcome())]
 	if !ok {
-		return "invalid_response"
+		return "invalid_response", nil
 	}
-	return outcome
+	return outcome, result.GetCurrentTaskToken()
 }
 
 // hasPendingUpdateForWorkflowHeartbeatNotification reads pending Updates from the current Registry.
