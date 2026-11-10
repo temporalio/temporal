@@ -112,6 +112,8 @@ func (r *rateLimitManager) setNumReadPartitions(val int) {
 	defer r.mu.Unlock()
 	// Defaulting to 1 partition if misconfigured
 	r.numReadPartitions = max(val, 1)
+	// The per-key default is stored pre-divided by numReadPartitions, so it must be re-derived.
+	r.trySetRPSFromUserDataLocked()
 	r.computeAndApplyRateLimitLocked()
 }
 
