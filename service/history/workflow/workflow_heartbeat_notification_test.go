@@ -58,9 +58,10 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	shard := historyi.NewMockShardContext(ctrl)
 	shard.EXPECT().GetConfig().Return(&configs.Config{
-		EnableWorkflowHeartbeatNotification:     func(namespace string) bool { return namespace == "namespace-name" },
-		WorkflowHeartbeatNotificationInputTypes: func(string) []string { return []string{"signal"} },
-	})
+		EnableWorkflowHeartbeatNotification:          func(namespace string) bool { return namespace == "namespace-name" },
+		WorkflowHeartbeatNotificationInputTypes:      func(string) []string { return []string{"signal"} },
+		WorkflowHeartbeatNotificationDispatchTimeout: func(string) time.Duration { return 500 * time.Millisecond },
+	}).AnyTimes()
 	delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)
 	shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered}, nil)
 	SendWorkflowHeartbeatNotification(context.Background(), shard, &WorkflowHeartbeatNotification{

@@ -240,6 +240,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		[]string(nil),
 		`WorkflowHeartbeatNotificationInputTypes limits notifications to the listed input types per namespace. An unset or empty list disables all types.`,
 	)
+	WorkflowHeartbeatNotificationDispatchTimeout = NewNamespaceDurationSetting(
+		"history.workflowHeartbeatNotificationDispatchTimeout",
+		500*time.Millisecond,
+		`WorkflowHeartbeatNotificationDispatchTimeout limits how long History waits for Matching to dispatch a Workflow Task heartbeat notification and receive a worker response.`,
+	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
 		"system.workerCommandsDispatchTimeout",
 		5*time.Second*debug.TimeoutMultiplier,
