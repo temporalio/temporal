@@ -519,7 +519,7 @@ func (r *ReaderImpl) submit(
 	// task fire time backward. Need to account for that when submitting the task.
 	fireTime := executable.GetKey().FireTime.Add(common.ScheduledTaskMinPrecision)
 	if now.Before(fireTime) {
-		r.rescheduler.Add(executable, fireTime)
+		r.rescheduler.Add(executable, fireTime, ThrottleKey{})
 		return
 	}
 

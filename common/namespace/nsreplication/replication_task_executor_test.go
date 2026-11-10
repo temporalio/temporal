@@ -240,10 +240,11 @@ func (s *namespaceReplicationTaskExecutorSuite) replicationEventContext(
 		},
 	)
 	s.Require().True(ok)
+	sourceTaskID := int64(42)
 	ctx := wideevents.SetNamespaceReplicationTaskContext(context.Background(), wideevents.NamespaceReplicationTaskContext{
 		SourceCluster: "source-cluster",
 		TargetCluster: "target-cluster",
-		SourceTaskID:  42,
+		SourceTaskID:  &sourceTaskID,
 		AttemptCount:  2,
 		EventData:     eventData,
 	})
@@ -338,6 +339,58 @@ func (s *namespaceReplicationTaskExecutorSuite) TestEmitProcessedRequiresExplici
 		nil,
 	)
 	s.Len(s.eventLogger.records, 1)
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestEmitProcessedCarriesCHASMCorrelationAndMutationDetails() {
+	task := &replicationspb.NamespaceTaskAttributes{
+		Id:                 "namespace-id",
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+		Info:               &namespacepb.NamespaceInfo{Name: "namespace-name"},
+	}
+	eventData, ok := CHASMAuthoritativeApplyEventData(CHASMAuthoritativeApplyObservation{
+		Task:                task,
+		Stage:               CHASMApplyStageReceive,
+		ComponentBusinessID: "business-id",
+		ComponentRunID:      "run-id",
+	})
+	s.Require().True(ok)
+	ctx := wideevents.SetNamespaceReplicationTaskContext(context.Background(), wideevents.NamespaceReplicationTaskContext{
+		SourceCluster: "source-cluster",
+		TargetCluster: "target-cluster",
+		AttemptCount:  2,
+		EventData:     eventData,
+	})
+	preMutation := &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}}
+	request := &persistence.UpdateNamespaceRequest{
+		Namespace:           &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}},
+		NotificationVersion: 7,
+		IsGlobalNamespace:   true,
+	}
+
+	s.namespaceReplicator.emitNamespaceReplicationProcessed(
+		ctx,
+		wideevents.NamespaceReplicationOutcomeUpdated,
+		preMutation,
+		nil,
+		request,
+	)
+
+	s.Require().Len(s.eventLogger.records, 1)
+	values := make(map[string]otellog.Value)
+	s.eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		values[kv.Key] = kv.Value
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(values["details"].AsString()), &details))
+	s.Equal(CHASMReplicationTransport, details["transport"])
+	s.Equal("authoritative", details["mode"])
+	s.Equal(CHASMApplyStageReceive, details["apply_stage"])
+	s.Equal("business-id", details["component_business_id"])
+	s.Equal("run-id", details["component_run_id"])
+	s.NotNil(details["local_namespace_pre_mutation"])
+	s.NotNil(details["persistence_request"])
+	s.NotContains(details, "source_task_id")
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_NameUUIDCollision() {
@@ -530,8 +583,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Nil(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 	s.requireMetricOutcome(metricsOutcomeApplied, metricsOperationCreate)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)
 	s.Equal("CreateNamespaceRequest", request["request_type"])
@@ -581,7 +635,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	}}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
 	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
-	s.Nil(err)
+	s.Require().NoError(err)
 	s.requireMetricOutcome(metricsOutcomeNoChange, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeDuplicate))
 }
@@ -605,8 +659,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		Name: task.GetInfo().GetName(),
 	}).Return(nil, &serviceerror.NamespaceNotFound{})
 
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Require().NoError(err)
+	s.Equal(ApplyOutcomeNotAdmitted, outcome)
 	s.requireMetricOutcome(metricsOutcomeNotAdmitted, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeNotAdmitted))
 }
@@ -724,8 +779,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(updateTask), updateTask)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(updateTask), updateTask, MutationApplyOptions{})
 	s.Nil(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)
 	s.Equal("CreateNamespaceRequest", request["request_type"])
 	s.Equal("12", request["namespace"].(map[string]any)["config_version"])

@@ -38,6 +38,7 @@ type (
 		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
+		throttleState              *ThrottleState
 	}
 )
 
@@ -63,6 +64,7 @@ func NewExecutableFactory(
 	attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn,
 	dlqInternalErrors dynamicconfig.BoolPropertyFn,
 	dlqErrorPattern dynamicconfig.StringPropertyFn,
+	throttleState *ThrottleState,
 ) *executableFactoryImpl {
 	return &executableFactoryImpl{
 		executor:                   executor,
@@ -82,6 +84,7 @@ func NewExecutableFactory(
 		attemptsBeforeSendingToDlq: attemptsBeforeSendingToDlq,
 		dlqInternalErrors:          dlqInternalErrors,
 		dlqErrorPattern:            dlqErrorPattern,
+		throttleState:              throttleState,
 	}
 }
 
@@ -107,6 +110,7 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 			params.MaxUnexpectedErrorAttempts = f.attemptsBeforeSendingToDlq
 			params.DLQInternalErrors = f.dlqInternalErrors
 			params.DLQErrorPattern = f.dlqErrorPattern
+			params.ThrottleState = f.throttleState
 		},
 	)
 }

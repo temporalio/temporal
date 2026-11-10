@@ -22,6 +22,15 @@ func (cb *circularTaskBuffer) inc(n int) {
 	cb.buffer[cb.currentPos] += int32(n)
 }
 
+// incAgo adds n to the bucket that is `ago` buckets older than the current one.
+func (cb *circularTaskBuffer) incAgo(ago int, n int) {
+	numBuckets := len(cb.buffer)
+	stepsBack := ago % numBuckets // going back a full lap lands on the same bucket
+	// adding numBuckets before the modulo keeps the index non-negative when stepping back past 0
+	pos := (cb.currentPos - stepsBack + numBuckets) % numBuckets
+	cb.buffer[pos] += int32(n)
+}
+
 func (cb *circularTaskBuffer) advance() {
 	cb.currentPos = (cb.currentPos + 1) % len(cb.buffer)
 	cb.buffer[cb.currentPos] = 0 // Reset the task count for the new interval
@@ -55,15 +64,24 @@ func newTaskTracker(
 ) *taskTracker {
 	bucketSize = max(bucketSize, time.Millisecond)
 	buckets := int(totalInterval/bucketSize) + 1
-	return &taskTracker{
-		clock:           timeSource,
-		startTime:       timeSource.Now(),
-		bucketStartTime: timeSource.Now(),
-		bucketSize:      bucketSize,
-		buckets:         buckets,
-		totalInterval:   totalInterval,
-		tasks:           newCircularTaskBuffer(buckets),
+	t := &taskTracker{
+		clock:         timeSource,
+		bucketSize:    bucketSize,
+		buckets:       buckets,
+		totalInterval: totalInterval,
+		tasks:         newCircularTaskBuffer(buckets),
 	}
+	t.clear()
+	return t
+}
+
+// clear discards all recorded tasks and restarts the interval at the current time.
+func (s *taskTracker) clear() {
+	now := s.clock.Now()
+	s.startTime = now
+	s.bucketStartTime = now
+	clear(s.tasks.buffer)
+	s.tasks.currentPos = 0
 }
 
 // advanceAndReset advances the trackers position and clears out any expired intervals.
@@ -85,6 +103,49 @@ func (s *taskTracker) inc(n int) {
 	elapsed := currentTime.Sub(s.bucketStartTime)
 	s.advanceAndReset(elapsed)
 	s.tasks.inc(n)
+}
+
+// incOver adds n tasks spread uniformly over (from, now]. This is used to accurately
+// account for a batch of tasks that arrived over an interval.
+func (s *taskTracker) incOver(n int, from time.Time) {
+	now := s.clock.Now()
+	s.advanceAndReset(now.Sub(s.bucketStartTime))
+
+	span := now.Sub(from)
+	// With no interval to spread over (first call, or the clock moved backwards) fall back to
+	// counting at the current instant, as inc does.
+	if span <= 0 || n == 0 || now.Before(s.bucketStartTime) {
+		s.tasks.inc(n)
+		return
+	}
+	// The share of tasks that arrived before startTime is dropped: the rate only measures time
+	// since startTime, so counting them would overstate it. For a tracker created during this
+	// call that is the whole batch, which is intended: e.g. a batch accumulated over 20s
+	// counted in a new 2s window would read ~10x the true rate.
+	// TODO(dynamic partitioning): consider counting tasks that arrived before tracker existed, to react quickly to spikes on unloaded queue
+	lower := from
+	if s.startTime.After(lower) {
+		lower = s.startTime
+	}
+
+	start, end := s.bucketStartTime, now
+	var coveredTime time.Duration
+	assignedSoFar := 0
+	for ago := range s.buckets {
+		if !end.After(lower) {
+			break
+		}
+		if lower.After(start) {
+			start = lower
+		}
+		coveredTime += end.Sub(start)
+		// cumulative rounding keeps per-bucket error <= 1 and the total exact
+		assignedThroughThisBucket := int(float64(n)*float64(coveredTime)/float64(span) + 0.5)
+		s.tasks.incAgo(ago, assignedThroughThisBucket-assignedSoFar)
+		assignedSoFar = assignedThroughThisBucket
+		end = start
+		start = start.Add(-s.bucketSize)
+	}
 }
 
 // rate returns the rate of increments in a given interval
