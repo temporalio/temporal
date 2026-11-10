@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/metadata"
 )
 
 func TestWithTimeout(t *testing.T) {
@@ -41,15 +40,6 @@ func TestWithTimeout(t *testing.T) {
 			require.Equal(t, start.Add(time.Second), deadline)
 		})
 	})
-}
-
-func TestNameMetadata(t *testing.T) {
-	t.Parallel()
-
-	ctx := For(t)
-	md, ok := metadata.FromOutgoingContext(ctx)
-	require.True(t, ok)
-	require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
 }
 
 func TestContextDecorators(t *testing.T) {
@@ -304,18 +294,6 @@ func TestEnsureRemaining(t *testing.T) {
 
 		require.NotSame(t, ctx, refreshed, "context should have been replaced")
 		require.Equal(t, "decorated", refreshed.Value(key{}))
-	})
-
-	t.Run("preserves test name metadata", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := For(t)
-		refreshed := EnsureRemaining(ctx, t, DefaultTimeout()+10*time.Second)
-
-		require.NotSame(t, ctx, refreshed, "context should have been replaced")
-		md, ok := metadata.FromOutgoingContext(refreshed)
-		require.True(t, ok)
-		require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
 	})
 
 	t.Run("recognizes older context after repeated extensions", func(t *testing.T) {

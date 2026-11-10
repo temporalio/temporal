@@ -7,8 +7,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -21,9 +19,8 @@ const (
 	//
 	// A timeout requested via [WithTimeout] is its own ceiling and is never
 	// extended beyond it.
-	maxTimeout          = 2 * time.Minute
-	testNameMetadataKey = "temporal-test-name"
-	testTimeoutEnvVar   = "TEMPORAL_TEST_TIMEOUT"
+	maxTimeout        = 2 * time.Minute
+	testTimeoutEnvVar = "TEMPORAL_TEST_TIMEOUT"
 )
 
 // contextStore tracks one context state per test.
@@ -90,9 +87,6 @@ func newTestContext(tb testing.TB, st *contextState, deadline time.Time) (contex
 
 	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
 	ctx = context.WithValue(ctx, ownerKey{}, st)
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	ctx = metadata.AppendToOutgoingContext(ctx, testNameMetadataKey, tb.Name())
 
 	// Apply context decorators, in order.
 	for _, decorator := range st.decorators {
