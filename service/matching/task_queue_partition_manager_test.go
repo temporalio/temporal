@@ -1117,12 +1117,12 @@ func (s *PartitionManagerTestSuite) TestEphemeralDataChanged_UpdatesRateLimitPar
 
 func (s *PartitionManagerTestSuite) TestEphemeralDataChanged_StickyIgnoresScale() {
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
-	s.NoError(err)
+	s.Require().NoError(err)
 	sticky := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("sticky-name")
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	tqConfig := newTaskQueueConfig(sticky.TaskQueue(), s.partitionMgr.engine.config, s.ns.Name())
 	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.ns, sticky, tqConfig, logger, logger, metrics.NoopMetricsHandler, &mockUserDataManager{})
-	s.NoError(err)
+	s.Require().NoError(err)
 	pm.rateLimitManager.Start()
 	defer pm.rateLimitManager.Stop()
 	configured := pm.rateLimitManager.GetNumReadPartitionsForTesting()
