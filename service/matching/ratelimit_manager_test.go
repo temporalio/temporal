@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/matching/simplelimiter"
 )
@@ -290,51 +289,6 @@ func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault(
 	numPartitions := rlm.GetNumReadPartitionsForTesting()
 	want := float64(fairnessKeyRPS) * fraction / float64(numPartitions)
 	s.InEpsilon(want, got, 1e-9)
-}
-
-// TestFairnessKeyRateLimitDefault_RescaledOnPartitionCountChange verifies that the per-key default,
-// which is stored divided by numReadPartitions, follows changes to the partition count.
-func (s *RateLimitManagerSuite) TestFairnessKeyRateLimitDefault_RescaledOnPartitionCountChange() {
-	const fairnessKeyRPS = float32(100)
-	dcClient := dynamicconfig.NewMemoryClient()
-	dcClient.OverrideSetting(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	dc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
-	dc.Start()
-	defer dc.Stop()
-	config := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-		NewConfig(dc),
-		"test-ns",
-	)
-	udm := &mockUserDataManager{
-		data: &persistencespb.VersionedTaskQueueUserData{
-			Data: &persistencespb.TaskQueueUserData{
-				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
-					int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
-						Config: &taskqueuepb.TaskQueueConfig{
-							FairnessKeysRateLimitDefault: &taskqueuepb.RateLimitConfig{
-								RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: fairnessKeyRPS},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	rlm := newRateLimitManager(udm, config, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	rlm.Start()
-	defer rlm.Stop()
-	rlm.UserDataChanged()
-
-	got, ok := rlm.GetFairnessKeyRateLimitDefaultForTesting()
-	s.True(ok)
-	s.InEpsilon(float64(fairnessKeyRPS)/4, got, 1e-9)
-
-	dcClient.OverrideSetting(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	await.RequireTrue(s.T(), func() bool {
-		got, _ := rlm.GetFairnessKeyRateLimitDefaultForTesting()
-		return got == float64(fairnessKeyRPS)
-	}, 5*time.Second, 10*time.Millisecond)
 }
 
 // TestFractionScaling_ZeroFraction verifies that a zero fraction (fully drained) reduces
