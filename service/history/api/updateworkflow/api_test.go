@@ -205,7 +205,7 @@ func TestApplyRequest_CountsBufferedUpdates(t *testing.T) {
 	ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false).AnyTimes()
 	ms.EXPECT().GetCurrentVersion().Return(int64(1))
 	ms.EXPECT().VisitUpdates(gomock.Any())
-	ms.EXPECT().GetUpdateOutcome(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
 
 	registry := update.NewRegistry(ms)
 	for i, id := range []string{"first", "second"} {
