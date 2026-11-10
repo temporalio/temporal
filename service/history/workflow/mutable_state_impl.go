@@ -221,7 +221,11 @@ type (
 		// (via AttachChasmRequestID). It gates the lazy request-ID sweep at transaction close so only
 		// transactions that added an ID pay for the scan.
 		chasmRequestIDsAdded bool
-		updateInfoUpdated    map[string]struct{}
+		// chasmSpeculativeTransitionPending is set when a speculative CHASM transition left changes in the
+		// CHASM tree without persisting them. It lets IsDirty ignore those changes. It doesn't trigger a
+		// write: the changes are persisted only when a later non-speculative transaction closes.
+		chasmSpeculativeTransitionPending bool
+		updateInfoUpdated                 map[string]struct{}
 		// following xxxUserDataUpdated fields are for tracking if activity/timer user data updated.
 		// This help to determine if we need to update transition history: For
 		// user data change, we need to update transition history. No update for
@@ -7688,10 +7692,25 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 // However, certain in-memory changes (e.g. speculative workflow task) won't be cleared before releasing
 // the lock and have to be excluded from the check.
 func (ms *MutableStateImpl) IsDirty() bool {
+	return ms.isNonChasmDirty() ||
+		(ms.chasmTree.IsDirty() && !ms.chasmSpeculativeTransitionPending)
+}
+
+func (ms *MutableStateImpl) isNonChasmDirty() bool {
 	return ms.hBuilder.IsDirty() ||
 		len(ms.InsertTasks) > 0 ||
-		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty()
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+}
+
+// SetChasmSpeculativeTransitionPending marks the CHASM tree changes of the current transaction as
+// speculative: they stay in memory and IsDirty ignores them.
+func (ms *MutableStateImpl) SetChasmSpeculativeTransitionPending() error {
+	if ms.isNonChasmDirty() {
+		// This line means there is a Dev error.
+		return serviceerror.NewInternal("speculative CHASM transition changed state outside the CHASM tree")
+	}
+	ms.chasmSpeculativeTransitionPending = true
+	return nil
 }
 
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and
@@ -8762,6 +8781,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
 	ms.chasmRequestIDsAdded = false
+	ms.chasmSpeculativeTransitionPending = false
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})

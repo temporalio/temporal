@@ -3552,6 +3552,20 @@ func (mr *MockMutableStateMockRecorder) SetBaseWorkflow(baseRunID, baseRunLowest
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBaseWorkflow", reflect.TypeOf((*MockMutableState)(nil).SetBaseWorkflow), baseRunID, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion)
 }
 
+// SetChasmSpeculativeTransitionPending mocks base method.
+func (m *MockMutableState) SetChasmSpeculativeTransitionPending() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetChasmSpeculativeTransitionPending")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetChasmSpeculativeTransitionPending indicates an expected call of SetChasmSpeculativeTransitionPending.
+func (mr *MockMutableStateMockRecorder) SetChasmSpeculativeTransitionPending() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetChasmSpeculativeTransitionPending", reflect.TypeOf((*MockMutableState)(nil).SetChasmSpeculativeTransitionPending))
+}
+
 // SetChildrenInitializedPostResetPoint mocks base method.
 func (m *MockMutableState) SetChildrenInitializedPostResetPoint(children map[string]*persistence.ResetChildInfo) {
 	m.ctrl.T.Helper()

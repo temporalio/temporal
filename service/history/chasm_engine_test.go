@@ -18,6 +18,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
@@ -193,6 +194,24 @@ func (s *chasmEngineSuite) TestStartExecution_BrandNew() {
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
 	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.True(result.Created)
+}
+
+func (s *chasmEngineSuite) TestStartExecution_SpeculativeRejected() {
+	tv := testvars.New(s.T())
+	// No persistence call is expected.
+	_, err := s.engine.StartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+		}),
+		func(chasm.MutableContext) (chasm.RootComponent, error) {
+			return &testComponent{ActivityInfo: &persistencespb.ActivityInfo{}}, nil
+		},
+		chasm.WithSpeculative(),
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
 }
 
 func (s *chasmEngineSuite) TestStartExecution_WaitsForShardEngine() {
@@ -1523,6 +1542,192 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDTypesDedupIndependently(
 	s.Equal(2, updateCount)
 }
 
+// loadRunningTestExecution mocks loads of a running test execution from the DB and returns its ref.
+func (s *chasmEngineSuite) loadRunningTestExecution(loads int) chasm.ComponentRef {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	})
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+			return &persistence.GetWorkflowExecutionResponse{
+				State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{},
+					enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+			}, nil
+		}).Times(loads)
+	return ref
+}
+
+// expectPersistedActivityInfo expects one UpdateWorkflowExecution and stores the persisted root state in
+// *persisted. It returns the request so callers can inspect tasks.
+func (s *chasmEngineSuite) expectPersistedActivityInfo(
+	ref chasm.ComponentRef,
+	persisted *persistencespb.ActivityInfo,
+) **persistence.UpdateWorkflowExecutionRequest {
+	var captured *persistence.UpdateWorkflowExecutionRequest
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			captured = request
+			if rootNode, ok := request.UpdateWorkflowMutation.UpsertChasmNodes[""]; ok {
+				s.NoError(serialization.Decode(rootNode.Data, persisted))
+			}
+			return tests.UpdateWorkflowExecutionResponse, nil
+		}).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+	return &captured
+}
+
+func (s *chasmEngineSuite) setActivityField(field func(*persistencespb.ActivityInfo)) func(chasm.MutableContext, chasm.Component) error {
+	return func(_ chasm.MutableContext, component chasm.Component) error {
+		field(component.(*testComponent).ActivityInfo)
+		return nil
+	}
+}
+
+func (s *chasmEngineSuite) readActivityInfo(ref chasm.ComponentRef) *persistencespb.ActivityInfo {
+	var info *persistencespb.ActivityInfo
+	s.NoError(s.engine.ReadComponent(context.Background(), ref, func(_ chasm.Context, component chasm.Component) error {
+		info = common.CloneProto(component.(*testComponent).ActivityInfo)
+		return nil
+	}))
+	return info
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_NoPersistence() {
+	// No UpdateWorkflowExecution or NotifyChasmExecution is expected, so either call fails the test.
+	ref := s.loadRunningTestExecution(1)
+
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }), chasm.WithSpeculative())
+	s.NoError(err)
+	_, err = s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.TaskQueue = "b" }), chasm.WithSpeculative())
+	s.NoError(err)
+
+	info := s.readActivityInfo(ref)
+	s.Equal("a", info.ActivityId)
+	s.Equal("b", info.TaskQueue)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_FlushedByNextDurableUpdate() {
+	ref := s.loadRunningTestExecution(1)
+	persisted := &persistencespb.ActivityInfo{}
+	s.expectPersistedActivityInfo(ref, persisted)
+
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }), chasm.WithSpeculative())
+	s.NoError(err)
+	_, err = s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.TaskQueue = "b" }))
+	s.NoError(err)
+
+	s.Equal("a", persisted.ActivityId)
+	s.Equal("b", persisted.TaskQueue)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_ErrorDropsPendingChanges() {
+	ref := s.loadRunningTestExecution(2)
+
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }), chasm.WithSpeculative())
+	s.NoError(err)
+	_, err = s.engine.UpdateComponent(context.Background(), ref,
+		func(chasm.MutableContext, chasm.Component) error { return errors.New("rejected") }, chasm.WithSpeculative())
+	s.Error(err)
+
+	// The error clears the cached execution, including the earlier speculative change.
+	s.Empty(s.readActivityInfo(ref).ActivityId)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_TasksDeferredToNextWrite() {
+	ref := s.loadRunningTestExecution(1)
+
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			ctx.AddTask(component, chasm.TaskAttributes{}, &commonpb.Payload{Data: []byte("deferred")})
+			return nil
+		}, chasm.WithSpeculative())
+	s.NoError(err)
+
+	request := s.expectPersistedActivityInfo(ref, &persistencespb.ActivityInfo{})
+	_, err = s.engine.UpdateComponent(context.Background(), ref,
+		func(chasm.MutableContext, chasm.Component) error { return nil })
+	s.NoError(err)
+
+	var chasmTasks []tasks.Task
+	for _, categoryTasks := range (*request).UpdateWorkflowMutation.Tasks {
+		for _, task := range categoryTasks {
+			if _, ok := task.(*tasks.ChasmTask); ok {
+				chasmTasks = append(chasmTasks, task)
+			}
+		}
+	}
+	s.Len(chasmTasks, 1)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_RefUsable() {
+	ref := s.loadRunningTestExecution(1)
+
+	serializedRef, err := s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }), chasm.WithSpeculative())
+	s.NoError(err)
+	speculativeRef, err := chasm.DeserializeComponentRef(serializedRef)
+	s.NoError(err)
+
+	s.Equal("a", s.readActivityInfo(speculativeRef).ActivityId)
+
+	persisted := &persistencespb.ActivityInfo{}
+	s.expectPersistedActivityInfo(ref, persisted)
+	_, err = s.engine.UpdateComponent(context.Background(), speculativeRef,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.TaskQueue = "b" }))
+	s.NoError(err)
+	s.Equal("a", persisted.ActivityId)
+	s.Equal("b", persisted.TaskQueue)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_CloseIsPersisted() {
+	ref := s.loadRunningTestExecution(1)
+	worker := &commonpb.Principal{Type: "jwt", Name: "worker"}
+
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }), chasm.WithSpeculative())
+	s.NoError(err)
+
+	persisted := &persistencespb.ActivityInfo{}
+	request := s.expectPersistedActivityInfo(ref, persisted)
+	_, err = s.engine.UpdateComponent(headers.SetPrincipal(context.Background(), worker), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.CancelRequested = true }), chasm.WithSpeculative())
+	s.NoError(err)
+
+	mutation := (*request).UpdateWorkflowMutation
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, mutation.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, mutation.ExecutionState.Status)
+	s.ProtoEqual(worker, mutation.UpsertChasmNodes[""].GetMetadata().GetComponentAttributes().GetClosedByPrincipal())
+	// The earlier pending speculative change is persisted in the same write.
+	s.Equal("a", persisted.ActivityId)
+	s.True(persisted.CancelRequested)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_RequestIDDedup() {
+	ref := s.loadRunningTestExecution(1)
+
+	calls := 0
+	updateFn := func(chasm.MutableContext, chasm.Component) error {
+		calls++
+		return nil
+	}
+	_, err := s.engine.UpdateComponent(context.Background(), ref, updateFn,
+		chasm.WithSpeculative(), chasm.WithRequestID("r1"))
+	s.NoError(err)
+	_, err = s.engine.UpdateComponent(context.Background(), ref, updateFn,
+		chasm.WithSpeculative(), chasm.WithRequestID("r1"))
+	s.ErrorIs(err, chasm.ErrRequestIDAlreadyUsed)
+	s.Equal(1, calls)
+}
+
 func (s *chasmEngineSuite) TestReadComponent_Success() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
@@ -2443,6 +2648,68 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 	deserializedRef, err := chasm.DeserializeComponentRef(result.ExecutionRef)
 	s.NoError(err)
 	s.Equal(result.ExecutionKey, deserializedRef.ExecutionKey)
+}
+
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_Speculative_ExistingRunning() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: tv.RunID()}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(
+				chasm.ExecutionKey{NamespaceID: executionKey.NamespaceID, BusinessID: executionKey.BusinessID, RunID: tv.RunID()},
+				&persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				nil,
+			),
+		}, nil).Times(1)
+	// No UpdateWorkflowExecution is expected.
+
+	result, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(chasm.MutableContext) (chasm.RootComponent, error) {
+			s.Fail("startFn must not run for an existing execution")
+			return nil, nil
+		},
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }),
+		chasm.WithSpeculative(),
+	)
+	s.NoError(err)
+	s.False(result.Created)
+}
+
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_Speculative_CreatesNormally() {
+	tv := testvars.New(s.T())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("execution not found")).Times(1)
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.CreateWorkflowExecutionResponse, nil).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
+
+	result, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(chasm.MutableContext) (chasm.RootComponent, error) {
+			return &testComponent{ActivityInfo: &persistencespb.ActivityInfo{}}, nil
+		},
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }),
+		chasm.WithSpeculative(),
+	)
+	s.NoError(err)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound_SetsContextMetadata() {
@@ -3492,6 +3759,9 @@ type testComponent struct {
 }
 
 func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	if l.ActivityInfo.GetCancelRequested() {
+		return chasm.LifecycleStateCompleted
+	}
 	return chasm.LifecycleStateRunning
 }
 
@@ -3571,6 +3841,24 @@ func (l *testChasmLibrary) Components() []*chasm.RegistrableComponent {
 			chasm.WithRecordPrincipals()),
 		chasm.NewRegistrableComponent[*testComponentNoMetadata]("test_component_no_metadata"),
 	}
+}
+
+func (l *testChasmLibrary) Tasks() []*chasm.RegistrableTask {
+	return []*chasm.RegistrableTask{
+		chasm.NewRegistrableSideEffectTask("test_side_effect", &testSideEffectTaskHandler{}),
+	}
+}
+
+type testSideEffectTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*commonpb.Payload]
+}
+
+func (h *testSideEffectTaskHandler) Validate(chasm.Context, *testComponent, chasm.TaskInvocation, *commonpb.Payload) (bool, error) {
+	return true, nil
+}
+
+func (h *testSideEffectTaskHandler) Execute(context.Context, chasm.ComponentRef, chasm.TaskAttributes, *commonpb.Payload) error {
+	return nil
 }
 
 func (s *chasmEngineSuite) TestConvertError() {

@@ -12,6 +12,10 @@ import (
 // WithRequestID has already been recorded on the execution.
 var ErrRequestIDAlreadyUsed = serviceerror.NewFailedPrecondition("request ID has already been used for this execution")
 
+// ErrSpeculativeStartExecution is returned by StartExecution when WithSpeculative is set. Creating an
+// execution must persist it to claim the business ID.  TODO Add support.
+var ErrSpeculativeStartExecution = serviceerror.NewInvalidArgument("WithSpeculative is not supported for StartExecution")
+
 type ExecutionAlreadyStartedError struct {
 	Message          string
 	CurrentRequestID string

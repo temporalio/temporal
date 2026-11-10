@@ -187,6 +187,64 @@ func TestUpdateWithStartHonorsConflictPolicy(t *testing.T) {
 	require.Equal(t, 1, updateCount)
 }
 
+func TestStartExecutionRejectsSpeculative(t *testing.T) {
+	e, _ := startStore(t, 0)
+	_, err := chasm.StartExecution(engineContext(e),
+		chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "speculative"},
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		}, nil, chasm.WithSpeculative())
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+}
+
+// TestSpeculativeUpdateDefersTasks: a speculative update is visible to reads, but its tasks become physical
+// only when a later non-speculative update closes the transaction.
+func TestSpeculativeUpdateDefersTasks(t *testing.T) {
+	const ttl = time.Hour
+	e, ref := startStore(t, 0)
+
+	_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "speculative", ttl)
+		}, nil, chasm.WithSpeculative())
+	require.NoError(t, err)
+	require.Equal(t, 0, countTasks(t, e, ref, tasks.CategoryTimer))
+
+	hasPayload, err := chasm.ReadComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, _ chasm.Context, _ any) (bool, error) {
+			_, ok := s.Payloads["speculative"]
+			return ok, nil
+		}, nil)
+	require.NoError(t, err)
+	require.True(t, hasPayload)
+
+	_, _, err = chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, countTasks(t, e, ref, tasks.CategoryTimer))
+}
+
+// TestSpeculativeCloseIsPersisted: a speculative transition that closes the execution is persisted
+// normally, so the invariant check (which runs only after a persisted transition) sees the close.
+func TestSpeculativeCloseIsPersisted(t *testing.T) {
+	worker := &commonpb.Principal{Type: "jwt", Name: "worker"}
+	var rootAttributes *persistencespb.ChasmComponentAttributes
+	captureRoot := func(_ *testing.T, node *chasm.Node, _ chasm.RootComponent) {
+		rootAttributes = node.Snapshot(nil).Nodes[""].GetMetadata().GetComponentAttributes()
+	}
+	e, ref := startStoreWithEngineOptions(t, 0, []chasmtest.EngineOption{chasmtest.WithInvariantCheck(captureRoot)})
+
+	_, _, err := chasm.UpdateComponent(headers.SetPrincipal(engineContext(e), worker), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return s.Close(mc, nil)
+		}, nil, chasm.WithSpeculative())
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, worker, rootAttributes.GetClosedByPrincipal())
+}
+
 func TestUpdateComponentDeduplicatesRequestID(t *testing.T) {
 	e, ref := startStore(t, 0)
 	updateCount := 0

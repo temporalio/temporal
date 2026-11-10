@@ -155,6 +155,9 @@ func (e *Engine) StartExecution(
 	opts ...chasm.TransitionOption,
 ) (chasm.StartExecutionResult, error) {
 	options := constructTransitionOptions(opts...)
+	if options.Speculative {
+		return chasm.StartExecutionResult{}, chasm.ErrSpeculativeStartExecution
+	}
 	bKey := newBusinessKey(ref.ExecutionKey)
 
 	current, hasCurrent := e.currentExecutions[bKey]
@@ -217,7 +220,7 @@ func (e *Engine) UpdateWithStartExecution(
 			if err := conflictPolicyAllowsUpdate(ref, current, options.ConflictPolicy); err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
-			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, options.RequestID)
+			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, options.RequestID, options.Speculative)
 			if err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
@@ -282,7 +285,7 @@ func (e *Engine) UpdateComponent(
 		}
 	}
 
-	return e.updateComponentInExecution(ctx, execution, ref, updateFn, options.RequestID)
+	return e.updateComponentInExecution(ctx, execution, ref, updateFn, options.RequestID, options.Speculative)
 }
 
 func (e *Engine) ReadComponent(
@@ -718,6 +721,7 @@ func (e *Engine) updateComponentInExecution(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	requestID string,
+	speculative bool,
 ) ([]byte, error) {
 	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	component, err := execution.node.Component(mutableCtx, ref)
@@ -729,8 +733,21 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if err = e.closeTransaction(ctx, execution); err != nil {
-		return nil, err
+	persist := true
+	if speculative {
+		if err = execution.node.ApplySpeculativeTransition(ctx); err != nil {
+			return nil, err
+		}
+		if persist, err = execution.node.ShouldPersistSpeculativeTransition(ctx); err != nil {
+			return nil, err
+		}
+	}
+	// A speculative transition that isn't persisted leaves the transaction open: the next
+	// non-speculative transition closes it and generates the tasks.
+	if persist {
+		if err = e.closeTransaction(ctx, execution); err != nil {
+			return nil, err
+		}
 	}
 	execution.recordRequestID(requestID)
 
@@ -764,8 +781,6 @@ func constructTransitionOptions(opts ...chasm.TransitionOption) chasm.Transition
 	for _, opt := range opts {
 		opt(&options)
 	}
-	// NOTE: TransitionOptions.Speculative is intentionally not implemented here. It is also
-	// unimplemented in the production engine (see the TODO in service/history/chasm_engine.go).
 	return options
 }
 

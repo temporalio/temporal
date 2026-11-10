@@ -204,6 +204,10 @@ func (e *ChasmEngine) startExecution(
 		return chasm.StartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for StartExecution")
 	}
 
+	if options.Speculative {
+		return chasm.StartExecutionResult{}, chasm.ErrSpeculativeStartExecution
+	}
+
 	currentExecutionReleaseFn, err := e.lockCurrentExecution(
 		ctx,
 		shardContext,
@@ -513,15 +517,29 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		}
 	}
 
-	// TODO: Support WithSpeculative() TransitionOption.
-
 	e.setContextMetadata(ctx, chasmTree)
 
-	if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(
-		ctx,
-		shardContext,
-	); err != nil {
-		return nil, err
+	persist := true
+	if transitionOptions.Speculative {
+		if err := chasmTree.ApplySpeculativeTransition(ctx); err != nil {
+			return nil, err
+		}
+		if persist, err = chasmTree.ShouldPersistSpeculativeTransition(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	if persist {
+		if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext); err != nil {
+			return nil, err
+		}
+	} else {
+		// Keep the transition in the cached mutable state only. It's persisted when a later
+		// non-speculative transaction closes; nothing here triggers a write.
+		// TODO: consider notifying PollComponent waiters (e.notifier.Notify) for speculative transitions.
+		if err := mutableState.SetChasmSpeculativeTransitionPending(); err != nil {
+			return nil, err
+		}
 	}
 
 	serializedRef, err := mutableContext.Ref(component)
