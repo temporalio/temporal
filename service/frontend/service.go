@@ -136,7 +136,8 @@ type Config struct {
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// EnableServerVersionCheck disables periodic version checking performed by the frontend
-	EnableServerVersionCheck dynamicconfig.BoolPropertyFn
+	EnableServerVersionCheck        dynamicconfig.BoolPropertyFn
+	EnableServerVersionCheckLogging dynamicconfig.BoolPropertyFn
 
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
@@ -386,6 +387,7 @@ func NewConfig(
 		DefaultWorkflowRetryPolicy:               dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
 		DefaultWorkflowTaskTimeout:               dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 		EnableServerVersionCheck:                 dynamicconfig.EnableServerVersionCheck.Get(dc),
+		EnableServerVersionCheckLogging:          dynamicconfig.EnableServerVersionCheckLogging.Get(dc),
 		EnableTokenNamespaceEnforcement:          dynamicconfig.EnableTokenNamespaceEnforcement.Get(dc),
 		ExposeAuthorizerErrors:                   dynamicconfig.ExposeAuthorizerErrors.Get(dc),
 		KeepAliveMinTime:                         dynamicconfig.KeepAliveMinTime.Get(dc),

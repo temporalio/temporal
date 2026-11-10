@@ -2,14 +2,18 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"sync"
 	"time"
 
+	"github.com/blang/semver/v4"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	versionpb "go.temporal.io/api/version/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -18,16 +22,26 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const VersionCheckInterval = 24 * time.Hour
+const (
+	VersionCheckInterval = 24 * time.Hour
+	versionCheckTimeout  = 30 * time.Second
+)
+
+var errVersionInfoSaveConflict = errors.New("version info was updated concurrently")
 
 type VersionChecker struct {
 	config                 *Config
-	shutdownChan           chan struct{}
+	logger                 log.Logger
+	doneChan               chan struct{}
 	metricsHandler         metrics.Handler
 	clusterMetadataManager persistence.ClusterMetadataManager
-	startOnce              sync.Once
-	stopOnce               sync.Once
+	mu                     sync.Mutex
+	started                bool
+	stopped                bool
 	sdkVersionRecorder     *interceptor.SDKVersionInterceptor
+	versionInfoCaller      versioninfo.Caller
+	versionCheckContext    context.Context
+	cancelVersionCheck     context.CancelFunc
 }
 
 func NewVersionChecker(
@@ -35,68 +49,99 @@ func NewVersionChecker(
 	metricsHandler metrics.Handler,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
+	logger log.SnTaggedLogger,
 ) *VersionChecker {
+	ctx, cancel := context.WithCancel(headers.SetCallerInfo(context.Background(), headers.SystemBackgroundHighCallerInfo))
 	return &VersionChecker{
 		config:                 config,
-		shutdownChan:           make(chan struct{}),
+		logger:                 logger,
+		doneChan:               make(chan struct{}),
 		metricsHandler:         metricsHandler.WithTags(metrics.OperationTag(metrics.VersionCheckScope)),
 		clusterMetadataManager: clusterMetadataManager,
 		sdkVersionRecorder:     sdkVersionRecorder,
+		versionInfoCaller:      versioninfo.NewCaller(),
+		versionCheckContext:    ctx,
+		cancelVersionCheck:     cancel,
 	}
 }
 
 func (vc *VersionChecker) Start() {
-	if vc.config.EnableServerVersionCheck() {
-		vc.startOnce.Do(func() {
-			// TODO: specify a timeout for the context
-			ctx := headers.SetCallerInfo(
-				context.TODO(),
-				headers.SystemBackgroundHighCallerInfo,
-			)
-
-			go vc.versionCheckLoop(ctx)
-		})
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+	if vc.started || vc.stopped {
+		return
 	}
+	vc.started = true
+	go vc.versionCheckLoop(vc.versionCheckContext)
 }
 
 func (vc *VersionChecker) Stop() {
-	if vc.config.EnableServerVersionCheck() {
-		vc.stopOnce.Do(func() {
-			close(vc.shutdownChan)
-		})
+	vc.mu.Lock()
+	if !vc.stopped {
+		vc.stopped = true
+		vc.cancelVersionCheck()
+		if !vc.started {
+			close(vc.doneChan)
+		}
 	}
+	vc.mu.Unlock()
+	<-vc.doneChan
 }
 
 func (vc *VersionChecker) versionCheckLoop(
 	ctx context.Context,
 ) {
-	timer := time.NewTicker(VersionCheckInterval)
+	defer close(vc.doneChan)
+	startedAt := time.Now()
+	schedule := []time.Duration{
+		5 * time.Minute, 30 * time.Minute, time.Hour, 4 * time.Hour, VersionCheckInterval,
+	}
+	nextCheckAfter := schedule[0]
+	timer := time.NewTimer(nextCheckAfter)
 	defer timer.Stop()
-	vc.performVersionCheck(ctx)
+	vc.performVersionCheck(ctx, false)
 	for {
 		select {
-		case <-vc.shutdownChan:
+		case <-ctx.Done():
 			return
 		case <-timer.C:
-			vc.performVersionCheck(ctx)
+			vc.performVersionCheck(ctx, true)
+			if len(schedule) > 1 {
+				schedule = schedule[1:]
+				nextCheckAfter = schedule[0]
+			} else {
+				nextCheckAfter += VersionCheckInterval
+			}
+			timer.Reset(time.Until(startedAt.Add(nextCheckAfter)))
 		}
 	}
 }
 
 func (vc *VersionChecker) performVersionCheck(
 	ctx context.Context,
+	force bool,
 ) {
+	if ctx.Err() != nil || !vc.config.EnableServerVersionCheck() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, versionCheckTimeout)
+	defer cancel()
 	startTime := time.Now().UTC()
+	// Record latency before deferred cancellation changes ctx.Err().
 	defer func() {
-		metrics.VersionCheckLatency.With(vc.metricsHandler).Record(time.Since(startTime))
+		if ctx.Err() != context.Canceled {
+			metrics.VersionCheckLatency.With(vc.metricsHandler).Record(time.Since(startTime))
+		}
 	}()
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
-		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
+		if ctx.Err() != context.Canceled {
+			metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
+		}
 		return
 	}
 
-	if !isUpdateNeeded(metadata) {
+	if !force && !isUpdateNeeded(metadata) {
 		return
 	}
 
@@ -105,18 +150,71 @@ func (vc *VersionChecker) performVersionCheck(
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
-	resp, err := vc.getVersionInfo(req)
+	resp, err := vc.getVersionInfo(ctx, req)
 	if err != nil {
-		metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
-		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
+		if ctx.Err() != context.Canceled {
+			metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
+			metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
+		}
 		return
 	}
+	vc.logVersionInfo(resp)
 	err = vc.saveVersionInfo(ctx, resp)
+	if errors.Is(err, errVersionInfoSaveConflict) {
+		return
+	}
 	if err != nil {
-		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
+		if ctx.Err() != context.Canceled {
+			metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
+		}
 		return
 	}
 	metrics.VersionCheckSuccessCount.With(vc.metricsHandler).Record(1)
+}
+
+func (vc *VersionChecker) logVersionInfo(resp *versioninfo.VersionCheckResponse) {
+	if !vc.config.EnableServerVersionCheckLogging() {
+		return
+	}
+	for _, product := range resp.Products {
+		current, currentErr := semver.Parse(product.Current.Version)
+		recommended, recommendedErr := semver.Parse(product.Recommended.Version)
+		upgradeRecommended := currentErr == nil && recommendedErr == nil && recommended.GT(current)
+		if !upgradeRecommended && len(product.Alerts) == 0 {
+			continue
+		}
+		message := "Version check reported issues; review the alerts"
+		tags := []tag.Tag{
+			tag.NewStringTag("product", product.Product),
+			tag.NewStringTag("current-version", product.Current.Version),
+		}
+		if upgradeRecommended {
+			message = "Upgrade to a new version is recommended"
+			tags = append(tags,
+				tag.NewStringTag("recommended-version", product.Recommended.Version),
+				tag.NewTimeTag("release-time", timestamp.UnixOrZeroTime(product.Recommended.ReleaseTime)),
+				tag.NewStringTag("release-notes", product.Recommended.Notes),
+			)
+		}
+		if product.Instructions != "" {
+			tags = append(tags, tag.NewStringTag("upgrade-instructions", product.Instructions))
+		}
+		if len(product.Alerts) > 0 {
+			tags = append(tags, tag.NewAnyTag("alerts", product.Alerts))
+		}
+		warn := false
+		for _, alert := range product.Alerts {
+			if alert.Severity == versioninfo.SeverityHigh || alert.Severity == versioninfo.SeverityMedium {
+				warn = true
+				break
+			}
+		}
+		if warn {
+			vc.logger.Warn(message, tags...)
+		} else {
+			vc.logger.Info(message, tags...)
+		}
+	}
 }
 
 func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
@@ -146,8 +244,8 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 	}, nil
 }
 
-func (vc *VersionChecker) getVersionInfo(req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
-	return versioninfo.NewCaller().Call(req)
+func (vc *VersionChecker) getVersionInfo(ctx context.Context, req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
+	return vc.versionInfoCaller.Call(ctx, req)
 }
 
 func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse) error {
@@ -167,7 +265,7 @@ func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo
 		return err
 	}
 	if !saved {
-		return serviceerror.NewUnavailable("version info update hasn't been applied")
+		return errVersionInfoSaveConflict
 	}
 	return nil
 }
