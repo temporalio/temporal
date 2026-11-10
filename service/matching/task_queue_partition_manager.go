@@ -1751,7 +1751,17 @@ func parseDeploymentFromVersionKey(versionKey string) (deploymentName, buildID s
 }
 
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
-	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
+	if _, ok := pm.partition.(*tqid.NormalPartition); ok {
+		// Rate limits are divided across read partitions, so they follow dynamic partition scaling.
+		// Invalid or missing scale info falls back to dynamic config, as in checkPartitionCounts.
+		var scaledRead int32
+		if scale := data.GetScale(); scale.GetRead() > 0 && scale.GetWrite() > 0 && scale.GetWrite() <= scale.GetRead() {
+			scaledRead = scale.GetRead()
+		}
+		pm.rateLimitManager.SetScaledNumReadPartitions(int(scaledRead))
+	}
+
+	// for now, only sticky partitions act on the rest of ephemeral data, normal partitions ignore it.
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return
 	}

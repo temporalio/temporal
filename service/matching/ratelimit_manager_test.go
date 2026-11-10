@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/matching/simplelimiter"
 )
@@ -289,6 +290,73 @@ func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault(
 	numPartitions := rlm.GetNumReadPartitionsForTesting()
 	want := float64(fairnessKeyRPS) * fraction / float64(numPartitions)
 	s.InEpsilon(want, got, 1e-9)
+}
+
+// TestScaledNumReadPartitions_TakesPrecedenceOverConfig verifies that the read partition count from
+// dynamic partition scaling overrides dynamic config for both the whole-queue and per-key limits.
+func (s *RateLimitManagerSuite) TestScaledNumReadPartitions_TakesPrecedenceOverConfig() {
+	const rps = float32(100)
+	dcClient := dynamicconfig.NewMemoryClient()
+	dcClient.OverrideSetting(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	dc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
+	dc.Start()
+	defer dc.Stop()
+	config := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		NewConfig(dc),
+		"test-ns",
+	)
+	udm := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
+						Config: &taskqueuepb.TaskQueueConfig{
+							QueueRateLimit: &taskqueuepb.RateLimitConfig{
+								RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: rps},
+							},
+							FairnessKeysRateLimitDefault: &taskqueuepb.RateLimitConfig{
+								RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: rps},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	rlm := newRateLimitManager(udm, config, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	rlm.Start()
+	defer rlm.Stop()
+	rlm.UserDataChanged()
+
+	perPartition := func() (wholeQueue, perKey float64) {
+		rlm.mu.Lock()
+		defer rlm.mu.Unlock()
+		return rlm.effectiveRPS, *rlm.fairnessKeyRateLimitDefault
+	}
+	wholeQueue, perKey := perPartition()
+	s.InEpsilon(float64(rps)/4, wholeQueue, 1e-9)
+	s.InEpsilon(float64(rps)/4, perKey, 1e-9)
+
+	rlm.SetScaledNumReadPartitions(8)
+	wholeQueue, perKey = perPartition()
+	s.InEpsilon(float64(rps)/8, wholeQueue, 1e-9)
+	s.InEpsilon(float64(rps)/8, perKey, 1e-9)
+
+	// a dynamic config change is recorded but doesn't override the scaled count
+	dcClient.OverrideSetting(dynamicconfig.MatchingNumTaskqueueReadPartitions, 2)
+	await.RequireTrue(s.T(), func() bool {
+		rlm.mu.Lock()
+		defer rlm.mu.Unlock()
+		return rlm.configNumReadPartitions == 2
+	}, 5*time.Second, 10*time.Millisecond)
+	s.Equal(8, rlm.GetNumReadPartitionsForTesting())
+
+	rlm.SetScaledNumReadPartitions(0)
+	s.Equal(2, rlm.GetNumReadPartitionsForTesting())
+	wholeQueue, perKey = perPartition()
+	s.InEpsilon(float64(rps)/2, wholeQueue, 1e-9)
+	s.InEpsilon(float64(rps)/2, perKey, 1e-9)
 }
 
 // TestFractionScaling_ZeroFraction verifies that a zero fraction (fully drained) reduces
