@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -184,7 +183,6 @@ func TestHasPendingUpdateForWorkflowHeartbeatNotification(t *testing.T) {
 		name              string
 		registry          update.Registry
 		version           int64
-		persistedUpdates  map[string]*persistencespb.UpdateInfo
 		wantPendingUpdate bool
 	}{
 		{
@@ -199,28 +197,12 @@ func TestHasPendingUpdateForWorkflowHeartbeatNotification(t *testing.T) {
 			version:  1,
 		},
 		{
-			name: "no registry with persisted admission",
-			persistedUpdates: map[string]*persistencespb.UpdateInfo{
-				"update": {Value: &persistencespb.UpdateInfo_Admission{Admission: &persistencespb.UpdateAdmissionInfo{}}},
-			},
-			wantPendingUpdate: true,
-		},
-		{
-			name:     "stale registry with persisted admission",
-			registry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{},
-			version:  2,
-			persistedUpdates: map[string]*persistencespb.UpdateInfo{
-				"update": {Value: &persistencespb.UpdateInfo_Admission{Admission: &persistencespb.UpdateAdmissionInfo{}}},
-			},
-			wantPendingUpdate: true,
-		},
-		{
-			name:     "stale registry without persisted admission",
+			name:     "stale registry with outgoing update",
 			registry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{hasOutgoing: true},
 			version:  2,
 		},
 		{
-			name: "no registry or persisted admission",
+			name: "no registry",
 		},
 	}
 
@@ -230,9 +212,6 @@ func TestHasPendingUpdateForWorkflowHeartbeatNotification(t *testing.T) {
 			mutableState := historyi.NewMockMutableState(gomock.NewController(t))
 			if tc.registry != nil {
 				mutableState.EXPECT().GetCurrentVersion().Return(tc.version)
-			}
-			if tc.registry == nil || tc.version != 1 {
-				mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{UpdateInfos: tc.persistedUpdates})
 			}
 			workflowContext := &ContextImpl{MutableState: mutableState, updateRegistry: tc.registry}
 			require.Equal(t, tc.wantPendingUpdate, workflowContext.hasPendingUpdateForWorkflowHeartbeatNotification())

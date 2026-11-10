@@ -52,14 +52,14 @@ type Updater struct {
 	// Variables referencing mutable state data.
 	// WARNING: any references to mutable state data *have to* be copied
 	// to avoid data races when used outside the workflow lease.
-	taskQueue              *taskqueuepb.TaskQueue
-	priority               *commonpb.Priority
-	normalTaskQueueName    string
-	scheduledEventID       int64
-	scheduleToStartTimeout time.Duration
-	workflowTaskStamp      int32
-	bufferedForWHN         bool
-	firstBufferedForWHN    bool
+	taskQueue                                     *taskqueuepb.TaskQueue
+	priority                                      *commonpb.Priority
+	normalTaskQueueName                           string
+	scheduledEventID                              int64
+	scheduleToStartTimeout                        time.Duration
+	workflowTaskStamp                             int32
+	bufferedForWorkflowHeartbeatNotification      bool
+	firstBufferedForWorkflowHeartbeatNotification bool
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -110,13 +110,13 @@ func (u *Updater) Invoke(
 	if err != nil {
 		return nil, err
 	}
-	if u.bufferedForWHN {
+	if u.bufferedForWorkflowHeartbeatNotification {
 		handler := u.shardCtx.GetMetricsHandler().WithTags(
 			metrics.NamespaceTag(u.req.Request.Namespace),
 			metrics.StringTag("input_type", workflow.WorkflowHeartbeatNotificationUpdateAdmittedInputType),
 		)
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
-		if u.firstBufferedForWHN {
+		if u.firstBufferedForWorkflowHeartbeatNotification {
 			metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
 		}
 	}
@@ -220,8 +220,8 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 	if startedWorkflowTask && !alreadyExisted {
-		u.bufferedForWHN = true
-		u.firstBufferedForWHN = !hadWHNBufferedInput
+		u.bufferedForWorkflowHeartbeatNotification = true
+		u.firstBufferedForWorkflowHeartbeatNotification = !hadWHNBufferedInput
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.

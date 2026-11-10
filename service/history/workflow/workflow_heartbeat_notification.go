@@ -81,15 +81,9 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 	}
 }
 
-// hasPendingUpdateForWorkflowHeartbeatNotification reads pending Updates without creating or clearing the Registry.
+// hasPendingUpdateForWorkflowHeartbeatNotification reads pending Updates from the current Registry.
 func (c *ContextImpl) hasPendingUpdateForWorkflowHeartbeatNotification() bool {
-	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() == c.MutableState.GetCurrentVersion() {
-		return c.updateRegistry.HasOutgoingMessages(false)
-	}
-	for _, info := range c.MutableState.GetExecutionInfo().GetUpdateInfos() {
-		if info.GetAdmission() != nil {
-			return true
-		}
-	}
-	return false
+	return c.updateRegistry != nil &&
+		c.updateRegistry.FailoverVersion() == c.MutableState.GetCurrentVersion() &&
+		c.updateRegistry.HasOutgoingMessages(false)
 }
