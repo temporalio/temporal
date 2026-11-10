@@ -1,4 +1,3 @@
-// TODO: Remove this forwarding file once all callers use go.temporal.io/testx/parallelsuite.
 package parallelsuite
 
 import (
