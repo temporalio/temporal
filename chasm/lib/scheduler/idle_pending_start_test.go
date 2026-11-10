@@ -205,13 +205,17 @@ func TestIdle_FinalStartRemovedWithoutRunID_StillCloses(t *testing.T) {
 	fire := pendingUnpauseTime.Add(idleWeek + time.Hour).Truncate(time.Second)
 	e, ts := newPausedThenUnpaused(t, oneShotSpec(fire), 0)
 
-	firePureTasksAt(t, e, ts, fire.Add(10*time.Millisecond))
+	tick := fire.Add(10 * time.Millisecond)
+	firePureTasksAt(t, e, ts, tick)
+	// Bypasses the Invoker's drain paths on purpose, so nothing reconciles: the
+	// backstop armed at the tick must close the schedule on its own.
 	require.NoError(t, e.updateScheduler(func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
 		s.Invoker.Get(ctx).BufferedStarts = nil
 		return nil
 	}))
 
-	deadline := fire.Add(idleWeek)
+	// While the start was pending, the schedule was active as of the tick.
+	deadline := tick.Add(idleWeek)
 	requireSchedulerState(t, e, func(s *scheduler.Scheduler, _ chasm.Context) {
 		require.False(t, s.Closed)
 		require.Equal(t, deadline.UTC(), s.GetIdleCloseTime().AsTime().UTC())

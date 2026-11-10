@@ -126,6 +126,10 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 	// Re-arm tasks if this call changed state, or if the LastProcessedTime advance
 	// just unblocked backed-off starts.
 	i.addTasks(ctx)
+
+	// Overlap and catchup-window drops remove starts without any start being
+	// recorded, so this may have drained the schedule's last work.
+	i.Scheduler.Get(ctx).reconcileIdleFromContext(ctx)
 }
 
 type executeResult struct {
@@ -251,8 +255,15 @@ func (i *Invoker) recordExecuteResult(
 
 	i.addTasks(ctx)
 
+	// Starting, retrying, or failing a start all change what the Invoker owes:
+	// a non-retryable failure in particular removes a start without any
+	// Generate call, and could be the schedule's last work.
+	sched := i.Scheduler.Get(ctx)
+	sched.advanceLastEventTimeTo(latestStartTime)
+	sched.reconcileIdleFromContext(ctx)
+
 	if newlyStarted > 0 {
-		i.Scheduler.Get(ctx).Generator.Get(ctx).Generate(ctx)
+		sched.Generator.Get(ctx).Generate(ctx)
 	}
 
 	return newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions

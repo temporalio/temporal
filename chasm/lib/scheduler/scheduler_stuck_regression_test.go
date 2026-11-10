@@ -20,7 +20,7 @@ func TestIdleDeadlineRearmedAfterRecordingStart(t *testing.T) {
 
 	// Exhaust a limited schedule so the Generator arms the idle task rather
 	// than another tick: with no actions left useScheduledAction is false, so
-	// getIdleExpiration reports isIdle.
+	// reconcileIdle reports the schedule idle.
 	ctx := env.MutableContext()
 	sched := env.Scheduler
 	sched.Schedule.State.LimitedActions = true

@@ -52,11 +52,15 @@ func newTaggedMetricsHandler(baseHandler metrics.Handler, scheduler *Scheduler) 
 // exclusive: a given task run either fires (Validate=true, Execute ran) or is
 // invalidated (Validate=false; reason tag explains why). "skipped" covers the
 // arm side rather than a task run: a task that was deliberately not created
-// because an equivalent one is already pending.
+// because an equivalent one is already pending. "deferred" is a task that was
+// valid and executed, but found outstanding work and re-armed instead of
+// acting (e.g. an idle task that would otherwise close a schedule with a
+// pending start).
 const (
 	outcomeFired       = "fired"
 	outcomeInvalidated = "invalidated"
 	outcomeSkipped     = "skipped"
+	outcomeDeferred    = "deferred"
 )
 
 // reasonNone is the ReasonTag value emitted on the "fired" outcome. Prometheus

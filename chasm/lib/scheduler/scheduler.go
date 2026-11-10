@@ -356,7 +356,8 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 }
 
 // IsExecutionSkippable reports whether the scheduler has no internal work that
-// must complete before its virtual clock advances to the next timer.
+// must complete before its virtual clock advances to the next timer. Built from
+// the same work predicates as idle close; see lifecycle.go.
 func (s *Scheduler) IsExecutionSkippable(ctx chasm.Context) bool {
 	// Schedule status.
 	if s.Sentinel || s.Closed || s.WorkflowMigration != nil || s.Schedule.GetState().GetPaused() {
@@ -367,20 +368,15 @@ func (s *Scheduler) IsExecutionSkippable(ctx chasm.Context) bool {
 		return false
 	}
 
-	// Pending Invoker work.
+	// Pending Invoker work. Unlike idle close (hasPendingInvokerWork), running
+	// workflows block skipping: the clock must not jump past their completion.
 	invoker := s.Invoker.Get(ctx)
-	if len(invoker.GetCancelWorkflows()) > 0 || len(invoker.GetTerminateWorkflows()) > 0 {
+	if invoker.hasPendingControlActions() || invoker.hasIncompleteStarts() {
 		return false
-	}
-	for _, start := range invoker.GetBufferedStarts() {
-		if start.GetCompleted() == nil {
-			return false
-		}
 	}
 
 	// Generator readiness.
-	lastProcessedTime := s.Generator.Get(ctx).GetLastProcessedTime()
-	return lastProcessedTime != nil && !lastProcessedTime.AsTime().Before(s.Info.GetUpdateTime().AsTime())
+	return s.Generator.Get(ctx).hasCaughtUp(s)
 }
 
 func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
@@ -541,6 +537,11 @@ func (s *Scheduler) updateConflictToken() {
 // state: schedule create/update, and the start time of any action still held in
 // the Invoker's buffer.
 //
+// Starts without a RunId are not events here. While any are pending,
+// reconcileIdle advances the persisted LastEventTime to now instead, so the
+// idle deadline is measured from the last moment the schedule had work, not
+// from when that work was scheduled.
+//
 // The result is NOT monotonic. recentActions() reads BufferedStarts, which
 // applyCompletedRetention truncates to the last recentActionCount completed
 // entries (ordered by CloseTime). When the start holding the largest StartTime
@@ -555,15 +556,6 @@ func (s *Scheduler) computeLastEventTime(ctx chasm.Context) time.Time {
 	// The recentActions list is unsorted.
 	for _, a := range s.recentActions(ctx) {
 		latest = util.MaxTime(latest, a.GetActualTime().AsTime())
-	}
-
-	// recentActions skips starts without a RunId. Count them by scheduled time,
-	// or the tick that buffers a schedule's final action can arm the idle task in
-	// the past and close it before InvokerExecuteTask runs.
-	for _, start := range s.Invoker.Get(ctx).GetBufferedStarts() {
-		if start.GetRunId() == "" {
-			latest = util.MaxTime(latest, start.GetActualTime().AsTime())
-		}
 	}
 
 	return latest
@@ -621,23 +613,6 @@ func (s *Scheduler) idleDeadline(ctx chasm.Context, idleTime time.Duration) time
 		return s.Info.GetCreateTime().AsTime().Add(idleTime)
 	}
 	return s.getLastEventTime(ctx).Add(idleTime)
-}
-
-// getIdleExpiration returns an idle close time and whether the schedule is
-// idle. Generator-only: nextWakeup must reflect the spec's next pending wakeup
-// so the predicate can skip arming idle when work remains. Validate calls
-// isHeldOpen and idleDeadline directly.
-func (s *Scheduler) getIdleExpiration(
-	ctx chasm.Context,
-	idleTime time.Duration,
-	nextWakeup time.Time,
-) (time.Time, bool) {
-	if idleTime == 0 ||
-		s.isHeldOpen() ||
-		(!nextWakeup.IsZero() && s.useScheduledAction(false)) {
-		return time.Time{}, false
-	}
-	return s.idleDeadline(ctx, idleTime), true
 }
 
 func (s *Scheduler) hasMoreBackfills() bool {

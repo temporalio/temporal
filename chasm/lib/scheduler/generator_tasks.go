@@ -14,7 +14,6 @@ import (
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -162,48 +161,20 @@ func (g *GeneratorTaskHandler) rearmTasks(
 	nextWakeupTime time.Time,
 ) {
 	// Schedule the next timer task. Three outcomes are possible:
-	// - isIdle: the schedule is done; arm the idle task to close it.
+	// - The spec is exhausted: reconcileIdle arms the idle task, and no further
+	//   generator tick is needed. The schedule stays open for IdleTime so the
+	//   customer can describe/modify/restart it, then closes once nothing is
+	//   outstanding (see reconcileIdle and SchedulerIdleTaskHandler.Execute).
 	// - nextWakeupTime is set: arm the next generator tick.
 	// - Neither: Hold open without a task. This requires both that
 	//   isHeldOpen is true (paused or backfill pending) AND that no spec
 	//   wakeup is available, e.g. a paused manual-only schedule. IdleTime=0
 	//   also lands here. An external trigger (Patch.Unpause, Update, or a
 	//   BackfillerTask's completion-time Generate call) revives us.
-	idleExpiration, isIdle := sched.getIdleExpiration(ctx, idleTimeTotal, nextWakeupTime)
-	if isIdle {
-		// Schedule is complete, no need for another buffer task. We keep the schedule's
-		// backing mutable state explicitly open for the idle period, during which the
-		// customer can describe/modify/restart the schedule.
-		//
-		// Once the idle timer expires, we close the component.
-
-		// An idle task armed at exactly this deadline is already pending: arming a
-		// second one would leave a permanent duplicate in the component's PureTasks,
-		// because SchedulerIdleTaskHandler.Validate only invalidates tasks whose
-		// deadline has moved *later*.
-		if sched.GetIdleCloseTime().AsTime().Equal(idleExpiration) {
-			metricsHandler.Counter(metrics.ScheduleIdleTask.Name()).
-				Record(1, metrics.OutcomeTag(outcomeSkipped), metrics.ReasonTag(idleAlreadyArmed))
-			return
-		}
-
-		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
-			fmt.Sprintf("scheduled idle task for %s", idleExpiration.Format(time.RFC3339)))
-		ctx.AddTask(sched, chasm.TaskAttributes{
-			ScheduledTime: idleExpiration,
-		}, &schedulerpb.SchedulerIdleTask{
-			IdleTimeTotal: durationpb.New(idleTimeTotal),
-		})
-		// Record the idle-close deadline so it can be surfaced as the
-		// ScheduleIdleCloseTime search attribute for stuck-schedule detection.
-		sched.IdleCloseTime = timestamppb.New(idleExpiration)
-
+	specPending := !nextWakeupTime.IsZero() && sched.useScheduledAction(false)
+	if sched.reconcileIdle(ctx, metricsHandler, idleTimeTotal, specPending) {
 		return
 	}
-
-	// Not idle: the schedule has work again (or is being held open), so it's
-	// no longer pending an idle close.
-	sched.IdleCloseTime = nil
 
 	if !nextWakeupTime.IsZero() {
 		// A clock rollback can put the next action before the task validation

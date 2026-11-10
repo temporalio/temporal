@@ -52,12 +52,31 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	scheduler *Scheduler,
 	_ chasm.TaskAttributes,
-	_ *schedulerpb.SchedulerIdleTask,
+	task *schedulerpb.SchedulerIdleTask,
 ) error {
+	metricsHandler := newTaggedMetricsHandler(r.metricsHandler, scheduler)
+
+	// Closing is irreversible and drops anything still buffered, so the deadline
+	// alone is not enough: re-check for outstanding work at the moment of closing.
+	// This is what makes reconcileIdle's backstop task safe, and it also covers
+	// a past-due task armed by an older binary. Sentinels have no work to check.
+	if !scheduler.IsSentinel() {
+		specPending := scheduler.Generator.Get(ctx).hasPendingSpecActions(scheduler)
+		if scheduler.hasOutstandingWork(ctx, specPending) {
+			scheduler.getOrCreateEventLog(ctx).LogEvent(ctx, "idle timer deferred: schedule has outstanding work")
+			metricsHandler.Counter(metrics.ScheduleIdleTask.Name()).
+				Record(1, metrics.OutcomeTag(outcomeDeferred), metrics.ReasonTag(idleDeferredPendingWork))
+			// Re-arms IdleTime from now if the Invoker still owes work; clears
+			// IdleCloseTime if the schedule is held open or the spec resumed,
+			// where whatever ends that state reconciles again.
+			scheduler.reconcileIdle(ctx, metricsHandler, task.GetIdleTimeTotal().AsDuration(), specPending)
+			return nil
+		}
+	}
+
 	scheduler.getOrCreateEventLog(ctx).LogEvent(ctx, "schedule closed from idle timer")
 	scheduler.Closed = true
-	newTaggedMetricsHandler(r.metricsHandler, scheduler).
-		Counter(metrics.ScheduleIdleTask.Name()).
+	metricsHandler.Counter(metrics.ScheduleIdleTask.Name()).
 		Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 	return nil
 }
@@ -68,6 +87,7 @@ const (
 	idleInvalidatedExpirationShift metrics.ReasonString = "expiration_shift"
 	idleInvalidatedClosed          metrics.ReasonString = "closed"
 	idleAlreadyArmed               metrics.ReasonString = "already_armed"
+	idleDeferredPendingWork        metrics.ReasonString = "pending_work"
 )
 
 func (r *SchedulerIdleTaskHandler) Validate(
@@ -96,8 +116,9 @@ func (r *SchedulerIdleTaskHandler) Validate(
 	// Deadline moved earlier. getLastEventTime floors the recomputed value at the
 	// persisted LastEventTime mark, so this is now only reachable on a schedule
 	// whose mark predates that field (nil) - i.e. one that has not ticked since
-	// the upgrade. Fire anyway (closing the schedule is the safe call) but log,
-	// so a mark that is failing to hold the line still surfaces.
+	// the upgrade. Fire anyway - Execute still refuses to close while work is
+	// outstanding - but log, so a mark that is failing to hold the line still
+	// surfaces.
 	if idleExpiration.Before(taskAttrs.ScheduledTime) {
 		newTaggedLogger(r.baseLogger, scheduler).Warn("idle deadline regressed",
 			tag.Timestamp(idleExpiration),
