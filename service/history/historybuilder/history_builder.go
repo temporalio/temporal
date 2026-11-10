@@ -40,6 +40,8 @@ type (
 	HistoryMutation struct {
 		// events to be persisted to events table
 		DBEventsBatches [][]*historypb.HistoryEvent
+		// Buffered events moved into the history batches during this transaction.
+		FlushedBufferedEvents []*historypb.HistoryEvent
 		// events to be buffer in execution table
 		DBBufferBatch []*historypb.HistoryEvent
 		// whether to clear buffer events on DB

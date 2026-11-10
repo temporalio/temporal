@@ -1863,6 +1863,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:        [][]*historypb.HistoryEvent{{event1, event2}},
+		FlushedBufferedEvents:  []*historypb.HistoryEvent{event1, event2},
 		DBClearBuffer:          false,
 		DBBufferBatch:          nil,
 		MemBufferBatch:         nil,
@@ -1925,6 +1926,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:        [][]*historypb.HistoryEvent{{event1, event2}},
+		FlushedBufferedEvents:  []*historypb.HistoryEvent{event1, event2},
 		DBClearBuffer:          true,
 		DBBufferBatch:          nil,
 		MemBufferBatch:         nil,
@@ -2001,6 +2003,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:        [][]*historypb.HistoryEvent{{event0, event1, event2}},
+		FlushedBufferedEvents:  []*historypb.HistoryEvent{event0, event1, event2},
 		DBClearBuffer:          true,
 		DBBufferBatch:          nil,
 		MemBufferBatch:         nil,

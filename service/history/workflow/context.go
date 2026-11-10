@@ -1125,6 +1125,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	}
 	if transactionPolicy == historyi.TransactionPolicyActive {
 		c.handleWorkflowHeartbeatNotification(ctx, shardContext, payload.ExecutionMutation.NewBufferedEvents)
+		c.emitWorkflowBufferedInputFlushLatency(payload.ExecutionMutation.FlushedBufferedEvents)
 	}
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
