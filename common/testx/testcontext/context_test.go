@@ -46,25 +46,37 @@ func TestName(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name    string
-		context func(*testing.T) context.Context
-		foreign bool
+		name     string
+		context  func(*testing.T) context.Context
+		wantName string
 	}{
-		{name: "foreign", context: func(t *testing.T) context.Context { return t.Context() }, foreign: true},
-		{name: "test", context: func(t *testing.T) context.Context { return For(t) }},
-		{name: "derived", context: func(t *testing.T) context.Context { return context.WithoutCancel(For(t)) }},
-		{name: "extended", context: func(t *testing.T) context.Context {
-			return EnsureRemaining(For(t), t, DefaultTimeout()+time.Second)
-		}},
+		{
+			name:     "foreign",
+			context:  func(t *testing.T) context.Context { return t.Context() },
+			wantName: "",
+		},
+		{
+			name:     "test",
+			context:  func(t *testing.T) context.Context { return For(t) },
+			wantName: t.Name() + "/test",
+		},
+		{
+			name:     "derived",
+			context:  func(t *testing.T) context.Context { return context.WithoutCancel(For(t)) },
+			wantName: t.Name() + "/derived",
+		},
+		{
+			name: "extended",
+			context: func(t *testing.T) context.Context {
+				return EnsureRemaining(For(t), t, DefaultTimeout()+time.Second)
+			},
+			wantName: t.Name() + "/extended",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := tc.context(t)
-			if tc.foreign {
-				require.Empty(t, Name(ctx))
-			} else {
-				require.Equal(t, t.Name(), Name(ctx))
-			}
+			require.Equal(t, tc.wantName, Name(ctx))
 		})
 	}
 
