@@ -2078,6 +2078,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	).AnyTimes()
 	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
 	ms.EXPECT().Now().Return(virtualNow).AnyTimes()
+	ms.EXPECT().ToLogicalTimeWithCurrentTimeSkippingOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	// Add a valid timer task.
 	timerTask := &tasks.ChasmTaskPure{
@@ -2158,6 +2159,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Closes
 	).AnyTimes()
 	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
 	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	ms.EXPECT().ToLogicalTimeWithCurrentTimeSkippingOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	timerTask := &tasks.ChasmTaskPure{
 		WorkflowKey: definition.NewWorkflowKey(

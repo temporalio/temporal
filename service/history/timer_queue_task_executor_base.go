@@ -280,7 +280,9 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	// truncated to a common (millisecond) precision later on.
 	//
 	// See also queues.IsTimeExpired.
-	referenceTime := util.MaxTime(ms.Now(), task.GetKey().FireTime)
+	// Component task deadlines use logical time; the queue's fire time uses physical time.
+	logicalFireTime := ms.ToLogicalTimeWithCurrentTimeSkippingOffset(task.GetKey().FireTime)
+	referenceTime := util.MaxTime(ms.Now(), logicalFireTime)
 
 	return tree.EachPureTask(referenceTime, callback)
 }
