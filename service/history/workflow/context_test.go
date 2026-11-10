@@ -593,8 +593,10 @@ func (s *contextSuite) TestRefreshTask() {
 
 			// A refresh writes no events, so even a closed run must not record completion stats again.
 			snapshot := capture.Snapshot()
-			for _, recording := range append(snapshot[metrics.HistorySize.Name()], snapshot[metrics.HistoryCount.Name()]...) {
-				s.Equal(metrics.ExecutionStatsScope, recording.Tags[metrics.OperationTagName])
+			for _, metricName := range []string{metrics.HistorySize.Name(), metrics.HistoryCount.Name()} {
+				recordings := snapshot[metricName]
+				s.Len(recordings, 1, metricName)
+				s.Equal(metrics.ExecutionStatsScope, recordings[0].Tags[metrics.OperationTagName], metricName)
 			}
 		})
 	}
