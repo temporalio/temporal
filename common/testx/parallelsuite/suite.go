@@ -101,6 +101,8 @@ func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.Testin
 }
 
 // T returns the *testing.T, panicking if the guard has been sealed.
+//
+//nolint:forbidigo // Reject invalid suite usage.
 func (s *Suite[T]) T() *testing.T {
 	if s.guardT.hasSubtests.Load() {
 		panic("parallelsuite: do not call T() after Run(); use the subtest callback's parameter instead")
@@ -215,6 +217,7 @@ func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, false, args...)
 }
 
+//nolint:forbidigo // Reject invalid suite usage.
 func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
 
@@ -255,6 +258,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	}
 }
 
+//nolint:forbidigo // Reject invalid suite usage.
 func validateSuiteStruct(structType reflect.Type) {
 	if !strings.HasSuffix(structType.Name(), "Suite") {
 		panic(fmt.Sprintf("parallelsuite.Run: struct name %q must end with \"Suite\"", structType.Name()))
@@ -281,6 +285,8 @@ func validateSuiteStruct(structType reflect.Type) {
 //
 // The flag is registered by testify's suite package (imported above); we share
 // that registration via flag.Lookup rather than registering it a second time.
+//
+//nolint:forbidigo // Reject an invalid test filter.
 func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 	f := flag.Lookup("testify.m")
 	if f == nil {
@@ -303,6 +309,7 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 	return filtered
 }
 
+//nolint:forbidigo // Reject invalid suite usage.
 func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect.Method {
 	expectedNumIn := 1 + len(args)
 	inheritedType := structType.Field(0).Type

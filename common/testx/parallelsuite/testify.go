@@ -16,22 +16,30 @@ type testifyBase struct {
 }
 
 // Deprecated: SetT is managed internally by [Run]. Do not call directly.
+//
+//nolint:forbidigo // Reject unsupported testify APIs.
 func (b *testifyBase) SetT(_ *testing.T) {
 	panic("parallelsuite: do not call SetT directly; it is managed by parallelsuite.Run")
 }
 
 // Deprecated: SetS is managed internally by [Run]. Do not call directly.
+//
+//nolint:forbidigo // Reject unsupported testify APIs.
 func (b *testifyBase) SetS(_ testifysuite.TestingSuite) {
 	panic("parallelsuite: do not call SetS directly; it is managed by parallelsuite.Run")
 }
 
 // Deprecated: Assert returns non-fatal assertions which are not supported.
 // Use s.NoError, s.Equal, etc. directly (require semantics).
+//
+//nolint:forbidigo // Reject unsupported testify APIs.
 func (b *testifyBase) Assert() *assert.Assertions { //nolint:forbidigo // The disabled testify API must retain its signature.
 	panic("parallelsuite: do not use Assert(); use s.NoError, s.Equal, etc. directly")
 }
 
 // Deprecated: Require bypasses the guard mechanism. Use s.NoError, s.Equal, etc. directly.
+//
+//nolint:forbidigo // Reject unsupported testify APIs.
 func (b *testifyBase) Require() *require.Assertions {
 	panic("parallelsuite: do not use Require(); use s.NoError, s.Equal, etc. directly")
 }

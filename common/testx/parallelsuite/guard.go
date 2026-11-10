@@ -15,6 +15,7 @@ type guardT struct {
 	hasSubtests atomic.Bool
 }
 
+//nolint:forbidigo // Reject invalid suite usage.
 func (g *guardT) Helper() {
 	if g.hasSubtests.Load() {
 		panic(fmt.Sprintf(
