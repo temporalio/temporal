@@ -38,6 +38,7 @@ type (
 		clientBean      *client.MockBean
 		shardController *shard.MockController
 
+		processToolBox        ProcessToolBox
 		streamReceiverMonitor *StreamReceiverMonitorImpl
 	}
 )
@@ -75,6 +76,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 		Logger:          log.NewNoopLogger(),
 		DLQWriter:       NoopDLQWriter{},
 	}
+	s.processToolBox = processToolBox
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		processToolBox,
 		NewExecutableTaskConverter(processToolBox),
@@ -795,18 +797,10 @@ func (s *streamReceiverMonitorSuite) TestMonitorStreamStatus_RecoversPanic() {
 	s.Len(capture.Snapshot()[metrics.ReplicationStreamPanic.Name()], 1)
 }
 
-func (s *streamReceiverMonitorSuite) TestStatusMonitorLoop_GlobalNamespaceDisabled() {
-	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
-
-	done := make(chan struct{})
-	go func() {
-		s.streamReceiverMonitor.statusMonitorLoop()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		s.streamReceiverMonitor.shutdownOnce.Shutdown()
-		s.Fail("statusMonitorLoop should exit immediately when global namespace is disabled")
+func (s *streamReceiverMonitorSuite) TestStreamReceiverMonitorProvider_GlobalNamespace() {
+	for _, globalNamespaceEnabled := range []bool{true, false} {
+		s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(globalNamespaceEnabled)
+		monitor := streamReceiverMonitorProvider(s.processToolBox, NewExecutableTaskConverter(s.processToolBox))
+		s.Equal(globalNamespaceEnabled, monitor.(*StreamReceiverMonitorImpl).enableStreaming)
 	}
 }

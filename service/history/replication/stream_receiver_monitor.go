@@ -297,10 +297,6 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 }
 
 func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
-	// Without global namespace the engine has no replication ack manager, so there is nothing to monitor.
-	if !m.ClusterMetadata.IsGlobalNamespaceEnabled() {
-		return
-	}
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
