@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.worker.proto.v1;
+
+import "chasm/lib/worker/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
+
+// WorkerService provides internal RPCs to update the worker state machine.
+service WorkerService {
+  // RecordHeartbeat creates or updates workers with the same
+  // worker_grouping_key and renews their shared lease. When the lease expires,
+  // the current run for the group closes and activities still tracked by its
+  // workers are rescheduled. A later heartbeat starts a new run.
+  //
+  // Semantics:
+  // - Retried heartbeats are applied once.
+  // - Older heartbeats cannot undo newer updates.
+  rpc RecordHeartbeat(RecordHeartbeatRequest) returns (RecordHeartbeatResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "worker_grouping_key";
+  }
+}
