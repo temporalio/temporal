@@ -1,10 +1,8 @@
 # Reviews PRs from opted-in team members or Claude review labels with Claude.
 #
-# Uses `pull_request`: GitHub blocks `pull_request_target` in public
-# repositories by default from December 2, 2026. Under `pull_request`, PRs
-# from forks and bot actors get no secrets, so only PRs from branches of this
-# repository are reviewed. The `check-review-eligibility` job still gates the
-# review job behind the opt-in labels and review teams.
+# Uses `pull_request`, so PRs from forks and bots get no secrets and are not
+# reviewed: GitHub blocks `pull_request_target` in public repositories from
+# December 2, 2026.
 name: Claude review for opted-in PRs
 
 on:
@@ -23,20 +21,18 @@ jobs:
   check-review-eligibility:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      !endsWith(github.actor, '[bot]') &&
+      !endsWith(github.actor, '[bot]') && (
       (
+        github.event.action != 'labeled' &&
+        github.event.pull_request.draft == false
+      ) ||
+      (
+        github.event.action == 'labeled' &&
         (
-          github.event.action != 'labeled' &&
-          github.event.pull_request.draft == false
-        ) ||
-        (
-          github.event.action == 'labeled' &&
-          (
-            github.event.label.name == 'request-claude-review' ||
-            github.event.label.name == 'skip-claude-review'
-          )
+          github.event.label.name == 'request-claude-review' ||
+          github.event.label.name == 'skip-claude-review'
         )
-      )
+      ))
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
     permissions: {} # uses the Temporal CI/CD Bot app token, not GITHUB_TOKEN
@@ -52,9 +48,11 @@ jobs:
           app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          # Least-privilege: members:read for team-membership lookups and
+          # Least-privilege: members:read for team-membership lookups,
+          # pull-requests:read for PR metadata, and
           # issues:read for PR label lookups.
           permission-members: read
+          permission-pull-requests: read
           permission-issues: read
       - id: resolve
         env:
@@ -78,6 +76,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           AUTHOR: ${{ steps.resolve.outputs.author }}
+          EVENT_ACTOR: ${{ github.actor }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_LABEL_NAME: ${{ github.event.label.name }}
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
@@ -175,12 +174,9 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      # Under `pull_request` the default checkout is the PR's merge commit. Check
-      # out the base so the review instructions come from the base branch, not
-      # from the PR under review.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha }} # not the PR's merge commit
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
