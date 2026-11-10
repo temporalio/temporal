@@ -562,9 +562,7 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), hb)
 
 	require.Equal(t, "worker_metrics", eventLogger.records[0].EventName())
-	// The last-interval task counts are not exported. Targets come from the SDK
-	// and differ from the current counts; activity reported none, so it has no
-	// target attribute at all.
+	// The last-interval task counts are not exported.
 	require.Equal(t, map[string]any{
 		"namespace":                       "ns",
 		"task_queue":                      "my-queue",
