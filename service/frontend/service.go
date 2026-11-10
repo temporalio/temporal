@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmworker "go.temporal.io/server/chasm/lib/worker"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -255,6 +256,7 @@ type Config struct {
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
 
+	EnableDurableWorkerHeartbeats           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerHeartbeatsEnabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCancelWorkerPollsOnShutdown       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableMatchingFanOutForPollCancellation dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -457,6 +459,7 @@ func NewConfig(
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
 		MaxWorkflowRulesPerNamespace:            dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
+		EnableDurableWorkerHeartbeats:           chasmworker.EnableDurableWorkerHeartbeats.Get(dc),
 		WorkerHeartbeatsEnabled:                 dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
 		EnableCancelWorkerPollsOnShutdown:       dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
 		EnableMatchingFanOutForPollCancellation: dynamicconfig.EnableMatchingFanOutForPollCancellation.Get(dc),
