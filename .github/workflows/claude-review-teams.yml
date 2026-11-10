@@ -1,8 +1,4 @@
 # Reviews PRs from opted-in team members or Claude review labels with Claude.
-#
-# Uses `pull_request`, so PRs from forks and bots get no secrets and are not
-# reviewed: GitHub blocks `pull_request_target` in public repositories from
-# December 2, 2026.
 name: Claude review for opted-in PRs
 
 on:
