@@ -311,8 +311,8 @@ func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Contex
 	// userDataManager must be initialized here already so we can just ask it for scale info
 	scaleInfo := pm.userDataManager.PartitionScale()
 
-	if scaleInfo.GetRead() <= 0 || scaleInfo.GetWrite() <= 0 || scaleInfo.Write > scaleInfo.Read {
-		return nil // missing or invalid scale info
+	if !validPartitionScale(scaleInfo) {
+		return nil
 	}
 
 	// always validate partition id based on read/write counts and scale info
@@ -330,6 +330,21 @@ func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Contex
 	}
 	allowedDrift := pm.config.PartitionScaleAllowedDrift()
 	return validatePartitionScaleDrift(scaleInfo, forWrite, clientPC, allowedDrift)
+}
+
+// validPartitionScale returns whether scale info from dynamic partition scaling should be used.
+// When it isn't, partition counts come from dynamic config.
+func validPartitionScale(scaleInfo *taskqueuespb.PartitionScaleInfo) bool {
+	return scaleInfo.GetRead() > 0 && scaleInfo.GetWrite() > 0 && scaleInfo.GetWrite() <= scaleInfo.GetRead()
+}
+
+// effectiveReadPartitions returns the read partition count from scaleInfo if it's valid, and
+// otherwise the count from dynamic config.
+func effectiveReadPartitions(scaleInfo *taskqueuespb.PartitionScaleInfo, configured func() int) int {
+	if validPartitionScale(scaleInfo) {
+		return int(scaleInfo.GetRead())
+	}
+	return configured()
 }
 
 // validatePartitionCounts checks whether a partition should accept an RPC based on the current
@@ -1753,12 +1768,12 @@ func parseDeploymentFromVersionKey(versionKey string) (deploymentName, buildID s
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
 	if _, ok := pm.partition.(*tqid.NormalPartition); ok {
 		// Rate limits are divided across read partitions, so they follow dynamic partition scaling.
-		// Invalid or missing scale info falls back to dynamic config, as in checkPartitionCounts.
-		var scaledRead int32
-		if scale := data.GetScale(); scale.GetRead() > 0 && scale.GetWrite() > 0 && scale.GetWrite() <= scale.GetRead() {
-			scaledRead = scale.GetRead()
+		// The rate limit manager falls back to dynamic config itself when this is 0.
+		var scaledRead int
+		if scale := data.GetScale(); validPartitionScale(scale) {
+			scaledRead = int(scale.GetRead())
 		}
-		pm.rateLimitManager.SetScaledNumReadPartitions(int(scaledRead))
+		pm.rateLimitManager.SetScaledNumReadPartitions(scaledRead)
 	}
 
 	// for now, only sticky partitions act on the rest of ephemeral data, normal partitions ignore it.
@@ -1984,10 +1999,7 @@ func (pm *taskQueuePartitionManagerImpl) ForceLoadAllChildPartitions() {
 		return
 	}
 
-	partitions := pm.userDataManager.PartitionScale().GetRead()
-	if partitions == 0 {
-		partitions = int32(pm.config.NumReadPartitions())
-	}
+	partitions := int32(effectiveReadPartitions(pm.userDataManager.PartitionScale(), pm.config.NumReadPartitions))
 	if partitions <= 1 {
 		return
 	}
