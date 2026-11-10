@@ -296,6 +296,7 @@ func TestHandoffRetryPolicySelection(t *testing.T) {
 		timer                 enumspb.TimeoutType
 		failure               *failurepb.Failure
 		mainNil               bool
+		zeroInitialInterval   bool
 		retryIntervalOverride time.Duration
 		expectedType          activitypb.ActivityRetryType
 		expectedRetryInterval time.Duration
@@ -376,6 +377,17 @@ func TestHandoffRetryPolicySelection(t *testing.T) {
 			expectedRetryInterval: 21 * time.Second,
 		},
 		{
+			name:                "zero handoff interval retries immediately",
+			zeroInitialInterval: true,
+			expectedType:        activitypb.ACTIVITY_RETRY_TYPE_HANDOFF,
+		},
+		{
+			name:                "zero activity interval retries immediately",
+			handedOff:           true,
+			zeroInitialInterval: true,
+			expectedType:        activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY,
+		},
+		{
 			name:                  "worker overrides submission backoff",
 			retryIntervalOverride: 37 * time.Second,
 			expectedType:          activitypb.ACTIVITY_RETRY_TYPE_HANDOFF,
@@ -390,6 +402,13 @@ func TestHandoffRetryPolicySelection(t *testing.T) {
 			a.AwaitingCompletion = testCase.handedOff
 			if testCase.mainNil {
 				a.RetryPolicy = nil
+			}
+			if testCase.zeroInitialInterval {
+				policy := a.RetryPolicy
+				if testCase.expectedType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
+					policy = a.AsyncHandoffOptions.RetryPolicy
+				}
+				policy.InitialInterval = durationpb.New(0)
 			}
 
 			event := retryEvent{

@@ -75,11 +75,12 @@ func (a *Activity) dispatchTimeForAttempt(attempt *activitypb.ActivityAttemptSta
 }
 
 // dispatchTimeForRetry computes the time a retried attempt will be dispatched to Matching,
-// as complete_time + retry_interval. Returns nil if either field is missing or zero.
+// as complete_time + retry_interval. A zero interval dispatches at completion time.
+// Returns nil if either field is missing or the interval is negative.
 func dispatchTimeForRetry(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
 	retryInterval := attempt.GetCurrentRetryInterval()
 	completeTime := attempt.GetCompleteTime()
-	if retryInterval != nil && retryInterval.AsDuration() > 0 && completeTime != nil {
+	if retryInterval != nil && retryInterval.AsDuration() >= 0 && completeTime != nil {
 		return timestamppb.New(completeTime.AsTime().Add(retryInterval.AsDuration()))
 	}
 	return nil
