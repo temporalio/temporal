@@ -16,8 +16,7 @@ env:
 jobs:
   check-review-eligibility:
     if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      !endsWith(github.actor, '[bot]') && (
+      github.event.pull_request.head.repo.full_name == github.repository && (
       (
         github.event.action != 'labeled' &&
         github.event.pull_request.draft == false
