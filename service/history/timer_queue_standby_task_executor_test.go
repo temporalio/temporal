@@ -2499,6 +2499,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 	).AnyTimes()
 	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
+	ms.EXPECT().ToLogicalTimeWithCurrentTimeSkippingOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	// Add a valid timer task.
 	timerTask := &tasks.ChasmTaskPure{

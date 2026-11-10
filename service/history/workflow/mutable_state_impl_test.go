@@ -9865,6 +9865,45 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 	}
 }
 
+func (s *mutableStateSuite) TestToLogicalTimeWithCurrentTimeSkippingOffset() {
+	physicalTime := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		info     *persistencespb.TimeSkippingInfo
+		input    time.Time
+		expected time.Time
+	}{
+		{name: "no time skipping info", input: physicalTime, expected: physicalTime},
+		{name: "no skipped duration", info: &persistencespb.TimeSkippingInfo{}, input: physicalTime, expected: physicalTime},
+		{
+			name: "disabled time skipping retains offset",
+			info: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			},
+			input:    physicalTime,
+			expected: physicalTime.Add(time.Hour),
+		},
+		{
+			name: "zero time remains unset",
+			info: &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(time.Hour)},
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.mutableState.executionInfo.TimeSkippingInfo = tc.info
+			s.Equal(tc.expected, s.mutableState.ToLogicalTimeWithCurrentTimeSkippingOffset(tc.input))
+			s.Equal(tc.input, s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(s.mutableState.ToLogicalTimeWithCurrentTimeSkippingOffset(tc.input)))
+		})
+	}
+	s.Run("uses updated offset", func() {
+		info := &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(time.Hour)}
+		s.mutableState.executionInfo.TimeSkippingInfo = info
+		s.Equal(physicalTime.Add(time.Hour), s.mutableState.ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime))
+		info.AccumulatedSkippedDuration = durationpb.New(2 * time.Hour)
+		s.Equal(physicalTime.Add(2*time.Hour), s.mutableState.ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime))
+	})
+}
+
 // TestToPhysicalTimeWithCurrentTimeSkippingOffset covers both skipped and unskipped executions.
 func (s *mutableStateSuite) TestToPhysicalTimeWithCurrentTimeSkippingOffset() {
 	logicalTime := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)

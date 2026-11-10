@@ -27,6 +27,51 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestExecuteChasmPureTimersClockSkew(t *testing.T) {
+	t.Parallel()
+
+	physicalFireTime := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		skipped   time.Duration
+		nowOffset time.Duration
+	}{
+		{name: "task ahead without skipping", nowOffset: -time.Second},
+		{name: "task ahead with skipping", skipped: time.Hour, nowOffset: -time.Second},
+		{name: "now ahead with skipping", skipped: time.Hour, nowOffset: time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			tree := historyi.NewMockChasmTree(ctrl)
+			logicalDeadline := physicalFireTime.Add(tc.skipped)
+			logicalNow := logicalDeadline.Add(tc.nowOffset)
+			ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
+			ms.EXPECT().ChasmTree().Return(tree)
+			ms.EXPECT().ToLogicalTimeWithCurrentTimeSkippingOffset(physicalFireTime).Return(logicalDeadline)
+			ms.EXPECT().Now().Return(logicalNow)
+			tree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(referenceTime time.Time, callback func(chasm.NodePureTask, chasm.TaskAttributes, any) (bool, error)) error {
+					if logicalDeadline.After(referenceTime) {
+						return nil
+					}
+					_, err := callback(nil, chasm.TaskAttributes{}, nil)
+					return err
+				})
+			processed := false
+			err := (&timerQueueTaskExecutorBase{}).executeChasmPureTimers(ms, &tasks.ChasmTaskPure{
+				VisibilityTimestamp: physicalFireTime,
+			}, func(chasm.NodePureTask, chasm.TaskAttributes, any) (bool, error) {
+				processed = true
+				return true, nil
+			})
+			require.NoError(t, err)
+			require.True(t, processed, "a delivered timer must reach its logical deadline despite clock skew")
+		})
+	}
+}
+
 type (
 	timerQueueTaskExecutorBaseSuite struct {
 		suite.Suite

@@ -10360,8 +10360,9 @@ func logError(
 }
 
 func (ms *MutableStateImpl) ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time {
-	if logicalTime.IsZero() {
-		return logicalTime
-	}
-	return logicalTime.Add(-ms.accumulatedSkippedDuration())
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime)
+}
+
+func (ms *MutableStateImpl) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time {
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime)
 }

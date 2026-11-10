@@ -31,6 +31,46 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestTimeSkippingInfoUtilTimeConversions(t *testing.T) {
+	t.Parallel()
+
+	timestamp := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		util     *TimeSkippingInfoUtil
+		input    time.Time
+		physical time.Time
+		logical  time.Time
+	}{
+		{name: "nil util", input: timestamp, physical: timestamp, logical: timestamp},
+		{name: "nil info", util: NewTimeSkippingInfoUtil(nil), input: timestamp, physical: timestamp, logical: timestamp},
+		{name: "unset duration", util: NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{}), input: timestamp, physical: timestamp, logical: timestamp},
+		{
+			name: "accumulated offset applies when skipping is disabled",
+			util: NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+				InitialSkippedDuration:     durationpb.New(30 * time.Minute),
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			}),
+			input:    timestamp,
+			physical: timestamp.Add(-time.Hour),
+			logical:  timestamp.Add(time.Hour),
+		},
+		{
+			name: "zero time remains unset",
+			util: NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			}),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.physical, tc.util.ToPhysicalTimeWithCurrentTimeSkippingOffset(tc.input))
+			require.Equal(t, tc.logical, tc.util.ToLogicalTimeWithCurrentTimeSkippingOffset(tc.input))
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestIsTimeSkippingFeatureEnabled() {
 	cases := []struct {
 		name             string

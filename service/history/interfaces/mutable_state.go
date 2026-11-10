@@ -439,6 +439,9 @@ type (
 		// the current accumulated skipped duration. Zero time is returned unchanged.
 		// It cannot recover the physical time at which a past logical timestamp was generated.
 		ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time
+		// ToLogicalTimeWithCurrentTimeSkippingOffset converts physical time to logical time by adding
+		// the current accumulated skipped duration. Zero time is returned unchanged.
+		ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error

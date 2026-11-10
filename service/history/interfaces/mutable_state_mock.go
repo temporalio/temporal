@@ -3772,6 +3772,20 @@ func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueueScheduleToStartTimeout", reflect.TypeOf((*MockMutableState)(nil).TaskQueueScheduleToStartTimeout), name)
 }
 
+// ToLogicalTimeWithCurrentTimeSkippingOffset mocks base method.
+func (m *MockMutableState) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ToLogicalTimeWithCurrentTimeSkippingOffset", physicalTime)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// ToLogicalTimeWithCurrentTimeSkippingOffset indicates an expected call of ToLogicalTimeWithCurrentTimeSkippingOffset.
+func (mr *MockMutableStateMockRecorder) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToLogicalTimeWithCurrentTimeSkippingOffset", reflect.TypeOf((*MockMutableState)(nil).ToLogicalTimeWithCurrentTimeSkippingOffset), physicalTime)
+}
+
 // ToPhysicalTimeWithCurrentTimeSkippingOffset mocks base method.
 func (m *MockMutableState) ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time {
 	m.ctrl.T.Helper()
