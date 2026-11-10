@@ -2160,8 +2160,9 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 // (binary/null) is a result for both.
 func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 	// Must precede env creation, which otherwise fixes the default timeout.
-	ctx := testcontext.For(t, testcontext.WithTimeout(3*time.Minute))
+	testcontext.For(t, testcontext.WithTimeout(3*time.Minute))
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t), testcore.WithWorkerService("V1 scheduler"))...)
+	ctx := testcontext.For(t)
 
 	type sched struct {
 		name, scheduleID, workflowID string

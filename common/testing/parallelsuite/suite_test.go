@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/testing/testcontext"
+	"google.golang.org/grpc/metadata"
 )
 
 type validSuite struct{ Suite[*validSuite] }
@@ -84,7 +85,10 @@ func (s *awaitTrueSuite) TestAwaitTruef() {
 type contextSuite struct{ Suite[*contextSuite] }
 
 func (s *contextSuite) TestContextHasDeadline() {
-	deadline, ok := s.Context().Deadline()
+	ctx := s.Context()
+	md, _ := metadata.FromOutgoingContext(ctx)
+	s.Equal([]string{s.T().Name()}, md.Get("temporal-test-name"))
+	deadline, ok := ctx.Deadline()
 	s.True(ok)
 	s.Positive(time.Until(deadline))
 }

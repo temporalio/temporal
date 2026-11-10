@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
 )
@@ -258,6 +259,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Create the test context before any expensive setup, so that the deadline
 	// extension below can compensate for the time setup takes.
+	testtelemetry.AttachTestName(t)
 	ctx := testcontext.For(t)
 
 	options := testOptions{t: t}

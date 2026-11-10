@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
@@ -113,6 +114,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TearDownSuite() {
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) SetupTest() {
+	testtelemetry.AttachTestName(s.T())
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
