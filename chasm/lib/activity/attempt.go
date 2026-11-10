@@ -366,11 +366,15 @@ func startDelayBucket(delay time.Duration) activitypb.StartDelayBucket {
 }
 
 // reissueDispatchAndScheduleToStart re-emits the ActivityDispatchTask and ScheduleToStart timeout task for
-// a SCHEDULED activity. Retries fire at the retry time; first attempts dispatch now, lifted to
-// honor any pending start_delay.
+// a SCHEDULED activity. Retries retain their selected dispatch time, including after unpause.
+// First attempts dispatch now, lifted to honor any pending start_delay.
 func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) {
+	isRetry := attempt.GetCount() > 1 || a.pendingRetryType(attempt) != activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
+
 	var dispatchTime time.Time
-	if retryDispatchTime := dispatchTimeForRetry(attempt); retryDispatchTime != nil {
+	if isRetry && attempt.GetDispatchTime() != nil {
+		dispatchTime = attempt.GetDispatchTime().AsTime()
+	} else if retryDispatchTime := dispatchTimeForRetry(attempt); retryDispatchTime != nil {
 		dispatchTime = retryDispatchTime.AsTime()
 	} else {
 		dispatchTime = a.dispatchTimeRespectingStartDelay(ctx.Now(a))

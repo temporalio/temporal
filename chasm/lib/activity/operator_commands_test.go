@@ -1086,6 +1086,130 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 	}
 }
 
+// Options updates retain the selected dispatch time unless the governing retry policy changes.
+// A recalculated retry that is already due dispatches now, with a fresh schedule-to-start timeout.
+func TestUpdateOptionsRetryScheduling(t *testing.T) {
+	t.Parallel()
+
+	for _, retryCase := range []struct {
+		name      string
+		retryType activitypb.ActivityRetryType
+	}{
+		{name: "activity retry", retryType: activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY},
+		{name: "handoff retry", retryType: activitypb.ACTIVITY_RETRY_TYPE_HANDOFF},
+	} {
+		t.Run(retryCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, testCase := range []struct {
+				name             string
+				unpause          bool
+				pendingInterval  time.Duration
+				updatedInterval  time.Duration // Zero means an unrelated heartbeat update.
+				updateAfter      time.Duration
+				expectedDispatch time.Duration // Measured from the previous failure.
+			}{
+				{
+					name: "unrelated update after unpause", unpause: true,
+					pendingInterval: time.Minute, updateAfter: time.Hour + time.Second, expectedDispatch: time.Hour,
+				},
+				{
+					name: "policy edit after unpause", unpause: true,
+					pendingInterval: time.Minute, updatedInterval: time.Second,
+					updateAfter: time.Hour + time.Second, expectedDispatch: time.Hour + time.Second,
+				},
+				{
+					name:            "shortened backoff already elapsed",
+					pendingInterval: time.Hour, updatedInterval: time.Second,
+					updateAfter: 10 * time.Minute, expectedDispatch: 10 * time.Minute,
+				},
+				{
+					name:            "unrelated update preserves elapsed queue wait",
+					pendingInterval: time.Minute, updateAfter: 2 * time.Minute, expectedDispatch: time.Minute,
+				},
+			} {
+				t.Run(testCase.name, func(t *testing.T) {
+					t.Parallel()
+
+					a, ctx := newHandoffRetryTestActivity(t)
+					a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+					a.ScheduleToCloseTimeout = durationpb.New(4 * time.Hour)
+					a.ScheduleToStartTimeout = durationpb.New(time.Minute)
+					a.FirstAttemptStartedTime = timestamppb.New(defaultTime)
+					attempt := a.LastAttempt.Get(ctx)
+					attempt.PendingRetryType = retryCase.retryType
+					attempt.CompleteTime = timestamppb.New(defaultTime)
+					attempt.CurrentRetryInterval = durationpb.New(testCase.pendingInterval)
+					attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
+					attempt.DispatchTime = timestamppb.New(defaultTime.Add(testCase.pendingInterval))
+					policy := a.RetryPolicy
+					if retryCase.retryType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
+						attempt.Count = 1 // A handoff retry need not advance the activity attempt.
+						attempt.AsyncHandoffState.StartToCloseStartedTime = nil
+						policy = a.AsyncHandoffOptions.RetryPolicy
+					} else {
+						a.AsyncHandoffOptions = nil
+						attempt.AsyncHandoffState = nil
+					}
+					policy.InitialInterval = durationpb.New(testCase.pendingInterval)
+					policy.MaximumInterval = durationpb.New(2 * time.Hour)
+					policy.BackoffCoefficient = 1
+
+					now := defaultTime.Add(time.Hour)
+					ctx.HandleNow = func(chasm.Component) time.Time { return now }
+					if testCase.unpause {
+						a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
+						_, err := a.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+							FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{},
+						})
+						require.NoError(t, err)
+						require.Equal(t, now, attempt.GetDispatchTime().AsTime())
+					}
+
+					now = defaultTime.Add(testCase.updateAfter)
+					options := &apiactivitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(20 * time.Second)}
+					path := "heartbeat_timeout"
+					if testCase.updatedInterval > 0 {
+						updatedPolicy := &commonpb.RetryPolicy{InitialInterval: durationpb.New(testCase.updatedInterval)}
+						options = &apiactivitypb.ActivityOptions{RetryPolicy: updatedPolicy}
+						path = "retry_policy.initial_interval"
+						if retryCase.retryType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
+							options = &apiactivitypb.ActivityOptions{AsyncHandoffOptions: &apiactivitypb.AsyncHandoffOptions{RetryPolicy: updatedPolicy}}
+							path = "async_handoff_options.retry_policy.initial_interval"
+						}
+					}
+
+					ctx.Tasks = nil
+					_, err := a.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+						FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+							ActivityOptions: options,
+							UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{path}},
+						},
+					})
+					require.NoError(t, err)
+					dispatchTime := defaultTime.Add(testCase.expectedDispatch)
+					require.Equal(t, dispatchTime, attempt.GetDispatchTime().AsTime())
+
+					var dispatches, timeouts int
+					for _, task := range ctx.Tasks {
+						switch task.Payload.(type) {
+						case *activitypb.ActivityDispatchTask:
+							dispatches++
+							require.Equal(t, dispatchTime, task.Attributes.ScheduledTime)
+						case *activitypb.ScheduleToStartTimeoutTask:
+							timeouts++
+							require.Equal(t, dispatchTime.Add(a.GetScheduleToStartTimeout().AsDuration()), task.Attributes.ScheduledTime)
+						default:
+						}
+					}
+					require.Equal(t, 1, dispatches)
+					require.Equal(t, 1, timeouts)
+				})
+			}
+		})
+	}
+}
+
 func TestHandoffRetryOptionsUpdate(t *testing.T) {
 	t.Parallel()
 

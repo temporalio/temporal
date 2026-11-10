@@ -732,6 +732,10 @@ func (a *Activity) applyRetryAndHandoffStateUpdate(
 	attempt.PendingRetryType = pendingType
 	if updatedRetryInterval != nil {
 		attempt.CurrentRetryInterval = updatedRetryInterval
+
+		// If the new backoff already elapsed, dispatch now and start schedule-to-start from now.
+		retryDispatchTime := timestamp.TimeValue(dispatchTimeForRetry(attempt))
+		attempt.DispatchTime = timestamppb.New(util.MaxTime(retryDispatchTime, ctx.Now(a)))
 	}
 
 	return nil
