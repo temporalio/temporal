@@ -31,7 +31,7 @@ type RecordHeartbeatRequest struct {
 	// Grouping key shared by the workers in this request.
 	WorkerGroupingKey string `protobuf:"bytes,3,opt,name=worker_grouping_key,json=workerGroupingKey,proto3" json:"worker_grouping_key,omitempty"`
 	// The public heartbeat request, forwarded by Frontend for this group.
-	// All worker heartbeats must have the specified worker_grouping_key.
+	// All worker heartbeats belong to the group identified by worker_grouping_key.
 	FrontendRequest *v1.RecordWorkerHeartbeatRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache

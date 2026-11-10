@@ -15,7 +15,7 @@ message RecordHeartbeatRequest {
   string worker_grouping_key = 3;
 
   // The public heartbeat request, forwarded by Frontend for this group.
-  // All worker heartbeats must have the specified worker_grouping_key.
+  // All worker heartbeats belong to the group identified by worker_grouping_key.
   temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest frontend_request = 2;
 }
 
