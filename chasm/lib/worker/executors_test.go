@@ -2,36 +2,29 @@ package worker
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestLeaseExpiryValidation(t *testing.T) {
 	t.Parallel()
-	deadline := time.Unix(1000, 0).UTC()
 	for _, tc := range []struct {
-		name          string
-		status        workerpb.WorkerGroupStatus
-		scheduledTime time.Time
-		valid         bool
+		name   string
+		status workerpb.WorkerGroupStatus
+		valid  bool
 	}{
-		{name: "current lease", status: workerpb.WORKER_GROUP_STATUS_ACTIVE, scheduledTime: deadline, valid: true},
-		{name: "renewed lease", status: workerpb.WORKER_GROUP_STATUS_ACTIVE, scheduledTime: deadline.Add(-time.Minute)},
-		{name: "task deadline is after current lease deadline", status: workerpb.WORKER_GROUP_STATUS_ACTIVE, scheduledTime: deadline.Add(time.Minute)},
-		{name: "inactive group", status: workerpb.WORKER_GROUP_STATUS_INACTIVE, scheduledTime: deadline},
+		{name: "active group", status: workerpb.WORKER_GROUP_STATUS_ACTIVE, valid: true},
+		{name: "inactive group", status: workerpb.WORKER_GROUP_STATUS_INACTIVE},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			group := &WorkerGroup{WorkerGroupState: &workerpb.WorkerGroupState{
-				Status:              tc.status,
-				LeaseExpirationTime: timestamppb.New(deadline),
+				Status: tc.status,
 			}}
 			valid, err := (&leaseExpiryTaskExecutor{}).Validate(&chasm.MockContext{}, group,
-				chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: tc.scheduledTime}},
+				chasm.TaskInvocation{},
 				&workerpb.LeaseExpiryTask{})
 			require.NoError(t, err)
 			require.Equal(t, tc.valid, valid)

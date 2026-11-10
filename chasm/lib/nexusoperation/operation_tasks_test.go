@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 	"text/template"
 	"time"
@@ -91,6 +92,7 @@ func newInvocationTaskTestEnv(
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
 				),
+				EnableOutboundTaskThrottleController: dynamicconfig.GetBoolPropertyFn(false),
 			},
 			namespaceRegistry: nsRegistry,
 			metricsHandler:    metricsHandler,
@@ -1364,5 +1366,103 @@ func TestTaskGroupTaggedAsCallerOutbound(t *testing.T) {
 			task.SetOutboundTaskGroup(registered.TaskGroup())
 			require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound)
 		})
+	}
+}
+
+func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{"start", "cancel"} {
+		for _, tc := range []struct {
+			name              string
+			outboundEnabled   bool
+			controllerEnabled bool
+		}{
+			{"outbound disabled", false, true},
+			{"controller disabled", true, false},
+			{"enabled", true, true},
+		} {
+			t.Run(fmt.Sprintf("%s %s", method, tc.name), func(t *testing.T) {
+				t.Parallel()
+				enabled := tc.outboundEnabled && tc.controllerEnabled
+				resourceErr := &serviceerror.ResourceExhausted{
+					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+					Message: "caller rate limit exceeded",
+				}
+				endpoint := &persistencespb.NexusEndpointEntry{
+					Id: "endpoint-id",
+					Endpoint: &persistencespb.NexusEndpoint{Spec: &persistencespb.NexusEndpointSpec{
+						Name: "endpoint",
+						Target: &persistencespb.NexusEndpointTarget{Variant: &persistencespb.NexusEndpointTarget_Worker_{
+							Worker: &persistencespb.NexusEndpointTarget_Worker{NamespaceId: "handler-ns"},
+						}},
+					}},
+				}
+				registry := nexustest.FakeEndpointRegistry{
+					OnGetByID: func(context.Context, string) (*persistencespb.NexusEndpointEntry, error) { return endpoint, nil },
+				}
+				provider := func(context.Context, string, *persistencespb.NexusEndpointEntry, string) (*nexusrpc.HTTPClient, error) {
+					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
+						BaseURL: "http://nexus.test", Service: "service",
+						Serializer: commonnexus.PayloadSerializer,
+						HTTPCaller: func(*http.Request) (*http.Response, error) {
+							return nil, commonnexus.ConvertGRPCError(resourceErr, true)
+						},
+					})
+				}
+				op := NewOperation(&nexusoperationpb.OperationState{
+					Status:   nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+					Endpoint: "endpoint", EndpointId: "endpoint-id", Service: "service", Operation: "operation",
+					RequestId: "request-id", Attempt: 1, OperationToken: "token", ScheduledTime: timestamppb.Now(),
+				})
+				var err error
+				if method == "start" {
+					env := newInvocationTaskTestEnv(t, op, InvocationData{Input: mustToPayload(t, "input")}, registry, provider, metrics.NoopMetricsHandler, time.Hour)
+					env.handler.config.EnableOutboundTaskThrottleController = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
+					env.handler.config.TaskThrottleControllerSettings = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled})
+					env.setupReadComponent()
+					if !enabled {
+						env.setupUpdateComponent()
+					}
+					err = env.execute(&nexusoperationpb.InvocationTask{Attempt: 1})
+					if enabled {
+						require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
+						require.Nil(t, op.NextAttemptScheduleTime)
+						require.Equal(t, int32(1), op.Attempt)
+					} else {
+						require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+						require.NotNil(t, op.NextAttemptScheduleTime)
+						require.Equal(t, string(nexus.HandlerErrorTypeResourceExhausted), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
+					}
+				} else {
+					op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
+					cancellation := newCancellation(&nexusoperationpb.CancellationState{Status: nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, Attempt: 1})
+					env := newCancellationTaskTestEnv(t, op, cancellation, InvocationData{}, registry, provider, metrics.NoopMetricsHandler, time.Hour)
+					env.handler.config.EnableOutboundTaskThrottleController = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
+					env.handler.config.TaskThrottleControllerSettings = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled})
+					env.setupReadComponent()
+					if !enabled {
+						env.setupUpdateComponent()
+					}
+					err = env.execute(&nexusoperationpb.CancellationTask{Attempt: 1})
+					if enabled {
+						require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, cancellation.Status)
+						require.Nil(t, cancellation.NextAttemptScheduleTime)
+						require.Equal(t, int32(1), cancellation.Attempt)
+					} else {
+						require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, cancellation.Status)
+						require.NotNil(t, cancellation.NextAttemptScheduleTime)
+						require.Equal(t, string(nexus.HandlerErrorTypeResourceExhausted), cancellation.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
+					}
+				}
+				if enabled {
+					require.Equal(t, resourceErr, err)
+				} else {
+					var destinationDown *queueserrors.DestinationDownError
+					require.ErrorAs(t, err, &destinationDown)
+					require.NoError(t, destinationDown.Unwrap())
+				}
+			})
+		}
 	}
 }

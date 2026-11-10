@@ -150,8 +150,7 @@ type (
 		ValidateCallbackAddition(inFlight []chasmworkflow.CallbackAddition, addition chasmworkflow.CallbackAddition) error
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
+		GetCompletedUpdate(ctx context.Context, updateID string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error)
 		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		CheckResettable() error
 		// UpdateResetRunID saves the runID that resulted when this execution was reset.
@@ -321,6 +320,9 @@ type (
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)
+		// CurrentStorageUsage returns this cluster's storage usage as of now, including the interval since
+		// its last closed transaction that is not accrued yet. It does not modify the mutable state.
+		CurrentStorageUsage() *persistencespb.StorageUsage
 
 		GetExternalPayloadSize() int64
 		AddExternalPayloadSize(size int64)
@@ -335,7 +337,7 @@ type (
 		// against wall-clock time.
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
-		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
 
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)

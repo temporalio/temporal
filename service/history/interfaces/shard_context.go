@@ -112,6 +112,7 @@ type (
 			closeExecutionVisibilityTaskID int64,
 			workflowCloseTime time.Time,
 			workflowStartTime time.Time,
+			workflowCreateTime time.Time,
 			stage *tasks.DeleteWorkflowExecutionStage,
 			retentionDelete bool,
 		) error
@@ -133,7 +134,7 @@ type (
 		ChasmWorkflowRegistry() *chasmworkflow.Registry
 		EndpointRegistry() chasm.EndpointRegistry
 
-		BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter
+		BusinessIDReuseRateLimiter(namespaceName namespace.Name, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

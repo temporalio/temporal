@@ -20,6 +20,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	querypb "go.temporal.io/api/query/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -145,6 +147,50 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNo
 				c.ClusterName(),
 				resp.ReplicationConfig.State,
 			)
+		}
+	}, replicationWaitTime, replicationCheckInterval)
+}
+
+// TestNamespaceFailover_SetActiveClusterOnPassiveReplica covers the self-hosted to cloud migration
+// step `b> tctl --ns $ns n u --ac a`: re-asserting the current active cluster on the passive replica
+// of a namespace that has already failed over (FailoverVersion > IFV). The update must be accepted
+// by the passive cluster, keep cluster0 active on both clusters, leave info and config untouched,
+// and converge FailoverVersion on both clusters to the passive cluster's next version for cluster0.
+//
+// Both test clusters share FVI=10, so the passive cluster's next version for cluster0 equals the
+// current one. The FVI-mismatch bump (42 -> 1_000_002) is covered by
+// TestUpdateNamespace_PassiveClusterFailoverVersionBump in service/frontend.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_SetActiveClusterOnPassiveReplica() {
+	namespace := s.createGlobalNamespace()
+	activeCluster := s.clusters[0].ClusterName()
+
+	// IFV(cluster0)=1, IFV(cluster1)=2, FVI=10: 1 -> 2 -> 11.
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+	s.failover(namespace, 1, activeCluster, 11)
+
+	before := s.describeNamespace(s.T(), s.clusters[1], namespace, true)
+	s.Equal(int64(11), before.GetFailoverVersion())
+
+	resp, err := s.clusters[1].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: activeCluster,
+		},
+	})
+	s.NoError(err)
+	s.Equal(int64(11), resp.GetFailoverVersion())
+	s.Equal(activeCluster, resp.GetReplicationConfig().GetActiveClusterName())
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		for _, c := range s.clusters {
+			after := s.describeNamespace(t, c, namespace, true)
+			require.Equal(t, int64(11), after.GetFailoverVersion(), "cluster %s", c.ClusterName())
+			require.Equal(t, activeCluster, after.GetReplicationConfig().GetActiveClusterName(), "cluster %s", c.ClusterName())
+			require.Equal(t, enumspb.REPLICATION_STATE_NORMAL, after.GetReplicationConfig().GetState(), "cluster %s", c.ClusterName())
+			require.ElementsMatch(t, s.namespaceClusterNames(before), s.namespaceClusterNames(after), "cluster %s", c.ClusterName())
+			require.Len(t, after.GetFailoverHistory(), len(before.GetFailoverHistory()), "cluster %s", c.ClusterName())
+			protorequire.ProtoEqual(t, before.GetNamespaceInfo(), after.GetNamespaceInfo())
+			protorequire.ProtoEqual(t, before.GetConfig(), after.GetConfig())
 		}
 	}, replicationWaitTime, replicationCheckInterval)
 }

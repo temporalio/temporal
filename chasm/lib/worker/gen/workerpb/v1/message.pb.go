@@ -87,8 +87,6 @@ func (WorkerGroupStatus) EnumDescriptor() ([]byte, []int) {
 // WorkerGroupState owns the shared lease for workers heartbeating together.
 type WorkerGroupState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// SDK-generated grouping key, also used as the CHASM Business ID.
-	WorkerGroupingKey string `protobuf:"bytes,1,opt,name=worker_grouping_key,json=workerGroupingKey,proto3" json:"worker_grouping_key,omitempty"`
 	// Lifecycle of the group run. Individual workers may stop while the group stays active.
 	Status WorkerGroupStatus `protobuf:"varint,2,opt,name=status,proto3,enum=temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus" json:"status,omitempty"`
 	// Lease deadline computed using CHASM's clock and the supplied lease duration.
@@ -125,13 +123,6 @@ func (x *WorkerGroupState) ProtoReflect() protoreflect.Message {
 // Deprecated: Use WorkerGroupState.ProtoReflect.Descriptor instead.
 func (*WorkerGroupState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *WorkerGroupState) GetWorkerGroupingKey() string {
-	if x != nil {
-		return x.WorkerGroupingKey
-	}
-	return ""
 }
 
 func (x *WorkerGroupState) GetStatus() WorkerGroupStatus {
@@ -189,9 +180,8 @@ var File_temporal_server_chasm_lib_worker_proto_v1_message_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe8\x01\n" +
-	"\x10WorkerGroupState\x12.\n" +
-	"\x13worker_grouping_key\x18\x01 \x01(\tR\x11workerGroupingKey\x12T\n" +
+	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb8\x01\n" +
+	"\x10WorkerGroupState\x12T\n" +
 	"\x06status\x18\x02 \x01(\x0e2<.temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatusR\x06status\x12N\n" +
 	"\x15lease_expiration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\"\r\n" +
 	"\vWorkerState*z\n" +

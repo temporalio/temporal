@@ -43,17 +43,13 @@ func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 // newWorkerGroup creates an active group with no workers or lease.
-func newWorkerGroup(groupingKey string) (*WorkerGroup, error) {
-	if groupingKey == "" {
-		return nil, serviceerror.NewInvalidArgument("worker grouping key is required")
-	}
+func newWorkerGroup() *WorkerGroup {
 	return &WorkerGroup{
 		WorkerGroupState: &workerstatepb.WorkerGroupState{
-			WorkerGroupingKey: groupingKey,
-			Status:            workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
+			Status: workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 		},
 		Workers: make(chasm.Map[string, *Worker]),
-	}, nil
+	}
 }
 
 func (g *WorkerGroup) LifecycleState(_ chasm.Context) chasm.LifecycleState {
@@ -93,9 +89,6 @@ func (g *WorkerGroup) recordHeartbeat(
 	heartbeats []*workerpb.WorkerHeartbeat,
 	leaseDuration time.Duration,
 ) error {
-	if !transitionActiveHeartbeat.Possible(g) {
-		return serviceerror.NewFailedPrecondition("worker group is inactive")
-	}
 	if leaseDuration <= 0 {
 		return serviceerror.NewInvalidArgument("worker lease duration must be positive")
 	}
@@ -107,9 +100,6 @@ func (g *WorkerGroup) recordHeartbeat(
 		key := heartbeat.GetWorkerInstanceKey()
 		if key == "" {
 			return serviceerror.NewInvalidArgument("worker instance key is required")
-		}
-		if heartbeat.GetHostInfo().GetWorkerGroupingKey() != g.WorkerGroupingKey {
-			return serviceerror.NewInvalidArgument("worker heartbeat grouping key does not match the group")
 		}
 	}
 	return transitionActiveHeartbeat.Apply(g, ctx, eventHeartbeatReceived{
