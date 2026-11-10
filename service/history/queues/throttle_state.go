@@ -23,9 +23,11 @@ type (
 	// ThrottleKey is one bucket per budget. Priority is deliberately not part of it: the
 	// rescheduler offers the one bucket to classes in priority order, which needs it shared.
 	// It carries the namespace name because that is what the limiters key their budgets on.
+	// Destination separates caller RPS budgets by target and is empty for other causes.
 	ThrottleKey struct {
 		Cause         enumspb.ResourceExhaustedCause
 		NamespaceName namespace.Name
+		Destination   string
 	}
 
 	ThrottleState struct {
@@ -73,7 +75,8 @@ func IsControllerInput(
 		return false
 	}
 	return cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT ||
-		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT
+		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT ||
+		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT
 }
 
 func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceName namespace.Name) ThrottleKey {
@@ -81,10 +84,14 @@ func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceName namespac
 }
 
 func (k ThrottleKey) metricsTags() []metrics.Tag {
-	return []metrics.Tag{
+	tags := []metrics.Tag{
 		metrics.ResourceExhaustedCauseTag(k.Cause),
 		metrics.NamespaceTag(k.NamespaceName.String()),
 	}
+	if k.Destination != "" {
+		tags = append(tags, metrics.DestinationTag(k.Destination))
+	}
+	return tags
 }
 
 // cappedTags omits the unbounded namespace dimension after the key cap is reached.
