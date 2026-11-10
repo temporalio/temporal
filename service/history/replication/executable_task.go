@@ -181,9 +181,11 @@ func (e *ExecutableTaskImpl) Ack() {
 	}
 	if !atomic.CompareAndSwapInt32(&e.taskState, taskStatePending, taskStateAcked) {
 		e.Ack() // retry ack
+		return
 	}
 
 	now := time.Now().UTC()
+	observePayload(e.PayloadObserver, e.replicationTask, e.sourceClusterName, e.sourceShardKey.ShardID, PayloadAcked, now)
 	e.emitFinishMetrics(now)
 }
 

@@ -42,6 +42,8 @@ type (
 	LaneStream struct {
 		RemoteCluster string
 		ShardID       int32
+		// RemoteShardID identifies the receiving shard, which may differ from ShardID.
+		RemoteShardID int32
 	}
 
 	// LaneStreamPolicy decides the lanes of one stream. The stream never calls it from two
