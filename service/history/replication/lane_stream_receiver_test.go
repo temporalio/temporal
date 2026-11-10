@@ -474,7 +474,7 @@ func (s *laneStreamReceiverSuite) TestHighPriorityFlowControlSignal() {
 func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_ReportsThrottledNamespaces() {
 	s.streamReceiver.receiverMode = ReceiverModeTieredStack
 	feedback := NewMockLaneFeedbackProvider(s.controller)
-	feedback.EXPECT().ThrottledNamespaceIDs(s.streamReceiver.clientShardKey.ShardID).Return([]string{"ns-hot-a", "ns-hot-b"})
+	feedback.EXPECT().ThrottledNamespaceIDs(LaneFeedbackStream{Source: s.streamReceiver.serverShardKey, Target: s.streamReceiver.clientShardKey}).Return([]string{"ns-hot-a", "ns-hot-b"})
 	s.streamReceiver.laneFeedback = feedback
 	watermarkInfo := &WatermarkInfo{Watermark: 10, Timestamp: time.Unix(0, 1000)}
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
@@ -544,9 +544,9 @@ func (s *laneStreamReceiverSuite) TestAckMessage_LanesEnabled_ReportsLaneLimitAn
 			defer metricsHandler.StopCapture(capture)
 			s.streamReceiver.MetricsHandler = metricsHandler
 			feedback := NewMockLaneFeedbackProvider(gomock.NewController(t))
-			feedback.EXPECT().ThrottledNamespaceIDs(s.streamReceiver.clientShardKey.ShardID).Return(nil)
+			feedback.EXPECT().ThrottledNamespaceIDs(LaneFeedbackStream{Source: s.streamReceiver.serverShardKey, Target: s.streamReceiver.clientShardKey}).Return(nil)
 			if maxBytes > 0 {
-				feedback.EXPECT().Feedback(s.streamReceiver.clientShardKey.ShardID, maxBytes).Return(tc.feedback)
+				feedback.EXPECT().Feedback(LaneFeedbackStream{Source: s.streamReceiver.serverShardKey, Target: s.streamReceiver.clientShardKey}, maxBytes).Return(tc.feedback)
 			}
 			s.streamReceiver.laneFeedback = feedback
 			watermarkInfo := &WatermarkInfo{Watermark: 10, Timestamp: time.Unix(0, 1000)}

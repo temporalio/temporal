@@ -337,7 +337,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes
 	factory := NewMockLaneStreamPolicyFactory(s.controller)
 	s.streamSender.lanePolicyFactory = factory
 	policy := NewMockLaneStreamPolicy(s.controller)
-	factory.EXPECT().NewStreamPolicy(LaneStream{RemoteCluster: "target_cluster", ShardID: s.serverShardKey.ShardID}).Return(policy, nil)
+	factory.EXPECT().NewStreamPolicy(LaneStream{RemoteCluster: "target_cluster", ShardID: s.serverShardKey.ShardID, RemoteShardID: s.clientShardKey.ShardID}).Return(policy, nil)
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(gomock.Any()).AnyTimes()
 	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(200)).AnyTimes()
@@ -811,7 +811,7 @@ func (s *laneStreamSenderSuite) TestLanePolicyLifecycle() {
 	factory := NewMockLaneStreamPolicyFactory(s.controller)
 	policy := NewMockLaneStreamPolicy(s.controller)
 	s.streamSender.lanePolicyFactory = factory
-	factory.EXPECT().NewStreamPolicy(LaneStream{RemoteCluster: "target_cluster", ShardID: s.serverShardKey.ShardID}).Return(policy, nil)
+	factory.EXPECT().NewStreamPolicy(LaneStream{RemoteCluster: "target_cluster", ShardID: s.serverShardKey.ShardID, RemoteShardID: s.clientShardKey.ShardID}).Return(policy, nil)
 	s.streamSender.startLanePolicy()
 
 	// Stopping the stream closes the policy once, and no method is called after that.
@@ -907,4 +907,15 @@ func (s *laneStreamSenderSuite) TestRecordLaneLagBoundaries() {
 			}
 		})
 	}
+}
+
+func (s *laneStreamSenderSuite) TestLanePolicyStreamIdentity() {
+	s.streamSender.serverShardKey.ShardID = 11
+	s.streamSender.clientShardKey.ShardID = 37
+	factory := NewMockLaneStreamPolicyFactory(s.controller)
+	policy := NewMockLaneStreamPolicy(s.controller)
+	factory.EXPECT().NewStreamPolicy(LaneStream{RemoteCluster: "target_cluster", ShardID: 11, RemoteShardID: 37}).Return(policy, nil)
+	s.streamSender.lanePolicyFactory = factory
+	s.streamSender.startLanePolicy()
+	s.Same(policy, s.streamSender.lanePolicy)
 }

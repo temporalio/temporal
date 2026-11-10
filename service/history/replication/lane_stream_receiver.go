@@ -183,6 +183,10 @@ func (r *laneStreamReceiver) Key() ClusterShardKeyPair {
 	}
 }
 
+func (r *laneStreamReceiver) feedbackStream() LaneFeedbackStream {
+	return LaneFeedbackStream{Source: r.serverShardKey, Target: r.clientShardKey}
+}
+
 func (r *laneStreamReceiver) sendEventLoop() error {
 	var panicErr error
 	defer func() {
@@ -321,12 +325,12 @@ func (r *laneStreamReceiver) ackMessage(
 	var maxLanes int32
 	laneProtocolVersion := r.laneProtocolVersion(receiverMode)
 	if receiverMode == ReceiverModeTieredStack {
-		throttleHighNamespaceIDs = r.laneFeedback.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
+		throttleHighNamespaceIDs = r.laneFeedback.ThrottledNamespaceIDs(r.feedbackStream())
 	}
 	if laneProtocolVersion > 0 {
 		maxLanes = int32(r.maxLanes)
 		if maxBytes := r.Config.ReplicationStreamReceiverLaneFeedbackMaxBytes(); maxBytes > 0 {
-			laneFeedback = r.laneFeedback.Feedback(r.clientShardKey.ShardID, maxBytes)
+			laneFeedback = r.laneFeedback.Feedback(r.feedbackStream(), maxBytes)
 			if size := proto.Size(laneFeedback); size > maxBytes {
 				metrics.ReplicationLaneFeedbackDropped.With(r.MetricsHandler).Record(
 					1,
@@ -432,7 +436,7 @@ func (r *laneStreamReceiver) processMessages(
 			// namespace stays observable and can be released once its rate drops.
 			for _, task := range convertedTasks {
 				if nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId(); nsID != "" {
-					r.laneFeedback.RecordTask(r.clientShardKey.ShardID, nsID)
+					r.laneFeedback.RecordTask(r.feedbackStream(), nsID)
 				}
 			}
 		}
@@ -451,6 +455,9 @@ func (r *laneStreamReceiver) processMessages(
 			r.finishLaneBatch(laneID, messages.GetLaneInfo().GetRetire())
 		}
 		for _, task := range trackedTasks {
+			if r.PayloadObserver != nil {
+				observePayload(r.PayloadObserver, task.ReplicationTask(), clusterName, r.serverShardKey.ShardID, PayloadReceived, time.Now())
+			}
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
 			if err != nil {
 				return err

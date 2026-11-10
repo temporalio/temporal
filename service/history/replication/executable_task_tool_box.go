@@ -43,5 +43,6 @@ type (
 		WorkflowCache            wcache.Cache
 		RemoteHistoryFetcher     eventhandler.HistoryPaginatedFetcher
 		NamespaceThrottler       NamespaceThrottler
+		PayloadObserver          PayloadObserver `optional:"true"`
 	}
 )
