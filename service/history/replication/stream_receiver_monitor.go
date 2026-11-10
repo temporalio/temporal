@@ -297,6 +297,10 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 }
 
 func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
+	// Without global namespace the engine has no replication ack manager, so there is nothing to monitor.
+	if !m.ClusterMetadata.IsGlobalNamespaceEnabled() {
+		return
+	}
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
@@ -309,14 +313,15 @@ func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
 		}
 	}
 }
+
 func (m *StreamReceiverMonitorImpl) monitorStreamStatus() {
 	var panicErr error
 	defer func() {
-		log.CapturePanic(m.Logger, &panicErr)
 		if panicErr != nil {
 			metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
 		}
 	}()
+	defer log.CapturePanic(m.Logger, &panicErr) // must be deferred directly for recover() to work
 
 	if m.shutdownOnce.IsShutdown() {
 		return
