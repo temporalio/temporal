@@ -21,6 +21,7 @@ func emitWorkflowHistoryStats(
 	metricsHandler metrics.Handler,
 	namespace namespace.Name,
 	state enumsspb.WorkflowExecutionState,
+	wroteEventsInTransaction bool,
 	historySize int,
 	historyCount int,
 ) {
@@ -29,7 +30,7 @@ func emitWorkflowHistoryStats(
 	metrics.HistorySize.With(executionScope).Record(int64(historySize))
 	metrics.HistoryCount.With(executionScope).Record(int64(historyCount))
 
-	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && wroteEventsInTransaction {
 		completionScope := handler.WithTags(metrics.OperationTag(metrics.WorkflowCompletionStatsScope))
 		metrics.HistorySize.With(completionScope).Record(int64(historySize))
 		metrics.HistoryCount.With(completionScope).Record(int64(historyCount))
