@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
-	"go.temporal.io/server/common/testing/testtelemetry"
 )
 
 // testingSuite is the constraint for suite types.
@@ -129,7 +128,6 @@ func (s *Suite[T]) Context() context.Context {
 	if s.ctx != nil {
 		return s.ctx
 	}
-	testtelemetry.AttachTestName(s.T())
 	return testcontext.For(s.T())
 }
 
