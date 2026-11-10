@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 	"strings"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -227,7 +226,10 @@ func SendWorkflowHeartbeatNotification(
 			shardCtx.GetLogger().Warn("Unable to encode workflow heartbeat notification", tag.Error(err))
 			return
 		}
-		matchCtx, matchCancel := context.WithTimeout(context.WithoutCancel(ctx), 1500*time.Millisecond)
+		matchCtx, matchCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
+		)
 		defer matchCancel()
 		_, err = matchingClient.DispatchNexusTask(matchCtx, &matchingservice.DispatchNexusTaskRequest{
 			NamespaceId: notification.namespaceID,
