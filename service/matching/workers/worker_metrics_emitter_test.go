@@ -541,15 +541,19 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 		},
 		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
 			CurrentPollers: 3,
+			TargetPollers:  5,
 		},
 		WorkflowStickyPollerInfo: &workerpb.WorkerPollerInfo{
 			CurrentPollers: 2,
+			TargetPollers:  7,
 		},
+		// An SDK too old to report a target leaves it at 0.
 		ActivityPollerInfo: &workerpb.WorkerPollerInfo{
 			CurrentPollers: 0,
 		},
 		NexusPollerInfo: &workerpb.WorkerPollerInfo{
 			CurrentPollers: 4,
+			TargetPollers:  6,
 		},
 		CurrentStickyCacheSize: 100,
 		TotalStickyCacheHit:    500,
@@ -558,8 +562,9 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), hb)
 
 	require.Equal(t, "worker_metrics", eventLogger.records[0].EventName())
-	// The last-interval task counts are not exported.
-	// Targets mirror current pollers, including a reported zero.
+	// The last-interval task counts are not exported. Targets come from the SDK
+	// and differ from the current counts; activity reported none, so it has no
+	// target attribute at all.
 	require.Equal(t, map[string]any{
 		"namespace":                       "ns",
 		"task_queue":                      "my-queue",
@@ -567,13 +572,12 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 		"workflow_total_slots":            int64(10),
 		"workflow_used_slots":             int64(2),
 		"workflow_current_pollers":        int64(3),
-		"workflow_target_pollers":         int64(3),
+		"workflow_target_pollers":         int64(5),
 		"workflow_current_sticky_pollers": int64(2),
-		"workflow_target_sticky_pollers":  int64(2),
+		"workflow_target_sticky_pollers":  int64(7),
 		"activity_current_pollers":        int64(0),
-		"activity_target_pollers":         int64(0),
 		"nexus_current_pollers":           int64(4),
-		"nexus_target_pollers":            int64(4),
+		"nexus_target_pollers":            int64(6),
 		"workflow_total_processed_tasks":  int64(1000),
 		"workflow_total_failed_tasks":     int64(10),
 		"sticky_cache_size":               int64(100),
@@ -627,6 +631,33 @@ func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
 	require.Equal(t, int64(5), attrs["workflow_used_slots"])
 }
 
+// An SDK that predates target reporting, or a pool that never started, leaves
+// target_pollers at 0. That is not a real target, so no attribute is exported.
+func TestEmitWorkerMetricsEventUnreportedPollerTarget(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+	emitter := &workerMetricsEmitter{
+		handler:     metricstest.NewCaptureHandler(),
+		config:      WorkerMetricsConfig{},
+		eventLogger: eventLogger,
+	}
+
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
+			CurrentPollers: 3,
+		},
+		WorkflowStickyPollerInfo: &workerpb.WorkerPollerInfo{
+			CurrentPollers: 2,
+		},
+	})
+
+	attrs := singleEventAttrs(t, eventLogger)
+	require.Equal(t, int64(3), attrs["workflow_current_pollers"])
+	require.Equal(t, int64(2), attrs["workflow_current_sticky_pollers"])
+	require.NotContains(t, attrs, "workflow_target_pollers")
+	require.NotContains(t, attrs, "workflow_target_sticky_pollers")
+}
+
 func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 	eventLogger := &captureEventLogger{}
 	emitter := &workerMetricsEmitter{
@@ -640,6 +671,7 @@ func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 		WorkerInstanceKey: "w1",
 		ActivityPollerInfo: &workerpb.WorkerPollerInfo{
 			CurrentPollers: 5,
+			TargetPollers:  8,
 		},
 	})
 
@@ -649,7 +681,7 @@ func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 		"task_queue":               "",
 		"worker_instance_key":      "w1",
 		"activity_current_pollers": int64(5),
-		"activity_target_pollers":  int64(5),
+		"activity_target_pollers":  int64(8),
 		"sticky_cache_size":        int64(0),
 		"sticky_cache_hit":         int64(0),
 		"sticky_cache_miss":        int64(0),
