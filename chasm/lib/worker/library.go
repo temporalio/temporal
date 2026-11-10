@@ -32,6 +32,10 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
-		chasm.NewRegistrablePureTask("expiry", l.leaseExpiryTaskExecutor),
+		chasm.NewRegistrablePureTask(
+			"expiry",
+			l.leaseExpiryTaskExecutor,
+			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace),
+		),
 	}
 }

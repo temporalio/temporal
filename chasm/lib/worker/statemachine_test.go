@@ -10,8 +10,7 @@ import (
 func TestLeaseExpiry(t *testing.T) {
 	t.Parallel()
 	ctx := &chasm.MockMutableContext{}
-	group, err := newWorkerGroup("group-1")
-	require.NoError(t, err)
+	group := newWorkerGroup()
 	require.Equal(t, chasm.LifecycleStateRunning, group.LifecycleState(ctx))
 	require.NoError(t, transitionLeaseExpired.Apply(group, ctx, eventLeaseExpired{}))
 	require.Equal(t, chasm.LifecycleStateCompleted, group.LifecycleState(ctx))
