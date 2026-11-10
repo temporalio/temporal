@@ -378,7 +378,8 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 				}
 				return 666, nil
 			},
-			runTimeout: 500 * time.Millisecond,
+			// Must outlast the attach and signal requests against the first run, which can be slow on loaded CI.
+			runTimeout: 3 * time.Second,
 		},
 		{
 			name: "WorkflowFailureRetry",

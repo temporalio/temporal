@@ -1022,6 +1022,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
 	workflowStartTime time.Time,
+	workflowCreateTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
 	retentionDelete bool,
 ) (retErr error) {
@@ -1102,6 +1103,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 							CloseTime:                      workflowCloseTime,
 							StartTime:                      workflowStartTime,
+							CreateTime:                     workflowCreateTime,
 							IsRetentionDelete:              retentionDelete,
 						},
 					}
@@ -2479,13 +2481,13 @@ func (s *ContextImpl) CallbackValidator() callbacks.Validator {
 	return s.callbackValidator
 }
 
-func (s *ContextImpl) BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
-	rps := s.config.BusinessIDReuseRate(namespaceID.String())
+func (s *ContextImpl) BusinessIDReuseRateLimiter(namespaceName namespace.Name, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
+	rps := s.config.BusinessIDReuseRate(namespaceName.String())
 	if rps <= 0 {
 		return nil
 	}
-	burst := max(1, int(float64(rps)*s.config.BusinessIDReuseBurstRatio(namespaceID.String())))
-	key := namespaceID.String() + "/" + businessID + "/" + strconv.Itoa(int(archetypeID))
+	burst := max(1, int(float64(rps)*s.config.BusinessIDReuseBurstRatio(namespaceName.String())))
+	key := namespaceName.String() + "/" + businessID + "/" + strconv.Itoa(int(archetypeID))
 	existing := s.businessIDRateLimiters.Get(key)
 	if existing == nil {
 		rl := quotas.NewRateLimiter(float64(rps), burst)
