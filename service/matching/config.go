@@ -29,11 +29,13 @@ type (
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		PollWaitForNamespaceRateLimitToken   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
+		GradualMembershipChange              dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter // [cleanup-wv-pre-release]
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableTaskQueueUserDataRevisionMerge dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxVersionsInTaskQueue               dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
@@ -58,6 +60,7 @@ type (
 		ExternalPayloadsEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EnableWorkerConfigEvents                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EnableWorkerMetricsEvents                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		WorkerMetricsEventInterval               dynamicconfig.DurationPropertyFnWithNamespaceFilter
 		WorkerRegistryNumBuckets                 dynamicconfig.IntPropertyFn
 		WorkerRegistryEntryTTL                   dynamicconfig.DurationPropertyFn
 		WorkerRegistryMinEvictAge                dynamicconfig.DurationPropertyFn
@@ -286,6 +289,7 @@ func NewConfig(
 		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc), // [cleanup-wv-pre-release]
 		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
 		UseRevisionNumberForWorkerVersioning:     dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
+		EnableTaskQueueUserDataRevisionMerge:     dynamicconfig.MatchingEnableTaskQueueUserDataRevisionMerge.Get(dc),
 		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 		MaxVersionsInTaskQueue:                   dynamicconfig.MatchingMaxVersionsInTaskQueue.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
@@ -320,6 +324,7 @@ func NewConfig(
 		ExternalPayloadsEnabled:                  dynamicconfig.ExternalPayloadsEnabled.Get(dc),
 		EnableWorkerConfigEvents:                 dynamicconfig.MatchingEnableWorkerConfigEvents.Get(dc),
 		EnableWorkerMetricsEvents:                dynamicconfig.MatchingEnableWorkerMetricsEvents.Get(dc),
+		WorkerMetricsEventInterval:               dynamicconfig.MatchingWorkerMetricsEventInterval.Get(dc),
 		WorkerRegistryNumBuckets:                 dynamicconfig.MatchingWorkerRegistryNumBuckets.Get(dc),
 		WorkerRegistryEntryTTL:                   dynamicconfig.MatchingWorkerRegistryEntryTTL.Get(dc),
 		WorkerRegistryMinEvictAge:                dynamicconfig.MatchingWorkerRegistryMinEvictAge.Get(dc),
@@ -330,6 +335,7 @@ func NewConfig(
 		ForwarderMaxRatePerSecond:                dynamicconfig.MatchingForwarderMaxRatePerSecond.Get(dc),
 		ForwarderMaxChildrenPerNode:              dynamicconfig.MatchingForwarderMaxChildrenPerNode.Get(dc),
 		AlignMembershipChange:                    dynamicconfig.MatchingAlignMembershipChange.Get(dc),
+		GradualMembershipChange:                  dynamicconfig.MatchingGradualMembershipChange.Get(dc),
 		ShutdownDrainDuration:                    dynamicconfig.MatchingShutdownDrainDuration.Get(dc),
 		VersionCompatibleSetLimitPerQueue:        dynamicconfig.VersionCompatibleSetLimitPerQueue.Get(dc),
 		VersionBuildIdLimitPerQueue:              dynamicconfig.VersionBuildIdLimitPerQueue.Get(dc),
