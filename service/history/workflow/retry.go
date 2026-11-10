@@ -58,9 +58,8 @@ func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
 	if !ok {
 		return delay
 	}
-	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
-	if p != nil {
-		d := p.AsDuration()
+	// A delay that is not positive does not override the retry policy.
+	if d := afi.ApplicationFailureInfo.GetNextRetryDelay().AsDuration(); d > 0 {
 		delay = &d
 	}
 	return delay

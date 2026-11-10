@@ -250,6 +250,20 @@ func (s *retryActivitySuite) TestRetryActivity_next_retry_delay_should_override_
 	s.assertTruncateFailureCalled()
 }
 
+func (s *retryActivitySuite) TestRetryActivity_should_use_retry_policy_when_next_retry_delay_is_zero() {
+	s.mutableState.timeSource = s.timeSource
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	expectedScheduledTime := s.timeSource.Now().Add(time.Second).UTC()
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	s.failure.GetApplicationFailureInfo().NextRetryDelay = durationpb.New(0)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
+	s.Require().NoError(err)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, state)
+	s.Equal(expectedScheduledTime, s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
+}
+
 func (s *retryActivitySuite) TestRetryActivity_when_no_next_backoff_interval_should_fail() {
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	s.mutableState.taskGenerator = taskGeneratorMock

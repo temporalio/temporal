@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -108,6 +110,43 @@ func Test_NonRetriableErrors(t *testing.T) {
 		)
 		assert.NotEqual(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, retryState)
 	})
+}
+
+func TestGetBackoffIntervalNextRetryDelay(t *testing.T) {
+	t.Parallel()
+
+	// The retry policy below gives an interval of 2s for the second attempt.
+	testCases := []struct {
+		name           string
+		nextRetryDelay *durationpb.Duration
+		expected       time.Duration
+	}{
+		{name: "not set", expected: 2 * time.Second},
+		{name: "smallest positive", nextRetryDelay: durationpb.New(time.Nanosecond), expected: time.Nanosecond},
+		{name: "zero", nextRetryDelay: durationpb.New(0), expected: 2 * time.Second},
+		{name: "negative", nextRetryDelay: durationpb.New(-time.Second), expected: 2 * time.Second},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			interval, retryState := getBackoffInterval(
+				time.Time{},
+				2,                              // currentAttempt
+				0,                              // maxAttempts
+				durationpb.New(time.Second),    // initInterval
+				durationpb.New(10*time.Second), // maxInterval
+				nil,                            // expirationTime
+				2,                              // backoffCoefficient
+				&failurepb.Failure{FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NextRetryDelay: tc.nextRetryDelay},
+				}},
+				nil, // nonRetryableTypes
+			)
+			require.Equal(t, tc.expected, interval)
+			require.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+		})
+	}
 }
 
 func Test_nextBackoffInterval(t *testing.T) {
