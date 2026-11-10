@@ -779,6 +779,7 @@ func (c *clientImpl) doPollNexusTaskQueue(
 				WorkerVersionCapabilities: request.Request.WorkerVersionCapabilities,
 				DeploymentOptions:         request.Request.DeploymentOptions,
 				WorkerHeartbeat:           request.Request.WorkerHeartbeat,
+				PollerPoolInfo:            request.Request.PollerPoolInfo,
 			},
 			ForwardedSource: request.ForwardedSource,
 			Conditions:      request.Conditions,
