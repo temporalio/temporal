@@ -13,6 +13,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tasktoken"
@@ -157,17 +158,16 @@ func (c *ContextImpl) handleBufferedInputsForWorkflowHeartbeatNotification(
 }
 
 type WorkflowHeartbeatNotification struct {
-	namespaceID   string
+	workflowKey   definition.WorkflowKey
 	namespaceName string
-	workflowID    string
-	runID         string
 	controlQueue  string
 	taskToken     []byte
-	eventType     string
+	// inputEventTypeName is a history event name or UPDATE_ADMITTED for an admitted Update.
+	inputEventTypeName string
 }
 
 // PrepareWorkflowHeartbeatNotification snapshots the started task while the workflow lease is held.
-func PrepareWorkflowHeartbeatNotification(ms historyi.MutableState, eventType string) (*WorkflowHeartbeatNotification, error) {
+func PrepareWorkflowHeartbeatNotification(ms historyi.MutableState, inputEventTypeName string) (*WorkflowHeartbeatNotification, error) {
 	task := ms.GetStartedWorkflowTask()
 	if task == nil || task.WorkerControlTaskQueue == "" {
 		return nil, nil
@@ -188,13 +188,11 @@ func PrepareWorkflowHeartbeatNotification(ms historyi.MutableState, eventType st
 		return nil, err
 	}
 	return &WorkflowHeartbeatNotification{
-		namespaceID:   key.NamespaceID,
-		namespaceName: ms.GetNamespaceEntry().Name().String(),
-		workflowID:    key.WorkflowID,
-		runID:         key.RunID,
-		controlQueue:  task.WorkerControlTaskQueue,
-		taskToken:     token,
-		eventType:     eventType,
+		workflowKey:        key,
+		namespaceName:      ms.GetNamespaceEntry().Name().String(),
+		controlQueue:       task.WorkerControlTaskQueue,
+		taskToken:          token,
+		inputEventTypeName: inputEventTypeName,
 	}, nil
 }
 
@@ -204,7 +202,7 @@ func SendWorkflowHeartbeatNotification(
 	shardCtx historyi.ShardContext,
 	notification *WorkflowHeartbeatNotification,
 ) {
-	if notification == nil || !isWorkflowHeartbeatNotificationInputEnabled(shardCtx, notification.namespaceName, notification.eventType) {
+	if notification == nil || !isWorkflowHeartbeatNotificationInputEnabled(shardCtx, notification.namespaceName, notification.inputEventTypeName) {
 		return
 	}
 	go func() {
@@ -217,8 +215,8 @@ func SendWorkflowHeartbeatNotification(
 			WorkflowHeartbeatNotification: &workerpb.WorkflowHeartbeatNotificationCommand{
 				TaskToken: notification.taskToken,
 				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: notification.workflowID,
-					RunId:      notification.runID,
+					WorkflowId: notification.workflowKey.WorkflowID,
+					RunId:      notification.workflowKey.RunID,
 				},
 			},
 		}}
@@ -233,7 +231,7 @@ func SendWorkflowHeartbeatNotification(
 		)
 		defer matchCancel()
 		_, err = matchingClient.DispatchNexusTask(matchCtx, &matchingservice.DispatchNexusTaskRequest{
-			NamespaceId: notification.namespaceID,
+			NamespaceId: notification.workflowKey.NamespaceID,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: notification.controlQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
@@ -253,8 +251,8 @@ func SendWorkflowHeartbeatNotification(
 		if err != nil {
 			shardCtx.GetLogger().Warn("Unable to dispatch workflow heartbeat notification",
 				tag.WorkflowNamespace(notification.namespaceName),
-				tag.WorkflowID(notification.workflowID),
-				tag.WorkflowRunID(notification.runID),
+				tag.WorkflowID(notification.workflowKey.WorkflowID),
+				tag.WorkflowRunID(notification.workflowKey.RunID),
 				tag.Error(err))
 		}
 	}()
