@@ -35,6 +35,21 @@ SQL_USER=$USERNAME SQL_PASSWORD=$PASSWD make install-schema-mysql
 ./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql8 --db temporal_visibility update-schema -d ./schema/mysql/v8/visibility/versioned  -- Or upgrades your schema by providing your schema for visibility
 ```
 
+### Authenticate with a password command
+Instead of `--password`, the tool can run a command and use its stdout as the password, like the server's `passwordCommand` config.
+The command runs for every new connection, so short-lived tokens such as cloud IAM tokens work.
+`--password-command-arg` is repeatable. The `SQL_PASSWORD_COMMAND_ARGS` env var takes a comma-separated list.
+
+```
+./temporal-sql-tool --ep $SQL_HOST -p $port --plugin postgres12 --db temporal -u $SQL_USER --tls \
+  --password-command aws \
+  --password-command-arg rds --password-command-arg generate-db-auth-token \
+  --password-command-arg=--hostname=$SQL_HOST --password-command-arg=--port=$port \
+  --password-command-arg=--username=$SQL_USER \
+  --password-command-timeout 30s \
+  setup-schema -v 0.0
+```
+
 ### Update schema as part of a release
 You can only upgrade to a new version after the initial setup done above.
 

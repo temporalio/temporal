@@ -4,6 +4,8 @@ package chasmtest_test
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -114,6 +116,31 @@ func TestInvariantCheckRunsAfterSuccessfulTransitions(t *testing.T) {
 		"first", "second",
 		"first", "second",
 	}, calls)
+}
+
+// TestUpdateWithStartSyncsSubComponentsAddedByUpdate: when UpdateWithStart creates an execution, the
+// sub-components its update adds must become nodes in the tree, not only exist in memory.
+func TestUpdateWithStartSyncsSubComponentsAddedByUpdate(t *testing.T) {
+	var nodePaths []string
+	check := func(_ *testing.T, node *chasm.Node, _ chasm.RootComponent) {
+		nodePaths = slices.Collect(maps.Keys(node.Snapshot(nil).Nodes))
+	}
+	e, _ := startStoreWithEngineOptions(t, 0, []chasmtest.EngineOption{chasmtest.WithInvariantCheck(check)})
+
+	result, err := chasm.UpdateWithStartExecution(
+		engineContext(e),
+		chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "update-with-start"},
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		},
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "added", 0)
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	require.True(t, result.Created)
+	require.Contains(t, nodePaths, "Payloads#added")
 }
 
 func TestUpdateComponentDeduplicatesRequestID(t *testing.T) {

@@ -122,6 +122,16 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 	cfg.ConnectAddr = fmt.Sprintf("%s:%v", host, port)
 	cfg.User = cli.GlobalString(schema.CLIOptUser)
 	cfg.Password = cli.GlobalString(schema.CLIOptPassword)
+	passwordCommand := cli.GlobalString(schema.CLIFlagPasswordCommand)
+	passwordCommandArgs := cli.GlobalStringSlice(schema.CLIFlagPasswordCommandArg)
+	passwordCommandTimeout := cli.GlobalDuration(schema.CLIFlagPasswordCommandTimeout)
+	if passwordCommand != "" || len(passwordCommandArgs) > 0 || passwordCommandTimeout != 0 {
+		cfg.PasswordCommand = &config.PasswordCommandConfig{
+			Command: passwordCommand,
+			Args:    passwordCommandArgs,
+			Timeout: passwordCommandTimeout,
+		}
+	}
 	cfg.DatabaseName = cli.GlobalString(schema.CLIOptDatabase)
 	cfg.PluginName = cli.GlobalString(schema.CLIOptPluginName)
 
@@ -172,6 +182,14 @@ func ValidateConnectConfig(cfg *config.SQL) error {
 	}
 	if cfg.DatabaseName == "" {
 		return schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument")
+	}
+	if cfg.PasswordCommand != nil && cfg.Password != "" {
+		return schema.NewConfigError(flag(schema.CLIOptPassword) + " and " +
+			flag(schema.CLIFlagPasswordCommand) + " are mutually exclusive")
+	}
+	if cfg.PasswordCommand != nil && cfg.PasswordCommand.Command == "" {
+		return schema.NewConfigError(flag(schema.CLIFlagPasswordCommandArg) + " and " +
+			flag(schema.CLIFlagPasswordCommandTimeout) + " require " + flag(schema.CLIFlagPasswordCommand))
 	}
 
 	return nil
