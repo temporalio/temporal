@@ -141,6 +141,7 @@ func SendWorkflowHeartbeatNotification(shardCtx historyi.ShardContext, namespace
 	if !isWorkflowHeartbeatNotificationInputEnabled(shardCtx, namespaceName, eventType) {
 		return
 	}
+	// TODO(whn): Dispatch to the worker holding the started Workflow Task.
 }
 
 // hasPendingUpdateForWorkflowHeartbeatNotification checks for unsent Updates in the existing, current-version Registry.

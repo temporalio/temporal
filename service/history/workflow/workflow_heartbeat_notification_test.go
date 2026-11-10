@@ -225,8 +225,8 @@ func TestHandleBufferedInputsForWorkflowHeartbeatNotification(t *testing.T) {
 			buffered := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 			require.Len(t, buffered, len(tc.bufferedTypes))
 			for i, inputType := range tc.bufferedTypes {
-				require.Equal(t, workflowHeartbeatNotificationInputTypeForName(inputType), buffered[i].Tags["input_type"])
 				require.Equal(t, inputType, buffered[i].Tags["event_type"])
+				require.NotContains(t, buffered[i].Tags, "input_type")
 				require.Equal(t, tests.GlobalNamespaceEntry.Name().String(), buffered[i].Tags["namespace"])
 			}
 			first := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
@@ -234,8 +234,8 @@ func TestHandleBufferedInputsForWorkflowHeartbeatNotification(t *testing.T) {
 				require.Empty(t, first)
 			} else {
 				require.Len(t, first, 1)
-				require.Equal(t, workflowHeartbeatNotificationInputTypeForName(tc.firstType), first[0].Tags["input_type"])
 				require.Equal(t, tc.firstType, first[0].Tags["event_type"])
+				require.NotContains(t, first[0].Tags, "input_type")
 			}
 		})
 	}
