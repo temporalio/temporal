@@ -2492,7 +2492,7 @@ func TestCanReapplyOnReset(t *testing.T) {
 	} {
 		t.Run(eventType.String(), func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, expected, canReapplyOnReset(smReg, &historypb.HistoryEvent{EventType: eventType}))
+			require.Equal(t, expected, CanReapplyOnReset(smReg, &historypb.HistoryEvent{EventType: eventType}))
 		})
 	}
 }

@@ -429,20 +429,17 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetE
 	s.True(releaseCalled)
 }
 
-func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_NoWorkflowTaskBoundary() {
-	// A closed current workflow with no completed workflow task and no usable pending workflow
-	// task (never had one, or its only task was started then cleared on close) has no
-	// workflow-task boundary to anchor on. There is nothing to reset to, so the reapply errors
-	// out (the version-history lookup of EmptyEventID fails) and the replication task is retried.
+func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_FailedWorkflowTask() {
+	// No completed or pending workflow task: the reset is anchored at the last failed workflow task in history.
 	ctx := context.Background()
 
 	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
-	nextEventID := int64(2)
-	lastWorkflowTaskStartedVersion := s.namespaceEntry.FailoverVersion(workflowID)
+	nextEventID := int64(9)
+	version := s.namespaceEntry.FailoverVersion(workflowID)
 	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
-		{EventId: common.FirstEventID, Version: lastWorkflowTaskStartedVersion},
+		{EventId: nextEventID - 1, Version: version},
 	})
 	histories := versionhistory.NewVersionHistories(versionHistory)
 	historySize := rand.Int63()
@@ -477,12 +474,48 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_NoWork
 		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	// No completed workflow task and no pending one: no boundary to anchor on.
 	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(common.EmptyEventID)
 	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil).AnyTimes()
 	mutableState.EXPECT().AddHistorySize(historySize)
 
-	// ResetWorkflow must not be invoked: the EmptyEventID version-history lookup errors out first.
+	// The second workflow task was failed when the workflow was terminated.
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		BranchToken: versionHistory.GetBranchToken(),
+		MinEventID:  common.FirstEventID,
+		MaxEventID:  nextEventID,
+		PageSize:    defaultPageSize,
+	}).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{
+		{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+		{EventId: 3, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+		{EventId: 4, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED},
+		{EventId: 5, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+		{EventId: 6, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+		{EventId: 7, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED},
+		{EventId: 8, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED},
+	}}, nil)
+
+	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
+		ctx,
+		namespaceID,
+		workflowID,
+		runID,
+		versionHistory.GetBranchToken(),
+		int64(6),
+		version,
+		nextEventID,
+		gomock.Any(),
+		gomock.Not(""),
+		targetWorkflow,
+		targetWorkflow,
+		EventsReapplicationResetWorkflowReason,
+		workflowEvents.Events,
+		nil,
+		false, // allowResetWithPendingChildren
+		nil,   // post reset operations
+	).Return(nil)
+
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
@@ -491,9 +524,83 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_NoWork
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, historyi.TransactionPolicyPassive, (*historyi.TransactionPolicy)(nil),
+	).Return(nil)
 
 	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
-	s.Error(err)
+	s.NoError(err)
+	s.True(releaseCalled)
+}
+
+func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_NoWorkflowTask() {
+	// Closed before any workflow task: there is nothing to reset to, so the events are not reapplied.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	nextEventID := int64(3)
+	version := s.namespaceEntry.FailoverVersion(workflowID)
+	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
+		{EventId: nextEventID - 1, Version: version},
+	})
+	histories := versionhistory.NewVersionHistories(versionHistory)
+	historySize := rand.Int63()
+
+	releaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
+	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
+
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}},
+	}
+
+	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion(workflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       workflowID,
+		VersionHistories: histories,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: runID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(common.EmptyEventID)
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil).AnyTimes()
+	mutableState.EXPECT().AddHistorySize(historySize)
+
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{
+		{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED},
+	}}, nil)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
+
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, historyi.TransactionPolicyPassive, (*historyi.TransactionPolicy)(nil),
+	).Return(nil)
+
+	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
+	s.NoError(err)
 	s.True(releaseCalled)
 }
 
@@ -749,9 +856,8 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Starte
 }
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_TransientWorkflowTaskNotUsable() {
-	// A transient (continuously failing, attempt > 1) pending task has no persisted
-	// WorkflowTaskScheduled event, so it must NOT be used as a reset anchor. ResetWorkflow must
-	// not be invoked; the EmptyEventID version-history lookup errors out instead.
+	// A transient pending workflow task has no persisted WorkflowTaskScheduled event, so the reset is
+	// anchored at the last timed out workflow task in history instead.
 	ctx := context.Background()
 
 	namespaceID := namespace.ID("some random namespace ID")
@@ -760,7 +866,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Transi
 	nextEventID := int64(5)
 	version := s.namespaceEntry.FailoverVersion(workflowID)
 	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
-		{EventId: common.FirstEventID, Version: version},
+		{EventId: nextEventID - 1, Version: version},
 	})
 	histories := versionhistory.NewVersionHistories(versionHistory)
 	historySize := rand.Int63()
@@ -797,13 +903,39 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Transi
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(common.EmptyEventID)
 	mutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
-	// Transient task: ScheduledEventID is a NextEventID placeholder with no backing event.
 	mutableState.EXPECT().GetPendingWorkflowTask().Return(&historyi.WorkflowTaskInfo{
 		ScheduledEventID: nextEventID,
 		StartedEventID:   common.EmptyEventID,
 		Type:             enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	}).AnyTimes()
 	mutableState.EXPECT().AddHistorySize(historySize)
+
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{
+		{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+		{EventId: 3, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+		{EventId: 4, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT},
+	}}, nil)
+
+	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
+		ctx,
+		namespaceID,
+		workflowID,
+		runID,
+		versionHistory.GetBranchToken(),
+		int64(3),
+		version,
+		nextEventID,
+		gomock.Any(),
+		gomock.Not(""),
+		targetWorkflow,
+		targetWorkflow,
+		EventsReapplicationResetWorkflowReason,
+		workflowEvents.Events,
+		nil,
+		false, // allowResetWithPendingChildren
+		nil,   // post reset operations
+	).Return(nil)
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
@@ -813,10 +945,61 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Transi
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, historyi.TransactionPolicyPassive, (*historyi.TransactionPolicy)(nil),
+	).Return(nil)
 
 	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
-	s.Error(err)
+	s.NoError(err)
 	s.True(releaseCalled)
+}
+
+func (s *transactionMgrSuite) TestGetEventsReapplicationResetEventID_MultiplePages() {
+	nextEventID := int64(7)
+	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
+		{EventId: nextEventID - 1, Version: s.namespaceEntry.FailoverVersion("some random workflow ID")},
+	})
+	mutableState := historyi.NewMockMutableState(s.controller)
+	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(common.EmptyEventID)
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil)
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		VersionHistories: versionhistory.NewVersionHistories(versionHistory),
+	})
+	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		BranchToken: versionHistory.GetBranchToken(),
+		MinEventID:  common.FirstEventID,
+		MaxEventID:  nextEventID,
+		PageSize:    defaultPageSize,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+			{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+			{EventId: 3, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+			{EventId: 4, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED},
+		},
+		NextPageToken: []byte("next page"),
+	}, nil)
+	// The last workflow task timed out before it started, so the reset is anchored at its scheduled event.
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		ShardID:       s.mockShard.GetShardID(),
+		BranchToken:   versionHistory.GetBranchToken(),
+		MinEventID:    common.FirstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      defaultPageSize,
+		NextPageToken: []byte("next page"),
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{EventId: 5, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+			{EventId: 6, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT},
+		},
+	}, nil)
+
+	resetEventID, err := GetEventsReapplicationResetEventID(context.Background(), s.mockShard, mutableState)
+	s.NoError(err)
+	s.Equal(int64(5), resetEventID)
 }
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
