@@ -8546,6 +8546,58 @@ func (s *mutableStateSuite) TestCloseTransaction_ChasmTreeReceivesPrincipal() {
 	}
 }
 
+// newMutableStateWithDirtyChasmTree returns a mutable state whose CHASM tree reports pending changes.
+func (s *mutableStateSuite) newMutableStateWithDirtyChasmTree() (*MutableStateImpl, *historyi.MockChasmTree) {
+	namespaceEntry := tests.GlobalNamespaceEntry
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, s.buildWorkflowMutableState(), 123)
+	s.NoError(err)
+	s.NoError(mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false))
+
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes()
+	mutableState.chasmTree = mockChasmTree
+	return mutableState, mockChasmTree
+}
+
+func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_GuardsPass() {
+	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
+	s.True(mutableState.IsDirty())
+
+	s.NoError(mutableState.SetChasmSpeculativeTransitionPending())
+	s.False(mutableState.IsDirty())
+	_, err := mutableState.StartTransaction(tests.GlobalNamespaceEntry)
+	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_RejectsNonChasmChanges() {
+	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
+	mutableState.AddTasks(&tasks.ChasmTask{WorkflowKey: mutableState.GetWorkflowKey()})
+
+	err := mutableState.SetChasmSpeculativeTransitionPending()
+	var internalErr *serviceerror.Internal
+	s.ErrorAs(err, &internalErr)
+	s.True(mutableState.IsDirty())
+}
+
+func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_FlushedOnClose() {
+	mutableState, mockChasmTree := s.newMutableStateWithDirtyChasmTree()
+	s.NoError(mutableState.SetChasmSpeculativeTransitionPending())
+
+	rootNode := &persistencespb.ChasmNode{Metadata: &persistencespb.ChasmNodeMetadata{}}
+	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), true).Return(chasm.NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{"": rootNode},
+	}, nil).Times(1)
+
+	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Contains(mutation.UpsertChasmNodes, "")
+
+	// The flag is cleared by the close, so a dirty tree counts as dirty again.
+	s.True(mutableState.IsDirty())
+}
+
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 	s.mockConfig.EnablePrincipalPropagation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	namespaceEntry := tests.GlobalNamespaceEntry
