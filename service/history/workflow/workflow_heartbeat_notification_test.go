@@ -27,21 +27,21 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestPrepareWorkflowHeartbeatNotification(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ms := historyi.NewMockMutableState(ctrl)
-	started := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 	clock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
-	ms.EXPECT().GetStartedWorkflowTask().Return(&historyi.WorkflowTaskInfo{
-		ScheduledEventID:       5,
-		StartedEventID:         6,
-		StartedTime:            started,
-		Attempt:                2,
-		Version:                9,
-		StartedClock:           clock,
-		WorkerControlTaskQueue: "control-queue",
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		WorkflowTaskScheduledEventId:   5,
+		WorkflowTaskStartedEventId:     6,
+		WorkflowTaskStartedTime:        timestamppb.New(time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)),
+		WorkflowTaskAttempt:            2,
+		WorkflowTaskVersion:            9,
+		WorkflowTaskStartedClock:       clock,
+		WorkflowTaskWorkerControlQueue: "control-queue",
 	})
 	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"))
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
@@ -57,6 +57,21 @@ func TestPrepareWorkflowHeartbeatNotification(t *testing.T) {
 	require.True(t, proto.Equal(clock, token.GetClock()))
 }
 
+func TestPrepareWorkflowHeartbeatNotification_StartedClockUnknown(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		WorkflowTaskScheduledEventId:   5,
+		WorkflowTaskStartedEventId:     6,
+		WorkflowTaskWorkerControlQueue: "control-queue",
+	})
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"))
+
+	notification, err := PrepareWorkflowHeartbeatNotification(ms, enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)])
+	require.NoError(t, err)
+	require.Nil(t, notification)
+}
+
 func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	shard := historyi.NewMockShardContext(ctrl)
@@ -67,13 +82,11 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 	delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)
 	shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered}, nil)
 	SendWorkflowHeartbeatNotification(context.Background(), shard, &WorkflowHeartbeatNotification{
-		namespaceID:   "namespace-id",
-		namespaceName: "namespace-name",
-		workflowID:    "workflow-id",
-		runID:         "run-id",
-		controlQueue:  "control-queue",
-		taskToken:     []byte("task-token"),
-		eventType:     enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)],
+		workflowKey:        definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"),
+		namespaceName:      "namespace-name",
+		controlQueue:       "control-queue",
+		taskToken:          []byte("task-token"),
+		inputEventTypeName: enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)],
 	})
 
 	select {
