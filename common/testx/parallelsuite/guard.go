@@ -15,10 +15,9 @@ type guardT struct {
 	hasSubtests atomic.Bool
 }
 
-//nolint:forbidigo // Reject invalid suite usage.
 func (g *guardT) Helper() {
 	if g.hasSubtests.Load() {
-		panic(fmt.Sprintf(
+		panic(fmt.Sprintf( //nolint:forbidigo
 			"parallelsuite: assertion called on %q after Run() was called; "+
 				"use the callback parameter's assertions inside Run() instead",
 			g.name,

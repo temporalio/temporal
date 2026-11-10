@@ -101,11 +101,9 @@ func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.Testin
 }
 
 // T returns the *testing.T, panicking if the guard has been sealed.
-//
-//nolint:forbidigo // Reject invalid suite usage.
 func (s *Suite[T]) T() *testing.T {
 	if s.guardT.hasSubtests.Load() {
-		panic("parallelsuite: do not call T() after Run(); use the subtest callback's parameter instead")
+		panic("parallelsuite: do not call T() after Run(); use the subtest callback's parameter instead") //nolint:forbidigo
 	}
 	return s.guardT.T
 }
@@ -217,13 +215,12 @@ func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, false, args...)
 }
 
-//nolint:forbidigo // Reject invalid suite usage.
 func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
-		panic(fmt.Sprintf("parallelsuite.Run: suite must be a pointer to a struct, got %v", typ))
+		panic(fmt.Sprintf("parallelsuite.Run: suite must be a pointer to a struct, got %v", typ)) //nolint:forbidigo
 	}
 	structType := typ.Elem()
 
@@ -231,7 +228,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 
 	methods := discoverTestMethods(typ, structType, args)
 	if len(methods) == 0 {
-		panic(fmt.Sprintf("parallelsuite.Run: suite %s has no Test* methods", structType.Name()))
+		panic(fmt.Sprintf("parallelsuite.Run: suite %s has no Test* methods", structType.Name())) //nolint:forbidigo
 	}
 
 	methods = applyTestifyMFilter(methods)
@@ -258,14 +255,13 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	}
 }
 
-//nolint:forbidigo // Reject invalid suite usage.
 func validateSuiteStruct(structType reflect.Type) {
 	if !strings.HasSuffix(structType.Name(), "Suite") {
-		panic(fmt.Sprintf("parallelsuite.Run: struct name %q must end with \"Suite\"", structType.Name()))
+		panic(fmt.Sprintf("parallelsuite.Run: struct name %q must end with \"Suite\"", structType.Name())) //nolint:forbidigo
 	}
 
 	if structType.NumField() != 1 {
-		panic(fmt.Sprintf(
+		panic(fmt.Sprintf( //nolint:forbidigo
 			"parallelsuite.Run: suite %s must have no fields besides the embedded parallelsuite.Suite; "+
 				"pass parameters as extra args to Run instead (got %d fields)",
 			structType.Name(), structType.NumField(),
@@ -273,7 +269,7 @@ func validateSuiteStruct(structType reflect.Type) {
 	}
 	f := structType.Field(0)
 	if !f.Anonymous {
-		panic(fmt.Sprintf(
+		panic(fmt.Sprintf( //nolint:forbidigo
 			"parallelsuite.Run: suite %s must embed parallelsuite.Suite, found named field %q",
 			structType.Name(), f.Name,
 		))
@@ -285,8 +281,6 @@ func validateSuiteStruct(structType reflect.Type) {
 //
 // The flag is registered by testify's suite package (imported above); we share
 // that registration via flag.Lookup rather than registering it a second time.
-//
-//nolint:forbidigo // Reject an invalid test filter.
 func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 	f := flag.Lookup("testify.m")
 	if f == nil {
@@ -298,7 +292,7 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		panic(fmt.Sprintf("parallelsuite: invalid regexp for -testify.m: %s", err))
+		panic(fmt.Sprintf("parallelsuite: invalid regexp for -testify.m: %s", err)) //nolint:forbidigo
 	}
 	var filtered []reflect.Method
 	for _, m := range methods {
@@ -309,7 +303,6 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 	return filtered
 }
 
-//nolint:forbidigo // Reject invalid suite usage.
 func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect.Method {
 	expectedNumIn := 1 + len(args)
 	inheritedType := structType.Field(0).Type
@@ -321,7 +314,7 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 		name := method.Name
 		_, inherited := inheritedType.MethodByName(name)
 		if !strings.HasPrefix(name, "Test") && !inherited {
-			panic(fmt.Sprintf(
+			panic(fmt.Sprintf( //nolint:forbidigo
 				"parallelsuite.Run: suite %s has exported method %s that does not start with Test; "+
 					"use a package-level function instead",
 				structType.Name(), name,
@@ -337,13 +330,13 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 
 		mt := method.Type
 		if mt.NumOut() != 0 {
-			panic(fmt.Sprintf(
+			panic(fmt.Sprintf( //nolint:forbidigo
 				"parallelsuite.Run: method %s.%s must not have return values, got %v",
 				structType.Name(), method.Name, mt,
 			))
 		}
 		if mt.NumIn() != expectedNumIn {
-			panic(fmt.Sprintf(
+			panic(fmt.Sprintf( //nolint:forbidigo
 				"parallelsuite.Run: method %s.%s has wrong number of parameters: expected %d, got %d (%v)",
 				structType.Name(), method.Name, expectedNumIn, mt.NumIn(), mt,
 			))
@@ -353,7 +346,7 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 			paramType := mt.In(1 + j)
 			argType := reflect.TypeOf(a)
 			if !argType.AssignableTo(paramType) {
-				panic(fmt.Sprintf(
+				panic(fmt.Sprintf( //nolint:forbidigo
 					"parallelsuite.Run: method %s.%s parameter %d has type %v but Run arg has type %v",
 					structType.Name(), method.Name, j+1, paramType, argType,
 				))
