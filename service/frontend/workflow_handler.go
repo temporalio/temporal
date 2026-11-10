@@ -7756,6 +7756,8 @@ func (wh *WorkflowHandler) ListWorkflowRules(
 
 // RecordWorkerHeartbeat updates the metadata registry and, when enabled,
 // forwards durable heartbeats to the worker state machine.
+// Both updates must succeed for the heartbeat to be acknowledged.
+// A failure in either update does not cancel the other.
 func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	ctx context.Context, request *workflowservice.RecordWorkerHeartbeatRequest,
 ) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
@@ -7768,20 +7770,26 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 		return nil, err
 	}
 
+	var durableErr error
+	var wg sync.WaitGroup
+	if wh.config.EnableDurableWorkerHeartbeats(namespaceName.String()) {
+		// Renew the durable lease even if the in-memory registry update fails.
+		wg.Go(func() {
+			defer log.CapturePanic(wh.logger, &durableErr)
+			durableErr = wh.recordDurableWorkerHeartbeats(ctx, namespaceID.String(), request)
+		})
+	}
+
 	_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 		NamespaceId:       namespaceID.String(),
 		HeartbeartRequest: request,
 	})
-
+	wg.Wait()
 	if err != nil {
 		return nil, err
 	}
-
-	// When durable tracking is disabled, workers are still tracked in the in-memory registry.
-	if wh.config.EnableDurableWorkerHeartbeats(namespaceName.String()) {
-		if err := wh.recordDurableWorkerHeartbeats(ctx, namespaceID.String(), request); err != nil {
-			return nil, err
-		}
+	if durableErr != nil {
+		return nil, durableErr
 	}
 
 	return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
