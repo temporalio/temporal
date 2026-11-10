@@ -65,13 +65,11 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 	delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)
 	shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered}, nil)
 	SendWorkflowHeartbeatNotification(context.Background(), shard, &WorkflowHeartbeatNotification{
-		namespaceID:   "namespace-id",
-		namespaceName: "namespace-name",
-		workflowID:    "workflow-id",
-		runID:         "run-id",
-		controlQueue:  "control-queue",
-		taskToken:     []byte("task-token"),
-		eventType:     enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)],
+		workflowKey:        definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"),
+		namespaceName:      "namespace-name",
+		controlQueue:       "control-queue",
+		taskToken:          []byte("task-token"),
+		inputEventTypeName: enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)],
 	})
 
 	select {
