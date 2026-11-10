@@ -82,6 +82,7 @@ func (s *laneStreamSender) startLanePolicy() {
 		policy, err = s.lanePolicyFactory.NewStreamPolicy(LaneStream{
 			RemoteCluster: s.clientClusterName,
 			ShardID:       s.serverShardKey.ShardID,
+			RemoteShardID: s.clientShardKey.ShardID,
 		})
 	}) {
 		return

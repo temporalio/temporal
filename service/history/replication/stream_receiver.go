@@ -466,6 +466,9 @@ func (r *StreamReceiverImpl) processMessages(
 			r.finishLaneBatch(isolatedNamespaceID, messages.GetRetireIsolatedLane())
 		}
 		for _, task := range trackedTasks {
+			if r.PayloadObserver != nil {
+				observePayload(r.PayloadObserver, task.ReplicationTask(), clusterName, r.serverShardKey.ShardID, PayloadReceived, time.Now())
+			}
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
 			if err != nil {
 				return err
