@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,7 +17,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/await"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -83,6 +86,15 @@ func timingOutAddresses(timingOut ...string) peerProbeFn {
 		}
 		return nil
 	}
+}
+
+// probeMetricCounts sums the probe metric recorded for each "target_service/outcome".
+func probeMetricCounts(capture *metricstest.Capture) map[string]int64 {
+	counts := make(map[string]int64)
+	for _, r := range capture.SnapshotMetric(metrics.FrontendPeerHealthCheckProbe.Name()) {
+		counts[r.Tags["target_service"]+"/"+r.Tags["outcome"]] += r.Value.(int64)
+	}
+	return counts
 }
 
 func TestClassifyPeerProbeError(t *testing.T) {
@@ -303,11 +315,19 @@ func TestRunRound_DeadlineCountsUnfinishedAsUnknown(t *testing.T) {
 		}
 		return nil
 	}
-	checker := newPeerTestChecker(monitor, probe, testPeerHealthCheckConfig(1, 20, 0.5, time.Minute, 50*time.Millisecond))
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	checker := newPeerHealthChecker(monitor, probe, func(healthpb.HealthCheckResponse_ServingStatus) {},
+		testPeerHealthCheckConfig(1, 20, 0.5, time.Minute, 50*time.Millisecond), handler, log.NewNoopLogger())
 
 	start := time.Now()
 	require.Equal(t, peerRoundPass, checker.runRound(context.Background()))
 	require.Less(t, time.Since(start), 500*time.Millisecond)
+	require.Equal(t, map[string]int64{
+		"history/response":  1,
+		"history/unknown":   1,
+		"matching/response": 2,
+	}, probeMetricCounts(capture))
 }
 
 func TestRunRound_ConcurrencyCapped(t *testing.T) {
@@ -353,4 +373,166 @@ func TestRunRound_ConcurrencyCapped(t *testing.T) {
 	release()
 	require.Equal(t, peerRoundPass, <-done)
 	require.Equal(t, int32(peerHealthCheckMaxConcurrentProbes), maxInFlight.Load())
+}
+
+// statusRecorder captures every setStatus call in order.
+type statusRecorder struct {
+	mu       sync.Mutex
+	statuses []healthpb.HealthCheckResponse_ServingStatus
+}
+
+func (r *statusRecorder) set(s healthpb.HealthCheckResponse_ServingStatus) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.statuses = append(r.statuses, s)
+}
+
+func (r *statusRecorder) list() []healthpb.HealthCheckResponse_ServingStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.statuses)
+}
+
+func (r *statusRecorder) last() (healthpb.HealthCheckResponse_ServingStatus, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.statuses) == 0 {
+		return 0, false
+	}
+	return r.statuses[len(r.statuses)-1], true
+}
+
+// newPeerLoopChecker builds a checker whose flag and probe outcome can be toggled by the test.
+func newPeerLoopChecker(
+	t *testing.T,
+	enabled *atomic.Bool,
+	healthy *atomic.Bool,
+	probeCalls *atomic.Int32,
+	interval time.Duration,
+	rec *statusRecorder,
+) *peerHealthChecker {
+	monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
+		primitives.HistoryService:  testPeerHosts("history", 4),
+		primitives.MatchingService: testPeerHosts("matching", 4),
+	})
+	// An unhealthy probe times out for half of History's hosts, which fails the round.
+	probe := func(_ context.Context, _ primitives.ServiceName, address string) error {
+		probeCalls.Add(1)
+		if !healthy.Load() && (address == "history-0:7234" || address == "history-1:7234") {
+			return status.Error(codes.DeadlineExceeded, "x")
+		}
+		return nil
+	}
+	cfg := testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second)
+	cfg.Enabled = enabled.Load
+	cfg.Interval = dynamicconfig.GetDurationPropertyFn(interval)
+	return newPeerHealthChecker(monitor, probe, rec.set, cfg, metrics.NoopMetricsHandler, log.NewNoopLogger())
+}
+
+func TestTick_FlagOff_ServingWithoutProbing(t *testing.T) {
+	var enabled, healthy atomic.Bool
+	var probeCalls atomic.Int32
+	rec := &statusRecorder{}
+	checker := newPeerLoopChecker(t, &enabled, &healthy, &probeCalls, time.Second, rec)
+
+	checker.tick(context.Background())
+
+	require.Equal(t, int32(0), probeCalls.Load())
+	last, ok := rec.last()
+	require.True(t, ok)
+	require.Equal(t, healthpb.HealthCheckResponse_SERVING, last)
+}
+
+func TestTick_FailedRoundThenPass(t *testing.T) {
+	var enabled, healthy atomic.Bool
+	enabled.Store(true)
+	var probeCalls atomic.Int32
+	rec := &statusRecorder{}
+	checker := newPeerLoopChecker(t, &enabled, &healthy, &probeCalls, time.Second, rec)
+
+	checker.tick(context.Background())
+	healthy.Store(true)
+	checker.tick(context.Background())
+
+	require.Equal(t, []healthpb.HealthCheckResponse_ServingStatus{
+		healthpb.HealthCheckResponse_NOT_SERVING,
+		healthpb.HealthCheckResponse_SERVING,
+	}, rec.list())
+}
+
+func TestTick_FlagTurnedOffWhileNotServing(t *testing.T) {
+	var enabled, healthy atomic.Bool
+	enabled.Store(true)
+	var probeCalls atomic.Int32
+	rec := &statusRecorder{}
+	checker := newPeerLoopChecker(t, &enabled, &healthy, &probeCalls, time.Second, rec)
+
+	checker.tick(context.Background())
+	require.Equal(t, []healthpb.HealthCheckResponse_ServingStatus{healthpb.HealthCheckResponse_NOT_SERVING}, rec.list())
+
+	enabled.Store(false)
+	callsBefore := probeCalls.Load()
+	checker.tick(context.Background())
+
+	require.Equal(t, callsBefore, probeCalls.Load())
+	last, ok := rec.last()
+	require.True(t, ok)
+	require.Equal(t, healthpb.HealthCheckResponse_SERVING, last)
+}
+
+func TestTick_UnknownRoundKeepsStatus(t *testing.T) {
+	monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
+		primitives.HistoryService:  nil,
+		primitives.MatchingService: nil,
+	})
+	rec := &statusRecorder{}
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	checker := newPeerHealthChecker(monitor, timingOutAddresses(), rec.set,
+		testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second), handler, log.NewNoopLogger())
+
+	checker.tick(context.Background())
+
+	require.Empty(t, rec.list())
+	rounds := capture.SnapshotMetric(metrics.FrontendPeerHealthCheckRound.Name())
+	require.Len(t, rounds, 1)
+	require.Equal(t, peerRoundUnknown, rounds[0].Tags["outcome"])
+}
+
+func TestStartStop_LoopRunsAndStops(t *testing.T) {
+	var enabled, healthy atomic.Bool
+	enabled.Store(true)
+	healthy.Store(true)
+	var probeCalls atomic.Int32
+	rec := &statusRecorder{}
+	checker := newPeerLoopChecker(t, &enabled, &healthy, &probeCalls, 10*time.Millisecond, rec)
+
+	checker.Start()
+	await.RequireTrue(t, func() bool {
+		last, ok := rec.last()
+		return ok && last == healthpb.HealthCheckResponse_SERVING && probeCalls.Load() >= 3
+	}, 5*time.Second, 5*time.Millisecond)
+
+	checker.Stop()
+	checker.Stop() // second call must be a no-op
+
+	stoppedAt := len(rec.list())
+	require.Never(t, func() bool { return len(rec.list()) != stoppedAt }, 100*time.Millisecond, 10*time.Millisecond)
+}
+
+func TestStart_FirstRoundRunsImmediately(t *testing.T) {
+	var enabled, healthy atomic.Bool
+	enabled.Store(true)
+	healthy.Store(true)
+	var probeCalls atomic.Int32
+	rec := &statusRecorder{}
+	checker := newPeerLoopChecker(t, &enabled, &healthy, &probeCalls, time.Hour, rec)
+
+	checker.Start()
+	t.Cleanup(checker.Stop)
+
+	await.RequireTrue(t, func() bool {
+		last, ok := rec.last()
+		return ok && last == healthpb.HealthCheckResponse_SERVING
+	}, time.Second, 5*time.Millisecond)
 }

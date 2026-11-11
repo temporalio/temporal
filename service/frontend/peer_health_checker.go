@@ -7,8 +7,12 @@ import (
 	"math/rand/v2"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -64,6 +68,10 @@ type (
 		config         peerHealthCheckConfig
 		metricsHandler metrics.Handler
 		logger         log.Logger
+
+		status int32
+		cancel context.CancelFunc
+		wg     sync.WaitGroup
 	}
 
 	peerProbeTarget struct {
@@ -215,6 +223,7 @@ func classifyPeerProbeError(roundCtx context.Context, err error) peerProbeOutcom
 
 // collectProbeResults tallies probe outcomes per role until every probe reports or the round ends.
 // Every planned probe that has not reported by then counts as unknown, so each role's counts sum to its planned count.
+// It records one probe metric per planned probe, unless the round was cut short by Stop.
 func (c *peerHealthChecker) collectProbeResults(
 	ctx context.Context,
 	plannedPerRole map[primitives.ServiceName]int,
@@ -234,6 +243,23 @@ collect:
 		case <-ctx.Done():
 			c.logger.Warn("peer health check round timed out", tag.Error(ctx.Err()))
 			break collect
+		}
+	}
+	// A round cut short by Stop is discarded by tick, so it records nothing.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return counts
+	}
+	for role, planned := range plannedPerRole {
+		reported := 0
+		for _, n := range counts[role] {
+			reported += n
+		}
+		counts[role][peerProbeUnknown] += planned - reported
+		for outcome, n := range counts[role] {
+			if n > 0 {
+				c.metricsHandler.Counter(metrics.FrontendPeerHealthCheckProbe.Name()).
+					Record(int64(n), metrics.StringTag("target_service", string(role)), metrics.OutcomeTag(string(outcome)))
+			}
 		}
 	}
 	return counts
@@ -274,4 +300,63 @@ func (c *peerHealthChecker) evaluateRound(
 		}
 	}
 	return verdict
+}
+
+// Start launches the check loop. It is idempotent.
+func (c *peerHealthChecker) Start() {
+	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	c.cancel = cancel
+	c.wg.Add(1)
+	go c.loop(ctx)
+}
+
+// Stop cancels the loop and waits for it. It is idempotent.
+// After Stop returns, setStatus is never called again.
+func (c *peerHealthChecker) Stop() {
+	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+		return
+	}
+	c.cancel()
+	c.wg.Wait()
+}
+
+func (c *peerHealthChecker) loop(ctx context.Context) {
+	defer c.wg.Done()
+	for {
+		c.tick(ctx)
+		timer := time.NewTimer(c.config.Interval())
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+}
+
+// tick runs one check iteration. A round interrupted by Stop sets no status and records nothing.
+// An unknown round leaves the status unchanged.
+func (c *peerHealthChecker) tick(ctx context.Context) {
+	if !c.config.Enabled() {
+		if ctx.Err() == nil {
+			c.setStatus(healthpb.HealthCheckResponse_SERVING)
+		}
+		return
+	}
+	verdict := c.runRound(ctx)
+	if ctx.Err() != nil {
+		return
+	}
+	switch verdict {
+	case peerRoundPass:
+		c.setStatus(healthpb.HealthCheckResponse_SERVING)
+	case peerRoundFail:
+		c.setStatus(healthpb.HealthCheckResponse_NOT_SERVING)
+	default:
+		// An unknown verdict leaves the status unchanged.
+	}
+	c.metricsHandler.Counter(metrics.FrontendPeerHealthCheckRound.Name()).Record(1, metrics.OutcomeTag(verdict))
 }
