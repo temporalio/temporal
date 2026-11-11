@@ -168,11 +168,11 @@ const nextRetryDelayOverride = 10 * time.Second
 func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 	env := newActivityParityEnv(s.T())
 
-	testTimeoutWhileAttemptInProgress := func(t *testing.T, timeout model.Event) {
+	testTimeoutWhileAttemptInProgress := func(t *testing.T, timeout model.Event, exclusion string) {
 		trace := []model.Event{model.Poll, timeout}
 		cfg := activityConfig{
 			MaxAttempts:            2,
-			NonRetryableErrorTypes: []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType(timeout).String()},
+			NonRetryableErrorTypes: []string{exclusion},
 		}
 
 		t.Run("WorkflowActivity", func(t *testing.T) {
@@ -224,11 +224,17 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 
 	s.Run("StartToClose", func(s *activityParityTestSuite) {
 		t := s.T()
-		testTimeoutWhileAttemptInProgress(t, model.StartToCloseElapses)
+		testTimeoutWhileAttemptInProgress(t, model.StartToCloseElapses, "TemporalTimeout:StartToClose")
 	})
 	s.Run("Heartbeat", func(s *activityParityTestSuite) {
 		t := s.T()
-		testTimeoutWhileAttemptInProgress(t, model.HeartbeatElapses)
+		testTimeoutWhileAttemptInProgress(t, model.HeartbeatElapses, "TemporalTimeout:Heartbeat")
+	})
+	s.Run("StartToCloseProtoName", func(s *activityParityTestSuite) {
+		testTimeoutWhileAttemptInProgress(s.T(), model.StartToCloseElapses, "TemporalTimeout:TIMEOUT_TYPE_START_TO_CLOSE")
+	})
+	s.Run("HeartbeatProtoName", func(s *activityParityTestSuite) {
+		testTimeoutWhileAttemptInProgress(s.T(), model.HeartbeatElapses, "TemporalTimeout:TIMEOUT_TYPE_HEARTBEAT")
 	})
 	s.Run("StartToCloseReportedByID", func(s *activityParityTestSuite) {
 		testTimeoutReportedByID(s.T(), enumspb.TIMEOUT_TYPE_START_TO_CLOSE, model.StartToCloseTimeoutFailureType)

@@ -168,6 +168,14 @@ func TestIsRetryableFailure(t *testing.T) {
 			retryable:         true,
 		},
 		{
+			name: "application failure timeout-like names remain exact",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "TemporalTimeout:Heartbeat"}},
+			},
+			nonRetryableTypes: []string{"TemporalTimeout:TIMEOUT_TYPE_HEARTBEAT"},
+			retryable:         true,
+		},
+		{
 			name: "application failure type excluded",
 			failure: &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "type"}},
@@ -394,6 +402,12 @@ func TestValidateRetryPolicy(t *testing.T) {
 					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String(),
 					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String(),
 					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String(),
+					"TemporalTimeout:TIMEOUT_TYPE_START_TO_CLOSE",
+					"TemporalTimeout:TIMEOUT_TYPE_HEARTBEAT",
+					"TemporalTimeout:StartToHandoff",
+					"TemporalTimeout:HandoffToClose",
+					"TemporalTimeout:TIMEOUT_TYPE_START_TO_HANDOFF",
+					"TemporalTimeout:TIMEOUT_TYPE_HANDOFF_TO_CLOSE",
 				},
 			},
 			wantErr:       false,
@@ -439,30 +453,39 @@ func TestValidateRetryPolicy(t *testing.T) {
 func TestIsRetryableTimeout(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		timeoutType enumspb.TimeoutType
+		protoName   string
 		retryable   bool
 	}{
-		{enumspb.TIMEOUT_TYPE_START_TO_CLOSE, true},
-		{enumspb.TIMEOUT_TYPE_HEARTBEAT, true},
-		{enumspb.TIMEOUT_TYPE_START_TO_HANDOFF, true},
-		{enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE, true},
-		{enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, false},
-		{enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, false},
-		{enumspb.TIMEOUT_TYPE_UNSPECIFIED, false},
-		{enumspb.TimeoutType(999), false},
+		{timeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE, protoName: "TIMEOUT_TYPE_START_TO_CLOSE", retryable: true},
+		{timeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT, protoName: "TIMEOUT_TYPE_HEARTBEAT", retryable: true},
+		{timeoutType: enumspb.TIMEOUT_TYPE_START_TO_HANDOFF, protoName: "TIMEOUT_TYPE_START_TO_HANDOFF", retryable: true},
+		{timeoutType: enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE, protoName: "TIMEOUT_TYPE_HANDOFF_TO_CLOSE", retryable: true},
+		{timeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, protoName: "TIMEOUT_TYPE_SCHEDULE_TO_START"},
+		{timeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, protoName: "TIMEOUT_TYPE_SCHEDULE_TO_CLOSE"},
+		{timeoutType: enumspb.TIMEOUT_TYPE_UNSPECIFIED, protoName: "TIMEOUT_TYPE_UNSPECIFIED"},
+		{timeoutType: enumspb.TimeoutType(999)},
 	} {
-		t.Run(tc.timeoutType.String(), func(t *testing.T) {
+		t.Run(testCase.timeoutType.String(), func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.retryable, IsRetryableTimeout(tc.timeoutType, nil))
-			require.False(t, IsRetryableTimeout(tc.timeoutType, []string{TimeoutFailureTypePrefix + tc.timeoutType.String()}))
-			require.Equal(t, tc.retryable, IsRetryableTimeout(tc.timeoutType, []string{"application-error"}))
+			require.Equal(t, testCase.retryable, IsRetryableTimeout(testCase.timeoutType, nil))
+			require.False(t, IsRetryableTimeout(testCase.timeoutType, []string{TimeoutFailureTypePrefix + testCase.timeoutType.String()}))
+			require.Equal(t, testCase.retryable, IsRetryableTimeout(testCase.timeoutType, []string{"application-error"}))
 
 			failure := &failurepb.Failure{FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{TimeoutType: tc.timeoutType},
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{TimeoutType: testCase.timeoutType},
 			}}
-			require.Equal(t, tc.retryable, IsRetryableFailure(failure, nil))
-			require.False(t, IsRetryableFailure(failure, []string{TimeoutFailureTypePrefix + tc.timeoutType.String()}))
+			require.Equal(t, testCase.retryable, IsRetryableFailure(failure, nil))
+			require.False(t, IsRetryableFailure(failure, []string{TimeoutFailureTypePrefix + testCase.timeoutType.String()}))
+
+			if testCase.protoName != "" {
+				exclusions := []string{TimeoutFailureTypePrefix + testCase.protoName}
+				require.False(t, IsRetryableTimeout(testCase.timeoutType, exclusions))
+				require.False(t, IsRetryableFailure(failure, exclusions))
+			}
+			require.Equal(t, testCase.retryable, IsRetryableTimeout(testCase.timeoutType,
+				[]string{"TemporalTimeout:TIMEOUT_TYPE_SCHEDULE_TO_CLOSE"}))
 		})
 	}
 }
