@@ -13,7 +13,7 @@ func Register(registry *chasm.Registry, library *Library) error {
 var HistoryModule = fx.Module(
 	"chasm.lib.wci",
 	fx.Provide(newHandler),
-	fx.Provide(NewFetchSnapshotTaskHandler),
+	fx.Provide(NewMetricsPollTimerTaskHandler),
 	fx.Provide(NewDeferredDecisionTaskHandler),
 	fx.Provide(NewResizeTaskHandler),
 	fx.Provide(NewInvokeTaskHandler),

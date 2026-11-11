@@ -174,15 +174,37 @@ func polls(capture *metricstest.Capture, ref wciRef) int {
 	return n
 }
 
-// An outage longer than the standby discard delay loses the poll timer: the standby discards it and the
+// The poll timer is a side-effect timer, so a standby keeps it for ChasmStandbyTaskDiscardDelay, past the
+// shorter timer discard delay, and the new active cluster runs it after a failover.
+func (s *WCIFailoverSuite) TestOutageKeepsThePollTimer() {
+	ref := s.createRegionalWCI()
+	capture := s.outageThenFailover(ref)
+	s.Require().Eventually(func() bool { return polls(capture, ref) > 0 }, 3*wciPollInterval, 200*time.Millisecond,
+		"the new active cluster runs the kept poll timer")
+}
+
+// An outage longer than ChasmStandbyTaskDiscardDelay loses the poll timer: the standby discards it and the
 // failover doesn't re-queue it. The next task-add re-arms it (ha-plan 8d.2 item 7); an idle WCI stays stuck
 // until the CHASM framework re-queues discarded timers.
-func (s *WCIFailoverSuite) TestOutageLosesThePollTimerUntilATaskAdd() {
+func (s *WCIFailoverSuite) TestOutagePastTheDiscardDelayLosesThePollTimerUntilATaskAdd() {
+	s.clusters[1].OverrideDynamicConfig(s.T(), dynamicconfig.ChasmStandbyTaskDiscardDelay, 2*time.Second)
 	ref := s.createRegionalWCI()
-	s.setReplication(false)
-	defer s.setReplication(true)
+	capture := s.outageThenFailover(ref)
+	time.Sleep(3 * wciPollInterval) //nolint:forbidigo // several poll intervals
+	s.Require().Zero(polls(capture, ref), "the discarded poll timer isn't re-queued on the new active cluster")
 
-	// The active cluster polls at create + wciPollInterval; the standby's copy waits, then is discarded.
+	s.recordTaskAdd(1, ref)
+	s.Require().Eventually(func() bool { return polls(capture, ref) > 0 }, 3*wciPollInterval, 200*time.Millisecond,
+		"a task-add re-arms the overdue poll")
+}
+
+// outageThenFailover cuts replication past the first poll and a 2 s discard delay, fails over to cluster 1,
+// and returns a capture of cluster 1's metrics from then on.
+func (s *WCIFailoverSuite) outageThenFailover(ref wciRef) *metricstest.Capture {
+	s.setReplication(false)
+	s.T().Cleanup(func() { s.setReplication(true) })
+
+	// The active cluster polls at create + wciPollInterval; the standby's copy waits.
 	time.Sleep(wciPollInterval + 2*time.Second + 3*time.Second) //nolint:forbidigo // past the first poll and the discard delay
 
 	_, err := s.clusters[1].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
@@ -195,11 +217,6 @@ func (s *WCIFailoverSuite) TestOutageLosesThePollTimerUntilATaskAdd() {
 	// The suite owns these clusters, and polls() filters to this WCI, so cluster-global capture is fine here.
 	handler := s.clusters[1].Host().CaptureMetricsHandler() //nolint:staticcheck // xdc has no TestEnv capture helper
 	capture := handler.StartCapture()
-	defer handler.StopCapture(capture)
-	time.Sleep(3 * wciPollInterval) //nolint:forbidigo // several poll intervals
-	s.Require().Zero(polls(capture, ref), "the discarded poll timer isn't re-queued on the new active cluster")
-
-	s.recordTaskAdd(1, ref)
-	s.Require().Eventually(func() bool { return polls(capture, ref) > 0 }, 3*wciPollInterval, 200*time.Millisecond,
-		"a task-add re-arms the overdue poll")
+	s.T().Cleanup(func() { handler.StopCapture(capture) })
+	return capture
 }

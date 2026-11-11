@@ -189,7 +189,7 @@ func newE2EInRegion(t *testing.T, script fakeAlgo, region string) *e2e {
 	history := &fakeHistory{}
 	computeOpts := ComputeTaskHandlerOptions{ComputeClient: computeClient, HistoryClient: history, Logger: log.NewNoopLogger(), StaticConfig: staticConfig}
 	lib := NewLibrary(h,
-		NewFetchSnapshotTaskHandler(snapshotOpts), NewDeferredDecisionTaskHandler(snapshotOpts),
+		NewMetricsPollTimerTaskHandler(snapshotOpts), NewDeferredDecisionTaskHandler(snapshotOpts),
 		NewResizeTaskHandler(computeOpts), NewInvokeTaskHandler(computeOpts),
 		NewValidateSpecTaskHandler(computeOpts), NewSignalVersionWorkflowTaskHandler(computeOpts),
 		NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history, DynamicConfig: dynamicconfig.NewNoopCollection(), MetricsHandler: metricsHandler, StaticConfig: staticConfig}),
@@ -554,7 +554,7 @@ func TestE2E_FailoverSwapsTheActiveRegionsGroup(t *testing.T) {
 	}
 	poll := func(active, inactive string) {
 		t.Helper()
-		require.False(t, e.fetchSnapshot(t, e.firePollTimer(t)))
+		require.False(t, e.poll(t))
 		g := groups()
 		require.NotNil(t, g[active].AlgorithmStatus, "%s scales here", active)
 		require.Nil(t, g[inactive].AlgorithmStatus, "%s starts fresh", inactive)
@@ -620,7 +620,7 @@ func TestE2E_InvokeTaskPassesItsRequestID(t *testing.T) {
 	require.Equal(t, []string{strconv.FormatInt(requestID, 10)}, e.compute.requestIDs, "the provider can de-duplicate retries on it")
 }
 
-func TestE2E_FetchSnapshotRunsPoll(t *testing.T) {
+func TestE2E_PollTimerRunsPoll(t *testing.T) {
 	next := 2 * minPollInterval
 	e := newE2E(t, fakeAlgo{nextPoll: &next})
 	_, err := e.update(groupUpsert("test-invoke"))
@@ -631,72 +631,136 @@ func TestE2E_FetchSnapshotRunsPoll(t *testing.T) {
 		},
 	}
 
-	require.False(t, e.fetchSnapshot(t, e.firePollTimer(t)))
+	require.False(t, e.poll(t))
 
 	require.EqualValues(t, 5, fake.seen.Workflow.LastBacklogCount)
 	w, _ := e.live(t)
 	require.Equal(t, e.clock.Now().Add(next), w.NextPollTime.AsTime(), "the poll re-armed the timer")
 }
 
-func (e *e2e) firePollTimer(t *testing.T) *timestamppb.Timestamp {
+// poll fires the poll timer at next_poll_time.
+func (e *e2e) poll(t *testing.T) bool {
 	t.Helper()
 	w, _ := e.live(t)
-	pollTime := w.NextPollTime
 	// The queue fires a timer at or after its scheduled time.
-	e.clock.Update(pollTime.AsTime())
-	dropped, err := chasmtest.ExecutePureTask(e.ctx, e.engine, w, chasm.PureTaskHandler[*WorkerControllerInstance, *wcipb.MetricsPollTimerTask](&MetricsPollTimerTaskHandler{}), chasm.TaskAttributes{ScheduledTime: pollTime.AsTime()}, &wcipb.MetricsPollTimerTask{PollTime: pollTime})
-	require.NoError(t, err, "the poll timer invalidates itself")
-	require.False(t, dropped)
-	return pollTime
+	e.clock.Update(w.NextPollTime.AsTime())
+	return e.pollAt(t, w.NextPollTime)
 }
 
-func (e *e2e) fetchSnapshot(t *testing.T, pollTime *timestamppb.Timestamp) bool {
+// pollAt runs a poll timer armed for pollTime and reports whether it was dropped as stale.
+func (e *e2e) pollAt(t *testing.T, pollTime *timestamppb.Timestamp) bool {
 	t.Helper()
 	w, _ := e.live(t)
-	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.FetchSnapshotTask](e.lib.FetchSnapshotTaskHandler), chasm.TaskAttributes{}, &wcipb.FetchSnapshotTask{PollTime: pollTime})
+	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.MetricsPollTimerTask](e.lib.MetricsPollTimerTaskHandler), chasm.TaskAttributes{ScheduledTime: pollTime.AsTime()}, &wcipb.MetricsPollTimerTask{PollTime: pollTime})
 	require.NoError(t, err)
 	return dropped
 }
 
-func TestE2E_PollTimerArmsFallbackUntilFetchWritesBack(t *testing.T) {
-	next := 2 * minPollInterval
-	e := newE2E(t, fakeAlgo{nextPoll: &next})
-	_, err := e.update(groupUpsert("test-invoke"))
-	require.NoError(t, err)
-
-	pollTime := e.firePollTimer(t)
-	w, _ := e.live(t)
-	require.Equal(t, pollTime.AsTime(), w.InFlightPollTime.AsTime())
-	require.Equal(t, e.clock.Now().Add(maxPollInterval), w.NextPollTime.AsTime(), "a fallback poll covers a lost fetch")
-
-	require.False(t, e.fetchSnapshot(t, pollTime))
-	w, _ = e.live(t)
-	require.Nil(t, w.InFlightPollTime)
-	require.Equal(t, e.clock.Now().Add(next), w.NextPollTime.AsTime(), "the fetch re-arms at the algorithm's interval")
-}
-
-func TestE2E_SupersededFetchDoesNotApply(t *testing.T) {
+func TestE2E_SupersededPollDoesNotApply(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	_, err := e.update(groupUpsert("test-invoke"))
 	require.NoError(t, err)
 
 	t.Run("at_validation", func(t *testing.T) {
-		first := e.firePollTimer(t)
-		second := e.firePollTimer(t)
-		require.True(t, e.fetchSnapshot(t, first), "the fallback's poll replaced it")
-		require.False(t, e.fetchSnapshot(t, second))
+		w, _ := e.live(t)
+		stale := w.NextPollTime
+		require.False(t, e.poll(t))
+		require.True(t, e.pollAt(t, stale), "the poll re-armed, so the old timer is stale")
 	})
 	t.Run("at_write_back", func(t *testing.T) {
-		first := e.firePollTimer(t)
-		var second *timestamppb.Timestamp
+		w, _ := e.live(t)
+		first := w.NextPollTime
+		e.clock.Update(first.AsTime())
+		var rearmed *timestamppb.Timestamp
 		e.frontend.onDescribe = func() {
 			e.frontend.onDescribe = nil
-			second = e.firePollTimer(t)
+			// While this poll fetches, it falls overdue and an update re-arms it (healPollTimer).
+			e.clock.Update(first.AsTime().Add(maxPollInterval + time.Second))
+			_, err := e.update(groupUpsert("test-invoke"))
+			require.NoError(t, err)
+			w, _ := e.live(t)
+			rearmed = w.NextPollTime
 		}
-		require.False(t, e.fetchSnapshot(t, first))
+		require.False(t, e.pollAt(t, first))
+		require.NotNil(t, rearmed)
+		require.NotEqual(t, first.AsTime(), rearmed.AsTime(), "the update re-armed the poll")
+		w, _ = e.live(t)
+		require.Equal(t, rearmed.AsTime(), w.NextPollTime.AsTime(), "the stale write-back left the newer timer")
+	})
+}
+
+// validate fires the periodic validation at next_validation_time.
+func (e *e2e) validate(t *testing.T) bool {
+	t.Helper()
+	w, _ := e.live(t)
+	e.clock.Update(w.NextValidationTime.AsTime())
+	return e.validateAt(t, w.NextValidationTime)
+}
+
+// validateAt runs a validation armed for validationTime and reports whether it was dropped as stale.
+func (e *e2e) validateAt(t *testing.T, validationTime *timestamppb.Timestamp) bool {
+	t.Helper()
+	w, _ := e.live(t)
+	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.ValidateSpecTask](e.lib.ValidateSpecTaskHandler), chasm.TaskAttributes{ScheduledTime: validationTime.AsTime()}, &wcipb.ValidateSpecTask{ValidationTime: validationTime})
+	require.NoError(t, err)
+	return dropped
+}
+
+func TestE2E_PeriodicValidationRecordsAndRearms(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+
+	e.compute.callErr = errors.New("provider rejected the config")
+	require.False(t, e.validate(t))
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.VALIDATION_RESULT_FAILED, w.ValidationStatus.GetResult())
+	require.Equal(t, e.clock.Now(), w.ValidationStatus.GetLastValidationTime().AsTime())
+	require.Equal(t, e.clock.Now().Add(validationInterval), w.NextValidationTime.AsTime())
+}
+
+func TestE2E_TransientValidationFailureKeepsStatusAndRearms(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	w, _ := e.live(t)
+	before := w.ValidationStatus
+
+	e.compute.callErr = context.DeadlineExceeded
+	require.False(t, e.validate(t))
+	w, _ = e.live(t)
+	require.Equal(t, before.GetLastValidationTime().AsTime(), w.ValidationStatus.GetLastValidationTime().AsTime(), "a transient failure isn't recorded")
+	require.Equal(t, e.clock.Now().Add(validationInterval), w.NextValidationTime.AsTime(), "the cadence continues")
+}
+
+func TestE2E_SupersededValidationDoesNotApply(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+
+	t.Run("at_validation", func(t *testing.T) {
 		w, _ := e.live(t)
-		require.Equal(t, second.AsTime(), w.InFlightPollTime.AsTime(), "the stale write-back left the newer poll in flight")
-		require.Equal(t, e.clock.Now().Add(maxPollInterval), w.NextPollTime.AsTime())
+		stale := w.NextValidationTime
+		require.False(t, e.validate(t))
+		require.True(t, e.validateAt(t, stale), "the validation re-armed, so the old timer is stale")
+	})
+	t.Run("at_write_back", func(t *testing.T) {
+		w, _ := e.live(t)
+		first := w.NextValidationTime
+		e.clock.Update(first.AsTime())
+		providerErr := errors.New("provider rejected the config")
+		e.compute.callErr = providerErr
+		e.compute.onValidate = func() {
+			e.compute.onValidate = nil
+			// A duplicate of this validation succeeds and re-arms while this one validates; this one then fails.
+			e.compute.callErr = nil
+			require.False(t, e.validateAt(t, first))
+			e.compute.callErr = providerErr
+		}
+		require.False(t, e.validateAt(t, first))
+		w, _ = e.live(t)
+		require.Equal(t, wcipb.VALIDATION_RESULT_SUCCESS, w.ValidationStatus.GetResult(), "the stale write-back recorded nothing")
+		require.Equal(t, first.AsTime().Add(validationInterval), w.NextValidationTime.AsTime())
 	})
 }
 
@@ -704,7 +768,7 @@ func TestE2E_SupersededFetchDoesNotApply(t *testing.T) {
 func (e *e2e) moveTo(region string) {
 	at := func() string { return region }
 	e.handler.hostRegion = at
-	e.lib.FetchSnapshotTaskHandler.hostRegion = at
+	e.lib.MetricsPollTimerTaskHandler.hostRegion = at
 	e.lib.DeferredDecisionTaskHandler.hostRegion = at
 	e.lib.MigrateToWorkflowTaskHandler.hostRegion = at
 	e.lib.ResizeTaskHandler.hostRegion = at
@@ -721,7 +785,7 @@ func TestE2E_RecordsHostRegion(t *testing.T) {
 			require.NoError(t, err)
 		}},
 		{name: "task_add", call: func(t *testing.T, e *e2e) { require.NoError(t, e.recordTaskAdd()) }},
-		{name: "poll", call: func(t *testing.T, e *e2e) { require.False(t, e.fetchSnapshot(t, e.firePollTimer(t))) }},
+		{name: "poll", call: func(t *testing.T, e *e2e) { require.False(t, e.poll(t)) }},
 		{name: "deferred_decision", call: func(t *testing.T, e *e2e) {
 			w, _ := e.live(t)
 			task := &wcipb.DeferredDecisionTask{ScalingGroupId: "g", TaskAdd: &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}}
@@ -773,7 +837,7 @@ func TestE2E_DescribeReturnsTaskQueueObservations(t *testing.T) {
 			{Name: "orders", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW, Stats: &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 5}},
 		},
 	}
-	require.False(t, e.fetchSnapshot(t, e.firePollTimer(t)))
+	require.False(t, e.poll(t))
 	require.NoError(t, e.recordTaskAdd())
 
 	resp, err := e.describe()
@@ -1407,3 +1471,4 @@ func TestE2E_MigrateToWorkflowOnMissing(t *testing.T) {
 	var notFound *serviceerror.NotFound
 	require.ErrorAs(t, e.migrateToWorkflow(), &notFound)
 }
+

@@ -10,7 +10,8 @@ option go_package = "go.temporal.io/server/chasm/lib/wci/gen/wcipb;wcipb";
 
 // Each task snapshots the state field that makes it stale; Validate compares it.
 
-// Pure. Fires at next_poll_time; marks the poll in flight, arms a fallback, schedules FetchSnapshotTask.
+// Side-effect timer. Fires at next_poll_time: DescribeWorkerDeploymentVersion, then ProcessMetricsPoll, which re-arms it.
+// Stale unless poll_time is next_poll_time, at validation and at write-back.
 message MetricsPollTimerTask {
   google.protobuf.Timestamp poll_time = 1;
 }
@@ -18,16 +19,6 @@ message MetricsPollTimerTask {
 // Pure. Fires at pending_expire_time; aborts a migration that was never activated.
 message PendingExpiryTask {
   google.protobuf.Timestamp expire_time = 1;
-}
-
-// Pure. Fires at next_validation_time; schedules ValidateSpecTask.
-message PeriodicValidationTimerTask {
-  google.protobuf.Timestamp validation_time = 1;
-}
-
-// Side-effect. DescribeWorkerDeploymentVersion, then ProcessMetricsPoll and re-arm; stale unless poll_time is in_flight_poll_time.
-message FetchSnapshotTask {
-  google.protobuf.Timestamp poll_time = 1;
 }
 
 // Side-effect. Fetches a snapshot, then ProcessDeferredScalingDecision.
@@ -38,7 +29,8 @@ message DeferredDecisionTask {
   repeated temporal.api.enums.v1.TaskQueueType effective_task_types = 3;
 }
 
-// Side-effect. Validates the whole spec.
+// Side-effect timer. Fires at next_validation_time: validates the whole spec, then re-arms.
+// Stale unless validation_time is next_validation_time, at validation and at write-back.
 message ValidateSpecTask {
   google.protobuf.Timestamp validation_time = 1;
 }

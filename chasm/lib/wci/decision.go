@@ -185,7 +185,6 @@ func (w *WorkerControllerInstance) ProcessMetricsPoll(
 			}
 		}
 	}
-	w.InFlightPollTime = nil
 	w.armPollTimer(ctx, ctx.Now(w).Add(nextPoll))
 	return nil
 }
@@ -326,7 +325,7 @@ func withoutDeferred(ctx chasm.Context, actions []scalingalgorithm.ScalingAction
 	})
 }
 
-// armPollTimer replaces the poll timer; the new next_poll_time invalidates any older timer or fetch.
+// armPollTimer replaces the poll timer; the new next_poll_time invalidates any older one, even mid-fetch.
 func (w *WorkerControllerInstance) armPollTimer(ctx chasm.MutableContext, at time.Time) {
 	w.NextPollTime = timestamppb.New(at)
 	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.MetricsPollTimerTask{PollTime: common.CloneProto(w.NextPollTime)})
@@ -366,7 +365,7 @@ func (w *WorkerControllerInstance) queueMigrationTaskAdd(ctx chasm.MutableContex
 	w.MigrationTaskAdds = append(w.MigrationTaskAdds, event)
 }
 
-// healPollTimer re-arms an overdue poll: a standby discards a pure timer it can't run, and a failover doesn't re-queue it.
+// healPollTimer re-arms an overdue poll: a standby discards a timer it can't run past its discard delay, or one is DLQ'd.
 func (w *WorkerControllerInstance) healPollTimer(ctx chasm.MutableContext) {
 	if w.Status != wcipb.WCI_STATUS_RUNNING || w.NextPollTime == nil {
 		return
@@ -376,7 +375,8 @@ func (w *WorkerControllerInstance) healPollTimer(ctx chasm.MutableContext) {
 	}
 }
 
+// armValidationTimer schedules the next periodic validation; the new next_validation_time invalidates any older one.
 func (w *WorkerControllerInstance) armValidationTimer(ctx chasm.MutableContext, at time.Time) {
 	w.NextValidationTime = timestamppb.New(at)
-	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.PeriodicValidationTimerTask{ValidationTime: common.CloneProto(w.NextValidationTime)})
+	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.ValidateSpecTask{ValidationTime: common.CloneProto(w.NextValidationTime)})
 }

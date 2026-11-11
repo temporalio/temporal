@@ -53,32 +53,33 @@ func fetchSnapshot(ctx context.Context, client workflowservice.WorkflowServiceCl
 	})
 }
 
-// FetchSnapshotTaskHandler polls metrics, then runs ProcessMetricsPoll and re-arms the timer.
-type FetchSnapshotTaskHandler struct {
-	chasm.SideEffectTaskHandlerBase[*wcipb.FetchSnapshotTask]
+// MetricsPollTimerTaskHandler fires at next_poll_time, polls metrics, then runs ProcessMetricsPoll, which re-arms it.
+// A side-effect timer, so a standby keeps it for ChasmStandbyTaskDiscardDelay rather than the shorter timer delay.
+type MetricsPollTimerTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*wcipb.MetricsPollTimerTask]
 	frontendClient workflowservice.WorkflowServiceClient
 	logger         log.Logger
 	hostRegion     dynamicconfig.StringPropertyFn
 }
 
-func NewFetchSnapshotTaskHandler(opts SnapshotTaskHandlerOptions) *FetchSnapshotTaskHandler {
-	return &FetchSnapshotTaskHandler{frontendClient: opts.FrontendClient, logger: opts.Logger, hostRegion: hostRegionFn(opts.StaticConfig, opts.DynamicConfig)}
+func NewMetricsPollTimerTaskHandler(opts SnapshotTaskHandlerOptions) *MetricsPollTimerTaskHandler {
+	return &MetricsPollTimerTaskHandler{frontendClient: opts.FrontendClient, logger: opts.Logger, hostRegion: hostRegionFn(opts.StaticConfig, opts.DynamicConfig)}
 }
 
-func (h *FetchSnapshotTaskHandler) Validate(
+func (h *MetricsPollTimerTaskHandler) Validate(
 	_ chasm.Context,
 	w *WorkerControllerInstance,
 	_ chasm.TaskInvocation,
-	task *wcipb.FetchSnapshotTask,
+	task *wcipb.MetricsPollTimerTask,
 ) (bool, error) {
-	return w.Status == wcipb.WCI_STATUS_RUNNING && proto.Equal(task.GetPollTime(), w.InFlightPollTime), nil
+	return w.Status == wcipb.WCI_STATUS_RUNNING && proto.Equal(task.GetPollTime(), w.NextPollTime), nil
 }
 
-func (h *FetchSnapshotTaskHandler) Execute(
+func (h *MetricsPollTimerTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	task *wcipb.FetchSnapshotTask,
+	task *wcipb.MetricsPollTimerTask,
 ) error {
 	v, err := readVersion(ctx, ref)
 	if err != nil {
@@ -95,8 +96,8 @@ func (h *FetchSnapshotTaskHandler) Execute(
 		observed = observedTaskQueuesFromDescribe(resp)
 	}
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
-		// A newer poll fired while this one fetched; its own fetch applies instead.
-		if w.Status != wcipb.WCI_STATUS_RUNNING || !proto.Equal(task.GetPollTime(), w.InFlightPollTime) {
+		// The poll was re-armed while this one fetched; the newer timer applies instead.
+		if w.Status != wcipb.WCI_STATUS_RUNNING || !proto.Equal(task.GetPollTime(), w.NextPollTime) {
 			return struct{}{}, nil
 		}
 		w.recordHostRegion(h.hostRegion())

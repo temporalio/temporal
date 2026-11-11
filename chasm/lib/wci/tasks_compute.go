@@ -177,7 +177,8 @@ func (h *InvokeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef,
 	return err
 }
 
-// ValidateSpecTaskHandler validates algorithm configs in history and provider configs via ComputeClient.
+// ValidateSpecTaskHandler fires at next_validation_time, validates algorithm configs in history and provider configs
+// via ComputeClient, then re-arms. A side-effect timer, so a standby keeps it for ChasmStandbyTaskDiscardDelay.
 type ValidateSpecTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*wcipb.ValidateSpecTask]
 	client ComputeClient
@@ -192,7 +193,7 @@ func (h *ValidateSpecTaskHandler) Validate(_ chasm.Context, w *WorkerControllerI
 	return w.Status == wcipb.WCI_STATUS_RUNNING && proto.Equal(task.GetValidationTime(), w.NextValidationTime), nil
 }
 
-func (h *ValidateSpecTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, _ chasm.TaskAttributes, _ *wcipb.ValidateSpecTask) error {
+func (h *ValidateSpecTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, _ chasm.TaskAttributes, task *wcipb.ValidateSpecTask) error {
 	type input struct {
 		rc      compute.RequestContext
 		spec    *iface.WorkerControllerInstanceSpec
@@ -210,17 +211,24 @@ func (h *ValidateSpecTaskHandler) Execute(ctx context.Context, ref chasm.Compone
 		validationErr = h.client.ValidateSpec(ctx, in.rc, in.spec)
 	}
 	// Transient failures are not spec failures; keep the last status, as the workflow does.
-	if errors.Is(validationErr, context.DeadlineExceeded) || errors.Is(validationErr, context.Canceled) {
+	transient := errors.Is(validationErr, context.DeadlineExceeded) || errors.Is(validationErr, context.Canceled)
+	if transient {
 		h.logger.Warn("Transient failure validating WCI spec", tag.Error(validationErr))
-		return nil
 	}
 	errorType := computeErrorType(validationErr)
 	if in.algoErr != nil {
 		errorType = wcimetrics.ErrorTypeInvalidSpec
 	}
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
-		recordOperation(metricsFor(mctx, w, ""), wcimetrics.OperationTypeValidateSpec, errorType)
-		w.recordValidation(mctx, validationErr)
+		// Re-armed while this one validated; the newer validation applies instead.
+		if w.Status != wcipb.WCI_STATUS_RUNNING || !proto.Equal(task.GetValidationTime(), w.NextValidationTime) {
+			return struct{}{}, nil
+		}
+		if !transient {
+			recordOperation(metricsFor(mctx, w, ""), wcimetrics.OperationTypeValidateSpec, errorType)
+			w.recordValidation(mctx, validationErr)
+		}
+		w.armValidationTimer(mctx, mctx.Now(w).Add(validationInterval))
 		return struct{}{}, nil
 	}, nil)
 	return err

@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/common/log"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -186,7 +185,7 @@ func TestProcessDeferredScalingDecision_UsesPrefetchedSnapshot(t *testing.T) {
 }
 
 // A task from a superseded timer, or from a state the root has left, fails Validate.
-func TestTimerAndFetchValidation(t *testing.T) {
+func TestTimerValidation(t *testing.T) {
 	current := timestamppb.New(testNow)
 	stale := timestamppb.New(testNow.Add(-time.Minute))
 	for _, tc := range []struct {
@@ -203,16 +202,12 @@ func TestTimerAndFetchValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := rootAt(tc.status)
 			w.NextPollTime = current
-			w.InFlightPollTime = current
 			w.NextValidationTime = current
 
 			ok, err := (&MetricsPollTimerTaskHandler{}).Validate(nil, w, chasm.TaskInvocation{}, &wcipb.MetricsPollTimerTask{PollTime: tc.time})
 			require.NoError(t, err)
 			require.Equal(t, tc.want, ok)
-			ok, err = (&FetchSnapshotTaskHandler{}).Validate(nil, w, chasm.TaskInvocation{}, &wcipb.FetchSnapshotTask{PollTime: tc.time})
-			require.NoError(t, err)
-			require.Equal(t, tc.want, ok)
-			ok, err = (&PeriodicValidationTimerTaskHandler{}).Validate(nil, w, chasm.TaskInvocation{}, &wcipb.PeriodicValidationTimerTask{ValidationTime: tc.time})
+			ok, err = (&ValidateSpecTaskHandler{}).Validate(nil, w, chasm.TaskInvocation{}, &wcipb.ValidateSpecTask{ValidationTime: tc.time})
 			require.NoError(t, err)
 			require.Equal(t, tc.want, ok)
 		})
@@ -229,30 +224,6 @@ func TestDeferredDecisionValidation(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestPollTimerSchedulesFetch(t *testing.T) {
-	w, _, ctx := newDecisionTest(t, fakeAlgo{})
-	pollTime := timestamppb.New(testNow)
-	require.NoError(t, (&MetricsPollTimerTaskHandler{}).Execute(ctx, w, chasm.TaskAttributes{}, &wcipb.MetricsPollTimerTask{PollTime: pollTime}))
-	fallback := timestamppb.New(testNow.Add(maxPollInterval))
-	tasks := taskTypes(ctx)
-	require.Len(t, tasks, 2)
-	require.True(t, proto.Equal(&wcipb.MetricsPollTimerTask{PollTime: fallback}, tasks[0].(proto.Message)), "a fallback poll is armed first")
-	require.True(t, proto.Equal(&wcipb.FetchSnapshotTask{PollTime: pollTime}, tasks[1].(proto.Message)))
-	require.True(t, proto.Equal(pollTime, w.InFlightPollTime))
-	require.True(t, proto.Equal(fallback, w.NextPollTime))
-}
-
-func TestValidationTimerRearmsBeforeValidating(t *testing.T) {
-	w, _, ctx := newDecisionTest(t, fakeAlgo{})
-	require.NoError(t, (&PeriodicValidationTimerTaskHandler{}).Execute(ctx, w, chasm.TaskAttributes{}, &wcipb.PeriodicValidationTimerTask{}))
-
-	require.Equal(t, testNow.Add(validationInterval), w.NextValidationTime.AsTime())
-	require.Len(t, ctx.Tasks, 2)
-	require.IsType(t, &wcipb.PeriodicValidationTimerTask{}, ctx.Tasks[0].Payload)
-	validate := ctx.Tasks[1].Payload.(*wcipb.ValidateSpecTask)
-	require.Equal(t, w.NextValidationTime.AsTime(), validate.GetValidationTime().AsTime())
-}
-
 func TestConstructorsArmTimers(t *testing.T) {
 	ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNow: func(chasm.Component) time.Time { return testNow }}}
 	w := NewWorkerControllerInstance(ctx, "dep", "build", nil)
@@ -266,7 +237,7 @@ func TestConstructorsArmTimers(t *testing.T) {
 	var timers []string
 	for _, task := range ctx.Tasks {
 		switch task.Payload.(type) {
-		case *wcipb.PendingExpiryTask, *wcipb.MetricsPollTimerTask, *wcipb.PeriodicValidationTimerTask:
+		case *wcipb.PendingExpiryTask, *wcipb.MetricsPollTimerTask, *wcipb.ValidateSpecTask:
 			timers = append(timers, fmt.Sprintf("%T", task.Payload))
 		default:
 		}

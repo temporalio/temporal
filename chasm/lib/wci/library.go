@@ -19,7 +19,7 @@ type Library struct {
 
 	handler *handler
 
-	FetchSnapshotTaskHandler         *FetchSnapshotTaskHandler
+	MetricsPollTimerTaskHandler      *MetricsPollTimerTaskHandler
 	DeferredDecisionTaskHandler      *DeferredDecisionTaskHandler
 	ResizeTaskHandler                *ResizeTaskHandler
 	InvokeTaskHandler                *InvokeTaskHandler
@@ -37,7 +37,7 @@ func NewNilLibrary() *Library {
 
 func NewLibrary(
 	handler *handler,
-	fetchSnapshot *FetchSnapshotTaskHandler,
+	metricsPollTimer *MetricsPollTimerTaskHandler,
 	deferredDecision *DeferredDecisionTaskHandler,
 	resize *ResizeTaskHandler,
 	invoke *InvokeTaskHandler,
@@ -48,7 +48,7 @@ func NewLibrary(
 ) *Library {
 	return &Library{
 		handler:                          handler,
-		FetchSnapshotTaskHandler:         fetchSnapshot,
+		MetricsPollTimerTaskHandler:      metricsPollTimer,
 		DeferredDecisionTaskHandler:      deferredDecision,
 		ResizeTaskHandler:                resize,
 		InvokeTaskHandler:                invoke,
@@ -82,14 +82,10 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
-		chasm.NewRegistrablePureTask("metricsPollTimer", &MetricsPollTimerTaskHandler{},
-			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace)),
-		chasm.NewRegistrablePureTask("periodicValidationTimer", &PeriodicValidationTimerTaskHandler{},
+		chasm.NewRegistrableSideEffectTask("metricsPollTimer", l.MetricsPollTimerTaskHandler,
 			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace)),
 		chasm.NewRegistrablePureTask("scalingGroupBackoff", &ScalingGroupBackoffTaskHandler{}),
 		chasm.NewRegistrablePureTask("pendingExpiry", &PendingExpiryTaskHandler{}),
-		chasm.NewRegistrableSideEffectTask("fetchSnapshot", l.FetchSnapshotTaskHandler,
-			chasm.WithSingletonTask(chasm.SingletonTaskModeIgnore)),
 		chasm.NewRegistrableSideEffectTask("deferredDecision", l.DeferredDecisionTaskHandler),
 		chasm.NewRegistrableSideEffectTask("validateSpec", l.ValidateSpecTaskHandler,
 			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace)),

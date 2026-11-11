@@ -90,14 +90,14 @@ func TestRootTransitions(t *testing.T) {
 		},
 		{
 			name: "workflow_migration_aborted", sources: []wcipb.WciStatus{wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW}, dest: wcipb.WCI_STATUS_RUNNING,
-			wantTasks: []string{"*wcipb.MetricsPollTimerTask", "*wcipb.PeriodicValidationTimerTask"},
+			wantTasks: []string{"*wcipb.MetricsPollTimerTask", "*wcipb.ValidateSpecTask"},
 			apply: run(func(w *WorkerControllerInstance, ctx chasm.MutableContext) error {
 				return TransitionWorkflowMigrationAborted.Apply(w, ctx, EventWorkflowMigrationAborted{})
 			}),
 		},
 		{
 			name: "migration_activated", sources: []wcipb.WciStatus{wcipb.WCI_STATUS_PENDING_ACTIVATION}, dest: wcipb.WCI_STATUS_RUNNING,
-			wantTasks: []string{"*wcipb.MetricsPollTimerTask", "*wcipb.PeriodicValidationTimerTask"},
+			wantTasks: []string{"*wcipb.MetricsPollTimerTask", "*wcipb.ValidateSpecTask"},
 			apply: run(func(w *WorkerControllerInstance, ctx chasm.MutableContext) error {
 				return TransitionMigrationActivated.Apply(w, ctx, EventMigrationActivated{})
 			}),

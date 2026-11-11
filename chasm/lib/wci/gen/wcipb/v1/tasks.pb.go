@@ -24,7 +24,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Pure. Fires at next_poll_time; marks the poll in flight, arms a fallback, schedules FetchSnapshotTask.
+// Side-effect timer. Fires at next_poll_time: DescribeWorkerDeploymentVersion, then ProcessMetricsPoll, which re-arms it.
+// Stale unless poll_time is next_poll_time, at validation and at write-back.
 type MetricsPollTimerTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PollTime      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=poll_time,json=pollTime,proto3" json:"poll_time,omitempty"`
@@ -114,96 +115,6 @@ func (x *PendingExpiryTask) GetExpireTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// Pure. Fires at next_validation_time; schedules ValidateSpecTask.
-type PeriodicValidationTimerTask struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	ValidationTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=validation_time,json=validationTime,proto3" json:"validation_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *PeriodicValidationTimerTask) Reset() {
-	*x = PeriodicValidationTimerTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PeriodicValidationTimerTask) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PeriodicValidationTimerTask) ProtoMessage() {}
-
-func (x *PeriodicValidationTimerTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PeriodicValidationTimerTask.ProtoReflect.Descriptor instead.
-func (*PeriodicValidationTimerTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *PeriodicValidationTimerTask) GetValidationTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ValidationTime
-	}
-	return nil
-}
-
-// Side-effect. DescribeWorkerDeploymentVersion, then ProcessMetricsPoll and re-arm; stale unless poll_time is in_flight_poll_time.
-type FetchSnapshotTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PollTime      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=poll_time,json=pollTime,proto3" json:"poll_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FetchSnapshotTask) Reset() {
-	*x = FetchSnapshotTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FetchSnapshotTask) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FetchSnapshotTask) ProtoMessage() {}
-
-func (x *FetchSnapshotTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FetchSnapshotTask.ProtoReflect.Descriptor instead.
-func (*FetchSnapshotTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *FetchSnapshotTask) GetPollTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.PollTime
-	}
-	return nil
-}
-
 // Side-effect. Fetches a snapshot, then ProcessDeferredScalingDecision.
 type DeferredDecisionTask struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -217,7 +128,7 @@ type DeferredDecisionTask struct {
 
 func (x *DeferredDecisionTask) Reset() {
 	*x = DeferredDecisionTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -229,7 +140,7 @@ func (x *DeferredDecisionTask) String() string {
 func (*DeferredDecisionTask) ProtoMessage() {}
 
 func (x *DeferredDecisionTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -242,7 +153,7 @@ func (x *DeferredDecisionTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeferredDecisionTask.ProtoReflect.Descriptor instead.
 func (*DeferredDecisionTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
+	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DeferredDecisionTask) GetScalingGroupId() string {
@@ -266,7 +177,8 @@ func (x *DeferredDecisionTask) GetEffectiveTaskTypes() []v1.TaskQueueType {
 	return nil
 }
 
-// Side-effect. Validates the whole spec.
+// Side-effect timer. Fires at next_validation_time: validates the whole spec, then re-arms.
+// Stale unless validation_time is next_validation_time, at validation and at write-back.
 type ValidateSpecTask struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ValidationTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=validation_time,json=validationTime,proto3" json:"validation_time,omitempty"`
@@ -276,7 +188,7 @@ type ValidateSpecTask struct {
 
 func (x *ValidateSpecTask) Reset() {
 	*x = ValidateSpecTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[5]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -288,7 +200,7 @@ func (x *ValidateSpecTask) String() string {
 func (*ValidateSpecTask) ProtoMessage() {}
 
 func (x *ValidateSpecTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[5]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -301,7 +213,7 @@ func (x *ValidateSpecTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateSpecTask.ProtoReflect.Descriptor instead.
 func (*ValidateSpecTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{5}
+	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ValidateSpecTask) GetValidationTime() *timestamppb.Timestamp {
@@ -321,7 +233,7 @@ type SignalVersionWorkflowTask struct {
 
 func (x *SignalVersionWorkflowTask) Reset() {
 	*x = SignalVersionWorkflowTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[6]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -333,7 +245,7 @@ func (x *SignalVersionWorkflowTask) String() string {
 func (*SignalVersionWorkflowTask) ProtoMessage() {}
 
 func (x *SignalVersionWorkflowTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[6]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -346,7 +258,7 @@ func (x *SignalVersionWorkflowTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignalVersionWorkflowTask.ProtoReflect.Descriptor instead.
 func (*SignalVersionWorkflowTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{6}
+	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SignalVersionWorkflowTask) GetLastValidationTime() *timestamppb.Timestamp {
@@ -365,7 +277,7 @@ type MigrateToWorkflowTask struct {
 
 func (x *MigrateToWorkflowTask) Reset() {
 	*x = MigrateToWorkflowTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[7]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -377,7 +289,7 @@ func (x *MigrateToWorkflowTask) String() string {
 func (*MigrateToWorkflowTask) ProtoMessage() {}
 
 func (x *MigrateToWorkflowTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[7]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -390,7 +302,7 @@ func (x *MigrateToWorkflowTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrateToWorkflowTask.ProtoReflect.Descriptor instead.
 func (*MigrateToWorkflowTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{7}
+	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{5}
 }
 
 // Side-effect, on a MIGRATED instance. Sends the workflow the task-adds queued after its activation.
@@ -402,7 +314,7 @@ type ForwardTaskAddsTask struct {
 
 func (x *ForwardTaskAddsTask) Reset() {
 	*x = ForwardTaskAddsTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[8]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -414,7 +326,7 @@ func (x *ForwardTaskAddsTask) String() string {
 func (*ForwardTaskAddsTask) ProtoMessage() {}
 
 func (x *ForwardTaskAddsTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[8]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -427,7 +339,7 @@ func (x *ForwardTaskAddsTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardTaskAddsTask.ProtoReflect.Descriptor instead.
 func (*ForwardTaskAddsTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{8}
+	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{6}
 }
 
 // Pure. BACKING_OFF -> SCALING.
@@ -440,7 +352,7 @@ type ScalingGroupBackoffTask struct {
 
 func (x *ScalingGroupBackoffTask) Reset() {
 	*x = ScalingGroupBackoffTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[9]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -452,7 +364,7 @@ func (x *ScalingGroupBackoffTask) String() string {
 func (*ScalingGroupBackoffTask) ProtoMessage() {}
 
 func (x *ScalingGroupBackoffTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[9]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -465,7 +377,7 @@ func (x *ScalingGroupBackoffTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScalingGroupBackoffTask.ProtoReflect.Descriptor instead.
 func (*ScalingGroupBackoffTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{9}
+	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ScalingGroupBackoffTask) GetAttempt() int32 {
@@ -485,7 +397,7 @@ type ResizeTask struct {
 
 func (x *ResizeTask) Reset() {
 	*x = ResizeTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[10]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -497,7 +409,7 @@ func (x *ResizeTask) String() string {
 func (*ResizeTask) ProtoMessage() {}
 
 func (x *ResizeTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[10]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -510,7 +422,7 @@ func (x *ResizeTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResizeTask.ProtoReflect.Descriptor instead.
 func (*ResizeTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{10}
+	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ResizeTask) GetAttempt() int32 {
@@ -532,7 +444,7 @@ type InvokeTask struct {
 
 func (x *InvokeTask) Reset() {
 	*x = InvokeTask{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[11]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -544,7 +456,7 @@ func (x *InvokeTask) String() string {
 func (*InvokeTask) ProtoMessage() {}
 
 func (x *InvokeTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[11]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -557,7 +469,7 @@ func (x *InvokeTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeTask.ProtoReflect.Descriptor instead.
 func (*InvokeTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{11}
+	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *InvokeTask) GetRequestId() int64 {
@@ -583,11 +495,7 @@ const file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDesc = "" +
 	"\tpoll_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bpollTime\"P\n" +
 	"\x11PendingExpiryTask\x12;\n" +
 	"\vexpire_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"b\n" +
-	"\x1bPeriodicValidationTimerTask\x12C\n" +
-	"\x0fvalidation_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x0evalidationTime\"L\n" +
-	"\x11FetchSnapshotTask\x127\n" +
-	"\tpoll_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bpollTime\"\xe9\x01\n" +
+	"expireTime\"\xe9\x01\n" +
 	"\x14DeferredDecisionTask\x12(\n" +
 	"\x10scaling_group_id\x18\x01 \x01(\tR\x0escalingGroupId\x12O\n" +
 	"\btask_add\x18\x02 \x01(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\ataskAdd\x12V\n" +
@@ -621,38 +529,34 @@ func file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP() []byt
 	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_goTypes = []any{
-	(*MetricsPollTimerTask)(nil),        // 0: temporal.server.chasm.lib.wci.proto.v1.MetricsPollTimerTask
-	(*PendingExpiryTask)(nil),           // 1: temporal.server.chasm.lib.wci.proto.v1.PendingExpiryTask
-	(*PeriodicValidationTimerTask)(nil), // 2: temporal.server.chasm.lib.wci.proto.v1.PeriodicValidationTimerTask
-	(*FetchSnapshotTask)(nil),           // 3: temporal.server.chasm.lib.wci.proto.v1.FetchSnapshotTask
-	(*DeferredDecisionTask)(nil),        // 4: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask
-	(*ValidateSpecTask)(nil),            // 5: temporal.server.chasm.lib.wci.proto.v1.ValidateSpecTask
-	(*SignalVersionWorkflowTask)(nil),   // 6: temporal.server.chasm.lib.wci.proto.v1.SignalVersionWorkflowTask
-	(*MigrateToWorkflowTask)(nil),       // 7: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowTask
-	(*ForwardTaskAddsTask)(nil),         // 8: temporal.server.chasm.lib.wci.proto.v1.ForwardTaskAddsTask
-	(*ScalingGroupBackoffTask)(nil),     // 9: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupBackoffTask
-	(*ResizeTask)(nil),                  // 10: temporal.server.chasm.lib.wci.proto.v1.ResizeTask
-	(*InvokeTask)(nil),                  // 11: temporal.server.chasm.lib.wci.proto.v1.InvokeTask
-	(*timestamppb.Timestamp)(nil),       // 12: google.protobuf.Timestamp
-	(*TaskAddEvent)(nil),                // 13: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	(v1.TaskQueueType)(0),               // 14: temporal.api.enums.v1.TaskQueueType
+	(*MetricsPollTimerTask)(nil),      // 0: temporal.server.chasm.lib.wci.proto.v1.MetricsPollTimerTask
+	(*PendingExpiryTask)(nil),         // 1: temporal.server.chasm.lib.wci.proto.v1.PendingExpiryTask
+	(*DeferredDecisionTask)(nil),      // 2: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask
+	(*ValidateSpecTask)(nil),          // 3: temporal.server.chasm.lib.wci.proto.v1.ValidateSpecTask
+	(*SignalVersionWorkflowTask)(nil), // 4: temporal.server.chasm.lib.wci.proto.v1.SignalVersionWorkflowTask
+	(*MigrateToWorkflowTask)(nil),     // 5: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowTask
+	(*ForwardTaskAddsTask)(nil),       // 6: temporal.server.chasm.lib.wci.proto.v1.ForwardTaskAddsTask
+	(*ScalingGroupBackoffTask)(nil),   // 7: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupBackoffTask
+	(*ResizeTask)(nil),                // 8: temporal.server.chasm.lib.wci.proto.v1.ResizeTask
+	(*InvokeTask)(nil),                // 9: temporal.server.chasm.lib.wci.proto.v1.InvokeTask
+	(*timestamppb.Timestamp)(nil),     // 10: google.protobuf.Timestamp
+	(*TaskAddEvent)(nil),              // 11: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	(v1.TaskQueueType)(0),             // 12: temporal.api.enums.v1.TaskQueueType
 }
 var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_depIdxs = []int32{
-	12, // 0: temporal.server.chasm.lib.wci.proto.v1.MetricsPollTimerTask.poll_time:type_name -> google.protobuf.Timestamp
-	12, // 1: temporal.server.chasm.lib.wci.proto.v1.PendingExpiryTask.expire_time:type_name -> google.protobuf.Timestamp
-	12, // 2: temporal.server.chasm.lib.wci.proto.v1.PeriodicValidationTimerTask.validation_time:type_name -> google.protobuf.Timestamp
-	12, // 3: temporal.server.chasm.lib.wci.proto.v1.FetchSnapshotTask.poll_time:type_name -> google.protobuf.Timestamp
-	13, // 4: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask.task_add:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	14, // 5: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask.effective_task_types:type_name -> temporal.api.enums.v1.TaskQueueType
-	12, // 6: temporal.server.chasm.lib.wci.proto.v1.ValidateSpecTask.validation_time:type_name -> google.protobuf.Timestamp
-	12, // 7: temporal.server.chasm.lib.wci.proto.v1.SignalVersionWorkflowTask.last_validation_time:type_name -> google.protobuf.Timestamp
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	10, // 0: temporal.server.chasm.lib.wci.proto.v1.MetricsPollTimerTask.poll_time:type_name -> google.protobuf.Timestamp
+	10, // 1: temporal.server.chasm.lib.wci.proto.v1.PendingExpiryTask.expire_time:type_name -> google.protobuf.Timestamp
+	11, // 2: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask.task_add:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	12, // 3: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask.effective_task_types:type_name -> temporal.api.enums.v1.TaskQueueType
+	10, // 4: temporal.server.chasm.lib.wci.proto.v1.ValidateSpecTask.validation_time:type_name -> google.protobuf.Timestamp
+	10, // 5: temporal.server.chasm.lib.wci.proto.v1.SignalVersionWorkflowTask.last_validation_time:type_name -> google.protobuf.Timestamp
+	6,  // [6:6] is the sub-list for method output_type
+	6,  // [6:6] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_init() }
@@ -667,7 +571,7 @@ func file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

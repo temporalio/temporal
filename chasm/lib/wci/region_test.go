@@ -24,7 +24,7 @@ func TestHandlersTakeHostRegionFromDynamicConfig(t *testing.T) {
 	dc := regionCollection("aws-us-west-2")
 	for name, region := range map[string]func() string{
 		"handler":           newHandler(HandlerOptions{DynamicConfig: dc}).hostRegion,
-		"fetchSnapshot":     NewFetchSnapshotTaskHandler(SnapshotTaskHandlerOptions{DynamicConfig: dc}).hostRegion,
+		"metricsPollTimer":  NewMetricsPollTimerTaskHandler(SnapshotTaskHandlerOptions{DynamicConfig: dc}).hostRegion,
 		"deferredDecision":  NewDeferredDecisionTaskHandler(SnapshotTaskHandlerOptions{DynamicConfig: dc}).hostRegion,
 		"resize":            NewResizeTaskHandler(ComputeTaskHandlerOptions{DynamicConfig: dc}).hostRegion,
 		"migrateToWorkflow": NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{DynamicConfig: dc}).hostRegion,
