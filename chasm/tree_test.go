@@ -4370,7 +4370,7 @@ func (s *nodeSuite) TestApplySpeculativeTransition_SyncsNewSubComponent() {
 	s.Contains(root.children, "SubComponent2")
 }
 
-func (s *nodeSuite) TestShouldPersistSpeculativeTransition() {
+func (s *nodeSuite) TestSpeculativeTransitionPolicy() {
 	s.useStatefulExecutionState()
 	node := s.testComponentTree()
 	_, err := node.CloseTransaction(context.Background(), true)
@@ -4380,29 +4380,29 @@ func (s *nodeSuite) TestShouldPersistSpeculativeTransition() {
 	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 
-	// A transition that leaves the execution running stays speculative.
+	// A transition that leaves the execution running stays speculative and notifies pollers.
 	tc.(*TestComponent).ComponentData.CreateRequestId = "updated"
-	persist, err := node.ShouldPersistSpeculativeTransition(context.Background())
+	policy, err := node.SpeculativeTransitionPolicy(context.Background())
 	s.NoError(err)
-	s.False(persist)
+	s.Equal(SpeculativeTransitionPolicy{Persist: false, Notify: true}, policy)
 
 	// A transition that closes the execution must be persisted.
 	tc.(*TestComponent).Complete(chasmCtx)
-	persist, err = node.ShouldPersistSpeculativeTransition(context.Background())
+	policy, err = node.SpeculativeTransitionPolicy(context.Background())
 	s.NoError(err)
-	s.True(persist)
+	s.True(policy.Persist)
 }
 
-func (s *nodeSuite) TestShouldPersistSpeculativeTransition_Terminated() {
+func (s *nodeSuite) TestSpeculativeTransitionPolicy_Terminated() {
 	s.useStatefulExecutionState()
 	node := s.testComponentTree()
 	_, err := node.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 
 	node.terminated = true
-	persist, err := node.ShouldPersistSpeculativeTransition(context.Background())
+	policy, err := node.SpeculativeTransitionPolicy(context.Background())
 	s.NoError(err)
-	s.True(persist)
+	s.True(policy.Persist)
 }
 
 func (s *nodeSuite) TestApplySpeculativeTransition_KeepsNewTasks() {
