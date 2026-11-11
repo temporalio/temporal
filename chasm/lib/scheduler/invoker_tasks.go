@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -44,6 +45,9 @@ type (
 		// the request makes it through metering's interceptor. Because we don't change for
 		// terminate/cancels, we can go directly to history for other service calls.
 		FrontendClient workflowservice.WorkflowServiceClient
+
+		// TimeSource stamps StartTime on started workflows. Defaults to real time.
+		TimeSource clock.TimeSource `optional:"true"`
 	}
 
 	InvokerExecuteTaskHandler struct {
@@ -53,6 +57,7 @@ type (
 		baseLogger     log.Logger
 		historyClient  resource.HistoryClient
 		frontendClient workflowservice.WorkflowServiceClient
+		timeSource     clock.TimeSource
 	}
 
 	InvokerProcessBufferTaskHandler struct {
@@ -108,12 +113,17 @@ const (
 )
 
 func NewInvokerExecuteTaskHandler(opts InvokerTaskHandlerOptions) *InvokerExecuteTaskHandler {
+	timeSource := opts.TimeSource
+	if timeSource == nil {
+		timeSource = clock.NewRealTimeSource()
+	}
 	return &InvokerExecuteTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
+		timeSource:     timeSource,
 	}
 }
 
@@ -741,7 +751,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	if err != nil {
 		return err
 	}
-	actualStartTime := time.Now()
+	actualStartTime := h.timeSource.Now()
 	// Reconstruct virtual time from wall time.
 	actualStartTime = actualStartTime.Add(
 		timeSkippingStatePropagation.GetInitialSkippedDuration().AsDuration(),
