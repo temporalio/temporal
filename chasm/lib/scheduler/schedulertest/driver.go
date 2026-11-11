@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -23,7 +22,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/testlogger"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -215,21 +213,7 @@ func newDriverScaffold(t *testing.T, opts ...DriverOption) (*Driver, *driverConf
 		t.Fatalf("failed to register scheduler library: %v", err)
 	}
 
-	// Scheduler components read namespace-scoped Tweakables via the CHASM context,
-	// so each execution's backend must answer GetNamespaceEntry. The transition
-	// counter is held constant (matching helper_test.go); the chasmtest engine's
-	// default incrementing counter prevents re-armed pure tasks from materializing.
-	tv := testvars.New(t)
-	engine := chasmtest.NewEngine(t, registry,
-		chasmtest.WithTimeSource(ts),
-		chasmtest.WithNodeBackendDecorator(func(b *chasm.MockNodeBackend) {
-			b.HandleGetNamespaceEntry = tv.Namespace
-			b.HandleNextTransitionCount = func() int64 { return 2 }
-			b.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
-				return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1}
-			}
-		}),
-	)
+	engine := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(ts))
 
 	d := &Driver{
 		T:                     t,
@@ -386,7 +370,7 @@ func (d *Driver) Step() bool {
 	if err != nil {
 		d.T.Fatalf("EachPureTask failed: %v", err)
 	}
-	if _, err := node.CloseTransaction(); err != nil {
+	if err := d.Engine.CloseTransaction(context.Background(), d.ref); err != nil {
 		d.T.Fatalf("CloseTransaction after pure tasks failed: %v", err)
 	}
 
@@ -420,7 +404,7 @@ func (d *Driver) Step() bool {
 			d.maxActionsObserved = taken
 		}
 	}
-	if _, err := node.CloseTransaction(); err != nil {
+	if err := d.Engine.CloseTransaction(context.Background(), d.ref); err != nil {
 		d.T.Fatalf("CloseTransaction after side-effect tasks failed: %v", err)
 	}
 
