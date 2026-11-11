@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestIdleOrderingFinalStartUpdateAndCallback(t *testing.T) {
+func TestIdleOrderingFinalStartUpdateAndLegacyCallback(t *testing.T) {
 	for _, policy := range []enumspb.ScheduleOverlapPolicy{
 		enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 		enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
@@ -87,7 +87,12 @@ func TestIdleOrderingFinalStartUpdateAndCallback(t *testing.T) {
 					DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
 						require.Equal(t, "ordering-request", request.GetRequestId())
 						require.Equal(t, "ordering-workflow", request.GetWorkflowId())
-						require.Len(t, request.GetCompletionCallbacks(), 1, "early callback order requires a callback actually issued by the start RPC")
+						if policy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+							require.Empty(t, request.GetCompletionCallbacks())
+							// Model a deduplicated retry of a start accepted with a callback before rollout.
+						} else {
+							require.Len(t, request.GetCompletionCallbacks(), 1)
+						}
 						switch order {
 						case "update_callback_before_record":
 							update()
