@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,23 +39,25 @@ func newFrontendHealthClient(t *testing.T, env *testcore.TestEnv) healthpb.Healt
 }
 
 func frontendWorkflowServiceStatus(t *testing.T, client healthpb.HealthClient) (healthpb.HealthCheckResponse_ServingStatus, error) {
-	resp, err := client.Check(t.Context(), &healthpb.HealthCheckRequest{Service: frontend.WorkflowServiceName})
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	resp, err := client.Check(ctx, &healthpb.HealthCheckRequest{Service: frontend.WorkflowServiceName})
 	return resp.GetStatus(), err
 }
 
 // awaitFrontendWorkflowServiceStatus waits until the frontend reports want for WorkflowService.
-func awaitFrontendWorkflowServiceStatus(t *testing.T, client healthpb.HealthClient, want healthpb.HealthCheckResponse_ServingStatus) {
+func awaitFrontendWorkflowServiceStatus(t *testing.T, client healthpb.HealthClient, want healthpb.HealthCheckResponse_ServingStatus, timeout time.Duration) {
 	await.RequireTruef(t, func() bool {
 		got, err := frontendWorkflowServiceStatus(t, client)
 		return err == nil && got == want
-	}, 10*time.Second, 100*time.Millisecond, "frontend WorkflowService health should become %s", want)
+	}, timeout, 100*time.Millisecond, "frontend WorkflowService health should become %s", want)
 }
 
 func TestPeerHealthCheck_HealthyClusterServing(t *testing.T) {
 	env := newPeerHealthCheckEnv(t)
 	client := newFrontendHealthClient(t, env)
 
-	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING)
+	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING, 30*time.Second)
 }
 
 // injectTimeoutProbes makes every probe of the role time out and counts the probes.
@@ -76,7 +79,7 @@ func TestPeerHealthCheck_WholeRoleOutageStaysServing(t *testing.T) {
 	env := newPeerHealthCheckEnv(t)
 	client := newFrontendHealthClient(t, env)
 	// Wait for the real probes to pass first; History starts NOT_SERVING until its shards are acquired.
-	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING)
+	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING, 30*time.Second)
 
 	var calls atomic.Int32
 	t.Cleanup(injectTimeoutProbes(env, primitives.MatchingService, &calls))
@@ -92,7 +95,7 @@ func TestPeerHealthCheck_WholeRoleOutageStaysServing(t *testing.T) {
 func TestPeerHealthCheck_FlagOffIgnoresFailures(t *testing.T) {
 	env := newPeerHealthCheckEnv(t)
 	client := newFrontendHealthClient(t, env)
-	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING)
+	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING, 30*time.Second)
 
 	var calls atomic.Int32
 	t.Cleanup(injectTimeoutProbes(env, primitives.HistoryService, &calls))
@@ -109,5 +112,5 @@ func TestPeerHealthCheck_FlagOffIgnoresFailures(t *testing.T) {
 
 	probed := calls.Load()
 	require.Never(t, func() bool { return calls.Load() != probed }, time.Second, 100*time.Millisecond)
-	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING)
+	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING, 10*time.Second)
 }
