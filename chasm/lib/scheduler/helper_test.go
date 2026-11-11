@@ -92,8 +92,13 @@ func defaultConfig() *scheduler.Config {
 	}
 }
 
-func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
+func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor, configure ...func(*scheduler.Config)) *scheduler.Library {
 	config := defaultConfig()
+	for _, configure := range configure {
+		if configure != nil {
+			configure(config)
+		}
+	}
 	specBuilder := newLegacySpecBuilder(0, 0)
 	invokerOpts := scheduler.InvokerTaskHandlerOptions{
 		Config:         config,
@@ -216,9 +221,12 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 
 // engineTestConfig holds configuration options for newTestEngineContext.
 type engineTestConfig struct {
-	specProcessor scheduler.SpecProcessor
-	timeSource    *clock.EventTimeSource
-	engineOpts    []chasmtest.EngineOption
+	specProcessor      scheduler.SpecProcessor
+	timeSource         *clock.EventTimeSource
+	engineOpts         []chasmtest.EngineOption
+	configureScheduler func(*scheduler.Config)
+	wrapLibrary        func(*scheduler.Library) chasm.Library
+	invariantCheck     chasmtest.InvariantCheck
 }
 
 // engineTestOption is a functional option for configuring newTestEngineContext.
@@ -275,13 +283,20 @@ func newTestEngineContextFromConfig(
 
 	registry := chasm.NewRegistry(logger)
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
+	schedulerLibrary := newTestLibrary(logger, specProcessor, config.configureScheduler)
+	var library chasm.Library = schedulerLibrary
+	if config.wrapLibrary != nil {
+		library = config.wrapLibrary(schedulerLibrary)
+	}
+	require.NoError(t, registry.Register(library))
 
-	config.engineOpts = append(config.engineOpts, chasmtest.WithInvariantCheck(
-		func(t *testing.T, node *chasm.Node, root chasm.RootComponent) {
+	check := config.invariantCheck
+	if check == nil {
+		check = func(t *testing.T, node *chasm.Node, root chasm.RootComponent) {
 			requireValidSchedulerState(t, registry, node, root)
-		},
-	))
+		}
+	}
+	config.engineOpts = append(config.engineOpts, chasmtest.WithInvariantCheck(check))
 	engine := chasmtest.NewEngine(t, registry, config.engineOpts...)
 	return engine, chasm.NewEngineContext(context.Background(), engine)
 }
