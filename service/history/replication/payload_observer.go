@@ -18,6 +18,8 @@ const (
 type PayloadObservation struct {
 	NamespaceID string
 	Origin      wideevents.ReplicationTaskOrigin
+	Source      ClusterShardKey
+	Target      ClusterShardKey
 	Phase       PayloadPhase
 	At          time.Time
 }
@@ -28,6 +30,24 @@ type PayloadObservation struct {
 // an ACK has reached the sender. Cancellation and failure do not count as success.
 type PayloadObserver interface {
 	ObservePayload(PayloadObservation)
+}
+
+type routedPayloadObserver struct {
+	observer PayloadObserver
+	source   ClusterShardKey
+	target   ClusterShardKey
+}
+
+func payloadObserverForRoute(observer PayloadObserver, source, target ClusterShardKey) PayloadObserver {
+	if observer == nil {
+		return nil
+	}
+	return routedPayloadObserver{observer: observer, source: source, target: target}
+}
+
+func (o routedPayloadObserver) ObservePayload(value PayloadObservation) {
+	value.Source, value.Target = o.source, o.target
+	o.observer.ObservePayload(value)
 }
 
 func observePayload(

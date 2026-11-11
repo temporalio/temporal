@@ -39,6 +39,12 @@ func (e *executableTaskConverterImpl) Convert(
 	replicationTasks ...*replicationspb.ReplicationTask,
 ) []TrackableExecutableTask {
 	tasks := make([]TrackableExecutableTask, len(replicationTasks))
+	converter := e
+	if e.processToolBox.PayloadObserver != nil {
+		scoped := *e
+		scoped.processToolBox.PayloadObserver = payloadObserverForRoute(e.processToolBox.PayloadObserver, serverShardKey, clientShardKey)
+		converter = &scoped
+	}
 	for index, replicationTask := range replicationTasks {
 		metrics.ReplicationTasksRecv.With(e.processToolBox.MetricsHandler).Record(
 			int64(1),
@@ -46,7 +52,7 @@ func (e *executableTaskConverterImpl) Convert(
 			metrics.ToClusterIDTag(clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTag(replicationTask)),
 		)
-		tasks[index] = e.convertOne(sourceClusterName, serverShardKey, replicationTask)
+		tasks[index] = converter.convertOne(sourceClusterName, serverShardKey, replicationTask)
 	}
 	return tasks
 }
