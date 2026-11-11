@@ -105,8 +105,8 @@ func Validate(policy *commonpb.RetryPolicy) error {
 		return serviceerror.NewInvalidArgumentf("invalid InitialInterval set on retry policy: %v", err)
 	}
 	backoffCoefficient := policy.GetBackoffCoefficient()
-	if math.IsNaN(backoffCoefficient) || math.IsInf(backoffCoefficient, 0) {
-		return serviceerror.NewInvalidArgument("BackoffCoefficient must be finite on retry policy.")
+	if math.IsNaN(backoffCoefficient) {
+		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be NaN on retry policy.")
 	}
 	if backoffCoefficient < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")

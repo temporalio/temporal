@@ -372,15 +372,13 @@ func TestValidateRetryPolicy(t *testing.T) {
 				BackoffCoefficient: math.NaN(),
 			},
 			wantErr:       true,
-			wantErrString: "BackoffCoefficient must be finite on retry policy.",
+			wantErrString: "BackoffCoefficient cannot be NaN on retry policy.",
 		},
 		{
 			name: "positive infinite coefficient",
 			input: &commonpb.RetryPolicy{
 				BackoffCoefficient: math.Inf(1),
 			},
-			wantErr:       true,
-			wantErrString: "BackoffCoefficient must be finite on retry policy.",
 		},
 		{
 			name: "negative infinite coefficient",
@@ -388,7 +386,7 @@ func TestValidateRetryPolicy(t *testing.T) {
 				BackoffCoefficient: math.Inf(-1),
 			},
 			wantErr:       true,
-			wantErrString: "BackoffCoefficient must be finite on retry policy.",
+			wantErrString: "BackoffCoefficient cannot be less than 1 on retry policy.",
 		},
 		{
 			name: "maxAttempts is 1, NaN coefficient",
