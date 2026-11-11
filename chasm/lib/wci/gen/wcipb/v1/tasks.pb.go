@@ -342,7 +342,7 @@ func (*ForwardTaskAddsTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{6}
 }
 
-// Pure. BACKING_OFF -> SCALING.
+// Side-effect timer, for the standby discard delay; no I/O. BACKING_OFF -> SCALING.
 type ScalingGroupBackoffTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`

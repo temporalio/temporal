@@ -134,17 +134,28 @@ func (h *ResizeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef,
 	return err
 }
 
-// ScalingGroupBackoffTaskHandler ends a resize backoff.
+// ScalingGroupBackoffTaskHandler ends a resize backoff. It does no I/O; it is a side-effect timer so a
+// standby keeps it for ChasmStandbyTaskDiscardDelay, since nothing else leaves BACKING_OFF.
 type ScalingGroupBackoffTaskHandler struct {
-	chasm.PureTaskHandlerBase
+	chasm.SideEffectTaskHandlerBase[*wcipb.ScalingGroupBackoffTask]
 }
 
 func (h *ScalingGroupBackoffTaskHandler) Validate(ctx chasm.Context, g *ScalingGroup, _ chasm.TaskInvocation, task *wcipb.ScalingGroupBackoffTask) (bool, error) {
-	return g.Status == wcipb.SCALING_GROUP_STATUS_BACKING_OFF && g.Attempt == task.GetAttempt() && g.rootRunning(ctx), nil
+	return g.backoffCurrent(ctx, task), nil
 }
 
-func (h *ScalingGroupBackoffTaskHandler) Execute(ctx chasm.MutableContext, g *ScalingGroup, _ chasm.TaskAttributes, _ *wcipb.ScalingGroupBackoffTask) error {
-	return TransitionBackoffElapsed.Apply(g, ctx, EventBackoffElapsed{Destination: destinationOf(ctx, g)})
+func (h *ScalingGroupBackoffTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, _ chasm.TaskAttributes, task *wcipb.ScalingGroupBackoffTask) error {
+	_, _, err := chasm.UpdateComponent(ctx, ref, func(g *ScalingGroup, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		if !g.backoffCurrent(mctx, task) {
+			return struct{}{}, nil
+		}
+		return struct{}{}, TransitionBackoffElapsed.Apply(g, mctx, EventBackoffElapsed{Destination: destinationOf(mctx, g)})
+	}, nil)
+	return err
+}
+
+func (g *ScalingGroup) backoffCurrent(ctx chasm.Context, task *wcipb.ScalingGroupBackoffTask) bool {
+	return g.Status == wcipb.SCALING_GROUP_STATUS_BACKING_OFF && g.Attempt == task.GetAttempt() && g.rootRunning(ctx)
 }
 
 // InvokeTaskHandler drives InvokeWorker; see finishInvoke for the hand-off.

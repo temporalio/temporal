@@ -464,7 +464,7 @@ func TestE2E_RegionalDestinationsSurviveRetries(t *testing.T) {
 		require.NoError(t, err)
 		_, g = e.live(t)
 		require.Equal(t, wcipb.SCALING_GROUP_STATUS_BACKING_OFF, g.Status)
-		_, err = chasmtest.ExecutePureTask(e.ctx, e.engine, g, chasm.PureTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](&ScalingGroupBackoffTaskHandler{}), chasm.TaskAttributes{ScheduledTime: g.NextAttemptTime.AsTime()}, &wcipb.ScalingGroupBackoffTask{Attempt: g.Attempt})
+		_, err = chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](&ScalingGroupBackoffTaskHandler{}), chasm.TaskAttributes{ScheduledTime: g.NextAttemptTime.AsTime()}, &wcipb.ScalingGroupBackoffTask{Attempt: g.Attempt})
 		require.NoError(t, err)
 		require.Equal(t, []string{want, want}, e.destinations(t, "resize"), "first attempt and the one after backoff")
 	})
@@ -506,7 +506,7 @@ func TestE2E_ResizeOutsideHostRegionGivesUp(t *testing.T) {
 			runResize()
 			_, g := e.live(t)
 			require.Equal(t, wcipb.SCALING_GROUP_STATUS_BACKING_OFF, g.Status, "the first failure backs off either way")
-			_, err = chasmtest.ExecutePureTask(e.ctx, e.engine, g, chasm.PureTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](&ScalingGroupBackoffTaskHandler{}), chasm.TaskAttributes{ScheduledTime: g.NextAttemptTime.AsTime()}, &wcipb.ScalingGroupBackoffTask{Attempt: g.Attempt})
+			_, err = chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](&ScalingGroupBackoffTaskHandler{}), chasm.TaskAttributes{ScheduledTime: g.NextAttemptTime.AsTime()}, &wcipb.ScalingGroupBackoffTask{Attempt: g.Attempt})
 			require.NoError(t, err)
 			runResize()
 
@@ -1472,3 +1472,47 @@ func TestE2E_MigrateToWorkflowOnMissing(t *testing.T) {
 	require.ErrorAs(t, e.migrateToWorkflow(), &notFound)
 }
 
+// A backoff timer for an attempt the group has moved past is a no-op, whether caught at validation or,
+// as for a duplicate delivery racing the first, at write-back.
+func TestE2E_SupersededBackoffDoesNotApply(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	fake.actions = []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeUpdateWorkerSetSize, Count: count(4)}}
+	require.NoError(t, e.recordTaskAdd())
+	e.compute.callErr = compute.NewProviderError(compute.FailureUnavailable, errors.New("down"))
+	_, g := e.live(t)
+	_, err = chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ResizeTask](e.lib.ResizeTaskHandler), chasm.TaskAttributes{}, &wcipb.ResizeTask{Attempt: g.Attempt})
+	require.NoError(t, err)
+	_, g = e.live(t)
+	require.Equal(t, wcipb.SCALING_GROUP_STATUS_BACKING_OFF, g.Status)
+	spent := &wcipb.ScalingGroupBackoffTask{Attempt: g.Attempt}
+	attrs := chasm.TaskAttributes{ScheduledTime: g.NextAttemptTime.AsTime()}
+	backoff := &ScalingGroupBackoffTaskHandler{}
+	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](backoff), attrs, spent)
+	require.NoError(t, err)
+	require.False(t, dropped)
+	_, g = e.live(t)
+	require.Equal(t, wcipb.SCALING_GROUP_STATUS_SCALING, g.Status, "the elapsed backoff restarts the resize")
+
+	t.Run("at_validation", func(t *testing.T) {
+		dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](backoff), attrs, spent)
+		require.NoError(t, err)
+		require.True(t, dropped)
+	})
+	t.Run("at_write_back", func(t *testing.T) {
+		_, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](validAtRead{backoff}), attrs, spent)
+		require.NoError(t, err)
+		_, g := e.live(t)
+		require.Equal(t, wcipb.SCALING_GROUP_STATUS_SCALING, g.Status)
+	})
+}
+
+// validAtRead passes validation, as a task does when the state moves on between its validation and its write-back.
+type validAtRead struct {
+	*ScalingGroupBackoffTaskHandler
+}
+
+func (validAtRead) Validate(chasm.Context, *ScalingGroup, chasm.TaskInvocation, *wcipb.ScalingGroupBackoffTask) (bool, error) {
+	return true, nil
+}
