@@ -536,3 +536,70 @@ func TestStart_FirstRoundRunsImmediately(t *testing.T) {
 		return ok && last == healthpb.HealthCheckResponse_SERVING
 	}, time.Second, 5*time.Millisecond)
 }
+
+func TestStop_InterruptsInFlightRound(t *testing.T) {
+	var enabled, healthy atomic.Bool
+	enabled.Store(true)
+	healthy.Store(true)
+	rec := &statusRecorder{}
+	started := make(chan struct{}, 1)
+	monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
+		primitives.HistoryService:  testPeerHosts("history", 2),
+		primitives.MatchingService: testPeerHosts("matching", 2),
+	})
+	// The probe would succeed, but it blocks until the round is cancelled.
+	probe := func(ctx context.Context, _ primitives.ServiceName, _ string) error {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		return nil
+	}
+	cfg := testPeerHealthCheckConfig(1, 20, 0.5, time.Minute, time.Minute)
+	cfg.Enabled = enabled.Load
+	cfg.Interval = dynamicconfig.GetDurationPropertyFn(time.Hour)
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	checker := newPeerHealthChecker(monitor, probe, rec.set, cfg, handler, log.NewNoopLogger())
+
+	checker.Start()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first round never started probing")
+	}
+	checker.Stop()
+
+	require.Empty(t, rec.list(), "a round interrupted by Stop must not set status")
+	require.Empty(t, capture.SnapshotMetric(metrics.FrontendPeerHealthCheckRound.Name()), "a round interrupted by Stop must not emit a round metric")
+}
+
+func TestStart_ZeroIntervalDoesNotPanic(t *testing.T) {
+	var enabled, healthy atomic.Bool
+	enabled.Store(true)
+	healthy.Store(true)
+	var probeCalls atomic.Int32
+	rec := &statusRecorder{}
+	checker := newPeerLoopChecker(t, &enabled, &healthy, &probeCalls, 0, rec)
+
+	require.NotPanics(t, func() {
+		checker.Start()
+		checker.Stop()
+	})
+}
+
+func TestStop_BeforeStartPreventsStart(t *testing.T) {
+	var enabled, healthy atomic.Bool
+	enabled.Store(true)
+	healthy.Store(true)
+	var probeCalls atomic.Int32
+	rec := &statusRecorder{}
+	checker := newPeerLoopChecker(t, &enabled, &healthy, &probeCalls, time.Hour, rec)
+
+	checker.Stop()
+	checker.Start()
+
+	require.Empty(t, rec.list())
+	require.Equal(t, int32(0), probeCalls.Load())
+}

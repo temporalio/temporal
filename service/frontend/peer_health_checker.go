@@ -26,6 +26,9 @@ import (
 
 const peerHealthCheckMaxConcurrentProbes = 50
 
+// minPeerHealthCheckInterval guards against a non-positive dynamic config value, which would panic time.NewTicker or spin time.NewTimer.
+const minPeerHealthCheckInterval = time.Second
+
 // peerProbeOutcome classifies one probe. Only timeouts count as failures.
 type peerProbeOutcome string
 
@@ -69,9 +72,10 @@ type (
 		metricsHandler metrics.Handler
 		logger         log.Logger
 
-		status int32
-		cancel context.CancelFunc
-		wg     sync.WaitGroup
+		lifecycleMu sync.Mutex // serializes Start and Stop so cancel is set before Stop can read it
+		status      int32
+		cancel      context.CancelFunc
+		wg          sync.WaitGroup
 	}
 
 	peerProbeTarget struct {
@@ -241,7 +245,10 @@ collect:
 		case r := <-results:
 			counts[r.role][r.outcome]++
 		case <-ctx.Done():
-			c.logger.Warn("peer health check round timed out", tag.Error(ctx.Err()))
+			// Only a round deadline is worth a warning; a cancelled parent means shutdown.
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				c.logger.Warn("peer health check round timed out", tag.Error(ctx.Err()))
+			}
 			break collect
 		}
 	}
@@ -304,6 +311,8 @@ func (c *peerHealthChecker) evaluateRound(
 
 // Start launches the check loop. It is idempotent.
 func (c *peerHealthChecker) Start() {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
 	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -314,8 +323,13 @@ func (c *peerHealthChecker) Start() {
 }
 
 // Stop cancels the loop and waits for it. It is idempotent.
-// After Stop returns, setStatus is never called again.
+// Stop before Start prevents a later Start. After Stop returns, setStatus is never called again.
 func (c *peerHealthChecker) Stop() {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	if atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusInitialized, common.DaemonStatusStopped) {
+		return
+	}
 	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -323,11 +337,19 @@ func (c *peerHealthChecker) Stop() {
 	c.wg.Wait()
 }
 
+// interval returns the live check interval, floored so a bad dynamic config value cannot crash or spin the loop.
+func (c *peerHealthChecker) interval() time.Duration {
+	if d := c.config.Interval(); d > 0 {
+		return d
+	}
+	return minPeerHealthCheckInterval
+}
+
 func (c *peerHealthChecker) loop(ctx context.Context) {
 	defer c.wg.Done()
 	for {
 		c.tick(ctx)
-		timer := time.NewTimer(c.config.Interval())
+		timer := time.NewTimer(c.interval())
 		select {
 		case <-ctx.Done():
 			timer.Stop()
