@@ -169,6 +169,7 @@ type (
 		overrides                       *Overrides
 		membershipMonitor               membership.Monitor
 		healthInterceptor               *interceptor.HealthInterceptor
+		peerHealthChecker               *peerHealthChecker
 		scheduleSpecBuilder             *scheduler.SpecBuilder
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
@@ -356,6 +357,7 @@ func NewWorkflowHandler(
 	validator *workflow.RequestValidator,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
 	metricsHandler metrics.Handler,
+	peerHealthChecker *peerHealthChecker,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		ActivityHandler:       activityHandler,
@@ -407,6 +409,7 @@ func NewWorkflowHandler(
 		overrides:                       NewOverrides(),
 		membershipMonitor:               membershipMonitor,
 		healthInterceptor:               healthInterceptor,
+		peerHealthChecker:               peerHealthChecker,
 		scheduleSpecBuilder:             scheduleSpecBuilder,
 		outstandingPollers:              collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
 		httpEnabled:                     httpEnabled,
@@ -429,7 +432,11 @@ func (wh *WorkflowHandler) Start() {
 		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 		go func() {
 			_ = wh.membershipMonitor.WaitUntilInitialized(context.Background())
+			// Always start SERVING: an unknown peer health round leaves the status unchanged, so this must not wait for one.
 			wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+			if wh.peerHealthChecker != nil {
+				wh.peerHealthChecker.Start()
+			}
 			wh.healthInterceptor.SetHealthy(true)
 			wh.logger.Info("Frontend is now healthy")
 		}()
@@ -462,6 +469,10 @@ func (wh *WorkflowHandler) Stop() {
 		common.DaemonStatusStopped,
 	) {
 		wh.namespaceRegistry.UnregisterStateChangeCallback(wh)
+		// Stop the checker first so it cannot flip the status back to SERVING after NOT_SERVING.
+		if wh.peerHealthChecker != nil {
+			wh.peerHealthChecker.Stop()
+		}
 		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 		wh.healthInterceptor.SetHealthy(false)
 	}

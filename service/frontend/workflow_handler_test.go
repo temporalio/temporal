@@ -51,6 +51,7 @@ import (
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -69,6 +70,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/wideevents"
@@ -79,6 +81,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -377,7 +380,36 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		),
 		nil,
 		metrics.NoopMetricsHandler,
+		nil, // Not testing the peer health checker here
 	)
+}
+
+// An unknown peer health round leaves the status unchanged, so Start must set SERVING itself once membership is ready.
+func (s *WorkflowHandlerSuite) TestStart_ServingWhenPeerHealthCheckHasNoMembers() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	s.mockNamespaceCache.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any())
+	s.mockNamespaceCache.EXPECT().UnregisterStateChangeCallback(gomock.Any())
+	wh.peerHealthChecker = newPeerHealthChecker(
+		newPeerTestMonitor(s.T(), map[primitives.ServiceName][]membership.HostInfo{
+			primitives.HistoryService:  nil,
+			primitives.MatchingService: nil,
+		}),
+		nil, // never probed: no host is available
+		func(st healthpb.HealthCheckResponse_ServingStatus) {
+			wh.healthServer.SetServingStatus(WorkflowServiceName, st)
+		},
+		testPeerHealthCheckConfig(1, 20, 0.5, time.Second, time.Second),
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
+	)
+
+	wh.Start()
+	defer wh.Stop()
+
+	await.RequireTrue(s.T(), func() bool {
+		resp, err := wh.healthServer.Check(context.Background(), &healthpb.HealthCheckRequest{Service: WorkflowServiceName})
+		return err == nil && resp.GetStatus() == healthpb.HealthCheckResponse_SERVING
+	}, 5*time.Second, 5*time.Millisecond)
 }
 
 func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueKindFromToken() {

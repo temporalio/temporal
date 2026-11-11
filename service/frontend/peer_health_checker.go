@@ -3,6 +3,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -19,6 +20,8 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/testhooks"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
@@ -114,6 +117,32 @@ func newPeerHealthChecker(
 		config:         config,
 		metricsHandler: metricsHandler,
 		logger:         logger,
+	}
+}
+
+// newGRPCPeerProbe returns a probe that calls the standard gRPC health check on a peer.
+// It returns nil for any answer, NOT_SERVING included, and otherwise the raw RPC error for the checker to classify.
+func newGRPCPeerProbe(
+	connFn func(role primitives.ServiceName, address string) grpc.ClientConnInterface,
+	testHooks testhooks.TestHooks,
+) peerProbeFn {
+	return func(ctx context.Context, role primitives.ServiceName, address string) error {
+		if hook, ok := testhooks.Get(testHooks, testhooks.FrontendPeerHealthProbe, testhooks.GlobalScope); ok {
+			if err := hook(role, address); err != nil {
+				return err
+			}
+		}
+		var serviceName string
+		switch role {
+		case primitives.HistoryService:
+			serviceName = "temporal.api.workflowservice.v1.HistoryService"
+		case primitives.MatchingService:
+			serviceName = "temporal.api.workflowservice.v1.MatchingService"
+		default:
+			return fmt.Errorf("peer health probe: unsupported role %q", role)
+		}
+		_, err := healthpb.NewHealthClient(connFn(role, address)).Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
+		return err
 	}
 }
 

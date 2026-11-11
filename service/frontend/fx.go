@@ -1066,12 +1066,31 @@ func HandlerProvider(
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	rpcFactory common.RPCFactory,
+	testHooks testhooks.TestHooks,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
 		serviceConfig.GlobalWorkerDeploymentReadRPS,
 		serviceConfig.GlobalWorkerDeploymentReadBurstRatio,
 		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
+	)
+
+	connFn := func(role primitives.ServiceName, address string) grpc.ClientConnInterface {
+		if role == primitives.MatchingService {
+			return rpcFactory.CreateMatchingGRPCConnection(address)
+		}
+		return rpcFactory.CreateHistoryGRPCConnection(address)
+	}
+	peerHealthChecker := newPeerHealthChecker(
+		membershipMonitor,
+		newGRPCPeerProbe(connFn, testHooks),
+		func(s healthpb.HealthCheckResponse_ServingStatus) {
+			healthServer.SetServingStatus(WorkflowServiceName, s)
+		},
+		serviceConfig.PeerHealthCheck,
+		metricsHandler,
+		logger,
 	)
 
 	wfHandler := NewWorkflowHandler(
@@ -1114,6 +1133,7 @@ func HandlerProvider(
 		),
 		chasmNsReplClient,
 		metricsHandler,
+		peerHealthChecker,
 	)
 	return wfHandler
 }

@@ -9,6 +9,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
@@ -42,6 +43,8 @@ var (
 	HistoryChasmRuntimeProvider                 = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
 	HistoryTransferTaskInterceptor              = newKey[func(historytasks.Task, func()), namespace.ID]()
 	NexusRetainTimedOutOperation                = newKey[bool, namespace.Name]()
+	// FrontendPeerHealthProbe overrides the peer health probe. A non-nil error fails the probe; nil falls through to the real gRPC probe.
+	FrontendPeerHealthProbe = newKey[func(role primitives.ServiceName, address string) error, global]()
 	// HistoryPassiveReplicationTest enables the single-cluster passive replication
 	// test stack for one namespace. Production builds always report it as unset.
 	HistoryPassiveReplicationTest       = newKey[HistoryPassiveReplicationTestHook, namespace.ID]()

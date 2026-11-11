@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"runtime"
 	"slices"
 	"sync"
@@ -20,8 +21,12 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 )
@@ -613,4 +618,119 @@ func TestStop_BeforeStartPreventsStart(t *testing.T) {
 
 	require.Empty(t, rec.list())
 	require.Equal(t, int32(0), probeCalls.Load())
+}
+
+// startPeerHealthServer serves the gRPC health service on a loopback listener and returns its address.
+func startPeerHealthServer(t *testing.T, opts []grpc.ServerOption, statuses map[string]healthpb.HealthCheckResponse_ServingStatus) string {
+	t.Helper()
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	srv := grpc.NewServer(opts...)
+	hs := health.NewServer()
+	for name, st := range statuses {
+		hs.SetServingStatus(name, st)
+	}
+	healthpb.RegisterHealthServer(srv, hs)
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+	return lis.Addr().String()
+}
+
+// newPeerTestConn dials the address with insecure credentials and closes the connection on cleanup.
+func newPeerTestConn(t *testing.T, addr string) grpc.ClientConnInterface {
+	t.Helper()
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn
+}
+
+func TestGRPCPeerProbe_Serving(t *testing.T) {
+	addr := startPeerHealthServer(t, nil, map[string]healthpb.HealthCheckResponse_ServingStatus{
+		"temporal.api.workflowservice.v1.HistoryService": healthpb.HealthCheckResponse_SERVING,
+	})
+	conn := newPeerTestConn(t, addr)
+	probe := newGRPCPeerProbe(func(primitives.ServiceName, string) grpc.ClientConnInterface { return conn }, testhooks.NewTestHooks())
+
+	require.NoError(t, probe(context.Background(), primitives.HistoryService, addr))
+}
+
+func TestGRPCPeerProbe_NotServing(t *testing.T) {
+	addr := startPeerHealthServer(t, nil, map[string]healthpb.HealthCheckResponse_ServingStatus{
+		"temporal.api.workflowservice.v1.HistoryService": healthpb.HealthCheckResponse_NOT_SERVING,
+	})
+	conn := newPeerTestConn(t, addr)
+	probe := newGRPCPeerProbe(func(primitives.ServiceName, string) grpc.ClientConnInterface { return conn }, testhooks.NewTestHooks())
+
+	// Any answer from the host counts as a response, NOT_SERVING included.
+	require.NoError(t, probe(context.Background(), primitives.HistoryService, addr))
+}
+
+func TestGRPCPeerProbe_PermissionDenied(t *testing.T) {
+	deny := grpc.UnaryInterceptor(func(_ context.Context, _ any, _ *grpc.UnaryServerInfo, _ grpc.UnaryHandler) (any, error) {
+		return nil, status.Error(codes.PermissionDenied, "")
+	})
+	addr := startPeerHealthServer(t, []grpc.ServerOption{deny}, map[string]healthpb.HealthCheckResponse_ServingStatus{
+		"temporal.api.workflowservice.v1.HistoryService": healthpb.HealthCheckResponse_SERVING,
+	})
+	conn := newPeerTestConn(t, addr)
+	probe := newGRPCPeerProbe(func(primitives.ServiceName, string) grpc.ClientConnInterface { return conn }, testhooks.NewTestHooks())
+
+	err := probe(context.Background(), primitives.HistoryService, addr)
+	require.Error(t, err)
+	require.Equal(t, peerProbeResponse, classifyPeerProbeError(context.Background(), err))
+}
+
+func TestGRPCPeerProbe_ConnectionRefused(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+	require.NoError(t, lis.Close())
+	conn := newPeerTestConn(t, addr)
+	probe := newGRPCPeerProbe(func(primitives.ServiceName, string) grpc.ClientConnInterface { return conn }, testhooks.NewTestHooks())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err = probe(ctx, primitives.HistoryService, addr)
+	require.Error(t, err)
+	require.Equal(t, peerProbeRefused, classifyPeerProbeError(context.Background(), err))
+}
+
+// A black-holed address never answers the dial. The first probe waits for its context to expire.
+// The connection is shared and does not wait for ready, so the second probe fails fast with Unavailable once the dial has failed.
+func TestGRPCPeerProbe_BlackHole(t *testing.T) {
+	const addr = "10.255.255.1:7234"
+	conn := newPeerTestConn(t, addr)
+	probe := newGRPCPeerProbe(func(primitives.ServiceName, string) grpc.ClientConnInterface { return conn }, testhooks.NewTestHooks())
+
+	for i := range 2 {
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		err := probe(ctx, primitives.HistoryService, addr)
+		cancel()
+		require.Error(t, err)
+		got := classifyPeerProbeError(context.Background(), err)
+		if got != peerProbeTimeout {
+			t.Skipf("environment does not black-hole %s (probe %d classified %q: %v)", addr, i+1, got, err)
+		}
+	}
+}
+
+func TestGRPCPeerProbe_TestHookOverrides(t *testing.T) {
+	addr := startPeerHealthServer(t, nil, map[string]healthpb.HealthCheckResponse_ServingStatus{
+		"temporal.api.workflowservice.v1.HistoryService":  healthpb.HealthCheckResponse_SERVING,
+		"temporal.api.workflowservice.v1.MatchingService": healthpb.HealthCheckResponse_SERVING,
+	})
+	conn := newPeerTestConn(t, addr)
+	th := testhooks.NewTestHooks()
+	cleanup := testhooks.Set(th, testhooks.FrontendPeerHealthProbe, func(role primitives.ServiceName, _ string) error {
+		if role == primitives.MatchingService {
+			return errors.New("injected")
+		}
+		return nil
+	}, testhooks.GlobalScope)
+	t.Cleanup(cleanup)
+	probe := newGRPCPeerProbe(func(primitives.ServiceName, string) grpc.ClientConnInterface { return conn }, th)
+
+	require.Error(t, probe(context.Background(), primitives.MatchingService, addr))
+	require.NoError(t, probe(context.Background(), primitives.HistoryService, addr))
 }
