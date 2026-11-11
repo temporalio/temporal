@@ -945,6 +945,46 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		0*time.Second,
 		`FrontendShutdownFailHealthCheckDuration is the duration of shutdown failure detection`,
 	)
+	FrontendPeerHealthCheckEnabled = NewGlobalBoolSetting(
+		"frontend.peerHealthCheckEnabled",
+		false,
+		`FrontendPeerHealthCheckEnabled enables the frontend peer health checker, which probes History and Matching hosts`,
+	)
+	FrontendPeerHealthCheckInterval = NewGlobalDurationSetting(
+		"frontend.peerHealthCheckInterval",
+		30*time.Second,
+		`FrontendPeerHealthCheckInterval is the interval between peer health check rounds`,
+	)
+	FrontendPeerHealthCheckSamplePercentage = NewGlobalFloatSetting(
+		"frontend.peerHealthCheckSamplePercentage",
+		0.5,
+		`FrontendPeerHealthCheckSamplePercentage is the fraction of hosts per role probed in each peer health check round`,
+	)
+	FrontendPeerHealthCheckMaxHostsPerRole = NewGlobalIntSetting(
+		"frontend.peerHealthCheckMaxHostsPerRole",
+		20,
+		`FrontendPeerHealthCheckMaxHostsPerRole is the maximum number of hosts per role probed in each peer health check round`,
+	)
+	FrontendPeerHealthCheckFailureThreshold = NewGlobalFloatSetting(
+		"frontend.peerHealthCheckFailureThreshold",
+		0.5,
+		`FrontendPeerHealthCheckFailureThreshold is the timed-out probe ratio per role at or above which a peer health check round fails`,
+	)
+	FrontendPeerHealthCheckMinFailedHosts = NewGlobalIntSetting(
+		"frontend.peerHealthCheckMinFailedHosts",
+		2,
+		`FrontendPeerHealthCheckMinFailedHosts is the minimum number of timed-out probes in a role for the peer health check round to fail`,
+	)
+	FrontendPeerHealthCheckProbeTimeout = NewGlobalDurationSetting(
+		"frontend.peerHealthCheckProbeTimeout",
+		5*time.Second,
+		`FrontendPeerHealthCheckProbeTimeout is the timeout for a single peer health check probe. It must be shorter than frontend.peerHealthCheckRoundTimeout; probes cut off by the round deadline count as unknown, not timeout.`,
+	)
+	FrontendPeerHealthCheckRoundTimeout = NewGlobalDurationSetting(
+		"frontend.peerHealthCheckRoundTimeout",
+		10*time.Second,
+		`FrontendPeerHealthCheckRoundTimeout is the deadline for a whole peer health check round`,
+	)
 	FrontendMaxBadBinaries = NewNamespaceIntSetting(
 		"frontend.maxBadBinaries",
 		10,
