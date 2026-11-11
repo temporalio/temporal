@@ -3249,6 +3249,11 @@ on each source shard's stream, not a total for the namespace: a namespace whose 
 concentrates on one shard sends at most this rate there. If any entry is invalid, no namespace
 is isolated.`,
 	)
+	ReplicationStreamSenderLaneScheduler = NewGlobalStringSetting(
+		"history.ReplicationStreamSenderLaneScheduler",
+		"per-lane",
+		"Lane execution scheduler: per-lane or pooled. Pooled uses two preparation workers per stream and two retained payload slots per scheduling class. Changing the scheduler restarts lane streams. Unknown values use per-lane execution.",
+	)
 	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderMaxLanes",
 		4,

@@ -316,6 +316,7 @@ func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationSt
 		}
 		if _, ok := s.laneRegistry.SnapshotByKey(lane.Key); ok {
 			s.laneRegistry.SetPolicyState(lane.Key, lane.PolicyState)
+			s.laneRegistry.SetSchedulingClass(lane.Key, lane.SchedulingClass)
 			continue
 		}
 		_, created, err := s.laneRegistry.Create(lane.Key, lane.Filter, signals.DefaultAcked, lane.PolicyState)
@@ -323,6 +324,7 @@ func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationSt
 			return err
 		}
 		if created {
+			s.laneRegistry.SetSchedulingClass(lane.Key, lane.SchedulingClass)
 			metrics.ReplicationLaneCreated.With(s.metrics).Record(
 				1,
 				metrics.ToClusterTag(s.clientClusterName),
@@ -335,6 +337,8 @@ func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationSt
 			s.laneRegistry.RequestRetirement(lane.logicalKey)
 		}
 	}
+	// Policy rates may change even when lane membership and ACK positions do not.
+	s.laneRegistry.NotifyPolicyChanged()
 	return nil
 }
 
@@ -364,15 +368,16 @@ func (s *laneStreamSender) laneSignals(attr *replicationspb.SyncReplicationState
 	s.laneStateMu.Lock()
 	for _, lane := range snapshots {
 		lanes = append(lanes, LaneStatus{
-			Key:         lane.logicalKey,
-			Filter:      LaneFilter{NamespaceIDs: slices.Clone(lane.filter.NamespaceIDs)},
-			SentCursor:  lane.cursor,
-			Acked:       lane.acked,
-			AckedTime:   lane.ackedTime,
-			Retiring:    lane.retiring,
-			LastRefused: s.laneRefusedAt[lane.logicalKey],
-			Paused:      lane.paused,
-			PolicyState: slices.Clone(lane.policyState),
+			SchedulingClass: lane.schedulingClass,
+			Key:             lane.logicalKey,
+			Filter:          LaneFilter{NamespaceIDs: slices.Clone(lane.filter.NamespaceIDs)},
+			SentCursor:      lane.cursor,
+			Acked:           lane.acked,
+			AckedTime:       lane.ackedTime,
+			Retiring:        lane.retiring,
+			LastRefused:     s.laneRefusedAt[lane.logicalKey],
+			Paused:          lane.paused,
+			PolicyState:     slices.Clone(lane.policyState),
 		})
 	}
 	s.laneStateMu.Unlock()
@@ -500,6 +505,9 @@ func laneFilterOwner(filter LaneFilter, key string, owners map[namespace.ID]stri
 }
 
 func validateDesiredLane(lane DesiredLane) error {
+	if lane.SchedulingClass < 0 || lane.SchedulingClass >= laneSchedulingClassCount {
+		return fmt.Errorf("lane %q: scheduling class %d is outside [0, %d)", lane.Key, lane.SchedulingClass, laneSchedulingClassCount)
+	}
 	if lane.Key == "" {
 		return errors.New("lane key is empty")
 	}
@@ -665,10 +673,14 @@ func (s *laneStreamSender) sendDefaultTasks(priority enumsspb.TaskPriority, begi
 	return err
 }
 
-// startLaneLoops starts a send loop for every lane, now and as lanes are created.
+// startLaneLoops starts the selected lane executor, including lanes created later.
 func (s *laneStreamSender) startLaneLoops() {
 	s.laneLoopsOnce.Do(func() {
-		go WrapEventLoop(s.server.Context(), s.laneManagerLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+		loop := s.laneManagerLoop
+		if s.pooledLaneScheduling {
+			loop = func() error { return newLanePool(s).run() }
+		}
+		go WrapEventLoop(s.server.Context(), loop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 	})
 }
 
