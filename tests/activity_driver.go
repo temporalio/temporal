@@ -255,7 +255,11 @@ func nonRetryableTimeouts(errorTypes []string) []model.EventType {
 		model.ScheduleToStartElapses, model.ScheduleToCloseElapses, model.StartToCloseElapses, model.HeartbeatElapses,
 		model.StartToHandoffElapses, model.HandoffToCloseElapses,
 	} {
-		if slices.Contains(errorTypes, retrypolicy.TimeoutFailureTypePrefix+timeoutType(e).String()) {
+		timeout := timeoutType(e)
+		shortName := retrypolicy.TimeoutFailureTypePrefix + timeout.String()
+		protoName := retrypolicy.TimeoutFailureTypePrefix + enumspb.TimeoutType_name[int32(timeout)]
+
+		if slices.Contains(errorTypes, shortName) || slices.Contains(errorTypes, protoName) {
 			nonRetryable = append(nonRetryable, e.Type)
 		}
 	}

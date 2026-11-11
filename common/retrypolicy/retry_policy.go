@@ -14,10 +14,8 @@ import (
 )
 
 const (
-	// TimeoutFailureTypePrefix is the prefix for timeout failure types
-	// used in retry policy
-	// the actual failure type will be prefix + enums.TimeoutType.String()
-	// e.g. "TemporalTimeout:StartToClose" or "TemporalTimeout:Heartbeat"
+	// TimeoutFailureTypePrefix identifies timeout exclusions followed by a short or protobuf enum
+	// name, e.g. "TemporalTimeout:Heartbeat" or "TemporalTimeout:TIMEOUT_TYPE_HEARTBEAT".
 	TimeoutFailureTypePrefix = "TemporalTimeout:"
 )
 
@@ -136,7 +134,13 @@ func IsRetryableTimeout(timeoutType enumspb.TimeoutType, nonRetryableTypes []str
 	switch timeoutType {
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE, enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		enumspb.TIMEOUT_TYPE_START_TO_HANDOFF, enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE:
-		return !slices.Contains(nonRetryableTypes, TimeoutFailureTypePrefix+timeoutType.String())
+		shortName := TimeoutFailureTypePrefix + timeoutType.String()
+		protoName := TimeoutFailureTypePrefix + enumspb.TimeoutType_name[int32(timeoutType)]
+
+		excluded := slices.Contains(nonRetryableTypes, shortName) ||
+			slices.Contains(nonRetryableTypes, protoName)
+
+		return !excluded
 	default:
 		return false
 	}
