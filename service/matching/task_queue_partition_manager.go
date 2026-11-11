@@ -784,6 +784,13 @@ func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 }
 
 func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, outcome syncMatchOutcome) {
+	if len(pm.taskHooks) == 0 {
+		return
+	}
+	// Hooks act on the namespace (e.g. signal its workflows), so only run them where it's active.
+	if isActive, err := pm.isActiveInCluster(); err == nil && !isActive {
+		return
+	}
 	for _, l := range pm.taskHooks {
 		hookOutcome := syncMatchOutcomeToHook(outcome)
 		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{

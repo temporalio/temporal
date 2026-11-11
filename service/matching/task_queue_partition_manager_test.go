@@ -25,6 +25,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
@@ -2247,6 +2248,42 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+}
+
+// A standby cluster backlogs tasks pushed by standby history; hooks must not act on a namespace that isn't active here.
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotInvokedWhenNamespacePassive() {
+	passiveNs := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: s.ns.ID().String(), Name: s.ns.Name().String()},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+		},
+		1,
+	)
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any()).AnyTimes()
+	registry.EXPECT().UnregisterStateChangeCallback(gomock.Any()).AnyTimes()
+	registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(passiveNs, nil).AnyTimes()
+	registry.EXPECT().GetNamespaceByIDWithOptions(gomock.Any(), gomock.Any()).Return(passiveNs, nil).AnyTimes()
+	registry.EXPECT().GetNamespaceName(gomock.Any()).Return(passiveNs.Name(), nil).AnyTimes()
+	s.partitionMgr.engine.namespaceRegistry = registry
+
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId:      namespaceID,
+			RunId:            "run",
+			WorkflowId:       "wf",
+			VersionDirective: worker_versioning.MakeBuildIdDirective("buildXYZ"),
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+	s.Empty(hook.getCalls(), "hooks must not fire for a namespace that is passive in this cluster")
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
