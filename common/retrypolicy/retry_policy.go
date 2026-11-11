@@ -1,6 +1,7 @@
 package retrypolicy
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -103,7 +104,11 @@ func Validate(policy *commonpb.RetryPolicy) error {
 	if err := timestamp.ValidateAndCapProtoDuration(policy.GetInitialInterval()); err != nil {
 		return serviceerror.NewInvalidArgumentf("invalid InitialInterval set on retry policy: %v", err)
 	}
-	if policy.GetBackoffCoefficient() < 1 {
+	backoffCoefficient := policy.GetBackoffCoefficient()
+	if math.IsNaN(backoffCoefficient) || math.IsInf(backoffCoefficient, 0) {
+		return serviceerror.NewInvalidArgument("BackoffCoefficient must be finite on retry policy.")
+	}
+	if backoffCoefficient < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(policy.GetMaximumInterval()); err != nil {

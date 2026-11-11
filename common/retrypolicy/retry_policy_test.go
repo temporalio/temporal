@@ -1,6 +1,7 @@
 package retrypolicy
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -366,6 +367,43 @@ func TestValidateRetryPolicy(t *testing.T) {
 			wantErrString: "BackoffCoefficient cannot be less than 1 on retry policy.",
 		},
 		{
+			name: "NaN coefficient",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: math.NaN(),
+			},
+			wantErr:       true,
+			wantErrString: "BackoffCoefficient must be finite on retry policy.",
+		},
+		{
+			name: "positive infinite coefficient",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: math.Inf(1),
+			},
+			wantErr:       true,
+			wantErrString: "BackoffCoefficient must be finite on retry policy.",
+		},
+		{
+			name: "negative infinite coefficient",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: math.Inf(-1),
+			},
+			wantErr:       true,
+			wantErrString: "BackoffCoefficient must be finite on retry policy.",
+		},
+		{
+			name: "maxAttempts is 1, NaN coefficient",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: math.NaN(),
+				MaximumAttempts:    1,
+			},
+		},
+		{
+			name: "large finite coefficient",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: math.MaxFloat64,
+			},
+		},
+		{
 			name: "maximum interval in seconds is negative",
 			input: &commonpb.RetryPolicy{
 				BackoffCoefficient: 2.0,
@@ -437,14 +475,13 @@ func TestValidateRetryPolicy(t *testing.T) {
 		},
 	}
 
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			err := Validate(tt.input)
-			if tt.wantErr {
-				assert.NotNil(t, err, "expected error - did not get one")
-				assert.Equal(t, err.Error(), tt.wantErrString, "unexpected error message")
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := Validate(testCase.input)
+			if testCase.wantErr {
+				require.ErrorContains(t, err, testCase.wantErrString)
 			} else {
-				assert.Nil(t, err, "unexpected error")
+				require.NoError(t, err)
 			}
 		})
 	}
