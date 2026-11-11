@@ -188,8 +188,7 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 // update request IDs are recorded in the CHASM request IDs data node and start request IDs in the execution
 // state, and the two are deduplicated independently.
 func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
-	cenv := newChasmTestEnv(s.Context(), s.T(),
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, true))
+	cenv := newChasmTestEnv(s.Context(), s.T())
 	tv := testvars.New(s.T())
 
 	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
