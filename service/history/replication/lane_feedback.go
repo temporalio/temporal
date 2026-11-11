@@ -30,6 +30,17 @@ type (
 		Feedback(stream LaneFeedbackStream, maxBytes int) *anypb.Any
 	}
 
+	// LaneFeedbackNotifier is an optional provider capability for prompt ACKs when
+	// pressure changes. SubscribeFeedback registers a nonblocking notification
+	// callback for one receiving shard and returns a nonblocking unsubscribe.
+	// Notifications carry no policy authority; the receiver reads a fresh snapshot.
+	// Providers must bound subscriptions, release them on unsubscribe, and notify
+	// both pressure and recovery changes. Periodic ACKs remain the fallback.
+	// A nil unsubscribe declines the subscription and must not retain the callback.
+	LaneFeedbackNotifier interface {
+		SubscribeFeedback(shardID int32, notify func()) (unsubscribe func())
+	}
+
 	noopLaneFeedbackProvider struct{}
 )
 

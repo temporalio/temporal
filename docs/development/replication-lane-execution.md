@@ -34,3 +34,27 @@ scope, concurrent PAUSE, committed writes, panic handling and shutdown. The
 SQLite XDC suite includes a pooled fixture and a scheduler-switch test using a
 backlog. These tests establish execution and lifecycle behavior, not a production
 throughput or observation-overhead qualification.
+
+## Prompt receiver feedback
+
+A receiver feedback provider may also implement `LaneFeedbackNotifier`. The
+receiver subscribes once for its receiving shard and coalesces notifications into
+a single pending wakeup. A notification conveys no policy state or authority:
+the next ACK reads fresh pressure and size-bounded feedback using the complete
+source/target `LaneFeedbackStream` from the normal feedback provider.
+
+Prompt ACKs have a minimum interval of 100 ms. Periodic ACK deadlines remain
+anchored independently, so notifications cannot postpone ordinary progress.
+If the receiver has not established valid watermarks, repeated notifications
+wait for the next periodic opportunity instead of spinning. Notifications received
+while Send is in progress remain pending for the next eligible ACK.
+
+Providers must keep subscriptions bounded, make callbacks and unsubscribe
+nonblocking, and release callbacks during unsubscribe. A nil unsubscribe declines
+the subscription; the receiver then uses its original periodic loop. A receiver
+with an accepted subscription always unsubscribes on shutdown or send failure.
+The no-op provider does not implement notifications, preserving default behavior.
+
+Timer and receiver lifecycle tests cover notification coalescing, periodic anchors,
+unavailable watermarks, pending updates during Send, fresh pressure/recovery reads,
+declined subscriptions and unsubscribe on normal/error exits.
