@@ -290,12 +290,12 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 }
 
 // backfillerBufferCapacity returns how many starts one backfiller may enqueue.
-// Backfillers share half the buffer, less the generator reserve; retained
-// completed actions don't count against it. The result is 0 only when that
-// shared budget is exhausted, i.e. when pending + generatorReserve >=
-// maxBufferSize/2: the buffer already holds that many actionable starts, or
-// the reserve alone consumes the half. The backfiller then backs off and
-// retries. The number of backfillers never reduces a positive budget to 0.
+// Backfillers share a budget of maxBufferSize/2 - generatorReserve, and the
+// first retainedActionCount buffer entries are not charged against it. The
+// result is 0 only when that budget is exhausted, i.e. when
+// bufferedCount - retainedActionCount + generatorReserve >= maxBufferSize/2.
+// The backfiller then backs off and retries. The number of backfillers never
+// reduces a positive budget to 0.
 func backfillerBufferCapacity(bufferedCount, retainedActionCount, maxBufferSize, generatorReserve, backfillerCount int) int {
 	backfillerCount = max(1, backfillerCount)
 	pending := max(0, bufferedCount-retainedActionCount)
