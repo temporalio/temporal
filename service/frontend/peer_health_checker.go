@@ -156,12 +156,12 @@ func (c *peerHealthChecker) sampleProbeTargets() ([]peerProbeTarget, map[primiti
 	for _, role := range peerHealthCheckRoles {
 		resolver, err := c.monitor.GetResolver(role)
 		if err != nil {
-			c.logger.Warn("peer health check failed to get resolver", tag.Service(role), tag.Error(err))
+			c.logger.Warn("peer health check failed to get resolver", tag.NewStringTag("target-service", string(role)), tag.Error(err))
 			continue
 		}
 		hosts := samplePeerHosts(resolver.AvailableMembers(), c.samplePercentage(), c.maxHostsPerRole())
 		if len(hosts) == 0 {
-			c.logger.Warn("peer health check found no available hosts", tag.Service(role))
+			c.logger.Warn("peer health check found no available hosts", tag.NewStringTag("target-service", string(role)))
 			continue
 		}
 		plannedPerRole[role] = len(hosts)
@@ -195,7 +195,7 @@ func (c *peerHealthChecker) runProbe(ctx context.Context, target peerProbeTarget
 	err := c.probe(probeCtx, target.role, target.address)
 	outcome := classifyPeerProbeError(ctx, err)
 	if err != nil {
-		c.logger.Debug("peer health probe failed", tag.Service(target.role), tag.NewStringTag("address", target.address), tag.NewStringTag("outcome", string(outcome)), tag.Error(err))
+		c.logger.Debug("peer health probe failed", tag.NewStringTag("target-service", string(target.role)), tag.NewStringTag("address", target.address), tag.NewStringTag("outcome", string(outcome)), tag.Error(err))
 	}
 	return peerProbeResult{role: target.role, outcome: outcome}
 }
@@ -301,7 +301,7 @@ func (c *peerHealthChecker) evaluateRound(
 		timeouts := roleCounts[peerProbeTimeout]
 		logRole := func(msg string) {
 			c.logger.Warn(msg,
-				tag.Service(role),
+				tag.NewStringTag("target-service", string(role)),
 				tag.NewInt("planned", planned),
 				tag.NewInt("timeout", timeouts),
 				tag.NewInt("refused", roleCounts[peerProbeRefused]),
