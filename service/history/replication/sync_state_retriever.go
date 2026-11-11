@@ -190,6 +190,11 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	cacheReleaseFunc historyi.ReleaseWorkflowContextFunc,
 	isNewWorkflow bool,
 ) (_ *SyncStateResult, retError error) {
+	mutableState, err := s.loadMSFromDbIfSpeculative(ctx, mutableState)
+	if err != nil {
+		return nil, err
+	}
+
 	shouldReturnMutation := func() bool {
 		if targetCurrentVersionedTransition == nil {
 			return false
@@ -377,6 +382,38 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 		RunId:      newRunId,
 		EventBatch: newRunEvents[0],
 	}, nil
+}
+
+// loadMSFromDbIfSpeculative returns mutableState, or a copy read from the DB when the CHASM tree has speculative
+// changes that aren't persisted. The copy isn't cached; mutableState and its speculative changes are unchanged.
+func (s *SyncStateRetrieverImpl) loadMSFromDbIfSpeculative(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+) (historyi.MutableState, error) {
+	// Outside a transaction, the CHASM tree is dirty only while a speculative transition is pending.
+	if !mutableState.ChasmTree().IsDirty() {
+		return mutableState, nil
+	}
+
+	executionInfo := mutableState.GetExecutionInfo()
+	response, err := s.shardContext.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.shardContext.GetShardID(),
+		NamespaceID: executionInfo.NamespaceId,
+		WorkflowID:  executionInfo.WorkflowId,
+		RunID:       mutableState.GetExecutionState().RunId,
+		ArchetypeID: mutableState.ChasmTree().ArchetypeID(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return workflow.NewMutableStateFromDB(
+		s.shardContext,
+		s.shardContext.GetEventsCache(),
+		s.logger,
+		mutableState.GetNamespaceEntry(),
+		response.State,
+		response.DBRecordVersion,
+	)
 }
 
 func (s *SyncStateRetrieverImpl) getMutation(

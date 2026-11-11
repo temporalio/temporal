@@ -733,18 +733,18 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	persist := true
+	policy := chasm.SpeculativeTransitionPolicy{Persist: true}
 	if speculative {
 		if err = execution.node.ApplySpeculativeTransition(ctx); err != nil {
 			return nil, err
 		}
-		if persist, err = execution.node.ShouldPersistSpeculativeTransition(ctx); err != nil {
+		if policy, err = execution.node.SpeculativeTransitionPolicy(ctx); err != nil {
 			return nil, err
 		}
 	}
 	// A speculative transition that isn't persisted leaves the transaction open: the next
 	// non-speculative transition closes it and generates the tasks.
-	if persist {
+	if policy.Persist {
 		if err = e.closeTransaction(ctx, execution); err != nil {
 			return nil, err
 		}

@@ -1612,6 +1612,22 @@ func (s *chasmEngineSuite) TestUpdateComponent_Speculative_NoPersistence() {
 	s.Equal("b", info.TaskQueue)
 }
 
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_NotifiesPollers() {
+	ref := s.loadRunningTestExecution(1)
+	notified, unsubscribe := s.engine.notifier.Subscribe(ref.ExecutionKey)
+	defer unsubscribe()
+
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }), chasm.WithSpeculative())
+	s.NoError(err)
+
+	select {
+	case <-notified:
+	default:
+		s.Fail("speculative update didn't notify pollers")
+	}
+}
+
 func (s *chasmEngineSuite) TestUpdateComponent_Speculative_FlushedByNextDurableUpdate() {
 	ref := s.loadRunningTestExecution(1)
 	persisted := &persistencespb.ActivityInfo{}

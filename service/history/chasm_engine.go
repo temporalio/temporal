@@ -519,26 +519,32 @@ func (e *ChasmEngine) applyUpdateWithLease(
 
 	e.setContextMetadata(ctx, chasmTree)
 
-	persist := true
+	policy := chasm.SpeculativeTransitionPolicy{Persist: true}
 	if transitionOptions.Speculative {
 		if err := chasmTree.ApplySpeculativeTransition(ctx); err != nil {
 			return nil, err
 		}
-		if persist, err = chasmTree.ShouldPersistSpeculativeTransition(ctx); err != nil {
+		if policy, err = chasmTree.SpeculativeTransitionPolicy(ctx); err != nil {
 			return nil, err
 		}
 	}
 
-	if persist {
+	if policy.Persist {
 		if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext); err != nil {
 			return nil, err
 		}
 	} else {
-		// Keep the transition in the cached mutable state only. It's persisted when a later
-		// non-speculative transaction closes; nothing here triggers a write.
-		// TODO: consider notifying PollComponent waiters (e.notifier.Notify) for speculative transitions.
+		// The transition stays in the cached mutable state until the next normal transaction closes.
 		if err := mutableState.SetChasmSpeculativeTransitionPending(); err != nil {
 			return nil, err
+		}
+		if policy.Notify {
+			workflowKey := mutableState.GetWorkflowKey()
+			e.NotifyExecution(chasm.ExecutionKey{
+				NamespaceID: workflowKey.NamespaceID,
+				BusinessID:  workflowKey.WorkflowID,
+				RunID:       workflowKey.RunID,
+			})
 		}
 	}
 

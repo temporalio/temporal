@@ -184,18 +184,16 @@ type UpdateWithStartExecutionResult[O any] struct {
 // EngineUpdateWithStartExecutionResult is a type alias for the result type returned by the UpdateWithStart Engine implementation.
 type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struct{}]
 
-// WithSpeculative applies the transition to the memory only. A transition that closes the execution is
-// persisted immediately instead.
+// WithSpeculative applies the transition to the memory only.
 //
 // A speculative transition is persisted when the next normal transition comes in. The caller must make that
 // a non speculative transition to persist. For example with a pure task that reschedules itself. Until then:
 //   - The transition is not durable. Cache eviction, a shard move, a host restart, or any error
 //     from a later transition on the execution drops it. Report normal rejections from the update
 //     function as output rather than as an error.
-//   - Reads see the transition while the execution is cached. PollComponent waiters are not
-//     notified of it.
+//   - Reads and PollComponent waiters see the transition while the execution is cached, so a
+//     waiter can see state that is later lost.
 //   - Immediate pure tasks run. Other tasks added by the transition are created when it is persisted.
-//   - Size and count limits are checked when it is persisted.
 func WithSpeculative() TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.Speculative = true
