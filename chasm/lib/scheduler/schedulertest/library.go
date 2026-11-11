@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -115,6 +116,8 @@ func NewRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 func NewTestLibrary(
 	config *scheduler.Config,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
 	specProcessor scheduler.SpecProcessor,
 	frontendClient workflowservice.WorkflowServiceClient,
 	historyClient resource.HistoryClient,
@@ -125,11 +128,12 @@ func NewTestLibrary(
 	)
 	invokerOpts := scheduler.InvokerTaskHandlerOptions{
 		Config:         config,
-		MetricsHandler: metrics.NoopMetricsHandler,
+		MetricsHandler: metricsHandler,
 		BaseLogger:     logger,
 		SpecProcessor:  specProcessor,
 		HistoryClient:  historyClient,
 		FrontendClient: frontendClient,
+		TimeSource:     timeSource,
 	}
 	return scheduler.NewLibrary(
 		config,

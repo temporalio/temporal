@@ -2,6 +2,8 @@ package schedulertest
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 )
 
 // Violation describes a single broken invariant.
@@ -69,6 +71,8 @@ func CheckInvariants(prev *Snapshot, cur Snapshot) []Violation {
 			cur.MaxActionsObserved, cur.MaxActionsPerExecution)
 	}
 
+	violations = append(violations, checkLedger(prev, cur)...)
+
 	if prev != nil {
 		// (3) Closed is terminal: a closed schedule must never reopen.
 		if prev.Closed && !cur.Closed {
@@ -118,4 +122,51 @@ func CheckInvariantsHook(t fataler) func(d *Driver) {
 		snap := cur
 		prev = &snap
 	}
+}
+
+// checkLedger checks that every start the scheduler buffered is either sent to
+// StartWorkflowExecution or discarded on purpose, and never lost to a close.
+func checkLedger(prev *Snapshot, cur Snapshot) []Violation {
+	var violations []Violation
+	add := func(name, format string, args ...any) {
+		violations = append(violations, Violation{Name: name, Message: fmt.Sprintf(format, args...)})
+	}
+
+	if cur.Migrating {
+		// A migration hands the buffer to the V1 workflow.
+		return nil
+	}
+
+	// Terminal half: a schedule never closes while a start it buffered is
+	// still waiting for InvokerExecuteTask (temporal#13016).
+	if cur.Closed && len(cur.PendingStarts) > 0 {
+		add("ledger-lost-start",
+			"scheduler closed with %d buffered start(s) never sent to StartWorkflowExecution: %v",
+			len(cur.PendingStarts), slices.Sorted(maps.Keys(cur.PendingStarts)))
+	}
+	if prev == nil {
+		return violations
+	}
+
+	// Conservation half: every start that leaves the buffer without a RunId was
+	// either sent to StartWorkflowExecution or discarded on purpose (overlap
+	// skip, missed catchup, paused/limited drop). Starts that are buffered and
+	// discarded within one transaction never appear pending, so the discard
+	// counters can only exceed the disappearances, never trail.
+	var silent []string
+	for id := range prev.PendingStarts {
+		_, still := cur.PendingStarts[id]
+		_, sent := cur.StartRequested[id]
+		if !still && !sent {
+			silent = append(silent, id)
+		}
+	}
+	discarded := (cur.OverlapSkipped - prev.OverlapSkipped) + (cur.DroppedStarts - prev.DroppedStarts)
+	if int64(len(silent)) > discarded {
+		slices.Sort(silent)
+		add("ledger-silent-drop",
+			"%d buffered start(s) left the buffer without a start RPC, but only %d discard(s) were recorded: %v",
+			len(silent), discarded, silent)
+	}
+	return violations
 }
