@@ -560,9 +560,11 @@ func (s *Scheduler) computeLastEventTime(ctx chasm.Context) time.Time {
 	// recentActions skips starts without a RunId. Count them by scheduled time,
 	// or the tick that buffers a schedule's final action can arm the idle task in
 	// the past and close it before InvokerExecuteTask runs.
-	for _, start := range s.Invoker.Get(ctx).GetBufferedStarts() {
-		if start.GetRunId() == "" {
-			latest = util.MaxTime(latest, start.GetActualTime().AsTime())
+	if tweakablesFromContext(ctx).EnablePendingStartIdleFix {
+		for _, start := range s.Invoker.Get(ctx).GetBufferedStarts() {
+			if start.GetRunId() == "" {
+				latest = util.MaxTime(latest, start.GetActualTime().AsTime())
+			}
 		}
 	}
 

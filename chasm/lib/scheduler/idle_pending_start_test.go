@@ -24,6 +24,52 @@ var (
 	pendingUnpauseTime = pendingCreateTime.Add(1265 * time.Millisecond)
 )
 
+func TestPendingStartIdleFix(t *testing.T) {
+	t.Parallel()
+	fire := pendingCreateTime.Add(idleWeek + time.Hour)
+	for _, tc := range []struct {
+		name                 string
+		enabled              bool
+		lastEventTime        time.Time
+		expectedDeadline     time.Time
+		expectedOldTaskValid bool
+	}{
+		{
+			name: "enabled", enabled: true, lastEventTime: pendingCreateTime,
+			expectedDeadline: fire.Add(idleWeek), expectedOldTaskValid: false,
+		},
+		{
+			name: "disabled", enabled: false, lastEventTime: pendingCreateTime,
+			expectedDeadline: pendingCreateTime.Add(idleWeek), expectedOldTaskValid: true,
+		},
+		{
+			name: "disabled after watermark persisted", enabled: false, lastEventTime: fire,
+			expectedDeadline: fire.Add(idleWeek), expectedOldTaskValid: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newTestEnv(t)
+			tweakables := scheduler.DefaultTweakables
+			tweakables.EnablePendingStartIdleFix = tc.enabled
+			ctx := scheduler.ContextWithTweakables(env.ReadContext(), tweakables)
+			sched := env.Scheduler
+			anchorLastEventTo(sched, pendingCreateTime)
+			sched.LastEventTime = timestamppb.New(tc.lastEventTime)
+			sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+				ActualTime: timestamppb.New(fire),
+			}}
+
+			require.Equal(t, tc.expectedDeadline, sched.IdleDeadline(ctx, idleWeek))
+			valid, err := newIdleHandler(idleWeek).Validate(ctx, sched, chasm.TaskInvocation{
+				TaskAttributes: chasm.TaskAttributes{ScheduledTime: pendingCreateTime.Add(idleWeek)},
+			}, &schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(idleWeek)})
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOldTaskValid, valid)
+		})
+	}
+}
+
 func oneShotSpec(fire time.Time) *schedulepb.ScheduleSpec {
 	r := func(v int) []*schedulepb.Range { return []*schedulepb.Range{{Start: int32(v)}} }
 	return &schedulepb.ScheduleSpec{
