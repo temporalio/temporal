@@ -293,5 +293,6 @@ func backfillerBufferCapacity(bufferedCount, retainedActionCount, maxBufferSize,
 	backfillerCount = max(1, backfillerCount)
 	pending := max(0, bufferedCount-retainedActionCount)
 	available := max(0, (maxBufferSize/2)-pending-generatorReserve)
-	return available / backfillerCount
+	// Pure tasks serialize on the tree and recompute the shared budget after each enqueue.
+	return min(available, max(1, available/backfillerCount))
 }
