@@ -123,6 +123,18 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 	i.TerminateWorkflows = append(i.GetTerminateWorkflows(), result.terminateWorkflows...)
 	i.LastProcessedTime = timestamppb.New(ctx.Now(i))
 
+	// A discarded selection cannot produce the completion that would release
+	// deferred work. Reconsider it while each pass removes at least one start.
+	if len(discards) > 0 && !slices.ContainsFunc(starts, func(start *schedulespb.BufferedStart) bool {
+		return start.GetCompleted() == nil && (start.GetRunId() != "" || start.GetAttempt() > 0)
+	}) {
+		for _, start := range starts {
+			if start.GetAttempt() == -1 {
+				start.Attempt = 0
+			}
+		}
+	}
+
 	// Re-arm tasks if this call changed state, or if the LastProcessedTime advance
 	// just unblocked backed-off starts.
 	i.addTasks(ctx)

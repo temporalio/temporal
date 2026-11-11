@@ -580,3 +580,81 @@ func TestProcessBufferTask_NeedsCancel(t *testing.T) {
 		ExpectedCancelWorkflows:  1,
 	})
 }
+
+// When a BUFFER_ALL start is discarded after being selected (here, for missing
+// the catchup window), no workflow runs whose completion would release the
+// starts deferred behind it. ProcessBuffer must reconsider them instead of
+// leaving them deferred with no task to wake them.
+func TestProcessBufferTask_DiscardedSelectionReleasesDeferredStarts(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	expired := timestamppb.New(now.Add(-defaultCatchupWindow * 2))
+	current := timestamppb.New(now)
+
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{
+			{
+				NominalTime:   expired,
+				ActualTime:    expired,
+				DesiredTime:   expired,
+				RequestId:     "expired",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			},
+			{
+				NominalTime:   current,
+				ActualTime:    current,
+				DesiredTime:   current,
+				RequestId:     "deferred",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			},
+		},
+		ExpectedBufferedStarts:      1,
+		ExpectedMissedCatchupWindow: 1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			remaining := invoker.GetBufferedStarts()[0]
+			require.Equal(t, "deferred", remaining.RequestId)
+			require.Equal(t, int64(1), remaining.Attempt, "remaining start must be readied, not left deferred")
+		},
+	})
+}
+
+// A discard must not release deferred starts while a workflow is still running:
+// that workflow's completion is what releases them.
+func TestProcessBufferTask_DiscardKeepsDeferredBehindRunningStart(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	expired := timestamppb.New(now.Add(-defaultCatchupWindow * 2))
+	current := timestamppb.New(now)
+
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{
+			{
+				NominalTime:   expired,
+				ActualTime:    expired,
+				DesiredTime:   expired,
+				RequestId:     "expired",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+			{
+				NominalTime:   current,
+				ActualTime:    current,
+				DesiredTime:   current,
+				RequestId:     "deferred",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			},
+		},
+		InitialRunningWorkflows:     []*commonpb.WorkflowExecution{{WorkflowId: "running", RunId: "running-run"}},
+		ExpectedBufferedStarts:      1,
+		ExpectedRunningWorkflows:    1,
+		ExpectedMissedCatchupWindow: 1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			for _, start := range invoker.GetBufferedStarts() {
+				if start.RequestId == "deferred" {
+					require.Equal(t, int64(-1), start.Attempt, "start must wait for the running workflow's completion")
+					return
+				}
+			}
+			require.Fail(t, "deferred start missing from buffer")
+		},
+	})
+}
