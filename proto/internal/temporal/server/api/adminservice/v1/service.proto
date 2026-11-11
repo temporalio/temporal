@@ -242,8 +242,7 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
-  // MigrateWorkerControllerInstance moves a CHASM-backed worker controller instance back to its workflow.
-  // Moving to CHASM is gated by dynamic config, not this RPC.
+  // MigrateWorkerControllerInstance moves one worker controller instance to the requested backend.
   rpc MigrateWorkerControllerInstance(MigrateWorkerControllerInstanceRequest) returns (MigrateWorkerControllerInstanceResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }

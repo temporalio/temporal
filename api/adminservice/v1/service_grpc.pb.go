@@ -170,8 +170,7 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
-	// MigrateWorkerControllerInstance moves a CHASM-backed worker controller instance back to its workflow.
-	// Moving to CHASM is gated by dynamic config, not this RPC.
+	// MigrateWorkerControllerInstance moves one worker controller instance to the requested backend.
 	MigrateWorkerControllerInstance(ctx context.Context, in *MigrateWorkerControllerInstanceRequest, opts ...grpc.CallOption) (*MigrateWorkerControllerInstanceResponse, error)
 	// ListWorkerControllerInstances lists CHASM-backed worker controller instances, filtering and
 	// returning their CHASM search attributes, which ListExecutions can't resolve.
@@ -766,8 +765,7 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
-	// MigrateWorkerControllerInstance moves a CHASM-backed worker controller instance back to its workflow.
-	// Moving to CHASM is gated by dynamic config, not this RPC.
+	// MigrateWorkerControllerInstance moves one worker controller instance to the requested backend.
 	MigrateWorkerControllerInstance(context.Context, *MigrateWorkerControllerInstanceRequest) (*MigrateWorkerControllerInstanceResponse, error)
 	// ListWorkerControllerInstances lists CHASM-backed worker controller instances, filtering and
 	// returning their CHASM search attributes, which ListExecutions can't resolve.
