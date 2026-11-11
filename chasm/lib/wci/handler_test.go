@@ -1153,7 +1153,7 @@ func TestE2E_ForwardWhileMigratingBackIsQueued(t *testing.T) {
 	require.Len(t, migrationTokenRequest(t, e.history.updates[0]).TaskAdds, 2, "sent to the workflow with the activation")
 }
 
-func TestE2E_AbortAndExpiryCloseThePendingTarget(t *testing.T) {
+func TestE2E_AbortAndActivationDeadlineCloseThePendingTarget(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	require.NoError(t, e.prepare(testToken, time.Minute))
 	require.NoError(t, e.abort(testToken))
@@ -1162,11 +1162,11 @@ func TestE2E_AbortAndExpiryCloseThePendingTarget(t *testing.T) {
 	require.NoError(t, e.prepare("run-2", time.Minute), "an aborted target does not block the next migration")
 
 	w, _ := e.live(t)
-	dropped, err := chasmtest.ExecutePureTask(e.ctx, e.engine, w, &PendingExpiryTaskHandler{}, chasm.TaskAttributes{}, &wcipb.PendingExpiryTask{ExpireTime: w.PendingExpireTime})
+	dropped, err := chasmtest.ExecutePureTask(e.ctx, e.engine, w, &ActivationDeadlineTaskHandler{}, chasm.TaskAttributes{}, &wcipb.ActivationDeadlineTask{Deadline: w.ActivationDeadline})
 	require.NoError(t, err)
 	require.False(t, dropped)
 	w, _ = e.live(t)
-	require.Equal(t, wcipb.WCI_STATUS_MIGRATION_ABORTED, w.Status, "an unactivated target expires")
+	require.Equal(t, wcipb.WCI_STATUS_MIGRATION_ABORTED, w.Status, "an unactivated target aborts at its deadline")
 	require.ErrorIs(t, e.activate("run-2", 0), ErrMigrationNotPending)
 }
 

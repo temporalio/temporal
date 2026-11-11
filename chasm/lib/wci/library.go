@@ -86,7 +86,7 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace)),
 		chasm.NewRegistrableSideEffectTask("scalingGroupBackoff", &ScalingGroupBackoffTaskHandler{},
 			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace)),
-		chasm.NewRegistrablePureTask("pendingExpiry", &PendingExpiryTaskHandler{}),
+		chasm.NewRegistrablePureTask("activationDeadline", &ActivationDeadlineTaskHandler{}),
 		chasm.NewRegistrableSideEffectTask("deferredDecision", l.DeferredDecisionTaskHandler),
 		chasm.NewRegistrableSideEffectTask("validateSpec", l.ValidateSpecTaskHandler,
 			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace)),

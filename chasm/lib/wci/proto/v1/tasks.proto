@@ -16,9 +16,9 @@ message MetricsPollTimerTask {
   google.protobuf.Timestamp poll_time = 1;
 }
 
-// Pure. Fires at pending_expire_time; aborts a migration that was never activated.
-message PendingExpiryTask {
-  google.protobuf.Timestamp expire_time = 1;
+// Pure. Fires at activation_deadline; aborts a migration target that was never activated.
+message ActivationDeadlineTask {
+  google.protobuf.Timestamp deadline = 1;
 }
 
 // Side-effect. Fetches a snapshot, then ProcessDeferredScalingDecision.

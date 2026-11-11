@@ -237,16 +237,16 @@ func TestConstructorsArmTimers(t *testing.T) {
 	var timers []string
 	for _, task := range ctx.Tasks {
 		switch task.Payload.(type) {
-		case *wcipb.PendingExpiryTask, *wcipb.MetricsPollTimerTask, *wcipb.ValidateSpecTask:
+		case *wcipb.ActivationDeadlineTask, *wcipb.MetricsPollTimerTask, *wcipb.ValidateSpecTask:
 			timers = append(timers, fmt.Sprintf("%T", task.Payload))
 		default:
 		}
 	}
-	require.Equal(t, []string{"*wcipb.PendingExpiryTask"}, timers)
+	require.Equal(t, []string{"*wcipb.ActivationDeadlineTask"}, timers)
 	require.NoError(t, TransitionMigrationActivated.Apply(m, ctx, EventMigrationActivated{}))
 	require.Equal(t, testNow, m.NextPollTime.AsTime())
 	require.Equal(t, testNow.Add(validationInterval), m.NextValidationTime.AsTime())
-	require.Nil(t, m.PendingExpireTime)
+	require.Nil(t, m.ActivationDeadline)
 }
 
 func TestSnapshotFromDescribe(t *testing.T) {

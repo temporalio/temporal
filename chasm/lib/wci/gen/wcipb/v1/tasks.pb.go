@@ -70,28 +70,28 @@ func (x *MetricsPollTimerTask) GetPollTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// Pure. Fires at pending_expire_time; aborts a migration that was never activated.
-type PendingExpiryTask struct {
+// Pure. Fires at activation_deadline; aborts a migration target that was never activated.
+type ActivationDeadlineTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	Deadline      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=deadline,proto3" json:"deadline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PendingExpiryTask) Reset() {
-	*x = PendingExpiryTask{}
+func (x *ActivationDeadlineTask) Reset() {
+	*x = ActivationDeadlineTask{}
 	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PendingExpiryTask) String() string {
+func (x *ActivationDeadlineTask) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PendingExpiryTask) ProtoMessage() {}
+func (*ActivationDeadlineTask) ProtoMessage() {}
 
-func (x *PendingExpiryTask) ProtoReflect() protoreflect.Message {
+func (x *ActivationDeadlineTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -103,14 +103,14 @@ func (x *PendingExpiryTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PendingExpiryTask.ProtoReflect.Descriptor instead.
-func (*PendingExpiryTask) Descriptor() ([]byte, []int) {
+// Deprecated: Use ActivationDeadlineTask.ProtoReflect.Descriptor instead.
+func (*ActivationDeadlineTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *PendingExpiryTask) GetExpireTime() *timestamppb.Timestamp {
+func (x *ActivationDeadlineTask) GetDeadline() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ExpireTime
+		return x.Deadline
 	}
 	return nil
 }
@@ -493,9 +493,8 @@ const file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDesc = "" +
 	"2temporal/server/chasm/lib/wci/proto/v1/tasks.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a4temporal/server/chasm/lib/wci/proto/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/enums/v1/task_queue.proto\"O\n" +
 	"\x14MetricsPollTimerTask\x127\n" +
 	"\tpoll_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bpollTime\"P\n" +
-	"\x11PendingExpiryTask\x12;\n" +
-	"\vexpire_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"\xe9\x01\n" +
+	"\x16ActivationDeadlineTask\x126\n" +
+	"\bdeadline\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\"\xe9\x01\n" +
 	"\x14DeferredDecisionTask\x12(\n" +
 	"\x10scaling_group_id\x18\x01 \x01(\tR\x0escalingGroupId\x12O\n" +
 	"\btask_add\x18\x02 \x01(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\ataskAdd\x12V\n" +
@@ -532,7 +531,7 @@ func file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDescGZIP() []byt
 var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_goTypes = []any{
 	(*MetricsPollTimerTask)(nil),      // 0: temporal.server.chasm.lib.wci.proto.v1.MetricsPollTimerTask
-	(*PendingExpiryTask)(nil),         // 1: temporal.server.chasm.lib.wci.proto.v1.PendingExpiryTask
+	(*ActivationDeadlineTask)(nil),    // 1: temporal.server.chasm.lib.wci.proto.v1.ActivationDeadlineTask
 	(*DeferredDecisionTask)(nil),      // 2: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask
 	(*ValidateSpecTask)(nil),          // 3: temporal.server.chasm.lib.wci.proto.v1.ValidateSpecTask
 	(*SignalVersionWorkflowTask)(nil), // 4: temporal.server.chasm.lib.wci.proto.v1.SignalVersionWorkflowTask
@@ -547,7 +546,7 @@ var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_goTypes = []any{
 }
 var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_depIdxs = []int32{
 	10, // 0: temporal.server.chasm.lib.wci.proto.v1.MetricsPollTimerTask.poll_time:type_name -> google.protobuf.Timestamp
-	10, // 1: temporal.server.chasm.lib.wci.proto.v1.PendingExpiryTask.expire_time:type_name -> google.protobuf.Timestamp
+	10, // 1: temporal.server.chasm.lib.wci.proto.v1.ActivationDeadlineTask.deadline:type_name -> google.protobuf.Timestamp
 	11, // 2: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask.task_add:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
 	12, // 3: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask.effective_task_types:type_name -> temporal.api.enums.v1.TaskQueueType
 	10, // 4: temporal.server.chasm.lib.wci.proto.v1.ValidateSpecTask.validation_time:type_name -> google.protobuf.Timestamp

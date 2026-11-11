@@ -42,35 +42,35 @@ func (this *MetricsPollTimerTask) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type PendingExpiryTask to the protobuf v3 wire format
-func (val *PendingExpiryTask) Marshal() ([]byte, error) {
+// Marshal an object of type ActivationDeadlineTask to the protobuf v3 wire format
+func (val *ActivationDeadlineTask) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type PendingExpiryTask from the protobuf v3 wire format
-func (val *PendingExpiryTask) Unmarshal(buf []byte) error {
+// Unmarshal an object of type ActivationDeadlineTask from the protobuf v3 wire format
+func (val *ActivationDeadlineTask) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *PendingExpiryTask) Size() int {
+func (val *ActivationDeadlineTask) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two PendingExpiryTask values are equivalent by recursively
+// Equal returns whether two ActivationDeadlineTask values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *PendingExpiryTask) Equal(that interface{}) bool {
+func (this *ActivationDeadlineTask) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *PendingExpiryTask
+	var that1 *ActivationDeadlineTask
 	switch t := that.(type) {
-	case *PendingExpiryTask:
+	case *ActivationDeadlineTask:
 		that1 = t
-	case PendingExpiryTask:
+	case ActivationDeadlineTask:
 		that1 = &t
 	default:
 		return false

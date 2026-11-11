@@ -56,7 +56,7 @@ var TransitionMigrationActivated = chasm.NewTransition(
 	[]wcipb.WciStatus{wcipb.WCI_STATUS_PENDING_ACTIVATION},
 	wcipb.WCI_STATUS_RUNNING,
 	func(w *WorkerControllerInstance, ctx chasm.MutableContext, _ EventMigrationActivated) error {
-		w.PendingExpireTime = nil
+		w.ActivationDeadline = nil
 		w.ActivatedMigrationToken = w.MigrationToken
 		// Keeps the workflow's conflict token, so in-flight updates still match.
 		w.LastUpdateTime = timestamppb.New(ctx.Now(w))
@@ -73,7 +73,7 @@ var TransitionPendingMigrationAborted = chasm.NewTransition(
 	[]wcipb.WciStatus{wcipb.WCI_STATUS_PENDING_ACTIVATION},
 	wcipb.WCI_STATUS_MIGRATION_ABORTED,
 	func(w *WorkerControllerInstance, _ chasm.MutableContext, _ EventPendingMigrationAborted) error {
-		w.PendingExpireTime = nil
+		w.ActivationDeadline = nil
 		return nil
 	},
 )

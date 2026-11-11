@@ -115,7 +115,7 @@ func NewWorkerControllerInstance(
 }
 
 // NewWorkerControllerInstanceFromMigration restores migrated state as a pending target: no timers,
-// no scaling, invisible to clients until TransitionMigrationActivated; it aborts itself at expireTime.
+// no scaling, invisible to clients until TransitionMigrationActivated; it aborts itself at expireTime, its activation deadline.
 func NewWorkerControllerInstanceFromMigration(
 	ctx chasm.MutableContext,
 	state *wcipb.WorkerControllerInstanceState,
@@ -130,12 +130,12 @@ func NewWorkerControllerInstanceFromMigration(
 	}
 	w.Status = wcipb.WCI_STATUS_PENDING_ACTIVATION
 	w.MigrationToken = token
-	w.PendingExpireTime = timestamppb.New(expireTime)
+	w.ActivationDeadline = timestamppb.New(expireTime)
 	for id, group := range groups {
 		group.Id = id
 		w.ScalingGroups[id] = chasm.NewComponentField(ctx, &ScalingGroup{ScalingGroupState: group})
 	}
-	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: expireTime}, &wcipb.PendingExpiryTask{ExpireTime: timestamppb.New(expireTime)})
+	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: expireTime}, &wcipb.ActivationDeadlineTask{Deadline: timestamppb.New(expireTime)})
 	return w
 }
 

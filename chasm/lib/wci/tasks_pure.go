@@ -6,25 +6,25 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// PendingExpiryTaskHandler aborts a pending migration target its coordinator never activated.
-type PendingExpiryTaskHandler struct {
+// ActivationDeadlineTaskHandler aborts a pending migration target its coordinator never activated.
+type ActivationDeadlineTaskHandler struct {
 	chasm.PureTaskHandlerBase
 }
 
-func (h *PendingExpiryTaskHandler) Validate(
+func (h *ActivationDeadlineTaskHandler) Validate(
 	_ chasm.Context,
 	w *WorkerControllerInstance,
 	_ chasm.TaskInvocation,
-	task *wcipb.PendingExpiryTask,
+	task *wcipb.ActivationDeadlineTask,
 ) (bool, error) {
-	return w.Status == wcipb.WCI_STATUS_PENDING_ACTIVATION && proto.Equal(task.GetExpireTime(), w.PendingExpireTime), nil
+	return w.Status == wcipb.WCI_STATUS_PENDING_ACTIVATION && proto.Equal(task.GetDeadline(), w.ActivationDeadline), nil
 }
 
-func (h *PendingExpiryTaskHandler) Execute(
+func (h *ActivationDeadlineTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	w *WorkerControllerInstance,
 	_ chasm.TaskAttributes,
-	_ *wcipb.PendingExpiryTask,
+	_ *wcipb.ActivationDeadlineTask,
 ) error {
 	return TransitionPendingMigrationAborted.Apply(w, ctx, EventPendingMigrationAborted{})
 }
