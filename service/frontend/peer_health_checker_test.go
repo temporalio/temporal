@@ -158,6 +158,8 @@ func TestSamplePeerHosts(t *testing.T) {
 		{name: "ten hosts half", n: 10, pct: 0.5, maxHosts: 20, want: 5},
 		{name: "hundred hosts capped by max", n: 100, pct: 0.5, maxHosts: 20, want: 20},
 		{name: "full percentage capped by max", n: 100, pct: 1, maxHosts: 20, want: 20},
+		{name: "negative max", n: 10, pct: 0.5, maxHosts: -1, want: 0},
+		{name: "zero max", n: 10, pct: 0.5, maxHosts: 0, want: 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			hosts := testPeerHosts("host", tc.n)
@@ -184,6 +186,29 @@ func TestSamplePeerHosts(t *testing.T) {
 			require.Equal(t, before[i], h.GetAddress())
 		}
 	})
+}
+
+func TestPeerHealthCheckConfigFallbacks(t *testing.T) {
+	bad := testPeerHealthCheckConfig(-1, -1, 2, 0, -time.Second)
+	c := newPeerTestChecker(nil, nil, bad)
+	require.Equal(t, defaultPeerHealthCheckProbeTimeout, c.probeTimeout())
+	require.Equal(t, defaultPeerHealthCheckRoundTimeout, c.roundTimeout())
+	require.InDelta(t, defaultPeerHealthCheckSamplePercentage, c.samplePercentage(), 1e-9)
+	require.InDelta(t, defaultPeerHealthCheckFailureThreshold, c.failureThreshold(), 1e-9)
+	require.Equal(t, defaultPeerHealthCheckMaxHostsPerRole, c.maxHostsPerRole())
+	bad.MinFailedHosts = dynamicconfig.GetIntPropertyFn(0)
+	require.Equal(t, defaultPeerHealthCheckMinFailedHosts, newPeerTestChecker(nil, nil, bad).minFailedHosts())
+
+	good := testPeerHealthCheckConfig(0.8, 7, 1, 2*time.Second, 3*time.Second)
+	c = newPeerTestChecker(nil, nil, good)
+	require.Equal(t, 2*time.Second, c.probeTimeout())
+	require.Equal(t, 3*time.Second, c.roundTimeout())
+	require.InDelta(t, 0.8, c.samplePercentage(), 1e-9)
+	require.InDelta(t, 1.0, c.failureThreshold(), 1e-9)
+	require.Equal(t, 7, c.maxHostsPerRole())
+	require.Equal(t, 2, c.minFailedHosts())
+	good.MinFailedHosts = dynamicconfig.GetIntPropertyFn(3)
+	require.Equal(t, 3, newPeerTestChecker(nil, nil, good).minFailedHosts())
 }
 
 func TestRunRound_AllHealthy(t *testing.T) {
