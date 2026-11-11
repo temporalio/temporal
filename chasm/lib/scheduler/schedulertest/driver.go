@@ -480,8 +480,7 @@ func (d *Driver) StepSideEffect() bool {
 		// A NotFound means the logical task was superseded/removed before
 		// dispatch (the backend accumulates physical tasks append-only, so a
 		// stale one can linger). Production drops these; so do we.
-		var notFound *serviceerror.NotFound
-		if !errors.As(execErr, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](execErr); !ok {
 			d.T.Fatalf("ExecuteSideEffectTask failed: %v", execErr)
 		}
 	}
