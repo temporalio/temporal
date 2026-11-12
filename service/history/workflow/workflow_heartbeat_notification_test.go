@@ -8,7 +8,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/service/history/historybuilder"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -85,7 +84,6 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED},
 			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED},
 			bufferedTypes: []string{"NexusOperationCompleted"},
-			firstType:     "NexusOperationCompleted",
 		},
 		{
 			name:      "workflow task not started",
@@ -116,15 +114,7 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 				mutableState.EXPECT().HasStartedWorkflowTask().Return(tc.started)
 			}
 			if tc.started && (len(tc.bufferedTypes) > 0 || tc.nilNamespace) {
-				mutableState.EXPECT().CountBufferedEvents(gomock.Any()).DoAndReturn(func(filter historybuilder.BufferedEventFilter) int {
-					count := 0
-					for _, eventType := range append(tc.priorEvents, tc.newEvents...) {
-						if filter(&historypb.HistoryEvent{EventType: eventType}) {
-							count++
-						}
-					}
-					return count
-				})
+				mutableState.EXPECT().NumBufferedEvents().Return(len(tc.priorEvents) + len(tc.newEvents))
 				namespaceEntry := tests.GlobalNamespaceEntry
 				if tc.nilNamespace {
 					namespaceEntry = nil

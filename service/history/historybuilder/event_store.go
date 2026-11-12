@@ -153,18 +153,6 @@ func (b *EventStore) NumBufferedEvents() int {
 	return len(b.dbBufferBatch) + len(b.memBufferBatch)
 }
 
-func (b *EventStore) CountBufferedEvents(predicate BufferedEventFilter) int {
-	count := 0
-	for _, batch := range [][]*historypb.HistoryEvent{b.dbBufferBatch, b.memBufferBatch} {
-		for _, event := range batch {
-			if predicate(event) {
-				count++
-			}
-		}
-	}
-	return count
-}
-
 func (b *EventStore) SizeInBytesOfBufferedEvents() int {
 	size := 0
 	for _, ev := range b.dbBufferBatch {

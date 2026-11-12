@@ -1909,20 +1909,6 @@ func (mr *MockMutableStateMockRecorder) ContinueAsNewMinBackoff(backoffDuration 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContinueAsNewMinBackoff", reflect.TypeOf((*MockMutableState)(nil).ContinueAsNewMinBackoff), backoffDuration)
 }
 
-// CountBufferedEvents mocks base method.
-func (m *MockMutableState) CountBufferedEvents(filter historybuilder.BufferedEventFilter) int {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CountBufferedEvents", filter)
-	ret0, _ := ret[0].(int)
-	return ret0
-}
-
-// CountBufferedEvents indicates an expected call of CountBufferedEvents.
-func (mr *MockMutableStateMockRecorder) CountBufferedEvents(filter any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).CountBufferedEvents), filter)
-}
-
 // CurrentStorageUsage mocks base method.
 func (m *MockMutableState) CurrentStorageUsage() *persistence.StorageUsage {
 	m.ctrl.T.Helper()
@@ -3445,6 +3431,20 @@ func (m *MockMutableState) Now() time.Time {
 func (mr *MockMutableStateMockRecorder) Now() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockMutableState)(nil).Now))
+}
+
+// NumBufferedEvents mocks base method.
+func (m *MockMutableState) NumBufferedEvents() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumBufferedEvents")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumBufferedEvents indicates an expected call of NumBufferedEvents.
+func (mr *MockMutableStateMockRecorder) NumBufferedEvents() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).NumBufferedEvents))
 }
 
 // PopTasks mocks base method.

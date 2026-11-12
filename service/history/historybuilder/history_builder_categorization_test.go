@@ -503,29 +503,6 @@ func TestHistoryBuilder_NumBufferedEvents(t *testing.T) {
 	})
 }
 
-func TestHistoryBuilder_CountBufferedEvents(t *testing.T) {
-	isTimerFired := func(e *historypb.HistoryEvent) bool {
-		return e.GetEventType() == enumspb.EVENT_TYPE_TIMER_FIRED
-	}
-
-	t.Run("empty buffers", func(t *testing.T) {
-		require.Equal(t, 0, newSUT().CountBufferedEvents(isTimerFired))
-	})
-
-	t.Run("matching events in dbBuffer and memBuffer", func(t *testing.T) {
-		s := historyBuilderWithTimerEventsInDbBuffer("timer-1", "timer-2")
-		s.AddTimerFiredEvent()
-		s.AddActivityTaskStartedEvent()
-		require.Equal(t, 3, s.CountBufferedEvents(isTimerFired))
-	})
-
-	t.Run("no matching events", func(t *testing.T) {
-		s := newSUT()
-		s.AddActivityTaskStartedEvent()
-		require.Equal(t, 0, s.CountBufferedEvents(isTimerFired))
-	})
-}
-
 func TestHistoryBuilder_AddDifferentEvents_WorkflowFinishEvents(t *testing.T) {
 	sut := newSUT()
 	assertWorkflowFinished := func(t *testing.T, s sutTestingAdapter) {

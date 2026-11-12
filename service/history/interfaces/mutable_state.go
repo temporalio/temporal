@@ -225,7 +225,7 @@ type (
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
 		HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool
-		CountBufferedEvents(filter historybuilder.BufferedEventFilter) int
+		NumBufferedEvents() int
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
