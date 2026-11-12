@@ -30,8 +30,29 @@ type config struct {
 	saltEnv        string
 }
 
+var defaults = struct {
+	sync.Mutex
+	cfg config
+}{
+	cfg: config{
+		totalShardsEnv: "TEST_TOTAL_SHARDS",
+		shardIndexEnv:  "TEST_SHARD_INDEX",
+		saltEnv:        "TEST_SHARD_SALT",
+	},
+}
+
 // Option configures shard selection.
 type Option func(*config)
+
+// SetDefaults updates process-wide defaults. Call it before starting tests.
+// Per-call options override these defaults; environment values are read on each FromEnv call.
+func SetDefaults(options ...Option) {
+	defaults.Lock()
+	defer defaults.Unlock()
+	for _, option := range options {
+		option(&defaults.cfg)
+	}
+}
 
 // WithSalt sets the default sharding salt. A non-empty salt environment variable overrides it.
 func WithSalt(salt string) Option {
@@ -54,16 +75,15 @@ func WithSaltEnv(name string) Option {
 }
 
 // FromEnv reads TEST_TOTAL_SHARDS and the zero-based TEST_SHARD_INDEX by default.
+// SetDefaults supplies defaults, which per-call options can override.
 // Sharding is disabled when either configured variable is empty.
 // A non-empty salt is required when sharding is enabled.
 // A non-empty salt environment variable overrides the salt supplied with WithSalt.
 // The salt is appended to the full test name before hashing with FarmHash Fingerprint32.
 func FromEnv(options ...Option) (Shard, error) {
-	cfg := config{
-		totalShardsEnv: "TEST_TOTAL_SHARDS",
-		shardIndexEnv:  "TEST_SHARD_INDEX",
-		saltEnv:        "TEST_SHARD_SALT",
-	}
+	defaults.Lock()
+	cfg := defaults.cfg
+	defaults.Unlock()
 	for _, option := range options {
 		option(&cfg)
 	}
