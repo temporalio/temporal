@@ -21,7 +21,7 @@ var MinWorkerHeartbeatTimeout = dynamicconfig.NewNamespaceDurationSetting(
 
 var WorkerGroupRetention = dynamicconfig.NewNamespaceDurationSetting(
 	"worker.groupRetention",
-	0,
+	24*time.Hour,
 	`How long closed worker groups are kept. Non-positive values use namespace retention. Namespace minimum retention still applies.`,
 )
 

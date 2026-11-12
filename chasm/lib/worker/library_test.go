@@ -12,14 +12,20 @@ import (
 )
 
 // TestWorkerGroupRetention verifies that registration uses the namespace's configured
-// worker-group retention and leaves namespace retention in effect when unset.
+// worker-group retention, including the default and explicit namespace fallback.
 func TestWorkerGroupRetention(t *testing.T) {
 	t.Parallel()
 	client := dynamicconfig.NewMemoryClient()
-	client.OverrideSetting(WorkerGroupRetention, []dynamicconfig.ConstrainedValue{{
-		Constraints: dynamicconfig.Constraints{Namespace: "custom-retention"},
-		Value:       6 * time.Hour,
-	}})
+	client.OverrideSetting(WorkerGroupRetention, []dynamicconfig.ConstrainedValue{
+		{
+			Constraints: dynamicconfig.Constraints{Namespace: "custom-retention"},
+			Value:       48 * time.Hour,
+		},
+		{
+			Constraints: dynamicconfig.Constraints{Namespace: "namespace-retention"},
+			Value:       time.Duration(0),
+		},
+	})
 	config := configProvider(dynamicconfig.NewCollection(client, log.NewNoopLogger()))
 	group := newLibrary(nil, config).Components()[0]
 	for _, tc := range []struct {
@@ -27,7 +33,8 @@ func TestWorkerGroupRetention(t *testing.T) {
 		retention  time.Duration
 		overridden bool
 	}{
-		{name: "custom-retention", retention: 6 * time.Hour, overridden: true},
+		{name: "default-retention", retention: 24 * time.Hour, overridden: true},
+		{name: "custom-retention", retention: 48 * time.Hour, overridden: true},
 		{name: "namespace-retention"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
