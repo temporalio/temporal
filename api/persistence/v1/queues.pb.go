@@ -132,8 +132,8 @@ type QueueReaderState struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Scopes []*QueueSliceScope     `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	// Lanes owned by this reader in addition to its scopes. Only replication stream
-	// readers use lanes. While lanes exist, scopes start no later than the earliest
-	// lane, so a reader that ignores lanes still covers every lane's tasks.
+	// readers use lanes. While lanes exist, the overall and HIGH-priority scopes cover
+	// every lane's resume position, so readers that ignore lanes can replay all lane tasks.
 	Lanes []*QueueReaderLane `protobuf:"bytes,2,rep,name=lanes,proto3" json:"lanes,omitempty"`
 	// Resume position of the replication HIGH priority default lane while lanes exist.
 	// Unset when the reader has no lanes.

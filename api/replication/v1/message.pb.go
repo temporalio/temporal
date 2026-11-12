@@ -429,28 +429,28 @@ type SyncReplicationState struct {
 	// stream's shard. A sender's lane policy may use them to decide which lanes exist.
 	// The open-source receiver reports none; a LaneFeedbackProvider supplies them.
 	ThrottleHighNamespaceIds []string `protobuf:"bytes,5,rep,name=throttle_high_namespace_ids,json=throttleHighNamespaceIds,proto3" json:"throttle_high_namespace_ids,omitempty"`
-	// Obsolete: no sender reads it. Receivers from before replication lanes set it, so
-	// the number must never be reused. Lanes report progress in lane_states.
+	// Applied watermarks for the legacy namespace-isolation protocol, keyed by namespace ID.
+	// Legacy fields 6 and 7 are retained for wire compatibility; their numbers must not be reused.
+	// New replication lanes report progress in lane_states.
 	IsolatedLaneStates map[string]*ReplicationState `protobuf:"bytes,6,rep,name=isolated_lane_states,json=isolatedLaneStates,proto3" json:"isolated_lane_states,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Obsolete: no sender reads it, and it must never be taken as lane support.
-	// Receivers from before replication lanes set it to true in tiered mode, so the
-	// number must never be reused. Lane support is lane_protocol_version.
+	// Capability advertisement for the legacy namespace-isolation protocol.
+	// Legacy tiered receivers set this to true. New lanes use lane_protocol_version.
 	SupportsNamespaceIsolation bool `protobuf:"varint,7,opt,name=supports_namespace_isolation,json=supportsNamespaceIsolation,proto3" json:"supports_namespace_isolation,omitempty"`
 	// Low watermarks of the lanes identified by WorkflowReplicationMessages.lane_info,
-	// keyed by lane ID. A missing lane ID does not show that the lane has drained. The
-	// sender only treats a lane as drained after it has retired that lane. Each state's
-	// flow_control_command pauses or resumes that lane alone; the sender also stops every
-	// lane while high_priority_state is paused.
+	// keyed by lane ID. A missing lane ID is not proof of drainage. Completing retirement
+	// requires an acknowledged watermark covering the lane's retirement boundary.
+	// Each state's flow_control_command pauses or resumes that lane alone;
+	// the sender also stops every lane while high_priority_state is paused.
 	LaneStates map[string]*ReplicationState `protobuf:"bytes,8,rep,name=lane_states,json=laneStates,proto3" json:"lane_states,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Version of the replication lane protocol that the receiver supports. Zero means
 	// the receiver does not support lanes. The sender sets
 	// WorkflowReplicationMessages.lane_info only when this is at least 1.
 	LaneProtocolVersion int32 `protobuf:"varint,9,opt,name=lane_protocol_version,json=laneProtocolVersion,proto3" json:"lane_protocol_version,omitempty"`
-	// Feedback from the receiver for the sender's lane policy, such as per-namespace
-	// health. Open source never sets or reads it: a LaneFeedbackProvider on the receiver
-	// produces it and a lane policy on the sender consumes it. The type URL versions the
-	// contents, and a policy ignores types it does not know. At most 4 KB, because it
-	// rides on stream acks.
+	// Opaque receiver feedback for the sender's lane policy, such as per-namespace health.
+	// A LaneFeedbackProvider produces the payload and a lane policy consumes it. The
+	// replication layer transports the payload without interpreting it. The type URL
+	// versions the payload; policies ignore types they do not recognize. Receiver
+	// configuration limits the serialized feedback size because it rides on stream acks.
 	// (-- api-linter: core::0146::any=disabled
 	//     aip.dev/not-precedent: This is not public. --)
 	LaneFeedback *anypb.Any `protobuf:"bytes,10,opt,name=lane_feedback,json=laneFeedback,proto3" json:"lane_feedback,omitempty"`
@@ -707,11 +707,12 @@ type WorkflowReplicationMessages struct {
 	ExclusiveHighWatermark     int64                  `protobuf:"varint,2,opt,name=exclusive_high_watermark,json=exclusiveHighWatermark,proto3" json:"exclusive_high_watermark,omitempty"`
 	ExclusiveHighWatermarkTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=exclusive_high_watermark_time,json=exclusiveHighWatermarkTime,proto3" json:"exclusive_high_watermark_time,omitempty"`
 	Priority                   v1.TaskPriority        `protobuf:"varint,4,opt,name=priority,proto3,enum=temporal.server.api.enums.v1.TaskPriority" json:"priority,omitempty"`
-	// Obsolete: no sender sets it. Receivers from before replication lanes route on
-	// it, so the number must never be reused. Lanes use lane_info.
+	// Namespace ID for routing a batch to a legacy namespace-isolation lane.
+	// Legacy fields 5 and 6 are retained for wire compatibility; their numbers must not be reused.
+	// New replication lanes use lane_info.
 	IsolatedNamespaceId string `protobuf:"bytes,5,opt,name=isolated_namespace_id,json=isolatedNamespaceId,proto3" json:"isolated_namespace_id,omitempty"`
-	// Obsolete: no sender sets it. Receivers from before replication lanes read it, so
-	// the number must never be reused. Lanes use lane_info.retire.
+	// Marks the final batch of a legacy namespace-isolation lane.
+	// New replication lanes use lane_info.retire.
 	RetireIsolatedLane bool `protobuf:"varint,6,opt,name=retire_isolated_lane,json=retireIsolatedLane,proto3" json:"retire_isolated_lane,omitempty"`
 	// Set when this batch belongs to a lane instead of the default lane of `priority`.
 	// The receiver tracks and acknowledges each lane separately, in

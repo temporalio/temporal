@@ -73,28 +73,28 @@ message SyncReplicationState {
   // stream's shard. A sender's lane policy may use them to decide which lanes exist.
   // The open-source receiver reports none; a LaneFeedbackProvider supplies them.
   repeated string throttle_high_namespace_ids = 5;
-  // Obsolete: no sender reads it. Receivers from before replication lanes set it, so
-  // the number must never be reused. Lanes report progress in lane_states.
+  // Applied watermarks for the legacy namespace-isolation protocol, keyed by namespace ID.
+  // Legacy fields 6 and 7 are retained for wire compatibility; their numbers must not be reused.
+  // New replication lanes report progress in lane_states.
   map<string, ReplicationState> isolated_lane_states = 6;
-  // Obsolete: no sender reads it, and it must never be taken as lane support.
-  // Receivers from before replication lanes set it to true in tiered mode, so the
-  // number must never be reused. Lane support is lane_protocol_version.
+  // Capability advertisement for the legacy namespace-isolation protocol.
+  // Legacy tiered receivers set this to true. New lanes use lane_protocol_version.
   bool supports_namespace_isolation = 7;
   // Low watermarks of the lanes identified by WorkflowReplicationMessages.lane_info,
-  // keyed by lane ID. A missing lane ID does not show that the lane has drained. The
-  // sender only treats a lane as drained after it has retired that lane. Each state's
-  // flow_control_command pauses or resumes that lane alone; the sender also stops every
-  // lane while high_priority_state is paused.
+  // keyed by lane ID. A missing lane ID is not proof of drainage. Completing retirement
+  // requires an acknowledged watermark covering the lane's retirement boundary.
+  // Each state's flow_control_command pauses or resumes that lane alone;
+  // the sender also stops every lane while high_priority_state is paused.
   map<string, ReplicationState> lane_states = 8;
   // Version of the replication lane protocol that the receiver supports. Zero means
   // the receiver does not support lanes. The sender sets
   // WorkflowReplicationMessages.lane_info only when this is at least 1.
   int32 lane_protocol_version = 9;
-  // Feedback from the receiver for the sender's lane policy, such as per-namespace
-  // health. Open source never sets or reads it: a LaneFeedbackProvider on the receiver
-  // produces it and a lane policy on the sender consumes it. The type URL versions the
-  // contents, and a policy ignores types it does not know. At most 4 KB, because it
-  // rides on stream acks.
+  // Opaque receiver feedback for the sender's lane policy, such as per-namespace health.
+  // A LaneFeedbackProvider produces the payload and a lane policy consumes it. The
+  // replication layer transports the payload without interpreting it. The type URL
+  // versions the payload; policies ignore types they do not recognize. Receiver
+  // configuration limits the serialized feedback size because it rides on stream acks.
   // (-- api-linter: core::0146::any=disabled
   //     aip.dev/not-precedent: This is not public. --)
   google.protobuf.Any lane_feedback = 10;
@@ -125,11 +125,12 @@ message WorkflowReplicationMessages {
   int64 exclusive_high_watermark = 2;
   google.protobuf.Timestamp exclusive_high_watermark_time = 3;
   temporal.server.api.enums.v1.TaskPriority priority = 4;
-  // Obsolete: no sender sets it. Receivers from before replication lanes route on
-  // it, so the number must never be reused. Lanes use lane_info.
+  // Namespace ID for routing a batch to a legacy namespace-isolation lane.
+  // Legacy fields 5 and 6 are retained for wire compatibility; their numbers must not be reused.
+  // New replication lanes use lane_info.
   string isolated_namespace_id = 5;
-  // Obsolete: no sender sets it. Receivers from before replication lanes read it, so
-  // the number must never be reused. Lanes use lane_info.retire.
+  // Marks the final batch of a legacy namespace-isolation lane.
+  // New replication lanes use lane_info.retire.
   bool retire_isolated_lane = 6;
   // Set when this batch belongs to a lane instead of the default lane of `priority`.
   // The receiver tracks and acknowledges each lane separately, in
