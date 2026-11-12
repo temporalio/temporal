@@ -131,6 +131,21 @@ func (mr *MockChasmTreeMockRecorder) CloseTransaction(ctx, isActive any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction), ctx, isActive)
 }
 
+// CloseTransactionIfClean mocks base method.
+func (m *MockChasmTree) CloseTransactionIfClean() (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseTransactionIfClean")
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CloseTransactionIfClean indicates an expected call of CloseTransactionIfClean.
+func (mr *MockChasmTreeMockRecorder) CloseTransactionIfClean() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionIfClean", reflect.TypeOf((*MockChasmTree)(nil).CloseTransactionIfClean))
+}
+
 // Component mocks base method.
 func (m *MockChasmTree) Component(arg0 chasm.Context, arg1 chasm.ComponentRef) (chasm.Component, error) {
 	m.ctrl.T.Helper()

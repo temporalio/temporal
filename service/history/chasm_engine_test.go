@@ -1087,6 +1087,48 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 	s.NoError(err)
 }
 
+func (s *chasmEngineSuite) TestUpdateComponent_SkipCleanUpdates() {
+	s.config.EnableCHASMSkipCleanUpdates = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	})
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{ActivityId: "initial"},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+
+	// An update without changes isn't persisted.
+	_, err := s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			s.Equal("initial", component.(*testComponent).ActivityInfo.ActivityId)
+			return nil
+		},
+	)
+	s.NoError(err)
+
+	// An update with changes is.
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+	_, err = s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			component.(*testComponent).ActivityInfo.ActivityId = "updated"
+			return nil
+		},
+	)
+	s.NoError(err)
+}
+
 func (s *chasmEngineSuite) TestUpdateComponent_SetsContextMetadata() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())

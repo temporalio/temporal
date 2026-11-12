@@ -3516,6 +3516,14 @@ This optimization should only be enabled after every cluster that may receive CH
 hydrated ancestor components when applying child-node mutations.`,
 	)
 
+	EnableCHASMSkipCleanUpdates = NewNamespaceBoolSetting(
+		"history.enableCHASMSkipCleanUpdates",
+		false,
+		`EnableCHASMSkipCleanUpdates controls whether a CHASM UpdateComponent call skips persisting a non-workflow
+execution when the update made no durable change, e.g. because it only changed ephemeral components or didn't change
+anything.`,
+	)
+
 	ChasmDLQScheduledPureTaskOnValidation = NewNamespaceBoolSetting(
 		"history.chasmDLQScheduledPureTaskOnValidation",
 		false,
