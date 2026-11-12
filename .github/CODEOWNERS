@@ -108,4 +108,4 @@
 *.gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
 
 # This generated file has no code owner to allow automated updates by CI.
-/tests/testcore/shard_salt.txt
+/common/testing/testshard/shard_salt.txt

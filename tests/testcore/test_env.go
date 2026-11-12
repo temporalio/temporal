@@ -2,18 +2,14 @@ package testcore
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -35,16 +31,11 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
+	servershard "go.temporal.io/server/common/testing/testshard"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
 )
-
-// shardSalt is used to distribute functional tests across shards.
-// This value is automatically updated by the optimize-test-sharding workflow.
-//
-//go:embed shard_salt.txt
-var shardSalt string
 
 var _ Env = (*TestEnv)(nil)
 
@@ -727,26 +718,8 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 // checkTestShard supports test sharding based on environment variables.
 // This distributes tests across multiple CI shards for parallel execution.
 func checkTestShard(t *testing.T) {
-	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
-	indexStr := os.Getenv("TEST_SHARD_INDEX")
-	if totalStr == "" || indexStr == "" {
-		return
-	}
-	total, err := strconv.Atoi(totalStr)
-	if err != nil || total < 1 {
-		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
-	}
-	index, err := strconv.Atoi(indexStr)
-	if err != nil || index < 0 || index >= total {
-		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
-	}
-
-	nameToHash := t.Name() + strings.TrimSpace(shardSalt)
-	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
-	if testIndex != index {
-		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
-	}
-	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
+	t.Helper()
+	servershard.FromEnv(t).MaybeSkip(t)
 }
 
 type dedicatedClusterGuard struct {
