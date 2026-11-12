@@ -5,35 +5,35 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/testlogger/internal/engine"
+	"go.temporal.io/testx/testlogger"
 	"go.uber.org/zap/zapcore"
 )
 
 type (
-	Level           = engine.Level
-	Mode            = engine.Mode
-	TestingT        = engine.TestingT
-	CleanupCapableT = engine.CleanupCapableT
-	Expectation     = engine.Expectation[tag.Tag]
-	Failure         = engine.Failure[tag.Tag]
+	Level           = testlogger.Level
+	Mode            = testlogger.Mode
+	TestingT        = testlogger.TestingT
+	CleanupCapableT = testlogger.CleanupCapableT
+	Expectation     = testlogger.Expectation[tag.Tag]
+	Failure         = testlogger.Failure[tag.Tag]
 )
 
 const (
-	Debug                    = engine.Debug
-	Info                     = engine.Info
-	Warn                     = engine.Warn
-	Error                    = engine.Error
-	Fatal                    = engine.Fatal
-	DPanic                   = engine.DPanic
-	Panic                    = engine.Panic
-	FailOnAnyUnexpectedError = engine.FailOnAnyUnexpectedError
-	FailOnExpectedErrorOnly  = engine.FailOnExpectedErrorOnly
+	Debug                    = testlogger.Debug
+	Info                     = testlogger.Info
+	Warn                     = testlogger.Warn
+	Error                    = testlogger.Error
+	Fatal                    = testlogger.Fatal
+	DPanic                   = testlogger.DPanic
+	Panic                    = testlogger.Panic
+	FailOnAnyUnexpectedError = testlogger.FailOnAnyUnexpectedError
+	FailOnExpectedErrorOnly  = testlogger.FailOnExpectedErrorOnly
 )
 
 // TestLogger is a log.Logger implementation that logs to the test's logger
 // _but_ will fail the test if log levels _above_ Warn are present
 type TestLogger struct {
-	*engine.Engine[tag.Tag]
+	*testlogger.Engine[tag.Tag]
 	wrapped   log.Logger
 	level     zapcore.Level
 	logCaller bool
@@ -52,21 +52,21 @@ func DontFailOnDPanic(t *TestLogger) *TestLogger {
 }
 
 func LogExpectations(t *TestLogger) *TestLogger {
-	engine.LogExpectations(t.Engine)
+	testlogger.LogExpectations(t.Engine)
 	return t
 }
 
 // WithLogTags adds tags to the logs emitted by the underlying logger
 func WithLogTags(tags ...tag.Tag) LoggerOption {
 	return func(t *TestLogger) {
-		engine.WithLogTags(tags...)(t.Engine)
+		testlogger.WithLogTags(tags...)(t.Engine)
 	}
 }
 
 func WrapLogger(l log.Logger) LoggerOption {
 	return func(t *TestLogger) {
 		t.wrapped = l
-		engine.WrapLogger[tag.Tag](l)(t.Engine)
+		testlogger.WrapLogger[tag.Tag](l)(t.Engine)
 	}
 }
 
@@ -102,7 +102,7 @@ func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 // Mode controls the behavior of the logger for when an expected or unexpected error is encountered.
 func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	tl := &TestLogger{level: zapcore.DebugLevel, logCaller: true}
-	tl.Engine = engine.NewEngine[tag.Tag](t, mode, nil, engine.CallerSkip[tag.Tag](1), func(e *engine.Engine[tag.Tag]) {
+	tl.Engine = testlogger.NewEngine[tag.Tag](t, mode, nil, testlogger.CallerSkip[tag.Tag](1), func(e *testlogger.Engine[tag.Tag]) {
 		tl.Engine = e
 		for _, opt := range opts {
 			opt(tl)
@@ -112,7 +112,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		} else if logger, ok := tl.wrapped.(log.SkipLogger); ok {
 			tl.wrapped = logger.Skip(1)
 		}
-		engine.WrapLogger[tag.Tag](tl.wrapped)(e)
+		testlogger.WrapLogger[tag.Tag](tl.wrapped)(e)
 	})
 	return tl
 }
