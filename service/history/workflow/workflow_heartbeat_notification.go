@@ -68,7 +68,11 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 	// TODO: Account for pending Updates. Only events are counted for now because UpdateRegistry is not a
 	// read-only method, so the first-input estimate is slightly exaggerated depending on the namespace's Update traffic.
 	firstBufferedInput := !hadBufferedInput
-	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(c.MutableState.GetNamespaceEntry().Name().String()))
+	namespaceEntry := c.MutableState.GetNamespaceEntry()
+	if namespaceEntry == nil {
+		return
+	}
+	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(namespaceEntry.Name().String()))
 
 	for _, eventType := range eventTypes {
 		inputHandler := handler.WithTags(metrics.StringTag("event_type", eventType))

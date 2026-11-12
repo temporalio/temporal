@@ -56,6 +56,7 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 		priorEvents   []enumspb.EventType
 		bufferedTypes []string
 		firstType     string
+		nilNamespace  bool
 	}{
 		{
 			name:          "first timer result",
@@ -91,6 +92,15 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			newEvents: []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
 		},
 		{
+			name: "no new buffered events",
+		},
+		{
+			name:         "nil namespace entry",
+			started:      true,
+			newEvents:    []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
+			nilNamespace: true,
+		},
+		{
 			name:      "no eligible input",
 			started:   true,
 			newEvents: []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED},
@@ -102,8 +112,10 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			t.Parallel()
 			controller := gomock.NewController(t)
 			mutableState := historyi.NewMockMutableState(controller)
-			mutableState.EXPECT().HasStartedWorkflowTask().Return(tc.started)
-			if tc.started && len(tc.bufferedTypes) > 0 {
+			if len(tc.newEvents) > 0 {
+				mutableState.EXPECT().HasStartedWorkflowTask().Return(tc.started)
+			}
+			if tc.started && (len(tc.bufferedTypes) > 0 || tc.nilNamespace) {
 				mutableState.EXPECT().HasAnyBufferedEvent(gomock.Any()).DoAndReturn(func(filter historybuilder.BufferedEventFilter) bool {
 					for _, eventType := range append(tc.priorEvents, tc.newEvents...) {
 						if filter(&historypb.HistoryEvent{EventType: eventType}) {
@@ -112,7 +124,11 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 					}
 					return false
 				})
-				mutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+				namespaceEntry := tests.GlobalNamespaceEntry
+				if tc.nilNamespace {
+					namespaceEntry = nil
+				}
+				mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry)
 			}
 
 			metricsHandler := metricstest.NewCaptureHandler()
