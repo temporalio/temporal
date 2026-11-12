@@ -1887,22 +1887,22 @@ func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
 	return nil
 }
 
-// SpeculativeTransitionPolicy says how the engine handles a speculative transition.
-type SpeculativeTransitionPolicy struct {
-	// Persist writes the transition now instead of keeping it in memory.
-	Persist bool
-	// Notify wakes PollComponent waiters when the transition stays in memory.
-	Notify bool
+// TransitionDecision describes the engine's actions for a transition.
+type TransitionDecision struct {
+	// PersistNow requires saving the transition before the update returns.
+	PersistNow bool
+	// NotifyPollers wakes PollComponent waiters when the transition stays in memory.
+	NotifyPollers bool
 }
 
-// SpeculativeTransitionPolicy returns how the engine handles the current speculative transition.
+// SpeculativeTransitionDecision returns how the engine handles the current speculative transition.
 // Call it after ApplySpeculativeTransition.
-func (n *Node) SpeculativeTransitionPolicy(ctx context.Context) (SpeculativeTransitionPolicy, error) {
+func (n *Node) SpeculativeTransitionDecision(ctx context.Context) (TransitionDecision, error) {
 	closes, err := n.speculativeTransitionClosesExecution(ctx)
 	if err != nil {
-		return SpeculativeTransitionPolicy{}, err
+		return TransitionDecision{}, err
 	}
-	return SpeculativeTransitionPolicy{Persist: closes, Notify: true}, nil
+	return TransitionDecision{PersistNow: closes, NotifyPollers: true}, nil
 }
 
 // speculativeTransitionClosesExecution reports whether the root is closed in memory while the

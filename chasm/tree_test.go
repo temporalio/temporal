@@ -4340,13 +4340,19 @@ func (s *nodeSuite) TestApplySpeculativeTransition_RunsImmediatePureTasks() {
 	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
 	mutableContext.AddTask(component, taskAttributes, &TestPureTask{Data: []byte("immediate")})
 
+	executionCount := 0
 	// Times(1) also checks the real close does not run the task again.
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Execute(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(nil).Times(1)
+		Execute(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).
+		DoAndReturn(func(MutableContext, any, TaskAttributes, *TestPureTask) error {
+			executionCount++
+			return nil
+		}).Times(1)
 
 	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Equal(1, executionCount)
 
 	_, err = root.CloseTransaction(context.Background(), true)
 	s.NoError(err)
@@ -4370,7 +4376,7 @@ func (s *nodeSuite) TestApplySpeculativeTransition_SyncsNewSubComponent() {
 	s.Contains(root.children, "SubComponent2")
 }
 
-func (s *nodeSuite) TestSpeculativeTransitionPolicy() {
+func (s *nodeSuite) TestSpeculativeTransitionDecision() {
 	s.useStatefulExecutionState()
 	node := s.testComponentTree()
 	_, err := node.CloseTransaction(context.Background(), true)
@@ -4382,27 +4388,27 @@ func (s *nodeSuite) TestSpeculativeTransitionPolicy() {
 
 	// A transition that leaves the execution running stays speculative and notifies pollers.
 	tc.(*TestComponent).ComponentData.CreateRequestId = "updated"
-	policy, err := node.SpeculativeTransitionPolicy(context.Background())
+	decision, err := node.SpeculativeTransitionDecision(context.Background())
 	s.NoError(err)
-	s.Equal(SpeculativeTransitionPolicy{Persist: false, Notify: true}, policy)
+	s.Equal(TransitionDecision{PersistNow: false, NotifyPollers: true}, decision)
 
 	// A transition that closes the execution must be persisted.
 	tc.(*TestComponent).Complete(chasmCtx)
-	policy, err = node.SpeculativeTransitionPolicy(context.Background())
+	decision, err = node.SpeculativeTransitionDecision(context.Background())
 	s.NoError(err)
-	s.True(policy.Persist)
+	s.True(decision.PersistNow)
 }
 
-func (s *nodeSuite) TestSpeculativeTransitionPolicy_Terminated() {
+func (s *nodeSuite) TestSpeculativeTransitionDecision_Terminated() {
 	s.useStatefulExecutionState()
 	node := s.testComponentTree()
 	_, err := node.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 
 	node.terminated = true
-	policy, err := node.SpeculativeTransitionPolicy(context.Background())
+	decision, err := node.SpeculativeTransitionDecision(context.Background())
 	s.NoError(err)
-	s.True(policy.Persist)
+	s.True(decision.PersistNow)
 }
 
 func (s *nodeSuite) TestApplySpeculativeTransition_KeepsNewTasks() {
