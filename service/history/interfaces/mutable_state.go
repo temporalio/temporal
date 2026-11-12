@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -51,6 +52,7 @@ type (
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
 		AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error
 		GenerateActivityCancelCommandsForClose() error
+		GenerateActivityTask(scheduledEventID int64) error
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)
 		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes, bool) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
@@ -137,9 +139,19 @@ type (
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(updateID string, failure *failurepb.Failure) error
 		AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error)
+		// ValidateCallbackAddition checks that attaching the given completion callbacks would not
+		// breach the execution's aggregate callback limits. Callbacks are validated only by the
+		// request handlers that introduce them, never where they are attached:
+		//   - api.NewWorkflowWithSignal, for every workflow start
+		//   - startworkflow, for callbacks attached to an existing workflow on conflict
+		//   - updateworkflow, for an Update's callbacks, before it is sent to a worker
+		// inFlight holds the callbacks of Updates admitted but not yet accepted, which must be
+		// reserved against the limits; see update.Registry.InFlightCallbacks.
+		ValidateCallbackAddition(inFlight []chasmworkflow.CallbackAddition, addition chasmworkflow.CallbackAddition) error
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetCompletedUpdate(ctx context.Context, updateID string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error)
+		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		CheckResettable() error
 		// UpdateResetRunID saves the runID that resulted when this execution was reset.
 		UpdateResetRunID(runID string)
@@ -308,6 +320,9 @@ type (
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)
+		// CurrentStorageUsage returns this cluster's storage usage as of now, including the interval since
+		// its last closed transaction that is not accrued yet. It does not modify the mutable state.
+		CurrentStorageUsage() *persistencespb.StorageUsage
 
 		GetExternalPayloadSize() int64
 		AddExternalPayloadSize(size int64)
@@ -322,7 +337,7 @@ type (
 		// against wall-clock time.
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
-		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
 
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
@@ -367,9 +382,6 @@ type (
 		ChasmSignalBacklinksEnabled() bool
 		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
-		// Ensures that the chasm workflow component is installed in the mutable state CHASM tree.
-		// Must be called before adding any components to the tree.
-		EnsureChasmWorkflowComponent(ctx context.Context)
 
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
@@ -420,14 +432,19 @@ type (
 		HasRequestID(requestID string) bool
 		SetSuccessorRunID(runID string)
 
-		// Now returns the current time of the mutable state, which may be ahead of
-		// wall-clock time if time skipping has happened.
+		// Now returns the current logical time of the mutable state, which may be ahead of
+		// physical time if time skipping has happened.
 		Now() time.Time
-		// ToRealTime converts a virtual timestamp from mutable state to wall-clock time,
-		// adjusting for accumulated skipped duration which may have happened.
-		ToRealTime(virtualTime time.Time) time.Time
+		// ToPhysicalTimeWithCurrentTimeSkippingOffset converts logical time to physical time by subtracting
+		// the current accumulated skipped duration. Zero time is returned unchanged.
+		// It cannot recover the physical time at which a past logical timestamp was generated.
+		ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time
+		// ToLogicalTimeWithCurrentTimeSkippingOffset converts physical time to logical time by adding
+		// the current accumulated skipped duration. Zero time is returned unchanged.
+		ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
+		RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition)
 	}
 )

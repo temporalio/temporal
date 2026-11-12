@@ -108,33 +108,44 @@ func TestRetryPolicyForTask(t *testing.T) {
 }
 
 func TestHandleNamespaceReplicationTaskEmitsReceivedAndPassesProcessingContext(t *testing.T) {
-	p, task, executor, _, eventLogger := newReplicationEventTestProcessor(t, true, 2)
-	var processingContext wideevents.NamespaceReplicationTaskContext
-	var processingContextSet bool
-	executor.EXPECT().Execute(gomock.Any(), task.GetNamespaceTaskAttributes()).DoAndReturn(
-		func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes) error {
-			processingContext, processingContextSet = wideevents.NamespaceReplicationTaskContextFromContext(ctx)
-			return nil
-		},
-	)
+	for _, tc := range []struct {
+		name         string
+		sourceTaskID int64
+	}{
+		{name: "nonzero source task ID", sourceTaskID: 42},
+		{name: "zero source task ID", sourceTaskID: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, task, executor, _, eventLogger := newReplicationEventTestProcessor(t, true, 2)
+			task.SourceTaskId = tc.sourceTaskID
+			var processingContext wideevents.NamespaceReplicationTaskContext
+			var processingContextSet bool
+			executor.EXPECT().Execute(gomock.Any(), task.GetNamespaceTaskAttributes()).DoAndReturn(
+				func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes) error {
+					processingContext, processingContextSet = wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+					return nil
+				},
+			)
 
-	p.handleReplicationTasks()
-	require.Equal(t, []string{"received"}, replicationEventPhases(eventLogger.records))
+			p.handleReplicationTasks()
+			require.Equal(t, []string{"received"}, replicationEventPhases(eventLogger.records))
 
-	received := replicationEventDetails(t, eventLogger.records[0])
-	require.InDelta(t, float64(42), received["source_task_id"], 0)
-	require.Equal(t, "cluster-a", received["source_cluster"])
-	require.Equal(t, "cluster-b", received["target_cluster"])
-	require.True(t, processingContextSet)
-	eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(task)
-	require.True(t, ok)
-	require.Equal(t, wideevents.NamespaceReplicationTaskContext{
-		SourceCluster: "cluster-a",
-		TargetCluster: "cluster-b",
-		SourceTaskID:  42,
-		AttemptCount:  1,
-		EventData:     eventData,
-	}, processingContext)
+			received := replicationEventDetails(t, eventLogger.records[0])
+			require.InDelta(t, float64(tc.sourceTaskID), received["source_task_id"], 0)
+			require.Equal(t, "cluster-a", received["source_cluster"])
+			require.Equal(t, "cluster-b", received["target_cluster"])
+			require.True(t, processingContextSet)
+			eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(task)
+			require.True(t, ok)
+			require.Equal(t, wideevents.NamespaceReplicationTaskContext{
+				SourceCluster: "cluster-a",
+				TargetCluster: "cluster-b",
+				SourceTaskID:  &tc.sourceTaskID,
+				AttemptCount:  1,
+				EventData:     eventData,
+			}, processingContext)
+		})
+	}
 }
 
 func TestHandleNamespaceReplicationTaskCountsRetries(t *testing.T) {
@@ -217,10 +228,11 @@ func TestHandleTaskQueueUserDataDLQEmitsTerminalOutcome(t *testing.T) {
 			TaskQueueName: "task-queue",
 		},
 	}
-	ns := namespace.NewLocalNamespaceForTest(
+	ns := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
 		nil,
-		"cluster-b",
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"cluster-a", "cluster-b"}},
+		0,
 	)
 	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil).Times(2)
 	matchingClient.EXPECT().ApplyTaskQueueUserDataReplicationEvent(gomock.Any(), gomock.Any()).
@@ -260,10 +272,11 @@ func TestHandleTaskQueueUserDataAppliedOutcome(t *testing.T) {
 			TaskQueueName: "task-queue",
 		},
 	}
-	ns := namespace.NewLocalNamespaceForTest(
+	ns := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
 		nil,
-		"cluster-b",
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"cluster-a", "cluster-b"}},
+		0,
 	)
 	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil).Times(2)
 	gomock.InOrder(
@@ -305,6 +318,37 @@ func TestHandleTaskQueueUserDataNotAdmittedOutcome(t *testing.T) {
 	require.Len(t, outcomes, 1)
 	require.Equal(t, taskQueueUserDataMetricsOutcomeNotAdmitted, outcomes[0].Tags[metrics.OutcomeTag("").Key])
 	require.Len(t, capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyEndToEndLatency.Name()], 1)
+}
+
+func TestHandleTaskQueueUserDataLocalNamespaceNotAdmitted(t *testing.T) {
+	p, task, _, _, _ := newReplicationEventTestProcessor(t, false, 1)
+	controller := gomock.NewController(t)
+	registry := namespace.NewMockRegistry(controller)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.applyOutcomeMetricsHandler = metricsHandler
+	p.namespaceRegistry = registry
+	task.TaskType = enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA
+	task.Attributes = &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+		TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+			NamespaceId:   "namespace-id",
+			TaskQueueName: "task-queue",
+		},
+	}
+	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
+		namespace.NewLocalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
+			nil,
+			"cluster-b",
+		),
+		nil,
+	)
+
+	p.handleReplicationTasks()
+
+	outcomes := capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyOutcomes.Name()]
+	require.Len(t, outcomes, 1)
+	require.Equal(t, taskQueueUserDataMetricsOutcomeNotAdmitted, outcomes[0].Tags[metrics.OutcomeTag("").Key])
 }
 
 func TestHandleNamespaceReplicationTaskEventsDisabled(t *testing.T) {

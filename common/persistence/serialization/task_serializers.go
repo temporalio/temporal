@@ -10,6 +10,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -134,7 +135,7 @@ func serializeTimerTask(
 		timerTask = timerChasmTaskToProto(task)
 	case *tasks.ChasmTaskPure:
 		timerTask = timerChasmPureTaskToProto(task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		timerTask = timeSkippingTimerTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", task)
@@ -142,7 +143,7 @@ func serializeTimerTask(
 	return encoder.TimerTaskInfoToBlob(timerTask)
 }
 
-func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistencespb.TimerTaskInfo {
+func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingFastForwardTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
 		NamespaceId:         task.NamespaceID,
 		WorkflowId:          task.WorkflowID,
@@ -159,8 +160,8 @@ func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistenc
 	}
 }
 
-func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.TimeSkippingTimerTask {
-	return &tasks.TimeSkippingTimerTask{
+func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.TimeSkippingFastForwardTimerTask {
+	return &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			info.NamespaceId,
 			info.WorkflowId,
@@ -632,6 +633,7 @@ func transferCloseTaskToProto(
 				// We set this to true even though it's no longer checked in case someone downgrades to a version that
 				// still checks this field.
 				CanSkipVisibilityArchival: true,
+				SkipParentVerification:    closeTask.SkipParentVerification,
 			},
 		},
 	}
@@ -646,10 +648,11 @@ func transferCloseTaskFromProto(
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: closeTask.VisibilityTime.AsTime(),
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp:    closeTask.VisibilityTime.AsTime(),
+		TaskID:                 closeTask.TaskId,
+		Version:                closeTask.Version,
+		DeleteAfterClose:       closeTask.DeleteAfterClose,
+		SkipParentVerification: closeTask.GetCloseExecutionTaskDetails().GetSkipParentVerification(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		DeleteProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -1135,6 +1138,7 @@ func visibilityDeleteTaskToProto(
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
 		StartTime:             timestamppb.New(deleteVisibilityTask.StartTime),
+		CreateTime:            timestamppb.New(deleteVisibilityTask.CreateTime),
 		IsRetentionDelete:     deleteVisibilityTask.IsRetentionDelete,
 		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
 			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
@@ -1159,6 +1163,7 @@ func visibilityDeleteTaskFromProto(
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
 		StartTime:                      deleteVisibilityTask.StartTime.AsTime(),
+		CreateTime:                     timestamp.TimeValue(deleteVisibilityTask.CreateTime),
 		IsRetentionDelete:              deleteVisibilityTask.IsRetentionDelete,
 	}
 }

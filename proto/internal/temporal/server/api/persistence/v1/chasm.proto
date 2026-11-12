@@ -81,6 +81,18 @@ message ChasmComponentAttributes {
   map<string, RequestMetadata> requests = 5;
   // Caller-supplied user metadata (summary, details) attached to this component.
   temporal.api.sdk.v1.UserMetadata user_metadata = 6;
+  // Principal of the caller whose request created the execution. Only set on
+  // the root component of non-workflow executions. Never overwritten.
+  // (-- api-linter: core::0140::prepositions=disabled
+  //     aip.dev/not-precedent: "by" is needed here. --)
+  temporal.api.common.v1.Principal started_by_principal = 7;
+  // Principal of the caller whose request first moved the execution to a closed
+  // state. Empty when the close was not caused by a caller request (e.g. a
+  // timeout task). Only set on the root component of non-workflow executions.
+  // Never overwritten.
+  // (-- api-linter: core::0140::prepositions=disabled
+  //     aip.dev/not-precedent: "by" is needed here. --)
+  temporal.api.common.v1.Principal closed_by_principal = 8;
 }
 
 // ChasmNodeLocalState holds cluster-local (non-replicated) metadata for a single CHASM node.
@@ -176,4 +188,15 @@ message ChasmNexusCompletion {
   string operation_token = 6;
   // Start time from the callback request, used for completion-before-start.
   google.protobuf.Timestamp start_time = 7;
+}
+
+// ChasmRequestIDs is the state of the framework-owned data node that records request IDs accepted
+// by UpdateComponent, so that a retried request can be deduplicated. It is stored as a reserved child
+// of the root node (not declared by any component) and is only written when a request ID is added.
+message ChasmRequestIDs {
+  // Accepted request IDs, mapped to the time each was recorded (truncated to whole seconds to keep entries
+  // small). A map so the existence check is a lookup. Entries older than history.requestIDMaxAge are dropped
+  // when an ID is added; once there are more than history.maximumRequestIDsInChasmDataNode, the oldest are
+  // dropped until half that many remain, so the cost of finding the oldest is amortized.
+  map<string, google.protobuf.Timestamp> request_ids = 1;
 }

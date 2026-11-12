@@ -33,6 +33,10 @@ type Outcome struct {
 // Initial is the state of a newly created Activity.
 func Initial(cfg Config) AbstractState {
 	s := AbstractState{Status: Scheduled, AttemptCount: 1}
+	if cfg.InitialAttemptStarted {
+		s.Status = Started
+		return s
+	}
 	if cfg.HasStartDelay {
 		s.Dispatchability = StartDelayPending
 	}

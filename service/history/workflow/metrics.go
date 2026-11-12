@@ -21,6 +21,7 @@ func emitWorkflowHistoryStats(
 	metricsHandler metrics.Handler,
 	namespace namespace.Name,
 	state enumsspb.WorkflowExecutionState,
+	wroteEventsInTransaction bool,
 	historySize int,
 	historyCount int,
 ) {
@@ -29,7 +30,7 @@ func emitWorkflowHistoryStats(
 	metrics.HistorySize.With(executionScope).Record(int64(historySize))
 	metrics.HistoryCount.With(executionScope).Record(int64(historyCount))
 
-	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && wroteEventsInTransaction {
 		completionScope := handler.WithTags(metrics.OperationTag(metrics.WorkflowCompletionStatsScope))
 		metrics.HistorySize.With(completionScope).Record(int64(historySize))
 		metrics.HistoryCount.With(completionScope).Record(int64(historyCount))
@@ -256,6 +257,12 @@ type ActivityCompletionMetrics struct {
 	AttemptStartedTime time.Time
 	// FirstScheduledTime is the scheduled time of the first attempt
 	FirstScheduledTime time.Time
+	// HasTimeSkippingClockOffset indicates that skipped time has shifted the workflow clock.
+	// Latency metrics are omitted because activity timestamps may use different clock offsets;
+	// activity counters are still recorded.
+	// TODO@time-skipping: Use the workflow's virtual clock to calculate and report activity
+	// latency if doing so has no unexpected customer-facing impact.
+	HasTimeSkippingClockOffset bool
 	// Closed is true if no more attempts will be made to execute the activity.
 	Closed bool
 	// TimerType is the type of timer that caused the activity execution to timeout.
@@ -287,7 +294,7 @@ func RecordActivityCompletionMetrics(
 	)
 
 	now := shard.GetTimeSource().Now()
-	if completion.Status != ActivityStatusTimeout &&
+	if !completion.HasTimeSkippingClockOffset && completion.Status != ActivityStatusTimeout &&
 		!completion.AttemptStartedTime.IsZero() &&
 		!completion.AttemptStartedTime.After(now) {
 		latency := now.Sub(completion.AttemptStartedTime)
@@ -297,7 +304,7 @@ func RecordActivityCompletionMetrics(
 	}
 
 	// Record true end-to-end duration only for terminal states (includes retries and backoffs)
-	if completion.Closed && !completion.FirstScheduledTime.IsZero() {
+	if !completion.HasTimeSkippingClockOffset && completion.Closed && !completion.FirstScheduledTime.IsZero() {
 		scheduleToCloseLatency := now.Sub(completion.FirstScheduledTime)
 		metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
 	}

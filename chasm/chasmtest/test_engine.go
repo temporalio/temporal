@@ -198,9 +198,26 @@ func (e *Engine) UpdateWithStartExecution(
 
 	current, hasCurrent := e.currentExecutions[bKey]
 	if hasCurrent {
+		if _, ok := current.requestIDs[options.RequestID]; options.RequestID != "" && ok {
+			serializedRef, err := current.node.Ref(current.root)
+			if err != nil {
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
+			}
+			return chasm.EngineUpdateWithStartExecutionResult{
+				ExecutionKey: current.key,
+				ExecutionRef: serializedRef,
+				Created:      false,
+				Deduplicated: true,
+			}, nil
+		}
+
 		switch current.backend.GetExecutionState().State {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, "")
+			// Updating a running execution reuses it, so the conflict policy must allow that.
+			if err := conflictPolicyAllowsUpdate(ref, current, options.ConflictPolicy); err != nil {
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
+			}
+			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, options.RequestID)
 			if err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
@@ -373,6 +390,42 @@ func (e *Engine) DeleteExecution(
 	return nil
 }
 
+// newConflictPolicyFailErr returns the error for a start that BusinessIDConflictPolicyFail rejects
+// because current is still running.
+func newConflictPolicyFailErr(
+	ref chasm.ComponentRef,
+	current *execution,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	return chasm.NewExecutionAlreadyStartedErr(
+		fmt.Sprintf(
+			"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
+			ref.BusinessID, current.key.RunID, conflictPolicy,
+		),
+		current.createRequestID,
+		current.key.RunID,
+	)
+}
+
+// conflictPolicyAllowsUpdate returns nil if the conflict policy lets UpdateWithStartExecution update the
+// running execution current, or the error to return instead. Like the history engine's version, the
+// switch has no default case so the exhaustive linter flags a new BusinessIDConflictPolicy.
+func conflictPolicyAllowsUpdate(
+	ref chasm.ComponentRef,
+	current *execution,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	switch conflictPolicy {
+	case chasm.BusinessIDConflictPolicyUseExisting:
+		return nil
+	case chasm.BusinessIDConflictPolicyFail:
+		return newConflictPolicyFailErr(ref, current, conflictPolicy)
+	case chasm.BusinessIDConflictPolicyTerminateExisting:
+		return serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not supported for UpdateWithStartExecution")
+	}
+	return serviceerror.NewInternal(fmt.Sprintf("unknown business ID conflict policy: %v", conflictPolicy))
+}
+
 // handleConflictPolicy is called when a StartExecution arrives for a business ID whose
 // current run is still running.
 func (e *Engine) handleConflictPolicy(
@@ -384,14 +437,7 @@ func (e *Engine) handleConflictPolicy(
 ) (chasm.StartExecutionResult, error) {
 	switch options.ConflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
-			fmt.Sprintf(
-				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
-				ref.BusinessID, current.key.RunID, options.ConflictPolicy,
-			),
-			current.createRequestID,
-			current.key.RunID,
-		)
+		return chasm.StartExecutionResult{}, newConflictPolicyFailErr(ref, current, options.ConflictPolicy)
 	case chasm.BusinessIDConflictPolicyTerminateExisting:
 		_, _ = current.backend.UpdateWorkflowStateStatus(
 			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
@@ -474,7 +520,7 @@ func (e *Engine) startNew(
 		return chasm.StartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(exec); err != nil {
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
@@ -518,7 +564,7 @@ func (e *Engine) startAndUpdateNew(
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(exec); err != nil {
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
@@ -624,8 +670,8 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 
 // closeTransaction closes the execution's transaction, commits its transition
 // count, and validates the resulting clean tree.
-func (e *Engine) closeTransaction(x *execution) error {
-	if _, err := x.node.CloseTransaction(); err != nil {
+func (e *Engine) closeTransaction(ctx context.Context, x *execution) error {
+	if _, err := x.node.CloseTransaction(ctx, true); err != nil {
 		return err
 	}
 	x.commitTransition()
@@ -683,7 +729,7 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if err = e.closeTransaction(execution); err != nil {
+	if err = e.closeTransaction(ctx, execution); err != nil {
 		return nil, err
 	}
 	execution.recordRequestID(requestID)

@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
@@ -1080,7 +1079,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	s.Require().NoError(err)
 	continueActivity()
 
-	result := await.Rcv(s.T(), activityPollResultCh)
+	result := s.Rcv(activityPollResultCh)
 	s.Require().NoError(result.err)
 	s.True(result.canceled, "Activity was not cancelled.")
 	env.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))

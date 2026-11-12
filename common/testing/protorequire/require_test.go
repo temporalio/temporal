@@ -199,4 +199,26 @@ func TestDeepEqual(t *testing.T) {
 			t.Fatal("expected differing values to fail")
 		}
 	})
+
+	type wrapper struct {
+		Count     int
+		Execution *commonpb.WorkflowExecution
+	}
+
+	t.Run("plain struct with differing non-string field fails", func(t *testing.T) {
+		mt := &mockT{}
+		protorequire.DeepEqual(mt, wrapper{Count: 1}, wrapper{Count: 2})
+		if !mt.failed {
+			t.Fatal("expected structs with differing non-string fields to fail")
+		}
+	})
+
+	t.Run("struct containing differing proto fails", func(t *testing.T) {
+		b := &commonpb.WorkflowExecution{WorkflowId: "wf-2", RunId: myUUID}
+		mt := &mockT{}
+		protorequire.DeepEqual(mt, wrapper{Execution: a}, wrapper{Execution: b})
+		if !mt.failed {
+			t.Fatal("expected struct containing differing proto to fail")
+		}
+	})
 }

@@ -25,18 +25,11 @@ type (
 		// Returns the build ID assigned to the task according to the assignment rules (if any),
 		// and a boolean indicating if sync-match happened or not.
 		AddTask(ctx context.Context, params addTaskParams) (buildId string, syncMatch bool, err error)
+		GrantEagerDispatch(ctx context.Context, items []*matchingservice.GrantEagerDispatchRequest_Item) ([]*matchingservice.GrantEagerDispatchResponse_Item, error)
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
-		// ProcessSpooledTask dispatches a task to a poller. When there are no pollers to pick
-		// up the task, this method will return error. Task will not be persisted to db
-		// TODO(pri): old matcher cleanup
-		ProcessSpooledTask(
-			ctx context.Context,
-			task *internalTask,
-			backlogQueue *PhysicalTaskQueueKey,
-		) error
 		// AddSpooledTask passes a task to the matcher to make it eligible for matching and
 		// returns immediately. (New matcher only)
 		AddSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error

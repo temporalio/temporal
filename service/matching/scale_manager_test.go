@@ -89,6 +89,100 @@ func TestScaleManagerAddedTasksBatchThreshold(t *testing.T) {
 	}
 }
 
+func TestScaleManagerCooldownPreservesSteadyArrivalRate(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		maxRate float32
+	}{
+		{name: "short cooldown control", maxRate: 100},
+		{name: "default cooldown", maxRate: 0.33},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testScaleManagerSteadyArrivalRate(t, tc.maxRate)
+		})
+	}
+}
+
+func testScaleManagerSteadyArrivalRate(t *testing.T, maxRate float32) {
+	t.Helper()
+	ts := clock.NewEventTimeSource()
+	logger := log.NewNoopLogger()
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true,
+			Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+				{TargetRate: 500, Window: 10 * time.Second},
+				{TargetRate: 600, Window: 5 * time.Second},
+				{TargetRate: 800, Window: 2 * time.Second},
+			},
+			Downs: []dynamicconfig.SimplePartitionScalerThreshold{
+				{TargetRate: 100, Window: 4 * time.Minute},
+			},
+			BacklogCap: 2_000_000,
+			Min:        1,
+			Max:        200,
+		}), nil, ts, logger, metrics.NoopMetricsHandler,
+	)
+	settings := dynamicconfig.PartitionScaleManagerSettings{
+		Enabled: true, MaxRate: maxRate, BatchSize: 100,
+		ShrinkRatio: 0.1, ShrinkDelta: 8,
+	}
+	ctrl := gomock.NewController(t)
+	userData := NewMockuserDataManager(ctrl)
+	userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	db := NewMockscaleDB(ctrl)
+	var persisted *persistencespb.PartitionScaleState
+	db.EXPECT().UpdateScaleState(gomock.Any(), true).DoAndReturn(
+		func(state *persistencespb.PartitionScaleState, _ bool) error {
+			persisted = common.CloneProto(state)
+			return nil
+		},
+	).AnyTimes()
+	sm := newScaleManager(
+		context.Background(),
+		tqid.MustNormalPartitionFromRpcName("tq", "ns-id", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		logger, metrics.NoopMetricsHandler, userData, nil, scaler, ts,
+		dynamicconfig.GetTypedPropertyFn(settings), dynamicconfig.GetIntPropertyFn(1),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+	// Drive the worker's wakeup branch synchronously so fake-clock advances cannot
+	// race with scaler calls or persistence. No background worker is started.
+	sm.scaleDB = db
+	sm.setState(&persistencespb.PartitionScaleState{Target: 1}, settings)
+	sm.callScaler()
+	addSteadyTasks := func(ticks int) {
+		for range ticks {
+			ts.Advance(100 * time.Millisecond)
+			for range 100 {
+				sm.AddedTasks(1)
+			}
+			select {
+			case <-sm.wakeup:
+				sm.callScaler()
+			default:
+			}
+		}
+	}
+
+	// Warm the Up windows at 1,000 tasks/s. The first persisted decision comes once the longest
+	// (10s) is full; a partial Down window doesn't hold it back.
+	addSteadyTasks(100)
+	require.NotNil(t, persisted)
+	require.Equal(t, int32(2), persisted.Target)
+	require.True(t, ts.Now().Before(sm.nextDecision), "warmup must enter cooldown")
+
+	// Once the pending batch crosses its threshold, each further arrival wakes
+	// the worker. The first 100ms tick after the default ~3.03s cooldown is 3.1s.
+	addSteadyTasks(31)
+	require.LessOrEqual(t, sm.batch.Load(), int64(100), "cooldown backlog must have reached the real scaler")
+	rate, full := scaler.upTrackers[2*time.Second].rateAndFull()
+	require.True(t, full)
+	// One 200ms tracker bucket at this arrival rate permits 100 tasks/s of
+	// boundary error. Cooldown must not turn steady arrivals into a rate spike.
+	require.InDelta(t, 1000, rate, 100, "steady 1,000 tasks/s must retain its arrival timing across cooldown")
+	require.Equal(t, int32(2), persisted.Target)
+}
+
 func (s *ScaleManagerSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.userDataValue = nil
@@ -110,6 +204,7 @@ func (s *ScaleManagerSuite) SetupTest() {
 	s.scaler.EXPECT().Stop().AnyTimes()
 
 	s.settings = dynamicconfig.PartitionScaleManagerSettings{
+		Enabled:            true,
 		MaxRate:            10,  // 100ms cooldown
 		ShrinkRatio:        1.0, // no shrink limit by default
 		ShrinkDelta:        100, // no shrink limit by default
@@ -520,6 +615,7 @@ func metricValues(recs []*metricstest.CapturedRecording) []float64 {
 // exclusively from the two shadow decisions (one each), not from the release.
 func (s *ScaleManagerSuite) TestShadowModeEmitsExpectedGauges() {
 	s.metricsHandler = s.capture
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = 10 * time.Millisecond
 
 	inputs := make(chan PartitionScalerInput, 2)
@@ -571,9 +667,10 @@ func (s *ScaleManagerSuite) TestShadowModeEmitsExpectedGauges() {
 	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_write"]), "read gauge per changed decision")
 }
 
-// TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval
-// <= 0 uses the normal apply path.
-func (s *ScaleManagerSuite) TestNonPositiveShadowLogIntervalDisabled() {
+// TestShadowLogIntervalDoesNotAffectApply verifies that ShadowModeLogInterval no longer
+// affects whether decisions are applied: only Mode decides that, so an enabled manager applies
+// decisions even with a non-positive interval.
+func (s *ScaleManagerSuite) TestShadowLogIntervalDoesNotAffectApply() {
 	s.settings.ShadowModeLogInterval = -time.Second
 
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -605,6 +702,7 @@ func (s *ScaleManagerSuite) TestNonPositiveShadowLogIntervalDisabled() {
 // managed target to baseline (one write, Target=0), but the scaler's hypothetical
 // decision (2) is never persisted.
 func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	inputs := make(chan PartitionScalerInput, 1)
@@ -645,6 +743,7 @@ func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
 // (Target 0, nil private state) on every call and never feeds hypothetical
 // decisions back into the state.
 func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	realPriv := protoutils.MarshalAny(s.T(), wrapperspb.String("real-state"))
 	priv1 := protoutils.MarshalAny(s.T(), wrapperspb.String("shadow-decision-1"))
@@ -685,6 +784,7 @@ func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -703,6 +803,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 // TestShadowLoggingCadence verifies that shadow decisions are logged no more
 // frequently than the configured cadence and unchanged decisions are not logged.
 func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -747,6 +848,7 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -766,8 +868,11 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 }
 
 // TestShadowModeSkipsDrain verifies that shadow mode does not change real read
-// partitions by clearing backlog bits.
+// partitions by clearing backlog bits. The drain path bails before its Describe fan-out,
+// so a shadowing manager makes no outbound calls at all: the responses mocked here would
+// drain every partition if the guard regressed.
 func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	s.settings.BackgroundInterval = 50 * time.Millisecond
 	s.settings.DrainBufferTime = 0
@@ -788,32 +893,11 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 		TargetVersion: 0,
 		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
 	}
-	drainedResp := &matchingservice.DescribeTaskQueuePartitionResponse{
-		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
-		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
-			"v1": {
-				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
-					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
-						{BacklogDrained: true},
-					},
-				},
-			},
-		},
-	}
-	describeCalls := make(chan struct{}, 4)
-	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Do(func(context.Context, *matchingservice.DescribeTaskQueuePartitionRequest, ...grpc.CallOption) {
-			describeCalls <- struct{}{}
-		}).
-		Return(drainedResp, nil).
-		Times(4)
+	// note: no expected DescribeTaskQueuePartition calls
 
 	s.startManager(4, initial)
 	s.fireBackgroundTimer()
 	waitRecv(s, inputs, "timer did not call scaler")
-	for range 4 {
-		waitRecv(s, describeCalls, "shadow drain did not describe read partition")
-	}
 
 	s.Equal(int32(4), bitSet(s.sm.scaleState.BacklogState).len())
 }
@@ -823,6 +907,7 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 // state (one write), dropping the write side to baseline (Write=0) while
 // preserving read partitions (BacklogState unchanged).
 func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	priv := protoutils.MarshalAny(s.T(), wrapperspb.String("managed-state"))
 
@@ -867,6 +952,7 @@ func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
 // are all logged. Releasing removes the stale non-zero baseline that would
 // otherwise short-circuit a decision returning to the prior real target.
 func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)

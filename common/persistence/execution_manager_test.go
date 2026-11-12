@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -235,4 +236,116 @@ func TestExecutionManager_TrimHistoryBranchSkipped_EmptyBranchToken(t *testing.T
 	if _, ok := err.(*p.ConditionFailedError); !ok {
 		t.Fatalf("expected ConditionFailedError, got %T", err)
 	}
+}
+
+// runAlreadyExistsCheckingStore is an ExecutionStore that checks CheckRunAlreadyExists itself.
+type runAlreadyExistsCheckingStore struct {
+	*mockp.MockExecutionStore
+}
+
+func (runAlreadyExistsCheckingStore) SupportsCheckRunAlreadyExists() bool {
+	return true
+}
+
+func newCheckRunAlreadyExistsCreateRequest() *p.CreateWorkflowExecutionRequest {
+	return &p.CreateWorkflowExecutionRequest{
+		ShardID:               1,
+		RangeID:               1,
+		Mode:                  p.CreateWorkflowModeBrandNew,
+		ArchetypeID:           chasm.WorkflowArchetypeID,
+		CheckRunAlreadyExists: true,
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{NamespaceId: "ns", WorkflowId: "wid", ExecutionStats: &persistencespb.ExecutionStats{}},
+			ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+			NextEventID:    2,
+		},
+	}
+}
+
+func newCheckRunAlreadyExistsStore(t *testing.T) *mockp.MockExecutionStore {
+	store := mockp.NewMockExecutionStore(gomock.NewController(t))
+	store.EXPECT().GetName().Return("mock-store").AnyTimes()
+	return store
+}
+
+func newCheckRunAlreadyExistsManager(store p.ExecutionStore) p.ExecutionManager {
+	return p.NewExecutionManager(
+		store,
+		serialization.NewSerializer(),
+		nil,
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+}
+
+func expectExistingRun(t *testing.T, store *mockp.MockExecutionStore, status enumspb.WorkflowExecutionStatus) {
+	stateBlob, err := serialization.NewSerializer().WorkflowExecutionStateToBlob(
+		&persistencespb.WorkflowExecutionState{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, Status: status},
+	)
+	require.NoError(t, err)
+	store.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.GetWorkflowExecutionRequest) (*p.InternalGetWorkflowExecutionResponse, error) {
+			require.Equal(t, "ns", req.NamespaceID)
+			require.Equal(t, "wid", req.WorkflowID)
+			require.Equal(t, "rid", req.RunID)
+			return &p.InternalGetWorkflowExecutionResponse{
+				State: &p.InternalWorkflowMutableState{ExecutionState: stateBlob},
+			}, nil
+		})
+}
+
+func TestExecutionManager_CheckRunAlreadyExists_Create_RunExists(t *testing.T) {
+	store := newCheckRunAlreadyExistsStore(t)
+	expectExistingRun(t, store, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+
+	_, err := newCheckRunAlreadyExistsManager(store).CreateWorkflowExecution(context.Background(), newCheckRunAlreadyExistsCreateRequest())
+
+	var existsErr *p.WorkflowRunAlreadyExistsError
+	require.ErrorAs(t, err, &existsErr)
+	require.Equal(t, "rid", existsErr.RunID)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, existsErr.Status)
+}
+
+func TestExecutionManager_CheckRunAlreadyExists_Create_RunNotFound(t *testing.T) {
+	store := newCheckRunAlreadyExistsStore(t)
+	store.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
+	store.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.InternalCreateWorkflowExecutionRequest) (*p.InternalCreateWorkflowExecutionResponse, error) {
+			require.False(t, req.CheckRunAlreadyExists)
+			return &p.InternalCreateWorkflowExecutionResponse{}, nil
+		})
+
+	_, err := newCheckRunAlreadyExistsManager(store).CreateWorkflowExecution(context.Background(), newCheckRunAlreadyExistsCreateRequest())
+	require.NoError(t, err)
+}
+
+func TestExecutionManager_CheckRunAlreadyExists_Create_StoreChecks(t *testing.T) {
+	store := newCheckRunAlreadyExistsStore(t)
+	store.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.InternalCreateWorkflowExecutionRequest) (*p.InternalCreateWorkflowExecutionResponse, error) {
+			require.True(t, req.CheckRunAlreadyExists)
+			return &p.InternalCreateWorkflowExecutionResponse{}, nil
+		})
+
+	_, err := newCheckRunAlreadyExistsManager(runAlreadyExistsCheckingStore{store}).CreateWorkflowExecution(
+		context.Background(), newCheckRunAlreadyExistsCreateRequest())
+	require.NoError(t, err)
+}
+
+func TestExecutionManager_CheckRunAlreadyExists_UpdateWithNew_RunExists(t *testing.T) {
+	store := newCheckRunAlreadyExistsStore(t)
+	expectExistingRun(t, store, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+
+	request := newTestUpdateRequest(nil)
+	request.CheckRunAlreadyExists = true
+	newSnapshot := newCheckRunAlreadyExistsCreateRequest().NewWorkflowSnapshot
+	request.NewWorkflowSnapshot = &newSnapshot
+
+	_, err := newCheckRunAlreadyExistsManager(store).UpdateWorkflowExecution(context.Background(), request)
+
+	var existsErr *p.WorkflowRunAlreadyExistsError
+	require.ErrorAs(t, err, &existsErr)
+	require.Equal(t, "rid", existsErr.RunID)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, existsErr.Status)
 }

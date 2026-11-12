@@ -13,7 +13,7 @@ import (
 )
 
 type FunctionalTestBaseSuite struct {
-	FunctionalTestBase
+	functionalTestBase
 }
 
 func TestFunctionalTestBaseSuite(t *testing.T) {
@@ -30,7 +30,7 @@ func (s *FunctionalTestBaseSuite) TearDownSuite() {
 }
 
 func (s *FunctionalTestBaseSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.functionalTestBase.SetupTest()
 }
 
 func (s *FunctionalTestBaseSuite) TestWorkerServiceHealthCheck() {

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/clock"
@@ -379,6 +380,72 @@ func TestRecordActivityCompletionMetrics_SkipsFutureStartTime(t *testing.T) {
 	)
 }
 
+func TestRecordActivityCompletionMetrics_HasTimeSkippingClockOffset(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  ActivityExecutionStatus
+		counter string
+		closed  bool
+	}{
+		{name: "succeeded", status: ActivityStatusSucceeded, counter: metrics.ActivitySuccess.Name(), closed: true},
+		{name: "failed attempt", status: ActivityStatusFailed, counter: metrics.ActivityTaskFail.Name()},
+		{name: "canceled", status: ActivityStatusCanceled, counter: metrics.ActivityCancel.Name(), closed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+			handler := metrics.NewMockHandler(controller)
+			shard := newActivityMetricsTestShard(controller, handler)
+			expectActivityMetricsScope(handler, metrics.HistoryRespondActivityTaskCompletedScope)
+
+			counter := metrics.NewMockCounterIface(controller)
+			counter.EXPECT().Record(int64(1))
+			handler.EXPECT().Counter(tc.counter).Return(counter)
+
+			RecordActivityCompletionMetrics(
+				shard,
+				namespace.Name("test-namespace"),
+				"test-task-queue",
+				ActivityCompletionMetrics{
+					Status:                     tc.status,
+					AttemptStartedTime:         time.Now().Add(-time.Minute),
+					FirstScheduledTime:         time.Now().Add(-2 * time.Minute),
+					HasTimeSkippingClockOffset: true,
+					Closed:                     tc.closed,
+				},
+				testActivityMetricTags(metrics.HistoryRespondActivityTaskCompletedScope)...,
+			)
+		})
+	}
+}
+
+func TestRecordActivityCompletionMetrics_TimeoutWithAccumulatedTimeSkip(t *testing.T) {
+	controller := gomock.NewController(t)
+	handler := metrics.NewMockHandler(controller)
+	shard := newActivityMetricsTestShard(controller, handler)
+	expectActivityMetricsScope(handler, metrics.TimerActiveTaskActivityTimeoutScope)
+
+	for _, metricName := range []string{metrics.ActivityTaskTimeout.Name(), metrics.ActivityTimeout.Name()} {
+		counter := metrics.NewMockCounterIface(controller)
+		counter.EXPECT().Record(int64(1), metrics.StringTag("timeout_type", enumspb.TIMEOUT_TYPE_HEARTBEAT.String()))
+		handler.EXPECT().Counter(metricName).Return(counter)
+	}
+
+	RecordActivityCompletionMetrics(
+		shard,
+		namespace.Name("test-namespace"),
+		"test-task-queue",
+		ActivityCompletionMetrics{
+			Status:                     ActivityStatusTimeout,
+			AttemptStartedTime:         time.Now().Add(-time.Minute),
+			FirstScheduledTime:         time.Now().Add(-2 * time.Minute),
+			HasTimeSkippingClockOffset: true,
+			Closed:                     true,
+			TimerType:                  enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		},
+		testActivityMetricTags(metrics.TimerActiveTaskActivityTimeoutScope)...,
+	)
+}
+
 func TestRecordActivityCompletionMetrics_RecordsLargeLatency(t *testing.T) {
 	controller := gomock.NewController(t)
 	handler := metrics.NewMockHandler(controller)
@@ -489,5 +556,44 @@ func testActivityMetricTags(operation string) []metrics.Tag {
 		metrics.OperationTag(operation),
 		metrics.WorkflowTypeTag("test-workflow"),
 		metrics.ActivityTypeTag("test-activity"),
+	}
+}
+
+func TestEmitWorkflowHistoryStats(t *testing.T) {
+	for _, tc := range []struct {
+		name                     string
+		state                    enumsspb.WorkflowExecutionState
+		wroteEventsInTransaction bool
+		expectedOperations       []string
+	}{
+		{
+			name:                     "closing transaction",
+			state:                    enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			wroteEventsInTransaction: true,
+			expectedOperations:       []string{metrics.ExecutionStatsScope, metrics.WorkflowCompletionStatsScope},
+		},
+		{
+			name:                     "closed workflow updated without events",
+			state:                    enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			wroteEventsInTransaction: false,
+			expectedOperations:       []string{metrics.ExecutionStatsScope},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			emitWorkflowHistoryStats(handler, "test-namespace", tc.state, tc.wroteEventsInTransaction, 1024, 12)
+
+			snapshot := capture.Snapshot()
+			for _, metricName := range []string{metrics.HistorySize.Name(), metrics.HistoryCount.Name()} {
+				var operations []string
+				for _, recording := range snapshot[metricName] {
+					operations = append(operations, recording.Tags[metrics.OperationTagName])
+				}
+				require.ElementsMatch(t, tc.expectedOperations, operations, metricName)
+			}
+		})
 	}
 }

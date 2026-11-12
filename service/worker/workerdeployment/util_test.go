@@ -15,15 +15,20 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
@@ -562,6 +567,39 @@ func TestIsRetryableQueryError(t *testing.T) {
 	})
 }
 
+func TestDescribeVersionFailedPrecondition(t *testing.T) {
+	version := "deployment.build-id"
+	testCases := []struct {
+		name        string
+		err         error
+		expectedMsg string
+	}{
+		{
+			name:        "version not found",
+			err:         serviceerror.NewNotFound("Worker Deployment Version not found"),
+			expectedMsg: "Version deployment.build-id not found in deployment",
+		},
+		{
+			name: "describe failed",
+			err: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+				Message: "too many requests issued to Worker Deployment 'deployment'",
+			},
+			expectedMsg: "Failed to describe version deployment.build-id while checking for missing task queues: too many requests issued to Worker Deployment 'deployment'",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := describeVersionFailedPrecondition(version, tc.err)
+
+			var failedPrecondition *serviceerror.FailedPrecondition
+			require.ErrorAs(t, err, &failedPrecondition)
+			require.EqualError(t, err, tc.expectedMsg)
+		})
+	}
+}
+
 // TestSignalVersionReactivation_RequestIdFormat verifies that SignalVersionReactivation
 // produces a deterministic UUID v5 RequestId derived from the revision number. Every
 // history pod that observes the same revisionNumber must produce the same RequestId so
@@ -703,4 +741,106 @@ func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_FailureAll
 		Return(&historyservice.SignalWorkflowExecutionResponse{}, nil).
 		Times(1)
 	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5))
+}
+
+func TestDeploymentLimitReachedMetricIsEmitted(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		failureType   string
+		wantLimitType string
+	}{
+		{name: "task queues per version", failureType: errMaxTaskQueuesInVersionType, wantLimitType: "task_queues"},
+		{name: "versions per deployment", failureType: errTooManyVersions, wantLimitType: "versions"},
+		{name: "deployments per namespace", wantLimitType: "deployments"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			client := &ClientImpl{metricsHandler: handler}
+			var err error
+			if tc.failureType != "" {
+				// Task-queue and version limits arrive as typed workflow failures.
+				outcome := &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &failurepb.Failure{
+					Message: "limit exceeded",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: tc.failureType},
+					},
+				}}}
+				err = client.handleRegisterVersionFailures("ns-limit-test", outcome)
+			} else {
+				// Deployment creation rejects the request when the namespace is already at its limit.
+				controller := gomock.NewController(t)
+				historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
+				visibility := manager.NewMockVisibilityManager(controller)
+				client.logger = log.NewNoopLogger()
+				client.historyClient = historyClient
+				client.visibilityManager = visibility
+				client.maxIDLengthLimit = dynamicconfig.GetIntPropertyFn(1000)
+				client.maxDeployments = dynamicconfig.GetIntPropertyFnFilteredByNamespace(2)
+				ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-limit-test"}, nil, "")
+				historyClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("deployment absent"))
+				visibility.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 2}, nil)
+				_, err = client.CreateWorkerDeployment(context.Background(), ns, "deployment", "identity", "request")
+			}
+
+			// Check the emitted label strings so existing queries remain compatible when tag constants change.
+			var exhausted *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &exhausted)
+			require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, exhausted.Cause)
+			recordings := capture.SnapshotMetric(metrics.WorkerDeploymentLimitExceeded.Name())
+			require.Len(t, recordings, 1)
+			require.Equal(t, int64(1), recordings[0].Value)
+			require.Equal(t, map[string]string{"namespace": "ns-limit-test", "limit_type": tc.wantLimitType}, recordings[0].Tags)
+		})
+	}
+}
+
+// Routing updates record version-limit failures for both current and ramping versions.
+func (d *deploymentWorkflowClientSuite) TestVersionLimitMetricIsEmittedForRoutingUpdates() {
+	for _, operation := range []string{"set current", "set ramping"} {
+		d.Run(operation, func() {
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			d.deploymentClient.metricsHandler = handler
+			d.deploymentClient.maxIDLengthLimit = dynamicconfig.GetIntPropertyFn(1000)
+
+			// An existing deployment rejects the new version requested with allowNoPollers.
+			d.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+				}, nil)
+			failure := &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &failurepb.Failure{
+				Message: "version limit reached",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: errTooManyVersions},
+				},
+			}}}
+			d.mockHistoryClient.EXPECT().ExecuteMultiOperation(gomock.Any(), gomock.Any()).Return(
+				&historyservice.ExecuteMultiOperationResponse{Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
+					{Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{StartWorkflow: &historyservice.StartWorkflowExecutionResponse{}}},
+					{Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{UpdateWorkflow: &historyservice.UpdateWorkflowExecutionResponse{
+						Response: &workflowservice.UpdateWorkflowExecutionResponse{
+							Stage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, Outcome: failure,
+						},
+					}}},
+				}}, nil)
+
+			var err error
+			if operation == "set current" {
+				_, err = d.deploymentClient.SetCurrentVersion(d.T().Context(), d.ns, testDeployment, "A.xyz", "identity", false, nil, true)
+			} else {
+				_, err = d.deploymentClient.SetRampingVersion(d.T().Context(), d.ns, testDeployment, "A.xyz", 50, "identity", false, nil, true)
+			}
+
+			var internal *serviceerror.Internal
+			d.Require().ErrorAs(err, &internal)
+			d.Require().Equal("version limit reached", internal.Message)
+			recordings := capture.SnapshotMetric(metrics.WorkerDeploymentLimitExceeded.Name())
+			d.Require().Len(recordings, 1)
+			d.Require().Equal(int64(1), recordings[0].Value)
+			d.Require().Equal(map[string]string{"namespace": testNamespace, "limit_type": "versions"}, recordings[0].Tags)
+		})
+	}
 }
