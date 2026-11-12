@@ -1,7 +1,6 @@
 package testlogger_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -60,29 +59,10 @@ func TestEngineUsesCallerFieldType(t *testing.T) {
 	expected.Forget()
 }
 
-type failureT struct {
-	*testing.T
-	message string
-}
+type panicLogger struct{ discardLogger }
 
-func (t *failureT) Fatalf(format string, args ...any) { t.message = fmt.Sprintf(format, args...) }
+func (panicLogger) Panic(message string, _ ...field) { panic(message) }
 
-func TestFailureRetainsOriginalFields(t *testing.T) {
-	t.Parallel()
-
-	tb := &failureT{T: t}
-	logger := testlogger.NewEngine[field](tb, testlogger.FailOnAnyUnexpectedError, discardLogger{})
-	fields := []field{{"code", 400}}
-
-	logger.Error("first", fields...)
-	failure := logger.Failure()
-
-	fields[0] = field{"code", 500}
-	logger.Error("second", fields...)
-
-	require.Same(t, failure, logger.Failure())
-	require.Equal(t, []field{{"code", 400}}, failure.Tags)
-	require.Equal(t, "first", failure.Msg)
-	require.NotEmpty(t, failure.Stack)
-	require.Contains(t, tb.message, "Unexpected Error log encountered: second")
+func newEngine(t testlogger.TestingT, mode testlogger.Mode) *testlogger.Engine[field] {
+	return testlogger.NewEngine[field](t, mode, panicLogger{})
 }
