@@ -14,6 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -196,6 +197,24 @@ func (r *laneStreamReceiver) sendEventLoop() error {
 	}()
 	defer log.CapturePanic(r.logger, &panicErr)
 
+	if notifier, ok := r.laneFeedback.(LaneFeedbackNotifier); ok {
+		wake := make(chan struct{}, 1)
+		unsubscribe := notifier.SubscribeFeedback(r.clientShardKey.ShardID, func() {
+			select {
+			case wake <- struct{}{}:
+			default:
+			}
+		})
+		if unsubscribe != nil {
+			defer unsubscribe()
+			return runLaneFeedbackACKLoop(clock.NewRealTimeSource(), r.Config.ReplicationStreamSyncStatusDuration(),
+				wake, r.shutdownChan.Channel(), func() (bool, error) {
+					_, sent, err := r.sendAckMessage(r.stream)
+					return sent, err
+				})
+		}
+	}
+
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
 
@@ -238,6 +257,12 @@ func (r *laneStreamReceiver) recvEventLoop() error {
 func (r *laneStreamReceiver) ackMessage(
 	stream Stream,
 ) (int64, error) {
+	watermark, _, err := r.sendAckMessage(stream)
+	return watermark, err
+}
+
+//nolint:revive // Complexity matches the original ackMessage; sent distinguishes skipped ACKs from watermark zero.
+func (r *laneStreamReceiver) sendAckMessage(stream Stream) (int64, bool, error) {
 	highPriorityWaterMarkInfo := r.highPriorityTaskTracker.LowWatermark()
 	lowPriorityWaterMarkInfo := r.lowPriorityTaskTracker.LowWatermark()
 	size := r.highFamilyTrackingCount() + r.lowPriorityTaskTracker.Size()
@@ -250,7 +275,7 @@ func (r *laneStreamReceiver) ackMessage(
 	receiverMode := ReceiverMode(atomic.LoadInt32((*int32)(&r.receiverMode)))
 	switch receiverMode {
 	case ReceiverModeUnset:
-		return 0, nil
+		return 0, false, nil
 	case ReceiverModeTieredStack:
 		if highPriorityWaterMarkInfo == nil || lowPriorityWaterMarkInfo == nil {
 			// This is to prevent the case: high priority task tracker received a batch of tasks, but low priority task tracker did not get any task yet.
@@ -259,7 +284,7 @@ func (r *laneStreamReceiver) ackMessage(
 			// because it is possible that low priority tracker might receive a batch of tasks with watermark 5 later.
 			// It is also true for the opposite case.
 			r.logger.Warn("Tiered stack mode. Have to wait for both high and low priority tracker received at least one batch of tasks before acking.")
-			return 0, nil
+			return 0, false, nil
 		}
 		highPriorityFlowControlInfo := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH)
 		if highPriorityFlowControlInfo.Command == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
@@ -307,17 +332,17 @@ func (r *laneStreamReceiver) ackMessage(
 		}
 	case ReceiverModeSingleStack:
 		if highPriorityWaterMarkInfo == nil { // This should not happen, more for a safety check
-			return 0, NewStreamError("Single stack mode. High priority tracker does not have low watermark info", serviceerror.NewInternal("Invalid tracker state"))
+			return 0, false, NewStreamError("Single stack mode. High priority tracker does not have low watermark info", serviceerror.NewInternal("Invalid tracker state"))
 		}
 		if lowPriorityWaterMarkInfo != nil {
-			return 0, NewStreamError("Single stack mode. Should not receive low priority task", serviceerror.NewInternal("Invalid tracker state"))
+			return 0, false, NewStreamError("Single stack mode. Should not receive low priority task", serviceerror.NewInternal("Invalid tracker state"))
 		}
 		inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
 		inclusiveLowWaterMarkTime = highPriorityWaterMarkInfo.Timestamp
 	default:
 	}
 	if inclusiveLowWaterMark == -1 {
-		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
+		return 0, false, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
 	}
 
 	var throttleHighNamespaceIDs []string
@@ -358,7 +383,7 @@ func (r *laneStreamReceiver) ackMessage(
 		},
 	})
 	if err != nil {
-		return 0, NewStreamError("stream_receiver failed to send", err)
+		return 0, false, NewStreamError("stream_receiver failed to send", err)
 	}
 	metrics.ReplicationTasksRecvBacklog.With(r.MetricsHandler).Record(
 		int64(size),
@@ -371,7 +396,7 @@ func (r *laneStreamReceiver) ackMessage(
 		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
 		metrics.OperationTag(metrics.SyncWatermarkScope),
 	)
-	return inclusiveLowWaterMark, nil
+	return inclusiveLowWaterMark, true, nil
 }
 
 //nolint:revive // cognitive complexity matches StreamReceiverImpl.processMessages, which this copies.

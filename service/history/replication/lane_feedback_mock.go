@@ -79,3 +79,41 @@ func (mr *MockLaneFeedbackProviderMockRecorder) ThrottledNamespaceIDs(stream any
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ThrottledNamespaceIDs", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).ThrottledNamespaceIDs), stream)
 }
+
+// MockLaneFeedbackNotifier is a mock of LaneFeedbackNotifier interface.
+type MockLaneFeedbackNotifier struct {
+	ctrl     *gomock.Controller
+	recorder *MockLaneFeedbackNotifierMockRecorder
+	isgomock struct{}
+}
+
+// MockLaneFeedbackNotifierMockRecorder is the mock recorder for MockLaneFeedbackNotifier.
+type MockLaneFeedbackNotifierMockRecorder struct {
+	mock *MockLaneFeedbackNotifier
+}
+
+// NewMockLaneFeedbackNotifier creates a new mock instance.
+func NewMockLaneFeedbackNotifier(ctrl *gomock.Controller) *MockLaneFeedbackNotifier {
+	mock := &MockLaneFeedbackNotifier{ctrl: ctrl}
+	mock.recorder = &MockLaneFeedbackNotifierMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockLaneFeedbackNotifier) EXPECT() *MockLaneFeedbackNotifierMockRecorder {
+	return m.recorder
+}
+
+// SubscribeFeedback mocks base method.
+func (m *MockLaneFeedbackNotifier) SubscribeFeedback(shardID int32, notify func()) func() {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeFeedback", shardID, notify)
+	ret0, _ := ret[0].(func())
+	return ret0
+}
+
+// SubscribeFeedback indicates an expected call of SubscribeFeedback.
+func (mr *MockLaneFeedbackNotifierMockRecorder) SubscribeFeedback(shardID, notify any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeFeedback", reflect.TypeOf((*MockLaneFeedbackNotifier)(nil).SubscribeFeedback), shardID, notify)
+}
