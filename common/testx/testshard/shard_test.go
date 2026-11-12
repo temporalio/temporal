@@ -15,14 +15,15 @@ func TestFromEnv(t *testing.T) {
 		total   string
 		index   string
 		salt    string
+		want    Shard
 		wantErr string
 	}{
 		{name: "unset"},
 		{name: "total missing", index: "1"},
 		{name: "index missing", total: "4"},
-		{name: "one shard", total: "1", index: "0", salt: "my-suite"},
-		{name: "first shard", total: "4", index: "0", salt: "my-suite"},
-		{name: "last shard", total: "4", index: "3", salt: "my-suite"},
+		{name: "one shard", total: "1", index: "0", salt: "my-suite", want: Shard{total: 1, salt: "my-suite"}},
+		{name: "first shard", total: "4", index: "0", salt: "my-suite", want: Shard{total: 4, salt: "my-suite"}},
+		{name: "last shard", total: "4", index: "3", salt: "my-suite", want: Shard{index: 3, total: 4, salt: "my-suite"}},
 		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TEST_SHARD_SALT or use WithSalt"},
 		{name: "malformed total", total: "four", index: "0", wantErr: `parsing TEST_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
 		{name: "zero total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
@@ -41,9 +42,7 @@ func TestFromEnv(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			if tc.total == "" || tc.index == "" || tc.total == "1" {
-				require.True(t, shard.ShouldRunTest("TestSuite/TestMethod"))
-			}
+			require.Equal(t, tc.want, shard)
 		})
 	}
 }
@@ -86,7 +85,7 @@ func TestSkipUnlessInShardInheritsSelection(t *testing.T) {
 		t.Cleanup(func() { require.False(t, t.Skipped(), "the first sharding decision must be retained") })
 		other.SkipUnlessInShard(t)
 	})
-	require.False(t, other.ShouldRunTest(t.Name()+"/suite"), "selection must be removed when its test finishes")
+	require.False(t, alreadySelected(t.Name()+"/suite"), "selection must be removed when its test finishes")
 }
 
 func TestFromEnvCustomVariables(t *testing.T) {
@@ -99,10 +98,11 @@ func TestFromEnvCustomVariables(t *testing.T) {
 		index       string
 		salt        string
 		defaultSalt string
+		want        Shard
 		wantErr     string
 	}{
-		{name: "custom salt", total: "4", index: "1", salt: "-test-salt"},
-		{name: "default salt", total: "4", index: "2", defaultSalt: "-salt-2827"},
+		{name: "custom salt", total: "4", index: "1", salt: "-test-salt", want: Shard{index: 1, total: 4, salt: "-test-salt"}},
+		{name: "default salt", total: "4", index: "2", defaultSalt: "-salt-2827", want: Shard{index: 2, total: 4, salt: "-salt-2827"}},
 		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set CI_SHARD_SALT or use WithSalt"},
 		{name: "missing total", index: "1"},
 		{name: "invalid total", total: "four", index: "0", wantErr: `parsing CI_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
@@ -125,7 +125,7 @@ func TestFromEnvCustomVariables(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			require.True(t, shard.ShouldRunTest("TestSuite/TestMethod"))
+			require.Equal(t, tc.want, shard)
 		})
 	}
 }
