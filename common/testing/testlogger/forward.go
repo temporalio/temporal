@@ -1,8 +1,9 @@
+// TODO: Remove this forwarding file once all callers use go.temporal.io/testx/testlogger.
 package testlogger
 
 import (
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/testlogger/internal/engine"
+	engine "go.temporal.io/testx/testlogger"
 )
 
 type CapturedLog = engine.CapturedLog[tag.Tag]

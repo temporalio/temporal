@@ -5,7 +5,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/testlogger/internal/engine"
+	engine "go.temporal.io/testx/testlogger"
 	"go.uber.org/zap/zapcore"
 )
 

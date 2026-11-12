@@ -1,4 +1,4 @@
-package engine
+package testlogger
 
 import (
 	"cmp"
@@ -60,7 +60,7 @@ const (
 	FailOnExpectedErrorOnly = "fail-on-expected-errors"
 )
 
-// This is a subset of the testing.T interface that we use in this package that is
+// TestingT is a subset of the testing.T interface that we use in this package that is
 // also shared with *rapid.T.
 type TestingT interface {
 	Errorf(string, ...any)
@@ -75,7 +75,7 @@ type TestingT interface {
 	Fatal(args ...any)
 }
 
-// CleanupCapable is an interface that allows a test to register cleanup functions.
+// CleanupCapableT is an interface that allows a test to register cleanup functions.
 // This is /not/ implemented by *rapid.T but is by *testing.T
 type CleanupCapableT interface {
 	TestingT
