@@ -178,13 +178,15 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		}
 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
 
-		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
+		currentExecutionPayload, err := currentMutableState.CloseTransactionAsMutation(
 			ctx,
 			historyi.TransactionPolicyActive,
 		)
 		if err != nil {
 			return err
 		}
+		currentWorkflowMutation = currentExecutionPayload.ExecutionMutation
+		currentWorkflowEventsSeq = currentExecutionPayload.ExecutionEvents
 
 		reapplyEventsFn = func(ctx context.Context, resetMutableState historyi.MutableState) error {
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
@@ -375,7 +377,7 @@ func (r *workflowResetterImpl) persistToDB(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow Workflow,
 ) error {
-	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+	resetExecutionPayload, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
 	)
@@ -391,7 +393,7 @@ func (r *workflowResetterImpl) persistToDB(
 		// single Transaction method does both. Write base-first so retries are safe: if the create
 		// fails, a retry rewrites the base link and the brand-new insert still succeeds. Creating
 		// first would leave the reset run as current and permanently conflict with the create.
-		baseWorkflowMutation, baseWorkflowEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsMutation(
+		baseExecutionPayload, err := baseWorkflow.GetMutableState().CloseTransactionAsMutation(
 			ctx,
 			historyi.TransactionPolicyActive,
 		)
@@ -403,8 +405,8 @@ func (r *workflowResetterImpl) persistToDB(
 			persistence.UpdateWorkflowModeBypassCurrent,
 			chasm.WorkflowArchetypeID,
 			baseWorkflow.GetMutableState().GetCurrentVersion(),
-			baseWorkflowMutation,
-			baseWorkflowEventsSeq,
+			baseExecutionPayload.ExecutionMutation,
+			baseExecutionPayload.ExecutionEvents,
 			nil,
 			nil,
 			nil,
@@ -418,8 +420,8 @@ func (r *workflowResetterImpl) persistToDB(
 			persistence.CreateWorkflowModeBrandNew,
 			chasm.WorkflowArchetypeID,
 			resetWorkflow.GetMutableState().GetCurrentVersion(),
-			resetWorkflowSnapshot,
-			resetWorkflowEventsSeq,
+			resetExecutionPayload.ExecutionSnapshot,
+			resetExecutionPayload.ExecutionEvents,
 			resetWorkflow.GetMutableState().IsWorkflow(),
 		); err != nil {
 			return err
@@ -435,7 +437,7 @@ func (r *workflowResetterImpl) persistToDB(
 		// Additionally since base is the same as current, we should ensure that we prepare only one of them for transaction and do it only once (to avoid DBRecordVersion conflict)
 		// So check if current was already prepared for transaction. If not prepare the mutation for transaction.
 		if currentWorkflowMutation == nil {
-			currentWorkflowMutation, currentWorkflowEventsSeq, err = currentWorkflow.GetMutableState().CloseTransactionAsMutation(
+			currentExecutionPayload, err := currentWorkflow.GetMutableState().CloseTransactionAsMutation(
 				ctx,
 				historyi.TransactionPolicyActive,
 			)
@@ -443,6 +445,8 @@ func (r *workflowResetterImpl) persistToDB(
 				return err
 			}
 
+			currentWorkflowMutation = currentExecutionPayload.ExecutionMutation
+			currentWorkflowEventsSeq = currentExecutionPayload.ExecutionEvents
 		}
 
 		if _, _, err := r.transaction.UpdateWorkflowExecution(
@@ -453,8 +457,8 @@ func (r *workflowResetterImpl) persistToDB(
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,
 			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
-			resetWorkflowSnapshot,
-			resetWorkflowEventsSeq,
+			resetExecutionPayload.ExecutionSnapshot,
+			resetExecutionPayload.ExecutionEvents,
 			// checkRunAlreadyExists: reset must keep a random run ID; a derived one would collide with the base run.
 			false,
 			currentWorkflow.GetMutableState().IsWorkflow(),
@@ -468,18 +472,21 @@ func (r *workflowResetterImpl) persistToDB(
 	if currentWorkflowMutation == nil {
 		// We have 2 different runs to update here - the base run & the new run. There were no changes to current.
 		// However we are still preparing current for transaction only to be able to use transaction.ConflictResolveWorkflowExecution() method below.
-		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentWorkflow.GetMutableState().CloseTransactionAsMutation(
+		currentExecutionPayload, err := currentWorkflow.GetMutableState().CloseTransactionAsMutation(
 			ctx,
 			historyi.TransactionPolicyActive,
 		)
 		if err != nil {
 			return err
 		}
+
+		currentWorkflowMutation = currentExecutionPayload.ExecutionMutation
+		currentWorkflowEventsSeq = currentExecutionPayload.ExecutionEvents
 	}
 
 	// We have 3 different runs to update here. However we have to prepare the snapshot of the base for transaction to be used in transaction.ConflictResolveWorkflowExecution() method.
 	// We use this method since it allows us to commit changes from all 3 different runs in the same DB transaction.
-	baseSnapshot, baseEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+	baseExecutionPayload, err := baseWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
 	)
@@ -493,11 +500,11 @@ func (r *workflowResetterImpl) persistToDB(
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		chasm.WorkflowArchetypeID,
 		baseWorkflow.GetMutableState().GetCurrentVersion(),
-		baseSnapshot,
-		baseEventsSeq,
+		baseExecutionPayload.ExecutionSnapshot,
+		baseExecutionPayload.ExecutionEvents,
 		&resetRunVersion,
-		resetWorkflowSnapshot,
-		resetWorkflowEventsSeq,
+		resetExecutionPayload.ExecutionSnapshot,
+		resetExecutionPayload.ExecutionEvents,
 		&currentRunVerson,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,

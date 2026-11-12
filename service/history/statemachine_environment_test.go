@@ -261,9 +261,9 @@ func TestValidateStateMachineRef(t *testing.T) {
 			t.Parallel()
 			s := newStateMachineEnvTestContext(t, tc.enableTransitionHistory)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
-			snapshot, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+			mutation, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 			require.NoError(t, err)
-			task := snapshot.Tasks[tasks.CategoryOutbound][0]
+			task := mutation.ExecutionMutation.Tasks[tasks.CategoryOutbound][0]
 			exec := stateMachineEnvironment{
 				shardContext:   s.mockShard,
 				cache:          s.workflowCache,
@@ -376,7 +376,7 @@ func TestAccess(t *testing.T) {
 			s := newStateMachineEnvTestContext(t, true)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
 			mutableState.GetExecutionState().State = tc.workflowState
-			snapshot, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+			mutation, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 			require.NoError(t, err)
 			persistenceMutableState := workflow.TestCloneToProto(context.Background(), mutableState)
 			em := s.mockShard.GetExecutionManager().(*persistence.MockExecutionManager)
@@ -390,7 +390,7 @@ func TestAccess(t *testing.T) {
 				logger:         s.mockShard.GetLogger(),
 			}
 
-			task := snapshot.Tasks[tasks.CategoryOutbound][0]
+			task := mutation.ExecutionMutation.Tasks[tasks.CategoryOutbound][0]
 			ref, _, err := StateMachineTask(s.mockShard.StateMachineRegistry(), task)
 			require.NoError(t, err)
 			err = exec.Access(context.Background(), ref, tc.accessType, tc.accessor)

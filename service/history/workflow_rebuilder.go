@@ -271,20 +271,20 @@ func (r *workflowRebuilderImpl) overwriteToDB(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 ) error {
-	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
+	transactionPayload, err := mutableState.CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
 	}
-	if len(resetWorkflowEventsSeq) != 0 {
+	if len(transactionPayload.ExecutionEvents) != 0 {
 		return serviceerror.NewInternal("workflowRebuilder encountered new events when rebuilding mutable state")
 	}
 
 	return r.transaction.SetWorkflowExecution(
 		ctx,
 		chasm.WorkflowArchetypeID,
-		resetWorkflowSnapshot,
+		transactionPayload.ExecutionSnapshot,
 	)
 }

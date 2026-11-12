@@ -644,7 +644,13 @@ func (s *signalWithStartWorkflowSuite) TestStartAndSignalWithoutCurrentWorkflow_
 	newContext := historyi.NewMockWorkflowContext(s.controller)
 	newMutableState := historyi.NewMockMutableState(s.controller)
 	newMutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive).
-		Return(&persistence.WorkflowSnapshot{}, []*persistence.WorkflowEvents{{}}, nil)
+		Return(
+			&historyi.SnapshotTransactionPayload{
+				ExecutionSnapshot: &persistence.WorkflowSnapshot{},
+				ExecutionEvents:   []*persistence.WorkflowEvents{{}},
+			},
+			nil,
+		)
 	failedErr := &persistence.CurrentWorkflowConditionFailedError{
 		Msg:   "current workflow condition failed",
 		RunID: uuid.New().String(),

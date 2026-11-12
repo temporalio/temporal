@@ -624,7 +624,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}()
 
-	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
+	resetExecutionPayload, err := resetMutableState.CloseTransactionAsSnapshot(
 		ctx,
 		resetWorkflowTransactionPolicy,
 	)
@@ -642,13 +642,15 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 			}
 		}()
 
-		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+		newExecutionPayload, err := newMutableState.CloseTransactionAsSnapshot(
 			ctx,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
 			return err
 		}
+		newWorkflow = newExecutionPayload.ExecutionSnapshot
+		newWorkflowEventsSeq = newExecutionPayload.ExecutionEvents
 	}
 
 	var currentWorkflow *persistence.WorkflowMutation
@@ -661,17 +663,19 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 			}
 		}()
 
-		currentWorkflow, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
+		currentExecutionPayload, err := currentMutableState.CloseTransactionAsMutation(
 			ctx,
 			*currentTransactionPolicy,
 		)
 		if err != nil {
 			return err
 		}
+		currentWorkflow = currentExecutionPayload.ExecutionMutation
+		currentWorkflowEventsSeq = currentExecutionPayload.ExecutionEvents
 	}
 
-	eventsToReapply := resetWorkflowEventsSeq
-	if len(resetWorkflowEventsSeq) == 0 {
+	eventsToReapply := resetExecutionPayload.ExecutionEvents
+	if len(eventsToReapply) == 0 {
 		if reapplyCandidateEvents := resetMutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
 			eventsToReapply = []*persistence.WorkflowEvents{
 				{
@@ -702,8 +706,8 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		conflictResolveMode,
 		c.archetypeID,
 		resetMutableState.GetCurrentVersion(),
-		resetWorkflow,
-		resetWorkflowEventsSeq,
+		resetExecutionPayload.ExecutionSnapshot,
+		resetExecutionPayload.ExecutionEvents,
 		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,
@@ -1007,7 +1011,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
 ) (*ExecutionTransactionPayload, error) {
-	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
+	updatePayload, err := c.MutableState.CloseTransactionAsMutation(
 		ctx,
 		updateWorkflowTransactionPolicy,
 	)
@@ -1016,17 +1020,19 @@ func (c *ContextImpl) closeMutableStateTransaction(
 	}
 
 	payload := &ExecutionTransactionPayload{
-		ExecutionMutation: updateWorkflow,
-		ExecutionEvents:   updateWorkflowEventsSeq,
+		ExecutionMutation: updatePayload.ExecutionMutation,
+		ExecutionEvents:   updatePayload.ExecutionEvents,
 	}
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
-		payload.NewExecutionSnapshot, payload.NewExecutionEvents, err = newMutableState.CloseTransactionAsSnapshot(
+		newExecutionPayload, err := newMutableState.CloseTransactionAsSnapshot(
 			ctx,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
 			return nil, err
 		}
+		payload.NewExecutionSnapshot = newExecutionPayload.ExecutionSnapshot
+		payload.NewExecutionEvents = newExecutionPayload.ExecutionEvents
 		payload.NewExecutionCheckRunAlreadyExists = payload.NewExecutionSnapshot != nil && newContext.CheckRunAlreadyExists()
 	}
 	return payload, nil
@@ -1125,14 +1131,14 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	// RespondWorkflowTaskCompleted requests.
 	c.reconcileTaskCompletionBuffer()
 
-	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
+	resetExecutionPayload, err := c.MutableState.CloseTransactionAsSnapshot(
 		ctx,
 		transactionPolicy,
 	)
 	if err != nil {
 		return err
 	}
-	if len(resetWorkflowEventsSeq) != 0 {
+	if len(resetExecutionPayload.ExecutionEvents) != 0 {
 		metrics.ClosedWorkflowBufferEventCount.With(c.metricsHandler).Record(1)
 		c.logger.Warn("SetWorkflowExecution encountered new events")
 	}
@@ -1140,7 +1146,7 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	return NewTransaction(shardContext).SetWorkflowExecution(
 		ctx,
 		c.archetypeID,
-		resetWorkflowSnapshot,
+		resetExecutionPayload.ExecutionSnapshot,
 	)
 }
 

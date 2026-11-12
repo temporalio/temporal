@@ -928,13 +928,13 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 		}
 	}
 
-	snapshot, events, err := mutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
+	transactionPayload, err := mutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
 	if err != nil {
 		return newExecutionParams{}, err
 	}
-	if len(events) != 0 {
+	if len(transactionPayload.ExecutionEvents) != 0 {
 		return newExecutionParams{}, serviceerror.NewInternal(
-			fmt.Sprintf("CHASM framework does not support events yet, found events for new run: %v", events),
+			fmt.Sprintf("CHASM framework does not support events yet, found events for new run: %v", transactionPayload.ExecutionEvents),
 		)
 	}
 
@@ -955,8 +955,8 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 			testhooks.TestHooks{},
 		),
 		mutableState: mutableState,
-		snapshot:     snapshot,
-		events:       events,
+		snapshot:     transactionPayload.ExecutionSnapshot,
+		events:       transactionPayload.ExecutionEvents,
 	}, nil
 }
 

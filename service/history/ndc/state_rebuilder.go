@@ -127,7 +127,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive)
+	_, err = rebuiltMutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive)
 	if err != nil {
 		return nil, RebuildStats{}, err
 	}
@@ -189,7 +189,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	currentVersionHistory.Items = nil
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
+	_, err = rebuiltMutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
 	if err != nil {
 		return nil, RebuildStats{}, err
 	}

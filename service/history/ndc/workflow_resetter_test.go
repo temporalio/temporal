@@ -199,7 +199,13 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		context.Background(),
 		historyi.TransactionPolicyActive,
-	).Return(resetSnapshot, resetEventsSeq, nil)
+	).Return(
+		&historyi.SnapshotTransactionPayload{
+			ExecutionSnapshot: resetSnapshot,
+			ExecutionEvents:   resetEventsSeq,
+		},
+		nil,
+	)
 
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
@@ -239,7 +245,16 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentEventsSeq := []*persistence.WorkflowEvents{{}}
 	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	currentMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
-	currentMutableState.EXPECT().CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive).Return(currentMutation, currentEventsSeq, nil)
+	currentMutableState.EXPECT().CloseTransactionAsMutation(
+		context.Background(),
+		historyi.TransactionPolicyActive,
+	).Return(
+		&historyi.MutationTransactionPayload{
+			ExecutionMutation: currentMutation,
+			ExecutionEvents:   currentEventsSeq,
+		},
+		nil,
+	)
 
 	resetWorkflow := NewMockWorkflow(s.controller)
 	resetReleaseCalled := false
@@ -266,7 +281,13 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		context.Background(),
 		historyi.TransactionPolicyActive,
-	).Return(resetSnapshot, resetEventsSeq, nil)
+	).Return(
+		&historyi.SnapshotTransactionPayload{
+			ExecutionSnapshot: resetSnapshot,
+			ExecutionEvents:   resetEventsSeq,
+		},
+		nil,
+	)
 
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
@@ -327,7 +348,13 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		context.Background(),
 		historyi.TransactionPolicyActive,
-	).Return(resetSnapshot, resetEventsSeq, nil)
+	).Return(
+		&historyi.SnapshotTransactionPayload{
+			ExecutionSnapshot: resetSnapshot,
+			ExecutionEvents:   resetEventsSeq,
+		},
+		nil,
+	)
 
 	// The base run is closed as a mutation carrying the ResetRunID set by UpdateResetRunID.
 	baseMutation := &persistence.WorkflowMutation{
@@ -337,7 +364,13 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 	baseMutableState.EXPECT().CloseTransactionAsMutation(
 		context.Background(),
 		historyi.TransactionPolicyActive,
-	).Return(baseMutation, baseEventsSeq, nil)
+	).Return(
+		&historyi.MutationTransactionPayload{
+			ExecutionMutation: baseMutation,
+			ExecutionEvents:   baseEventsSeq,
+		},
+		nil,
+	)
 
 	// Base-first: the base run is persisted with BypassCurrent (tolerating the missing current
 	// record) before the reset run is created as the new current.

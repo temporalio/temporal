@@ -7756,10 +7756,10 @@ func (ms *MutableStateImpl) StartTransaction(
 func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
-) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
+) (*historyi.MutationTransactionPayload, error) {
 	result, err := ms.closeTransaction(ctx, transactionPolicy)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	workflowMutation := &persistence.WorkflowMutation{
@@ -7794,23 +7794,26 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 
 	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return workflowMutation, result.workflowEventsSeq, nil
+	return &historyi.MutationTransactionPayload{
+		ExecutionMutation: workflowMutation,
+		ExecutionEvents:   result.workflowEventsSeq,
+	}, nil
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
-) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
+) (*historyi.SnapshotTransactionPayload, error) {
 	result, err := ms.closeTransaction(ctx, transactionPolicy)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if len(result.bufferEvents) > 0 {
 		// TODO do we need the functionality to generate snapshot with buffered events?
-		return nil, nil, softassert.UnexpectedInternalErr(
+		return nil, softassert.UnexpectedInternalErr(
 			ms.logger,
 			"cannot generate workflow snapshot with buffered events",
 			nil,
@@ -7839,9 +7842,12 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 
 	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return workflowSnapshot, result.workflowEventsSeq, nil
+	return &historyi.SnapshotTransactionPayload{
+		ExecutionSnapshot: workflowSnapshot,
+		ExecutionEvents:   result.workflowEventsSeq,
+	}, nil
 }
 
 func (ms *MutableStateImpl) IsResourceDuplicated(

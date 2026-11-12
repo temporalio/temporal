@@ -160,8 +160,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 ) error {
-
-	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+	targetWorkflowPayload, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyPassive,
 	)
@@ -185,8 +184,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 			prevRunID,
 			prevLastWriteVersion,
 			targetWorkflow.GetMutableState(),
-			targetWorkflowSnapshot,
-			targetWorkflowEventsSeq,
+			targetWorkflowPayload.ExecutionSnapshot,
+			targetWorkflowPayload.ExecutionEvents,
 			historyi.TransactionPolicyPassive,
 		)
 	}
@@ -202,8 +201,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		prevRunID,
 		prevLastWriteVersion,
 		targetWorkflow.GetMutableState(),
-		targetWorkflowSnapshot,
-		targetWorkflowEventsSeq,
+		targetWorkflowPayload.ExecutionSnapshot,
+		targetWorkflowPayload.ExecutionEvents,
 		historyi.TransactionPolicyPassive,
 	)
 }
@@ -251,7 +250,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
 	ms := targetWorkflow.GetMutableState()
 
 	eventReapplyCandidates := ms.GetReapplyCandidateEvents()
-	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := ms.CloseTransactionAsSnapshot(
+	targetWorkflowPayload, err := ms.CloseTransactionAsSnapshot(
 		ctx,
 		targetWorkflowPolicy,
 	)
@@ -259,11 +258,11 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
 		return err
 	}
 
-	if len(targetWorkflowEventsSeq) != 0 {
+	if len(targetWorkflowPayload.ExecutionEvents) != 0 {
 		if err := targetWorkflow.GetContext().ReapplyEvents(
 			ctx,
 			r.shardContext,
-			targetWorkflowEventsSeq,
+			targetWorkflowPayload.ExecutionEvents,
 		); err != nil {
 			return err
 		}
@@ -296,8 +295,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
 		prevRunID,
 		prevLastWriteVersion,
 		ms,
-		targetWorkflowSnapshot,
-		targetWorkflowEventsSeq,
+		targetWorkflowPayload.ExecutionSnapshot,
+		targetWorkflowPayload.ExecutionEvents,
 		historyi.TransactionPolicyPassive,
 	)
 	switch err.(type) {

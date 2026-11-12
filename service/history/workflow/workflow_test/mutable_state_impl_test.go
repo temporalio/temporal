@@ -107,15 +107,15 @@ func (c *mutationTestCase) Run(t *testing.T) {
 		addWorkflowExecutionSignaled(t, i, ms)
 	}
 
-	_, workflowEvents, err := ms.CloseTransactionAsMutation(context.Background(), c.transactionPolicy)
+	mutation, err := ms.CloseTransactionAsMutation(context.Background(), c.transactionPolicy)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if c.expectFlush {
-		c.testFailure(t, ms, wft, workflowEvents)
+		c.testFailure(t, ms, wft, mutation.ExecutionEvents)
 	} else {
-		c.testSuccess(t, ms, workflowEvents)
+		c.testSuccess(t, ms, mutation.ExecutionEvents)
 	}
 }
 

@@ -309,14 +309,14 @@ func startAndSignalWithoutCurrentWorkflow(
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
 ) (startOutcome, error) {
-	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
+	transactionPayload, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return startOutcome{}, err
 	}
-	if len(newWorkflowEventsSeq) != 1 {
+	if len(transactionPayload.ExecutionEvents) != 1 {
 		return startOutcome{}, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
@@ -343,8 +343,8 @@ func startAndSignalWithoutCurrentWorkflow(
 		prevRunID,
 		prevLastWriteVersion,
 		newWorkflowLease.GetMutableState(),
-		newWorkflow,
-		newWorkflowEventsSeq,
+		transactionPayload.ExecutionSnapshot,
+		transactionPayload.ExecutionEvents,
 		historyi.TransactionPolicyActive,
 	)
 	// CurrentWorkflowConditionFailedError.RequestIDs does not record signal delivery.

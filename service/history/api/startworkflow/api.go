@@ -356,14 +356,14 @@ func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*c
 			nil,
 		)
 	}
-	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
+	transactionPayload, err := mutableState.CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return nil, err
 	}
-	if len(eventBatches) != 1 {
+	if len(transactionPayload.ExecutionEvents) != 1 {
 		return nil, softassert.UnexpectedInternalErr(
 			s.shardContext.GetLogger(),
 			"unable to create 1st event batch",
@@ -376,8 +376,8 @@ func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*c
 		runID:                runID,
 		workflowLease:        workflowLease,
 		workflowTaskInfo:     workflowTaskInfo,
-		workflowSnapshot:     workflowSnapshot,
-		workflowEventBatches: eventBatches,
+		workflowSnapshot:     transactionPayload.ExecutionSnapshot,
+		workflowEventBatches: transactionPayload.ExecutionEvents,
 	}, nil
 }
 

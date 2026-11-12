@@ -280,7 +280,7 @@ func (r *HistoryImporterImpl) persistHistoryAndSerializeMutableState(
 	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 ) ([]byte, error) {
-	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
+	targetExecutionPayload, err := mutableState.CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyPassive,
 	)
@@ -288,12 +288,17 @@ func (r *HistoryImporterImpl) persistHistoryAndSerializeMutableState(
 		return nil, err
 	}
 
-	sizeSiff, err := workflow.PersistWorkflowEvents(ctx, r.shardContext, targetWorkflowEventsSeq...)
+	sizeSiff, err := workflow.PersistWorkflowEvents(
+		ctx,
+		r.shardContext,
+		targetExecutionPayload.ExecutionEvents...,
+	)
 	if err != nil {
 		return nil, err
 	}
 	mutableState.AddHistorySize(sizeSiff)
 
+	targetWorkflowSnapshot := targetExecutionPayload.ExecutionSnapshot
 	mutableStateRow := &persistencespb.WorkflowMutableState{
 		ActivityInfos:       targetWorkflowSnapshot.ActivityInfos,
 		TimerInfos:          targetWorkflowSnapshot.TimerInfos,
