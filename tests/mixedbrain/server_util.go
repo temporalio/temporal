@@ -39,6 +39,7 @@ func configureSharedSQLite(t *testing.T) {
 		`(env "SQLITE_MODE")`, `"rwc"`,
 		`(env "SQLITE_CACHE")`, `"private"`,
 	).Replace(string(configTemplate)))
+
 	configPath := filepath.Join(dir, "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, configTemplate, 0600))
 	t.Setenv("TEMPORAL_SERVER_CONFIG_FILE_PATH", configPath)
