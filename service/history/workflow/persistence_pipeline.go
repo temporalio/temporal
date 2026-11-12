@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -50,6 +51,8 @@ type commitGroup struct {
 	// publish as failed even if its own write succeeds.
 	dependencyFailed bool
 	inFlightAtClaim  int
+	// claimedAt is when the claim began, for the dispatch latency timer.
+	claimedAt time.Time
 }
 
 type operation struct {
@@ -195,22 +198,24 @@ func (c *ContextImpl) lockCommitted(ctx context.Context, priority locks.Priority
 		if err := c.lock.Acquire(ctx, priority, 1); err != nil {
 			return err
 		}
+		c.lockAcquired(lockHolderRecheck)
 		p.mu.Lock()
 		if p.waiters[0] != waiter {
 			p.mu.Unlock()
-			c.lock.Release(1)
+			c.releaseLock()
 			continue
 		}
 		tail := p.tail()
 		invalid := p.err != nil
 		p.mu.Unlock()
 		if tail != nil {
-			c.lock.Release(1)
+			c.releaseLock()
 			if _, err := tail.completion.Get(ctx); err != nil && ctx.Err() != nil {
 				return ctx.Err()
 			}
 			continue
 		}
+		c.lockHolder = lockHolderCommitted
 		if invalid {
 			c.clearMutableState()
 		}
@@ -244,13 +249,15 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 		if err := c.lock.Acquire(ctx, priority, 1); err != nil {
 			return err
 		}
+		c.lockAcquired(lockHolderRecheck)
 		p.mu.Lock()
 		blocked = len(p.waiters) != 0 || p.err != nil || p.submissions() >= maxPipelineSubmissions
 		p.mu.Unlock()
 		if blocked {
-			c.lock.Release(1)
+			c.releaseLock()
 			continue
 		}
+		c.lockHolder = lockHolderSpeculative
 		operationCtx := ctx
 		if original, ok := ctx.Value(pipelineContextKey{}).(context.Context); ok {
 			operationCtx = original
@@ -376,6 +383,7 @@ func (c *ContextImpl) completeSubmission(s *submission) error {
 }
 
 func (p *persistencePipeline) claimHead(s *submission) (*commitGroup, error) {
+	claimedAt := time.Now()
 	request, _, _, err := clonePipelineRequest(s.request)
 	if err != nil {
 		return nil, err
@@ -407,7 +415,7 @@ func (p *persistencePipeline) claimHead(s *submission) (*commitGroup, error) {
 	}
 	request.UpdateWorkflowMutation.DBRecordVersion = version + 1
 	request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize = historySize
-	group := &commitGroup{members: slices.Clone(p.pending[:count]), request: request}
+	group := &commitGroup{members: slices.Clone(p.pending[:count]), request: request, claimedAt: claimedAt}
 	for _, member := range group.members {
 		close(member.dequeued)
 	}
@@ -442,8 +450,9 @@ func (c *ContextImpl) executePersistenceGroup(group *commitGroup) {
 	}
 	// Publication must settle a claimed write even when the shard or caller is canceled.
 	_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
+	c.lockAcquired(lockHolderPublish)
 	c.publishPersistenceGroup(group, delta, err)
-	c.lock.Release(1)
+	c.releaseLock()
 	if recovered != nil {
 		panic(recovered) //nolint:forbidigo // Preserve the original panic after settling accepted writes.
 	}
@@ -472,6 +481,7 @@ func (c *ContextImpl) submitPersistenceGroup(group *commitGroup) {
 	if recovered != nil {
 		err = serviceerror.NewInternal("workflow persistence panicked")
 	}
+	metrics.WorkflowPersistencePipelineDispatchLatency.With(c.metricsHandler).Record(time.Since(group.claimedAt))
 	p.mu.Lock()
 	p.dispatching = false
 	group.sizeDiff = delta
@@ -511,8 +521,9 @@ func (c *ContextImpl) submitPersistenceGroup(group *commitGroup) {
 	p.mu.Unlock()
 	// Publication must settle a claimed write even when the shard or caller is canceled.
 	_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
+	c.lockAcquired(lockHolderPublish)
 	c.publishPersistenceGroup(group, delta, err)
-	c.lock.Release(1)
+	c.releaseLock()
 	if recovered != nil {
 		panic(recovered) //nolint:forbidigo // Preserve the original panic after settling accepted writes.
 	}
@@ -764,7 +775,7 @@ func (c *ContextImpl) makeOperationCommitted(ctx context.Context, discard bool) 
 	tail := p.tail()
 	p.notify()
 	p.mu.Unlock()
-	c.lock.Release(1)
+	c.releaseLock()
 	var err error
 	if tail != nil {
 		_, err = tail.completion.Get(context.WithoutCancel(ctx))
@@ -780,13 +791,15 @@ func (c *ContextImpl) makeOperationCommitted(ctx context.Context, discard bool) 
 	}
 	for {
 		_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
+		c.lockAcquired(lockHolderRecheck)
 		p.mu.Lock()
 		remaining := p.tail()
 		p.mu.Unlock()
 		if remaining == nil {
+			c.lockHolder = lockHolderCommitted
 			break
 		}
-		c.lock.Release(1)
+		c.releaseLock()
 		_, dependencyErr := remaining.completion.Get(context.WithoutCancel(ctx))
 		if err == nil {
 			err = dependencyErr

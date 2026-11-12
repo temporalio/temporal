@@ -3,13 +3,16 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/await"
@@ -331,4 +334,61 @@ func TestPersistencePipelineCancelAfterClaimStillPublishes(t *testing.T) {
 	_, err = b.completion.Get(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, []int64{42}, f.publishedVersions())
+}
+
+func lockHolders(capture *metricstest.Capture) []string {
+	var holders []string
+	for _, r := range capture.SnapshotMetric(metrics.WorkflowContextLockHoldDuration.Name()) {
+		holders = append(holders, r.Tags["holder"])
+	}
+	return holders
+}
+
+func TestPersistencePipelineRecordsLockHoldByHolder(t *testing.T) {
+	t.Parallel()
+	f := newAsyncPipelineFixture(t, 2, false)
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	f.c.metricsHandler = handler
+
+	require.NoError(t, f.c.LockSpeculative(t.Context(), locks.PriorityHigh))
+	require.NoError(t, f.c.Unlock())
+
+	// A committed lock taken while a group is in flight rechecks, waits for the publish, then holds.
+	_, done := f.submit(t.Context(), t, 10)
+	w := await.Rcv(t, f.submits)
+	locked := make(chan error, 1)
+	go func() { locked <- f.c.Lock(t.Context(), locks.PriorityHigh) }()
+	await.RequireTrue(t, func() bool { return len(lockHolders(capture)) == 2 }, 5*time.Second, time.Millisecond)
+	w.receipt.complete(nil)
+	require.NoError(t, await.Rcv(t, done))
+	require.NoError(t, await.Rcv(t, locked))
+	require.NoError(t, f.c.Unlock())
+
+	require.NoError(t, f.c.LockSpeculative(t.Context(), locks.PriorityHigh))
+	require.NoError(t, f.c.makeOperationCommitted(t.Context(), false))
+	require.NoError(t, f.c.Unlock())
+
+	require.True(t, f.c.TryLock(locks.PriorityLow))
+	require.NoError(t, f.c.Unlock())
+
+	require.Equal(t, []string{
+		lockHolderSpeculative,
+		lockHolderRecheck, lockHolderPublish, lockHolderCommitted,
+		lockHolderSpeculative, lockHolderCommitted,
+		lockHolderTryLock,
+	}, lockHolders(capture))
+	dispatches := capture.SnapshotMetric(metrics.WorkflowPersistencePipelineDispatchLatency.Name())
+	require.Len(t, dispatches, 1)
+	require.IsType(t, time.Duration(0), dispatches[0].Value)
+}
+
+func TestContextRecordsLockHoldWithoutPipeline(t *testing.T) {
+	t.Parallel()
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	c := NewContext(tests.NewDynamicConfig(), tests.WorkflowKey, chasm.WorkflowArchetypeID, log.NewNoopLogger(), log.NewNoopLogger(), handler, nil, testhooks.TestHooks{})
+	require.NoError(t, c.Lock(t.Context(), locks.PriorityHigh))
+	require.NoError(t, c.Unlock())
+	require.Equal(t, []string{lockHolderOperation}, lockHolders(capture))
 }

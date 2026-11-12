@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"time"
 
 	"go.opentelemetry.io/otel/trace"
 	commandpb "go.temporal.io/api/command/v1"
@@ -54,6 +55,11 @@ type (
 		pipeline       *persistencePipeline
 		operation      *operation
 		pipelineShard  historyi.ShardContext
+
+		// lockHolder and lockAcquiredAt describe the current lock holder for the hold duration timer.
+		// Only the holder reads or writes them.
+		lockHolder     string
+		lockAcquiredAt time.Time
 
 		// taskCompletionBuffer holds the intermediate pages of an in-progress
 		// pagination of RespondWorkflowTaskCompleted requests; nil when no
@@ -109,6 +115,17 @@ type (
 )
 
 var _ historyi.WorkflowContext = (*ContextImpl)(nil)
+
+// Holder tag values for WorkflowContextLockHoldDuration. A recheck hold is one that is released
+// right away because the pipeline state does not admit the caller yet.
+const (
+	lockHolderOperation   = "operation"
+	lockHolderCommitted   = "committed"
+	lockHolderSpeculative = "speculative"
+	lockHolderPublish     = "publish"
+	lockHolderRecheck     = "recheck"
+	lockHolderTryLock     = "try_lock"
+)
 
 // maxWorkflowTaskCompletionPages is the maximum number of pages that can be buffered.
 // This is a safety limit to prevent corrupted requests.
@@ -173,13 +190,31 @@ func (c *ContextImpl) Lock(
 	lockPriority locks.Priority,
 ) error {
 	if c.pipeline == nil {
-		return c.lock.Acquire(ctx, lockPriority, 1)
+		if err := c.lock.Acquire(ctx, lockPriority, 1); err != nil {
+			return err
+		}
+		c.lockAcquired(lockHolderOperation)
+		return nil
 	}
 	return c.lockCommitted(ctx, lockPriority)
 }
 
 func (c *ContextImpl) TryLock(lockPriority locks.Priority) bool {
-	return c.lock.TryAcquire(lockPriority, 1)
+	if !c.lock.TryAcquire(lockPriority, 1) {
+		return false
+	}
+	c.lockAcquired(lockHolderTryLock)
+	return true
+}
+
+func (c *ContextImpl) lockAcquired(holder string) {
+	c.lockHolder = holder
+	c.lockAcquiredAt = time.Now()
+}
+
+func (c *ContextImpl) releaseLock() {
+	metrics.WorkflowContextLockHoldDuration.With(c.metricsHandler).Record(time.Since(c.lockAcquiredAt), metrics.StringTag("holder", c.lockHolder))
+	c.lock.Release(1)
 }
 
 func (c *ContextImpl) Unlock() error {
@@ -188,7 +223,7 @@ func (c *ContextImpl) Unlock() error {
 	if c.pipeline != nil && c.config.HistoryCacheLimitSizeBased {
 		c.pipeline.cacheSize.Store(int64(c.cacheSizeLocked()))
 	}
-	c.lock.Release(1)
+	c.releaseLock()
 	if op == nil {
 		return nil
 	}

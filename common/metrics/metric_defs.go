@@ -1573,6 +1573,8 @@ var (
 	HistoryArchiverBlobSize                       = NewBytesHistogramDef("history_archiver_blob_size")
 	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
 	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
+	WorkflowContextLockHoldDuration               = NewTimerDef("workflow_context_lock_hold_duration")
+	WorkflowPersistencePipelineDispatchLatency    = NewTimerDef("workflow_persistence_pipeline_dispatch_latency")
 
 	VisibilityArchiverArchiveNonRetryableErrorCount                   = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount                      = NewCounterDef("visibility_archiver_archive_transient_error")
