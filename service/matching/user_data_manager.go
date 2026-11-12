@@ -422,6 +422,10 @@ func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
+	return m.refreshUserDataFromDBLocked(ctx)
+}
+
+func (m *userDataManagerImpl) refreshUserDataFromDBLocked(ctx context.Context) error {
 	response, err := m.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
 		NamespaceID: m.partition.NamespaceId(),
 		TaskQueue:   m.partition.TaskQueue().Name(),
@@ -565,6 +569,16 @@ func (m *userDataManagerImpl) updateUserData(
 	})
 	if err != nil {
 		m.logger.Error("failed to push new user data to owning matching node for namespace", tag.Error(err))
+		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+			// An old owner can commit a write after we load user data. Refresh before
+			// retrying the whole update so it merges against the latest persisted data.
+			if refreshErr := m.refreshUserDataFromDBLocked(ctx); refreshErr != nil {
+				return nil, false, serviceerror.NewUnavailablef("failed to refresh task queue user data after rejected update: %v", refreshErr)
+			}
+			if m.userData.GetVersion() != preUpdateVersion {
+				return nil, false, serviceerror.NewUnavailablef("task queue user data changed concurrently, retry update: %v", err)
+			}
+		}
 		return nil, false, err
 	}
 
