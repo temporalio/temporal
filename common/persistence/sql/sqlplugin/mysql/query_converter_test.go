@@ -293,6 +293,39 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 		"Keyword01",
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
+	statusCol := query.NewSAColumn(
+		sadefs.ExecutionStatus,
+		sadefs.ExecutionStatus,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	chasmCol := query.NewSAColumn(
+		"ChasmStatus",
+		"TemporalLowCardinalityKeyword01",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	systemOnlyExpr := &sqlparser.AndExpr{
+		Left: &sqlparser.ComparisonExpr{
+			Operator: sqlparser.EqualStr,
+			Left:     query.NamespaceIDSAColumn,
+			Right:    query.NewUnsafeSQLString("ns"),
+		},
+		Right: &sqlparser.AndExpr{
+			Left: &sqlparser.IsExpr{
+				Operator: sqlparser.IsNullStr,
+				Expr:     query.NamespaceDivisionSAColumn(),
+			},
+			Right: &sqlparser.ParenExpr{
+				Expr: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.InStr,
+					Left:     statusCol,
+					Right: sqlparser.ValTuple{
+						query.NewUnsafeSQLString("Running"),
+						query.NewUnsafeSQLString("Failed"),
+					},
+				},
+			},
+		},
+	}
 
 	tests := []struct {
 		name      string
@@ -302,7 +335,64 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 	}{
 		{
 			name: "empty",
-			stmt: "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id)",
+			stmt: "SELECT COUNT(*) FROM executions_visibility ev",
+		},
+		{
+			name:      "system columns only",
+			queryExpr: systemOnlyExpr,
+			stmt:      "SELECT COUNT(*) FROM executions_visibility ev WHERE namespace_id = 'ns' and TemporalNamespaceDivision is null and (status in ('Running', 'Failed'))",
+		},
+		{
+			name:      "group by status over system columns",
+			queryExpr: systemOnlyExpr,
+			groupBy:   []*query.SAColumn{statusCol},
+			stmt:      "SELECT status, COUNT(*) FROM executions_visibility ev WHERE namespace_id = 'ns' and TemporalNamespaceDivision is null and (status in ('Running', 'Failed')) GROUP BY status",
+		},
+		{
+			name: "custom search attribute nested under system columns",
+			queryExpr: &sqlparser.AndExpr{
+				Left: systemOnlyExpr,
+				Right: &sqlparser.NotExpr{
+					Expr: &sqlparser.ComparisonExpr{
+						Operator: sqlparser.EqualStr,
+						Left:     keywordCol,
+						Right:    query.NewUnsafeSQLString("foo"),
+					},
+				},
+			},
+			stmt: "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE namespace_id = 'ns' and TemporalNamespaceDivision is null and (status in ('Running', 'Failed')) and not Keyword01 = 'foo'",
+		},
+		{
+			name: "chasm search attribute",
+			queryExpr: &sqlparser.ComparisonExpr{
+				Operator: sqlparser.EqualStr,
+				Left:     chasmCol,
+				Right:    query.NewUnsafeSQLString("active"),
+			},
+			stmt: "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE TemporalLowCardinalityKeyword01 = 'active'",
+		},
+		{
+			name:      "group by chasm search attribute",
+			queryExpr: systemOnlyExpr,
+			groupBy:   []*query.SAColumn{chasmCol},
+			stmt:      "SELECT TemporalLowCardinalityKeyword01, COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE namespace_id = 'ns' and TemporalNamespaceDivision is null and (status in ('Running', 'Failed')) GROUP BY TemporalLowCardinalityKeyword01",
+		},
+		{
+			name: "custom search attribute inside keyword list expression",
+			queryExpr: &memberOfExpr{
+				Value: query.NewUnsafeSQLString("foo"),
+				JSONArr: query.NewSAColumn(
+					"AliasForKeywordList01",
+					"KeywordList01",
+					enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+				),
+			},
+			stmt: "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE 'foo' member of (KeywordList01)",
+		},
+		{
+			name:      "unrecognized expression keeps the joins",
+			queryExpr: query.NewColName("Keyword01"),
+			stmt:      "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE Keyword01",
 		},
 		{
 			name: "non-empty",
