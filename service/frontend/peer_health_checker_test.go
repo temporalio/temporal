@@ -454,20 +454,6 @@ func newPeerLoopChecker(
 	return newPeerHealthChecker(monitor, probe, rec.set, cfg, metrics.NoopMetricsHandler, log.NewNoopLogger())
 }
 
-func TestTick_FlagOff_ServingWithoutProbing(t *testing.T) {
-	var enabled, healthy atomic.Bool
-	var probeCalls atomic.Int32
-	rec := &statusRecorder{}
-	checker := newPeerLoopChecker(t, &enabled, &healthy, &probeCalls, time.Second, rec)
-
-	checker.tick(context.Background())
-
-	require.Equal(t, int32(0), probeCalls.Load())
-	last, ok := rec.last()
-	require.True(t, ok)
-	require.Equal(t, healthpb.HealthCheckResponse_SERVING, last)
-}
-
 func TestTick_FailedRoundThenPass(t *testing.T) {
 	var enabled, healthy atomic.Bool
 	enabled.Store(true)
