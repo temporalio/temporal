@@ -200,12 +200,13 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 
 // Option configures suite execution and is passed before test method arguments to [Run].
 type Option struct {
-	shardSalt string
+	shard testshard.Shard
 }
 
-// WithShardSalt sets the default sharding salt. A non-empty TEST_SHARD_SALT overrides it.
-func WithShardSalt(salt string) Option {
-	return Option{shardSalt: salt}
+// WithShard supplies the shard used to select test methods.
+// A zero-value shard disables sharding for this suite.
+func WithShard(shard testshard.Shard) Option {
+	return Option{shard: shard}
 }
 
 // Run discovers and runs all exported Test* methods on the given suite in parallel.
@@ -232,17 +233,20 @@ func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
 func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
 
-	var salt string
+	var shard *testshard.Shard
 	for len(args) > 0 {
 		opt, ok := args[0].(Option)
 		if !ok {
 			break
 		}
-		salt = opt.shardSalt
+		shard = &opt.shard
 		args = args[1:]
 	}
-	shard, err := testshard.FromEnv(salt)
-	require.NoError(t, err)
+	if shard == nil {
+		fromEnv, err := testshard.FromEnv()
+		require.NoError(t, err)
+		shard = &fromEnv
+	}
 
 	typ := reflect.TypeFor[T]()
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {

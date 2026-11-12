@@ -30,7 +30,7 @@ func TestFromEnv(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("TEST_TOTAL_SHARDS", tc.total)
 			t.Setenv("TEST_SHARD_INDEX", tc.index)
-			shard, err := FromEnv("")
+			shard, err := FromEnv()
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 				return
@@ -46,19 +46,22 @@ func TestFromEnv(t *testing.T) {
 func TestContainsCompatibility(t *testing.T) {
 	t.Setenv("TEST_SHARD_SALT", "")
 	for _, tc := range []struct {
-		name  string
-		salt  string
-		owner string
+		name    string
+		salt    string
+		envSalt string
+		owner   string
 	}{
 		{name: "TestSuite/TestMethod", owner: "1"},
 		{name: "TestSuite/TestMethod", salt: "-salt-2827", owner: "2"},
 		{name: "TestSuite/TestOther", salt: "-salt-2827", owner: "0"},
+		{name: "TestSuite/TestMethod", salt: "-salt-2827", envSalt: "-test-salt", owner: "1"},
 	} {
-		t.Run(tc.name+tc.salt, func(t *testing.T) {
+		t.Run(tc.name+tc.salt+tc.envSalt, func(t *testing.T) {
+			t.Setenv("TEST_SHARD_SALT", tc.envSalt)
 			t.Setenv("TEST_TOTAL_SHARDS", "4")
 			for _, index := range []string{"0", "1", "2", "3"} {
 				t.Setenv("TEST_SHARD_INDEX", index)
-				shard, err := FromEnv(tc.salt)
+				shard, err := FromEnv(WithSalt(tc.salt))
 				require.NoError(t, err)
 				require.Equal(t, index == tc.owner, shard.Contains(tc.name))
 			}

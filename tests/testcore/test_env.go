@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
-	"go.temporal.io/testx/testshard"
 )
 
 var _ Env = (*TestEnv)(nil)
@@ -720,9 +719,7 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 // This distributes tests across multiple CI shards for parallel execution.
 func checkTestShard(t *testing.T) {
 	t.Helper()
-	shard, err := testshard.FromEnv(servershard.Salt())
-	require.NoError(t, err)
-	shard.MaybeSkip(t)
+	servershard.FromEnv(t).MaybeSkip(t)
 }
 
 type dedicatedClusterGuard struct {

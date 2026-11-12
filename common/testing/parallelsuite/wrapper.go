@@ -31,12 +31,22 @@ func WithContext(ctx context.Context, scope Scope) Scope {
 
 func Run[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {
 	t.Helper()
-	parallelsuite.Run(t, s, append([]any{parallelsuite.WithShardSalt(testshard.Salt())}, args...)...)
+	parallelsuite.Run(t, s, withDefaultShard(t, args)...)
 }
 
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
 func RunLegacySequential[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {
 	t.Helper()
-	parallelsuite.RunLegacySequential(t, s, append([]any{parallelsuite.WithShardSalt(testshard.Salt())}, args...)...) //nolint:staticcheck // SA1019: forwarding the legacy runner
+	parallelsuite.RunLegacySequential(t, s, withDefaultShard(t, args)...) //nolint:staticcheck // SA1019: forwarding the legacy runner
+}
+
+func withDefaultShard(t *testing.T, args []any) []any {
+	t.Helper()
+	if len(args) > 0 {
+		if _, ok := args[0].(parallelsuite.Option); ok {
+			return args
+		}
+	}
+	return append([]any{parallelsuite.WithShard(testshard.FromEnv(t))}, args...)
 }

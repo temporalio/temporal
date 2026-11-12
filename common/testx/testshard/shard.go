@@ -23,11 +23,25 @@ type Shard struct {
 	salt  string
 }
 
+// Option configures shard selection.
+type Option struct {
+	salt string
+}
+
+// WithSalt sets the default sharding salt. A non-empty TEST_SHARD_SALT overrides it.
+func WithSalt(salt string) Option {
+	return Option{salt: salt}
+}
+
 // FromEnv reads TEST_TOTAL_SHARDS and the zero-based TEST_SHARD_INDEX.
 // Sharding is disabled when either variable is empty.
 // A non-empty TEST_SHARD_SALT overrides the supplied default salt.
 // The salt is appended to the full test name before hashing with FarmHash Fingerprint32.
-func FromEnv(salt string) (Shard, error) {
+func FromEnv(options ...Option) (Shard, error) {
+	var salt string
+	for _, option := range options {
+		salt = option.salt
+	}
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
 	indexStr := os.Getenv("TEST_SHARD_INDEX")
 	if totalStr == "" || indexStr == "" {

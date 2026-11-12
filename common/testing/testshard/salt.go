@@ -3,6 +3,9 @@ package testshard
 import (
 	_ "embed"
 	"strings"
+	"testing"
+
+	sharedtestshard "go.temporal.io/testx/testshard"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -11,7 +14,12 @@ import (
 //go:embed shard_salt.txt
 var shardSalt string
 
-// Salt returns the default salt for server functional tests.
-func Salt() string {
-	return strings.TrimSpace(shardSalt)
+// FromEnv reads shard configuration with the default salt for server functional tests.
+func FromEnv(t *testing.T) sharedtestshard.Shard {
+	t.Helper()
+	shard, err := sharedtestshard.FromEnv(sharedtestshard.WithSalt(strings.TrimSpace(shardSalt)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return shard
 }

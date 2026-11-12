@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/testx/testshard"
 )
 
 type validSuite struct{ Suite[*validSuite] }
@@ -241,7 +242,12 @@ func TestRunShardingProcess(t *testing.T) {
 	t.Run("suite", func(t *testing.T) {
 		args := []any{ran}
 		if os.Getenv("TESTX_SHARD_DEFAULT_SALT") != "" {
-			args = append([]any{WithShardSalt(os.Getenv("TESTX_SHARD_DEFAULT_SALT"))}, args...)
+			shard, err := testshard.FromEnv(testshard.WithSalt(os.Getenv("TESTX_SHARD_DEFAULT_SALT")))
+			require.NoError(t, err)
+			args = append([]any{WithShard(shard)}, args...)
+		}
+		if os.Getenv("TESTX_SHARD_DISABLED") == "true" {
+			args = append([]any{WithShard(testshard.Shard{})}, args...)
 		}
 		if os.Getenv("TESTX_SHARD_LEGACY") == "true" {
 			RunLegacySequential(t, &shardingSuite{}, args...) //nolint:staticcheck // SA1019: sharding must also work in the legacy runner.
@@ -260,18 +266,19 @@ func TestRunSharding(t *testing.T) {
 		salt        string
 		defaultSalt string
 		legacy      bool
+		disabled    bool
 		filter      string
 		want        string
 		wantErr     string
 	}{
 		{name: "disabled", want: "TestA TestB TestC nested"},
+		{name: "explicit zero shard", total: "invalid", index: "invalid", disabled: true, want: "TestA TestB TestC nested"},
 		{name: "one shard", total: "1", index: "0", want: "TestA TestB TestC nested"},
 		{name: "owns nested test", total: "4", index: "1", want: "TestA nested"},
 		{name: "last shard", total: "4", index: "3", want: "TestB TestC"},
 		{name: "empty shard", total: "4", index: "0"},
 		{name: "salt", total: "4", index: "2", salt: "-test-salt", want: "TestA nested"},
 		{name: "default salt", total: "4", index: "2", defaultSalt: "-test-salt", want: "TestA nested"},
-		{name: "env salt overrides default", total: "4", index: "0", salt: "-salt-2827", defaultSalt: "-test-salt", want: "TestB TestC"},
 		{name: "legacy", total: "4", index: "1", legacy: true, want: "TestA nested"},
 		{name: "method filter", total: "4", index: "3", filter: "^TestB$", want: "TestB"},
 		{name: "invalid total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS"},
@@ -285,7 +292,8 @@ func TestRunSharding(t *testing.T) {
 			cmd.Env = append(os.Environ(),
 				"TESTX_SHARD_PROCESS=1", "TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index,
 				"TEST_SHARD_SALT="+tc.salt, "TESTX_SHARD_DEFAULT_SALT="+tc.defaultSalt,
-				"TESTX_SHARD_WANT="+tc.want, "TESTX_SHARD_LEGACY="+strconv.FormatBool(tc.legacy))
+				"TESTX_SHARD_WANT="+tc.want, "TESTX_SHARD_LEGACY="+strconv.FormatBool(tc.legacy),
+				"TESTX_SHARD_DISABLED="+strconv.FormatBool(tc.disabled))
 			output, err := cmd.CombinedOutput()
 			if tc.wantErr != "" {
 				require.Error(t, err, "%s", output)
