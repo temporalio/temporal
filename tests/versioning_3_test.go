@@ -1624,13 +1624,16 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	}
 
 	wfStarted := make(chan struct{}, 1)
+	var replayed atomic.Bool
 
 	childv1 := func(ctx workflow.Context) (string, error) {
 		env.verifyWorkflowVersioning(s, tv1Child, vbPinned, tv1Child.Deployment(), override, nil)
 		return "v1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
-		if !workflow.IsReplaying(ctx) {
+		if workflow.IsReplaying(ctx) {
+			replayed.Store(true)
+		} else {
 			wfStarted <- struct{}{}
 		}
 		// wait for current version to change. Use a signal rather than a Go channel so the
@@ -1718,6 +1721,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
+	s.False(replayed.Load(), "workflow was unexpectedly replayed")
 	s.Equal("v1", out)
 }
 
@@ -2142,6 +2146,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 	}
 
 	wfStarted := make(chan struct{}, 10)
+	var replayed atomic.Bool
 
 	childv1 := func(ctx workflow.Context) (string, error) {
 		panic("child should not run on v1")
@@ -2150,7 +2155,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 		return "v2", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
-		if !workflow.IsReplaying(ctx) {
+		if workflow.IsReplaying(ctx) {
+			replayed.Store(true)
+		} else {
 			wfStarted <- struct{}{}
 		}
 		// wait for current version to change. Use a signal rather than a Go channel so the
@@ -2252,6 +2259,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
+	s.False(replayed.Load(), "workflow was unexpectedly replayed")
 	s.Equal("v2", out)
 
 	if parentBehavior == vbPinned {
@@ -3074,6 +3082,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wfStarted := make(chan struct{}, 10)
+	var replayed atomic.Bool
 
 	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
 		switch attempt {
@@ -3091,7 +3100,9 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 			} else {
 				env.verifyWorkflowVersioning(s, tv1, vbUnspecified, nil, override, tv1.DeploymentVersionTransition())
 			}
-			if !workflow.IsReplaying(ctx) {
+			if workflow.IsReplaying(ctx) {
+				replayed.Store(true)
+			} else {
 				wfStarted <- struct{}{}
 			}
 			// wait for current version to change. Use a signal rather than a Go channel so the
@@ -3206,6 +3217,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
+	s.False(replayed.Load(), "workflow was unexpectedly replayed")
 	if expectPinnedInherit {
 		s.Equal("v1", out)
 		env.verifyVersioningSAs(s, tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1)
