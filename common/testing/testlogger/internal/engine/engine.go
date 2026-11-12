@@ -1,24 +1,40 @@
-package testlogger
+package engine
 
 import (
 	"cmp"
 	"container/list"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest"
 )
+
+// Field supplies structured log data without choosing a logging backend.
+type Field interface {
+	Key() string
+	Value() any
+}
+
+// Logger writes the log calls observed by Engine.
+type Logger[F Field] interface {
+	Debug(string, ...F)
+	Info(string, ...F)
+	Warn(string, ...F)
+	Error(string, ...F)
+	DPanic(string, ...F)
+	Panic(string, ...F)
+	Fatal(string, ...F)
+}
+
+type Option[F Field] func(*Engine[F])
+
+// CallerSkip accounts for adapters between Engine and the calling test.
+func CallerSkip[F Field](skip int) Option[F] {
+	return func(t *Engine[F]) { t.state.callerSkip = skip }
+}
 
 //go:generate stringer -type Level -trimprefix Level -output testlogger.gen.go
 type Level int
@@ -37,17 +53,20 @@ type Mode string
 
 const (
 	// FailOnAnyUnexpectedError mode will fail if any unexpected error is encountered,
-	// like an allowlist. Use TestLogger.Expect to add an error to the allowlist.
+	// like an allowlist. Use Engine.Expect to add an error to the allowlist.
 	FailOnAnyUnexpectedError Mode = "fail-on-unexpected-errors"
 	// FailOnExpectedErrorOnly mode will only fail if an expected error is encountered,
-	// like a blocklist. Use TestLogger.Expect to add an error to the blocklist.
+	// like a blocklist. Use Engine.Expect to add an error to the blocklist.
 	FailOnExpectedErrorOnly = "fail-on-expected-errors"
 )
 
 // This is a subset of the testing.T interface that we use in this package that is
 // also shared with *rapid.T.
 type TestingT interface {
-	zaptest.TestingT
+	Errorf(string, ...any)
+	Fail()
+	Failed() bool
+	FailNow()
 	Helper()
 	Name() string
 	Logf(format string, args ...any)
@@ -66,39 +85,39 @@ type CleanupCapableT interface {
 // Expectation represents a log call we expect to happen in tests.
 // For error-level logs, expectations also influence whether the log fails the
 // test based on the logger mode.
-type Expectation struct {
+type Expectation[F Field] struct {
 	e          *list.Element
-	testLogger *TestLogger
+	testLogger *Engine[F]
 	lvl        Level
 	matches    atomic.Int64
 }
 
 // Forget removes a previously registered expectation.
 // A forgotten expectation will no longer be evaluated when logs are encountered.
-func (e *Expectation) Forget() {
+func (e *Expectation[F]) Forget() {
 	e.testLogger.Forget(e)
 }
 
-func (e *Expectation) Matched() bool {
+func (e *Expectation[F]) Matched() bool {
 	return e.MatchCount() > 0
 }
 
-func (e *Expectation) MatchCount() int64 {
+func (e *Expectation[F]) MatchCount() int64 {
 	return e.matches.Load()
 }
 
-type matcher struct {
-	expectation *Expectation
+type matcher[F Field] struct {
+	expectation *Expectation[F]
 	msg         *regexp.Regexp
 	tags        map[string]*regexp.Regexp
 }
 
-func newMatcher(msg string, tags []tag.Tag, e *Expectation) matcher {
+func newMatcher[F Field](msg string, tags []F, e *Expectation[F]) matcher[F] {
 	var rgx *regexp.Regexp
 	if msg != "" {
 		rgx = regexp.MustCompile(msg)
 	}
-	m := matcher{
+	m := matcher[F]{
 		expectation: e,
 		msg:         rgx,
 		tags:        map[string]*regexp.Regexp{},
@@ -109,7 +128,7 @@ func newMatcher(msg string, tags []tag.Tag, e *Expectation) matcher {
 	return m
 }
 
-func (m matcher) Matches(msg string, tags []tag.Tag) bool {
+func (m matcher[F]) Matches(msg string, tags []F) bool {
 	// A nil regexp (meaning original string "") means we're only matching based on tags.
 	if m.msg != nil && !m.msg.MatchString(msg) {
 		return false
@@ -134,192 +153,77 @@ func (m matcher) Matches(msg string, tags []tag.Tag) bool {
 	return remainingMatches == 0
 }
 
-type sharedTestLoggerState struct {
+type sharedEngineState[F Field] struct {
 	failOnDPanic atomic.Bool
 	failOnError  atomic.Bool
 	failOnFatal  atomic.Bool
 	t            TestingT
 	mu           struct {
 		sync.RWMutex
-		expectations map[Level]*list.List // Map[Level]List[matcher]
-		captures     map[*Capture]struct{}
+		expectations map[Level]*list.List // Map[Level]List[matcher[F]]
+		captures     map[*Capture[F]]struct{}
 		closed       bool
 	}
 	mode            Mode
 	logExpectations bool
-	logCaller       bool
-	level           zapcore.Level
-	failure         atomic.Pointer[Failure]
+	callerSkip      int
+	failure         atomic.Pointer[Failure[F]]
 }
 
 // Failure describes a log call that shouldFailTest considered a test-failing log.
-type Failure struct {
+type Failure[F Field] struct {
 	Level Level
 	Msg   string
-	Tags  []tag.Tag
+	Tags  []F
 	Stack string
 }
 
-// TestLogger is a log.Logger implementation that logs to the test's logger
+// Engine is a Logger implementation that logs to the test's logger
 // _but_ will fail the test if log levels _above_ Warn are present
-type TestLogger struct {
-	wrapped log.Logger
-	state   *sharedTestLoggerState
-	tags    []tag.Tag
+type Engine[F Field] struct {
+	wrapped Logger[F]
+	state   *sharedEngineState[F]
+	tags    []F
 }
 
-type LoggerOption func(*TestLogger)
-
-func DontFailOnError(t *TestLogger) *TestLogger {
+func DontFailOnError[F Field](t *Engine[F]) *Engine[F] {
 	t.state.failOnError.Store(false)
 	return t
 }
 
-func DontFailOnDPanic(t *TestLogger) *TestLogger {
+func DontFailOnDPanic[F Field](t *Engine[F]) *Engine[F] {
 	t.state.failOnDPanic.Store(false)
 	return t
 }
 
-func LogExpectations(t *TestLogger) *TestLogger {
+func LogExpectations[F Field](t *Engine[F]) *Engine[F] {
 	t.state.logExpectations = true
 	return t
 }
 
 // WithLogTags adds tags to the logs emitted by the underlying logger
-func WithLogTags(tags ...tag.Tag) LoggerOption {
-	return func(t *TestLogger) {
+func WithLogTags[F Field](tags ...F) Option[F] {
+	return func(t *Engine[F]) {
 		t.tags = tags
 	}
 }
 
-func WrapLogger(l log.Logger) LoggerOption {
-	return func(t *TestLogger) {
-		t.wrapped = l
-	}
+// WrapLogger sets the output logger used by the engine.
+func WrapLogger[F Field](logger Logger[F]) Option[F] {
+	return func(t *Engine[F]) { t.wrapped = logger }
 }
 
-func LogLevel(level zapcore.Level) LoggerOption {
-	return func(t *TestLogger) {
-		t.state.level = level
-	}
-}
-
-// WithoutCaller stops the TestLogger from logging the caller.
-// This is primarily intended for use when parsing log.Logger-generated logs in files
-// or coming from subprocesses.
-func WithoutCaller() LoggerOption {
-	return func(t *TestLogger) {
-		t.state.logCaller = false
-	}
-}
-
-// SetLogLevel overrides the temporal test log level during this test.
-func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
-	return func(t *TestLogger) {
-		oldLevel := os.Getenv(log.TestLogLevelEnvVar)
-		_ = os.Setenv(log.TestLogLevelEnvVar, level.String())
-		tt.Cleanup(func() {
-			_ = os.Setenv(log.TestLogLevelEnvVar, oldLevel)
-		})
-
-		t.state.level = level
-	}
-}
-
-var _ log.Logger = (*TestLogger)(nil)
-
-// globalFileCore is a process-wide singleton zapcore.Core that writes to the file specified
-// by TEMPORAL_TEST_LOG_FILE. It is a NopCore when the env var is unset.
-var (
-	globalFileCore     zapcore.Core = zapcore.NewNopCore()
-	globalFileCoreOnce sync.Once
-)
-
-func getGlobalFileCore() zapcore.Core {
-	globalFileCoreOnce.Do(func() {
-		logFile := os.Getenv(log.TestLogFileEnvVar)
-		if logFile == "" {
-			return
-		}
-		if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "testlogger: failed to create log file dir %s: %v\n", filepath.Dir(logFile), err)
-			return
-		}
-		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "testlogger: failed to open log file %s: %v\n", logFile, err)
-			return
-		}
-		format := cmp.Or(os.Getenv(log.TestLogFileFormatEnvVar), "json")
-		var enc zapcore.Encoder
-		switch strings.ToLower(format) {
-		case "console":
-			enc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
-		default: // "json" and anything unrecognized
-			enc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
-		}
-		level := zapcore.DebugLevel
-		if levelV := os.Getenv(log.TestLogFileLevelEnvVar); levelV != "" {
-			level = log.ParseZapLevel(levelV)
-		}
-		globalFileCore = zapcore.NewCore(enc, zapcore.AddSync(f), level)
-		fmt.Fprintf(os.Stderr, "testlogger: file logging enabled → %s (format=%s level=%s)\n", logFile, format, level)
-	})
-	return globalFileCore
-}
-
-// NewTestLogger creates a new TestLogger that logs to the provided testing.T.
-// Mode controls the behavior of the logger for when an expected or unexpected error is encountered.
-func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
-	tl := &TestLogger{
-		state: &sharedTestLoggerState{
-			t:               t,
-			logExpectations: false,
-			level:           zapcore.DebugLevel,
-			logCaller:       true,
-			mode:            mode,
-		},
-	}
+// NewEngine creates a test logger using the supplied output logger.
+func NewEngine[F Field](t TestingT, mode Mode, wrapped Logger[F], opts ...Option[F]) *Engine[F] {
+	tl := &Engine[F]{wrapped: wrapped, state: &sharedEngineState[F]{t: t, mode: mode}}
 	tl.state.mu.expectations = make(map[Level]*list.List)
-	tl.state.mu.captures = make(map[*Capture]struct{})
+	tl.state.mu.captures = make(map[*Capture[F]]struct{})
 	tl.state.failOnError.Store(true)
 	tl.state.failOnDPanic.Store(true)
 	tl.state.failOnFatal.Store(true)
 	for _, opt := range opts {
 		opt(tl)
 	}
-	if tl.wrapped == nil {
-		writer := zaptest.NewTestingWriter(t)
-
-		// Console core: format and level controlled by TEMPORAL_TEST_LOG_FORMAT / TEMPORAL_TEST_LOG_LEVEL.
-		var consoleEnc zapcore.Encoder
-		format := cmp.Or(os.Getenv(log.TestLogFormatEnvVar), "console")
-		switch strings.ToLower(format) {
-		case "console":
-			consoleEnc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
-		case "json":
-			consoleEnc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
-		default:
-			t.Fatalf("unknown log encoding %q", format)
-		}
-		consoleLevel := tl.state.level
-		if levelV := os.Getenv(log.TestLogLevelEnvVar); levelV != "" {
-			consoleLevel = log.ParseZapLevel(levelV)
-		}
-		core := zapcore.NewTee(
-			zapcore.NewCore(consoleEnc, writer, consoleLevel),
-			getGlobalFileCore())
-
-		zapOptions := []zap.Option{
-			zap.ErrorOutput(writer.WithMarkFailed(true)),
-			zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
-			zap.WithCaller(tl.state.logCaller),
-		}
-
-		// Skip(1) skips the TestLogger itself
-		tl.wrapped = log.NewZapLogger(zap.New(core, zapOptions...)).Skip(1)
-	}
-
 	// Only possible with a *testing.T until *rapid.T supports `Cleanup`
 	if ct, ok := t.(CleanupCapableT); ok {
 		// NOTE(tim): We don't care about anything logged after the test completes. Sure, this is racy,
@@ -334,13 +238,13 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 // level, msg, and tag arguments. For error-level logs, depending on the Mode of
 // the test logger, the expectation either acts as an entry in a blocklist
 // (FailOnExpectedErrorOnly) or an allowlist (FailOnAnyUnexpectedError).
-func (tl *TestLogger) Expect(level Level, msg string, tags ...tag.Tag) *Expectation {
+func (tl *Engine[F]) Expect(level Level, msg string, tags ...F) *Expectation[F] {
 	tl.state.mu.Lock()
 	defer tl.state.mu.Unlock()
 	if tl.state.logExpectations {
 		tl.wrapped.Info(fmt.Sprintf("(%p) TestLogger::Expecting: '%s'\n", tl, msg))
 	}
-	e := &Expectation{
+	e := &Expectation[F]{
 		testLogger: tl,
 		lvl:        level,
 	}
@@ -356,7 +260,7 @@ func (tl *TestLogger) Expect(level Level, msg string, tags ...tag.Tag) *Expectat
 
 // Forget removes a previously registered expectation.
 // A forgotten expectation will no longer be evaluated when logs are encountered.
-func (tl *TestLogger) Forget(e *Expectation) {
+func (tl *Engine[F]) Forget(e *Expectation[F]) {
 	tl.state.mu.Lock()
 	defer tl.state.mu.Unlock()
 	tl.state.mu.expectations[e.lvl].Remove(e.e)
@@ -364,7 +268,7 @@ func (tl *TestLogger) Forget(e *Expectation) {
 
 // StartCapture starts recording log calls that contain any of the provided exact tags.
 // It records all calls when no tags are provided.
-func (tl *TestLogger) StartCapture(anyTags ...tag.Tag) *Capture {
+func (tl *Engine[F]) StartCapture(anyTags ...F) *Capture[F] {
 	capture := newCapture(anyTags)
 	tl.state.mu.Lock()
 	tl.state.mu.captures[capture] = struct{}{}
@@ -373,17 +277,17 @@ func (tl *TestLogger) StartCapture(anyTags ...tag.Tag) *Capture {
 }
 
 // StopCapture stops recording log calls for capture.
-func (tl *TestLogger) StopCapture(capture *Capture) {
+func (tl *Engine[F]) StopCapture(capture *Capture[F]) {
 	tl.state.mu.Lock()
 	delete(tl.state.mu.captures, capture)
 	tl.state.mu.Unlock()
 }
 
-func (tl *TestLogger) shouldFailTest(level Level, msg string, tags []tag.Tag) bool {
+func (tl *Engine[F]) shouldFailTest(level Level, msg string, tags []F) bool {
 	// Only check expectations if they've been registered for this level.
 	if expectations, found := tl.state.mu.expectations[level]; found {
 		for e := expectations.Front(); e != nil; e = e.Next() {
-			m, ok := e.Value.(matcher)
+			m, ok := e.Value.(matcher[F])
 			if !ok {
 				tl.state.t.Fatalf("Bug in TestLogger: invalid %T value in matcher list", e.Value)
 			}
@@ -403,13 +307,13 @@ func (tl *TestLogger) shouldFailTest(level Level, msg string, tags []tag.Tag) bo
 // registered at the given level whose matcher matches this log call. It is purely
 // observational: it never affects whether the test fails (that remains the sole
 // job of shouldFailTest), so it is safe to call for any log at any level.
-func (tl *TestLogger) recordExpectationMatches(level Level, msg string, tags []tag.Tag) {
+func (tl *Engine[F]) recordExpectationMatches(level Level, msg string, tags []F) {
 	expectations, found := tl.state.mu.expectations[level]
 	if !found {
 		return
 	}
 	for e := expectations.Front(); e != nil; e = e.Next() {
-		m, ok := e.Value.(matcher)
+		m, ok := e.Value.(matcher[F])
 		if !ok {
 			tl.state.t.Fatalf("Bug in TestLogger: invalid %T value in matcher list", e.Value)
 		}
@@ -419,11 +323,11 @@ func (tl *TestLogger) recordExpectationMatches(level Level, msg string, tags []t
 	}
 }
 
-func (tl *TestLogger) recordCaptures(level Level, msg string, tags []tag.Tag) {
+func (tl *Engine[F]) recordCaptures(level Level, msg string, tags []F) {
 	if len(tl.state.mu.captures) == 0 {
 		return
 	}
-	record := CapturedLog{
+	record := CapturedLog[F]{
 		Level:   level,
 		Message: msg,
 		Tags:    slices.Clone(tags),
@@ -435,52 +339,52 @@ func (tl *TestLogger) recordCaptures(level Level, msg string, tags []tag.Tag) {
 
 // FailOnDPanic overrides the behavior of this logger. It returns the previous value
 // so that it can be restored later.
-func (tl *TestLogger) FailOnDPanic(b bool) bool {
+func (tl *Engine[F]) FailOnDPanic(b bool) bool {
 	return tl.state.failOnDPanic.Swap(b)
 }
 
 // FailOnError overrides the behavior of this logger. It returns the previous value
 // so that it can be restored later.
-func (tl *TestLogger) FailOnError(b bool) bool {
+func (tl *Engine[F]) FailOnError(b bool) bool {
 	return tl.state.failOnError.Swap(b)
 }
 
 // FailOnFatal overrides the behavior of this logger. It returns the previous value
 // so that it can be restored later.
 // Note that Fatal-level logs still panic
-func (tl *TestLogger) FailOnFatal(b bool) bool {
+func (tl *Engine[F]) FailOnFatal(b bool) bool {
 	return tl.state.failOnFatal.Swap(b)
 }
 
 // Failure returns the first Failure that shouldFailTest considered a test-failing
 // log, or nil if no such log has been observed. Sticky: first failure wins.
-func (tl *TestLogger) Failure() *Failure {
+func (tl *Engine[F]) Failure() *Failure[F] {
 	return tl.state.failure.Load()
 }
 
 // recordFailure stores the first observed failure (first-failure-wins via CAS).
 // Tags are copied so the recorded value is independent of the caller's slice.
-func (tl *TestLogger) recordFailure(level Level, msg string, tags []tag.Tag) {
+func (tl *Engine[F]) recordFailure(level Level, msg string, tags []F) {
 	if tl.state.failure.Load() != nil {
 		// fast-path: already recorded; avoid the copy and the stack capture.
 		return
 	}
-	tagsCopy := make([]tag.Tag, len(tags))
+	tagsCopy := make([]F, len(tags))
 	copy(tagsCopy, tags)
-	f := &Failure{
+	f := &Failure[F]{
 		Level: level,
 		Msg:   msg,
 		Tags:  tagsCopy,
-		Stack: captureStack(3), // skip captureStack, recordFailure, and the log.Logger method that called it
+		Stack: captureStack(3 + tl.state.callerSkip), // skip captureStack, recordFailure, and the Logger[F] method that called it
 	}
 	tl.state.failure.CompareAndSwap(nil, f)
 }
 
-func (tl *TestLogger) mergeWithLoggerTags(tags []tag.Tag) []tag.Tag {
+func (tl *Engine[F]) mergeWithLoggerTags(tags []F) []F {
 	if len(tl.tags) == 0 {
 		return tags
 	}
-	tagMap := make(map[string]tag.Tag, len(tl.tags)+len(tags))
+	tagMap := make(map[string]F, len(tl.tags)+len(tags))
 	// Iterate over the logger's tags first so that explicitly specified tags override them
 	for _, t := range tl.tags {
 		tagMap[t.Key()] = t
@@ -488,18 +392,18 @@ func (tl *TestLogger) mergeWithLoggerTags(tags []tag.Tag) []tag.Tag {
 	for _, t := range tags {
 		tagMap[t.Key()] = t
 	}
-	newTags := make([]tag.Tag, 0, len(tagMap))
+	newTags := make([]F, 0, len(tagMap))
 	for _, t := range tagMap {
 		newTags = append(newTags, t)
 	}
-	slices.SortStableFunc(newTags, func(a, b tag.Tag) int {
+	slices.SortStableFunc(newTags, func(a, b F) int {
 		return cmp.Compare(a.Key(), b.Key())
 	})
 	return newTags
 }
 
-// DPanic implements log.Logger.
-func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
+// DPanic implements Logger.
+func (tl *Engine[F]) DPanic(msg string, tags ...F) {
 	tl.state.mu.RLock()
 	defer tl.state.mu.RUnlock()
 	if tl.state.mu.closed {
@@ -516,8 +420,8 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 	}
 }
 
-// Debug implements log.Logger.
-func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
+// Debug implements Logger.
+func (tl *Engine[F]) Debug(msg string, tags ...F) {
 	tl.state.mu.RLock()
 	defer tl.state.mu.RUnlock()
 	if tl.state.mu.closed {
@@ -529,8 +433,8 @@ func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
 	tl.wrapped.Debug(msg, tags...)
 }
 
-// Error implements log.Logger.
-func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
+// Error implements Logger.
+func (tl *Engine[F]) Error(msg string, tags ...F) {
 	tl.state.mu.RLock()
 	if tl.state.mu.closed {
 		tl.state.mu.RUnlock()
@@ -556,8 +460,8 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 	tl.wrapped.Error(errorMessage(Error, msg), tags...)
 }
 
-// Fatal implements log.Logger.
-func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
+// Fatal implements Logger.
+func (tl *Engine[F]) Fatal(msg string, tags ...F) {
 	tl.state.mu.RLock()
 	defer tl.state.mu.RUnlock()
 	if tl.state.mu.closed {
@@ -580,8 +484,8 @@ func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
 	tl.wrapped.Error(fmt.Sprintf("FATAL: %s", msg), tags...)
 }
 
-// Info implements log.Logger.
-func (tl *TestLogger) Info(msg string, tags ...tag.Tag) {
+// Info implements Logger.
+func (tl *Engine[F]) Info(msg string, tags ...F) {
 	tl.state.mu.RLock()
 	defer tl.state.mu.RUnlock()
 	if tl.state.mu.closed {
@@ -593,8 +497,8 @@ func (tl *TestLogger) Info(msg string, tags ...tag.Tag) {
 	tl.wrapped.Info(msg, tags...)
 }
 
-// Panic implements log.Logger.
-func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
+// Panic implements Logger.
+func (tl *Engine[F]) Panic(msg string, tags ...F) {
 	tl.state.mu.RLock()
 	defer tl.state.mu.RUnlock()
 	if tl.state.mu.closed {
@@ -612,8 +516,8 @@ func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
 	tl.wrapped.Panic(message(Panic, msg, tags))
 }
 
-// Warn implements log.Logger.
-func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
+// Warn implements Logger.
+func (tl *Engine[F]) Warn(msg string, tags ...F) {
 	tl.state.mu.RLock()
 	defer tl.state.mu.RUnlock()
 	if tl.state.mu.closed {
@@ -627,11 +531,11 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 
 // failTest fails the test while dumping the stack, allowing us to know where in the code
 // the failure arose.
-func (tl *TestLogger) failTest(level Level, msg string, tags ...tag.Tag) {
+func (tl *Engine[F]) failTest(level Level, msg string, tags ...F) {
 	tl.state.t.Helper()
 	tl.recordFailure(level, msg, tags)
-	// skip captureStack, failTest, and the log.Logger function that called failTest
-	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), captureStack(3))
+	// skip captureStack, failTest, and the Logger function that called failTest
+	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), captureStack(3+tl.state.callerSkip))
 }
 
 // captureStack returns a formatted stack trace, skipping the first `skip` frames
@@ -660,11 +564,11 @@ func captureStack(skip int) string {
 }
 
 // WithTags gives you a new logger, copying the tags of the source, appending the provided new Tags
-func (tl *TestLogger) WithTags(tags ...tag.Tag) *TestLogger {
-	allTags := make([]tag.Tag, len(tl.tags)+len(tags))
+func (tl *Engine[F]) WithTags(tags ...F) *Engine[F] {
+	allTags := make([]F, len(tl.tags)+len(tags))
 	copy(allTags, tl.tags)
 	copy(allTags[len(tl.tags):], tags)
-	newtl := &TestLogger{
+	newtl := &Engine[F]{
 		wrapped: tl.wrapped,
 		state:   tl.state,
 		tags:    allTags,
@@ -674,7 +578,7 @@ func (tl *TestLogger) WithTags(tags ...tag.Tag) *TestLogger {
 
 // Close disallows any further logging, preventing the test framework from complaining about
 // logging post-test.
-func (tl *TestLogger) Close() {
+func (tl *Engine[F]) Close() {
 	// Taking the write lock ensures all in-progress log calls complete before we close.
 	// This prevents a race condition after the test has completed.
 	tl.state.mu.Lock()
@@ -682,23 +586,21 @@ func (tl *TestLogger) Close() {
 	tl.state.mu.Unlock()
 }
 
-func (tl *TestLogger) T() TestingT {
+func (tl *Engine[F]) T() TestingT {
 	return tl.state.t
 }
 
-var _ log.WithLogger = (*TestLogger)(nil)
-
-// With implements log.WithLogger
-func (tl *TestLogger) With(tags ...tag.Tag) log.Logger {
-	return &TestLogger{
+// With implements Logger
+func (tl *Engine[F]) With(tags ...F) *Engine[F] {
+	return &Engine[F]{
 		wrapped: tl.wrapped,
 		state:   tl.state,
 		tags:    tl.mergeWithLoggerTags(tags),
 	}
 }
 
-// Format the log.Logger tags and such into a useful message
-func failureMessage(level Level, msg string, tags []tag.Tag) string {
+// Format the Logger tags and such into a useful message
+func failureMessage[F Field](level Level, msg string, tags []F) string {
 	var b strings.Builder
 	b.WriteString("FAIL: ")
 	b.WriteString(errorMessage(level, msg))
@@ -720,7 +622,7 @@ func errorMessage(level Level, msg string) string {
 	return b.String()
 }
 
-func message(level Level, msg string, tags []tag.Tag) string {
+func message[F Field](level Level, msg string, tags []F) string {
 	var b strings.Builder
 	b.WriteString(level.String())
 	b.WriteRune(':')
@@ -735,7 +637,7 @@ func message(level Level, msg string, tags []tag.Tag) string {
 	return b.String()
 }
 
-func formatValue(t tag.Tag) string {
+func formatValue[F Field](t F) string {
 	switch v := t.Value().(type) {
 	case fmt.Stringer:
 		return v.String()
