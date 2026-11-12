@@ -2475,6 +2475,10 @@ func (ms *MutableStateImpl) HasAnyBufferedEvent(filter historybuilder.BufferedEv
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 
+func (ms *MutableStateImpl) CountBufferedEvents(filter historybuilder.BufferedEventFilter) int {
+	return ms.hBuilder.CountBufferedEvents(filter)
+}
+
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
 // first event ID is the ID of a batch of events in a single history events record
 func (ms *MutableStateImpl) GetLastFirstEventIDTxnID() (int64, int64) {

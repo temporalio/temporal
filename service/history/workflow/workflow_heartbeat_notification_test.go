@@ -116,13 +116,14 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 				mutableState.EXPECT().HasStartedWorkflowTask().Return(tc.started)
 			}
 			if tc.started && (len(tc.bufferedTypes) > 0 || tc.nilNamespace) {
-				mutableState.EXPECT().HasAnyBufferedEvent(gomock.Any()).DoAndReturn(func(filter historybuilder.BufferedEventFilter) bool {
+				mutableState.EXPECT().CountBufferedEvents(gomock.Any()).DoAndReturn(func(filter historybuilder.BufferedEventFilter) int {
+					count := 0
 					for _, eventType := range append(tc.priorEvents, tc.newEvents...) {
 						if filter(&historypb.HistoryEvent{EventType: eventType}) {
-							return true
+							count++
 						}
 					}
-					return false
+					return count
 				})
 				namespaceEntry := tests.GlobalNamespaceEntry
 				if tc.nilNamespace {

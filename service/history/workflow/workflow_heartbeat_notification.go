@@ -58,13 +58,10 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 		return
 	}
 
-	bufferedInputCount := 0
-	hadBufferedInput := c.MutableState.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
-		if isWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
-			bufferedInputCount++
-		}
-		return bufferedInputCount > len(eventTypes)
+	bufferedInputCount := c.MutableState.CountBufferedEvents(func(event *historypb.HistoryEvent) bool {
+		return isWorkflowHeartbeatNotificationInputType(event.GetEventType())
 	})
+	hadBufferedInput := bufferedInputCount > len(eventTypes)
 	// TODO: Account for pending Updates. Only events are counted for now because UpdateRegistry is not a
 	// read-only method, so the first-input estimate is slightly exaggerated depending on the namespace's Update traffic.
 	firstBufferedInput := !hadBufferedInput
