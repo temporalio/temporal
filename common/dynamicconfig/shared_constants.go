@@ -350,6 +350,17 @@ type ReplicationStreamImplementationRule struct {
 	ShardPercent int
 }
 
+// ReplicationLaneIsolationEntry moves one namespace's HIGH priority replication traffic to one
+// remote cluster onto its own lane.
+type ReplicationLaneIsolationEntry struct {
+	// RemoteCluster is the name of the remote cluster.
+	RemoteCluster string
+	// NamespaceID is the ID of the namespace to isolate.
+	NamespaceID string
+	// TasksPerSecond limits the lane's send rate on each source shard. It must be positive.
+	TasksPerSecond float64
+}
+
 const (
 	HistoryReplicationRateLimiterScopeAll                  = "all"
 	HistoryReplicationRateLimiterScopeOpenForceReplication = "openForceReplication"

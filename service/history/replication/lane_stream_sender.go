@@ -56,6 +56,45 @@ type laneStreamSender struct {
 	flowController          SenderFlowController
 	sendLock                sync.Mutex
 	ssRateLimiter           ServerSchedulerRateLimiter
+
+	// lanesEnabledSetting is ReplicationStreamSenderLanesEnabled when the stream started.
+	lanesEnabledSetting bool
+	lanePolicyFactory   LaneStreamPolicyFactory
+	// lanePolicyMu serializes calls to lanePolicy, which is nil when the stream has no lane
+	// policy.
+	lanePolicyMu     sync.Mutex
+	lanePolicy       LaneStreamPolicy
+	lanePolicyClosed bool
+	// laneReconcileMu keeps key reuse and its policy callbacks ordered with retirement.
+	laneReconcileMu sync.Mutex
+	// lanePolicyStopped is set when the stream stops. The policy is closed then, or when the
+	// call that is running returns, so that stopping never waits for the policy.
+	lanePolicyStopped atomic.Bool
+	// lanePolicyDisabled is set when the policy or one of its limiters panics. The stream
+	// then calls nothing more on the policy except Close.
+	lanePolicyDisabled atomic.Bool
+	// laneRegistry is nil when the stream does not use lanes.
+	laneRegistry *senderLaneRegistry
+	// hasPersistedLanes is whether the reader state had lanes when the stream started.
+	// laneRecoveryFloor is then the persisted HIGH scope, which covers every persisted lane.
+	hasPersistedLanes bool
+	laneRecoveryFloor int64
+	// laneRestoreIncomplete is whether some persisted lanes are not continued, so the default
+	// lane re-sends their tasks from laneRecoveryFloor.
+	laneRestoreIncomplete bool
+	// lanesConfirmed is whether the receiver supports lanes. It is set by the first ack,
+	// after which initialLaneState is closed.
+	lanesConfirmed       atomic.Bool
+	initialLaneStateOnce sync.Once
+	initialLaneState     chan struct{}
+	// laneStateMu guards the lane state that comes from the policy's answers.
+	laneStateMu sync.Mutex
+	// requestedLanes are the lanes in the policy's latest answer.
+	requestedLanes map[string]struct{}
+	laneLimiters   map[string]LaneLimiter
+	// laneRefusedAt is when each lane's limiter last refused a send.
+	laneRefusedAt map[string]time.Time
+	laneLoopsOnce sync.Once
 }
 
 func newLaneStreamSender(
@@ -69,6 +108,7 @@ func newLaneStreamSender(
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 	config *configs.Config,
+	lanePolicyFactory LaneStreamPolicyFactory,
 ) *laneStreamSender {
 	logger := log.With(
 		shardContext.GetLogger(),
@@ -81,7 +121,8 @@ func newLaneStreamSender(
 	// flip between two reads would leave the sender half in each mode until the recv
 	// loop's config guard restarts the stream.
 	tieredStackEnabled := config.EnableReplicationTaskTieredProcessing()
-	return &laneStreamSender{
+	lanesEnabledSetting := config.ReplicationStreamSenderLanesEnabled()
+	s := &laneStreamSender{
 		server:                  server,
 		shardContext:            shardContext,
 		historyEngine:           historyEngine,
@@ -100,7 +141,17 @@ func newLaneStreamSender(
 		readerGroup:             newReaderGroupIfEnabled(config.EnableReplicationReaderGroup, shardContext, clientShardKey, tieredStackEnabled, logger),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
+		lanesEnabledSetting:     lanesEnabledSetting,
+		lanePolicyFactory:       lanePolicyFactory,
+		initialLaneState:        make(chan struct{}),
+		laneLimiters:            make(map[string]LaneLimiter),
+		laneRefusedAt:           make(map[string]time.Time),
 	}
+	// Lanes split HIGH priority traffic, so they require the tiered stack.
+	if lanesEnabledSetting && tieredStackEnabled && lanePolicyFactory != nil {
+		s.initLaneRegistry()
+	}
+	return s
 }
 
 func (s *laneStreamSender) Start() {
@@ -148,11 +199,15 @@ func (s *laneStreamSender) Stop() {
 	}
 
 	s.shutdownChan.Shutdown()
+	s.closeLanePolicy()
 	s.logger.Info("StreamSender stopped.")
 }
 
+// IsValid returns false once ReplicationStreamSenderLanesEnabled changes, so that the
+// stream reconnects with lanes turned on or off.
 func (s *laneStreamSender) IsValid() bool {
-	return atomic.LoadInt32(&s.status) == common.DaemonStatusStarted
+	return atomic.LoadInt32(&s.status) == common.DaemonStatusStarted &&
+		s.config.ReplicationStreamSenderLanesEnabled() == s.lanesEnabledSetting
 }
 
 func (s *laneStreamSender) Wait() {
@@ -189,6 +244,14 @@ func (s *laneStreamSender) recvEventLoop() (retErr error) {
 		if err != nil {
 			return NewStreamError("StreamSender failed to receive", err)
 		}
+		// Signal liveness on arrival rather than after processing, so that the liveness
+		// monitor also stops a stream whose first ack never finishes processing, for example
+		// because a lane policy call hangs.
+		select {
+		case s.recvSignalChan <- struct{}{}:
+		default:
+			// signal channel is full. Continue
+		}
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
 			if err := s.recvSyncReplicationState(attr.SyncReplicationState); err != nil {
@@ -204,11 +267,6 @@ func (s *laneStreamSender) recvEventLoop() (retErr error) {
 			return fmt.Errorf("streamSender unable to handle request: %w, taskAttr: %v", err, attr)
 		}
 
-		select {
-		case s.recvSignalChan <- struct{}{}:
-		default:
-			// signal channel is full. Continue
-		}
 	}
 	return nil
 }
@@ -245,6 +303,9 @@ func (s *laneStreamSender) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 func (s *laneStreamSender) recvSyncReplicationState(
 	attr *replicationspb.SyncReplicationState,
 ) error {
+	if s.laneRegistry != nil {
+		return s.recvLaneSyncReplicationState(attr)
+	}
 	if s.readerGroup != nil {
 		readerState, err := s.readerGroup.BuildReaderState(attr)
 		if err != nil {
@@ -385,8 +446,21 @@ func (s *laneStreamSender) recvSyncReplicationState(
 func (s *laneStreamSender) sendCatchUp(priority enumsspb.TaskPriority) (int64, error) {
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
-	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
-	err := s.sendTasks(
+	var catchupBeginInclusiveWatermark int64
+	if s.laneRegistry != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		// Whether persisted lanes continue depends on the receiver's lane support, which
+		// the first ack reports.
+		if err := s.sendLaneCatchUpPrime(catchupEndExclusiveWatermark); err != nil {
+			return 0, err
+		}
+		catchupBeginInclusiveWatermark = s.laneCatchupBeginWatermark(catchupEndExclusiveWatermark)
+		if s.lanesConfirmed.Load() {
+			s.startLaneLoops()
+		}
+	} else {
+		catchupBeginInclusiveWatermark = s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
+	}
+	err := s.sendDefaultTasks(
 		priority,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
@@ -439,7 +513,7 @@ func (s *laneStreamSender) sendLive(
 	defer syncStatusTimer.Stop()
 	sendTasks := func() error {
 		endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
-		err := s.sendTasks(
+		err := s.sendDefaultTasks(
 			priority,
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
@@ -479,6 +553,7 @@ func (s *laneStreamSender) sendTasks(
 	priority enumsspb.TaskPriority,
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
+	target *laneSendTarget,
 ) error {
 	if beginInclusiveWatermark > endExclusiveWatermark {
 		err := serviceerror.NewInternalf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
@@ -495,6 +570,7 @@ func (s *laneStreamSender) sendTasks(
 					ExclusiveHighWatermark:     endExclusiveWatermark,
 					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 					Priority:                   priority,
+					LaneInfo:                   target.getLaneInfo(),
 				},
 			},
 		})
@@ -534,6 +610,7 @@ Loop:
 						ExclusiveHighWatermark:     item.GetTaskID(),
 						ExclusiveHighWatermarkTime: timestamppb.New(item.GetVisibilityTime()),
 						Priority:                   priority,
+						LaneInfo:                   target.getLaneInfo(),
 					},
 				},
 			})
@@ -547,6 +624,9 @@ Loop:
 			continue Loop
 		}
 		if !s.shouldProcessTask(item) {
+			continue Loop
+		}
+		if target.skippingOwner(item) != "" || !target.accepts(item) {
 			continue Loop
 		}
 		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
@@ -623,6 +703,11 @@ Loop:
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
+			if target != nil && target.rateLimit != nil {
+				if limitErr := target.rateLimit(s.server.Context()); limitErr != nil {
+					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("lane_rate_limit: %w", limitErr))
+				}
+			}
 			if s.config.EmitReplicationLifecycleEvents() {
 				s.emitReplicationSent(task, item)
 			}
@@ -633,6 +718,7 @@ Loop:
 						ExclusiveHighWatermark:     task.SourceTaskId + 1,
 						ExclusiveHighWatermarkTime: task.VisibilityTime,
 						Priority:                   priority,
+						LaneInfo:                   target.getLaneInfo(),
 					},
 				},
 			})
@@ -703,6 +789,7 @@ Loop:
 				ExclusiveHighWatermark:     endExclusiveWatermark,
 				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 				Priority:                   priority,
+				LaneInfo:                   target.getLaneInfo(),
 			},
 		},
 	})
