@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
@@ -93,6 +94,7 @@ type TestEnv struct {
 type TestOption func(*testOptions)
 
 type testOptions struct {
+	testTimeout              time.Duration
 	dedicatedCluster         bool
 	needWorkerService        bool
 	dedicatedReason          string
@@ -114,6 +116,13 @@ type dynamicConfigOverride struct {
 }
 
 type versionHeadersContextKey struct{}
+
+// WithTestTimeout sets the timeout for the environment's test context.
+func WithTestTimeout(timeout time.Duration) TestOption {
+	return func(o *testOptions) {
+		o.testTimeout = timeout
+	}
+}
 
 // WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
 // Use this for tests that have cluster-global side effects.
@@ -257,15 +266,18 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
 
-	// Create the test context before any expensive setup, so that the deadline
-	// extension below can compensate for the time setup takes.
-	testtelemetry.AttachTestName(t)
-	ctx := testcontext.For(t)
-
 	options := testOptions{t: t}
 	for _, opt := range opts {
 		opt(&options)
 	}
+
+	// Create the test context before any expensive setup, so that the deadline
+	// extension below can compensate for the time setup takes.
+	// Must precede decorator registration, which otherwise fixes the default timeout.
+	testcontext.For(t, testcontext.WithTimeout(options.testTimeout))
+	testtelemetry.AttachTestName(t)
+	ctx := testcontext.For(t)
+
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 	if options.dedicatedReason != "" {
 		dedicatedGuard.record(options.dedicatedReason)

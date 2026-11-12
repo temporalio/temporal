@@ -2159,9 +2159,10 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 // diverges: V1 keeps the previous result and failure, V2 clears both. An explicit nil
 // (binary/null) is a result for both.
 func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
-	// Must precede env creation, which otherwise fixes the default timeout.
-	testcontext.For(t, testcontext.WithTimeout(3*time.Minute))
-	s := newScheduleEnv(t, append(scheduleCommonOpts(t), testcore.WithWorkerService("V1 scheduler"))...)
+	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithWorkerService("V1 scheduler"),
+		testcore.WithTestTimeout(3*time.Minute),
+	)...)
 	ctx := testcontext.For(t)
 
 	type sched struct {
