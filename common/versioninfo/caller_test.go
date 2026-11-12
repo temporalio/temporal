@@ -91,18 +91,25 @@ func TestPostInfo(t *testing.T) {
 
 func TestCallerTimeout(t *testing.T) {
 	t.Parallel()
+	started := make(chan error, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, err := io.Copy(io.Discard, r.Body)
+		started <- err
+		if err != nil {
+			return
+		}
 		<-r.Context().Done()
 	}))
 	t.Cleanup(server.Close)
 	t.Cleanup(server.CloseClientConnections)
 	endpoint, err := url.Parse(server.URL)
 	require.NoError(t, err)
-	caller := versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host, Timeout: 50 * time.Millisecond}
+	caller := versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host, Timeout: 200 * time.Millisecond}
 	ctx := testcontext.For(t, testcontext.WithTimeout(5*time.Second))
 	_, err = caller.CallWithContext(ctx, validVersionCheckRequest())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.NoError(t, ctx.Err(), "the HTTP client deadline must expire before the parent context")
+	require.NoError(t, await.Rcv(t, started))
 }
 
 func TestCallerCancellation(t *testing.T) {
@@ -114,9 +121,13 @@ func TestCallerCancellation(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			started := make(chan struct{}, 1)
+			started := make(chan error, 1)
 			server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				started <- struct{}{}
+				_, err := io.Copy(io.Discard, r.Body)
+				started <- err
+				if err != nil {
+					return
+				}
 				<-r.Context().Done()
 			}))
 			t.Cleanup(server.Close)
@@ -135,7 +146,7 @@ func TestCallerCancellation(t *testing.T) {
 				result <- err
 			}()
 			if !cancelBeforeRequest {
-				await.Rcv(t, started)
+				require.NoError(t, await.Rcv(t, started))
 				cancel()
 			}
 			require.ErrorIs(t, await.Rcv(t, result), context.Canceled)
