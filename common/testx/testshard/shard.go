@@ -55,7 +55,8 @@ func WithSaltEnv(name string) Option {
 
 // FromEnv reads TEST_TOTAL_SHARDS and the zero-based TEST_SHARD_INDEX by default.
 // Sharding is disabled when either configured variable is empty.
-// A non-empty salt environment variable overrides the supplied default salt.
+// A non-empty salt is required when sharding is enabled.
+// A non-empty salt environment variable overrides the salt supplied with WithSalt.
 // The salt is appended to the full test name before hashing with FarmHash Fingerprint32.
 func FromEnv(options ...Option) (Shard, error) {
 	cfg := config{
@@ -85,18 +86,22 @@ func FromEnv(options ...Option) (Shard, error) {
 	if index < 0 || index >= total {
 		return Shard{}, fmt.Errorf("%s out of bounds: %d must be in [0, %d)", cfg.shardIndexEnv, index, total)
 	}
-	return Shard{index: index, total: total, salt: cmp.Or(os.Getenv(cfg.saltEnv), cfg.salt)}, nil
+	salt := cmp.Or(os.Getenv(cfg.saltEnv), cfg.salt)
+	if salt == "" {
+		return Shard{}, fmt.Errorf("sharding salt is required: set %s or use WithSalt", cfg.saltEnv)
+	}
+	return Shard{index: index, total: total, salt: salt}, nil
 }
 
-// MaybeSkip reads shard configuration and skips t if it belongs to another shard.
+// SkipUnlessInShard reads shard configuration and skips t if it belongs to another shard.
 // Invalid configuration fails the test.
-func MaybeSkip(t *testing.T, options ...Option) {
+func SkipUnlessInShard(t *testing.T, options ...Option) {
 	t.Helper()
 	shard, err := FromEnv(options...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	shard.MaybeSkip(t)
+	shard.SkipUnlessInShard(t)
 }
 
 // ShouldRunTest reports whether the full test name should run on this shard.
@@ -104,9 +109,9 @@ func (s Shard) ShouldRunTest(testName string) bool {
 	return s.total == 0 || alreadySelected(testName) || s.testIndex(testName) == s.index
 }
 
-// MaybeSkip skips t if its full name belongs to another shard.
+// SkipUnlessInShard skips t if its full name belongs to another shard.
 // Once selected, t and its descendants retain that decision across later sharding checks.
-func (s Shard) MaybeSkip(t *testing.T) {
+func (s Shard) SkipUnlessInShard(t *testing.T) {
 	t.Helper()
 	if s.total == 0 || alreadySelected(t.Name()) {
 		return

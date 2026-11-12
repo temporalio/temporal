@@ -262,7 +262,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	t.Helper()
 
 	// Check test sharding early, before any expensive operations.
-	checkTestShard(t)
+	// Test sharding is based on environment variables.
+	// This distributes tests across multiple CI shards for parallel execution.
+	testshard.SkipUnlessInShard(t, testshard.WithSalt(strings.TrimSpace(shardSalt)))
 
 	options := testOptions{t: t}
 	for _, opt := range opts {
@@ -720,13 +722,6 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	default:
 		return false
 	}
-}
-
-// checkTestShard supports test sharding based on environment variables.
-// This distributes tests across multiple CI shards for parallel execution.
-func checkTestShard(t *testing.T) {
-	t.Helper()
-	testshard.MaybeSkip(t, testshard.WithSalt(strings.TrimSpace(shardSalt)))
 }
 
 type dedicatedClusterGuard struct {

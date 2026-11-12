@@ -14,14 +14,16 @@ func TestFromEnv(t *testing.T) {
 		name    string
 		total   string
 		index   string
+		salt    string
 		wantErr string
 	}{
 		{name: "unset"},
 		{name: "total missing", index: "1"},
 		{name: "index missing", total: "4"},
-		{name: "one shard", total: "1", index: "0"},
-		{name: "first shard", total: "4", index: "0"},
-		{name: "last shard", total: "4", index: "3"},
+		{name: "one shard", total: "1", index: "0", salt: "my-suite"},
+		{name: "first shard", total: "4", index: "0", salt: "my-suite"},
+		{name: "last shard", total: "4", index: "3", salt: "my-suite"},
+		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TEST_SHARD_SALT or use WithSalt"},
 		{name: "malformed total", total: "four", index: "0", wantErr: `parsing TEST_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
 		{name: "zero total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
 		{name: "negative total", total: "-1", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: -1"},
@@ -32,6 +34,7 @@ func TestFromEnv(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("TEST_TOTAL_SHARDS", tc.total)
 			t.Setenv("TEST_SHARD_INDEX", tc.index)
+			t.Setenv("TEST_SHARD_SALT", tc.salt)
 			shard, err := FromEnv()
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
@@ -53,7 +56,6 @@ func TestShouldRunTestCompatibility(t *testing.T) {
 		envSalt string
 		owner   string
 	}{
-		{name: "TestSuite/TestMethod", owner: "1"},
 		{name: "TestSuite/TestMethod", salt: "-salt-2827", owner: "2"},
 		{name: "TestSuite/TestOther", salt: "-salt-2827", owner: "0"},
 		{name: "TestSuite/TestMethod", salt: "-salt-2827", envSalt: "-test-salt", owner: "1"},
@@ -71,18 +73,18 @@ func TestShouldRunTestCompatibility(t *testing.T) {
 	}
 }
 
-func TestMaybeSkipInheritsSelection(t *testing.T) {
+func TestSkipUnlessInShardInheritsSelection(t *testing.T) {
 	t.Parallel()
-	selected := Shard{total: 1}
+	selected := Shard{total: 1, salt: "selected-salt"}
 	other := Shard{total: 4, index: 0, salt: "other-salt"}
 	t.Run("suite", func(t *testing.T) {
-		selected.MaybeSkip(t)
+		selected.SkipUnlessInShard(t)
 		t.Run("nested", func(t *testing.T) {
 			t.Cleanup(func() { require.False(t, t.Skipped(), "a selected parent's descendants must stay on its shard") })
-			other.MaybeSkip(t)
+			other.SkipUnlessInShard(t)
 		})
 		t.Cleanup(func() { require.False(t, t.Skipped(), "the first sharding decision must be retained") })
-		other.MaybeSkip(t)
+		other.SkipUnlessInShard(t)
 	})
 	require.False(t, other.ShouldRunTest(t.Name()+"/suite"), "selection must be removed when its test finishes")
 }
@@ -92,14 +94,16 @@ func TestFromEnvCustomVariables(t *testing.T) {
 	t.Setenv("TEST_SHARD_INDEX", "invalid")
 	t.Setenv("TEST_SHARD_SALT", "ignored")
 	for _, tc := range []struct {
-		name    string
-		total   string
-		index   string
-		salt    string
-		wantErr string
+		name        string
+		total       string
+		index       string
+		salt        string
+		defaultSalt string
+		wantErr     string
 	}{
 		{name: "custom salt", total: "4", index: "1", salt: "-test-salt"},
-		{name: "default salt", total: "4", index: "2"},
+		{name: "default salt", total: "4", index: "2", defaultSalt: "-salt-2827"},
+		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set CI_SHARD_SALT or use WithSalt"},
 		{name: "missing total", index: "1"},
 		{name: "invalid total", total: "four", index: "0", wantErr: `parsing CI_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
 		{name: "zero total", total: "0", index: "0", wantErr: "CI_TOTAL_SHARDS must be positive: 0"},
@@ -111,7 +115,7 @@ func TestFromEnvCustomVariables(t *testing.T) {
 			t.Setenv("CI_SHARD_INDEX", tc.index)
 			t.Setenv("CI_SHARD_SALT", tc.salt)
 			shard, err := FromEnv(
-				WithSalt("-salt-2827"),
+				WithSalt(tc.defaultSalt),
 				WithTotalShardsEnv("CI_TOTAL_SHARDS"),
 				WithShardIndexEnv("CI_SHARD_INDEX"),
 				WithSaltEnv("CI_SHARD_SALT"),
@@ -126,7 +130,7 @@ func TestFromEnvCustomVariables(t *testing.T) {
 	}
 }
 
-func TestMaybeSkipProcess(t *testing.T) {
+func TestSkipUnlessInShardProcess(t *testing.T) {
 	if os.Getenv("TESTX_SKIP_PROCESS") == "" {
 		return
 	}
@@ -134,33 +138,35 @@ func TestMaybeSkipProcess(t *testing.T) {
 	if salt := os.Getenv("TESTX_SKIP_SALT"); salt != "" {
 		options = append(options, WithSalt(salt))
 	}
-	MaybeSkip(t, options...)
+	SkipUnlessInShard(t, options...)
 	t.Log("test body ran")
 }
 
-func TestMaybeSkip(t *testing.T) {
+func TestSkipUnlessInShard(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		total   string
 		index   string
 		salt    string
+		envSalt string
 		wantRun bool
 		wantErr string
 	}{
 		{name: "disabled", wantRun: true},
-		{name: "owns test", total: "4", index: "1", wantRun: true},
-		{name: "other shard", total: "4", index: "0"},
-		{name: "default salt", total: "4", index: "2", salt: "my-suite", wantRun: true},
+		{name: "owns test", total: "4", index: "0", envSalt: "my-suite", wantRun: true},
+		{name: "other shard", total: "4", index: "1", envSalt: "my-suite"},
+		{name: "default salt", total: "4", index: "2", salt: "other", wantRun: true},
+		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TEST_SHARD_SALT or use WithSalt"},
 		{name: "misconfigured", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			executable, err := os.Executable()
 			require.NoError(t, err)
-			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestMaybeSkipProcess$", "-test.v")
+			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestSkipUnlessInShardProcess$", "-test.v")
 			cmd.Env = append(os.Environ(), "TESTX_SKIP_PROCESS=1", "TESTX_SKIP_SALT="+tc.salt,
-				"TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index, "TEST_SHARD_SALT=")
+				"TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index, "TEST_SHARD_SALT="+tc.envSalt)
 			output, err := cmd.CombinedOutput()
 			if tc.wantErr != "" {
 				require.Error(t, err, "%s", output)
