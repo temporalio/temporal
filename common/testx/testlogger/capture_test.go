@@ -7,19 +7,17 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/testx/testlogger"
 )
 
 func TestCaptureLifecycle(t *testing.T) {
 	t.Parallel()
 
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	testLogger := newEngine(t, testlogger.FailOnExpectedErrorOnly)
 	testLogger.Info("before") // won't be captured
 
 	capture := testLogger.StartCapture()
-	testLogger.Debug("debug", tag.String("key", "value"))
+	testLogger.Debug("debug", field{"key", "value"})
 	testLogger.Info("info")
 	testLogger.Warn("warn")
 	testLogger.Error("error")
@@ -27,8 +25,8 @@ func TestCaptureLifecycle(t *testing.T) {
 	testLogger.StopCapture(capture)
 	testLogger.Info("after") // won't be captured
 
-	require.Equal(t, []testlogger.CapturedLog{
-		{Level: testlogger.Debug, Message: "debug", Tags: []tag.Tag{tag.String("key", "value")}},
+	require.Equal(t, []testlogger.CapturedLog[field]{
+		{Level: testlogger.Debug, Message: "debug", Tags: []field{field{"key", "value"}}},
 		{Level: testlogger.Info, Message: "info"},
 		{Level: testlogger.Warn, Message: "warn"},
 		{Level: testlogger.Error, Message: "error"},
@@ -38,69 +36,69 @@ func TestCaptureLifecycle(t *testing.T) {
 func TestCaptureSharesStateWithDerivedLoggers(t *testing.T) {
 	t.Parallel()
 
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	testLogger := newEngine(t, testlogger.FailOnExpectedErrorOnly)
 	capture := testLogger.StartCapture()
 
-	log.With(testLogger, tag.String("inherited", "value")).Info("with")
-	testLogger.WithTags(tag.String("direct", "value")).Info("with-tags")
+	testLogger.With(field{"inherited", "value"}).Info("with")
+	testLogger.WithTags(field{"direct", "value"}).Info("with-tags")
 
-	require.Equal(t, []testlogger.CapturedLog{
-		{Level: testlogger.Info, Message: "with", Tags: []tag.Tag{tag.String("inherited", "value")}},
-		{Level: testlogger.Info, Message: "with-tags", Tags: []tag.Tag{tag.String("direct", "value")}},
+	require.Equal(t, []testlogger.CapturedLog[field]{
+		{Level: testlogger.Info, Message: "with", Tags: []field{field{"inherited", "value"}}},
+		{Level: testlogger.Info, Message: "with-tags", Tags: []field{field{"direct", "value"}}},
 	}, capture.Snapshot())
 }
 
 func TestCaptureFiltersIndependently(t *testing.T) {
 	t.Parallel()
 
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	testLogger := newEngine(t, testlogger.FailOnExpectedErrorOnly)
 	all := testLogger.StartCapture()
-	matching := testLogger.StartCapture(tag.String("keep", "true"))
+	matching := testLogger.StartCapture(field{"keep", "true"})
 
 	testLogger.Info("excluded")
-	testLogger.Info("included", tag.String("keep", "true"))
+	testLogger.Info("included", field{"keep", "true"})
 
 	require.Len(t, all.Snapshot(), 2)
-	require.Equal(t, []testlogger.CapturedLog{{
+	require.Equal(t, []testlogger.CapturedLog[field]{{
 		Level:   testlogger.Info,
 		Message: "included",
-		Tags:    []tag.Tag{tag.String("keep", "true")},
+		Tags:    []field{field{"keep", "true"}},
 	}}, matching.Snapshot())
 }
 
 func TestCaptureSnapshotIsDefensiveCopy(t *testing.T) {
 	t.Parallel()
 
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	testLogger := newEngine(t, testlogger.FailOnExpectedErrorOnly)
 	capture := testLogger.StartCapture()
-	tags := []tag.Tag{tag.String("key", "original")}
+	tags := []field{field{"key", "original"}}
 
 	testLogger.Info("message", tags...)
-	tags[0] = tag.String("key", "mutated input")
+	tags[0] = field{"key", "mutated input"}
 
 	// mutate the snapshot
 	first := capture.Snapshot()
 	first[0].Message = "mutated snapshot"
-	first[0].Tags[0] = tag.String("key", "mutated snapshot")
+	first[0].Tags[0] = field{"key", "mutated snapshot"}
 
-	require.Equal(t, []testlogger.CapturedLog{{
+	require.Equal(t, []testlogger.CapturedLog[field]{{
 		Level:   testlogger.Info,
 		Message: "message",
-		Tags:    []tag.Tag{tag.String("key", "original")},
+		Tags:    []field{field{"key", "original"}},
 	}}, capture.Snapshot())
 }
 
 func TestCaptureRequireContains(t *testing.T) {
 	t.Parallel()
 
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	testLogger := newEngine(t, testlogger.FailOnExpectedErrorOnly)
 	capture := testLogger.StartCapture()
-	testLogger.Error("failed", tag.String("operation", "StartOperation"), tag.Time("attempt-start", time.Now()), tag.Error(errors.New("failure")))
+	testLogger.Error("failed", field{"operation", "StartOperation"}, field{"attempt-start", time.Now()}, field{"error", errors.New("failure")})
 
 	t.Run("matching pattern", func(t *testing.T) {
 		t.Parallel()
 
-		capture.RequireContains(t, testlogger.CapturedLogPattern{
+		capture.RequireContains(t, testlogger.CapturedLogPattern[field]{
 			Level:   testlogger.Error,
 			Message: "failed",
 			Tags: map[string]any{
@@ -115,7 +113,7 @@ func TestCaptureRequireContains(t *testing.T) {
 		t.Parallel()
 
 		recorder := &mockT{T: t}
-		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+		capture.RequireContains(recorder, testlogger.CapturedLogPattern[field]{
 			Level:   testlogger.Error,
 			Message: "failed",
 			Tags: map[string]any{
@@ -136,7 +134,7 @@ func TestCaptureRequireContains(t *testing.T) {
 		t.Parallel()
 
 		recorder := &mockT{T: t}
-		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+		capture.RequireContains(recorder, testlogger.CapturedLogPattern[field]{
 			Level:   testlogger.Error,
 			Message: "failed",
 			Tags: map[string]any{
@@ -155,7 +153,7 @@ func TestCaptureRequireContains(t *testing.T) {
 		t.Parallel()
 
 		recorder := &mockT{T: t}
-		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+		capture.RequireContains(recorder, testlogger.CapturedLogPattern[field]{
 			Level:   testlogger.Warn,
 			Message: "missing",
 			// missing!
@@ -170,9 +168,7 @@ func TestCaptureRequireContains(t *testing.T) {
 func TestCaptureRecordsConcurrentDerivedLoggers(t *testing.T) {
 	t.Parallel()
 
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly,
-		testlogger.WrapLogger(log.NewNoopLogger()),
-	)
+	testLogger := newEngine(t, testlogger.FailOnExpectedErrorOnly)
 	capture := testLogger.StartCapture()
 
 	const (
@@ -181,7 +177,7 @@ func TestCaptureRecordsConcurrentDerivedLoggers(t *testing.T) {
 	)
 	var wg sync.WaitGroup
 	for loggerID := range loggerCount {
-		derived := log.With(testLogger, tag.Int("logger-id", loggerID))
+		derived := testLogger.With(field{"logger-id", loggerID})
 		wg.Go(func() {
 			for range recordsPerLog {
 				derived.Info("concurrent")

@@ -102,15 +102,13 @@ func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 // Mode controls the behavior of the logger for when an expected or unexpected error is encountered.
 func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	tl := &TestLogger{level: zapcore.DebugLevel, logCaller: true}
-	tl.Engine = testlogger.NewEngine[tag.Tag](t, mode, nil, testlogger.CallerSkip[tag.Tag](1), func(e *testlogger.Engine[tag.Tag]) {
+	tl.Engine = testlogger.NewEngine[tag.Tag](t, mode, nil, func(e *testlogger.Engine[tag.Tag]) {
 		tl.Engine = e
 		for _, opt := range opts {
 			opt(tl)
 		}
 		if tl.wrapped == nil {
 			tl.configureLogger(t)
-		} else if logger, ok := tl.wrapped.(log.SkipLogger); ok {
-			tl.wrapped = logger.Skip(1)
 		}
 		testlogger.WrapLogger[tag.Tag](tl.wrapped)(e)
 	})
@@ -133,50 +131,3 @@ func (tl *TestLogger) With(tags ...tag.Tag) log.Logger {
 
 var _ log.Logger = (*TestLogger)(nil)
 var _ log.WithLogger = (*TestLogger)(nil)
-
-// Debug implements log.Logger.
-func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
-	tl.Engine.Debug(msg, tags...)
-}
-
-// Info implements log.Logger.
-func (tl *TestLogger) Info(msg string, tags ...tag.Tag) {
-	tl.Engine.Info(msg, tags...)
-}
-
-// Warn implements log.Logger.
-func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
-	tl.Engine.Warn(msg, tags...)
-}
-
-// Error implements log.Logger.
-func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
-	tl.T().Helper()
-	tl.Engine.Error(msg, tags...)
-}
-
-// DPanic implements log.Logger.
-func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
-	tl.T().Helper()
-	tl.Engine.DPanic(msg, tags...)
-}
-
-// Panic implements log.Logger.
-func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
-	tl.T().Helper()
-	tl.Engine.Panic(msg, tags...)
-}
-
-// Fatal implements log.Logger.
-func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
-	tl.T().Helper()
-	tl.Engine.Fatal(msg, tags...)
-}
-
-// Expect instructs the logger to track matching log calls, as specified by the
-// level, msg, and tag arguments. For error-level logs, depending on the Mode of
-// the test logger, the expectation either acts as an entry in a blocklist
-// (FailOnExpectedErrorOnly) or an allowlist (FailOnAnyUnexpectedError).
-func (tl *TestLogger) Expect(level Level, msg string, tags ...tag.Tag) *Expectation {
-	return tl.Engine.Expect(level, msg, tags...)
-}
