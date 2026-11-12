@@ -90,15 +90,15 @@ func TestIsWorkflowHeartbeatNotificationInputEnabled(t *testing.T) {
 		inputType string
 		want      bool
 	}{
-		{"master flag off", false, nil, "EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED", false},
-		{"empty list disables all", true, nil, "EVENT_TYPE_ACTIVITY_TASK_COMPLETED", false},
-		{"selected signal", true, []string{"signal"}, "EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED", true},
-		{"mixed-case signal", true, []string{"sIgnal"}, "EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED", true},
-		{"unselected timer", true, []string{"signal"}, "EVENT_TYPE_TIMER_FIRED", false},
+		{"master flag off", false, nil, "WorkflowExecutionSignaled", false},
+		{"empty list disables all", true, nil, "ActivityTaskCompleted", false},
+		{"selected signal", true, []string{"signal"}, "WorkflowExecutionSignaled", true},
+		{"mixed-case signal", true, []string{"sIgnal"}, "WorkflowExecutionSignaled", true},
+		{"unselected timer", true, []string{"signal"}, "TimerFired", false},
 		{"selected update", true, []string{"update"}, WorkflowHeartbeatNotificationUpdateAdmittedEventType, true},
 		{"uppercase update", true, []string{"UPDATE"}, WorkflowHeartbeatNotificationUpdateAdmittedEventType, true},
-		{"unknown event", true, []string{"signal"}, "EVENT_TYPE_UNRECOGNIZED", false},
-		{"unknown event with empty list", true, nil, "EVENT_TYPE_UNRECOGNIZED", false},
+		{"unknown event", true, []string{"signal"}, "Unrecognized", false},
+		{"unknown event with empty list", true, nil, "Unrecognized", false},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
