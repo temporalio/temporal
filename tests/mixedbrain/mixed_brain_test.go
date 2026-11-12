@@ -2,6 +2,7 @@ package mixedbrain
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"io"
 	"os"
@@ -109,10 +110,7 @@ func TestMixedBrain(t *testing.T) {
 		return
 	}
 
-	persistenceDriver := os.Getenv("PERSISTENCE_DRIVER")
-	if persistenceDriver == "" {
-		persistenceDriver = "sqlite"
-	}
+	persistenceDriver := cmp.Or(os.Getenv("PERSISTENCE_DRIVER"), "sqlite")
 	switch persistenceDriver {
 	case "sqlite":
 		configureSharedSQLite(t, tmpDir)
