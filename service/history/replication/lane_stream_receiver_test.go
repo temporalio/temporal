@@ -578,6 +578,7 @@ func (s *laneStreamReceiverSuite) TestAckMessage_LanesEnabled_ReportsLaneLimitAn
 					"lane-a": {
 						InclusiveLowWatermark:     laneWatermark.Watermark,
 						InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+						FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 					},
 				},
 				LaneProtocolVersion: replicationLaneProtocolVersion,

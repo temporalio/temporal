@@ -493,11 +493,11 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_HandoverLiftsRateLimits() {
 
 	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, map[string]*historyservice.HandoverNamespaceInfo{"ns-b": {}}, nil)
 	s.NoError(s.streamSender.reconcileLanes(attr, false))
-	s.False(s.streamSender.lanePaced(logicalKey))
+	s.False(s.streamSender.laneShouldBeRateLimited(logicalKey))
 
 	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil)
 	s.NoError(s.streamSender.reconcileLanes(attr, false))
-	s.True(s.streamSender.lanePaced(logicalKey))
+	s.True(s.streamSender.laneShouldBeRateLimited(logicalKey))
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
