@@ -135,10 +135,10 @@ func TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask(t *test
 	await.Require(t.Context(), t, func(t *await.T) {
 		buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 		require.Len(t, buffered, 1)
-		require.Equal(t, "EVENT_TYPE_TIMER_FIRED", buffered[0].Tags["event_type"])
+		require.Equal(t, "TimerFired", buffered[0].Tags["event_type"])
 		first := capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
 		require.Len(t, first, 1)
-		require.Equal(t, "EVENT_TYPE_TIMER_FIRED", first[0].Tags["event_type"])
+		require.Equal(t, "TimerFired", first[0].Tags["event_type"])
 	}, 10*time.Second, 100*time.Millisecond)
 
 	_, err = env.TaskPoller().HandleWorkflowTask(tv, resp.GetWorkflowTask(),
@@ -250,7 +250,7 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		recordings := capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
 		s.Len(recordings, 1)
 		if len(recordings) == 1 {
-			s.Equal("EVENT_TYPE_ACTIVITY_TASK_COMPLETED", recordings[0].Tags["event_type"])
+			s.Equal("ActivityTaskCompleted", recordings[0].Tags["event_type"])
 		}
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -266,11 +266,11 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 	s.NoError(err)
 
 	expected := map[string]int{
-		"EVENT_TYPE_ACTIVITY_TASK_COMPLETED":             1,
-		"EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED":  1,
-		"EVENT_TYPE_NEXUS_OPERATION_COMPLETED":           1,
-		"EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED":         1,
-		"EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED": 1,
+		"ActivityTaskCompleted":            1,
+		"ChildWorkflowExecutionCompleted":  1,
+		"NexusOperationCompleted":          1,
+		"WorkflowExecutionSignaled":        1,
+		"WorkflowExecutionCancelRequested": 1,
 	}
 	s.Await(func(s *NexusWorkflowTestSuite) {
 		recordings := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())

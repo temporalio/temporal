@@ -42,7 +42,7 @@ func TestIsWorkflowHeartbeatNotificationInputType(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.eligible, IsWorkflowHeartbeatNotificationInputType(tc.eventType))
+			require.Equal(t, tc.eligible, isWorkflowHeartbeatNotificationInputType(tc.eventType))
 		})
 	}
 }
@@ -61,30 +61,30 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			name:          "first timer result",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
-			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED"},
-			firstType:     "EVENT_TYPE_TIMER_FIRED",
+			bufferedTypes: []string{"TimerFired"},
+			firstType:     "TimerFired",
 		},
 		{
 			name:          "previous signal",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
 			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED},
-			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED"},
+			bufferedTypes: []string{"TimerFired"},
 		},
 		{
 			name:          "multiple inputs in one transaction",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED},
-			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED", "EVENT_TYPE_ACTIVITY_TASK_COMPLETED"},
-			firstType:     "EVENT_TYPE_TIMER_FIRED",
+			bufferedTypes: []string{"TimerFired", "ActivityTaskCompleted"},
+			firstType:     "TimerFired",
 		},
 		{
 			name:          "unrelated buffered event",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED},
 			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED},
-			bufferedTypes: []string{"EVENT_TYPE_NEXUS_OPERATION_COMPLETED"},
-			firstType:     "EVENT_TYPE_NEXUS_OPERATION_COMPLETED",
+			bufferedTypes: []string{"NexusOperationCompleted"},
+			firstType:     "NexusOperationCompleted",
 		},
 		{
 			name:      "workflow task not started",

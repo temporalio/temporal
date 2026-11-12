@@ -6,9 +6,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-// IsWorkflowHeartbeatNotificationInputType reports whether an event type is eligible for a Workflow Task heartbeat notification.
+// isWorkflowHeartbeatNotificationInputType reports whether an event type is eligible for a Workflow Task heartbeat notification.
 // Buffering alone does not make an event eligible; for example, ActivityTaskStarted records progress but does not normally require a new Workflow Task.
-func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool {
+func isWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool {
 	switch eventType {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
@@ -44,24 +44,23 @@ func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool 
 func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 	newBufferedEvents []*historypb.HistoryEvent,
 ) {
-	if !c.MutableState.HasStartedWorkflowTask() {
+	if len(newBufferedEvents) == 0 || !c.MutableState.HasStartedWorkflowTask() {
 		return
 	}
 
 	eventTypes := make([]string, 0, len(newBufferedEvents))
 	for _, event := range newBufferedEvents {
-		if IsWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
-			eventTypes = append(eventTypes, enumspb.EventType_name[int32(event.GetEventType())])
+		if isWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
+			eventTypes = append(eventTypes, event.GetEventType().String())
 		}
 	}
 	if len(eventTypes) == 0 {
 		return
 	}
 
-	// The closed transaction's builder contains both prior buffered events and this mutation's new events.
 	bufferedInputCount := 0
 	hadBufferedInput := c.MutableState.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
-		if IsWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
+		if isWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
 			bufferedInputCount++
 		}
 		return bufferedInputCount > len(eventTypes)
