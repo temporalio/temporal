@@ -67,10 +67,11 @@ func workflowHeartbeatNotificationInputTypeForName(eventType string) string {
 	if eventType == WorkflowHeartbeatNotificationUpdateAdmittedMetricTag {
 		return workflowHeartbeatNotificationUpdate
 	}
-	if value, ok := enumspb.EventType_value[eventType]; ok {
-		return workflowHeartbeatNotificationInputTypeForEvent(enumspb.EventType(value))
+	value, err := enumspb.EventTypeFromString(eventType)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return workflowHeartbeatNotificationInputTypeForEvent(value)
 }
 
 // isWorkflowHeartbeatNotificationInputEnabled checks the namespace rollout and input type filter.
