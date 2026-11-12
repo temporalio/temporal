@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/testx/testlogger"
 	testzap "go.temporal.io/testx/testlogger/zap"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
@@ -66,4 +67,47 @@ func TestDefaultOutputAndFailure(t *testing.T) {
 	count := len(tb.logs)
 	logger.Info("after close")
 	require.Len(t, tb.logs, count)
+}
+
+func TestDevelopmentDPanicObeysTestLoggerControls(t *testing.T) {
+	t.Parallel()
+	core, observed := observer.New(zap.DebugLevel)
+	logger := testzap.Wrap(t, testlogger.FailOnAnyUnexpectedError, zap.New(core, zap.Development()))
+	expected := logger.Expect(testlogger.DPanic, "allowed")
+	require.NotPanics(t, func() { logger.DPanic("allowed") })
+	require.True(t, expected.Matched())
+	logger.FailOnDPanic(false)
+	require.NotPanics(t, func() { logger.DPanic("disabled") })
+	require.Len(t, observed.All(), 2)
+}
+
+type inlineObject struct{}
+
+func (inlineObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("key", "value")
+	return nil
+}
+
+func TestRejectsNonKeyValueFields(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		field zap.Field
+	}{
+		{
+			name:  "namespace",
+			field: zap.Namespace("context"),
+		},
+		{
+			name:  "inline",
+			field: zap.Inline(inlineObject{}),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			logger := testzap.Wrap(t, testlogger.FailOnAnyUnexpectedError, zap.NewNop())
+			require.PanicsWithValue(t, "testlogger/zap: namespace and inline modifiers are unsupported", func() { logger.With(tc.field) })
+			require.PanicsWithValue(t, "testlogger/zap: namespace and inline modifiers are unsupported", func() { logger.Info("message", tc.field) })
+		})
+	}
 }
