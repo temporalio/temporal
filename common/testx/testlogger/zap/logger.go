@@ -18,7 +18,8 @@ func (f Field) Value() any {
 	return encoder.Fields[f.Key()]
 }
 
-// Logger accepts Zap fields and shares expectations and captures with derived loggers.
+// Logger accepts keyed Zap fields and shares expectations and captures with derived loggers.
+// Namespace and inline modifiers are unsupported; use keyed fields.
 type Logger struct{ *testlogger.Engine[Field] }
 
 // New creates a logger that writes to the test output.
@@ -46,9 +47,17 @@ func fields(values []zaplog.Field) []Field {
 	if values == nil {
 		return nil
 	}
-	result := make([]Field, len(values))
-	for i, value := range values {
-		result[i] = Field{value}
+	result := make([]Field, 0, len(values))
+	for _, value := range values {
+		switch value.Type {
+		case zapcore.NamespaceType, zapcore.InlineMarshalerType:
+			//nolint:forbidigo // Panics are fine in testing code.
+			panic("testlogger/zap: namespace and inline modifiers are unsupported")
+		case zapcore.SkipType:
+			continue
+		default:
+			result = append(result, Field{value})
+		}
 	}
 	return result
 }
@@ -120,7 +129,7 @@ func (l *Logger) DPanic(message string, values ...zaplog.Field) {
 }
 
 func (l output) DPanic(message string, values ...Field) {
-	l.Logger.DPanic(message, zapFields(values)...)
+	l.Logger.WithOptions(zaplog.WithPanicHook(dpanicHook{})).DPanic(message, zapFields(values)...)
 }
 
 func (l *Logger) Panic(message string, values ...zaplog.Field) {
@@ -140,3 +149,8 @@ func (l *Logger) Fatal(message string, values ...zaplog.Field) {
 func (l output) Fatal(message string, values ...Field) {
 	l.Logger.Fatal(message, zapFields(values)...)
 }
+
+// The engine decides whether DPanic fails the test; Zap's development-mode panic must not bypass it.
+type dpanicHook struct{}
+
+func (dpanicHook) OnWrite(*zapcore.CheckedEntry, []zapcore.Field) {}
