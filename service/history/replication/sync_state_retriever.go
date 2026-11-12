@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -120,7 +119,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			RunID:       execution.RunId,
 		},
 		archetypeID,
-		locks.PriorityLow,
+		workflowLockPriorityFromContext(ctx),
 	)
 	if err != nil {
 		return nil, err
@@ -305,7 +304,7 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 			WorkflowId: execution.WorkflowId,
 			RunId:      newRunId,
 		},
-		locks.PriorityLow,
+		workflowLockPriorityFromContext(ctx),
 	)
 	defer func() {
 		if releaseFunc != nil {

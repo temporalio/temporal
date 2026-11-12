@@ -173,7 +173,7 @@ var (
 		"DeleteWorkerDeployment":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"CreateWorkerDeploymentVersion":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UpdateWorkerDeploymentVersionComputeConfig":   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ValidateWorkerDeploymentVersionComputeConfig": {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
+		"ValidateWorkerDeploymentVersionComputeConfig": {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DeleteWorkerDeploymentVersion":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UpdateWorkerDeploymentVersionMetadata":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"ListWorkerDeployments":                        {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
@@ -197,6 +197,9 @@ var (
 		"RemoveSearchAttributes":   {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
 		"ListSearchAttributes":     {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"DeleteNamespace":          {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
+		"SoftDeleteNamespace":      {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
+		"RestoreNamespace":         {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
+		"DescribeNamespaceRestore": {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"AddOrUpdateRemoteCluster": {Scope: ScopeCluster, Access: AccessAdmin, Polling: PollingNone},
 		"RemoveRemoteCluster":      {Scope: ScopeCluster, Access: AccessAdmin, Polling: PollingNone},
 		"ListClusters":             {Scope: ScopeCluster, Access: AccessAdmin, Polling: PollingNone},
@@ -239,6 +242,21 @@ func MethodName(fullApiName string) string {
 		return fullApiName[index+1:]
 	}
 	return fullApiName
+}
+
+// ParseFullMethod splits a full gRPC method — "/pkg.Service/Method" — into its proto
+// service full name and method name. ok is false for anything that is not that shape.
+func ParseFullMethod(fullMethod string) (service string, method string, ok bool) {
+	rest, ok := strings.CutPrefix(fullMethod, "/")
+	if !ok {
+		return "", "", false
+	}
+	service, method, ok = strings.Cut(rest, "/")
+	if !ok || service == "" || method == "" || strings.ContainsRune(method, '/') {
+		return "", "", false
+	}
+	// A proto service is package-qualified, so no dot means this is not a service name.
+	return service, method, strings.ContainsRune(service, '.')
 }
 
 func ServiceName(fullApiName string) string {

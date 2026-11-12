@@ -10,7 +10,6 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -45,7 +44,6 @@ type (
 		MetricsHandler            metrics.Handler
 		DynamicCollection         *dynamicconfig.Collection
 		WorkflowVerifier          WorkflowVerifier
-		ChasmRegistry             *chasm.Registry
 		SDKClientFactory          sdk.ClientFactory
 	}
 
@@ -205,7 +203,6 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
 		emitNamespaceLifecycleEvents:     dynamicconfig.EmitNamespaceLifecycleEvents.Get(wc.DynamicCollection),
 		workflowVerifier:                 wc.WorkflowVerifier,
-		chasmRegistry:                    wc.ChasmRegistry,
 	}
 }
 
@@ -240,7 +237,6 @@ func newShardedActivities(params initParams) (*shardedActivities, error) {
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(params.DynamicCollection),
 		emitNamespaceLifecycleEvents:     dynamicconfig.EmitNamespaceLifecycleEvents.Get(params.DynamicCollection),
 		workflowVerifier:                 params.WorkflowVerifier,
-		chasmRegistry:                    params.ChasmRegistry,
 		sdkClientFactory:                 params.SDKClientFactory,
 	}}, nil
 }

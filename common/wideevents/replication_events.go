@@ -109,9 +109,10 @@ const (
 const (
 	ParentChildLifecycleEventType = "parent_child_lifecycle"
 
-	ParentChildPhaseVerifyChildCompletion = "verify_child_completion"
-	ParentChildPhaseParentResend          = "parent_resend"
-	ParentChildPhaseChildResend           = "child_resend"
+	ParentChildPhaseVerifyChildCompletion    = "verify_child_completion"
+	ParentChildPhaseParentResend             = "parent_resend"
+	ParentChildPhaseChildResend              = "child_resend"
+	ParentChildPhaseOrphanedChildReplacement = "orphaned_child_replacement"
 
 	ParentChildOutcomeNotFound          = "not_found"
 	ParentChildOutcomeCompletionMissing = "completion_missing"
@@ -124,6 +125,7 @@ const (
 	ParentChildOutcomeDeduplicated      = "deduplicated"
 	ParentChildOutcomeLimited           = "limited"
 	ParentChildOutcomeFailed            = "failed"
+	ParentChildOutcomeReplaced          = "replaced"
 )
 
 // EmitReplicationError normalizes the common error envelope and emits it into the existing
@@ -198,6 +200,9 @@ type ReplicationLifecyclePayload struct {
 	// TargetCluster is the target streamed to; progress is cached per target. Also emitted on skipped,
 	// where it is the passive now missing the dropped task's state.
 	TargetCluster string
+	// TargetShard is the shard receiving this stream. It can differ from SourceShard when clusters
+	// have different shard counts.
+	TargetShard int32
 	// Priority is the stream it went out on. Also emitted on skipped.
 	Priority string
 	// ArtifactKind is snapshot (whole state) or mutation (a diff).
@@ -236,7 +241,7 @@ type ReplicationLifecyclePayload struct {
 	// LastEventID/LastEventVersion are the last event on the target's current branch after applying.
 	LastEventID      int64
 	LastEventVersion int64
-	// Outcome is applied, verified, resend_needed or error. Failed applies emit no event at all.
+	// Outcome is applied, verified, resend_needed, replaced, or error. Failed applies emit no event at all.
 	Outcome string
 	// Error is the failure message when Outcome is error.
 	Error string
@@ -336,6 +341,9 @@ func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyV
 	if p.TargetCluster != "" {
 		attrs = append(attrs, log.String("target_cluster", p.TargetCluster))
 	}
+	if p.TargetShard != 0 {
+		attrs = append(attrs, log.Int64("target_shard", int64(p.TargetShard)))
+	}
 	if p.Priority != "" {
 		attrs = append(attrs, log.String("priority", p.Priority))
 	}
@@ -368,6 +376,9 @@ func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyV
 func (p ReplicationLifecyclePayload) appendSkipped(attrs []log.KeyValue) []log.KeyValue {
 	if p.TargetCluster != "" {
 		attrs = append(attrs, log.String("target_cluster", p.TargetCluster))
+	}
+	if p.TargetShard != 0 {
+		attrs = append(attrs, log.Int64("target_shard", int64(p.TargetShard)))
 	}
 	if p.Priority != "" {
 		attrs = append(attrs, log.String("priority", p.Priority))

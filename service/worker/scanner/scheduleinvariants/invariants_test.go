@@ -279,13 +279,20 @@ func TestScheduleIsExpectedNotToFire(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "buffer_one_with_running_workflow",
-			resp: describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE, 1),
-			want: true,
+			// The Generator advances FutureActionTimes while starts are buffered, so
+			// an overdue time under BUFFER_* means it stalled.
+			name: "buffer_one_with_running_workflow_still_overdue",
+			resp: describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE, 1, overdueActionTime()),
+			want: false,
 		},
 		{
-			name: "buffer_all_with_running_workflow",
-			resp: describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL, 2),
+			name: "buffer_all_with_running_workflow_still_overdue",
+			resp: describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL, 2, overdueActionTime()),
+			want: false,
+		},
+		{
+			name: "buffer_one_with_running_workflow_pending",
+			resp: describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE, 1, pendingActionTime()),
 			want: true,
 		},
 		{
@@ -395,7 +402,7 @@ func TestRunOverdueScan_FiltersExpectedNotToFireSchedulesAndCountsRest(t *testin
 	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.Any()).Return(&visibilityservice.ListChasmExecutionsResponse{
 		Executions: []*chasmspb.VisibilityExecutionInfo{
 			chasmExec("sched-paused"),
-			chasmExec("sched-buffer-waiting"),
+			chasmExec("sched-buffer-stalled"),
 			chasmExec("sched-actually-overdue"),
 		},
 		NextPageToken: nil,
@@ -405,8 +412,8 @@ func TestRunOverdueScan_FiltersExpectedNotToFireSchedulesAndCountsRest(t *testin
 		Namespace: "ns-1", ScheduleId: "sched-paused",
 	}).Return(describeResp(true, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, 0), nil)
 	d.frontendClient.EXPECT().DescribeSchedule(gomock.Any(), &workflowservice.DescribeScheduleRequest{
-		Namespace: "ns-1", ScheduleId: "sched-buffer-waiting",
-	}).Return(describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE, 1), nil)
+		Namespace: "ns-1", ScheduleId: "sched-buffer-stalled",
+	}).Return(describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE, 1, overdueActionTime()), nil)
 	d.frontendClient.EXPECT().DescribeSchedule(gomock.Any(), &workflowservice.DescribeScheduleRequest{
 		Namespace: "ns-1", ScheduleId: "sched-actually-overdue",
 	}).Return(describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, 0, overdueActionTime()), nil)
@@ -422,9 +429,9 @@ func TestRunOverdueScan_FiltersExpectedNotToFireSchedulesAndCountsRest(t *testin
 	snapshot := capture.Snapshot()
 	anomalies := snapshot[metrics.ScheduleInvariantsScannerOverdueNextActionTimeCount.Name()]
 	require.Len(t, anomalies, 1)
-	require.Equal(t, int64(1), anomalies[0].Value, "only sched-actually-overdue should count")
+	require.Equal(t, int64(2), anomalies[0].Value, "sched-buffer-stalled and sched-actually-overdue should count")
 	require.Empty(t, snapshot[metrics.ScheduleInvariantsScannerOverdueNextActionTimeStaleCandidateCount.Name()],
-		"paused and buffer-waiting are exemptions, not stale candidates")
+		"paused is an exemption, not a stale candidate")
 }
 
 // Asserts by absence: with no expectations registered, any call for ns-passive fails.

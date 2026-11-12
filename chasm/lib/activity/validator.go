@@ -7,6 +7,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -126,6 +127,22 @@ func validateAndNormalizeActivityAttributes(
 		activityType,
 		runTimeout,
 		options)
+}
+
+func validatePropagatedNexusSerializationContext(nexusContext *nexuspb.PropagatedSerializationContext, maxIDLengthLimit int) error {
+	if len(nexusContext.GetEndpoint()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("Nexus serialization context endpoint exceeds length limit. Length=%d Limit=%d",
+			len(nexusContext.GetEndpoint()), maxIDLengthLimit)
+	}
+	if len(nexusContext.GetService()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("Nexus serialization context service exceeds length limit. Length=%d Limit=%d",
+			len(nexusContext.GetService()), maxIDLengthLimit)
+	}
+	if len(nexusContext.GetOperation()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("Nexus serialization context operation exceeds length limit. Length=%d Limit=%d",
+			len(nexusContext.GetOperation()), maxIDLengthLimit)
+	}
+	return nil
 }
 
 func validateStartDelay(startDelay *durationpb.Duration) error {

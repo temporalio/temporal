@@ -42,7 +42,12 @@ type (
 		config                    *configs.Config
 	}
 	SourceTaskConverter interface {
-		Convert(task tasks.Task, targetClusterID int32, priority enumsspb.TaskPriority) (*replicationspb.ReplicationTask, error)
+		Convert(
+			task tasks.Task,
+			targetClusterID int32,
+			priority enumsspb.TaskPriority,
+			workflowLockPriority locks.Priority,
+		) (*replicationspb.ReplicationTask, error)
 	}
 	SourceTaskConverterProvider func(
 		historyEngine historyi.Engine,
@@ -61,7 +66,13 @@ type (
 		syncStateRetriever SyncStateRetriever
 		logger             log.Logger
 	}
+	workflowLockPriorityContextKey struct{}
+	// unbuildableTaskError identifies a task serialization or source history lookup failure.
+	unbuildableTaskError struct{ err error }
 )
+
+func (e *unbuildableTaskError) Error() string { return e.err.Error() }
+func (e *unbuildableTaskError) Unwrap() error { return e.err }
 
 func NewSourceTaskConverter(
 	historyEngine historyi.Engine,
@@ -83,6 +94,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	task tasks.Task,
 	targetClusterID int32,
 	priority enumsspb.TaskPriority,
+	workflowLockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 
 	var ctx context.Context
@@ -101,6 +113,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	callerInfo := getReplicaitonCallerInfo(priority)
 	ctx, cancel = newTaskContext(nsName, c.config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
+	ctx = withWorkflowLockPriority(ctx, workflowLockPriority)
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task, targetClusterID)
 	if err != nil {
 		return nil, err
@@ -108,7 +121,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	if replicationTask != nil {
 		rawTaskInfo, err := c.replicationTaskSerializer.SerializeReplicationTask(task)
 		if err != nil {
-			return nil, err
+			return nil, &unbuildableTaskError{err: err}
 		}
 		replicationTask.RawTaskInfo = rawTaskInfo
 	}
@@ -309,6 +322,13 @@ func convertSyncVersionedTransitionTask(
 	if taskInfo.ArchetypeID == chasm.UnspecifiedArchetypeID {
 		taskInfo.ArchetypeID = chasm.WorkflowArchetypeID
 	}
+	var progress *ReplicationProgress
+	if taskInfo.CurrentVersionHistory != nil {
+		progress = converter.replicationCache.Get(taskInfo.RunID, targetClusterID)
+		if progress.VersionedTransitionSent(taskInfo.VersionedTransition) {
+			return converter.generateVerifyVersionedTransitionTask(taskInfo, taskInfo.CurrentVersionHistory)
+		}
+	}
 	return generateStateReplicationTask(
 		ctx,
 		converter.shardContext,
@@ -316,7 +336,7 @@ func convertSyncVersionedTransitionTask(
 		taskInfo.ArchetypeID,
 		converter.workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
-			return converter.convert(ctx, taskInfo, targetClusterID, mutableState, releaseFunc)
+			return converter.convert(ctx, taskInfo, targetClusterID, progress, mutableState, releaseFunc)
 		},
 	)
 }
@@ -411,7 +431,7 @@ func generateStateReplicationTask(
 			RunId:      workflowKey.RunID,
 		},
 		archetypeID,
-		locks.PriorityLow,
+		workflowLockPriorityFromContext(ctx),
 	)
 	if err != nil {
 		return nil, err
@@ -429,6 +449,18 @@ func generateStateReplicationTask(
 	}
 }
 
+func workflowLockPriorityFromContext(ctx context.Context) locks.Priority {
+	priority, ok := ctx.Value(workflowLockPriorityContextKey{}).(locks.Priority)
+	if !ok {
+		return locks.PriorityLow
+	}
+	return priority
+}
+
+func withWorkflowLockPriority(ctx context.Context, priority locks.Priority) context.Context {
+	return context.WithValue(ctx, workflowLockPriorityContextKey{}, priority)
+}
+
 func getVersionHistoryAndEvents(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -443,12 +475,15 @@ func getVersionHistoryAndEvents(
 	logger log.Logger,
 ) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
 	if eventBlobCache != nil {
-		if xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(
+		versionHistory, eventBatches, baseWorkflowInfo, _, ok := getEventsFromCache(
+			eventBlobCache,
 			workflowKey,
-			firstEventID,
 			eventVersion,
-		)); ok {
-			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlobs, xdcCacheValue.BaseWorkflowInfo, nil
+			firstEventID,
+			nextEventID,
+		)
+		if ok {
+			return versionHistory, eventBatches, baseWorkflowInfo, nil
 		}
 	}
 	versionHistory, branchToken, baseWorkflowInfo, err := getBranchToken(
@@ -470,6 +505,42 @@ func getVersionHistoryAndEvents(
 		return nil, nil, nil, convertGetHistoryError(workflowKey, logger, err)
 	}
 	return versionHistory, eventBatches, baseWorkflowInfo, nil
+}
+
+// getEventsFromCache returns the event batches in the range [firstEventID, nextEventID) from eventBlobCache. A
+// transaction can be split across several batches (history.maximumEventBatchSizeInBytes), while a cache
+// entry holds a single batch, so it follows each entry's NextEventID to the next batch. It returns false
+// unless every batch in the range is cached. The returned exclusive end covers all cached batches,
+// which may extend beyond nextEventID.
+func getEventsFromCache(
+	eventBlobCache persistence.XDCCache,
+	workflowKey definition.WorkflowKey,
+	eventVersion int64,
+	firstEventID int64,
+	nextEventID int64,
+) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *workflowspb.BaseExecutionInfo, int64, bool) {
+	var eventBatches []*commonpb.DataBlob
+	startEventID := firstEventID
+	startEventVersion := eventVersion
+	for {
+		xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(workflowKey, startEventID, startEventVersion))
+		if !ok {
+			return nil, nil, nil, 0, false
+		}
+		eventBatches = append(eventBatches, xdcCacheValue.EventBlobs...)
+		if xdcCacheValue.NextEventID >= nextEventID {
+			return xdcCacheValue.VersionHistoryItems, eventBatches, xdcCacheValue.BaseWorkflowInfo, xdcCacheValue.NextEventID, true
+		}
+		startEventID = xdcCacheValue.NextEventID
+		var err error
+		startEventVersion, err = versionhistory.GetVersionHistoryEventVersion(
+			&historyspb.VersionHistory{Items: xdcCacheValue.VersionHistoryItems},
+			startEventID,
+		)
+		if err != nil {
+			return nil, nil, nil, 0, false
+		}
+	}
 }
 
 func getVersionHistoryAndEventsWithNewRun(
@@ -554,7 +625,7 @@ func getBranchToken(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		locks.PriorityLow,
+		workflowLockPriorityFromContext(ctx),
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -564,7 +635,11 @@ func getBranchToken(
 	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
 	case nil:
-		return persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)
+		historyItems, branchToken, baseInfo, err := persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)
+		if err != nil {
+			return nil, nil, nil, &unbuildableTaskError{err: err}
+		}
+		return historyItems, branchToken, baseInfo, nil
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil, nil, nil
 	default:
@@ -660,6 +735,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	ctx context.Context,
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	targetClusterID int32,
+	progress *ReplicationProgress,
 	mutableState historyi.MutableState,
 	releaseFunc historyi.ReleaseWorkflowContextFunc,
 ) (*replicationspb.ReplicationTask, error) {
@@ -675,11 +751,16 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		}
 		return c.convertTaskEquivalents(ctx, taskInfo, targetClusterID)
 	}
-
-	progress := c.replicationCache.Get(taskInfo.RunID, targetClusterID)
+	if taskInfo.CurrentVersionHistory == nil {
+		progress = c.replicationCache.Get(taskInfo.RunID, targetClusterID)
+	}
 
 	if progress.VersionedTransitionSent(taskInfo.VersionedTransition) {
-		return c.generateVerifyVersionedTransitionTask(taskInfo, mutableState)
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+		if err != nil {
+			return nil, err
+		}
+		return c.generateVerifyVersionedTransitionTask(taskInfo, currentVersionHistory)
 	}
 
 	if !c.onCurrentBranch(mutableState, taskInfo.VersionedTransition) {
@@ -749,6 +830,46 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	// you use mutable state after the releaseFunc has been called, you will be accessing mutable state without holding the lock.
 	// Deep copy what you need.
 
+	// A cold progress cache must not suppress the events produced by this task.
+	// The receiver can fetch any gaps if the serialized state has advanced further.
+	if !taskInfo.IsFirstTask && len(syncStateResult.VersionedTransitionArtifact.EventBatches) == 0 &&
+		taskInfo.FirstEventID >= common.FirstEventID && taskInfo.NextEventID > taskInfo.FirstEventID {
+		var eventBatches []*commonpb.DataBlob
+		var cached bool
+		if c.eventBlobCache != nil {
+			var cachedVersionHistory []*historyspb.VersionHistoryItem
+			var cachedNextEventID int64
+			cachedVersionHistory, eventBatches, _, cachedNextEventID, cached = getEventsFromCache(
+				c.eventBlobCache,
+				taskInfo.WorkflowKey,
+				taskInfo.FirstEventVersion,
+				taskInfo.FirstEventID,
+				taskInfo.NextEventID,
+			)
+			if cached {
+				// Cache entries may outlive an event-based rebuild or extend beyond the task's range.
+				lca, err := versionhistory.FindLCAVersionHistoryItemFromItemSlice(currentHistoryCopy.Items, cachedVersionHistory)
+				if err != nil || lca.EventId < cachedNextEventID-1 {
+					eventBatches = nil
+				}
+			}
+		}
+		if !cached {
+			eventBatches, err = getEventsBlob(
+				ctx,
+				c.shardID,
+				currentHistoryCopy.BranchToken,
+				taskInfo.FirstEventID,
+				taskInfo.NextEventID,
+				c.executionManager,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+		syncStateResult.VersionedTransitionArtifact.EventBatches = eventBatches
+	}
+
 	syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(closeTransferTask)
 	syncStateResult.VersionedTransitionArtifact.IsForceReplication = taskInfo.IsForceReplication
 
@@ -779,12 +900,8 @@ func (c *syncVersionedTransitionTaskConverter) onCurrentBranch(mutableState hist
 
 func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransitionTask(
 	taskInfo *tasks.SyncVersionedTransitionTask,
-	mutableState historyi.MutableState,
+	currentVersionHistory *historyspb.VersionHistory,
 ) (*replicationspb.ReplicationTask, error) {
-	currentHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().VersionHistories)
-	if err != nil {
-		return nil, err
-	}
 	var nextEventId = taskInfo.NextEventID
 	if nextEventId == common.EmptyEventID && taskInfo.LastVersionHistoryItem != nil {
 		nextEventId = taskInfo.LastVersionHistoryItem.GetEventId() + 1
@@ -792,11 +909,11 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 
 	var eventVersionHistory []*historyspb.VersionHistoryItem
 	if nextEventId != common.EmptyEventID {
-		lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, nextEventId-1)
+		lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, nextEventId-1)
 		if err != nil {
 			return nil, err
 		}
-		capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
+		capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentVersionHistory, &historyspb.VersionHistoryItem{
 			EventId: nextEventId - 1,
 			Version: lastEventVersion,
 		})

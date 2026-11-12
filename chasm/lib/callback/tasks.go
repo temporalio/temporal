@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -32,7 +33,12 @@ type invocationResult interface {
 }
 
 // invocationResultOK marks an invocation as successful.
-type invocationResultOK struct{}
+type invocationResultOK struct {
+	// links are the links the target returned when it accepted the delivery, to be recorded on the
+	// CHASM Callback. Only a NexusHandler-variant callback will produce these. A Nexus-variant callback
+	// just delivers the completion result, without receiving any links in return.
+	links []nexus.Link
+}
 
 func (invocationResultOK) mustImplementInvocationResult() {}
 

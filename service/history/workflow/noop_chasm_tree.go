@@ -18,7 +18,7 @@ var NoopChasmTree = &noopChasmTree{}
 
 type noopChasmTree struct{}
 
-func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (*noopChasmTree) CloseTransaction(context.Context, bool) (chasm.NodesMutation, error) {
 	return chasm.NodesMutation{}, nil
 }
 
@@ -45,6 +45,8 @@ func (*noopChasmTree) ApplySnapshot(chasm.NodesSnapshot) error {
 func (*noopChasmTree) RefreshTasks() error {
 	return nil
 }
+
+func (*noopChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {}
 
 func (*noopChasmTree) IsStateDirty() bool {
 	return false

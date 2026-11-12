@@ -11,10 +11,16 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/resource"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -34,26 +40,32 @@ type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
 	historyHandler    historyservice.HistoryServiceServer
+	callbackValidator callbacks.Validator
 	linkValidator     *linkValidator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
+	matchingClient    resource.MatchingClient
 	namespaceRegistry namespace.Registry
 }
 
 func newHandler(
 	config *Config,
 	historyHandler historyservice.HistoryServiceServer,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	matchingClient resource.MatchingClient,
 	namespaceRegistry namespace.Registry,
 ) *handler {
 	return &handler{
 		config:            config,
 		historyHandler:    historyHandler,
+		callbackValidator: callbackValidator,
 		linkValidator:     linkValidator,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
+		matchingClient:    matchingClient,
 		namespaceRegistry: namespaceRegistry,
 	}
 }
@@ -63,63 +75,107 @@ func newHandler(
 // matching being delivered to a worker poll request.
 func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.StartActivityExecutionRequest) (*activitypb.StartActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
+	var eagerTaskData *eagerActivityTaskData
 
-	reusePolicy, ok := businessIDReusePolicyMap[frontendReq.GetIdReusePolicy()]
-	if !ok {
-		return nil, serviceerror.NewInvalidArgumentf("unsupported ID reuse policy: %v", frontendReq.GetIdReusePolicy())
-	}
-
-	conflictPolicy, ok := businessIDConflictPolicyMap[frontendReq.GetIdConflictPolicy()]
-	if !ok {
-		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
-	}
-
-	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
-
-	result, err := chasm.StartExecution(
-		ctx,
-		chasm.ExecutionKey{
-			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  frontendReq.GetActivityId(),
-		},
-		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
-			newActivity, err := NewStandaloneActivity(mutableContext, request)
-			if err != nil {
-				return nil, err
-			}
-
-			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
-					return nil, err
-				}
-			}
-			if len(request.GetLinks()) > 0 {
-				if err := newActivity.attachLinks(mutableContext, request.GetLinks(), request.GetRequestId(), h.linkValidator, frontendReq.GetNamespace()); err != nil {
-					return nil, err
-				}
-			}
-
-			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
-			if err != nil {
-				return nil, err
-			}
-
-			return newActivity, nil
-		},
-		frontendReq,
-		chasm.WithRequestID(frontendReq.GetRequestId()),
-		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
-	)
-
+	reusePolicy, conflictPolicy, err := businessIDPolicies(frontendReq)
 	if err != nil {
-		if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
-			return nil, serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
-		}
-
 		return nil, err
 	}
 
-	if result.Created {
+	// TODO: Reconcile the Matching grant when the subsequent start does not create an eager task.
+	if frontendReq.GetRequestEagerExecution() &&
+		h.config.EnableActivityEagerDispatchCheck(frontendReq.GetNamespace()) &&
+		!h.grantEagerActivityDispatch(ctx, req.GetNamespaceId(), frontendReq) {
+		// Matching grants are best-effort. On a denial or any Matching failure, schedule the
+		// activity normally instead of failing the start request.
+		frontendReq.RequestEagerExecution = false
+	}
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+	}
+	// startFn can run on an execution that is then discarded (a start that conflicts with an existing
+	// activity), so eagerTaskData is only used when the result says the activity was created.
+	startFn := func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
+		newActivity, newEagerTaskData, err := h.newActivityForStartExecution(mutableContext, request, req.GetNamespaceId())
+		if err != nil {
+			return nil, err
+		}
+		eagerTaskData = newEagerTaskData
+		return newActivity, nil
+	}
+	startOpts := []chasm.TransitionOption{
+		chasm.WithStartRequestID(frontendReq.GetRequestId()),
+		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
+	}
+
+	cbs := frontendReq.GetCompletionCallbacks()
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+
+	var (
+		resultKey         chasm.ExecutionKey
+		resultRef         []byte
+		created           bool
+		nexusContextMatch metrics.ReasonString
+	)
+	if attachCallbacks || attachLinks {
+		// Start the activity, or apply on_conflict_options to the existing one, in one transaction. A
+		// start usually creates a new activity, so try the create before looking up an existing one.
+		requestID := frontendReq.GetRequestId()
+		var result chasm.UpdateWithStartExecutionResult[any]
+		result, err = chasm.UpdateWithStartExecution(
+			ctx,
+			executionKey,
+			startFn,
+			// Runs on the new activity too, where startFn already attached the callbacks and links under
+			// this request ID, so both attach calls are no-ops there.
+			func(a *Activity, mutableContext chasm.MutableContext, _ *workflowservice.StartActivityExecutionRequest) (any, error) {
+				if attachCallbacks {
+					if !callback.HasCallbacksForRequest(a, requestID) {
+						existing := a.RequestData.Get(mutableContext).GetPropagatedNexusSerializationContext()
+						incoming := frontendReq.GetPropagatedNexusSerializationContext()
+						nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
+					}
+
+					regTime := timestamppb.New(mutableContext.Now(a))
+					err := callback.ValidateAndAttach(mutableContext, a, requestID, regTime, cbs, frontendReq.GetNamespace(), h.callbackValidator, callback.WithReusedRequestID())
+					if err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := a.attachLinks(mutableContext, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
+			},
+			frontendReq,
+			append(startOpts, chasm.WithAssumeNew())...,
+		)
+		resultKey, resultRef, created = result.ExecutionKey, result.ExecutionRef, result.Created
+	} else {
+		var result chasm.StartExecutionResult
+		result, err = chasm.StartExecution(ctx, executionKey, startFn, frontendReq, startOpts...)
+		resultKey, resultRef, created = result.ExecutionKey, result.ExecutionRef, result.Created
+	}
+
+	if err != nil {
+		if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
+			return nil, serviceerror.NewActivityExecutionAlreadyStarted(
+				"activity execution already started",
+				alreadyStartedErr.CurrentRequestID,
+				alreadyStartedErr.CurrentRunID,
+			)
+		}
+		return nil, err
+	}
+
+	if created {
 		emitPayloadSizeMetric(
 			h.metricsHandler.WithTags(
 				metrics.NamespaceTag(frontendReq.GetNamespace()),
@@ -129,56 +185,125 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		)
 	}
 
-	// Apply on_conflict_options to an existing activity.
-	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
-	cbs := frontendReq.GetCompletionCallbacks()
-	links := frontendReq.GetLinks()
-	onConflict := frontendReq.GetOnConflictOptions()
-	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
-	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
-	if !result.Created && (attachCallbacks || attachLinks) {
-		requestID := frontendReq.GetRequestId()
-		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
-		_, _, err := chasm.UpdateComponent(
-			ctx,
-			ref,
-			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
-				if attachCallbacks {
-					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
-						return nil, err
-					}
-				}
-				if attachLinks {
-					if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
-						return nil, err
-					}
-				}
-				return nil, nil
-			},
-			nil,
-			chasm.WithRequestID(requestID),
-		)
-		if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
+	var eagerTask *workflowservice.PollActivityTaskQueueResponse
+	if created && eagerTaskData != nil {
+		eagerTask, err = eagerTaskData.response(resultRef)
+		if err != nil {
 			return nil, err
 		}
+		metrics.ActivityEagerExecutionCounter.With(eagerActivityMetricsHandler(h.metricsHandler, h.config, frontendReq)).Record(1)
+	}
+
+	if !created && nexusContextMatch != "" {
+		metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1,
+			metrics.NamespaceTag(frontendReq.GetNamespace()),
+			metrics.NexusSerializationContextMatchTag(nexusContextMatch),
+		)
 	}
 
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
-			RunId:   result.ExecutionKey.RunID,
-			Started: result.Created,
+			RunId:             resultKey.RunID,
+			Started:           created,
+			EagerActivityTask: eagerTask,
 			Link: &commonpb.Link{
 				Variant: &commonpb.Link_Activity_{
 					Activity: &commonpb.Link_Activity{
 						Namespace:  frontendReq.GetNamespace(),
 						ActivityId: frontendReq.GetActivityId(),
-						RunId:      result.ExecutionKey.RunID,
+						RunId:      resultKey.RunID,
 					},
 				},
 			},
-			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil
+}
+
+func (h *handler) newActivityForStartExecution(
+	mutableContext chasm.MutableContext,
+	request *workflowservice.StartActivityExecutionRequest,
+	namespaceID string,
+) (*Activity, *eagerActivityTaskData, error) {
+	newActivity, err := NewStandaloneActivity(mutableContext, request)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
+		regTime := timestamppb.New(mutableContext.Now(newActivity))
+		err := callback.ValidateAndAttach(mutableContext, newActivity, request.GetRequestId(), regTime, cbs, request.GetNamespace(), h.callbackValidator, callback.WithReusedRequestID())
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if len(request.GetLinks()) > 0 {
+		if err := newActivity.attachLinks(mutableContext, request.GetLinks(), request.GetRequestId(), h.linkValidator, request.GetNamespace()); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	eager := request.GetRequestEagerExecution()
+	if eager {
+		if err := TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
+			requestID: request.GetRequestId(),
+		}); err != nil {
+			return nil, nil, err
+		}
+		newActivity.recordLastWorker(mutableContext, request.GetIdentity())
+	} else {
+		err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if !eager {
+		return newActivity, nil, nil
+	}
+
+	eagerTaskData, err := newActivity.eagerActivityTaskData(mutableContext, eagerActivityTaskRequest{
+		namespaceID: namespaceID,
+		namespace:   request.GetNamespace(),
+		requestID:   request.GetRequestId(),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return newActivity, eagerTaskData, nil
+}
+
+func businessIDPolicies(request *workflowservice.StartActivityExecutionRequest) (chasm.BusinessIDReusePolicy, chasm.BusinessIDConflictPolicy, error) {
+	reusePolicy, ok := businessIDReusePolicyMap[request.GetIdReusePolicy()]
+	if !ok {
+		return 0, 0, serviceerror.NewInvalidArgumentf("unsupported ID reuse policy: %v", request.GetIdReusePolicy())
+	}
+
+	conflictPolicy, ok := businessIDConflictPolicyMap[request.GetIdConflictPolicy()]
+	if !ok {
+		return 0, 0, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", request.GetIdConflictPolicy())
+	}
+
+	return reusePolicy, conflictPolicy, nil
+}
+
+func (h *handler) grantEagerActivityDispatch(
+	ctx context.Context,
+	namespaceID string,
+	request *workflowservice.StartActivityExecutionRequest,
+) bool {
+	if h.matchingClient == nil {
+		return false
+	}
+
+	metrics.EagerDispatchRequestsSent.With(eagerActivityMetricsHandler(h.metricsHandler, h.config, request)).Record(1)
+	return common.GrantEagerDispatch(
+		ctx,
+		h.matchingClient,
+		namespaceID,
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		request.GetPriority(),
+		nil,
+	)
 }
 
 // DescribeActivityExecution queries current activity state, optionally as a long-poll that waits

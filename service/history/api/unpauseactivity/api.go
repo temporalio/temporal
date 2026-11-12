@@ -115,7 +115,7 @@ func processUnpauseActivityRequest(
 		}
 
 		if err := workflow.UnpauseActivity(
-			shardContext, mutableState, ai,
+			mutableState, ai,
 			frontendRequest.GetResetAttempts(),
 			frontendRequest.GetResetHeartbeat(),
 			frontendRequest.GetJitter().AsDuration()); err != nil {

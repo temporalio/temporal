@@ -17,7 +17,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.uber.org/mock/gomock"
@@ -104,7 +103,6 @@ func (s *activitiesSuite) expectRemoteNotFound(ex *ExecutionInfo) {
 			WorkflowId: ex.BusinessID,
 			RunId:      ex.RunID,
 		},
-		Archetype:       chasm.WorkflowArchetype,
 		ArchetypeId:     ex.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).Times(1)
@@ -153,7 +151,6 @@ func (s *activitiesSuite) TestReplicateBatch_Success() {
 			WorkflowId: execution1.BusinessID,
 			RunId:      execution1.RunID,
 		},
-		Archetype:       chasm.WorkflowArchetype,
 		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
@@ -341,7 +338,6 @@ func (s *activitiesSuite) TestReplicateBatch_HeartbeatResumesInject() {
 				WorkflowId: ex.BusinessID,
 				RunId:      ex.RunID,
 			},
-			Archetype:       chasm.WorkflowArchetype,
 			ArchetypeId:     ex.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)

@@ -126,6 +126,124 @@ func (s *NexusStateReplicationSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
+func (s *NexusStateReplicationSuite) TestTimeoutCleanupReplicatesAcrossFailover() {
+	if s.chasmEnabled {
+		s.T().Skip("legacy HSM cleanup")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	ns := s.createGlobalNamespace()
+	for _, cluster := range s.clusters {
+		cluster.OverrideDynamicConfig(s.T(), nexusoperations.MaxConcurrentOperations, 1)
+	}
+	endpoint := s.createBufferedNexusEndpoint(ctx, nexustest.Handler{OnStartOperation: func(context.Context, string, string, *nexus.LazyValue, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "retry")
+	}})
+	c, err := sdkclient.Dial(sdkclient.Options{HostPort: s.clusters[0].Host().FrontendGRPCAddress(), Namespace: ns})
+	s.Require().NoError(err)
+	defer c.Close()
+	run, err := c.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: "tq"}, "workflow")
+	s.Require().NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	command := func(timeout time.Duration) *commandpb.Command {
+		return &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{Endpoint: endpoint, Service: "service", Operation: "operation", ScheduleToCloseTimeout: durationpb.New(timeout)}}}
+	}
+	task := s.pollWorkflowTask(ctx, s.clusters[0].FrontendClient(), ns)
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{command(2 * time.Second)}})
+	s.Require().NoError(err)
+	timedout := s.pollWorkflowTask(ctx, s.clusters[0].FrontendClient(), ns)
+	var oldID int64
+	for _, event := range timedout.History.Events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
+			oldID = event.GetEventId()
+		}
+	}
+	s.Require().Positive(oldID)
+	s.Require().NotNil(s.RequireHistoryEvent(timedout.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT))
+	desc, err := s.clusters[0].AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: ns, Execution: execution, Archetype: chasm.WorkflowArchetype})
+	s.Require().NoError(err)
+	s.Require().NotContains(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), strconv.FormatInt(oldID, 10))
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: timedout.TaskToken, Commands: []*commandpb.Command{command(time.Minute)}})
+	s.Require().NoError(err)
+	// Wait for both the deletion and the replacement operation to be replicated.
+	for i := range 2 {
+		cluster := s.clusters[i]
+		await.Require(ctx, s.T(), func(t *await.T) {
+			desc, e := cluster.AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{Namespace: ns, Execution: execution, Archetype: chasm.WorkflowArchetype})
+			require.NoError(t, e)
+			nodes := desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById()
+			require.NotContains(t, nodes, strconv.FormatInt(oldID, 10))
+			require.Len(t, nodes, 1)
+		}, replicationWaitTime, replicationCheckInterval)
+	}
+	s.failoverToNewActiveCluster(ctx, ns)
+	_, err = s.clusters[1].FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: ns, WorkflowExecution: execution, SignalName: "after-failover"})
+	s.Require().NoError(err)
+	task, err = s.clusters[1].FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{Namespace: ns, TaskQueue: &taskqueuepb.TaskQueue{Name: "tq"}, Identity: "test"})
+	s.Require().NoError(err)
+	_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{command(time.Minute)}})
+	s.Require().ErrorContains(err, "PendingNexusOperationsLimitExceeded")
+	task, err = s.clusters[1].FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{Namespace: ns, TaskQueue: &taskqueuepb.TaskQueue{Name: "tq"}, Identity: "test"})
+	s.Require().NoError(err)
+	_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken})
+	s.Require().NoError(err)
+}
+
+func (s *NexusStateReplicationSuite) TestTimeoutCleanupConflictReappliesTimeout() {
+	if s.chasmEnabled || !s.enableTransitionHistory {
+		s.T().Skip("legacy HSM conflict reapplication requires transition history")
+	}
+	s.runWithEventBatchSizes(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		namespace := s.createBufferedEventsNamespace(ctx)
+		// Prevent the new active cluster from timing out the operation itself, either
+		// through the timer queue or an outbound attempt, before reapplication.
+		s.clusters[1].OverrideDynamicConfig(s.T(), dynamicconfig.TimerProcessorSchedulerWorkerCount, 0)
+		s.clusters[1].OverrideDynamicConfig(s.T(), dynamicconfig.OutboundQueueGroupLimiterConcurrency, 0)
+		for _, cluster := range s.clusters {
+			cluster.OverrideDynamicConfig(s.T(), nexusoperations.MaxConcurrentOperations, 1)
+		}
+		endpoint := s.createBufferedNexusEndpoint(ctx, nexustest.Handler{OnStartOperation: func(context.Context, string, string, *nexus.LazyValue, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "retry")
+		}})
+		workflowID := "nexus-cleanup-conflict-" + uuid.NewString()
+		taskQueue := &taskqueuepb.TaskQueue{Name: workflowID, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{Namespace: namespace.Name, WorkflowID: workflowID, TaskQueue: taskQueue})
+		first := s.pollBufferedEventsWorkflowTask(ctx, 0, namespace.Name, taskQueue)
+		s.completeWorkflowTask(ctx, workflowTaskCompletion{Task: first, Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommandWithTimeout(endpoint, "old", 15*time.Second)}})
+		await.Require(ctx, s.T(), func(t *await.T) {
+			history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, namespace.Name, execution)
+			require.Positive(t, findNexusScheduledEventID(history, "old"))
+		}, replicationWaitTime, replicationCheckInterval)
+		oldHistory := s.getWorkflowHistory(ctx, s.T(), 0, namespace.Name, execution)
+		oldID := findNexusScheduledEventID(oldHistory, "old")
+		s.Require().Positive(oldID)
+		replicationToOld := s.blockReplicationForWorkflow(0, workflowID)
+		replicationToNew := s.blockReplicationForWorkflow(1, workflowID)
+		timeoutTask := s.pollBufferedEventsWorkflowTask(ctx, 0, namespace.Name, taskQueue)
+		s.Require().True(hasNexusEventForScheduledID(timeoutTask.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, oldID))
+		s.completeWorkflowTask(ctx, workflowTaskCompletion{Task: timeoutTask, Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommandWithTimeout(endpoint, "replacement", time.Minute)}})
+		desc, err := s.clusters[0].AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: namespace.Name, Execution: execution, Archetype: chasm.WorkflowArchetype})
+		s.Require().NoError(err)
+		s.Require().NotContains(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), strconv.FormatInt(oldID, 10))
+		s.signalWorkflow(ctx, workflowSignal{Namespace: namespace.Name, Execution: execution, SignalName: "hold-after-cleanup"})
+		held := s.pollBufferedEventsWorkflowTask(ctx, 0, namespace.Name, taskQueue)
+		s.Require().NotEmpty(held.TaskToken)
+		losing := s.finishNaturallyBufferedConflict(ctx, naturallyBufferedConflict{Namespace: namespace, Execution: execution, ReplicationToOldActive: replicationToOld, ReplicationToNewActive: replicationToNew, ExpectedEventTypes: []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT}, WinnerSignal: "cleanup-conflict-winner"})
+		s.Require().True(hasNexusEventForScheduledID(losing, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, oldID))
+		winning := s.getWorkflowHistory(ctx, s.T(), 1, namespace.Name, execution)
+		s.Require().True(hasNexusEventForScheduledID(winning, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, oldID))
+		s.Require().False(hasNexusEventForScheduledID(winning, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, findNexusScheduledEventID(losing, "replacement")))
+		desc, err = s.clusters[1].AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: namespace.Name, Execution: execution, Archetype: chasm.WorkflowArchetype})
+		s.Require().NoError(err)
+		s.Require().NotContains(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), strconv.FormatInt(oldID, 10))
+		task := s.pollBufferedEventsWorkflowTask(ctx, 1, namespace.Name, taskQueue)
+		_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommandWithTimeout(endpoint, "after-conflict", time.Minute)}})
+		s.Require().NoError(err)
+	})
+}
+
 // TestNexusOperationEventsReplicated tests that nexus related operation events and state updates are replicated
 // across clusters and that the operation machinary functions as expected when failover happens.
 // General outline:
@@ -700,11 +818,6 @@ NexusOperationCompleted
 	}
 }
 
-// SetupSubTest makes assertion failures report on the active subtest.
-func (s *NexusStateReplicationSuite) SetupSubTest() {
-	s.setupTest()
-}
-
 // mixedFlagOperation contains the handles needed after failover.
 type mixedFlagOperation struct {
 	ctx               context.Context
@@ -790,9 +903,126 @@ func (s *NexusStateReplicationSuite) TestNexusOperationChasmReplicatedWithMixedF
 	}
 }
 
+// TestHSMTokenCompletesHSMOperationAfterResetWithNonzeroFailoverVersion verifies that the native
+// HSM reset fallback remains valid when failover changes the namespace version before reset.
+func (s *NexusStateReplicationSuite) TestHSMTokenCompletesHSMOperationAfterResetWithNonzeroFailoverVersion() {
+	if s.chasmEnabled {
+		s.T().Skip("same-framework scenario is covered by the HSM suite variants")
+	}
+
+	op := s.setupOperationForHSMFailoverTarget(false)
+	s.completeTokenAfterFailoverResetToHSM(op, "HSM token to HSM completion after nonzero failover")
+}
+
+// TestChasmTokenCompletesHSMOperationAfterResetWithNonzeroFailoverVersion verifies that a CHASM
+// callback token can complete an operation rebuilt into HSM after failover and reset. The failover
+// is significant: the rebuilt HSM node has a nonzero initial failover version that is absent from
+// the CHASM token.
+func (s *NexusStateReplicationSuite) TestChasmTokenCompletesHSMOperationAfterResetWithNonzeroFailoverVersion() {
+	if !s.chasmEnabled {
+		s.T().Skip("cross-framework scenario starts with a CHASM operation")
+	}
+
+	op := s.setupMixedFlagChasmOperation()
+	s.completeTokenAfterFailoverResetToHSM(op, "CHASM token to HSM completion after nonzero failover")
+}
+
+func (s *NexusStateReplicationSuite) completeTokenAfterFailoverResetToHSM(op mixedFlagOperation, reason string) {
+	s.T().Helper()
+	namespaceDescription := s.describeNamespace(s.T(), s.clusters[1], op.ns, true)
+	s.Positive(namespaceDescription.GetFailoverVersion())
+
+	// Finish a workflow task after NexusOperationStarted so reset reapplies the pending operation.
+	pollRes := s.pollWorkflowTask(op.ctx, s.clusters[1].FrontendClient(), op.ns)
+	_, err := s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(op.ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: pollRes.TaskToken,
+	})
+	s.NoError(err)
+
+	originalExecution := &commonpb.WorkflowExecution{WorkflowId: op.run.GetID(), RunId: op.run.GetRunID()}
+	var resetPoint int64
+	for _, event := range s.getWorkflowHistory(op.ctx, s.T(), 1, op.ns, originalExecution) {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			resetPoint = event.GetEventId()
+		}
+	}
+	s.Greater(resetPoint, op.scheduledEventID)
+
+	resetResponse, err := s.clusters[1].FrontendClient().ResetWorkflowExecution(op.ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 op.ns,
+		WorkflowExecution:         originalExecution,
+		Reason:                    reason,
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: resetPoint,
+	})
+	s.NoError(err)
+	resetExecution := &commonpb.WorkflowExecution{WorkflowId: op.run.GetID(), RunId: resetResponse.GetRunId()}
+	s.assertOperationInHSMTree(op.ctx, s.clusters[1], op.ns, resetExecution, op.scheduledEventID)
+
+	completion := nexusrpc.CompleteOperationOptions{
+		Result: testcore.MustToPayload(s.T(), "result"),
+		Header: nexus.Header{commonnexus.CallbackTokenHeader: op.callbackToken},
+	}
+	completionClient := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	})
+	s.NoError(completionClient.CompleteOperation(op.ctx, op.publicCallbackURL, completion))
+
+	resetRun := op.targetClient.GetWorkflow(op.ctx, op.run.GetID(), resetResponse.GetRunId())
+	s.waitEvent(op.ctx, op.targetClient, resetRun, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	history := s.getWorkflowHistory(op.ctx, s.T(), 1, op.ns, resetExecution)
+	var completedEvents int
+	for _, event := range history {
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
+			completedEvents++
+			s.Equal(testcore.MustToPayload(s.T(), "result"), event.GetNexusOperationCompletedEventAttributes().GetResult())
+		}
+	}
+	s.Equal(1, completedEvents)
+
+	// A duplicate callback cannot produce a second terminal transition.
+	err = completionClient.CompleteOperation(op.ctx, op.publicCallbackURL, completion)
+	var handlerError *nexus.HandlerError
+	s.ErrorAs(err, &handlerError)
+	s.Equal(nexus.HandlerErrorTypeNotFound, handlerError.Type)
+	history = s.getWorkflowHistory(op.ctx, s.T(), 1, op.ns, resetExecution)
+	completedEvents = 0
+	for _, event := range history {
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
+			completedEvents++
+		}
+	}
+	s.Equal(1, completedEvents)
+
+	// Complete the workflow and verify its result on the reset run.
+	pollRes = s.pollWorkflowTask(op.ctx, s.clusters[1].FrontendClient(), op.ns)
+	_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(op.ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: pollRes.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "workflow-result")}},
+				},
+			},
+		}},
+	})
+	s.NoError(err)
+	var workflowResult string
+	s.NoError(resetRun.Get(op.ctx, &workflowResult))
+	s.Equal("workflow-result", workflowResult)
+}
+
 // setupMixedFlagChasmOperation creates a CHASM operation, waits for it to
 // replicate to the flag-off cluster, then fails over and returns its handles.
 func (s *NexusStateReplicationSuite) setupMixedFlagChasmOperation() mixedFlagOperation {
+	return s.setupOperationForHSMFailoverTarget(true)
+}
+
+// setupOperationForHSMFailoverTarget creates an operation on cluster 0, waits for it to replicate
+// to the HSM-configured cluster 1, then fails over and returns its handles. Existing operation state
+// continues to use its original backend after replication.
+func (s *NexusStateReplicationSuite) setupOperationForHSMFailoverTarget(chasmOnSource bool) mixedFlagOperation {
 	var callbackToken string
 	var publicCallbackURL string
 	h := nexustest.Handler{
@@ -812,12 +1042,14 @@ func (s *NexusStateReplicationSuite) setupMixedFlagChasmOperation() mixedFlagOpe
 	ns := s.createGlobalNamespace()
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-	// Enable CHASM operation creation only on the initially-active cluster. The rollout percentage
-	// defaults to 0, so dial it up to 100 there as well; otherwise the boolean flag alone routes
-	// nothing to CHASM.
-	s.clusters[0].OverrideDynamicConfig(s.T(), chasmnexusoperation.EnableChasmWorkflowOperations, true)
-	s.clusters[0].OverrideDynamicConfig(s.T(), chasmnexusoperation.ChasmWorkflowOperationsRolloutPercent, 100)
+	sourceRolloutPercent := 0
+	if chasmOnSource {
+		sourceRolloutPercent = 100
+	}
+	s.clusters[0].OverrideDynamicConfig(s.T(), chasmnexusoperation.EnableChasmWorkflowOperations, chasmOnSource)
+	s.clusters[0].OverrideDynamicConfig(s.T(), chasmnexusoperation.ChasmWorkflowOperationsRolloutPercent, sourceRolloutPercent)
 	s.clusters[1].OverrideDynamicConfig(s.T(), chasmnexusoperation.EnableChasmWorkflowOperations, false)
+	s.clusters[1].OverrideDynamicConfig(s.T(), chasmnexusoperation.ChasmWorkflowOperationsRolloutPercent, 0)
 
 	// Route callbacks to the failover target.
 	for _, cluster := range s.clusters {
@@ -881,14 +1113,24 @@ func (s *NexusStateReplicationSuite) setupMixedFlagChasmOperation() mixedFlagOpe
 
 	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 
-	// The active cluster creates the operation on CHASM.
 	scheduledEventID := s.waitEvent(ctx, sdkClient0, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
-	s.assertOperationInChasmTree(ctx, s.clusters[0], ns, execution, scheduledEventID)
-
-	// The CHASM operation state replicates to the flag-off cluster.
 	s.waitEvent(ctx, sdkClient1, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
 	s.waitEvent(ctx, sdkClient1, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
-	s.assertOperationInChasmTree(ctx, s.clusters[1], ns, execution, scheduledEventID)
+	decodedCallbackToken, err := commonnexus.DecodeCallbackToken(callbackToken)
+	s.NoError(err)
+	completionToken, err := (&commonnexus.CallbackTokenGenerator{}).DecodeCompletion(decodedCallbackToken)
+	s.NoError(err)
+	if chasmOnSource {
+		s.NotEmpty(completionToken.GetComponentRef())
+		s.Nil(completionToken.GetRef())
+		s.assertOperationInChasmTree(ctx, s.clusters[0], ns, execution, scheduledEventID)
+		s.assertOperationInChasmTree(ctx, s.clusters[1], ns, execution, scheduledEventID)
+	} else {
+		s.Empty(completionToken.GetComponentRef())
+		s.NotNil(completionToken.GetRef())
+		s.assertOperationInHSMTree(ctx, s.clusters[0], ns, execution, scheduledEventID)
+		s.assertOperationInHSMTree(ctx, s.clusters[1], ns, execution, scheduledEventID)
+	}
 
 	// Fail over to the flag-off cluster.
 	s.failover(ns, 0, s.clusters[1].ClusterName(), 2)
@@ -945,6 +1187,30 @@ func (s *NexusStateReplicationSuite) assertOperationInChasmTree(
 	_, inCHASM := desc.DatabaseMutableState.GetChasmNodes()["Operations#"+opID]
 	s.True(inCHASM, "operation %s should be stored as a CHASM node on cluster %s", opID, cluster.ClusterName())
 	s.False(inHSM, "operation %s should not be an HSM sub-state-machine on cluster %s", opID, cluster.ClusterName())
+}
+
+// assertOperationInHSMTree verifies the operation is stored as an HSM sub-state-machine and not a
+// CHASM node.
+func (s *NexusStateReplicationSuite) assertOperationInHSMTree(
+	ctx context.Context,
+	cluster *testcore.TestCluster,
+	ns string,
+	execution *commonpb.WorkflowExecution,
+	scheduledEventID int64,
+) {
+	s.T().Helper()
+	opID := strconv.FormatInt(scheduledEventID, 10)
+	desc, err := cluster.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: ns,
+		Execution: execution,
+		Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	_, inHSM := desc.DatabaseMutableState.GetExecutionInfo().
+		GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById()[opID]
+	_, inCHASM := desc.DatabaseMutableState.GetChasmNodes()["Operations#"+opID]
+	s.True(inHSM, "operation %s should be stored as an HSM sub-state-machine on cluster %s", opID, cluster.ClusterName())
+	s.False(inCHASM, "operation %s should not be a CHASM node on cluster %s", opID, cluster.ClusterName())
 }
 
 func (s *NexusStateReplicationSuite) waitEvent(ctx context.Context, sdkClient sdkclient.Client, run sdkclient.WorkflowRun, eventType enumspb.EventType) (eventID int64) {

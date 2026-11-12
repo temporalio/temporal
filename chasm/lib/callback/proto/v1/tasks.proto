@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.callbacks.proto.v1;
 
-option go_package = "go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspb";
+option go_package = "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1;callbackspb";
 
 message InvocationTask {
   // The attempt number for this invocation.

@@ -6,9 +6,14 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc/status"
 )
@@ -19,15 +24,31 @@ type ValidatorOptions struct {
 	EnabledKinds []Kind
 }
 
+// CurrentCallbacksInfo describes the callbacks already attached to an execution, so that
+// aggregate limits (max callbacks, total max size of callbacks) can be enforced.
+type CurrentCallbacksInfo struct {
+	Count     int
+	TotalSize int // Size of all attached callbacks in bytes.
+}
+
 // Validator validates completion callbacks attached to executions (e.g. workflows and standalone activities).
 type Validator interface {
 	// Validate rejects callbacks that are not enabled for the execution, or are malformed.
 	// Will mutate the supplied Callbacks to normalize. e.g. converting Nexus headers to lower-case.
 	Validate(ctx context.Context, namespaceName string, cbs []*commonpb.Callback, opts ValidatorOptions) error
+
+	// ValidateAdditions enforces aggregate limits like the total number of callbacks that can be attached
+	// to an execution. Relies on denormalized [CurrentCallbacksInfo] to avoid deserializing all existing
+	// callbacks whenever a new one is added.
+	//
+	// This is the cumulative counterpart to Validate. And should always be called, even on Start- paths.
+	// (Since the request to start an execution could potentially contain too many or too large of callbacks.)
+	ValidateAdditions(namespaceName string, newCBs []*commonpb.Callback, existing CurrentCallbacksInfo) error
 }
 
 // ValidatorConfig holds the limits a [Validator] enforces.
 type ValidatorConfig struct {
+	TotalCallbacksMaxSize    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit         dynamicconfig.IntPropertyFn // All ID types use the same global setting.
 
@@ -50,6 +71,7 @@ func (vc *ValidatorConfig) Validate() error {
 		}
 	}
 
+	assertGetterIsSet("TotalCallbacksMaxSize", vc.TotalCallbacksMaxSize)
 	assertGetterIsSet("MaxCallbacksPerExecution", vc.MaxCallbacksPerExecution)
 	if vc.MaxIDLengthLimit == nil {
 		missingFields = append(missingFields, "MaxIDLengthLimit")
@@ -72,15 +94,16 @@ func (vc *ValidatorConfig) Validate() error {
 }
 
 type validator struct {
-	config ValidatorConfig
+	config            ValidatorConfig
+	namespaceRegistry namespace.Registry
 }
 
 // NewValidator returns a new Validator.
-func NewValidator(config ValidatorConfig) (Validator, error) {
+func NewValidator(config ValidatorConfig, namespaceRegistry namespace.Registry) (Validator, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	return &validator{config: config}, nil
+	return &validator{config: config, namespaceRegistry: namespaceRegistry}, nil
 }
 
 // Validate validates completion callbacks: their kind, their count, and the fields of each variant.
@@ -102,6 +125,43 @@ func (v *validator) Validate(
 			return err
 		}
 	}
+	return nil
+}
+
+// ValidateAdditions checks the count and total size the execution would reach once newCBs are
+// attached. Errors are FailedPrecondition rather than InvalidArgument: the request may be
+// perfectly well-formed and only fail because of what the execution already holds.
+func (v *validator) ValidateAdditions(
+	namespaceName string,
+	newCBs []*commonpb.Callback,
+	existing CurrentCallbacksInfo,
+) error {
+	// Check aggregate callback count.
+	maxCount := v.config.MaxCallbacksPerExecution(namespaceName)
+	if existing.Count+len(newCBs) > maxCount {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to an execution (%d callbacks already attached)",
+			maxCount,
+			existing.Count,
+		)
+	}
+
+	// Check aggregate callback size.
+	var addedBytes int
+	for _, cb := range newCBs {
+		addedBytes += cb.Size()
+	}
+	maxSize := v.config.TotalCallbacksMaxSize(namespaceName)
+	if existing.TotalSize+addedBytes > maxSize {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d bytes of callbacks to an execution "+
+				"(%d bytes already attached, %d more requested)",
+			maxSize,
+			existing.TotalSize,
+			addedBytes,
+		)
+	}
+
 	return nil
 }
 
@@ -155,6 +215,9 @@ func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Ne
 		)
 	}
 	cb.Header = lowerCaseHeaders
+	if rawURL == chasm.NexusCompletionHandlerURL {
+		return v.validateInternalCallback(namespaceName, cb)
+	}
 	return nil
 }
 
@@ -191,5 +254,31 @@ func (v *validator) validateNexusHandler(namespaceName string, cb *commonpb.Call
 			size, v.config.NexusHandlerSourceContextMaxSize(namespaceName))
 	}
 
+	return nil
+}
+
+func (v *validator) validateInternalCallback(namespaceName string, cb *commonpb.Callback_Nexus) error {
+	token := nexus.Header(cb.GetHeader()).Get(commonnexus.CallbackTokenHeader)
+	if token == "" {
+		return serviceerror.NewInvalidArgument("missing internal callback token")
+	}
+	serializedRef, _, err := chasm.UnpackNexusCallbackToken(token)
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid internal callback token: %v", err)
+	}
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(serializedRef); err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid internal callback component reference: %v", err)
+	}
+	if ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+		return serviceerror.NewInvalidArgument("internal callback component reference requires namespace and business IDs")
+	}
+	namespaceID, err := v.namespaceRegistry.GetNamespaceID(namespace.Name(namespaceName))
+	if err != nil {
+		return err
+	}
+	if ref.GetNamespaceId() != namespaceID.String() {
+		return serviceerror.NewInvalidArgument("internal callback must target the same namespace")
+	}
 	return nil
 }

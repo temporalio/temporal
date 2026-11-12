@@ -1,9 +1,11 @@
 package nexusoperation
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -23,52 +25,24 @@ type operationContextKeyType struct{}
 // context value. Exported for use in tests that need to set up MockContext.
 var OperationContextKey = operationContextKeyType{}
 
+// DestinationBlockedFn reports whether the outbound queue is blocking an endpoint.
+type DestinationBlockedFn func(namespaceID string, destination string) bool
+
 // OperationContext holds dependencies injected into the chasm.Context for use by Operation methods.
 type OperationContext struct {
-	MetricTagConfig dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	DestinationBlocked DestinationBlockedFn
+	MetricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 }
 
-// componentOnlyLibrary registers just the components without task executors or gRPC handlers.
-// Used in the frontend to enable component ref serialization.
-type componentOnlyLibrary struct {
-	chasm.UnimplementedLibrary
-	metricTagConfig dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
-}
-
-func newComponentOnlyLibrary(dc *dynamicconfig.Collection) *componentOnlyLibrary {
-	return &componentOnlyLibrary{
-		metricTagConfig: MetricTagConfiguration.Get(dc),
-	}
-}
-
-func (l *componentOnlyLibrary) Name() string {
-	return libraryName
-}
-
-func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Operation](
-			componentName,
-			chasm.WithSearchAttributes(
-				EndpointSearchAttribute,
-				ServiceSearchAttribute,
-				OperationSearchAttribute,
-				RequestIDSearchAttribute,
-				StatusSearchAttribute,
-			),
-			chasm.WithBusinessIDAlias("OperationId"),
-			chasm.WithContextValues(map[any]any{
-				OperationContextKey: &OperationContext{
-					MetricTagConfig: l.metricTagConfig,
-				},
-			}),
-		),
-		chasm.NewRegistrableComponent[*Cancellation]("cancellation"),
-	}
-}
-
+// Library registers the Nexus operation components and tasks. The history service builds it with newLibrary, which
+// provides the task and gRPC handlers and the OperationContext dependencies. The frontend and offline readers such as
+// tdbg use NewNilLibrary, which leaves them nil: they only need the registrations to serialize component refs and
+// decode persisted trees.
 type Library struct {
-	componentOnlyLibrary
+	chasm.UnimplementedLibrary
+
+	destinationBlocked DestinationBlockedFn
+	metricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 
 	handler *handler
 
@@ -82,27 +56,64 @@ type Library struct {
 	cancellationBackoffTaskHandler    *cancellationBackoffTaskHandler
 }
 
-func newLibrary(
-	handler *handler,
-	operationBackoffTaskHandler *operationBackoffTaskHandler,
-	operationInvocationTaskHandler *operationInvocationTaskHandler,
-	operationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler,
-	operationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler,
-	operationStartToCloseTimeoutTaskHandler *operationStartToCloseTimeoutTaskHandler,
-	cancellationInvocationTaskHandler *cancellationInvocationTaskHandler,
-	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler,
-	dc *dynamicconfig.Collection,
-) *Library {
+type libraryParams struct {
+	fx.In
+
+	Handler                                    *handler
+	OperationBackoffTaskHandler                *operationBackoffTaskHandler
+	OperationInvocationTaskHandler             *operationInvocationTaskHandler
+	OperationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler
+	OperationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler
+	OperationStartToCloseTimeoutTaskHandler    *operationStartToCloseTimeoutTaskHandler
+	CancellationInvocationTaskHandler          *cancellationInvocationTaskHandler
+	CancellationBackoffTaskHandler             *cancellationBackoffTaskHandler
+	DynamicConfig                              *dynamicconfig.Collection
+	DestinationBlocked                         DestinationBlockedFn
+}
+
+func newLibrary(params libraryParams) *Library {
 	return &Library{
-		componentOnlyLibrary:                       *newComponentOnlyLibrary(dc),
-		handler:                                    handler,
-		operationBackoffTaskHandler:                operationBackoffTaskHandler,
-		operationInvocationTaskHandler:             operationInvocationTaskHandler,
-		operationScheduleToCloseTimeoutTaskHandler: operationScheduleToCloseTimeoutTaskHandler,
-		operationScheduleToStartTimeoutTaskHandler: operationScheduleToStartTimeoutTaskHandler,
-		operationStartToCloseTimeoutTaskHandler:    operationStartToCloseTimeoutTaskHandler,
-		cancellationInvocationTaskHandler:          cancellationInvocationTaskHandler,
-		cancellationBackoffTaskHandler:             cancellationBackoffTaskHandler,
+		metricTagConfig:                            MetricTagConfiguration.Get(params.DynamicConfig),
+		destinationBlocked:                         params.DestinationBlocked,
+		handler:                                    params.Handler,
+		operationBackoffTaskHandler:                params.OperationBackoffTaskHandler,
+		operationInvocationTaskHandler:             params.OperationInvocationTaskHandler,
+		operationScheduleToCloseTimeoutTaskHandler: params.OperationScheduleToCloseTimeoutTaskHandler,
+		operationScheduleToStartTimeoutTaskHandler: params.OperationScheduleToStartTimeoutTaskHandler,
+		operationStartToCloseTimeoutTaskHandler:    params.OperationStartToCloseTimeoutTaskHandler,
+		cancellationInvocationTaskHandler:          params.CancellationInvocationTaskHandler,
+		cancellationBackoffTaskHandler:             params.CancellationBackoffTaskHandler,
+	}
+}
+
+// NewNilLibrary returns a Library with nil handlers, for contexts where no task execution happens.
+func NewNilLibrary() *Library { return &Library{} }
+
+func (l *Library) Name() string {
+	return libraryName
+}
+
+func (l *Library) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Operation](
+			componentName,
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
+			chasm.WithSearchAttributes(
+				EndpointSearchAttribute,
+				ServiceSearchAttribute,
+				OperationSearchAttribute,
+				RequestIDSearchAttribute,
+				StatusSearchAttribute,
+			),
+			chasm.WithBusinessIDAlias("OperationId"),
+			chasm.WithContextValues(map[any]any{
+				OperationContextKey: &OperationContext{
+					MetricTagConfig:    l.metricTagConfig,
+					DestinationBlocked: l.destinationBlocked,
+				},
+			}),
+		),
+		chasm.NewRegistrableComponent[*Cancellation]("cancellation"),
 	}
 }
 

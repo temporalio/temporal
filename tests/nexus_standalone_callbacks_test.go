@@ -6,11 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	nexusoperationpb "go.temporal.io/api/nexusoperation/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -239,6 +241,84 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		// Both the last delivery failure and the terminal failure come from delivery #2.
 		const lastDeliveryFailureMessage = "handler error (BAD_REQUEST): delivery #2"
 		s.Equal(lastDeliveryFailureMessage, cbInfo.GetLastAttemptFailure().GetMessage())
+	})
+
+	// Verify that a NexusHandler-variant callback links in both directions: the handler is handed a link
+	// to the callback, and the links the handler returns are recorded on the callback.
+	s.Run("NexusHandlerCallbackLinks", func(s *NexusStandaloneCallbacksTestSuite) {
+		ctx := s.Context()
+		// A dedicated env, so enabling NexusHandler callbacks doesn't leak into RejectNonNexusCallbacks.
+		env := s.newTestEnv(true)
+		env.OverrideDynamicConfig(nexusoperation.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler})
+		alwaysSuccessEndpointName := env.createSyncSuccessEndpoint(ctx, s.T(), "operation-result")
+
+		handlerTaskQueue := testcore.RandomizeStr("nh-callback-" + s.T().Name())
+
+		// Stands in for a workflow the handler started to process the completion.
+		handlerReturnLink := &commonpb.Link_WorkflowEvent{
+			Namespace:  env.Namespace().String(),
+			WorkflowId: "nh-callback-handler-wf-id",
+			RunId:      uuid.NewString(),
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		}
+		inboundLinks := make(chan []*nexuspb.Link, 1)
+		pollerErrCh := env.nexusTaskPoller(ctx, s.T(), handlerTaskQueue, func(
+			_ *testing.T,
+			res *workflowservice.PollNexusTaskQueueResponse,
+		) (*nexusTaskResponse, error) {
+			inboundLinks <- res.GetRequest().GetStartOperation().GetLinks()
+			return &nexusTaskResponse{
+				StartResult: &nexus.HandlerStartOperationResultAsync{OperationToken: "nh-callback-op-token"},
+				Links:       []nexus.Link{commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerReturnLink)},
+			}, nil
+		})
+
+		operationID := testvars.New(s.T()).Any().String()
+		startRequestID := uuid.NewString()
+		startResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    alwaysSuccessEndpointName,
+			RequestId:   startRequestID,
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_NexusHandler_{
+					NexusHandler: &commonpb.Callback_NexusHandler{
+						TaskQueueName: handlerTaskQueue,
+						// The shared poller only accepts tasks addressed to "test-service".
+						Service:   "test-service",
+						Operation: "OnComplete",
+					},
+				},
+			}},
+		})
+		s.NoError(err)
+		s.NoError(s.Rcv(pollerErrCh))
+
+		cbInfo := s.awaitCallbackInfo(env, operationID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		// Each callback is given its own request ID, rather than the one that started the operation.
+		s.NotEmpty(cbInfo.GetRequestId())
+		s.NotEqual(startRequestID, cbInfo.GetRequestId())
+		protorequire.ProtoSliceEqual(s.T(),
+			[]*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: handlerReturnLink}}},
+			cbInfo.GetCallback().GetLinks())
+
+		gotLinks := s.Rcv(inboundLinks)
+		s.Require().Len(gotLinks, 1)
+		gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
+		s.NoError(err)
+		protorequire.ProtoEqual(s.T(), &commonpb.Link_Callback{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.Execution{
+				Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+				BusinessId: operationID,
+				RunId:      startResp.GetRunId(),
+			},
+			RequestId: cbInfo.GetRequestId(),
+		}, gotCallbackLink)
 	})
 
 	s.Run("DescribeReportsStandbyBeforeClose", func(s *NexusStandaloneCallbacksTestSuite) {

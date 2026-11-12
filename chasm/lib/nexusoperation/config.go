@@ -6,7 +6,6 @@ import (
 	"text/template"
 	"time"
 
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/callbacks"
@@ -74,24 +73,29 @@ func UseChasmForWorkflow(enabled bool, rolloutPercent int, namespaceName, workfl
 	return dynamicconfig.RolloutAccepts(key, rolloutPercent)
 }
 
-var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"nexusoperation.request.timeout",
-	time.Second*10,
-	`Timeout for making a single nexus start or cancel request.`,
+var StateAccessBuffer = dynamicconfig.NewNamespaceDurationSetting(
+	"nexusoperation.request.stateAccessBuffer",
+	time.Second,
+	`Time reserved at the end of a Nexus start or cancel task for saving the result of the request. The task executor
+bounds each task with a deadline that covers loading the operation, the request, and saving the result: 11s on the
+outbound queue and 3s on the transfer queue, which runs system endpoint requests. The request gets the time left until
+that deadline minus this buffer, further capped by the remaining operation timeout.`,
 )
 
-var MinRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
-	"nexusoperation.limit.request.timeout.min",
+var MinOutboundRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"nexusoperation.limit.outboundRequest.timeout.min",
 	time.Millisecond*1500,
-	`Minimum time remaining for a request to complete for the server to make RPCs. If the remaining request timeout is
-less than this value, a non-retryable timeout error will be returned.`,
+	`Minimum time remaining for a request to an external Nexus endpoint to complete for the server to make it. Does not
+apply to the system endpoint, which is served in-process. If the remaining operation timeout is less than this value,
+the operation fails with a non-retryable timeout error. If the time left on the task deadline minus StateAccessBuffer
+is less than this value, the attempt fails with a retryable request timeout error.`,
 )
 
 var MinDispatchTaskTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.dispatch.task.timeout.min",
 	time.Second,
 	`Minimum time remaining for a request to be dispatched to the handler worker. If the remaining request timeout is less
-than this value, a timeout error will be returned. Working in conjunction with MinRequestTimeout, both configs help
+than this value, a timeout error will be returned. Working in conjunction with MinOutboundRequestTimeout, both configs help
 ensure that the server has enough time to complete a Nexus request.`,
 )
 
@@ -160,6 +164,40 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 "nexus_header" field that contains any of these disallowed keys will be rejected.`,
 )
 
+var TrackedHeaderPrefixes = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.trackedHeaderPrefixes",
+	convertHeaderPrefixes,
+	[]string{"temporal-"},
+	`Case insensitive list of Nexus header key prefixes to track. ScheduleNexusOperation commands and
+StartNexusOperationExecution requests with "nexus_header" keys that start with any of these prefixes are counted via the
+nexus_header_prefix_usage metric, tagged by prefix, and logged.`,
+)
+
+var RejectedHeaderPrefixes = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.rejectedHeaderPrefixes",
+	convertHeaderPrefixes,
+	[]string(nil),
+	`Case insensitive list of Nexus header key prefixes to reject. ScheduleNexusOperation commands and
+StartNexusOperationExecution requests with "nexus_header" keys that start with any of these prefixes will be rejected.
+Rejections are counted via the nexus_header_prefix_usage metric with rejected=true.`,
+)
+
+// convertHeaderPrefixes lower-cases the configured header prefixes and drops empty ones, which would otherwise match
+// every header key.
+func convertHeaderPrefixes(in any) ([]string, error) {
+	prefixes, err := dynamicconfig.ConvertStructure[[]string](nil)(in)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		if p != "" {
+			result = append(result, strings.ToLower(p))
+		}
+	}
+	return result, nil
+}
+
 var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.scheduleToCloseTimeout",
 	0,
@@ -221,7 +259,8 @@ var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
 1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag)
 2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag)
-3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings)
+3. Backend tag - adds the HSM or CHASM backend to caller outcome and latency metrics (IncludeBackendTag).
+4. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings)
 
 Note: default metric tags (like namespace, endpoint) are always included and not affected by this configuration.
 Adding high-cardinality tags (like unique operation names) can significantly increase metric storage requirements and
@@ -246,20 +285,21 @@ type Config struct {
 	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnabledCallbackKinds                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
-	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumHistoryShards                           int32
 	LongPollBuffer                             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	RequestTimeout                             dynamicconfig.DurationPropertyFnWithDestinationFilter
-	MinRequestTimeout                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	StateAccessBuffer                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MinOutboundRequestTimeout                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperationsPerWorkflow         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationTokenLength                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DisallowedOperationHeaders                 dynamicconfig.TypedPropertyFn[[]string]
+	TrackedHeaderPrefixes                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	RejectedHeaderPrefixes                     dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	MaxOperationScheduleToCloseTimeout         dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                        dynamicconfig.TypedPropertyFn[*template.Template]
@@ -272,6 +312,8 @@ type Config struct {
 	MaxIDLengthLimit                           dynamicconfig.IntPropertyFn
 	MaxReasonLength                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RetryPolicy                                func() backoff.RetryPolicy
+	EnableOutboundTaskThrottleController       dynamicconfig.BoolPropertyFn
+	TaskThrottleControllerSettings             dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
 }
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
@@ -279,30 +321,33 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
 		EnabledCallbackKinds:               EnabledCallbackKinds.Get(dc),
-		MaxCallbacksPerExecution:           callback.MaxPerExecution.Get(dc),
 		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
-		NumHistoryShards:                   cfg.NumHistoryShards,
-		LongPollBuffer:                     LongPollBuffer.Get(dc),
-		LongPollTimeout:                    LongPollTimeout.Get(dc),
-		RequestTimeout:                     RequestTimeout.Get(dc),
-		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
-		MaxConcurrentOperationsPerWorkflow: MaxConcurrentOperationsPerWorkflow.Get(dc),
-		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),
-		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
-		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
-		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
-		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
-		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
-		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
-		MaxUserMetadataSummarySize:         dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
-		MaxUserMetadataDetailsSize:         dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
-		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
-		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
-		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
-		MaxReasonLength:                    MaxReasonLength.Get(dc),
-		RetryPolicy:                        RetryPolicy.Get(dc),
+		NumHistoryShards:                     cfg.NumHistoryShards,
+		LongPollBuffer:                       LongPollBuffer.Get(dc),
+		LongPollTimeout:                      LongPollTimeout.Get(dc),
+		StateAccessBuffer:                    StateAccessBuffer.Get(dc),
+		MinOutboundRequestTimeout:            MinOutboundRequestTimeout.Get(dc),
+		MaxConcurrentOperationsPerWorkflow:   MaxConcurrentOperationsPerWorkflow.Get(dc),
+		MaxServiceNameLength:                 MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:               MaxOperationNameLength.Get(dc),
+		MaxOperationTokenLength:              MaxOperationTokenLength.Get(dc),
+		MaxOperationHeaderSize:               MaxOperationHeaderSize.Get(dc),
+		DisallowedOperationHeaders:           DisallowedOperationHeaders.Get(dc),
+		TrackedHeaderPrefixes:                TrackedHeaderPrefixes.Get(dc),
+		RejectedHeaderPrefixes:               RejectedHeaderPrefixes.Get(dc),
+		MaxOperationScheduleToCloseTimeout:   MaxOperationScheduleToCloseTimeout.Get(dc),
+		PayloadSizeLimit:                     dynamicconfig.BlobSizeLimitError.Get(dc),
+		PayloadSizeLimitWarn:                 dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MaxUserMetadataSummarySize:           dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
+		MaxUserMetadataDetailsSize:           dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
+		CallbackURLTemplate:                  CallbackURLTemplate.Get(dc),
+		UseNewFailureWireFormat:              UseNewFailureWireFormat.Get(dc),
+		VisibilityMaxPageSize:                dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
+		MaxReasonLength:                      MaxReasonLength.Get(dc),
+		RetryPolicy:                          RetryPolicy.Get(dc),
+		EnableOutboundTaskThrottleController: dynamicconfig.EnableOutboundTaskThrottleController.Get(dc),
+		TaskThrottleControllerSettings:       dynamicconfig.TaskThrottleController.Get(dc),
 	}
 }
