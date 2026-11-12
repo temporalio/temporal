@@ -104,11 +104,6 @@ func SkipUnlessInShard(t *testing.T, options ...Option) {
 	shard.SkipUnlessInShard(t)
 }
 
-// ShouldRunTest reports whether the full test name should run on this shard.
-func (s Shard) ShouldRunTest(testName string) bool {
-	return s.total == 0 || alreadySelected(testName) || s.testIndex(testName) == s.index
-}
-
 // SkipUnlessInShard skips t if its full name belongs to another shard.
 // Once selected, t and its descendants retain that decision across later sharding checks.
 func (s Shard) SkipUnlessInShard(t *testing.T) {
