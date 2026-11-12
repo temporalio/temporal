@@ -1,17 +1,35 @@
 # testshard
 
-Environment-based test selection shared by test harnesses.
+`go.temporal.io/testx/testshard` distributes tests across CI jobs. Call it at the
+start of a test, before expensive setup:
 
-`testshard.FromEnv()` reads `TEST_TOTAL_SHARDS` and the zero-based
-`TEST_SHARD_INDEX`. Sharding is disabled when either variable is empty.
-Tests are selected by `FarmHash Fingerprint32(fullTestName + salt) % totalShards`.
-The salt defaults to an empty string; `testshard.WithSalt(salt)` supplies a
-default, and a non-empty `TEST_SHARD_SALT` overrides it. Use `Shard.MaybeSkip(t)`
-to apply the selection; selected tests and their descendants retain the same
-shard across subsequent checks.
+```go
+shard, err := testshard.FromEnv()
+require.NoError(t, err)
+shard.MaybeSkip(t)
+```
 
-`parallelsuite.Run` and `RunLegacySequential` automatically shard test methods
-when both shard variables are set. Each method and all its nested subtests run
-on one shard. Pass `parallelsuite.WithShard(shard)` before any test method
-arguments to supply a configured shard. An explicit zero-value shard disables
-automatic sharding for the suite.
+Run each shard in a separate job, using the same total and a different index:
+
+```sh
+TEST_TOTAL_SHARDS=4 TEST_SHARD_INDEX=0 go test ./...
+```
+
+This example needs four jobs with indices `0` through `3`. If either variable
+is empty, all tests run; invalid values return an error.
+
+The salt defaults to empty. Supply a default with
+`testshard.FromEnv(testshard.WithSalt("my-suite"))`; a non-empty `TEST_SHARD_SALT`
+overrides it. All jobs must use the same salt.
+
+Selected tests and their nested subtests stay on the same shard.
+
+`parallelsuite.Run` and `RunLegacySequential` use the environment automatically.
+To supply a shard explicitly:
+
+```go
+parallelsuite.Run(t, &MySuite{}, parallelsuite.WithShard(shard))
+```
+
+Place `WithShard` before any method arguments. Pass `testshard.Shard{}` to
+`WithShard` to disable sharding for a suite.
