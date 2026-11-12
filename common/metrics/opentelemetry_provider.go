@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || temporal_with_prometheus || temporal_with_statsd
+
 package metrics
 
 import (
@@ -14,39 +16,11 @@ import (
 
 var _ OpenTelemetryProvider = (*openTelemetryProviderImpl)(nil)
 
-type (
-	OpenTelemetryProvider interface {
-		Stop(logger log.Logger)
-		GetMeter() metric.Meter
-	}
-
-	openTelemetryProviderImpl struct {
-		meter          metric.Meter
-		config         *PrometheusConfig
-		server         *http.Server
-		statsdExporter *statsdExporter
-	}
-)
-
-// NewOpenTelemetryProviderWithStatsd creates a new OpenTelemetry provider with a StatsD exporter.
-func NewOpenTelemetryProviderWithStatsd(
-	logger log.Logger,
-	statsdConfig *StatsdConfig,
-	clientConfig *ClientConfig,
-) (*openTelemetryProviderImpl, error) {
-	// Set up StatsD exporter if config is provided
-	if statsdConfig == nil {
-		return nil, errors.New("statsd config is required to provide statsd metrics")
-	}
-	var err error
-	statsdExp, err := NewStatsdExporter(statsdConfig, logger)
-	if err != nil {
-		logger.Error("Failed to initialize statsd exporter.", tag.Error(err))
-		return nil, err
-	}
-	// Create a PeriodicReader with the StatsD exporter
-	statsdReader := sdkmetrics.NewPeriodicReader(statsdExp)
-	return newOpenTelemetryProvider(logger, statsdReader, statsdConfig, statsdExp, nil, nil, clientConfig)
+type openTelemetryProviderImpl struct {
+	meter          metric.Meter
+	config         *PrometheusConfig
+	server         *http.Server
+	statsdExporter *statsdExporter
 }
 
 func newOpenTelemetryProvider(

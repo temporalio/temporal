@@ -37,8 +37,10 @@ included.
 | `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK                           |
 | `temporal_with_prometheus`    | Built-in Prometheus reporting | Prometheus HTTP handler, Tally Prometheus reporter |
 | `temporal_with_s3store`       | S3 archival                   | AWS SDK S3 client                                  |
+| `temporal_with_statsd`        | Built-in StatsD reporting     | StatsD client                                      |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
+Without built-in metric reporters, metrics default to a no-op handler.
 
 `make build-tags-check`, which runs in CI, checks the packages each `temporal_with_*` tag compiles out
 of the `temporal_minimal` server, as listed in the `EXCLUDED_PACKAGES_<tag>` variables in the

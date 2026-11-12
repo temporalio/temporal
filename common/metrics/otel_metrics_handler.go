@@ -12,6 +12,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
+type OpenTelemetryProvider interface {
+	Stop(logger log.Logger)
+	GetMeter() metric.Meter
+}
+
 // otelMetricsHandler is an adapter around an OpenTelemetry [metric.Meter] that implements the [Handler] interface.
 type (
 	otelMetricsHandler struct {
