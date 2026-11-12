@@ -170,9 +170,10 @@ func NewContext(
 	}
 	if config.WorkflowPersistencePipeline {
 		contextImpl.pipeline = &persistencePipeline{
-			changed:     make(chan struct{}),
-			coalescing:  config.WorkflowPersistenceCoalescing,
-			maxInFlight: max(config.WorkflowPersistencePipelineMaxInFlight, 1),
+			changed:        make(chan struct{}),
+			coalescing:     config.WorkflowPersistenceCoalescing,
+			maxInFlight:    max(config.WorkflowPersistencePipelineMaxInFlight, 1),
+			metricsHandler: contextImpl.metricsHandler,
 		}
 		contextImpl.pipeline.cacheSize.Store(1)
 	}
@@ -1192,10 +1193,11 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		} else {
 			c.operation.submissions = append(c.operation.submissions, s)
 			next, _ := c.MutableState.GetUpdateCondition()
-			c.pipeline.mu.Lock()
+			wait := c.pipeline.lockTimed()
 			c.MutableState.SetUpdateCondition(next, c.pipeline.committedDBRecordVersion)
 			c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize = c.pipeline.committedHistorySize + c.pipeline.outstandingHistorySize
 			c.pipeline.mu.Unlock()
+			c.pipeline.recordMutexWait(mutexSiteSubmit, wait)
 			return nil
 		}
 	}

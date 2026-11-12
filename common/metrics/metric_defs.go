@@ -1575,6 +1575,10 @@ var (
 	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
 	WorkflowContextLockHoldDuration               = NewTimerDef("workflow_context_lock_hold_duration")
 	WorkflowPersistencePipelineDispatchLatency    = NewTimerDef("workflow_persistence_pipeline_dispatch_latency")
+	WorkflowPersistencePipelineClaimLatency       = NewTimerDef("workflow_persistence_pipeline_claim_latency")
+	WorkflowPersistencePipelineMutexWait          = NewTimerDef("workflow_persistence_pipeline_mutex_wait")
+	WorkflowPersistencePipelineDrainWait          = NewTimerDef("workflow_persistence_pipeline_drain_wait")
+	WorkflowPersistencePipelineAdmissionWait      = NewTimerDef("workflow_persistence_pipeline_admission_wait")
 
 	VisibilityArchiverArchiveNonRetryableErrorCount                   = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount                      = NewCounterDef("visibility_archiver_archive_transient_error")

@@ -15,9 +15,11 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 )
@@ -81,7 +83,18 @@ type persistencePipeline struct {
 	releasePin               func()
 	pinned                   bool
 	cacheSize                atomic.Int64
+	metricsHandler           metrics.Handler
 }
+
+// Tag values for the pipeline wait timers.
+const (
+	mutexSiteAdmit                 = "admit"
+	mutexSiteSubmit                = "submit"
+	drainSiteCommitted             = "committed"
+	drainSiteMakeCommitted         = "make_committed"
+	admissionReasonCommittedWaiter = "committed_waiter"
+	admissionReasonSubmissionLimit = "submission_limit"
+)
 
 type pipelineContextKey struct{}
 
@@ -140,6 +153,10 @@ func (c *ContextImpl) PersistenceFuture() future.Future[struct{}] {
 	p := c.pipeline
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.futureLocked()
+}
+
+func (p *persistencePipeline) futureLocked() future.Future[struct{}] {
 	if p.err != nil {
 		return readyPersistenceFuture(p.err)
 	}
@@ -147,6 +164,18 @@ func (c *ContextImpl) PersistenceFuture() future.Future[struct{}] {
 		return tail.completion
 	}
 	return readyPersistenceFuture(nil)
+}
+
+// lockTimed locks mu and returns how long it waited. Callers record the wait after unlocking, so the
+// recording doesn't lengthen the critical section.
+func (p *persistencePipeline) lockTimed() time.Duration {
+	start := time.Now()
+	p.mu.Lock()
+	return time.Since(start)
+}
+
+func (p *persistencePipeline) recordMutexWait(site string, wait time.Duration) {
+	metrics.WorkflowPersistencePipelineMutexWait.With(p.metricsHandler).Record(wait, metrics.StringTag("site", site))
 }
 
 // SetPersistencePin keeps the cache entry alive independently of canceled callers.
@@ -182,6 +211,8 @@ func (c *ContextImpl) lockCommitted(ctx context.Context, priority locks.Priority
 		p.notify()
 		p.mu.Unlock()
 	}()
+	// drained is the time spent waiting for queued and in-flight writes to finish.
+	var drained time.Duration
 	for {
 		p.mu.Lock()
 		first := p.waiters[0] == waiter
@@ -210,12 +241,18 @@ func (c *ContextImpl) lockCommitted(ctx context.Context, priority locks.Priority
 		p.mu.Unlock()
 		if tail != nil {
 			c.releaseLock()
-			if _, err := tail.completion.Get(ctx); err != nil && ctx.Err() != nil {
+			start := time.Now()
+			_, err := tail.completion.Get(ctx)
+			drained += time.Since(start)
+			if err != nil && ctx.Err() != nil {
 				return ctx.Err()
 			}
 			continue
 		}
 		c.lockHolder = lockHolderCommitted
+		if drained > 0 {
+			metrics.WorkflowPersistencePipelineDrainWait.With(c.metricsHandler).Record(drained, metrics.StringTag("site", drainSiteCommitted))
+		}
 		if invalid {
 			c.clearMutableState()
 		}
@@ -229,18 +266,37 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 		return c.Lock(ctx, priority)
 	}
 	p := c.pipeline
+	// blockedFor is the time admission waited for committed waiters or the submission limit. The reason
+	// is committed_waiter if any of the waits was for a committed waiter.
+	var blockedFor time.Duration
+	var blockedReason string
+	recordBlocked := func() {
+		if blockedFor > 0 {
+			metrics.WorkflowPersistencePipelineAdmissionWait.With(c.metricsHandler).Record(blockedFor, metrics.StringTag("reason", blockedReason))
+		}
+	}
 	for {
 		p.mu.Lock()
-		blocked := len(p.waiters) != 0 || p.submissions() >= maxPipelineSubmissions
+		waiting := len(p.waiters) != 0
+		blocked := waiting || p.submissions() >= maxPipelineSubmissions
 		invalid := p.err != nil
 		changed := p.changed
 		p.mu.Unlock()
 		if invalid {
+			recordBlocked()
 			return c.lockCommitted(ctx, priority)
 		}
 		if blocked {
+			if waiting {
+				blockedReason = admissionReasonCommittedWaiter
+			} else if blockedReason == "" {
+				blockedReason = admissionReasonSubmissionLimit
+			}
+			testhooks.Call(c.testHooks, testhooks.HistoryPersistencePipelineAdmissionBlocked, namespace.ID(c.workflowKey.NamespaceID))
+			start := time.Now()
 			select {
 			case <-changed:
+				blockedFor += time.Since(start)
 				continue
 			case <-ctx.Done():
 				return ctx.Err()
@@ -250,9 +306,10 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 			return err
 		}
 		c.lockAcquired(lockHolderRecheck)
-		p.mu.Lock()
+		wait := p.lockTimed()
 		blocked = len(p.waiters) != 0 || p.err != nil || p.submissions() >= maxPipelineSubmissions
 		p.mu.Unlock()
+		p.recordMutexWait(mutexSiteAdmit, wait)
 		if blocked {
 			c.releaseLock()
 			continue
@@ -262,7 +319,12 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 		if original, ok := ctx.Value(pipelineContextKey{}).(context.Context); ok {
 			operationCtx = original
 		}
-		c.operation = &operation{ctx: operationCtx, pipelined: true, dependency: c.PersistenceFuture()}
+		wait = p.lockTimed()
+		dependency := p.futureLocked()
+		p.mu.Unlock()
+		p.recordMutexWait(mutexSiteAdmit, wait)
+		c.operation = &operation{ctx: operationCtx, pipelined: true, dependency: dependency}
+		recordBlocked()
 		return nil
 	}
 }
@@ -290,8 +352,11 @@ func (p *persistencePipeline) submit(ctx context.Context, failoverVersion int64,
 	if size > maxPipelineBatchBytes {
 		return nil, persistence.ErrIncompatibleWorkflowMutations
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	wait := p.lockTimed()
+	defer func() {
+		p.mu.Unlock()
+		p.recordMutexWait(mutexSiteSubmit, wait)
+	}()
 	if p.err != nil {
 		return nil, p.err
 	}
@@ -358,7 +423,9 @@ func (c *ContextImpl) completeSubmission(s *submission) error {
 				}
 				continue
 			}
+			claimed := time.Since(group.claimedAt)
 			p.mu.Unlock()
+			metrics.WorkflowPersistencePipelineClaimLatency.With(c.metricsHandler).Record(claimed)
 			c.executePersistenceGroup(group)
 			continue
 		}
@@ -777,8 +844,11 @@ func (c *ContextImpl) makeOperationCommitted(ctx context.Context, discard bool) 
 	p.mu.Unlock()
 	c.releaseLock()
 	var err error
+	var drained time.Duration
 	if tail != nil {
+		start := time.Now()
 		_, err = tail.completion.Get(context.WithoutCancel(ctx))
+		drained += time.Since(start)
 	}
 	for {
 		p.mu.Lock()
@@ -800,7 +870,9 @@ func (c *ContextImpl) makeOperationCommitted(ctx context.Context, discard bool) 
 			break
 		}
 		c.releaseLock()
+		start := time.Now()
 		_, dependencyErr := remaining.completion.Get(context.WithoutCancel(ctx))
+		drained += time.Since(start)
 		if err == nil {
 			err = dependencyErr
 		}
@@ -813,6 +885,9 @@ func (c *ContextImpl) makeOperationCommitted(ctx context.Context, discard bool) 
 	}
 	p.notify()
 	p.mu.Unlock()
+	if drained > 0 {
+		metrics.WorkflowPersistencePipelineDrainWait.With(c.metricsHandler).Record(drained, metrics.StringTag("site", drainSiteMakeCommitted))
+	}
 	c.operation = op
 	op.pipelined = false
 	op.dependency = readyPersistenceFuture(err)

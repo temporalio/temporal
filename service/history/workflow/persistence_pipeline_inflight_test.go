@@ -337,11 +337,108 @@ func TestPersistencePipelineCancelAfterClaimStillPublishes(t *testing.T) {
 }
 
 func lockHolders(capture *metricstest.Capture) []string {
-	var holders []string
-	for _, r := range capture.SnapshotMetric(metrics.WorkflowContextLockHoldDuration.Name()) {
-		holders = append(holders, r.Tags["holder"])
+	return recordedTags(capture, metrics.WorkflowContextLockHoldDuration.Name(), "holder")
+}
+
+func recordedTags(capture *metricstest.Capture, metric, tag string) []string {
+	var values []string
+	for _, r := range capture.SnapshotMetric(metric) {
+		values = append(values, r.Tags[tag])
 	}
-	return holders
+	return values
+}
+
+// captureWaits sends the pipeline's metrics to a capture and signals blocked each time a speculative lock
+// waits for admission.
+func captureWaits(c *ContextImpl) (*metricstest.Capture, chan struct{}) {
+	handler := metricstest.NewCaptureHandler()
+	c.metricsHandler = handler
+	c.pipeline.metricsHandler = handler
+	blocked := make(chan struct{}, 1)
+	c.testHooks = testhooks.NewTestHooks()
+	testhooks.Set(c.testHooks, testhooks.HistoryPersistencePipelineAdmissionBlocked, func() {
+		select {
+		case blocked <- struct{}{}:
+		default:
+		}
+	}, namespace.ID(tests.WorkflowKey.NamespaceID))
+	return handler.StartCapture(), blocked
+}
+
+func requirePositiveDurations(t *testing.T, recordings []*metricstest.CapturedRecording) {
+	t.Helper()
+	for _, r := range recordings {
+		require.Positive(t, r.Value.(time.Duration))
+	}
+}
+
+func TestPersistencePipelineRecordsWaits(t *testing.T) {
+	t.Parallel()
+	f := newAsyncPipelineFixture(t, 2, false)
+	capture, blocked := captureWaits(f.c)
+
+	// A committed lock waits for the group in flight, and a speculative lock waits behind it.
+	_, aDone := f.submit(t.Context(), t, 10)
+	wa := await.Rcv(t, f.submits)
+	locked := make(chan error, 1)
+	go func() { locked <- f.c.Lock(t.Context(), locks.PriorityHigh) }()
+	// The committed lock records a recheck hold when it releases the lock to wait for the group.
+	await.RequireTrue(t, func() bool { return len(lockHolders(capture)) == 1 }, 5*time.Second, time.Millisecond)
+	admitted := make(chan error, 1)
+	go func() { admitted <- f.c.LockSpeculative(t.Context(), locks.PriorityHigh) }()
+	await.Rcv(t, blocked)
+	wa.receipt.complete(nil)
+	require.NoError(t, await.Rcv(t, aDone))
+	require.NoError(t, await.Rcv(t, locked))
+	require.NoError(t, f.c.Unlock())
+	require.NoError(t, await.Rcv(t, admitted))
+	require.NoError(t, f.c.Unlock())
+
+	// Making a speculative operation committed waits for the group in flight.
+	_, bDone := f.submit(t.Context(), t, 11)
+	wb := await.Rcv(t, f.submits)
+	require.NoError(t, f.c.LockSpeculative(t.Context(), locks.PriorityHigh))
+	committed := make(chan error, 1)
+	go func() { committed <- f.c.makeOperationCommitted(t.Context(), false) }()
+	waitPipeline(t, f.c.pipeline, func() bool { return len(f.c.pipeline.waiters) == 1 })
+	wb.receipt.complete(nil)
+	require.NoError(t, await.Rcv(t, bDone))
+	require.NoError(t, await.Rcv(t, committed))
+	require.NoError(t, f.c.Unlock())
+
+	require.Len(t, capture.SnapshotMetric(metrics.WorkflowPersistencePipelineClaimLatency.Name()), 2)
+	mutexWaits := recordedTags(capture, metrics.WorkflowPersistencePipelineMutexWait.Name(), "site")
+	require.ElementsMatch(t, []string{mutexSiteSubmit, mutexSiteSubmit, mutexSiteAdmit, mutexSiteAdmit, mutexSiteAdmit, mutexSiteAdmit}, mutexWaits)
+	drains := capture.SnapshotMetric(metrics.WorkflowPersistencePipelineDrainWait.Name())
+	require.Equal(t, []string{drainSiteCommitted, drainSiteMakeCommitted}, recordedTags(capture, metrics.WorkflowPersistencePipelineDrainWait.Name(), "site"))
+	requirePositiveDurations(t, drains)
+	admissions := capture.SnapshotMetric(metrics.WorkflowPersistencePipelineAdmissionWait.Name())
+	require.Equal(t, []string{admissionReasonCommittedWaiter}, recordedTags(capture, metrics.WorkflowPersistencePipelineAdmissionWait.Name(), "reason"))
+	requirePositiveDurations(t, admissions)
+}
+
+func TestPersistencePipelineRecordsSubmissionLimitWait(t *testing.T) {
+	t.Parallel()
+	c := pipelineTestContext(t, false, func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		return pipelineTestResponse(0), nil
+	})
+	capture, blocked := captureWaits(c)
+	for i := range maxPipelineSubmissions {
+		_, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+i)))
+		require.NoError(t, err)
+	}
+	locked := make(chan error, 1)
+	go func() { locked <- c.LockSpeculative(t.Context(), locks.PriorityHigh) }()
+	await.Rcv(t, blocked)
+	// Invalidating the queue drops the submissions, so the caller takes a committed lock instead.
+	c.pipeline.mu.Lock()
+	c.pipeline.invalidate(0, pipelineDependencyError())
+	c.pipeline.mu.Unlock()
+	require.NoError(t, await.Rcv(t, locked))
+	require.NoError(t, c.Unlock())
+
+	require.Equal(t, []string{admissionReasonSubmissionLimit}, recordedTags(capture, metrics.WorkflowPersistencePipelineAdmissionWait.Name(), "reason"))
+	requirePositiveDurations(t, capture.SnapshotMetric(metrics.WorkflowPersistencePipelineAdmissionWait.Name()))
 }
 
 func TestPersistencePipelineRecordsLockHoldByHolder(t *testing.T) {

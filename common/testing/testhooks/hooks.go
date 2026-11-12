@@ -41,7 +41,10 @@ var (
 	HistoryReplicationDLQWriteInterceptor       = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
 	HistoryChasmRuntimeProvider                 = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
 	HistoryTransferTaskInterceptor              = newKey[func(historytasks.Task, func()), namespace.ID]()
-	NexusRetainTimedOutOperation                = newKey[bool, namespace.Name]()
+	// HistoryPersistencePipelineAdmissionBlocked runs each time a speculative lock waits for committed
+	// waiters or the submission limit.
+	HistoryPersistencePipelineAdmissionBlocked = newKey[func(), namespace.ID]()
+	NexusRetainTimedOutOperation               = newKey[bool, namespace.Name]()
 	// HistoryPassiveReplicationTest enables the single-cluster passive replication
 	// test stack for one namespace. Production builds always report it as unset.
 	HistoryPassiveReplicationTest       = newKey[HistoryPassiveReplicationTestHook, namespace.ID]()
