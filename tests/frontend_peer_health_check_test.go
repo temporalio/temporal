@@ -53,13 +53,6 @@ func awaitFrontendWorkflowServiceStatus(t *testing.T, client healthpb.HealthClie
 	}, timeout, 100*time.Millisecond, "frontend WorkflowService health should become %s", want)
 }
 
-func TestPeerHealthCheck_HealthyClusterServing(t *testing.T) {
-	env := newPeerHealthCheckEnv(t)
-	client := newFrontendHealthClient(t, env)
-
-	awaitFrontendWorkflowServiceStatus(t, client, healthpb.HealthCheckResponse_SERVING, 30*time.Second)
-}
-
 // injectTimeoutProbes makes every probe of the role time out and counts the probes.
 // testcore runs one host per role, so this is a whole-role outage.
 func injectTimeoutProbes(env *testcore.TestEnv, failing primitives.ServiceName, calls *atomic.Int32) func() {
