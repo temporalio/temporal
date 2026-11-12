@@ -192,6 +192,47 @@ func TestApplyRequest_RejectsUpdateOnPausedWorkflow(t *testing.T) {
 	require.Contains(t, err.Error(), "Workflow is paused")
 }
 
+func TestApplyRequest_CountsBufferedUpdates(t *testing.T) {
+	newMutableState := func(t *testing.T, numBufferedEvents int) *historyi.MockMutableState {
+		ms := historyi.NewMockMutableState(gomock.NewController(t))
+		ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+		ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+		ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+		ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+		ms.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
+		ms.EXPECT().HasPendingWorkflowTask().Return(true).AnyTimes()
+		ms.EXPECT().NumBufferedEvents().Return(numBufferedEvents).AnyTimes()
+		ms.EXPECT().GetCurrentVersion().Return(int64(1))
+		ms.EXPECT().VisitUpdates(gomock.Any())
+		ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+		return ms
+	}
+	applyUpdate := func(t *testing.T, registry update.Registry, ms historyi.MutableState, id string) *Updater {
+		req := createUpdateRequest(id)
+		req.Request.Request.Input = &updatepb.Input{Name: "update"}
+		updater := &Updater{req: req}
+		action, err := updater.ApplyRequest(context.Background(), registry, ms)
+		require.NoError(t, err)
+		require.True(t, action.Noop)
+		require.True(t, updater.bufferedForWorkflowHeartbeatNotification)
+		return updater
+	}
+
+	t.Run("earlier unsent Update", func(t *testing.T) {
+		ms := newMutableState(t, 0)
+		registry := update.NewRegistry(ms)
+		require.True(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+		require.False(t, applyUpdate(t, registry, ms, "second").firstBufferedForWorkflowHeartbeatNotification)
+	})
+
+	t.Run("buffered events", func(t *testing.T) {
+		ms := newMutableState(t, 1)
+		registry := update.NewRegistry(ms)
+		require.False(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+	})
+}
+
 // An Update whose callbacks would breach the execution's limits must be rejected before it is
 // admitted and dispatched to a worker: once accepted there, its callbacks are attached without
 // further checks.
@@ -307,6 +348,7 @@ func newRunningMutableStateForCallbacks(ctrl *gomock.Controller) *historyi.MockM
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{}).AnyTimes()
 	ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+	ms.EXPECT().HasStartedWorkflowTask().Return(false).AnyTimes()
 	// Required by update.NewRegistry
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()
