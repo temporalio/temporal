@@ -44,13 +44,26 @@ const (
 )
 
 type namespaceReplicationVerifyRequest struct {
-	// NamespaceID selects the namespace. Names can be reused, so they never
-	// select the source.
+	// NamespaceID selects the namespace when given. Otherwise the name is
+	// resolved on the source once, and the returned ID identifies all replicas.
 	NamespaceID string
-	// ExpectedNamespaceName, when set, must match the name of the namespace the
-	// ID resolves to. It guards against acting on the wrong namespace when the
-	// operator supplies both a name and a mistyped or stale ID.
+	// ExpectedNamespaceName selects the source when no ID is given. With an ID,
+	// it guards against selecting the wrong namespace with a mistyped or stale ID.
 	ExpectedNamespaceName string
+	// ExpectedNamespaceNameInherited reports that the name came from tdbg's
+	// --namespace or TEMPORAL_CLI_NAMESPACE, so errors can say where the
+	// operator should look.
+	ExpectedNamespaceNameInherited bool
+}
+
+// expectedNameDescription quotes the expected name and, when it was inherited,
+// says where it came from.
+func (r namespaceReplicationVerifyRequest) expectedNameDescription() string {
+	description := fmt.Sprintf("%q", r.ExpectedNamespaceName)
+	if r.ExpectedNamespaceNameInherited {
+		description += " from " + namespaceReplicationInheritedNameSource
+	}
+	return description
 }
 
 type namespaceReplicationVerificationResult struct {
@@ -102,6 +115,7 @@ type namespaceReplicationObservation struct {
 type namespaceReplicationReader interface {
 	SourceCluster(ctx context.Context) (string, error)
 	SourceNamespaceByID(ctx context.Context, id string) (*adminservice.GetNamespaceResponse, error)
+	SourceNamespaceByName(ctx context.Context, name string) (*adminservice.GetNamespaceResponse, error)
 	PeerNamespaceByID(ctx context.Context, cluster string, id string) (*adminservice.GetNamespaceResponse, error)
 	PeerNamespaceByName(ctx context.Context, cluster string, name string) (*adminservice.GetNamespaceResponse, error)
 }
@@ -129,15 +143,40 @@ func (r adminNamespaceReplicationReader) SourceNamespaceByID(
 	ctx context.Context,
 	id string,
 ) (*adminservice.GetNamespaceResponse, error) {
-	response, err := namespaceReplicationRPCCall(ctx, r.rpcTimeout, func(rpcCtx context.Context) (*adminservice.GetNamespaceResponse, error) {
-		return r.client.GetNamespace(rpcCtx, &adminservice.GetNamespaceRequest{
-			Attributes: &adminservice.GetNamespaceRequest_Id{Id: id},
-		})
+	response, err := r.sourceNamespace(ctx, &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{Id: id},
 	})
 	if err != nil {
 		return nil, err
 	}
 	return requireNamespaceID(response, id)
+}
+
+func (r adminNamespaceReplicationReader) SourceNamespaceByName(
+	ctx context.Context,
+	name string,
+) (*adminservice.GetNamespaceResponse, error) {
+	response, err := r.sourceNamespace(ctx, &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Namespace{Namespace: name},
+	})
+	if err != nil {
+		return nil, err
+	}
+	// As with requireNamespaceID, incomplete responses are rejected later with
+	// a more specific error.
+	if responseName := response.GetInfo().GetName(); responseName != "" && responseName != name {
+		return nil, errors.New("response has a different namespace name")
+	}
+	return response, nil
+}
+
+func (r adminNamespaceReplicationReader) sourceNamespace(
+	ctx context.Context,
+	request *adminservice.GetNamespaceRequest,
+) (*adminservice.GetNamespaceResponse, error) {
+	return namespaceReplicationRPCCall(ctx, r.rpcTimeout, func(rpcCtx context.Context) (*adminservice.GetNamespaceResponse, error) {
+		return r.client.GetNamespace(rpcCtx, request)
+	})
 }
 
 func (r adminNamespaceReplicationReader) PeerNamespaceByID(
@@ -279,7 +318,17 @@ func (v *namespaceReplicationVerifier) observe(
 		return observation, errors.New("source DescribeCluster returned an empty cluster name")
 	}
 
-	source, err := v.reader.SourceNamespaceByID(ctx, request.NamespaceID)
+	var source *adminservice.GetNamespaceResponse
+	if request.NamespaceID != "" {
+		source, err = v.reader.SourceNamespaceByID(ctx, request.NamespaceID)
+	} else if request.ExpectedNamespaceName != "" {
+		source, err = v.reader.SourceNamespaceByName(ctx, request.ExpectedNamespaceName)
+		if err != nil && request.ExpectedNamespaceNameInherited {
+			err = fmt.Errorf("namespace %s: %w", request.expectedNameDescription(), err)
+		}
+	} else {
+		return observation, errors.New("namespace name or ID is required")
+	}
 	if err != nil {
 		return observation, fmt.Errorf("read source namespace: %w", err)
 	}
@@ -291,10 +340,10 @@ func (v *namespaceReplicationVerifier) observe(
 	result.NamespaceID = source.GetInfo().GetId()
 	if request.ExpectedNamespaceName != "" && request.ExpectedNamespaceName != result.NamespaceName {
 		blockNamespaceReplicationVerification(result, fmt.Errorf(
-			"namespace ID %q belongs to namespace %q, not %q",
+			"namespace ID %q belongs to namespace %q, not %s",
 			result.NamespaceID,
 			result.NamespaceName,
-			request.ExpectedNamespaceName,
+			request.expectedNameDescription(),
 		))
 		return observation, nil
 	}

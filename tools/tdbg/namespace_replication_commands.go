@@ -29,18 +29,19 @@ func newNamespaceReplicationCommands(
 				{
 					Name:  "verify",
 					Usage: "Compare a global namespace across its configured clusters",
-					Description: "Selects the namespace by ID because namespace names can be reused; --namespace only cross-checks it. " +
+					Description: "Select the namespace with --namespace or --namespace-id. Names are resolved once on the source, then replicas are identified by ID. " +
+						"Every name given, including an inherited --namespace or TEMPORAL_CLI_NAMESPACE, must agree with the others and with the ID. " +
 						"Run it against the namespace's active cluster; removed peers are not inspected. " +
 						"Peers are read through that cluster's frontend, so only --address and its TLS settings are needed.",
 					Flags: []cli.Flag{
 						&cli.StringFlag{
 							Name:  FlagNamespaceID,
-							Usage: "Namespace ID (required)",
+							Usage: "Namespace ID; any namespace name given must belong to it",
 						},
 						&cli.StringFlag{
 							Name:    FlagNamespace,
 							Aliases: FlagNamespaceAlias,
-							Usage:   "Optional namespace name to cross-check against --namespace-id; it never selects the namespace, and a --namespace before the subcommand is ignored",
+							Usage:   "Namespace name to resolve on the source, or to cross-check against --namespace-id",
 						},
 						&cli.BoolFlag{
 							Name:  FlagPrintJSON,
@@ -101,33 +102,57 @@ func namespaceReplicationRPCTimeout(c *cli.Context) time.Duration {
 	return contextTimeout(c, defaultContextTimeout)
 }
 
-var errNamespaceReplicationNameSelector = errors.New(
-	"--namespace-id is required; a namespace name alone is not accepted because names can be reused",
-)
+// namespaceReplicationInheritedNameSource names where an inherited namespace
+// name comes from; urfave/cli does not say whether the flag or the variable set it.
+const namespaceReplicationInheritedNameSource = "tdbg --namespace or TEMPORAL_CLI_NAMESPACE"
 
-// namespaceReplicationVerifyRequestFromCLI reads the required namespace ID and
-// the optional name to cross-check it against. Only a --namespace given on this
-// command is cross-checked; an inherited --namespace or TEMPORAL_CLI_NAMESPACE
-// is ignored when the ID is supplied, matching how local selectors take
-// precedence elsewhere in tdbg.
+// namespaceReplicationVerifyRequestFromCLI requires an explicit selector rather
+// than tdbg's implicit default namespace. Every namespace name given, on this
+// command or inherited from tdbg's --namespace or TEMPORAL_CLI_NAMESPACE, must
+// agree; none takes precedence. With an ID, the name is also checked against it.
+// Without one, an inherited name selects the namespace.
 func namespaceReplicationVerifyRequestFromCLI(c *cli.Context) (namespaceReplicationVerifyRequest, error) {
 	id := strings.TrimSpace(c.String(FlagNamespaceID))
-	if id == "" {
-		for _, ancestor := range c.Lineage() {
-			if ancestor.IsSet(FlagNamespace) {
-				return namespaceReplicationVerifyRequest{}, errNamespaceReplicationNameSelector
-			}
-		}
-		return namespaceReplicationVerifyRequest{}, errors.New("--namespace-id is required")
+	if c.IsSet(FlagNamespaceID) && id == "" {
+		return namespaceReplicationVerifyRequest{}, errors.New("--namespace-id is blank")
 	}
-	request := namespaceReplicationVerifyRequest{NamespaceID: id}
-	if c.IsSet(FlagNamespace) {
-		request.ExpectedNamespaceName = strings.TrimSpace(c.String(FlagNamespace))
-		if request.ExpectedNamespaceName == "" {
+	// The lineage starts with this command, so a conflict is always between the
+	// name given here and an inherited one.
+	var name string
+	inherited := false
+	for i, ancestor := range c.Lineage() {
+		if !ancestor.IsSet(FlagNamespace) {
+			continue
+		}
+		candidate := strings.TrimSpace(ancestor.String(FlagNamespace))
+		switch {
+		case candidate == "" && i > 0:
+			// urfave/cli counts an exported but empty TEMPORAL_CLI_NAMESPACE as
+			// set. A blank inherited name names no namespace, so it is ignored.
+		case candidate == "":
 			return namespaceReplicationVerifyRequest{}, errors.New("--namespace is blank; omit it or give the namespace name")
+		case name == "":
+			name, inherited = candidate, i > 0
+		case candidate != name:
+			return namespaceReplicationVerifyRequest{}, fmt.Errorf(
+				"--namespace %q conflicts with %q from %s",
+				name,
+				candidate,
+				namespaceReplicationInheritedNameSource,
+			)
+		default:
+			// Agrees with the name already seen. Commands between this one and
+			// the root have no flag of their own and report the root's value.
 		}
 	}
-	return request, nil
+	if id == "" && name == "" {
+		return namespaceReplicationVerifyRequest{}, errors.New("--namespace or --namespace-id is required")
+	}
+	return namespaceReplicationVerifyRequest{
+		NamespaceID:                    id,
+		ExpectedNamespaceName:          name,
+		ExpectedNamespaceNameInherited: inherited,
+	}, nil
 }
 
 func printNamespaceReplicationVerification(
