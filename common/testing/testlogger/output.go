@@ -82,6 +82,6 @@ func (tl *TestLogger) configureLogger(t TestingT) {
 		zap.WithCaller(tl.logCaller),
 	}
 
-	// Skip(2) skips the server wrapper and shared engine
-	tl.wrapped = log.NewZapLogger(zap.New(core, zapOptions...)).Skip(2)
+	// Skip(1) skips the shared engine
+	tl.wrapped = log.NewZapLogger(zap.New(core, zapOptions...)).Skip(1)
 }
