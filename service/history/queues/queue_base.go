@@ -120,6 +120,7 @@ func newQueueBase(
 	metricsHandler metrics.Handler,
 ) *queueBase {
 	if options.CompactQueueState == nil {
+		//nolint:forbidigo // A queue that never compacts could outgrow the shard record, so fail at construction.
 		panic("queues.Options.CompactQueueState must be set, usually from the history config's EnableQueueStateCompaction")
 	}
 	var readerScopes map[int64][]Scope

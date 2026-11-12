@@ -130,8 +130,7 @@ func (s *queueBaseSuite) TestNewQueueBase_RequiresCompactQueueState() {
 	)
 	s.options.CompactQueueState = nil
 
-	require.PanicsWithValue(
-		s.T(),
+	s.Require().PanicsWithValue(
 		"queues.Options.CompactQueueState must be set, usually from the history config's EnableQueueStateCompaction",
 		func() { s.newQueueBase(mockShard, tasks.CategoryTransfer, nil) },
 	)
@@ -662,11 +661,11 @@ func (s *queueBaseSuite) TestCheckPoint_WritesCompactStateOnlyWhenTheOptionIsOn(
 
 			base.checkpoint()
 
-			require.NotNil(s.T(), written, "the checkpoint wrote the queue state")
+			s.Require().NotNil(written, "the checkpoint wrote the queue state")
 			reader := written.ReaderStates[DefaultReaderId]
-			require.Len(s.T(), written.NamespaceIdTable, tc.wantTableEntries, "namespace ID table entries")
-			require.Len(s.T(), reader.PredicateGroups, tc.wantGroups, "predicate groups")
-			require.Len(s.T(), reader.Scopes, tc.wantPlainScopes, "plain scopes")
+			s.Require().Len(written.NamespaceIdTable, tc.wantTableEntries, "namespace ID table entries")
+			s.Require().Len(reader.PredicateGroups, tc.wantGroups, "predicate groups")
+			s.Require().Len(reader.Scopes, tc.wantPlainScopes, "plain scopes")
 		})
 	}
 }

@@ -1087,8 +1087,11 @@ func TestToPersistencePredicate_LeavesNonNamespacePredicatesUnchangedByABuilder(
 		name      string
 		predicate tasks.Predicate
 	}{
+		//nolint:staticcheck // Deprecated predicates are still read from old shards, so they must survive a builder.
 		{"task type", tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT})},
+		//nolint:staticcheck // See above.
 		{"destination", tasks.NewDestinationPredicate([]string{"d1"})},
+		//nolint:staticcheck // See above.
 		{"outbound task group", tasks.NewOutboundTaskGroupPredicate([]string{"g1"})},
 		{"outbound task", tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
 			{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
@@ -1478,19 +1481,25 @@ func TestToPersistenceQueueState_CompactGroupsNonNamespacePredicates(t *testing.
 			}),
 		},
 		{
-			name:   "outbound task group",
+			name: "outbound task group",
+			//nolint:staticcheck // Deprecated predicates are still read from old shards, so they must group.
 			shared: tasks.NewOutboundTaskGroupPredicate([]string{"g1"}),
-			other:  tasks.NewOutboundTaskGroupPredicate([]string{"g2"}),
+			//nolint:staticcheck // See above.
+			other: tasks.NewOutboundTaskGroupPredicate([]string{"g2"}),
 		},
 		{
-			name:   "destination",
+			name: "destination",
+			//nolint:staticcheck // See above.
 			shared: tasks.NewDestinationPredicate([]string{"d1"}),
-			other:  tasks.NewDestinationPredicate([]string{"d2"}),
+			//nolint:staticcheck // See above.
+			other: tasks.NewDestinationPredicate([]string{"d2"}),
 		},
 		{
-			name:   "task type",
+			name: "task type",
+			//nolint:staticcheck // See above.
 			shared: tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT}),
-			other:  tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT}),
+			//nolint:staticcheck // See above.
+			other: tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT}),
 		},
 	}
 	for _, tc := range tests {
