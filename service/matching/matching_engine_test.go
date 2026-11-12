@@ -1369,9 +1369,11 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			return resp, nil
 		}).AnyTimes()
 
+	// Backlog dispatch is not strictly FIFO: the matcher's task validator temporarily takes a
+	// batch of tasks from the head of the backlog, so pollers can see later tasks first.
+	// Check that every task is delivered exactly once instead of checking the order.
+	delivered := make(map[int64]bool, taskCount)
 	for i := int64(0); i < taskCount; {
-		scheduledEventID := i * 3
-
 		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -1395,6 +1397,15 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.True(validateTimeRange(result.StartedTime.AsTime(), time.Minute))
 		s.Equal(time.Second*50, result.StartToCloseTimeout.AsDuration())
 		s.Equal(time.Second*10, result.HeartbeatTimeout.AsDuration())
+
+		resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
+		s.NoError(err)
+		scheduledEventID := resultToken.GetScheduledEventId()
+		s.Zero(scheduledEventID%3, "unexpected scheduled event ID %d", scheduledEventID)
+		s.Less(scheduledEventID, int64(taskCount*3))
+		s.False(delivered[scheduledEventID], "task with scheduled event ID %d delivered twice", scheduledEventID)
+		delivered[scheduledEventID] = true
+
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
 			NamespaceId:      namespaceID,
@@ -1404,11 +1415,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			ActivityId:       activityID,
 			ActivityType:     activityTypeName,
 		}
-
-		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		s.Equal(serializedToken, result.TaskToken)
+		protoassert.ProtoEqual(s.T(), taskToken, resultToken)
 		i++
 	}
+	s.Len(delivered, taskCount)
 	s.expectEmptyBacklog(tlID)
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
