@@ -190,7 +190,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	cacheReleaseFunc historyi.ReleaseWorkflowContextFunc,
 	isNewWorkflow bool,
 ) (_ *SyncStateResult, retError error) {
-	mutableState, err := s.loadMSFromDbIfSpeculative(ctx, mutableState)
+	mutableState, err := s.loadMSFromDBIfSpeculative(ctx, mutableState)
 	if err != nil {
 		return nil, err
 	}
@@ -384,9 +384,9 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	}, nil
 }
 
-// loadMSFromDbIfSpeculative returns mutableState, or a copy read from the DB when the CHASM tree has speculative
+// loadMSFromDBIfSpeculative returns mutableState, or a copy read from the DB when the CHASM tree has speculative
 // changes that aren't persisted. The copy isn't cached; mutableState and its speculative changes are unchanged.
-func (s *SyncStateRetrieverImpl) loadMSFromDbIfSpeculative(
+func (s *SyncStateRetrieverImpl) loadMSFromDBIfSpeculative(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 ) (historyi.MutableState, error) {

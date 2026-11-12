@@ -2696,6 +2696,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_Speculative_ExistingRunn
 			return nil, nil
 		},
 		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }),
+		useExistingPolicy,
 		chasm.WithSpeculative(),
 	)
 	s.NoError(err)
