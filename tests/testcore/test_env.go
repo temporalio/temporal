@@ -2,6 +2,7 @@ package testcore
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"net/http"
@@ -31,11 +32,17 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
-	servershard "go.temporal.io/server/common/testing/testshard"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/testx/testshard"
 )
+
+// shardSalt is used to distribute functional tests across shards.
+// This value is automatically updated by the optimize-test-sharding workflow.
+//
+//go:embed shard_salt.txt
+var shardSalt string
 
 var _ Env = (*TestEnv)(nil)
 
@@ -719,7 +726,9 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 // This distributes tests across multiple CI shards for parallel execution.
 func checkTestShard(t *testing.T) {
 	t.Helper()
-	servershard.FromEnv(t).MaybeSkip(t)
+	shard, err := testshard.FromEnv(testshard.WithSalt(strings.TrimSpace(shardSalt)))
+	require.NoError(t, err)
+	shard.MaybeSkip(t)
 }
 
 type dedicatedClusterGuard struct {
