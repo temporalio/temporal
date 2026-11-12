@@ -19,12 +19,20 @@ var MinWorkerHeartbeatTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	`Minimum allowed worker heartbeat timeout.`,
 )
 
+var WorkerGroupRetention = dynamicconfig.NewNamespaceDurationSetting(
+	"worker.groupRetention",
+	0,
+	`How long closed worker groups are kept. Non-positive values use namespace retention. Namespace minimum retention still applies.`,
+)
+
 type Config struct {
 	MinHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	GroupRetention      dynamicconfig.DurationPropertyFnWithNamespaceFilter
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		MinHeartbeatTimeout: MinWorkerHeartbeatTimeout.Get(dc),
+		GroupRetention:      WorkerGroupRetention.Get(dc),
 	}
 }

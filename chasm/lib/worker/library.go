@@ -1,14 +1,18 @@
 package worker
 
 import (
+	"time"
+
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
 )
 
 type Library struct {
 	chasm.UnimplementedLibrary
 
+	config                  *Config
 	handler                 *handler
 	leaseExpiryTaskExecutor *leaseExpiryTaskExecutor
 }
@@ -18,8 +22,8 @@ func NewNilLibrary() *Library {
 	return &Library{}
 }
 
-func newLibrary(handler *handler) *Library {
-	return &Library{handler: handler, leaseExpiryTaskExecutor: &leaseExpiryTaskExecutor{}}
+func newLibrary(handler *handler, config *Config) *Library {
+	return &Library{config: config, handler: handler, leaseExpiryTaskExecutor: &leaseExpiryTaskExecutor{}}
 }
 
 func (l *Library) Name() string {
@@ -27,8 +31,14 @@ func (l *Library) Name() string {
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
+	var groupOptions []chasm.RegistrableComponentOption
+	if l.config != nil {
+		groupOptions = append(groupOptions, chasm.WithRetention(func(ns *namespace.Namespace) time.Duration {
+			return l.config.GroupRetention(ns.Name().String())
+		}))
+	}
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*WorkerGroup](groupComponentName),
+		chasm.NewRegistrableComponent[*WorkerGroup](groupComponentName, groupOptions...),
 		// Detached workers can run recovery tasks after the group closes,
 		// while the execution is retained.
 		chasm.NewRegistrableComponent[*Worker](workerComponentName, chasm.WithDetached()),
