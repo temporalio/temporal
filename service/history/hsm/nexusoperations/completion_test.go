@@ -77,7 +77,7 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 			})
 			require.NoError(t, completionHandler.Handle(
 				context.Background(),
-				fakeEnv{node},
+				fakeEnv{node: node},
 				hsm.Ref{},
 				"",      // requestID (empty skips the request-id match check)
 				"token", // operationToken
@@ -119,4 +119,51 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 			require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
 		})
 	}
+}
+
+func TestCompletionHandler_AlreadyStartedMetricsUseWorkflowTime(t *testing.T) {
+	workflowNow := time.Date(2027, time.January, 1, 12, 0, 0, 0, time.UTC)
+	scheduledTime := workflowNow.Add(-time.Minute)
+	startedTime := workflowNow.Add(-30 * time.Second)
+	wallNow := workflowNow.Add(-time.Hour)
+
+	backend := &hsmtest.NodeBackend{WorkflowTimeFn: func() time.Time { return workflowNow }}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(scheduledTime, &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
+	require.NoError(t, hsm.MachineTransition(node, func(operation nexusoperations.Operation) (hsm.TransitionOutput, error) {
+		return nexusoperations.TransitionStarted.Apply(operation, nexusoperations.EventStarted{
+			Time: startedTime,
+			Node: node,
+			Attributes: &historypb.NexusOperationStartedEventAttributes{
+				OperationToken: "token",
+			},
+		})
+	}))
+
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	completionHandler := nexusoperations.NewCompletionHandler(captureHandler, &nexusoperations.Config{})
+	require.NoError(t, completionHandler.Handle(
+		context.Background(),
+		fakeEnv{node: node, nowFn: func() time.Time { return wallNow }},
+		hsm.Ref{},
+		"",      // requestID (empty skips the request-id match check)
+		"token", // operationToken
+		nil,     // startTime
+		nil,     // links
+		&commonpb.Payload{},
+		nil,
+	))
+
+	snapshot := capture.Snapshot()
+	scheduleToClose := snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()]
+	require.Len(t, scheduleToClose, 1)
+	require.Equal(t, time.Minute, scheduleToClose[0].Value)
+	startToClose := snapshot[chasmnexus.NexusOperationStartToCloseLatency.Name()]
+	require.Len(t, startToClose, 1)
+	require.Equal(t, 30*time.Second, startToClose[0].Value)
+	require.Empty(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()])
 }

@@ -134,6 +134,8 @@ type Config struct {
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
+	TaskThrottleController dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
+
 	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay      dynamicconfig.DurationPropertyFn
@@ -218,6 +220,8 @@ type Config struct {
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumRequestIDsPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RequestIDMaxAge                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	EnableChasmRequestIDDataNode     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaximumRequestIDsInChasmDataNode dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
@@ -610,6 +614,7 @@ func NewConfig(
 		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
+		TaskThrottleController:                               dynamicconfig.TaskThrottleController.Get(dc),
 		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
 		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
 		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
@@ -719,6 +724,8 @@ func NewConfig(
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
 		MaximumRequestIDsPerExecution:    dynamicconfig.MaximumRequestIDsPerExecution.Get(dc),
 		RequestIDMaxAge:                  dynamicconfig.RequestIDMaxAge.Get(dc),
+		EnableChasmRequestIDDataNode:     dynamicconfig.EnableChasmRequestIDDataNode.Get(dc),
+		MaximumRequestIDsInChasmDataNode: dynamicconfig.MaximumRequestIDsInChasmDataNode.Get(dc),
 		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
 		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),

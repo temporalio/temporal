@@ -575,11 +575,14 @@ func WorkflowResendSchedulerProvider(
 }
 
 func ReplicationProgressCacheProvider(
+	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 	logger log.Logger,
 	handler metrics.Handler,
 ) replication.ProgressCache {
-	return replication.NewProgressCache(serviceConfig, logger, handler)
+	c := replication.NewProgressCache(serviceConfig, logger, handler)
+	lc.Append(fx.StartStopHook(c.Start, c.Stop))
+	return c
 }
 
 func VersionMembershipCacheProvider(

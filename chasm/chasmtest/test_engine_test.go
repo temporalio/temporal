@@ -4,6 +4,8 @@ package chasmtest_test
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -116,6 +118,75 @@ func TestInvariantCheckRunsAfterSuccessfulTransitions(t *testing.T) {
 	}, calls)
 }
 
+// TestUpdateWithStartSyncsSubComponentsAddedByUpdate: when UpdateWithStart creates an execution, the
+// sub-components its update adds must become nodes in the tree, not only exist in memory.
+func TestUpdateWithStartSyncsSubComponentsAddedByUpdate(t *testing.T) {
+	var nodePaths []string
+	check := func(_ *testing.T, node *chasm.Node, _ chasm.RootComponent) {
+		nodePaths = slices.Collect(maps.Keys(node.Snapshot(nil).Nodes))
+	}
+	e, _ := startStoreWithEngineOptions(t, 0, []chasmtest.EngineOption{chasmtest.WithInvariantCheck(check)})
+
+	result, err := chasm.UpdateWithStartExecution(
+		engineContext(e),
+		chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "update-with-start"},
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		},
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "added", 0)
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	require.True(t, result.Created)
+	require.Contains(t, nodePaths, "Payloads#added")
+}
+
+// TestUpdateWithStartHonorsConflictPolicy: UpdateWithStart on a running execution updates it only under
+// BusinessIDConflictPolicyUseExisting, and fails under the default BusinessIDConflictPolicyFail.
+func TestUpdateWithStartHonorsConflictPolicy(t *testing.T) {
+	e, ref := startStore(t, 0)
+	updateCount := 0
+	updateWithStart := func(opts ...chasm.TransitionOption) (chasm.UpdateWithStartExecutionResult[any], error) {
+		return chasm.UpdateWithStartExecution(
+			engineContext(e),
+			ref.ExecutionKey,
+			func(chasm.MutableContext, any) (*tests.PayloadStore, error) {
+				t.Fatal("startFn should not be called when the execution is running")
+				return nil, nil
+			},
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, nil
+			},
+			nil,
+			opts...,
+		)
+	}
+
+	_, err := updateWithStart()
+	_, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err)
+	require.True(t, ok, "expected ExecutionAlreadyStartedError, got %v", err)
+	require.Equal(t, 0, updateCount)
+
+	_, err = updateWithStart(chasm.WithBusinessIDPolicy(
+		chasm.BusinessIDReusePolicyAllowDuplicate,
+		chasm.BusinessIDConflictPolicy(99),
+	))
+	var internal *serviceerror.Internal
+	require.ErrorAs(t, err, &internal)
+	require.Equal(t, 0, updateCount)
+
+	result, err := updateWithStart(chasm.WithBusinessIDPolicy(
+		chasm.BusinessIDReusePolicyAllowDuplicate,
+		chasm.BusinessIDConflictPolicyUseExisting,
+	))
+	require.NoError(t, err)
+	require.False(t, result.Created)
+	require.Equal(t, 1, updateCount)
+}
+
 func TestUpdateComponentDeduplicatesRequestID(t *testing.T) {
 	e, ref := startStore(t, 0)
 	updateCount := 0
@@ -192,6 +263,42 @@ func TestStartExecutionDeduplicatesUpdateRequestID(t *testing.T) {
 	require.False(t, result.Created)
 	require.Equal(t, ref.ExecutionKey, result.ExecutionKey)
 	require.Equal(t, 0, startCount)
+}
+
+func TestUpdateWithStartDeduplicatesRequestID(t *testing.T) {
+	e, ref := startStore(t, 0, chasm.WithRequestID("create-request-id"))
+	startKey := ref.ExecutionKey
+	startKey.RunID = ""
+	updateCount := 0
+	updateWithStart := func(requestID string, conflictPolicy chasm.BusinessIDConflictPolicy) chasm.UpdateWithStartExecutionResult[any] {
+		result, err := chasm.UpdateWithStartExecution(
+			engineContext(e),
+			startKey,
+			func(chasm.MutableContext, any) (*tests.PayloadStore, error) {
+				t.Fatal("startFn should not be called when the execution is running")
+				return nil, nil
+			},
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, nil
+			},
+			nil,
+			chasm.WithRequestID(requestID),
+			chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, conflictPolicy),
+		)
+		require.NoError(t, err)
+		require.False(t, result.Created)
+		require.Equal(t, ref.ExecutionKey, result.ExecutionKey)
+		return result
+	}
+
+	require.False(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting).Deduplicated)
+	require.Equal(t, 1, updateCount)
+
+	require.True(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting).Deduplicated)
+	require.True(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyFail).Deduplicated)
+	require.True(t, updateWithStart("create-request-id", chasm.BusinessIDConflictPolicyFail).Deduplicated)
+	require.Equal(t, 1, updateCount)
 }
 
 func startStore(
