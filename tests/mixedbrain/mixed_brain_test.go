@@ -113,7 +113,7 @@ func TestMixedBrain(t *testing.T) {
 	persistenceDriver := cmp.Or(os.Getenv("PERSISTENCE_DRIVER"), "sqlite")
 	switch persistenceDriver {
 	case "sqlite":
-		configureSharedSQLite(t, tmpDir)
+		configureSharedSQLite(t)
 	case "postgres12", "postgres12_pgx":
 		setDefaultEnv(t, "POSTGRES_SEEDS", "127.0.0.1")
 		setDefaultEnv(t, "POSTGRES_USER", "temporal")

@@ -23,8 +23,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func configureSharedSQLite(t *testing.T, dir string) {
+func configureSharedSQLite(t *testing.T) {
 	t.Helper()
+	dir := t.TempDir()
 
 	// Both server processes must use the same files; in-memory databases are process-local.
 	setDefaultEnv(t, "DBNAME", filepath.Join(dir, "temporal.db"))
