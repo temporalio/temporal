@@ -23,6 +23,7 @@ const VersionCheckInterval = 24 * time.Hour
 type VersionChecker struct {
 	config                 *Config
 	shutdownChan           chan struct{}
+	ctx                    context.Context
 	cancelFunc             context.CancelFunc
 	metricsHandler         metrics.Handler
 	clusterMetadataManager persistence.ClusterMetadataManager
@@ -37,9 +38,14 @@ func NewVersionChecker(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 ) *VersionChecker {
+	ctx, cancel := context.WithCancel(headers.SetCallerInfo(
+		context.Background(), headers.SystemBackgroundHighCallerInfo,
+	))
 	return &VersionChecker{
 		config:                 config,
 		shutdownChan:           make(chan struct{}),
+		ctx:                    ctx,
+		cancelFunc:             cancel,
 		metricsHandler:         metricsHandler.WithTags(metrics.OperationTag(metrics.VersionCheckScope)),
 		clusterMetadataManager: clusterMetadataManager,
 		sdkVersionRecorder:     sdkVersionRecorder,
@@ -49,25 +55,16 @@ func NewVersionChecker(
 func (vc *VersionChecker) Start() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.startOnce.Do(func() {
-			ctx, cancel := context.WithCancel(headers.SetCallerInfo(
-				context.Background(),
-				headers.SystemBackgroundHighCallerInfo,
-			))
-			vc.cancelFunc = cancel
-			go vc.versionCheckLoop(ctx)
+			go vc.versionCheckLoop(vc.ctx)
 		})
 	}
 }
 
 func (vc *VersionChecker) Stop() {
-	if vc.config.EnableServerVersionCheck() {
-		vc.stopOnce.Do(func() {
-			if vc.cancelFunc != nil {
-				vc.cancelFunc()
-			}
-			close(vc.shutdownChan)
-		})
-	}
+	vc.stopOnce.Do(func() {
+		vc.cancelFunc()
+		close(vc.shutdownChan)
+	})
 }
 
 func (vc *VersionChecker) versionCheckLoop(
@@ -75,6 +72,9 @@ func (vc *VersionChecker) versionCheckLoop(
 ) {
 	timer := time.NewTicker(VersionCheckInterval)
 	defer timer.Stop()
+	if ctx.Err() != nil {
+		return
+	}
 	vc.performVersionCheck(ctx)
 	for {
 		select {

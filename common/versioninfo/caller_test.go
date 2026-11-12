@@ -10,6 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/versioninfo"
 )
 
@@ -85,64 +89,70 @@ func TestPostInfo(t *testing.T) {
 	}
 }
 
-func TestCaller_Timeout(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond)
+func TestCallerTimeout(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
 	}))
-	defer ts.Close()
+	t.Cleanup(server.Close)
+	t.Cleanup(server.CloseClientConnections)
+	endpoint, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	caller := versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host, Timeout: 50 * time.Millisecond}
+	ctx := testcontext.For(t, testcontext.WithTimeout(5*time.Second))
+	_, err = caller.CallWithContext(ctx, validVersionCheckRequest())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NoError(t, ctx.Err(), "the HTTP client deadline must expire before the parent context")
+}
 
-	u, err := url.Parse(ts.URL)
-	if err != nil {
-		t.Fatalf("Parse URL failed: %s", err)
-	}
-	caller := &versioninfo.Caller{
-		Scheme:  u.Scheme,
-		Host:    u.Host,
-		Timeout: 50 * time.Millisecond,
-	}
-	_, err = caller.Call(&versioninfo.VersionCheckRequest{
-		Product:   "server",
-		Version:   "0.1",
-		ClusterID: "foo",
-		DB:        "cassandra",
-		OS:        "linux",
-		Arch:      "arm64",
-		Timestamp: time.Now().UnixNano(),
-	})
-	if err == nil {
-		t.Fatal("expected caller to time out, got nil error")
+func TestCallerCancellation(t *testing.T) {
+	t.Parallel()
+	for _, cancelBeforeRequest := range []bool{true, false} {
+		name := "in flight"
+		if cancelBeforeRequest {
+			name = "already canceled"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			started := make(chan struct{}, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				started <- struct{}{}
+				<-r.Context().Done()
+			}))
+			t.Cleanup(server.Close)
+			t.Cleanup(server.CloseClientConnections)
+			endpoint, err := url.Parse(server.URL)
+			require.NoError(t, err)
+			caller := versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host, Timeout: 10 * time.Second}
+			ctx, cancel := context.WithCancel(testcontext.For(t, testcontext.WithTimeout(5*time.Second)))
+			t.Cleanup(cancel)
+			if cancelBeforeRequest {
+				cancel()
+			}
+			result := make(chan error, 1)
+			go func() {
+				_, err := caller.CallWithContext(ctx, validVersionCheckRequest())
+				result <- err
+			}()
+			if !cancelBeforeRequest {
+				await.Rcv(t, started)
+				cancel()
+			}
+			require.ErrorIs(t, await.Rcv(t, result), context.Canceled)
+			if cancelBeforeRequest {
+				select {
+				case <-started:
+					t.Fatal("an already canceled request reached the server")
+				default:
+				}
+			}
+		})
 	}
 }
 
-func TestCaller_ContextCancellation(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond)
-	}))
-	defer ts.Close()
-
-	u, err := url.Parse(ts.URL)
-	if err != nil {
-		t.Fatalf("Parse URL failed: %s", err)
-	}
-	caller := &versioninfo.Caller{
-		Scheme:  u.Scheme,
-		Host:    u.Host,
-		Timeout: 1 * time.Second,
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
-
-	_, err = caller.CallWithContext(ctx, &versioninfo.VersionCheckRequest{
-		Product:   "server",
-		Version:   "0.1",
-		ClusterID: "foo",
-		DB:        "cassandra",
-		OS:        "linux",
-		Arch:      "arm64",
-		Timestamp: time.Now().UnixNano(),
-	})
-	if err == nil {
-		t.Fatal("expected caller to return error on cancelled context, got nil")
+func validVersionCheckRequest() *versioninfo.VersionCheckRequest {
+	return &versioninfo.VersionCheckRequest{
+		Product: "server", Version: "0.1", ClusterID: "cluster", DB: "cassandra",
+		OS: "linux", Arch: "arm64", Timestamp: 1,
 	}
 }
