@@ -1368,11 +1368,11 @@ var (
 
 	WorkflowHeartbeatNotificationBufferedInput = NewCounterDef(
 		"workflow_heartbeat_notification_buffered_input",
-		WithDescription("Events buffered while a workflow task is started that are eligible for a workflow task heartbeat notification."),
+		WithDescription("Events buffered during a started workflow task that could trigger a workflow-heartbeat notification."),
 	)
 	WorkflowHeartbeatNotificationEstimatedFirstBufferedInput = NewCounterDef(
 		"workflow_heartbeat_notification_estimated_first_buffered_input",
-		WithDescription("Eligible buffered events that are estimated to be the first eligible input buffered during the started workflow task."),
+		WithDescription("The first buffered event to initiate a workflow-heartbeat notification."),
 	)
 
 	// Matching
