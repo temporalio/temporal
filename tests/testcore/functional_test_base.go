@@ -385,7 +385,6 @@ func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persist
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
 func (s *functionalTestBase) SetupTest() {
-	// Test sharding is based on environment variables.
 	testshard.SkipUnlessInShard(s.T(), testshard.WithSalt(strings.TrimSpace(shardSalt)))
 	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
