@@ -1194,10 +1194,6 @@ var (
 		"replication_stream_implementation_selected",
 		WithDescription("The number of replication streams created, tagged by the implementation selected for each."),
 	)
-	ReplicationLaneFeedbackDropped = NewCounterDef(
-		"replication_lane_feedback_dropped",
-		WithDescription("The number of receiver lane feedback payloads omitted because their serialized size exceeds the configured byte limit."),
-	)
 	ReplicationLaneCreated = NewCounterDef(
 		"replication_lane_created",
 		WithDescription("The number of replication lanes created by lane stream senders."),
@@ -1221,6 +1217,10 @@ var (
 	ReplicationLaneTasksSkippedByDefault = NewCounterDef(
 		"replication_lane_tasks_skipped_by_default",
 		WithDescription("The number of HIGH priority replication tasks the default lane skipped because a replication lane owns them. Over time this should match replication_lane_tasks_sent, apart from re-sends after reconnects."),
+	)
+	ReplicationLaneFeedbackDropped = NewCounterDef(
+		"replication_lane_feedback_dropped",
+		WithDescription("The number of receiver lane feedback payloads omitted because their serialized size exceeds the configured byte limit."),
 	)
 	ReplicationStreamChannelFull = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend         = NewCounterDef("replication_tasks_send")

@@ -547,9 +547,8 @@ func (s *laneStreamSender) setRequestedLanes(requested map[string]struct{}) {
 	}
 }
 
-// laneShouldBeRateLimited reports whether a lane's sends go through its limiter. Lanes are
-// not rate limited while a namespace handover is in progress or once the policy no longer
-// requests them, so handovers can finish and withdrawn lanes can drain their finite prefix.
+// laneShouldBeRateLimited reports whether the policy still requests a lane and no namespace
+// handover requires its rate limit to be lifted. Withdrawn lanes drain without a rate limit.
 func (s *laneStreamSender) laneShouldBeRateLimited(logicalKey string) bool {
 	if s.handoverInProgress.Load() {
 		return false
@@ -789,16 +788,17 @@ func laneRetryDelay(retryAfter time.Duration) time.Duration {
 func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) error {
 	for {
 		changed := s.laneRegistry.Changed()
-		if !s.laneRegistry.Paused(logicalKey) {
-			break
+		if s.laneRegistry.Paused(logicalKey) {
+			select {
+			case <-changed:
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
-		select {
-		case <-changed:
-		case <-ctx.Done():
-			return ctx.Err()
+		if !s.laneShouldBeRateLimited(logicalKey) {
+			return nil
 		}
-	}
-	for s.laneShouldBeRateLimited(logicalKey) {
 		limiter := s.laneLimiter(logicalKey)
 		if limiter == nil {
 			return nil
@@ -818,10 +818,11 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
+		case <-changed:
+			timer.Stop()
 		case <-timer.C:
 		}
 	}
-	return nil
 }
 
 // recordLaneLag records how far each lane is behind, and reports lanes behind by more than
@@ -850,7 +851,7 @@ func (s *laneStreamSender) recordLaneLag() {
 			metrics.ReplicationLaneMaxLagExceeded.With(s.metrics).Record(1, metrics.ToClusterTag(s.clientClusterName), laneTag)
 			s.laneStateMu.Lock()
 			_, requested := s.requestedLanes[lane.logicalKey]
-			pacedAt, paced := s.lanePacedAt[lane.logicalKey]
+			refusedAt := s.laneRefusedAt[lane.logicalKey]
 			s.laneStateMu.Unlock()
 			s.shardContext.GetThrottledLogger().Warn("Replication lane is behind by more than ReplicationLaneMaxLag.",
 				tag.NewStringTag("lane", lane.logicalKey),
@@ -860,7 +861,7 @@ func (s *laneStreamSender) recordLaneLag() {
 				tag.NewInt64("lane-acked", lane.acked),
 				tag.NewInt64("source-high-watermark", sourceHighWatermark),
 				tag.NewBoolTag("lane-requested", requested),
-				tag.NewBoolTag("lane-paced", paced && now.Sub(pacedAt) < lanePacedWindow),
+				tag.NewTimeTag("lane-last-refused", refusedAt),
 				tag.NewBoolTag("lane-paused", lane.paused),
 				tag.NewBoolTag("lane-retiring", lane.retiring),
 				tag.NewBoolTag("handover-in-progress", s.handoverInProgress.Load()))

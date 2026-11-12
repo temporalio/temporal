@@ -3265,6 +3265,13 @@ the stream if a sender does. A lane counts until the sender sends its retirement
 default leaves room above the sender's default of 4 for a lane to be replaced while another
 retires. Changing it restarts lane stream receivers.`,
 	)
+	ReplicationLaneMaxLag = NewGlobalDurationSetting(
+		"history.ReplicationLaneMaxLag",
+		30*time.Minute,
+		`ReplicationLaneMaxLag is how far a replication lane may fall behind before the sender reports
+it with the replication_lane_max_lag_exceeded metric and a warning log. It does not change how the
+lane sends.`,
+	)
 	ReplicationStreamReceiverLaneFeedbackMaxBytes = NewGlobalIntSetting(
 		"history.ReplicationStreamReceiverLaneFeedbackMaxBytes",
 		4096,
@@ -3272,13 +3279,6 @@ retires. Changing it restarts lane stream receivers.`,
 on each lane stream receiver ack, including the Any type URL. Oversized feedback is omitted;
 watermarks and lane capabilities are still sent. Non-positive values disable lane feedback.
 Changes take effect on the next ack without restarting the stream.`,
-	)
-	ReplicationLaneMaxLag = NewGlobalDurationSetting(
-		"history.ReplicationLaneMaxLag",
-		30*time.Minute,
-		`ReplicationLaneMaxLag is how far a replication lane may fall behind before the sender reports
-it with the replication_lane_max_lag_exceeded metric and a warning log. It does not change how the
-lane sends.`,
 	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
