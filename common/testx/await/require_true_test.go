@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/testx/await"
 )
 
 // RequireTrue is a thin bool-predicate adapter over the same polling runner
