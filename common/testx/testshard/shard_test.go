@@ -1,6 +1,8 @@
 package testshard
 
 import (
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,30 +22,30 @@ func TestFromEnv(t *testing.T) {
 		{name: "one shard", total: "1", index: "0"},
 		{name: "first shard", total: "4", index: "0"},
 		{name: "last shard", total: "4", index: "3"},
-		{name: "malformed total", total: "four", index: "0", wantErr: "TEST_TOTAL_SHARDS"},
-		{name: "zero total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS"},
-		{name: "negative total", total: "-1", index: "0", wantErr: "TEST_TOTAL_SHARDS"},
-		{name: "malformed index", total: "4", index: "first", wantErr: "TEST_SHARD_INDEX"},
-		{name: "negative index", total: "4", index: "-1", wantErr: "TEST_SHARD_INDEX"},
-		{name: "index equal to total", total: "4", index: "4", wantErr: "TEST_SHARD_INDEX"},
+		{name: "malformed total", total: "four", index: "0", wantErr: `parsing TEST_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
+		{name: "zero total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
+		{name: "negative total", total: "-1", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: -1"},
+		{name: "malformed index", total: "4", index: "first", wantErr: `parsing TEST_SHARD_INDEX: strconv.Atoi: parsing "first": invalid syntax`},
+		{name: "negative index", total: "4", index: "-1", wantErr: "TEST_SHARD_INDEX out of bounds: -1 must be in [0, 4)"},
+		{name: "index equal to total", total: "4", index: "4", wantErr: "TEST_SHARD_INDEX out of bounds: 4 must be in [0, 4)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("TEST_TOTAL_SHARDS", tc.total)
 			t.Setenv("TEST_SHARD_INDEX", tc.index)
 			shard, err := FromEnv()
 			if tc.wantErr != "" {
-				require.ErrorContains(t, err, tc.wantErr)
+				require.EqualError(t, err, tc.wantErr)
 				return
 			}
 			require.NoError(t, err)
 			if tc.total == "" || tc.index == "" || tc.total == "1" {
-				require.True(t, shard.Contains("TestSuite/TestMethod"))
+				require.True(t, shard.ShouldRunTest("TestSuite/TestMethod"))
 			}
 		})
 	}
 }
 
-func TestContainsCompatibility(t *testing.T) {
+func TestShouldRunTestCompatibility(t *testing.T) {
 	t.Setenv("TEST_SHARD_SALT", "")
 	for _, tc := range []struct {
 		name    string
@@ -63,7 +65,7 @@ func TestContainsCompatibility(t *testing.T) {
 				t.Setenv("TEST_SHARD_INDEX", index)
 				shard, err := FromEnv(WithSalt(tc.salt))
 				require.NoError(t, err)
-				require.Equal(t, index == tc.owner, shard.Contains(tc.name))
+				require.Equal(t, index == tc.owner, shard.ShouldRunTest(tc.name))
 			}
 		})
 	}
@@ -82,5 +84,96 @@ func TestMaybeSkipInheritsSelection(t *testing.T) {
 		t.Cleanup(func() { require.False(t, t.Skipped(), "the first sharding decision must be retained") })
 		other.MaybeSkip(t)
 	})
-	require.False(t, other.Contains(t.Name()+"/suite"), "selection must be removed when its test finishes")
+	require.False(t, other.ShouldRunTest(t.Name()+"/suite"), "selection must be removed when its test finishes")
+}
+
+func TestFromEnvCustomVariables(t *testing.T) {
+	t.Setenv("TEST_TOTAL_SHARDS", "invalid")
+	t.Setenv("TEST_SHARD_INDEX", "invalid")
+	t.Setenv("TEST_SHARD_SALT", "ignored")
+	for _, tc := range []struct {
+		name    string
+		total   string
+		index   string
+		salt    string
+		wantErr string
+	}{
+		{name: "custom salt", total: "4", index: "1", salt: "-test-salt"},
+		{name: "default salt", total: "4", index: "2"},
+		{name: "missing total", index: "1"},
+		{name: "invalid total", total: "four", index: "0", wantErr: `parsing CI_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
+		{name: "zero total", total: "0", index: "0", wantErr: "CI_TOTAL_SHARDS must be positive: 0"},
+		{name: "invalid index", total: "4", index: "first", wantErr: `parsing CI_SHARD_INDEX: strconv.Atoi: parsing "first": invalid syntax`},
+		{name: "index out of bounds", total: "4", index: "4", wantErr: "CI_SHARD_INDEX out of bounds: 4 must be in [0, 4)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CI_TOTAL_SHARDS", tc.total)
+			t.Setenv("CI_SHARD_INDEX", tc.index)
+			t.Setenv("CI_SHARD_SALT", tc.salt)
+			shard, err := FromEnv(
+				WithSalt("-salt-2827"),
+				WithTotalShardsEnv("CI_TOTAL_SHARDS"),
+				WithShardIndexEnv("CI_SHARD_INDEX"),
+				WithSaltEnv("CI_SHARD_SALT"),
+			)
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, shard.ShouldRunTest("TestSuite/TestMethod"))
+		})
+	}
+}
+
+func TestMaybeSkipProcess(t *testing.T) {
+	if os.Getenv("TESTX_SKIP_PROCESS") == "" {
+		return
+	}
+	var options []Option
+	if salt := os.Getenv("TESTX_SKIP_SALT"); salt != "" {
+		options = append(options, WithSalt(salt))
+	}
+	MaybeSkip(t, options...)
+	t.Log("test body ran")
+}
+
+func TestMaybeSkip(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		total   string
+		index   string
+		salt    string
+		wantRun bool
+		wantErr string
+	}{
+		{name: "disabled", wantRun: true},
+		{name: "owns test", total: "4", index: "1", wantRun: true},
+		{name: "other shard", total: "4", index: "0"},
+		{name: "default salt", total: "4", index: "2", salt: "my-suite", wantRun: true},
+		{name: "misconfigured", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			executable, err := os.Executable()
+			require.NoError(t, err)
+			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestMaybeSkipProcess$", "-test.v")
+			cmd.Env = append(os.Environ(), "TESTX_SKIP_PROCESS=1", "TESTX_SKIP_SALT="+tc.salt,
+				"TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index, "TEST_SHARD_SALT=")
+			output, err := cmd.CombinedOutput()
+			if tc.wantErr != "" {
+				require.Error(t, err, "%s", output)
+				require.Contains(t, string(output), tc.wantErr)
+				require.NotContains(t, string(output), "panic:")
+				return
+			}
+			require.NoError(t, err, "%s", output)
+			if tc.wantRun {
+				require.Contains(t, string(output), "test body ran")
+			} else {
+				require.NotContains(t, string(output), "test body ran")
+			}
+		})
+	}
 }

@@ -270,7 +270,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 
 	ownsMethod := false
 	for _, method := range methods {
-		if shard.Contains(t.Name() + "/" + method.Name) {
+		if shard.ShouldRunTest(t.Name() + "/" + method.Name) {
 			ownsMethod = true
 			break
 		}

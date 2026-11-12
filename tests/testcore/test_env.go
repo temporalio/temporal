@@ -726,9 +726,7 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 // This distributes tests across multiple CI shards for parallel execution.
 func checkTestShard(t *testing.T) {
 	t.Helper()
-	shard, err := testshard.FromEnv(testshard.WithSalt(strings.TrimSpace(shardSalt)))
-	require.NoError(t, err)
-	shard.MaybeSkip(t)
+	testshard.MaybeSkip(t, testshard.WithSalt(strings.TrimSpace(shardSalt)))
 }
 
 type dedicatedClusterGuard struct {

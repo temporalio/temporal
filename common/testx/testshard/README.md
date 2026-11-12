@@ -4,9 +4,7 @@
 start of a test, before expensive setup:
 
 ```go
-shard, err := testshard.FromEnv()
-require.NoError(t, err)
-shard.MaybeSkip(t)
+testshard.MaybeSkip(t)
 ```
 
 Run each shard in a separate job, using the same total and a different index:
@@ -15,19 +13,33 @@ Run each shard in a separate job, using the same total and a different index:
 TEST_TOTAL_SHARDS=4 TEST_SHARD_INDEX=0 go test ./...
 ```
 
-This example needs four jobs with indices `0` through `3`. If either variable
-is empty, all tests run; invalid values return an error.
+Run indices `0` through `3` for this example. If either variable is empty, all
+tests run; invalid values fail the test. Selected tests and their nested
+subtests stay on the same shard.
 
-The salt defaults to empty. Supply a default with
-`testshard.FromEnv(testshard.WithSalt("my-suite"))`; a non-empty `TEST_SHARD_SALT`
-overrides it. All jobs must use the same salt.
+The salt defaults to empty. Pass `testshard.WithSalt("my-suite")` to `MaybeSkip`
+to supply a default; a non-empty `TEST_SHARD_SALT` overrides it. All jobs must
+use the same salt.
 
-Selected tests and their nested subtests stay on the same shard.
-
-`parallelsuite.Run` and `RunLegacySequential` use the environment automatically.
-To supply a shard explicitly:
+To read different environment variables:
 
 ```go
+testshard.MaybeSkip(t,
+    testshard.WithTotalShardsEnv("CI_TOTAL_SHARDS"),
+    testshard.WithShardIndexEnv("CI_SHARD_INDEX"),
+    testshard.WithSaltEnv("CI_SHARD_SALT"),
+)
+```
+
+For repeated checks, use `shard, err := testshard.FromEnv(options...)`, handle
+the error, then call `shard.MaybeSkip(t)`.
+
+`parallelsuite.Run` and `RunLegacySequential` use the environment automatically.
+To pass custom configuration:
+
+```go
+shard, err := testshard.FromEnv(testshard.WithSalt("my-suite"))
+require.NoError(t, err)
 parallelsuite.Run(t, &MySuite{}, parallelsuite.WithShard(shard))
 ```
 

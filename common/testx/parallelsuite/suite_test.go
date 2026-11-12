@@ -281,8 +281,8 @@ func TestRunSharding(t *testing.T) {
 		{name: "default salt", total: "4", index: "2", defaultSalt: "-test-salt", want: "TestA nested"},
 		{name: "legacy", total: "4", index: "1", legacy: true, want: "TestA nested"},
 		{name: "method filter", total: "4", index: "3", filter: "^TestB$", want: "TestB"},
-		{name: "invalid total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS"},
-		{name: "invalid index", total: "4", index: "4", wantErr: "TEST_SHARD_INDEX"},
+		{name: "invalid total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
+		{name: "invalid index", total: "4", index: "4", wantErr: "TEST_SHARD_INDEX out of bounds: 4 must be in [0, 4)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
