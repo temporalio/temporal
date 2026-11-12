@@ -538,7 +538,9 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
-	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, isRunning, scheduler.resolveOverlapPolicy)
+	// A selected start blocks overlapping work even before its RPC records a
+	// RunId. Its eventual result will release or reconsider deferred starts.
+	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, invoker.hasPendingOrRunningStart(), scheduler.resolveOverlapPolicy)
 
 	// ProcessBuffer will drop starts by omitting them from NewBuffer. Start with the
 	// diff between the input and NewBuffer, and add any executing starts.
