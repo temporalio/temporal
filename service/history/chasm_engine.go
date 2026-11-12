@@ -519,17 +519,17 @@ func (e *ChasmEngine) applyUpdateWithLease(
 
 	e.setContextMetadata(ctx, chasmTree)
 
-	policy := chasm.SpeculativeTransitionPolicy{Persist: true}
+	decision := chasm.TransitionDecision{PersistNow: true}
 	if transitionOptions.Speculative {
 		if err := chasmTree.ApplySpeculativeTransition(ctx); err != nil {
 			return nil, err
 		}
-		if policy, err = chasmTree.SpeculativeTransitionPolicy(ctx); err != nil {
+		if decision, err = chasmTree.SpeculativeTransitionDecision(ctx); err != nil {
 			return nil, err
 		}
 	}
 
-	if policy.Persist {
+	if decision.PersistNow {
 		if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext); err != nil {
 			return nil, err
 		}
@@ -538,7 +538,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		if err := mutableState.SetChasmSpeculativeTransitionPending(); err != nil {
 			return nil, err
 		}
-		if policy.Notify {
+		if decision.NotifyPollers {
 			workflowKey := mutableState.GetWorkflowKey()
 			e.NotifyExecution(chasm.ExecutionKey{
 				NamespaceID: workflowKey.NamespaceID,

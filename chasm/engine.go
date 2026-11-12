@@ -187,13 +187,16 @@ type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struc
 // WithSpeculative applies the transition to the memory only.
 //
 // A speculative transition is persisted when the next normal transition comes in. The caller must make that
-// a non speculative transition to persist. For example with a pure task that reschedules itself. Until then:
+// a non speculative transition to persist.
 //   - The transition is not durable. Cache eviction, a shard move, a host restart, or any error
 //     from a later transition on the execution drops it. Report normal rejections from the update
 //     function as output rather than as an error.
 //   - Reads and PollComponent waiters see the transition while the execution is cached, so a
 //     waiter can see state that is later lost.
 //   - Immediate pure tasks run. Other tasks added by the transition are created when it is persisted.
+//   - Replication ignores states
+//
+// TODO: Add option to support all task.
 func WithSpeculative() TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.Speculative = true
