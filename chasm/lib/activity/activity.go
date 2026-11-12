@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/retrypolicy"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -225,6 +226,24 @@ func NewEmbeddedActivity(
 	state *activitypb.ActivityState,
 	parent ActivityStore,
 ) {
+}
+
+// buildWorkerCommandTaskToken builds the serialized task token for a worker command.
+// The token must match what was sent to the worker in the poll response.
+func (a *Activity) buildWorkerCommandTaskToken(ctx chasm.Context, _ chasm.NoValue) ([]byte, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	key := ctx.ExecutionKey()
+
+	token := tasktoken.NewStandaloneActivityTaskToken(
+		key.NamespaceID,
+		key.BusinessID, // activityID
+		a.GetActivityType().GetName(),
+		attempt.GetCount(),
+		attempt.GetComponentRef(),
+		attempt.GetStartedStamp(),
+	)
+
+	return token.Marshal()
 }
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
@@ -483,6 +502,9 @@ func (a *Activity) Terminate(
 		return chasm.TerminateComponentResponse{}, a.errClosed()
 	}
 
+	// TODO: Send worker commands when an activity is terminated. See Validate in
+	// worker_command_task_handler.go for why this is not yet supported.
+
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)
 	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, terminateEvent{
 		request:        req,
@@ -500,6 +522,23 @@ func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activityp
 		a.LastHeartbeat = chasm.NewDataField(ctx, heartbeat)
 	}
 	return heartbeat
+}
+
+// addWorkerCommandDispatchTask schedules a side-effect task to dispatch a worker command via the
+// worker control queue. No-op if the worker doesn't support worker commands (i.e., has no
+// control queue).
+func (a *Activity) addWorkerCommandDispatchTask(ctx chasm.MutableContext, task *activitypb.WorkerCommandDispatchTask) {
+	controlQueue := a.LastAttempt.Get(ctx).GetWorkerControlTaskQueue()
+	if controlQueue == "" {
+		return
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			Destination: controlQueue,
+		},
+		task,
+	)
 }
 
 // lastHeartbeatDetails returns the details recorded by the most recent heartbeat, or nil if

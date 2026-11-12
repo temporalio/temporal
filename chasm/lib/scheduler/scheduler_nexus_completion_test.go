@@ -597,17 +597,25 @@ func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
-// A workflow with no result arrives as an empty (or nil) success payload; V1
-// leaves completion state untouched in that case.
-// TestHandleNexusCompletion_SuccessPayload covers both sides of the empty-payload
-// check: a value replaces the result and clears the failure, no value leaves both.
+// TestHandleNexusCompletion_SuccessPayload: any success clears the failure. A value,
+// including an explicit binary/null, replaces the result; a no-result workflow (empty
+// or nil payload) clears it, so the next run gets no last completion result.
 func TestHandleNexusCompletion_SuccessPayload(t *testing.T) {
 	empty := &schedulerpb.LastCompletionResult{}
 	previous := &schedulerpb.LastCompletionResult{
 		Success: &commonpb.Payload{Data: []byte("previous-result")},
 		Failure: &failurepb.Failure{Message: "previous failure"},
 	}
-	value := &commonpb.Payload{Metadata: map[string][]byte{"encoding": []byte("json/plain")}, Data: []byte(`"new"`)}
+	// Shaped like a codec-encrypted result: custom encoding plus extra metadata keys.
+	value := &commonpb.Payload{
+		Metadata: map[string][]byte{
+			"encoding":            []byte("binary/encrypted-payload-v2"),
+			"codec-key-id":        []byte("key-1"),
+			"codec-proxy-version": []byte("9b81b8d"),
+		},
+		Data: []byte("ciphertext"),
+	}
+	null := &commonpb.Payload{Metadata: map[string][]byte{"encoding": []byte("binary/null")}}
 	for _, tc := range []struct {
 		name    string
 		initial *schedulerpb.LastCompletionResult
@@ -616,8 +624,10 @@ func TestHandleNexusCompletion_SuccessPayload(t *testing.T) {
 	}{
 		{name: "empty payload, empty state", initial: empty, success: &commonpb.Payload{}, want: empty},
 		{name: "nil payload, empty state", initial: empty, success: nil, want: empty},
-		{name: "empty payload, previous state", initial: previous, success: &commonpb.Payload{}, want: previous},
-		{name: "nil payload, previous state", initial: previous, success: nil, want: previous},
+		{name: "binary/null, empty state", initial: empty, success: null, want: &schedulerpb.LastCompletionResult{Success: null}},
+		{name: "empty payload, previous state", initial: previous, success: &commonpb.Payload{}, want: empty},
+		{name: "nil payload, previous state", initial: previous, success: nil, want: empty},
+		{name: "binary/null, previous state", initial: previous, success: null, want: &schedulerpb.LastCompletionResult{Success: null}},
 		{name: "value, empty state", initial: empty, success: value, want: &schedulerpb.LastCompletionResult{Success: value}},
 		{name: "value, previous state", initial: previous, success: value, want: &schedulerpb.LastCompletionResult{Success: value}},
 	} {

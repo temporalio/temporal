@@ -5,6 +5,7 @@ package ndc
 import (
 	"context"
 
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
@@ -250,7 +251,15 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
 
 	ms := targetWorkflow.GetMutableState()
 
-	eventReapplyCandidates := ms.GetReapplyCandidateEvents()
+	// Skip reapplication when the run was sent by the workflow's active cluster: that cluster
+	// already has every event in the run, so reapplying would only send its own events back to it.
+	reapplyEvents := !r.isSentByActiveCluster(ctx, ms)
+
+	// Read the candidates before closing the transaction, which clears them.
+	var eventReapplyCandidates []*historypb.HistoryEvent
+	if reapplyEvents {
+		eventReapplyCandidates = ms.GetReapplyCandidateEvents()
+	}
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := ms.CloseTransactionAsSnapshot(
 		ctx,
 		targetWorkflowPolicy,
@@ -259,28 +268,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
 		return err
 	}
 
-	if len(targetWorkflowEventsSeq) != 0 {
-		if err := targetWorkflow.GetContext().ReapplyEvents(
-			ctx,
-			r.shardContext,
-			targetWorkflowEventsSeq,
-		); err != nil {
-			return err
-		}
-	} else if len(eventReapplyCandidates) != 0 {
-		eventsToApply := []*persistence.WorkflowEvents{
-			{
-				NamespaceID: ms.GetExecutionInfo().NamespaceId,
-				WorkflowID:  ms.GetExecutionInfo().WorkflowId,
-				RunID:       ms.GetExecutionState().RunId,
-				Events:      eventReapplyCandidates,
-			},
-		}
-		if err := targetWorkflow.GetContext().ReapplyEvents(
-			ctx,
-			r.shardContext,
-			eventsToApply,
-		); err != nil {
+	if reapplyEvents {
+		if err := r.reapplyTargetEvents(ctx, targetWorkflow, targetWorkflowEventsSeq, eventReapplyCandidates); err != nil {
 			return err
 		}
 	}
@@ -309,6 +298,56 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
 	default:
 		return err
 	}
+}
+
+// isSentByActiveCluster reports whether the replicated run was sent by the cluster that is active
+// for its workflow. It returns false when the source is unknown, which keeps reapplication.
+func (r *nDCTransactionMgrForNewWorkflowImpl) isSentByActiveCluster(
+	ctx context.Context,
+	ms historyi.MutableState,
+) bool {
+	sourceClusterName := replicationTaskInfoFromContext(ctx).sourceClusterName
+	if sourceClusterName == "" {
+		return false
+	}
+	executionInfo := ms.GetExecutionInfo()
+	namespaceEntry, err := r.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
+	if err != nil {
+		return false
+	}
+	return namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: executionInfo.GetWorkflowId()}) == sourceClusterName
+}
+
+func (r *nDCTransactionMgrForNewWorkflowImpl) reapplyTargetEvents(
+	ctx context.Context,
+	targetWorkflow Workflow,
+	targetWorkflowEventsSeq []*persistence.WorkflowEvents,
+	eventReapplyCandidates []*historypb.HistoryEvent,
+) error {
+	if len(targetWorkflowEventsSeq) != 0 {
+		return targetWorkflow.GetContext().ReapplyEvents(
+			ctx,
+			r.shardContext,
+			targetWorkflowEventsSeq,
+		)
+	}
+	if len(eventReapplyCandidates) == 0 {
+		return nil
+	}
+	ms := targetWorkflow.GetMutableState()
+	eventsToApply := []*persistence.WorkflowEvents{
+		{
+			NamespaceID: ms.GetExecutionInfo().NamespaceId,
+			WorkflowID:  ms.GetExecutionInfo().WorkflowId,
+			RunID:       ms.GetExecutionState().RunId,
+			Events:      eventReapplyCandidates,
+		},
+	}
+	return targetWorkflow.GetContext().ReapplyEvents(
+		ctx,
+		r.shardContext,
+		eventsToApply,
+	)
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(

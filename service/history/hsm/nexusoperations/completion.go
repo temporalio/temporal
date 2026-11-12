@@ -222,7 +222,13 @@ func (h *CompletionHandler) Handle(
 		}
 		// fabricatedStart means the executor never emitted schedule-to-start, so we emit it here.
 		emitScheduleToStart := fabricatedStart && operation.StartedTime != nil
-		emitMetrics = h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, env.Now())
+		metricCloseTime := env.Now()
+		if !fabricatedStart {
+			// Normal async starts are recorded in workflow time. Use the same clock frame for
+			// their completion metrics while leaving completion-before-start behavior unchanged.
+			metricCloseTime = node.WorkflowTime()
+		}
+		emitMetrics = h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, metricCloseTime)
 		return nil
 	})
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {

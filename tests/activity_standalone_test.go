@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
@@ -31,6 +33,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -46,6 +49,7 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -670,12 +674,19 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 					},
 					Links:             originalLinks,
 					OnConflictOptions: onConflictOpts,
+					PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
+						Endpoint:  "endpoint",
+						Service:   "service",
+						Operation: "operation",
+					},
 				}
+				metricCapture := env.StartNamespaceMetricCapture()
 
 				// First call attaches both values.
 				resp1, err := env.FrontendClient().StartActivityExecution(s.Context(), startReq)
 				require.NoError(t, err)
 				require.False(t, resp1.GetStarted())
+				require.Len(t, metricCapture.Metric(metrics.NexusActivityUseExisting.Name()), 1)
 
 				// A retry with the same request ID is ignored even if its payload changed.
 				startReq.CompletionCallbacks = []*commonpb.Callback{
@@ -685,6 +696,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				resp2, err := env.FrontendClient().StartActivityExecution(s.Context(), startReq)
 				require.NoError(t, err)
 				require.False(t, resp2.GetStarted())
+				require.Len(t, metricCapture.Metric(metrics.NexusActivityUseExisting.Name()), 1, "a retry must not count again")
 
 				descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 					Namespace:  env.Namespace().String(),
@@ -815,6 +827,52 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				require.Len(t, descResp.GetCallbacks(), 1)
 				require.Equal(t, callbackAddress, descResp.GetCallbacks()[0].GetInfo().GetCallback().GetNexus().GetUrl())
 				protorequire.ProtoSliceEqual(t, originalLinks, descResp.GetInfo().GetLinks())
+			})
+			t.Run("ConcurrentAttachesWithSameRequestIdAttachOnce", func(t *testing.T) {
+				activityID := testcore.RandomizeStr(t.Name())
+				taskQueue := testcore.RandomizeStr(t.Name())
+				startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+				requestID := env.Tv().Any().String()
+
+				const attempts = 2
+				var wg sync.WaitGroup
+				responses := make([]*workflowservice.StartActivityExecutionResponse, attempts)
+				errs := make([]error, attempts)
+				for i := range attempts {
+					wg.Go(func() {
+						responses[i], errs[i] = env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+							Namespace:           env.Namespace().String(),
+							ActivityId:          activityID,
+							ActivityType:        env.Tv().ActivityType(),
+							Identity:            env.Tv().WorkerIdentity(),
+							Input:               defaultInput,
+							TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+							StartToCloseTimeout: durationpb.New(time.Minute),
+							IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+							RequestId:           requestID,
+							CompletionCallbacks: []*commonpb.Callback{{
+								Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/concurrent-cb"}},
+							}},
+							Links:             []*commonpb.Link{workflowEventLink("concurrent")},
+							OnConflictOptions: onConflictOpts,
+						})
+					})
+				}
+				wg.Wait()
+
+				for i := range attempts {
+					require.NoError(t, errs[i])
+					require.False(t, responses[i].GetStarted())
+					require.Equal(t, startResp.GetRunId(), responses[i].GetRunId())
+				}
+				descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.GetRunId(),
+				})
+				require.NoError(t, err)
+				require.Len(t, descResp.GetCallbacks(), 1, "the same request ID must attach only once")
+				require.Len(t, descResp.GetInfo().GetLinks(), 1, "the same request ID must attach only once")
 			})
 		})
 
@@ -3359,6 +3417,59 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.ErrorAs(t, err, &notFoundErr)
 		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
 	})
+}
+
+// TestDispatchCancelCommandToWorker tests that when a standalone activity is cancelled,
+// the server dispatches a cancel command to the worker's control queue.
+func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
+	env := s.newTestEnv()
+	t := s.T()
+	ctx := s.Context()
+
+	env.GetTestCluster().OverrideDynamicConfig(
+		t, dynamicconfig.EnableCancelActivityWorkerCommand,
+		true,
+	)
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	tv := env.Tv()
+	controlQueueName := tv.ControlQueueName(env.Namespace().String())
+
+	startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	// Poll for the activity task with WorkerInstanceKey + WorkerControlTaskQueue so the server
+	// knows this worker supports worker commands.
+	activityPollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity:               tv.WorkerIdentity(),
+		WorkerInstanceKey:      tv.WorkerInstanceKey(),
+		WorkerControlTaskQueue: controlQueueName,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activityID, activityPollResp.GetActivityId())
+	require.NotEmpty(t, activityPollResp.TaskToken)
+
+	// Request cancellation of the standalone activity.
+	_, err = env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+		Identity:   "cancelling-client",
+		Reason:     "test cancel command dispatch",
+	})
+	require.NoError(t, err)
+
+	execReq := env.pollWorkerCommand(ctx, t, controlQueueName, tv.WorkerIdentity())
+	require.Len(t, execReq.Commands, 1, "expected exactly 1 command")
+	cancelCmd := execReq.Commands[0].GetCancelActivity()
+	require.NotNil(t, cancelCmd, "expected CancelActivity command")
+	require.Equal(t, activityPollResp.TaskToken, cancelCmd.TaskToken)
 }
 
 func (s *standaloneActivityTestSuite) TestTerminate() {
@@ -15502,4 +15613,57 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 	})
+}
+
+// pollWorkerCommand polls the worker control queue for a worker command and returns the parsed
+// ExecuteCommandsRequest. Fails the test if no command arrives within the timeout.
+func (env *standaloneActivityEnv) pollWorkerCommand(
+	ctx context.Context,
+	t *testing.T,
+	controlQueueName string,
+	workerIdentity string,
+) *workerservicepb.ExecuteCommandsRequest {
+	t.Helper()
+	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
+	await.RequireTrue(t, func() bool {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer pollCancel()
+		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: controlQueueName, Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS},
+			Identity:  workerIdentity,
+		})
+		if err == nil && resp != nil && resp.Request != nil {
+			nexusPollResp = resp
+			return true
+		}
+		return false
+	}, 30*time.Second, 200*time.Millisecond)
+
+	startOp := nexusPollResp.Request.GetStartOperation()
+	require.NotNil(t, startOp, "expected StartOperation in Nexus request")
+	require.Equal(t, "ExecuteCommands", startOp.Operation)
+	require.NotNil(t, startOp.Payload)
+
+	var executeReq workerservicepb.ExecuteCommandsRequest
+	require.NoError(t, proto.Unmarshal(startOp.Payload.Data, &executeReq))
+
+	// Complete the Nexus task so matching doesn't block waiting for a response.
+	_, err := env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  workerIdentity,
+		TaskToken: nexusPollResp.GetTaskToken(),
+		Response: &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+						SyncSuccess: &nexuspb.StartOperationResponse_Sync{},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	return &executeReq
 }
