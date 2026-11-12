@@ -131,15 +131,18 @@ type (
 		ioSemaphore locks.PrioritySemaphore
 
 		// state is protected by stateLock
-		stateLock  sync.Mutex
-		state      contextState
-		stopReason stopReason
+		stateLock          sync.Mutex
+		state              contextState
+		stopReason         stopReason
+		ownershipRevision  uint64
+		ownershipChangedAt time.Time
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                        sync.RWMutex
 		lastUpdated                   time.Time
 		tasksCompletedSinceLastUpdate int
 		shardInfo                     *persistencespb.ShardInfo
+		rangeAcquiredAt               time.Time
 
 		// All methods of the taskKeyManager, except the completionFn returned by
 		// setAndTrackTaskKeys, must be invoked within rwLock.
@@ -1310,6 +1313,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	)
 
 	s.shardInfo = trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(updatedShardInfo))
+	s.rangeAcquiredAt = time.Now()
 	s.taskKeyManager.setRangeID(s.shardInfo.RangeId)
 
 	return nil
@@ -1826,13 +1830,13 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	defer s.stateLock.Unlock()
 
 	setStateAcquiring := func() {
-		s.state = contextStateAcquiring
+		s.setOwnershipStateLocked(contextStateAcquiring)
 		s.contextTaggedLogger.Info("", tag.LifeCycleStarted, tag.ComponentShardContext)
 		go s.acquireShard()
 	}
 
 	setStateStopping := func(request contextRequestStop) {
-		s.state = contextStateStopping
+		s.setOwnershipStateLocked(contextStateStopping)
 		s.stopReason = request.reason
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext)
 		// Cancel lifecycle context as soon as we know we're shutting down
@@ -1844,7 +1848,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	}
 
 	setStateStopped := func() {
-		s.state = contextStateStopped
+		s.setOwnershipStateLocked(contextStateStopped)
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext)
 		// Do this again in case we skipped the stopping state, which could happen
 		// when calling CloseShardByID or the controller is shutting down.
@@ -1869,7 +1873,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		case contextRequestAcquire:
 			return nil // nothing to do, already acquiring
 		case contextRequestAcquired:
-			s.state = contextStateAcquired
+			s.setOwnershipStateLocked(contextStateAcquired)
 			if request.engine != nil {
 				// engineFuture.Set should only be called inside stateLock when state is
 				// Acquiring, so that other code (i.e. FinishStop) can know that after a state

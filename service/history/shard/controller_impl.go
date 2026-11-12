@@ -38,7 +38,9 @@ var (
 type (
 	ControllerImpl struct {
 		sync.RWMutex
-		historyShards map[int32]historyi.ControllableContext
+		historyShards      map[int32]historyi.ControllableContext
+		ownershipRevision  uint64
+		ownershipChangedAt time.Time
 
 		lingerState struct {
 			sync.Mutex
@@ -261,6 +263,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (historyi.Contro
 		return nil, err
 	}
 	c.historyShards[shardID] = shard
+	c.recordOwnershipChangeLocked()
 	metrics.ShardContextCreatedCounter.With(c.taggedMetricsHandler).Record(1)
 	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
 
@@ -285,6 +288,7 @@ func (c *ControllerImpl) removeShardLocked(shardID int32, expected historyi.Cont
 	}
 
 	delete(c.historyShards, shardID)
+	c.recordOwnershipChangeLocked()
 	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
 	metrics.ShardContextRemovedCounter.With(c.taggedMetricsHandler).Record(1)
 
