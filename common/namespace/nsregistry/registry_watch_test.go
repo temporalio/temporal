@@ -251,7 +251,7 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	s.expectWatchAndList(watchCh, ns1Record)
 
 	tracker := newCallbackTracker(4)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -370,7 +370,7 @@ func (s *registryWatchSuite) TestCallbackSeesUpdatedCache() {
 		deleted bool
 	}
 	observedCh := make(chan observed, 3)
-	s.registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), func(ns *namespace.Namespace, deletedFromDb bool) {
 		cached, err := s.registry.GetNamespaceByIDWithOptions(
 			ns.ID(),
 			namespace.GetNamespaceOptions{DisableReadthrough: true},
@@ -426,7 +426,7 @@ func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 	s.expectWatchAndList(watchCh, nsRecord)
 
 	tracker := newCallbackTracker(3)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -485,7 +485,7 @@ func (s *registryWatchSuite) TestWatchNamespaceRename() {
 	s.expectWatchAndList(watchCh, nsRecord)
 
 	tracker := newCallbackTracker(2)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -568,7 +568,7 @@ func (s *registryWatchSuite) TestWatchInitialRefreshPaginated() {
 	)
 
 	tracker := newCallbackTracker(2)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -642,7 +642,7 @@ func (s *registryWatchSuite) TestWatchInitialRefreshPaginationError() {
 	registry := s.newRegistry()
 
 	tracker := newCallbackTracker(1)
-	registry.RegisterStateChangeCallback("test", tracker.callback())
+	registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	registry.Start()
 	defer registry.Stop()
@@ -683,9 +683,9 @@ func (s *registryWatchSuite) TestWatchMultipleCallbacks() {
 	tracker2 := newCallbackTracker(2)
 	tracker3 := newCallbackTracker(2)
 
-	s.registry.RegisterStateChangeCallback("callback1", tracker1.callback())
-	s.registry.RegisterStateChangeCallback("callback2", tracker2.callback())
-	s.registry.RegisterStateChangeCallback("callback3", tracker3.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("callback1"), tracker1.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("callback2"), tracker2.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("callback3"), tracker3.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -742,7 +742,7 @@ func (s *registryWatchSuite) TestWatchUpdateWithoutStateChange() {
 	s.expectWatchAndList(watchCh, nsRecord)
 
 	tracker := newCallbackTracker(2)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -800,7 +800,7 @@ func (s *registryWatchSuite) TestWatchDeleteNonExistentNamespace() {
 	s.expectWatchAndList(watchCh, nsRecord)
 
 	tracker := newCallbackTracker(2)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -870,7 +870,7 @@ func (s *registryWatchSuite) TestWatchFallbackToPolling() {
 	registry := s.newRegistry()
 
 	tracker := newCallbackTracker(1)
-	registry.RegisterStateChangeCallback("test", tracker.callback())
+	registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	registry.Start()
 	defer registry.Stop()
@@ -901,11 +901,11 @@ func (s *registryWatchSuite) TestWatchUnregisterCallback() {
 	s.expectWatchAndList(watchCh, nsRecord)
 
 	tracker := newCallbackTracker(1)
-	s.registry.RegisterStateChangeCallback("test-callback", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test-callback"), tracker.callback())
 
 	// Register a second callback that stays active to use as a synchronization point.
 	syncTracker := newCallbackTracker(2)
-	s.registry.RegisterStateChangeCallback("sync-callback", syncTracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("sync-callback"), syncTracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -916,7 +916,7 @@ func (s *registryWatchSuite) TestWatchUnregisterCallback() {
 	s.Equal(int32(1), syncTracker.getCount())
 
 	// Unregister the first callback
-	s.registry.UnregisterStateChangeCallback("test-callback")
+	s.registry.UnregisterStateChangeCallback(callbackKey("test-callback"))
 
 	// Send create event
 	ns2ID := namespace.NewID()
@@ -978,7 +978,7 @@ func (s *registryWatchSuite) TestWatchChannelCloses() {
 	registry := s.newRegistry()
 
 	tracker := newCallbackTracker(2)
-	registry.RegisterStateChangeCallback("test", tracker.callback())
+	registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	registry.Start()
 	defer registry.Stop()
@@ -1055,7 +1055,7 @@ func (s *registryWatchSuite) TestWatchEventWithError() {
 	registry := s.newRegistry()
 
 	tracker := newCallbackTracker(2)
-	registry.RegisterStateChangeCallback("test", tracker.callback())
+	registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	registry.Start()
 	defer registry.Stop()
@@ -1101,7 +1101,7 @@ func (s *registryWatchSuite) TestWatchEmptyInitialRefresh() {
 	s.expectWatchAndList(watchCh)
 
 	tracker := newCallbackTracker(1)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -1142,7 +1142,7 @@ func (s *registryWatchSuite) TestWatchUpdateForUnknownNamespace() {
 	s.expectWatchAndList(watchCh)
 
 	tracker := newCallbackTracker(1)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -1185,7 +1185,7 @@ func (s *registryWatchSuite) TestWatchCreateForExistingNamespace() {
 	s.expectWatchAndList(watchCh, nsRecord)
 
 	tracker := newCallbackTracker(2)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -1260,7 +1260,7 @@ func (s *registryWatchSuite) TestWatchReconnectSucceedsAfterRetry() {
 	registry := s.newRegistry()
 
 	tracker := newCallbackTracker(2)
-	registry.RegisterStateChangeCallback("test", tracker.callback())
+	registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	registry.Start()
 	defer registry.Stop()
@@ -1336,7 +1336,7 @@ func (s *registryWatchSuite) TestWatchNamespaceDeletedDuringRefresh() {
 	registry := s.newRegistry()
 
 	tracker := newCallbackTracker(4)
-	registry.RegisterStateChangeCallback("test", tracker.callback())
+	registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	registry.Start()
 	defer registry.Stop()
@@ -1409,7 +1409,7 @@ func (s *registryWatchSuite) TestWatchStop() {
 	s.expectWatchAndList(watchCh, nsRecord)
 
 	tracker := newCallbackTracker(1)
-	s.registry.RegisterStateChangeCallback("test", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	s.registry.Start()
 
@@ -1440,7 +1440,7 @@ func (s *registryWatchSuite) TestWatchUnknownEventType() {
 	registry := s.newRegistry()
 
 	tracker := newCallbackTracker(2)
-	registry.RegisterStateChangeCallback("test", tracker.callback())
+	registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	registry.Start()
 	defer registry.Stop()
@@ -1484,7 +1484,7 @@ func (s *registryWatchSuite) TestWatchRegisterCallbackAfterStart() {
 
 	// Register a setup callback to detect when initial refresh completes.
 	setupTracker := newCallbackTracker(1)
-	s.registry.RegisterStateChangeCallback("setup-callback", setupTracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("setup-callback"), setupTracker.callback())
 
 	s.registry.Start()
 	defer s.registry.Stop()
@@ -1493,11 +1493,11 @@ func (s *registryWatchSuite) TestWatchRegisterCallbackAfterStart() {
 	s.waitForCallback(setupTracker.ch, "setup initial refresh")
 
 	// Unregister setup callback before registering late callback
-	s.registry.UnregisterStateChangeCallback("setup-callback")
+	s.registry.UnregisterStateChangeCallback(callbackKey("setup-callback"))
 
 	// Now register a callback after startup
 	tracker := newCallbackTracker(2)
-	s.registry.RegisterStateChangeCallback("late-callback", tracker.callback())
+	s.registry.RegisterStateChangeCallback(callbackKey("late-callback"), tracker.callback())
 
 	// Should receive catch-up callback for existing namespace
 	s.waitForCallback(tracker.ch, "catch-up callback")
@@ -1576,7 +1576,7 @@ func (s *registryWatchSuite) TestWatchProcessEventError() {
 	registry := s.newRegistryWithResolverFactory(customFactory)
 
 	tracker := newCallbackTracker(2)
-	registry.RegisterStateChangeCallback("test", tracker.callback())
+	registry.RegisterStateChangeCallback(callbackKey("test"), tracker.callback())
 
 	registry.Start()
 	defer registry.Stop()

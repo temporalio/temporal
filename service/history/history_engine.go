@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -369,6 +370,10 @@ func NewEngineWithShardContext(
 	)
 
 	return historyEngImpl
+}
+
+func (e *historyEngineImpl) String() string {
+	return fmt.Sprintf("%T(%p)", e, e)
 }
 
 // Start will spin up all the components needed to start serving this shard.
