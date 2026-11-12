@@ -42,7 +42,7 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 	// behaviour.
 	var ps *shardedParentState
 
-	if err := workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
+	err := workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
 		status := ForceReplicationStatus{
 			ContinuedAsNewCount:                params.ContinuedAsNewCount,
 			TotalWorkflowCount:                 params.TotalForceReplicateWorkflowCount,
@@ -63,7 +63,8 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 			}
 		}
 		return status, nil
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 
@@ -83,9 +84,10 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 		return err
 	}
 	var targetMd DescribeTargetClusterResponse
-	if err := workflow.ExecuteLocalActivity(localCtx, shardedDescribeTargetClusterActivityName, DescribeTargetClusterRequest{
+	err = workflow.ExecuteLocalActivity(localCtx, shardedDescribeTargetClusterActivityName, DescribeTargetClusterRequest{
 		TargetClusterName: params.TargetClusterName,
-	}).Get(ctx, &targetMd); err != nil {
+	}).Get(ctx, &targetMd)
+	if err != nil {
 		return err
 	}
 	applyShardedDefaults(&params, targetMd.ShardCount)
@@ -115,10 +117,11 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 
 	// Kick off the task-queue user data replication child (ABANDON policy).
 	if !params.TaskQueueUserDataReplicationStatus.Done {
-		if err := maybeKickoffShardedTaskQueueUserDataReplication(ctx, &params, func(failureReason string) {
+		err := maybeKickoffShardedTaskQueueUserDataReplication(ctx, &params, func(failureReason string) {
 			params.TaskQueueUserDataReplicationStatus.FailureMessage = failureReason
 			params.TaskQueueUserDataReplicationStatus.Done = true
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
 	}
@@ -199,14 +202,15 @@ func countShardedWorkflowsForReplication(ctx workflow.Context, namespace, query 
 		RetryPolicy:         forceReplicationActivityRetryPolicy,
 	}
 	var output countWorkflowResponse
-	if err := workflow.ExecuteActivity(
+	err := workflow.ExecuteActivity(
 		workflow.WithActivityOptions(ctx, ao),
 		shardedCountWorkflowActivityName,
 		&workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: namespace,
 			Query:     query,
 		},
-	).Get(ctx, &output); err != nil {
+	).Get(ctx, &output)
+	if err != nil {
 		return 0, err
 	}
 	return output.WorkflowCount, nil
@@ -656,12 +660,13 @@ func (ps *shardedParentState) onChildCompleted(ctx workflow.Context, runID strin
 // successor — and SignalExternalWorkflow has no transient failure modes — so it
 // is latched into childErr to fail the parent rather than hang.
 func (ps *shardedParentState) promoteSuccessor(ctx workflow.Context, successorExec workflow.Execution) {
-	if err := workflow.SignalExternalWorkflow(ctx,
+	err := workflow.SignalExternalWorkflow(ctx,
 		successorExec.ID,
 		successorExec.RunID,
 		shardedResumeFullSignalName,
 		struct{}{},
-	).Get(ctx, nil); err != nil {
+	).Get(ctx, nil)
+	if err != nil {
 		var gone *temporal.UnknownExternalWorkflowExecutionError
 		if !errors.As(err, &gone) && ps.childErr == nil {
 			ps.childErr = fmt.Errorf("resumeFullRate signal to successor %s: %w", successorExec.RunID, err)

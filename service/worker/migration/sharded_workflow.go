@@ -194,13 +194,14 @@ func (s *shardedWorkflowState) startBackgroundCoroutines(ctx workflow.Context, p
 			// (SignalExternalWorkflow has no transient failure modes). Latch it
 			// and stop: continuing would mean operating against a parent we can
 			// no longer reach, with unpredictable results.
-			if err := workflow.SignalExternalWorkflow(gCtx,
+			err := workflow.SignalExternalWorkflow(gCtx,
 				parentExec.ID, parentExec.RunID,
 				shardedProgressSignalName,
 				shardedProgressPayload{
 					ChildRunID:    workflow.GetInfo(gCtx).WorkflowExecution.RunID,
 					VerifiedCount: s.verifiedCount,
-				}).Get(gCtx, nil); err != nil {
+				}).Get(gCtx, nil)
+			if err != nil {
 				s.setLastErr(fmt.Errorf("progress signal to parent: %w", err))
 				return
 			}
@@ -289,9 +290,10 @@ func (s *shardedWorkflowState) checkpointAtBoundary(ctx workflow.Context, parent
 	// Batches packed before handover may hold the full per-shard allowance.
 	// Drain them before starting a half-rate successor so the two children
 	// cannot exceed MaxExecsPerShard in aggregate on the same target shard.
-	if err := workflow.Await(ctx, func() bool {
+	err := workflow.Await(ctx, func() bool {
 		return s.batches.count() == 0 || s.lastErr != nil
-	}); err != nil {
+	})
+	if err != nil {
 		s.setLastErr(err)
 		return
 	}
@@ -301,13 +303,14 @@ func (s *shardedWorkflowState) checkpointAtBoundary(ctx workflow.Context, parent
 	if parentExec == nil {
 		return
 	}
-	if err := workflow.SignalExternalWorkflow(ctx,
+	err = workflow.SignalExternalWorkflow(ctx,
 		parentExec.ID, parentExec.RunID,
 		shardedCheckpointSignalName,
 		shardedCheckpointPayload{
 			ChildRunID:    workflow.GetInfo(ctx).WorkflowExecution.RunID,
 			NextPageToken: pageToken,
-		}).Get(ctx, nil); err != nil {
+		}).Get(ctx, nil)
+	if err != nil {
 		s.setLastErr(fmt.Errorf("checkpoint signal to parent: %w", err))
 	}
 }
@@ -413,9 +416,10 @@ func (s *shardedWorkflowState) dispatchSlotAvailable() bool {
 
 // waitForDispatchSlot blocks until a dispatch slot frees up or lastErr trips.
 func (s *shardedWorkflowState) waitForDispatchSlot(ctx workflow.Context) {
-	if err := workflow.Await(ctx, func() bool {
+	err := workflow.Await(ctx, func() bool {
 		return s.lastErr != nil || s.batches.count() < s.params.ConcurrentBatchCount
-	}); err != nil {
+	})
+	if err != nil {
 		s.setLastErr(err)
 	}
 }

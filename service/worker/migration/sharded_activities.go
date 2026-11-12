@@ -143,8 +143,9 @@ func (a *shardedActivities) runVerifyPhase(
 
 		activity.RecordHeartbeat(ctx, verifyHeartbeat(execs, verified, shards))
 
-		if done, result, err := a.evaluateVerifyIteration(
-			ctx, req, execs, verified, shards, doneCount, execCount); err != nil {
+		done, result, err := a.evaluateVerifyIteration(
+			ctx, req, execs, verified, shards, doneCount, execCount)
+		if err != nil {
 			return replicateBatchResult{}, err
 		} else if done {
 			return result, nil
