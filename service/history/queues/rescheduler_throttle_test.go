@@ -7,11 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -436,4 +438,50 @@ func TestReschedule_UnnamedPriorityStillDrains(t *testing.T) {
 	r.reschedule()
 
 	require.Zero(t, r.Len(), "a priority outside PriorityOrder must still be drained")
+}
+
+func TestOutboundCallerRPSBudgetScope(t *testing.T) {
+	t.Parallel()
+	options := defaultThrottleOverrides()
+	options.initialRate = 1
+	state, timeSource := newTestThrottleState(options)
+	scheduler := NewMockScheduler(gomock.NewController(t))
+	scheduler.EXPECT().TaskChannelKeyFn().Return(outboundTestChannel)
+	rescheduler := NewRescheduler(scheduler, timeSource, log.NewTestLogger(), metrics.NoopMetricsHandler, state)
+	for _, identity := range []struct{ source, destination, group string }{
+		{"caller", "endpoint", "nexusoperations.Invocation"},
+		{"caller", "endpoint", "nexusoperations.Cancelation"},
+		{"caller", "endpoint", "nexus"},
+		{"caller", "other-endpoint", "nexusoperations.Invocation"},
+		{"other-caller", "endpoint", "nexusoperations.Invocation"},
+	} {
+		executable, _ := newOutboundTestExecutable(t, timeSource, identity.source, identity.destination, identity.group)
+		executable.throttleState = state
+		if identity.group == "nexus" {
+			task := &tasks.ChasmTask{
+				WorkflowKey: definition.NewWorkflowKey(identity.source, "workflow", "run"),
+				Category:    tasks.CategoryOutbound,
+				Destination: identity.destination,
+			}
+			task.SetOutboundTaskGroup(identity.group)
+			executable.Task = task
+		}
+		executable.reportThrottle(enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE)
+		rescheduler.Add(executable, timeSource.Now(), executable.throttleKey)
+		if identity.source != "caller" || identity.destination != "endpoint" {
+			scheduler.EXPECT().TrySubmit(executable).Return(true)
+		}
+	}
+	require.True(t, admitOK(state, ThrottleKey{
+		Cause:         enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+		NamespaceName: "caller-name", Destination: "endpoint",
+	}))
+	rescheduler.reschedule()
+	require.Equal(t, 3, rescheduler.Len())
+	for remaining := 2; remaining >= 0; remaining-- {
+		timeSource.Advance(time.Second)
+		scheduler.EXPECT().TrySubmit(gomock.Any()).Return(true)
+		rescheduler.reschedule()
+		require.Equal(t, remaining, rescheduler.Len())
+	}
 }

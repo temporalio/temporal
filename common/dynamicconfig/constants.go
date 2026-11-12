@@ -1491,6 +1491,19 @@ backlog lag, count, and age for VERSIONED queues.`,
 		`MatchingAlignMembershipChange is a duration to align matching's membership changes to.
 This can help reduce effects of task queue movement.`,
 	)
+	MatchingGradualMembershipChange = NewGlobalDurationSetting(
+		"matching.gradualMembershipChange",
+		0*time.Second,
+		`MatchingGradualMembershipChange is the duration over which task queue partitions are
+moved due to a membership change. Requires matching.alignMembershipChange, which must be under
+about 12 seconds: a change scheduled 15 seconds or more ahead happens immediately, with no window.
+All of the cluster must be running a version that understands gradual membership changes before
+this is enabled, and it must be disabled before downgrading to a version that doesn't. Capped at
+4 minutes.
+Note: This extends the time for matching nodes to shut down by up to this duration, so the
+termination grace period in your deployment configuration must cover it.
+`,
+	)
 	MatchingShutdownDrainDuration = NewGlobalDurationSetting(
 		"matching.shutdownDrainDuration",
 		0*time.Second,
@@ -1645,7 +1658,7 @@ will be issued.`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
 		"matching.pollerScalingWaitTime",
-		1*time.Second,
+		5*time.Second,
 		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
 a decision to scale down the number of pollers will be issued`,
 	)
@@ -1657,21 +1670,21 @@ second per poller by one physical queue manager`,
 	)
 	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
 		"matching.pollerScalingTaskAddToDispatchRatio",
-		1.2,
+		1.05,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
 dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
 is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
-		false,
+		true,
 		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
-metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
-scoped by namespace and/or task queue.`,
+metric describing why pollers are scaled up, down, or held for a physical task queue. Enabled by default; can be
+disabled or scoped by namespace and/or task queue.`,
 	)
 	MatchingUseSignalsV2ForPollerScaling = NewTaskQueueBoolSetting(
 		"matching.useSignalsV2ForPollerScaling",
-		false,
+		true,
 		`MatchingUseSignalsV2ForPollerScaling, when enabled, uses v2 scaling signals for poller autoscaling:
 (1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
 (2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
@@ -2237,10 +2250,18 @@ The actual count is calculated as base * (multiplier ^ level)`,
 	TaskThrottleController = NewGlobalTypedSetting(
 		"history.taskThrottleController",
 		DefaultTaskThrottleControllerSettings,
-		`TaskThrottleController tunes host level pacing of history task retries that a namespace
-APS or persistence rate limiter refused. Unset fields keep their defaults.
+		`TaskThrottleController tunes host level pacing of history task retries refused by namespace
+APS, persistence, or remote Nexus caller RPS limits. Outbound caller RPS retries also require
+history.enableOutboundTaskThrottleController. Unset fields keep their defaults.
 Fields: Enabled, MinRate, MaxRate, InitialRate, KeyTTL, Beta, IncreaseRatio, LossThreshold,
 Window, MaxKeys. See TaskThrottleControllerSettings comments for details.`,
+	)
+
+	EnableOutboundTaskThrottleController = NewGlobalBoolSetting(
+		"history.enableOutboundTaskThrottleController",
+		false,
+		`EnableOutboundTaskThrottleController retries namespace-scoped Nexus caller RPS rejections in memory
+through the shared TaskThrottleController. Both this flag and TaskThrottleController.Enabled must be true.`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(

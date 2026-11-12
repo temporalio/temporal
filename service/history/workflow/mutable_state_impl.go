@@ -174,8 +174,13 @@ type (
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
 		// Running total of RetryLastFailure.Size() over pendingActivityInfoIDs.
-		activityFailureSize int
-		chasmNodeSizes      map[string]int // chasm node path -> key + node size in bytes
+		activityFailureSize   int
+		chasmNodeSizes        map[string]int // chasm node path -> key + node size in bytes
+		sizeAtLastTransaction int64
+		// Kept in memory, not derived from LastUpdateTime: on a passive cluster syncExecutionInfo overwrites
+		// LastUpdateTime with the source cluster's value, and LastUpdateTime includes skipped time, which a
+		// fast-forward can change within a transaction.
+		lastTransactionTime time.Time
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -605,6 +610,12 @@ func NewMutableStateFromDB(
 	if mutableState.executionInfo.GetTimeSkippingInfo() != nil {
 		mutableState.wrapTimeSourceWithTimeSkipping()
 	}
+
+	// The persisted LastUpdateTime was written by this cluster's last closeTransaction, so it is a local baseline.
+	mutableState.sizeAtLastTransaction = int64(mutableState.GetApproximatePersistedSize())
+	if lastUpdateTime := mutableState.executionInfo.GetLastUpdateTime(); lastUpdateTime != nil {
+		mutableState.lastTransactionTime = mutableState.withoutSkippedDuration(lastUpdateTime.AsTime())
+	}
 	return mutableState, nil
 }
 
@@ -630,6 +641,9 @@ func NewSanitizedMutableState(
 	}
 
 	mutableState.currentVersion = lastWriteVersion
+	// LastUpdateTime came from the source cluster's clock. Start storage usage accounting on this
+	// cluster from the next transaction instead.
+	mutableState.lastTransactionTime = time.Time{}
 	return mutableState, nil
 }
 
@@ -1566,29 +1580,15 @@ func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *per
 	}
 }
 
-func (ms *MutableStateImpl) GetUpdateOutcome(
+func (ms *MutableStateImpl) GetCompletedUpdate(
 	ctx context.Context,
 	updateID string,
-) (*updatepb.Outcome, error) {
+) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
 	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
 	if err != nil {
 		return nil, err
 	}
-	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), nil
-}
-
-func (ms *MutableStateImpl) GetUpdateAcceptedEventID(
-	ctx context.Context,
-	updateID string,
-) (int64, error) {
-	if acceptance := ms.executionInfo.GetUpdateInfos()[updateID].GetAcceptance(); acceptance != nil {
-		return acceptance.GetEventId(), nil
-	}
-	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
-	if err != nil {
-		return 0, err
-	}
-	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetAcceptedEventId(), nil
+	return event.GetWorkflowExecutionUpdateCompletedEventAttributes(), nil
 }
 
 func (ms *MutableStateImpl) GetUpdateNexusSerializationContext(
@@ -7024,7 +7024,7 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	// check workflow rules
 	if !ai.Paused {
-		ActivityMatchWorkflowRules(ms, ms.timeSource, ms.logger, ai)
+		ActivityMatchWorkflowRules(ms, ms.shard.GetTimeSource(), ms.logger, ai)
 	}
 
 	// if activity is paused
@@ -7550,7 +7550,7 @@ func (ms *MutableStateImpl) AddTasks(
 		// vs. real distinction. The CategoryTypeScheduled drop-check above runs first so it
 		// compares virtual-vs-virtual (now is also virtual).
 		if category.Type() == tasks.CategoryTypeScheduled {
-			task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
+			task.SetVisibilityTime(ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(task.GetVisibilityTime()))
 		}
 
 		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
@@ -7583,7 +7583,7 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 func (ms *MutableStateImpl) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time) {
 	maxPhysicalScheduledTime := maxLogicalScheduledTime
 	if !maxLogicalScheduledTime.Equal(tasks.MaximumKey.FireTime) {
-		maxPhysicalScheduledTime = ms.ToRealTimeWithCurrentOffset(maxLogicalScheduledTime)
+		maxPhysicalScheduledTime = ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(maxLogicalScheduledTime)
 	}
 
 	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
@@ -7626,7 +7626,7 @@ func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 	// workflowTask.ScheduledTime / StartedTime, which come from the time-skipping wrapper).
 	// The in-memory scheduled queue dispatches against real wall-clock, so convert here —
 	// same boundary contract as AddTasks for persisted scheduled tasks.
-	task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
+	task.SetVisibilityTime(ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(task.GetVisibilityTime()))
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
@@ -8022,8 +8022,11 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	now := ms.Now()
+	ms.closeTransactionAccrueStorageUsage(ms.withoutSkippedDuration(now))
+
 	ms.executionInfo.StateTransitionCount += 1
-	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.timeSource.Now())
+	ms.executionInfo.LastUpdateTime = timestamppb.New(now)
 
 	// We generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -8045,6 +8048,54 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
+}
+
+func (ms *MutableStateImpl) closeTransactionAccrueStorageUsage(
+	now time.Time,
+) {
+	var delta storageUsageDelta
+	// stateInDB is updated in cleanupTransaction, so here it is still the state at the start of this interval.
+	if ms.stateInDB != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		delta = computeStorageUsageDelta(
+			ms.sizeAtLastTransaction,
+			ms.executionInfo.GetExecutionStats().GetHistorySize(),
+			ms.lastTransactionTime,
+			now,
+		)
+	}
+	if !delta.isZero() {
+		SetStorageUsage(ms.executionInfo, addStorageUsage(ms.executionInfo.GetExecutionStats().GetStorageUsage(), delta))
+	}
+	ms.sizeAtLastTransaction = int64(ms.GetApproximatePersistedSize())
+	ms.lastTransactionTime = now
+}
+
+// CurrentStorageUsage returns this cluster's storage usage as of now (wall clock): the stored counters plus the
+// interval held since this cluster's last closed transaction, which is not accrued yet. A closed
+// execution, or one with no local baseline yet, returns the stored counters. It does not modify the
+// mutable state.
+func (ms *MutableStateImpl) CurrentStorageUsage() *persistencespb.StorageUsage {
+	usage := common.CloneProto(ms.executionInfo.GetExecutionStats().GetStorageUsage())
+	if ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return usage
+	}
+	delta := computeStorageUsageDelta(
+		ms.sizeAtLastTransaction,
+		ms.executionInfo.GetExecutionStats().GetHistorySize(),
+		ms.lastTransactionTime,
+		ms.withoutSkippedDuration(ms.timeSource.Now()),
+	)
+	if delta.isZero() {
+		return usage
+	}
+	return addStorageUsage(usage, delta)
+}
+
+// withoutSkippedDuration converts a reading of ms.timeSource back to wall-clock time. With time
+// skipping, ms.timeSource adds the execution's skipped duration, and skipped time is not storage
+// usage.
+func (ms *MutableStateImpl) withoutSkippedDuration(t time.Time) time.Time {
+	return t.Add(-ms.accumulatedSkippedDuration())
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
@@ -10308,9 +10359,10 @@ func logError(
 	logger.Error(msg, tags...)
 }
 
-func (ms *MutableStateImpl) ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time {
-	if virtualTime.IsZero() {
-		return virtualTime
-	}
-	return virtualTime.Add(-ms.accumulatedSkippedDuration())
+func (ms *MutableStateImpl) ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time {
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime)
+}
+
+func (ms *MutableStateImpl) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time {
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime)
 }
