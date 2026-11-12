@@ -51,6 +51,8 @@ func NewVersionChecker(
 	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 	logger log.SnTaggedLogger,
 ) *VersionChecker {
+	// The caller info applies to the cluster metadata reads and writes that store the version info,
+	// so persistence rate limiting treats them as high-priority background system traffic.
 	ctx, cancel := context.WithCancel(headers.SetCallerInfo(context.Background(), headers.SystemBackgroundHighCallerInfo))
 	return &VersionChecker{
 		config:                 config,
@@ -93,19 +95,17 @@ func (vc *VersionChecker) versionCheckLoop(
 ) {
 	defer close(vc.doneChan)
 	startedAt := time.Now()
-	schedule := []time.Duration{
-		5 * time.Minute, 30 * time.Minute, time.Hour, 4 * time.Hour, VersionCheckInterval,
-	}
+	schedule := vc.config.ServerVersionCheckSchedule()
 	nextCheckAfter := schedule[0]
 	timer := time.NewTimer(nextCheckAfter)
 	defer timer.Stop()
-	vc.performVersionCheck(ctx, false)
+	vc.performVersionCheck(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			vc.performVersionCheck(ctx, true)
+			vc.performVersionCheck(ctx)
 			if len(schedule) > 1 {
 				schedule = schedule[1:]
 				nextCheckAfter = schedule[0]
@@ -119,29 +119,15 @@ func (vc *VersionChecker) versionCheckLoop(
 
 func (vc *VersionChecker) performVersionCheck(
 	ctx context.Context,
-	force bool,
 ) {
 	if ctx.Err() != nil || !vc.config.EnableServerVersionCheck() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, versionCheckTimeout)
 	defer cancel()
-	startTime := time.Now().UTC()
-	// Record latency before deferred cancellation changes ctx.Err().
-	defer func() {
-		if ctx.Err() != context.Canceled {
-			metrics.VersionCheckLatency.With(vc.metricsHandler).Record(time.Since(startTime))
-		}
-	}()
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
-		if ctx.Err() != context.Canceled {
-			metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
-		}
-		return
-	}
-
-	if !force && !isUpdateNeeded(metadata) {
+		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
 
@@ -150,12 +136,12 @@ func (vc *VersionChecker) performVersionCheck(
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
+	requestStart := time.Now()
 	resp, err := vc.getVersionInfo(ctx, req)
+	metrics.VersionCheckLatency.With(vc.metricsHandler).Record(time.Since(requestStart))
 	if err != nil {
-		if ctx.Err() != context.Canceled {
-			metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
-			metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
-		}
+		metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
+		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
 	vc.logVersionInfo(resp)
@@ -164,9 +150,7 @@ func (vc *VersionChecker) performVersionCheck(
 		return
 	}
 	if err != nil {
-		if ctx.Err() != context.Canceled {
-			metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
-		}
+		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
 	metrics.VersionCheckSuccessCount.With(vc.metricsHandler).Record(1)
@@ -215,20 +199,6 @@ func (vc *VersionChecker) logVersionInfo(resp *versioninfo.VersionCheckResponse)
 			vc.logger.Info(message, tags...)
 		}
 	}
-}
-
-func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
-	if metadata.VersionInfo == nil {
-		return true
-	}
-	// Check if the server version has changed since last version check.
-	// This ensures upgrade notifications are cleared after cluster upgrade.
-	if metadata.VersionInfo.Current == nil ||
-		metadata.VersionInfo.Current.Version != headers.ServerVersion {
-		return true
-	}
-	return metadata.VersionInfo.LastUpdateTime != nil &&
-		metadata.VersionInfo.LastUpdateTime.AsTime().Before(time.Now().Add(-time.Hour))
 }
 
 func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*versioninfo.VersionCheckRequest, error) {

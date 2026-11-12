@@ -36,7 +36,7 @@ func TestVersionCheckerSchedule(t *testing.T) {
 		name string
 		err  error
 	}{
-		{name: "fresh metadata"},
+		{name: "metadata read succeeds"},
 		{name: "metadata failure", err: errors.New("database unavailable")},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -53,26 +53,22 @@ func TestVersionCheckerSchedule(t *testing.T) {
 					func(context.Context) (*persistence.GetClusterMetadataResponse, error) {
 						checks = append(checks, time.Since(startedAt))
 						return &persistence.GetClusterMetadataResponse{
-							ClusterMetadata: &persistencespb.ClusterMetadata{
-								ClusterId: "test-cluster",
-								VersionInfo: &versionpb.VersionInfo{
-									Current:        &versionpb.ReleaseInfo{Version: headers.ServerVersion},
-									LastUpdateTime: timestamppb.Now(),
-								},
-							},
+							ClusterMetadata: &persistencespb.ClusterMetadata{ClusterId: "test-cluster"},
 						}, test.err
 					},
 				).Times(len(expected))
-				forcedRequests := 0
+				requests := 0
 				if test.err == nil {
-					forcedRequests = len(expected) - 1
+					requests = len(expected)
 				}
-				manager.EXPECT().GetName().Return("test-db").Times(forcedRequests)
+				manager.EXPECT().GetName().Return("test-db").Times(requests)
 				handler := metricstest.NewCaptureHandler()
 				capture := handler.StartCapture()
 				defer handler.StopCapture(capture)
-				checker := NewVersionChecker(&Config{EnableServerVersionCheck: dynamicconfig.GetBoolPropertyFn(true)},
-					handler, manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
+				checker := NewVersionChecker(&Config{
+					EnableServerVersionCheck:   dynamicconfig.GetBoolPropertyFn(true),
+					ServerVersionCheckSchedule: defaultVersionCheckSchedule(),
+				}, handler, manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
 				checker.versionInfoCaller = versioninfo.Caller{Scheme: "unsupported", Host: "version-info.invalid"}
 				defer checker.Stop()
 				checker.Start()
@@ -93,7 +89,7 @@ func TestVersionCheckerSchedule(t *testing.T) {
 				time.Sleep(48 * time.Hour) //nolint:forbidigo // Advances synctest's virtual clock.
 				synctest.Wait()
 				require.Equal(t, expected, checks)
-				require.Len(t, capture.Snapshot()[metrics.VersionCheckRequestFailedCount.Name()], forcedRequests)
+				require.Len(t, capture.Snapshot()[metrics.VersionCheckRequestFailedCount.Name()], requests)
 			})
 		})
 	}
@@ -127,8 +123,10 @@ func TestVersionCheckerTimeoutAllowsLaterChecks(t *testing.T) {
 		handler := metricstest.NewCaptureHandler()
 		capture := handler.StartCapture()
 		defer handler.StopCapture(capture)
-		checker := NewVersionChecker(&Config{EnableServerVersionCheck: dynamicconfig.GetBoolPropertyFn(true)},
-			handler, manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
+		checker := NewVersionChecker(&Config{
+			EnableServerVersionCheck:   dynamicconfig.GetBoolPropertyFn(true),
+			ServerVersionCheckSchedule: defaultVersionCheckSchedule(),
+		}, handler, manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
 		checker.versionInfoCaller = versioninfo.Caller{Scheme: "unsupported", Host: "version-info.invalid"}
 		defer checker.Stop()
 		checker.Start()
@@ -150,7 +148,7 @@ func TestVersionCheckerTimeoutAllowsLaterChecks(t *testing.T) {
 		deadline, ok = contexts[1].Deadline()
 		require.True(t, ok)
 		require.Equal(t, startedAt.Add(5*time.Minute+versionCheckTimeout), deadline)
-		require.Len(t, capture.Snapshot()[metrics.VersionCheckLatency.Name()], 2)
+		require.Len(t, capture.Snapshot()[metrics.VersionCheckLatency.Name()], 1)
 		require.Len(t, capture.Snapshot()[metrics.VersionCheckFailedCount.Name()], 2)
 		require.Len(t, capture.Snapshot()[metrics.VersionCheckRequestFailedCount.Name()], 1)
 	})
@@ -169,8 +167,10 @@ func TestVersionCheckerDynamicEnable(t *testing.T) {
 				return nil, errors.New("database unavailable")
 			},
 		).Times(2)
-		checker := NewVersionChecker(&Config{EnableServerVersionCheck: enabled.Load},
-			metrics.NoopMetricsHandler, manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
+		checker := NewVersionChecker(&Config{
+			EnableServerVersionCheck:   enabled.Load,
+			ServerVersionCheckSchedule: defaultVersionCheckSchedule(),
+		}, metrics.NoopMetricsHandler, manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
 		defer checker.Stop()
 		checker.Start()
 		synctest.Wait()
@@ -265,7 +265,7 @@ func TestVersionCheckerPerformVersionCheck(t *testing.T) {
 			}, handler, manager, recorder, logger)
 			checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
 			defer checker.Stop()
-			checker.performVersionCheck(t.Context(), false)
+			checker.performVersionCheck(t.Context())
 			checker.Stop()
 			require.EqualValues(t, 1, requests.Load())
 			request := await.Rcv(t, reported)
@@ -361,6 +361,7 @@ func TestVersionCheckerStopCancelsInFlightCheck(t *testing.T) {
 			checker := NewVersionChecker(&Config{
 				EnableServerVersionCheck:        dynamicconfig.GetBoolPropertyFn(true),
 				EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true),
+				ServerVersionCheckSchedule:      defaultVersionCheckSchedule(),
 			}, handler, manager, interceptor.NewSDKVersionInterceptor(), logger)
 			checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
 			defer checker.Stop()
@@ -382,9 +383,18 @@ func TestVersionCheckerStopCancelsInFlightCheck(t *testing.T) {
 				require.EqualValues(t, 1, requests.Load())
 			}
 			snapshot := capture.Snapshot()
-			require.Empty(t, snapshot[metrics.VersionCheckFailedCount.Name()])
-			require.Empty(t, snapshot[metrics.VersionCheckRequestFailedCount.Name()])
+			require.Len(t, snapshot[metrics.VersionCheckFailedCount.Name()], 1)
 			require.Empty(t, snapshot[metrics.VersionCheckSuccessCount.Name()])
+			if stage == "HTTP request" {
+				require.Len(t, snapshot[metrics.VersionCheckRequestFailedCount.Name()], 1)
+			} else {
+				require.Empty(t, snapshot[metrics.VersionCheckRequestFailedCount.Name()])
+			}
+			if stage == "metadata read" {
+				require.Empty(t, snapshot[metrics.VersionCheckLatency.Name()])
+			} else {
+				require.Len(t, snapshot[metrics.VersionCheckLatency.Name()], 1)
+			}
 		})
 	}
 }
@@ -419,7 +429,7 @@ func TestVersionCheckerSkipsAlreadyCanceledCheck(t *testing.T) {
 	defer checker.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	checker.performVersionCheck(ctx, true)
+	checker.performVersionCheck(ctx)
 	require.Zero(t, requests.Load())
 	snapshot := capture.Snapshot()
 	require.Empty(t, snapshot[metrics.VersionCheckLatency.Name()])
@@ -433,21 +443,18 @@ func TestVersionCheckerDisabledPeriodicCheck(t *testing.T) {
 	enabled.Store(true)
 	manager := persistence.NewMockClusterMetadataManager(gomock.NewController(t))
 	manager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: &persistencespb.ClusterMetadata{
-			VersionInfo: &versionpb.VersionInfo{
-				Current:        &versionpb.ReleaseInfo{Version: headers.ServerVersion},
-				LastUpdateTime: timestamppb.Now(),
-			},
-		},
+		ClusterMetadata: &persistencespb.ClusterMetadata{ClusterId: "test-cluster"},
 	}, nil)
+	manager.EXPECT().GetName().Return("test-db")
 	handler := metricstest.NewCaptureHandler()
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
 	checker := NewVersionChecker(&Config{EnableServerVersionCheck: enabled.Load, EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true)}, handler,
 		manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
-	checker.performVersionCheck(context.Background(), false)
+	checker.versionInfoCaller = versioninfo.Caller{Scheme: "unsupported", Host: "version-info.invalid"}
+	checker.performVersionCheck(context.Background())
 	enabled.Store(false)
-	checker.performVersionCheck(context.Background(), true)
+	checker.performVersionCheck(context.Background())
 	recordings := capture.Snapshot()[metrics.VersionCheckLatency.Name()]
 	require.Len(t, recordings, 1)
 }
@@ -500,7 +507,7 @@ func TestVersionCheckerSaveVersionInfo(t *testing.T) {
 				handler, manager, interceptor.NewSDKVersionInterceptor(), logger)
 			checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
 			defer checker.Stop()
-			checker.performVersionCheck(context.Background(), false)
+			checker.performVersionCheck(context.Background())
 			snapshot := capture.Snapshot()
 			require.Empty(t, snapshot[metrics.VersionCheckSuccessCount.Name()])
 			if test.err != nil {
@@ -635,95 +642,6 @@ func TestVersionCheckerLogAlerts(t *testing.T) {
 	}
 }
 
-func TestIsUpdateNeeded(t *testing.T) {
-	tests := []struct {
-		name     string
-		metadata *persistence.GetClusterMetadataResponse
-		want     bool
-	}{
-		{
-			name: "nil VersionInfo returns true",
-			metadata: &persistence.GetClusterMetadataResponse{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
-					VersionInfo: nil,
-				},
-			},
-			want: true,
-		},
-		{
-			name: "nil Current returns true",
-			metadata: &persistence.GetClusterMetadataResponse{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
-					VersionInfo: &versionpb.VersionInfo{
-						Current:        nil,
-						LastUpdateTime: timestamppb.New(time.Now()),
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "different server version returns true",
-			metadata: &persistence.GetClusterMetadataResponse{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
-					VersionInfo: &versionpb.VersionInfo{
-						Current: &versionpb.ReleaseInfo{
-							Version: "0.0.0-old-version",
-						},
-						LastUpdateTime: timestamppb.New(time.Now()),
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "same version with recent LastUpdateTime returns false",
-			metadata: &persistence.GetClusterMetadataResponse{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
-					VersionInfo: &versionpb.VersionInfo{
-						Current: &versionpb.ReleaseInfo{
-							Version: headers.ServerVersion,
-						},
-						LastUpdateTime: timestamppb.New(time.Now()),
-					},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "same version with old LastUpdateTime returns true",
-			metadata: &persistence.GetClusterMetadataResponse{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
-					VersionInfo: &versionpb.VersionInfo{
-						Current: &versionpb.ReleaseInfo{
-							Version: headers.ServerVersion,
-						},
-						LastUpdateTime: timestamppb.New(time.Now().Add(-2 * time.Hour)),
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "same version with nil LastUpdateTime returns false",
-			metadata: &persistence.GetClusterMetadataResponse{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
-					VersionInfo: &versionpb.VersionInfo{
-						Current: &versionpb.ReleaseInfo{
-							Version: headers.ServerVersion,
-						},
-						LastUpdateTime: nil,
-					},
-				},
-			},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isUpdateNeeded(tt.metadata)
-			require.Equal(t, tt.want, got)
-		})
-	}
+func defaultVersionCheckSchedule() dynamicconfig.TypedPropertyFn[[]time.Duration] {
+	return dynamicconfig.ServerVersionCheckSchedule.Get(dynamicconfig.NewNoopCollection())
 }
