@@ -487,7 +487,8 @@ func (e *ChasmEngine) startNewForClosedExecution(
 }
 
 // applyUpdateWithLease applies an update function to a component within a held lease,
-// persists the changes, and returns the serialized component reference.
+// persists the changes, and returns the serialized component reference. If enabled, an update
+// without durable changes isn't persisted.
 func (e *ChasmEngine) applyUpdateWithLease(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -536,8 +537,16 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	}
 
 	if decision.PersistNow {
-		if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext); err != nil {
-			return nil, err
+		skipped := false
+		if e.config.EnableCHASMSkipCleanUpdates(mutableState.GetNamespaceEntry().Name().String()) {
+			if skipped, err = mutableState.CloseTransactionIfClean(); err != nil {
+				return nil, err
+			}
+		}
+		if !skipped {
+			if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		// The transition stays in the cached mutable state until the next normal transaction closes.

@@ -18,6 +18,7 @@ var _ ChasmTree = (*chasm.Node)(nil)
 // when chasm/tree.go implementation completes.
 type ChasmTree interface {
 	CloseTransaction(ctx context.Context, isActive bool) (chasm.NodesMutation, error)
+	CloseTransactionIfClean() (bool, error)
 	Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot
 	PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmLocalState)
 	ApplySystemMutation(chasm.NodesMutation) error

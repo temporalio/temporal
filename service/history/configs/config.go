@@ -80,6 +80,7 @@ type Config struct {
 	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSkipCleanUpdates                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -562,6 +563,7 @@ func NewConfig(
 		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSkipPersistence:                 dynamicconfig.EnableCHASMSkipPersistence.Get(dc),
+		EnableCHASMSkipCleanUpdates:                dynamicconfig.EnableCHASMSkipCleanUpdates.Get(dc),
 		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: nexusoperation.ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		ChasmMaxInMemoryPureTasks:                  dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),

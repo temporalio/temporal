@@ -6280,6 +6280,82 @@ func (s *nodeSuite) TestApplyMutation_ReplacesEphemeralNode() {
 	s.Equal("ephemeral-other", subComponents["other"].Get(readCtx).SubComponent1Data.GetRunId())
 }
 
+func (s *nodeSuite) TestCloseTransactionIfClean() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+
+	update := func(fn func(MutableContext, *TestComponent)) (bool, error) {
+		ctx := NewMutableContext(context.Background(), root)
+		c, err := root.Component(ctx, ComponentRef{})
+		s.NoError(err)
+		fn(ctx, c.(*TestComponent))
+		s.True(root.IsDirty())
+		return root.CloseTransactionIfClean()
+	}
+
+	// Loading a component for update without changing it.
+	clean, err := update(func(MutableContext, *TestComponent) {})
+	s.NoError(err)
+	s.True(clean)
+	s.False(root.IsDirty())
+
+	// Adding and updating an ephemeral component.
+	clean, err = update(func(ctx MutableContext, tc *TestComponent) {
+		tc.SubComponents = Map[string, *TestSubComponent1]{
+			"ephemeral": NewComponentField(ctx, &TestSubComponent1{
+				SubComponent1Data: &protoMessageType{RunId: "ephemeral"},
+			}, ComponentFieldEphemeral()),
+		}
+	})
+	s.NoError(err)
+	s.True(clean)
+	s.False(root.IsDirty())
+	clean, err = update(func(ctx MutableContext, tc *TestComponent) {
+		tc.SubComponents["ephemeral"].Get(ctx).SubComponent1Data.RunId = "ephemeral-updated"
+	})
+	s.NoError(err)
+	s.True(clean)
+	readCtx := NewContext(context.Background(), root)
+	c, err := root.Component(readCtx, ComponentRef{})
+	s.NoError(err)
+	s.Equal("ephemeral-updated", c.(*TestComponent).SubComponents["ephemeral"].Get(readCtx).SubComponent1Data.GetRunId())
+
+	// Durable changes and tasks leave the transaction open for CloseTransaction.
+	clean, err = update(func(_ MutableContext, tc *TestComponent) {
+		tc.ComponentData.RunId = "durable-change"
+	})
+	s.NoError(err)
+	s.False(clean)
+	s.True(root.IsDirty())
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Equal([]string{""}, slices.Collect(maps.Keys(mutation.UpdatedNodes)))
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 3 }
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().Validate(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(true, nil).AnyTimes()
+	clean, err = update(func(ctx MutableContext, tc *TestComponent) {
+		ctx.AddTask(tc, TaskAttributes{}, &TestSideEffectTask{Data: []byte("task")})
+	})
+	s.NoError(err)
+	s.False(clean)
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	// Removing the ephemeral component.
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 4 }
+	clean, err = update(func(_ MutableContext, tc *TestComponent) {
+		tc.SubComponents = nil
+	})
+	s.NoError(err)
+	s.True(clean)
+	_, ok := root.findNode([]string{"SubComponents"})
+	s.False(ok)
+}
+
 func (s *nodeSuite) assertNoSubComponentsPaths(nodes any) {
 	var paths []string
 	switch nodes := nodes.(type) {

@@ -7721,6 +7721,11 @@ func (ms *MutableStateImpl) ValidateChasmSpeculativeTransition() error {
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and
 // mutable state should move to a new versioned transition.
 func (ms *MutableStateImpl) isStateDirty() bool {
+	return ms.isNonChasmStateDirty() || ms.chasmTree.IsStateDirty()
+}
+
+// isNonChasmStateDirty is isStateDirty excluding the CHASM tree.
+func (ms *MutableStateImpl) isNonChasmStateDirty() bool {
 	// TODO: we need to track more workflow state changes
 	// e.g. changes to executionInfo.CancelRequested
 	// They are mostly covered by history builder check today.
@@ -7742,7 +7747,6 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsStateDirty() ||
 		ms.isResetStateUpdated ||
 		ms.timeSkippingInfoUpdated
 }
@@ -7782,6 +7786,13 @@ func (ms *MutableStateImpl) StartTransaction(
 	}
 
 	return flushBeforeReady, nil
+}
+
+func (ms *MutableStateImpl) CloseTransactionIfClean() (bool, error) {
+	if ms.IsWorkflow() || len(ms.InsertTasks) > 0 || ms.isNonChasmStateDirty() {
+		return false, nil
+	}
+	return ms.chasmTree.CloseTransactionIfClean()
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsMutation(

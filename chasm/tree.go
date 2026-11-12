@@ -2020,6 +2020,116 @@ func (n *Node) speculativeTransitionClosesExecution(ctx context.Context) (bool, 
 	return rootComponent.LifecycleState(immutableContext).IsClosed(), nil
 }
 
+// CloseTransactionIfClean closes the transaction without producing a mutation if it made no durable change, e.g.
+// because it only read components or only changed ephemeral components. It returns false, leaving the transaction
+// open, if anything has to be persisted, in which case the caller must close the transaction with CloseTransaction.
+// This method should only be invoked on the root node.
+func (n *Node) CloseTransactionIfClean() (bool, error) {
+	if len(n.newTasks) > 0 ||
+		len(n.immediatePureTasks) > 0 ||
+		len(n.pendingRequestLinks) > 0 ||
+		len(n.pendingUserMetadata) > 0 ||
+		n.needsPointerResolution ||
+		n.totalTimeSkippedUpdatedInPassive ||
+		n.backend.GetExecutionInfo().GetTimeSkippingInfo().GetConfig().GetEnabled() {
+		return false, nil
+	}
+
+	// Syncing the structure is repeatable, so CloseTransaction can still be called if the transaction isn't clean.
+	if err := n.syncSubComponents(); err != nil {
+		return false, err
+	}
+	if n.needsPointerResolution ||
+		len(n.mutation.DeletedNodes) > 0 ||
+		len(n.systemMutation.UpdatedNodes) > 0 ||
+		len(n.systemMutation.DeletedNodes) > 0 {
+		return false, nil
+	}
+
+	var cleanNodes []*Node
+	for _, node := range n.andAllChildren() {
+		if node.terminated {
+			return false, nil
+		}
+		if node.valueState < valueStateNeedSerialize {
+			continue
+		}
+		if node.shouldPersist() {
+			unchanged, err := node.serializedValueUnchanged()
+			if err != nil || !unchanged {
+				return false, err
+			}
+		}
+		cleanNodes = append(cleanNodes, node)
+	}
+
+	for _, node := range cleanNodes {
+		// Not using setValueState, which marks the subtree dirty.
+		node.valueState = valueStateSynced
+	}
+	n.cleanupTransaction()
+	return true, nil
+}
+
+// serializedValueUnchanged reports whether serializing the node's value would leave its persisted form unchanged.
+// It doesn't modify the node.
+func (n *Node) serializedValueUnchanged() (bool, error) {
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+		// The node was never persisted.
+		return false, nil
+	}
+	switch attributes := n.serializedNode.GetMetadata().GetAttributes().(type) {
+	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
+		for field := range n.valueFields() {
+			if field.err != nil {
+				return false, field.err
+			}
+			if field.kind != fieldKindData {
+				continue
+			}
+			var value proto.Message
+			if !field.val.IsNil() {
+				var ok bool
+				if value, ok = field.val.Interface().(proto.Message); !ok {
+					return false, serviceerror.NewInternal("only support proto.Message as chasm data")
+				}
+			}
+			return n.serializedDataEquals(value)
+		}
+		return n.serializedNode.GetData() == nil, nil
+	case *persistencespb.ChasmNodeMetadata_DataAttributes:
+		protoValue, ok := n.value.(proto.Message)
+		if !ok {
+			return false, serviceerror.NewInternal("only support proto.Message as chasm data")
+		}
+		return n.serializedDataEquals(protoValue)
+	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
+		// Collections have no data. Added and removed items are nodes of their own.
+		return true, nil
+	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
+		path, ok := n.value.([]string)
+		if !ok {
+			return false, nil
+		}
+		return slices.Equal(path, attributes.PointerAttributes.GetNodePath()), nil
+	default:
+		return false, softassert.UnexpectedInternalErr(n.logger, "unknown node type", nil)
+	}
+}
+
+// serializedDataEquals reports whether the node's persisted data is the serialized form of the given value.
+func (n *Node) serializedDataEquals(value proto.Message) (bool, error) {
+	var data []byte
+	if value != nil {
+		blob, err := encodeChasmBlob(value)
+		if err != nil {
+			return false, err
+		}
+		data = blob.GetData()
+	}
+	return bytes.Equal(data, n.serializedNode.GetData().GetData()), nil
+}
+
 func (n *Node) executeImmediatePureTasks() error {
 
 	// We must sync structure before running any tasks here because,
