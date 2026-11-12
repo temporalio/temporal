@@ -465,9 +465,10 @@ func (r *StreamReceiverImpl) processMessages(
 			// ack fold.
 			r.finishLaneBatch(isolatedNamespaceID, messages.GetRetireIsolatedLane())
 		}
+		observer := payloadObserverForRoute(r.PayloadObserver, r.serverShardKey, r.clientShardKey)
 		for _, task := range trackedTasks {
-			if r.PayloadObserver != nil {
-				observePayload(r.PayloadObserver, task.ReplicationTask(), clusterName, r.serverShardKey.ShardID, PayloadReceived, time.Now())
+			if observer != nil {
+				observePayload(observer, task.ReplicationTask(), clusterName, r.serverShardKey.ShardID, PayloadReceived, time.Now())
 			}
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
 			if err != nil {

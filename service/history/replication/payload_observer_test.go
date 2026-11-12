@@ -55,7 +55,7 @@ func TestPayloadObserverTrackedReceipts(t *testing.T) {
 			}
 			receiver := &laneStreamReceiver{
 				ProcessToolBox: box, serverShardKey: ClusterShardKey{ClusterID: 1, ShardID: 7},
-				clientShardKey:          ClusterShardKey{ClusterID: 2, ShardID: 7},
+				clientShardKey:          ClusterShardKey{ClusterID: 2, ShardID: 3},
 				highPriorityTaskTracker: NewExecutableTaskTracker(box.Logger, box.MetricsHandler),
 				taskConverter:           NewExecutableTaskConverter(box), laneFeedback: NewNoopLaneFeedbackProvider(),
 				logger: box.Logger, lanesEnabled: true, maxLanes: 1, memberLanes: make(map[string]*memberLane),
@@ -102,11 +102,15 @@ func TestPayloadObserverTrackedReceipts(t *testing.T) {
 			require.Equal(t, "source", received.Origin.ClusterName)
 			require.Equal(t, int32(7), received.Origin.ShardID)
 			require.Equal(t, int64(10), received.Origin.TaskID)
+			require.Equal(t, receiver.serverShardKey, received.Source)
+			require.Equal(t, receiver.clientShardKey, received.Target)
 			require.False(t, received.At.IsZero())
 			scheduler.tasks[0].Ack()
 			require.Len(t, observer.observations, 2)
 			require.Equal(t, PayloadAcked, observer.observations[1].Phase)
 			require.Equal(t, received.Origin, observer.observations[1].Origin)
+			require.Equal(t, received.Source, observer.observations[1].Source)
+			require.Equal(t, received.Target, observer.observations[1].Target)
 		})
 	}
 }
@@ -214,4 +218,31 @@ func TestPayloadObserverScope(t *testing.T) {
 		})
 	}
 	observePayload(nil, nil, "", 0, PayloadReceived, time.Now())
+	require.Nil(t, payloadObserverForRoute(nil, ClusterShardKey{}, ClusterShardKey{}))
+}
+
+func TestPayloadObserverConverterKeepsConcurrentRoutesIndependent(t *testing.T) {
+	t.Parallel()
+	observer := &recordingPayloadObserver{}
+	converter := NewExecutableTaskConverter(ProcessToolBox{Config: tests.NewDynamicConfig(),
+		Logger: log.NewNoopLogger(), MetricsHandler: metrics.NoopMetricsHandler, PayloadObserver: observer})
+	source := ClusterShardKey{ClusterID: 1, ShardID: 7}
+	targets := []ClusterShardKey{{ClusterID: 2, ShardID: 3}, {ClusterID: 3, ShardID: 4}}
+	var callers sync.WaitGroup
+	for i, target := range targets {
+		callers.Go(func() {
+			task := &replicationspb.ReplicationTask{SourceTaskId: int64(i + 1), Priority: enumsspb.TASK_PRIORITY_HIGH,
+				TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+				Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+					HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{NamespaceId: "namespace", WorkflowId: "workflow", RunId: "run"}}}
+			converted := converter.Convert("source", target, source, task)
+			converted[0].Ack()
+		})
+	}
+	callers.Wait()
+	require.Len(t, observer.observations, len(targets))
+	for _, value := range observer.observations {
+		require.Equal(t, source, value.Source)
+		require.Equal(t, targets[value.Origin.TaskID-1], value.Target)
+	}
 }
