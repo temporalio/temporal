@@ -75,10 +75,13 @@ func TestFailedAssertionFailsTestLogger(t *testing.T) {
 	t.Parallel()
 	tb := &failureT{T: t}
 	logger := testzap.Wrap(tb, testlogger.FailOnAnyUnexpectedError, zap.NewNop())
-	require.False(t, softassert.That(logger, false, "broken invariant", zap.String("detail", "value")))
+	//nolint:forbidigo // This reads a structured log field, not a test assertion.
+	marker := zap.Any(softassert.FailedAssertion.Key(), softassert.FailedAssertion.Value())
+	require.False(t, softassert.That(logger, false, "broken invariant", marker, zap.String("detail", "value")))
 	failure := logger.Failure()
 	require.NotNil(t, failure)
 	require.Equal(t, "failed assertion: broken invariant", failure.Msg)
-	require.Equal(t, zap.String("detail", "value"), failure.Tags[0].Field)
+	require.Equal(t, zap.Bool("failed-assertion", true), failure.Tags[0].Field)
+	require.Equal(t, zap.String("detail", "value"), failure.Tags[1].Field)
 	require.Contains(t, tb.failure, "failed assertion: broken invariant")
 }

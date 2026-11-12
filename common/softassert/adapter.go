@@ -1,5 +1,3 @@
-// TODO: Remove this forwarding file once all callers use go.temporal.io/testx/softassert.
-
 // softassert provides utilities for performing assertions.
 //
 // Unlike traditional assertions that may terminate the program or panic, soft assertions log an
