@@ -7,4 +7,3 @@ Collection of general-purpose Go test helpers.
 - `softassert`: log failed invariants without stopping execution.
 - `testcontext`: shared test contexts with deadlines and decorators.
 - `testlogger`: backend-independent test logging with expectations, captures, and failure diagnostics.
-- `testlogger/zap`: Zap logger and field integration for `testlogger`.

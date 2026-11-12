@@ -1,14 +1,10 @@
 package softassert_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/testx/softassert"
-	"go.temporal.io/testx/testlogger"
-	testzap "go.temporal.io/testx/testlogger/zap"
-	"go.uber.org/zap"
 )
 
 type recordingLogger struct {
@@ -62,26 +58,4 @@ func TestFail(t *testing.T) {
 	require.Equal(t, 1, logger.calls)
 	require.Equal(t, "failed assertion: unreachable", logger.message)
 	require.Equal(t, []string{"detail"}, logger.fields)
-}
-
-type failureT struct {
-	*testing.T
-	failure string
-}
-
-func (t *failureT) Fatalf(format string, args ...any) { t.failure = fmt.Sprintf(format, args...) }
-
-func TestFailedAssertionFailsTestLogger(t *testing.T) {
-	t.Parallel()
-	tb := &failureT{T: t}
-	logger := testzap.Wrap(tb, testlogger.FailOnAnyUnexpectedError, zap.NewNop())
-	//nolint:forbidigo // This reads a structured log field, not a test assertion.
-	marker := zap.Any(softassert.FailedAssertion.Key(), softassert.FailedAssertion.Value())
-	require.False(t, softassert.That(logger, false, "broken invariant", marker, zap.String("detail", "value")))
-	failure := logger.Failure()
-	require.NotNil(t, failure)
-	require.Equal(t, "failed assertion: broken invariant", failure.Msg)
-	require.Equal(t, zap.Bool("failed-assertion", true), failure.Tags[0].Field)
-	require.Equal(t, zap.String("detail", "value"), failure.Tags[1].Field)
-	require.Contains(t, tb.failure, "failed assertion: broken invariant")
 }
