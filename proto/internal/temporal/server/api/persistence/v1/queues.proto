@@ -20,6 +20,29 @@ message QueueState {
 
 message QueueReaderState {
   repeated QueueSliceScope scopes = 1;
+  // Lanes owned by this reader in addition to its scopes. Only replication stream
+  // readers use lanes. While lanes exist, the overall and HIGH-priority scopes cover
+  // every lane's resume position, so readers that ignore lanes can replay all lane tasks.
+  repeated QueueReaderLane lanes = 2;
+  // Resume position of the replication HIGH priority default lane while lanes exist.
+  // Unset when the reader has no lanes.
+  TaskKey replication_lane_default_cursor = 3;
+}
+
+// QueueReaderLane is a lane owned by a queue reader.
+message QueueReaderLane {
+  // Key that identifies the lane across restarts. Its format is defined by the
+  // component that creates the lane.
+  string logical_key = 1;
+  // Tasks the lane is responsible for, starting at the lane's resume position.
+  QueueSliceScope scope = 2;
+  // State the lane's policy saves with the lane, such as a learned rate, so the lane
+  // resumes at the right speed after a shard moves. Only the policy that created the
+  // lane writes or reads it; the queue code stores it and never interprets it. At most
+  // 256 bytes, because it is written with the shard's queue state. It may be empty,
+  // for example after a rollback through a binary that drops it, and policies must
+  // handle that.
+  bytes policy_state = 3;
 }
 
 message QueueSliceScope {
