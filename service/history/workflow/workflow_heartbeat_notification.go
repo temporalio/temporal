@@ -48,13 +48,13 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 		return
 	}
 
-	eventTypes := make([]string, 0, len(newBufferedEvents))
+	filteredEventTypes := make([]string, 0, len(newBufferedEvents))
 	for _, event := range newBufferedEvents {
 		if isWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
-			eventTypes = append(eventTypes, event.GetEventType().String())
+			filteredEventTypes = append(filteredEventTypes, event.GetEventType().String())
 		}
 	}
-	if len(eventTypes) == 0 {
+	if len(filteredEventTypes) == 0 {
 		return
 	}
 
@@ -70,7 +70,7 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 	}
 	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(namespaceEntry.Name().String()))
 
-	for _, eventType := range eventTypes {
+	for _, eventType := range filteredEventTypes {
 		inputHandler := handler.WithTags(metrics.StringTag("event_type", eventType))
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(inputHandler).Record(1)
 		if firstBufferedInput {
