@@ -37,8 +37,10 @@ const (
 
 // laneSendTarget directs sendTasks to send on a lane, or to filter the default lane.
 type laneSendTarget struct {
-	// laneInfo is set on every message. Nil sends on the default lane.
-	laneInfo *replicationspb.ReplicationLaneInfo
+	// laneInfo is set on every message, and logicalKey is the lane's key. Nil sends on the
+	// default lane.
+	laneInfo   *replicationspb.ReplicationLaneInfo
+	logicalKey string
 	// accept reports whether a task is sent. Nil accepts every task.
 	accept func(tasks.Task) bool
 	// laneOwner, on the default lane, returns the key of the lane that owns a task, which the
@@ -254,6 +256,7 @@ func (s *laneStreamSender) recvLaneSyncReplicationState(attr *replicationspb.Syn
 			s.startLanePolicy()
 		}
 		s.laneRegistry.ObserveAcks(attr.GetLaneStates())
+		s.recordLaneLag()
 		if err := s.reconcileLanes(attr, first); err != nil {
 			return err
 		}
@@ -281,6 +284,9 @@ func (s *laneStreamSender) recvLaneSyncReplicationState(attr *replicationspb.Syn
 func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationState, first bool) error {
 	s.laneReconcileMu.Lock()
 	defer s.laneReconcileMu.Unlock()
+	if _, handovers, err := s.shardContext.GetReplicationStatus([]string{s.clientClusterName}); err == nil {
+		s.handoverInProgress.Store(len(handovers) > 0)
+	}
 	signals := s.laneSignals(attr)
 	desired := s.evaluateLanes(signals)
 	if first {
@@ -311,8 +317,16 @@ func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationSt
 			s.laneRegistry.SetPolicyState(lane.Key, lane.PolicyState)
 			continue
 		}
-		if _, _, err := s.laneRegistry.Create(lane.Key, lane.Filter, signals.DefaultAcked, lane.PolicyState); err != nil {
+		_, created, err := s.laneRegistry.Create(lane.Key, lane.Filter, signals.DefaultAcked, lane.PolicyState)
+		if err != nil {
 			return err
+		}
+		if created {
+			metrics.ReplicationLaneCreated.With(s.metrics).Record(
+				1,
+				metrics.ToClusterTag(s.clientClusterName),
+				metrics.ReplicationLaneTag(lane.Key),
+			)
 		}
 	}
 	for _, lane := range s.laneRegistry.Snapshots() {
@@ -356,6 +370,7 @@ func (s *laneStreamSender) laneSignals(attr *replicationspb.SyncReplicationState
 			AckedTime:   lane.ackedTime,
 			Retiring:    lane.retiring,
 			LastRefused: s.laneRefusedAt[lane.logicalKey],
+			Paused:      lane.paused,
 			PolicyState: slices.Clone(lane.policyState),
 		})
 	}
@@ -367,6 +382,7 @@ func (s *laneStreamSender) laneSignals(attr *replicationspb.SyncReplicationState
 		ReceiverMaxLanes:      int(attr.GetMaxLanes()),
 		SourceHighWatermark:   s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID,
 		DefaultAcked:          attr.GetHighPriorityState().GetInclusiveLowWatermark(),
+		HandoverInProgress:    s.handoverInProgress.Load(),
 		Lanes:                 lanes,
 	}
 }
@@ -531,9 +547,12 @@ func (s *laneStreamSender) setRequestedLanes(requested map[string]struct{}) {
 	}
 }
 
-// laneShouldBeRateLimited reports whether the policy still requests a lane. Withdrawn lanes
-// drain their finite prefix without a rate limit.
+// laneShouldBeRateLimited reports whether the policy still requests a lane and no namespace
+// handover requires its rate limit to be lifted. Withdrawn lanes drain without a rate limit.
 func (s *laneStreamSender) laneShouldBeRateLimited(logicalKey string) bool {
+	if s.handoverInProgress.Load() {
+		return false
+	}
 	s.laneStateMu.Lock()
 	defer s.laneStateMu.Unlock()
 	_, requested := s.requestedLanes[logicalKey]
@@ -593,6 +612,11 @@ func (s *laneStreamSender) sendReadyLaneRetirements() error {
 		if !ok {
 			return serviceerror.NewInternalf("replication lane %q changed while its retirement marker was sent", lane.id)
 		}
+		metrics.ReplicationLaneRetired.With(s.metrics).Record(
+			1,
+			metrics.ToClusterTag(s.clientClusterName),
+			metrics.ReplicationLaneTag(lane.logicalKey),
+		)
 	}
 	return nil
 }
@@ -736,8 +760,9 @@ func (s *laneStreamSender) sendLaneRange(lane senderLaneSnapshot) error {
 		return nil
 	}
 	err := s.sendTasks(enumsspb.TASK_PRIORITY_HIGH, lane.cursor, end, &laneSendTarget{
-		laneInfo: &replicationspb.ReplicationLaneInfo{LaneId: lane.id},
-		accept:   lane.scope.Contains,
+		laneInfo:   &replicationspb.ReplicationLaneInfo{LaneId: lane.id},
+		logicalKey: lane.logicalKey,
+		accept:     lane.scope.Contains,
 		rateLimit: func(ctx context.Context) error {
 			return s.paceLane(ctx, lane.logicalKey)
 		},
@@ -757,10 +782,23 @@ func laneRetryDelay(retryAfter time.Duration) time.Duration {
 }
 
 // paceLane returns once the lane may send its next task, or with the context's error once the
-// stream ends, so that the send is not retried. The limiter never blocks: when it refuses a
-// send, the lane waits here for laneRetryDelay and asks again.
+// stream ends, so that the send is not retried. A lane the receiver has paused waits until it
+// resumes, even during a handover, because the pause protects the receiver. The limiter never
+// blocks: when it refuses a send, the lane waits here for laneRetryDelay and asks again.
 func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) error {
-	for s.laneShouldBeRateLimited(logicalKey) {
+	for {
+		changed := s.laneRegistry.Changed()
+		if s.laneRegistry.Paused(logicalKey) {
+			select {
+			case <-changed:
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		if !s.laneShouldBeRateLimited(logicalKey) {
+			return nil
+		}
 		limiter := s.laneLimiter(logicalKey)
 		if limiter == nil {
 			return nil
@@ -780,8 +818,53 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
+		case <-changed:
+			timer.Stop()
 		case <-timer.C:
 		}
 	}
-	return nil
+}
+
+// recordLaneLag records how far each lane is behind, and reports lanes behind by more than
+// ReplicationLaneMaxLag. The report carries the lane's live state, which is otherwise only in
+// memory, so that a lagging lane can be told apart from a stuck one.
+func (s *laneStreamSender) recordLaneLag() {
+	maxLag := s.config.ReplicationLaneMaxLag()
+	now := time.Now()
+	lanes := s.laneRegistry.Snapshots()
+	if len(lanes) == 0 {
+		return
+	}
+	sourceHighWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+	for _, lane := range lanes {
+		if lane.ackedTime.IsZero() {
+			continue
+		}
+		var lag time.Duration
+		// An idle lane's ACK timestamp ages even when it has acknowledged its entire range.
+		if lane.acked < min(sourceHighWatermark, lane.scope.Range.ExclusiveMax.TaskID) {
+			lag = now.Sub(lane.ackedTime)
+		}
+		laneTag := metrics.ReplicationLaneTag(lane.logicalKey)
+		metrics.ReplicationLaneLag.With(s.metrics).Record(lag, metrics.ToClusterTag(s.clientClusterName), laneTag)
+		if maxLag > 0 && lag > maxLag {
+			metrics.ReplicationLaneMaxLagExceeded.With(s.metrics).Record(1, metrics.ToClusterTag(s.clientClusterName), laneTag)
+			s.laneStateMu.Lock()
+			_, requested := s.requestedLanes[lane.logicalKey]
+			refusedAt := s.laneRefusedAt[lane.logicalKey]
+			s.laneStateMu.Unlock()
+			s.shardContext.GetThrottledLogger().Warn("Replication lane is behind by more than ReplicationLaneMaxLag.",
+				tag.NewStringTag("lane", lane.logicalKey),
+				tag.NewDurationTag("lag", lag),
+				tag.NewDurationTag("max-lag", maxLag),
+				tag.NewInt64("lane-sent-cursor", lane.cursor),
+				tag.NewInt64("lane-acked", lane.acked),
+				tag.NewInt64("source-high-watermark", sourceHighWatermark),
+				tag.NewBoolTag("lane-requested", requested),
+				tag.NewTimeTag("lane-last-refused", refusedAt),
+				tag.NewBoolTag("lane-paused", lane.paused),
+				tag.NewBoolTag("lane-retiring", lane.retiring),
+				tag.NewBoolTag("handover-in-progress", s.handoverInProgress.Load()))
+		}
+	}
 }

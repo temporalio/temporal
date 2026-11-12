@@ -34,6 +34,7 @@ func (s *laneStreamSenderSuite) TestPolicyInputsCannotChangeLaneOwnership() {
 	registry, err := newSenderLaneRegistry(100, nil)
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	policy := NewMockLaneStreamPolicy(s.controller)
 	s.streamSender.lanePolicy = policy
 	first := DesiredLane{Key: "first", Filter: namespaceLaneFilter("ns-a"), PolicyState: []byte{1}}
@@ -76,6 +77,7 @@ func (s *laneStreamSenderSuite) TestPolicyPanicWhileLanesReadRequestedState() {
 	_, _, err = registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	s.streamSender.laneLimiters["a"] = &fakeLaneLimiter{}
 	policy := NewMockLaneStreamPolicy(s.controller)
 	s.streamSender.lanePolicy = policy

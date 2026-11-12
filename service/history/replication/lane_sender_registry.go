@@ -34,6 +34,8 @@ type senderLaneSnapshot struct {
 	ackedTime  time.Time
 	// retiring records retirement intent. A finite scope end is the fixed handoff boundary.
 	retiring bool
+	// paused is whether the receiver's last ack paused the lane.
+	paused bool
 	// policyState is saved with the lane for the policy that created it.
 	policyState []byte
 }
@@ -195,8 +197,8 @@ func (r *senderLaneRegistry) Snapshots() []senderLaneSnapshot {
 	return out
 }
 
-// ObserveAcks records the lane watermarks from a receiver ack. A lane's acked position
-// never moves backwards.
+// ObserveAcks records the lane watermarks and pauses from a receiver ack. A lane's acked
+// position never moves backwards. A lane missing from the ack keeps its pause.
 func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.ReplicationState) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -211,21 +213,38 @@ func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.Repli
 			lane.ackedTime = state.GetInclusiveLowWatermarkTime().AsTime()
 			changed = true
 		}
+		if paused := state.GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE; paused != lane.paused {
+			lane.paused = paused
+			changed = true
+		}
+		if r.boundRetiringLane(lane) {
+			changed = true
+		}
 	}
 	if changed {
 		r.notifyChanged()
 	}
 }
 
+// Paused reports whether the receiver has paused a lane.
+func (r *senderLaneRegistry) Paused(logicalKey string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lane, ok := r.byKey[logicalKey]
+	return ok && lane.paused
+}
+
 // RequestRetirement withdraws a lane. It keeps sending until its cursor covers every
 // default reservation, then fixes its exclusive end at that sent cursor. New default
 // reservations own the suffix, after the lane has sent the entire prefix. The lane stays
 // registered until the receiver acknowledges that prefix.
+// A paused lane keeps its unbounded ownership until it resumes. Once a finite handoff
+// is fixed, it cannot be expanded again: default reservations may already own the suffix.
 func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byKey[logicalKey]
-	if !ok || lane.retiring {
+	if !ok || lane.retiring || lane.paused {
 		return false
 	}
 	lane.retiring = true
@@ -238,7 +257,7 @@ func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 // every default reservation and released its send lease. If default reservations keep ahead
 // of the lane, retirement remains pending. The finite end is persisted and never moves again.
 func (r *senderLaneRegistry) boundRetiringLane(lane *senderLane) bool {
-	if !lane.retiring || lane.pending || lane.leases != 0 || lane.scope.Range.ExclusiveMax.TaskID != math.MaxInt64 || lane.cursor < r.defaultReservedCursor {
+	if !lane.retiring || lane.pending || lane.paused || lane.leases != 0 || lane.scope.Range.ExclusiveMax.TaskID != math.MaxInt64 || lane.cursor < r.defaultReservedCursor {
 		return false
 	}
 	lane.scope.Range.ExclusiveMax = tasks.NewImmediateKey(lane.cursor)
@@ -261,7 +280,7 @@ func (r *senderLaneRegistry) ReadyRetirements() []senderLaneSnapshot {
 	defer r.mu.Unlock()
 	var out []senderLaneSnapshot
 	for _, lane := range r.byKey {
-		if lane.retirementReady() {
+		if lane.retirementReady() && !lane.paused {
 			out = append(out, lane.senderLaneSnapshot)
 		}
 	}
@@ -269,6 +288,8 @@ func (r *senderLaneRegistry) ReadyRetirements() []senderLaneSnapshot {
 }
 
 // CompleteRetirement removes a retiring lane after its retirement marker was sent.
+// A pause arriving after ReadyRetirements cannot recall a marker already in flight.
+// Completion remains safe because the entire finite prefix was acknowledged before send.
 func (r *senderLaneRegistry) CompleteRetirement(laneID string) (senderLaneSnapshot, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -288,7 +309,7 @@ func (r *senderLaneRegistry) Acquire(laneID string) (senderLaneSnapshot, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byID[laneID]
-	if !ok || lane.pending || lane.leases != 0 {
+	if !ok || lane.pending || lane.paused || lane.leases != 0 {
 		return senderLaneSnapshot{}, false
 	}
 	if lane.retiring && lane.scope.Range.ExclusiveMax.TaskID != math.MaxInt64 && lane.acked >= lane.scope.Range.ExclusiveMax.TaskID {

@@ -1194,6 +1194,30 @@ var (
 		"replication_stream_implementation_selected",
 		WithDescription("The number of replication streams created, tagged by the implementation selected for each."),
 	)
+	ReplicationLaneCreated = NewCounterDef(
+		"replication_lane_created",
+		WithDescription("The number of replication lanes created by lane stream senders."),
+	)
+	ReplicationLaneRetired = NewCounterDef(
+		"replication_lane_retired",
+		WithDescription("The number of replication lanes retired by lane stream senders."),
+	)
+	ReplicationLaneLag = NewTimerDef(
+		"replication_lane_lag",
+		WithDescription("How far a replication lane is behind: the age of its oldest task that the receiver has not acknowledged."),
+	)
+	ReplicationLaneMaxLagExceeded = NewCounterDef(
+		"replication_lane_max_lag_exceeded",
+		WithDescription("The number of acks for which a replication lane's lag exceeded history.ReplicationLaneMaxLag."),
+	)
+	ReplicationLaneTasksSent = NewCounterDef(
+		"replication_lane_tasks_sent",
+		WithDescription("The number of replication tasks sent on replication lanes."),
+	)
+	ReplicationLaneTasksSkippedByDefault = NewCounterDef(
+		"replication_lane_tasks_skipped_by_default",
+		WithDescription("The number of HIGH priority replication tasks the default lane skipped because a replication lane owns them. Over time this should match replication_lane_tasks_sent, apart from re-sends after reconnects."),
+	)
 	ReplicationLaneFeedbackDropped = NewCounterDef(
 		"replication_lane_feedback_dropped",
 		WithDescription("The number of receiver lane feedback payloads omitted because their serialized size exceeds the configured byte limit."),
