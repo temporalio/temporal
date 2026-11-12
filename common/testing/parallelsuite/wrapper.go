@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testshard"
 	"go.temporal.io/testx/parallelsuite"
 )
 
@@ -30,12 +31,12 @@ func WithContext(ctx context.Context, scope Scope) Scope {
 
 func Run[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {
 	t.Helper()
-	parallelsuite.Run(t, s, args...)
+	parallelsuite.Run(t, s, append([]any{parallelsuite.WithShardSalt(testshard.Salt())}, args...)...)
 }
 
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
 func RunLegacySequential[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {
 	t.Helper()
-	parallelsuite.RunLegacySequential(t, s, args...) //nolint:staticcheck // SA1019: forwarding the legacy runner
+	parallelsuite.RunLegacySequential(t, s, append([]any{parallelsuite.WithShardSalt(testshard.Salt())}, args...)...) //nolint:staticcheck // SA1019: forwarding the legacy runner
 }

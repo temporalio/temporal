@@ -3,7 +3,12 @@ package parallelsuite
 import (
 	"context"
 	"flag"
+	"os"
+	"os/exec"
 	"reflect"
+	"slices"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -208,4 +213,86 @@ func TestGuardSeal(t *testing.T) {
 	t.Run("assertion after Run", func(t *testing.T) {
 		Run(t, &sealAfterRunSuite{})
 	})
+}
+
+type shardingSuite struct{ Suite[*shardingSuite] }
+
+func (s *shardingSuite) TestA(ran chan string) {
+	s.Snd(ran, "TestA")
+	s.Run("nested", func(s *shardingSuite) { s.Snd(ran, "nested") })
+}
+func (s *shardingSuite) TestB(ran chan string) { s.Snd(ran, "TestB") }
+func (s *shardingSuite) TestC(ran chan string) { s.Snd(ran, "TestC") }
+
+func TestRunShardingProcess(t *testing.T) {
+	if os.Getenv("TESTX_SHARD_PROCESS") == "" {
+		return
+	}
+	ran := make(chan string, 4)
+	t.Cleanup(func() {
+		close(ran)
+		got := make([]string, 0)
+		for name := range ran {
+			got = append(got, name)
+		}
+		slices.Sort(got)
+		require.Equal(t, strings.Fields(os.Getenv("TESTX_SHARD_WANT")), got)
+	})
+	t.Run("suite", func(t *testing.T) {
+		args := []any{ran}
+		if os.Getenv("TESTX_SHARD_DEFAULT_SALT") != "" {
+			args = append([]any{WithShardSalt(os.Getenv("TESTX_SHARD_DEFAULT_SALT"))}, args...)
+		}
+		if os.Getenv("TESTX_SHARD_LEGACY") == "true" {
+			RunLegacySequential(t, &shardingSuite{}, args...) //nolint:staticcheck // SA1019: sharding must also work in the legacy runner.
+		} else {
+			Run(t, &shardingSuite{}, args...)
+		}
+	})
+}
+
+func TestRunSharding(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		total       string
+		index       string
+		salt        string
+		defaultSalt string
+		legacy      bool
+		filter      string
+		want        string
+		wantErr     string
+	}{
+		{name: "disabled", want: "TestA TestB TestC nested"},
+		{name: "one shard", total: "1", index: "0", want: "TestA TestB TestC nested"},
+		{name: "owns nested test", total: "4", index: "1", want: "TestA nested"},
+		{name: "last shard", total: "4", index: "3", want: "TestB TestC"},
+		{name: "empty shard", total: "4", index: "0"},
+		{name: "salt", total: "4", index: "2", salt: "-test-salt", want: "TestA nested"},
+		{name: "default salt", total: "4", index: "2", defaultSalt: "-test-salt", want: "TestA nested"},
+		{name: "env salt overrides default", total: "4", index: "0", salt: "-salt-2827", defaultSalt: "-test-salt", want: "TestB TestC"},
+		{name: "legacy", total: "4", index: "1", legacy: true, want: "TestA nested"},
+		{name: "method filter", total: "4", index: "3", filter: "^TestB$", want: "TestB"},
+		{name: "invalid total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS"},
+		{name: "invalid index", total: "4", index: "4", wantErr: "TEST_SHARD_INDEX"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			executable, err := os.Executable()
+			require.NoError(t, err)
+			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestRunShardingProcess$", "-testify.m="+tc.filter)
+			cmd.Env = append(os.Environ(),
+				"TESTX_SHARD_PROCESS=1", "TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index,
+				"TEST_SHARD_SALT="+tc.salt, "TESTX_SHARD_DEFAULT_SALT="+tc.defaultSalt,
+				"TESTX_SHARD_WANT="+tc.want, "TESTX_SHARD_LEGACY="+strconv.FormatBool(tc.legacy))
+			output, err := cmd.CombinedOutput()
+			if tc.wantErr != "" {
+				require.Error(t, err, "%s", output)
+				require.Contains(t, string(output), tc.wantErr)
+			} else {
+				require.NoError(t, err, "%s", output)
+			}
+		})
+	}
 }

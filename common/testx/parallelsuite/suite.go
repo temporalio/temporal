@@ -14,6 +14,7 @@ import (
 	testifysuite "github.com/stretchr/testify/suite"
 	"go.temporal.io/testx/await"
 	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/testx/testshard"
 )
 
 // TestingSuite is the constraint for suite types.
@@ -197,6 +198,16 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
 }
 
+// Option configures suite execution and is passed before test method arguments to [Run].
+type Option struct {
+	shardSalt string
+}
+
+// WithShardSalt sets the default sharding salt. A non-empty TEST_SHARD_SALT overrides it.
+func WithShardSalt(salt string) Option {
+	return Option{shardSalt: salt}
+}
+
 // Run discovers and runs all exported Test* methods on the given suite in parallel.
 //
 // Each method gets its own fresh suite instance initialized for the subtest's
@@ -204,6 +215,8 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 // parallel. Any sequential setup must happen before calling Run.
 //
 // The suite must embed [Suite] and have no other fields.
+// TEST_TOTAL_SHARDS and TEST_SHARD_INDEX enable automatic sharding by full method name.
+// Nested subtests stay with their method. TEST_SHARD_SALT defaults to an empty salt.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, true, args...)
 }
@@ -218,6 +231,18 @@ func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
 
 func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
+
+	var salt string
+	for len(args) > 0 {
+		opt, ok := args[0].(Option)
+		if !ok {
+			break
+		}
+		salt = opt.shardSalt
+		args = args[1:]
+	}
+	shard, err := testshard.FromEnv(salt)
+	require.NoError(t, err)
 
 	typ := reflect.TypeFor[T]()
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
@@ -239,6 +264,17 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 		return // all methods filtered by -testify.m; nothing to run
 	}
 
+	ownsMethod := false
+	for _, method := range methods {
+		if shard.Contains(t.Name() + "/" + method.Name) {
+			ownsMethod = true
+			break
+		}
+	}
+	if !ownsMethod {
+		t.Skip("Skipping suite: no test methods belong to this shard")
+	}
+
 	argVals := make([]reflect.Value, len(args))
 	for i, a := range args {
 		argVals[i] = reflect.ValueOf(a)
@@ -251,6 +287,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
+			shard.MaybeSkip(t)
 			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)

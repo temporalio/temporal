@@ -11,7 +11,7 @@ permissions:
   pull-requests: write
 
 env:
-  SALT_FILE: tests/testcore/shard_salt.txt
+  SALT_FILE: common/testing/testshard/shard_salt.txt
   BRANCH: auto/optimize-test-sharding
 
 jobs:
