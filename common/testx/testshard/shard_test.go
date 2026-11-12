@@ -183,3 +183,54 @@ func TestSkipUnlessInShard(t *testing.T) {
 		})
 	}
 }
+
+func TestSetDefaultsProcess(t *testing.T) {
+	if os.Getenv("TESTX_DEFAULTS_PROCESS") == "" {
+		return
+	}
+	SetDefaults(
+		WithSalt("process-salt"),
+		WithTotalShardsEnv("CI_TOTAL_SHARDS"),
+		WithShardIndexEnv("CI_SHARD_INDEX"),
+		WithSaltEnv("CI_SHARD_SALT"),
+	)
+	want := Shard{index: 1, total: 4, salt: "process-salt"}
+	shard, err := FromEnv()
+	require.NoError(t, err)
+	require.Equal(t, want, shard)
+
+	shard, err = FromEnv(WithSalt("suite-salt"))
+	require.NoError(t, err)
+	require.Equal(t, Shard{index: 1, total: 4, salt: "suite-salt"}, shard)
+	shard, err = FromEnv()
+	require.NoError(t, err)
+	require.Equal(t, want, shard)
+
+	t.Setenv("CI_SHARD_SALT", "env-salt")
+	shard, err = FromEnv(WithSalt("suite-salt"))
+	require.NoError(t, err)
+	require.Equal(t, Shard{index: 1, total: 4, salt: "env-salt"}, shard)
+
+	t.Setenv("CI_SHARD_INDEX", "3")
+	shard, err = FromEnv()
+	require.NoError(t, err)
+	require.Equal(t, Shard{index: 3, total: 4, salt: "env-salt"}, shard)
+
+	SetDefaults(WithSalt("updated-salt"))
+	t.Setenv("CI_SHARD_SALT", "")
+	shard, err = FromEnv()
+	require.NoError(t, err)
+	require.Equal(t, Shard{index: 3, total: 4, salt: "updated-salt"}, shard)
+}
+
+func TestSetDefaults(t *testing.T) {
+	t.Parallel()
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestSetDefaultsProcess$")
+	cmd.Env = append(os.Environ(), "TESTX_DEFAULTS_PROCESS=1",
+		"TEST_TOTAL_SHARDS=invalid", "TEST_SHARD_INDEX=invalid", "TEST_SHARD_SALT=ignored",
+		"CI_TOTAL_SHARDS=4", "CI_SHARD_INDEX=1", "CI_SHARD_SALT=")
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", output)
+}

@@ -17,31 +17,24 @@ Run indices `0` through `3` for this example. If either variable is empty, all
 tests run; invalid values fail the test. Selected tests and their nested
 subtests stay on the same shard.
 
-Sharded runs require a non-empty salt. Set `TEST_SHARD_SALT` or pass
-`testshard.WithSalt("my-suite")` to `SkipUnlessInShard`; a non-empty environment
-value takes precedence. All jobs must use the same salt.
-
-To read different environment variables:
+Sharded runs require a non-empty salt. Set `TEST_SHARD_SALT`, or configure
+process-wide defaults once in `TestMain` before `m.Run()`:
 
 ```go
-testshard.SkipUnlessInShard(t,
-    testshard.WithTotalShardsEnv("CI_TOTAL_SHARDS"),
-    testshard.WithShardIndexEnv("CI_SHARD_INDEX"),
-    testshard.WithSaltEnv("CI_SHARD_SALT"),
-)
+testshard.SetDefaults(testshard.WithSalt("my-suite"))
 ```
+
+To rename variables, add `WithTotalShardsEnv("CI_TOTAL_SHARDS")`,
+`WithShardIndexEnv("CI_SHARD_INDEX")`, or `WithSaltEnv("CI_SHARD_SALT")` to
+`SetDefaults`. Precedence is: non-empty salt environment value, per-call
+options, then process defaults. All jobs must use the same salt. Environment
+values are read on each call.
 
 For repeated checks, use `shard, err := testshard.FromEnv(options...)`, handle
 the error, then call `shard.SkipUnlessInShard(t)`.
 
-`parallelsuite.Run` and `RunLegacySequential` use the environment automatically.
-To pass custom configuration:
+`parallelsuite.Run` and `RunLegacySequential` use these defaults automatically:
 
 ```go
-shard, err := testshard.FromEnv(testshard.WithSalt("my-suite"))
-require.NoError(t, err)
-parallelsuite.Run(t, &MySuite{}, parallelsuite.WithShard(shard))
+parallelsuite.Run(t, &MySuite{})
 ```
-
-Place `WithShard` before any method arguments. Pass `testshard.Shard{}` to
-`WithShard` to disable sharding for a suite.
