@@ -217,7 +217,7 @@ func WithShard(shard testshard.Shard) Option {
 //
 // The suite must embed [Suite] and have no other fields.
 // TEST_TOTAL_SHARDS and TEST_SHARD_INDEX enable automatic sharding by full method name.
-// Nested subtests stay with their method. TEST_SHARD_SALT defaults to an empty salt.
+// Nested subtests stay with their method. See [testshard.FromEnv] for configuration.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, true, args...)
 }
@@ -291,7 +291,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
-			shard.MaybeSkip(t)
+			shard.SkipUnlessInShard(t)
 			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
