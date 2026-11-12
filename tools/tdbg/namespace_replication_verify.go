@@ -18,6 +18,8 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -44,9 +46,26 @@ const (
 )
 
 type namespaceReplicationVerifyRequest struct {
-	// NamespaceID selects the namespace. Names can be reused, so they never
-	// select the source.
+	// NamespaceID selects the namespace when given. Otherwise the name is
+	// resolved on the source once, and the returned ID identifies all replicas.
 	NamespaceID string
+	// ExpectedNamespaceName selects the source when no ID is given. With an ID,
+	// it guards against selecting the wrong namespace with a mistyped or stale ID.
+	ExpectedNamespaceName string
+	// ExpectedNamespaceNameInherited reports that the name came from tdbg's
+	// --namespace or TEMPORAL_CLI_NAMESPACE, so errors can say where the
+	// operator should look.
+	ExpectedNamespaceNameInherited bool
+}
+
+// expectedNameDescription quotes the expected name and, when it was inherited,
+// says where it came from.
+func (r namespaceReplicationVerifyRequest) expectedNameDescription() string {
+	description := fmt.Sprintf("%q", r.ExpectedNamespaceName)
+	if r.ExpectedNamespaceNameInherited {
+		description += " from " + namespaceReplicationInheritedNameSource
+	}
+	return description
 }
 
 type namespaceReplicationVerificationResult struct {
@@ -102,6 +121,7 @@ type namespaceReplicationObservation struct {
 type namespaceReplicationReader interface {
 	SourceCluster(ctx context.Context) (string, error)
 	SourceNamespaceByID(ctx context.Context, id string) (*adminservice.GetNamespaceResponse, error)
+	SourceNamespaceByName(ctx context.Context, name string) (*adminservice.GetNamespaceResponse, error)
 	PeerNamespaceByID(ctx context.Context, cluster string, id string) (*adminservice.GetNamespaceResponse, error)
 	PeerNamespaceByName(ctx context.Context, cluster string, name string) (*adminservice.GetNamespaceResponse, error)
 }
@@ -129,15 +149,40 @@ func (r adminNamespaceReplicationReader) SourceNamespaceByID(
 	ctx context.Context,
 	id string,
 ) (*adminservice.GetNamespaceResponse, error) {
-	response, err := namespaceReplicationRPCCall(ctx, r.rpcTimeout, func(rpcCtx context.Context) (*adminservice.GetNamespaceResponse, error) {
-		return r.client.GetNamespace(rpcCtx, &adminservice.GetNamespaceRequest{
-			Attributes: &adminservice.GetNamespaceRequest_Id{Id: id},
-		})
+	response, err := r.sourceNamespace(ctx, &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{Id: id},
 	})
 	if err != nil {
 		return nil, err
 	}
 	return requireNamespaceID(response, id)
+}
+
+func (r adminNamespaceReplicationReader) SourceNamespaceByName(
+	ctx context.Context,
+	name string,
+) (*adminservice.GetNamespaceResponse, error) {
+	response, err := r.sourceNamespace(ctx, &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Namespace{Namespace: name},
+	})
+	if err != nil {
+		return nil, err
+	}
+	// As with requireNamespaceID, incomplete responses are rejected later with
+	// a more specific error.
+	if responseName := response.GetInfo().GetName(); responseName != "" && responseName != name {
+		return nil, errors.New("response has a different namespace name")
+	}
+	return response, nil
+}
+
+func (r adminNamespaceReplicationReader) sourceNamespace(
+	ctx context.Context,
+	request *adminservice.GetNamespaceRequest,
+) (*adminservice.GetNamespaceResponse, error) {
+	return namespaceReplicationRPCCall(ctx, r.rpcTimeout, func(rpcCtx context.Context) (*adminservice.GetNamespaceResponse, error) {
+		return r.client.GetNamespace(rpcCtx, request)
+	})
 }
 
 func (r adminNamespaceReplicationReader) PeerNamespaceByID(
@@ -279,7 +324,17 @@ func (v *namespaceReplicationVerifier) observe(
 		return observation, errors.New("source DescribeCluster returned an empty cluster name")
 	}
 
-	source, err := v.reader.SourceNamespaceByID(ctx, request.NamespaceID)
+	var source *adminservice.GetNamespaceResponse
+	if request.NamespaceID != "" {
+		source, err = v.reader.SourceNamespaceByID(ctx, request.NamespaceID)
+	} else if request.ExpectedNamespaceName != "" {
+		source, err = v.reader.SourceNamespaceByName(ctx, request.ExpectedNamespaceName)
+		if err != nil && request.ExpectedNamespaceNameInherited {
+			err = fmt.Errorf("namespace %s: %w", request.expectedNameDescription(), err)
+		}
+	} else {
+		return observation, errors.New("namespace name or ID is required")
+	}
 	if err != nil {
 		return observation, fmt.Errorf("read source namespace: %w", err)
 	}
@@ -289,19 +344,28 @@ func (v *namespaceReplicationVerifier) observe(
 	observation.sourceSnapshot = source
 	result.NamespaceName = source.GetInfo().GetName()
 	result.NamespaceID = source.GetInfo().GetId()
+	if request.ExpectedNamespaceName != "" && request.ExpectedNamespaceName != result.NamespaceName {
+		blockNamespaceReplicationVerification(result, fmt.Errorf(
+			"namespace ID %q belongs to namespace %q, not %s",
+			result.NamespaceID,
+			result.NamespaceName,
+			request.expectedNameDescription(),
+		))
+		return observation, nil
+	}
 
 	configProjection, failoverProjection, err := namespaceReplicationProjections(source, v.dataKeysToIgnore)
 	if err != nil {
-		blockNamespaceReplicationVerification(result, fmt.Errorf("project source namespace: %w", err))
+		blockNamespaceReplicationVerification(result, fmt.Errorf("source namespace cannot be compared: %w", err))
 		return observation, nil
 	}
 	result.SourceConfigFingerprint, err = namespaceReplicationFingerprint(configProjection)
 	if err != nil {
-		return observation, err
+		return observation, fmt.Errorf("compute source config fingerprint: %w", err)
 	}
 	result.SourceFailoverFingerprint, err = namespaceReplicationFingerprint(failoverProjection)
 	if err != nil {
-		return observation, err
+		return observation, fmt.Errorf("compute source failover fingerprint: %w", err)
 	}
 	sourceConfigVersion := source.GetConfigVersion()
 	sourceFailoverVersion := source.GetFailoverVersion()
@@ -356,12 +420,12 @@ func (v *namespaceReplicationVerifier) observe(
 	finalSource, err := v.reader.SourceNamespaceByID(ctx, result.NamespaceID)
 	if err != nil {
 		result.Status = namespaceReplicationStatusInconclusiveSourceChanged
-		result.StatusDetail = fmt.Sprintf("final source read failed: %v", err)
+		result.StatusDetail = fmt.Sprintf("re-read source namespace after scanning replicas: %v", err)
 		return observation, nil
 	}
 	equal, err := namespaceReplicationSnapshotsEqual(source, finalSource, v.dataKeysToIgnore)
 	if err != nil {
-		return observation, err
+		return observation, fmt.Errorf("compare source namespace before and after scanning replicas: %w", err)
 	}
 	if !equal {
 		result.Status = namespaceReplicationStatusInconclusiveSourceChanged
@@ -418,17 +482,17 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 
 	configProjection, failoverProjection, err := namespaceReplicationProjections(byID, v.dataKeysToIgnore)
 	if err != nil {
-		result.Error = fmt.Sprintf("project namespace: %v", err)
+		result.Error = fmt.Sprintf("replica cannot be compared: %v", err)
 		return result, nil
 	}
 	configFingerprint, err := namespaceReplicationFingerprint(configProjection)
 	if err != nil {
-		result.Error = fmt.Sprintf("fingerprint config: %v", err)
+		result.Error = fmt.Sprintf("compute config fingerprint: %v", err)
 		return result, nil
 	}
 	failoverFingerprint, err := namespaceReplicationFingerprint(failoverProjection)
 	if err != nil {
-		result.Error = fmt.Sprintf("fingerprint failover: %v", err)
+		result.Error = fmt.Sprintf("compute failover fingerprint: %v", err)
 		return result, nil
 	}
 
@@ -541,7 +605,7 @@ func validateSourceNamespace(response *adminservice.GetNamespaceResponse, source
 	}
 	if response.GetReplicationConfig().GetActiveClusterName() != sourceCluster {
 		return fmt.Errorf(
-			"selected source cluster %q is not active; active cluster is %q",
+			"selected source cluster %q is not active; connect tdbg to the active cluster %q",
 			sourceCluster,
 			response.GetReplicationConfig().GetActiveClusterName(),
 		)
@@ -634,7 +698,7 @@ func namespaceReplicationProjections(
 			State:       info.GetState(),
 			Description: info.GetDescription(),
 			OwnerEmail:  info.GetOwnerEmail(),
-			Data:        cloneNamespaceDataExcluding(info.GetData(), dataKeysToIgnore),
+			Data:        namespaceDataExcluding(info.GetData(), dataKeysToIgnore),
 		},
 		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionTtl: proto.CloneOf(config.GetWorkflowExecutionRetentionTtl()),
@@ -643,10 +707,12 @@ func namespaceReplicationProjections(
 			HistoryArchivalUri:            config.GetHistoryArchivalUri(),
 			VisibilityArchivalState:       config.GetVisibilityArchivalState(),
 			VisibilityArchivalUri:         config.GetVisibilityArchivalUri(),
-			CustomSearchAttributeAliases:  cloneNonEmptyStringMap(config.GetCustomSearchAttributeAliases()),
+			CustomSearchAttributeAliases:  maps.Clone(config.GetCustomSearchAttributeAliases()),
 		},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			Clusters: normalizedClusterReplicationConfigs(replicationConfig.GetClusters()),
+			Clusters: util.MapSlice(clusterNames(replicationConfig.GetClusters()), func(name string) *replicationpb.ClusterReplicationConfig {
+				return &replicationpb.ClusterReplicationConfig{ClusterName: name}
+			}),
 		},
 	}
 	var failoverHistory []*replicationpb.FailoverStatus
@@ -672,43 +738,18 @@ func namespaceReplicationProjections(
 	return configProjection, failoverProjection, nil
 }
 
-func cloneNonEmptyStringMap(input map[string]string) map[string]string {
-	if len(input) == 0 {
-		return nil
-	}
-	return maps.Clone(input)
-}
-
-func cloneNamespaceDataExcluding(
+// namespaceDataExcluding copies namespace data without the cluster-local keys.
+// Verification compares projections with proto.Equal, which treats nil and
+// empty maps alike, so no normalization is needed.
+func namespaceDataExcluding(
 	input map[string]string,
 	keysToIgnore map[string]struct{},
 ) map[string]string {
-	if len(input) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(input))
-	for key, value := range input {
-		if _, ignored := keysToIgnore[key]; !ignored {
-			result[key] = value
-		}
-	}
-	if len(result) == 0 {
-		return nil
-	}
-	return result
-}
-
-func normalizedClusterReplicationConfigs(
-	clusters []*replicationpb.ClusterReplicationConfig,
-) []*replicationpb.ClusterReplicationConfig {
-	names := clusterNames(clusters)
-	if len(names) == 0 {
-		return nil
-	}
-	result := make([]*replicationpb.ClusterReplicationConfig, 0, len(names))
-	for _, name := range names {
-		result = append(result, &replicationpb.ClusterReplicationConfig{ClusterName: name})
-	}
+	result := maps.Clone(input)
+	maps.DeleteFunc(result, func(key string, _ string) bool {
+		_, ignored := keysToIgnore[key]
+		return ignored
+	})
 	return result
 }
 
@@ -788,15 +829,13 @@ func namespaceReplicationDifferences(
 	return differences
 }
 
+// clusterNames returns the sorted cluster names, so cluster order does not count
+// as a difference. Callers validate the names first, so they are nonempty and
+// unique.
 func clusterNames(clusters []*replicationpb.ClusterReplicationConfig) []string {
-	result := make([]string, 0, len(clusters))
-	for _, cluster := range clusters {
-		if cluster.GetClusterName() != "" {
-			result = append(result, cluster.GetClusterName())
-		}
-	}
-	slices.Sort(result)
-	return slices.Compact(result)
+	names := nsreplication.ConvertClusterReplicationConfigFromProto(clusters)
+	slices.Sort(names)
+	return names
 }
 
 // namespaceReplicationSnapshotsEqual reports whether two reads of the same
@@ -825,37 +864,63 @@ func namespaceReplicationSnapshotsEqual(
 		proto.Equal(firstFailover, secondFailover), nil
 }
 
+// deriveNamespaceReplicationStatus turns the per-cluster rows into the overall
+// verdict. It runs only after a complete scan of a source that held still.
+// Anything repair cannot fix blocks, and the detail names each blocking replica
+// so the operator does not have to infer it from the table.
 func deriveNamespaceReplicationStatus(result *namespaceReplicationVerificationResult) {
 	source := result.Clusters[0]
 
 	repairRequired := false
-	blocked := false
+	var blockers []string
 	for _, cluster := range result.Clusters[1:] {
-		switch cluster.Presence {
-		case namespaceReplicationPresenceMissing:
+		if reason := namespaceReplicationBlockReason(&cluster, source); reason != "" {
+			blockers = append(blockers, fmt.Sprintf("%s (%s)", cluster.Cluster, reason))
+			continue
+		}
+		if cluster.Presence == namespaceReplicationPresenceMissing ||
+			cluster.ConfigMatch != namespaceReplicationMatchMatch ||
+			*cluster.ConfigVersion > *source.ConfigVersion {
 			repairRequired = true
-		case namespaceReplicationPresencePresent:
-			if cluster.Error != "" || cluster.ConfigVersion == nil || cluster.FailoverVersion == nil ||
-				namespaceReplicationFailoverBlocks(&cluster, *source.FailoverVersion) {
-				blocked = true
-				continue
-			}
-			if cluster.ConfigMatch != namespaceReplicationMatchMatch ||
-				*cluster.ConfigVersion > *source.ConfigVersion {
-				repairRequired = true
-			}
-		default:
-			blocked = true
 		}
 	}
 
-	if blocked {
+	switch {
+	case len(blockers) > 0:
 		result.Status = namespaceReplicationStatusBlocked
-		result.StatusDetail = "one or more replicas block safe repair"
-	} else if repairRequired {
+		result.StatusDetail = "replicas block safe repair: " + strings.Join(blockers, ", ")
+	case repairRequired:
 		result.Status = namespaceReplicationStatusRepairRequired
-	} else {
+	default:
 		result.Status = namespaceReplicationStatusHealthy
+	}
+}
+
+// namespaceReplicationBlockReason says why a replica blocks repair, or returns
+// "" when it is healthy or repair can fix it.
+func namespaceReplicationBlockReason(
+	cluster *namespaceReplicationClusterVerification,
+	source namespaceReplicationClusterVerification,
+) string {
+	switch cluster.Presence {
+	case namespaceReplicationPresenceMissing:
+		return ""
+	case namespaceReplicationPresencePresent:
+	default:
+		// UNAVAILABLE or NAME_COLLISION; the row carries the error.
+		return cluster.Presence
+	}
+	switch {
+	case cluster.Error != "":
+		return cluster.Error
+	case cluster.ConfigVersion == nil || cluster.FailoverVersion == nil:
+		return "versions are unknown"
+	case !namespaceReplicationFailoverBlocks(cluster, *source.FailoverVersion):
+		return ""
+	case *cluster.FailoverVersion > *source.FailoverVersion:
+		return fmt.Sprintf("failover version %d is ahead of the source's %d", *cluster.FailoverVersion, *source.FailoverVersion)
+	default:
+		return "failover state differs from the source"
 	}
 }
 

@@ -122,6 +122,120 @@ func TestNamespaceReplicationRepairCommandExecute(t *testing.T) {
 	require.Equal(t, source.GetInfo().GetDescription(), target.GetInfo().GetDescription())
 }
 
+// Repair selects the namespace exactly as verify does. These CLI tests run
+// sequentially: running a urfave/cli app mutates tdbg's shared global flags.
+func TestNamespaceReplicationRepairCommandNamespaceSelection(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		global     []string
+		local      []string
+		byName     bool
+		wantError  string
+		wantOutput string
+		wantCalls  int
+	}{
+		{name: "name", local: []string{"--namespace", "namespace"}, byName: true},
+		{name: "alias", local: []string{"-n", "namespace"}, byName: true},
+		{name: "inherited name", global: []string{"-n", "namespace"}, byName: true},
+		{name: "ID", local: []string{"--namespace-id", "namespace-id"}},
+		{name: "ID with matching name", local: []string{"-n", "namespace", "--namespace-id", "namespace-id"}},
+		{name: "ID with mismatched name", local: []string{"-n", "other", "--namespace-id", "namespace-id"}, wantError: "repair is blocked", wantCalls: 1, wantOutput: `not "other"` + "\n"},
+		{name: "ID with mismatched inherited name", global: []string{"-n", "other"}, local: []string{"--namespace-id", "namespace-id"}, wantError: "repair is blocked", wantCalls: 1, wantOutput: `not "other" from tdbg --namespace or TEMPORAL_CLI_NAMESPACE` + "\n"},
+		{name: "conflicting names", global: []string{"-n", "other"}, local: []string{"-n", "namespace"}, wantError: `--namespace "namespace" conflicts with "other"`},
+		{name: "blank inherited name is not a selector", global: []string{"-n", " "}, wantError: "--namespace or --namespace-id is required"},
+		{name: "no selector", wantError: "--namespace or --namespace-id is required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			target := proto.CloneOf(source)
+			target.Info.Description = "divergent"
+			sourceClient := testNamespaceReplicationSourceClient(source)
+			reads := 0
+			sourceClient.getNamespaceFn = func(request *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+				if test.byName && reads == 0 {
+					require.Equal(t, "namespace", request.GetNamespace())
+				} else {
+					require.Equal(t, "namespace-id", request.GetId())
+				}
+				reads++
+				return proto.CloneOf(source), nil
+			}
+			factory := &testNamespaceReplicationCLIClientFactory{
+				clients: map[string]*testNamespaceReplicationAdminClient{
+					"source":    sourceClient,
+					"cluster-b": testNamespaceReplicationTargetClient("cluster-b", target),
+				},
+			}
+			app, output := testNamespaceReplicationCLIApp(factory)
+			args := append([]string{"tdbg"}, test.global...)
+			args = append(args, "namespace", "replication", "repair")
+			err := app.Run(append(args, test.local...))
+			require.Contains(t, output.String(), test.wantOutput)
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				require.Equal(t, 2, tdbgExitCode(err))
+				require.Equal(t, test.wantCalls, factory.adminClientCalls)
+				return
+			}
+			require.NoError(t, err)
+			require.Contains(t, output.String(), namespaceReplicationRepairStatusPlanned)
+			require.Contains(t, output.String(), "Namespace: namespace (namespace-id)")
+		})
+	}
+}
+
+// Execution verifies again after writing. That read, like every read after the
+// first, uses the resolved ID: the name may belong to another namespace by then.
+func TestNamespaceReplicationRepairCommandExecuteResolvesNameOnce(t *testing.T) {
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+	target := proto.CloneOf(source)
+	target.Info.Description = "divergent"
+	sourceClient := testNamespaceReplicationSourceClient(source)
+	targetClient := testNamespaceReplicationTargetClient("cluster-b", target)
+	var reads []string
+	sourceClient.getNamespaceFn = func(request *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+		if request.GetNamespace() != "" {
+			reads = append(reads, "name:"+request.GetNamespace())
+		} else {
+			reads = append(reads, "id:"+request.GetId())
+		}
+		return proto.CloneOf(source), nil
+	}
+	sourceClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+		applyRepairTaskToSnapshot(source, decodeNamespaceRepairTask(t, request))
+		return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+	}
+	targetClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+		applyRepairTaskToSnapshot(target, decodeNamespaceRepairTask(t, request))
+		return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+	}
+	sourceClient.reconcileNamespaceMutationComponentsFn = func(*adminservice.ReconcileNamespaceMutationComponentsRequest) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
+		return &adminservice.ReconcileNamespaceMutationComponentsResponse{}, nil
+	}
+	factory := &testNamespaceReplicationCLIClientFactory{
+		clients: map[string]*testNamespaceReplicationAdminClient{
+			"source":    sourceClient,
+			"cluster-b": targetClient,
+		},
+	}
+	app, output := testNamespaceReplicationCLIApp(factory)
+
+	err := app.Run([]string{
+		"tdbg", "--yes", "namespace", "replication", "repair",
+		"--namespace", "namespace", "--reason", "operator test", "--execute",
+	})
+	require.NoError(t, err)
+	require.Contains(t, output.String(), namespaceReplicationRepairExecutionSucceeded)
+	require.Contains(t, output.String(), "Final verification: "+namespaceReplicationStatusHealthy)
+	require.Equal(t, "name:namespace", reads[0])
+	// Planning, freezing the source and the final verification each re-read it.
+	require.Greater(t, len(reads), 3)
+	for _, read := range reads[1:] {
+		require.Equal(t, "id:namespace-id", read)
+	}
+	require.Equal(t, source.GetInfo().GetDescription(), target.GetInfo().GetDescription())
+}
+
 func TestPrintNamespaceReplicationRepairPlanBeforePrompt(t *testing.T) {
 	plan := &namespaceReplicationRepairPlan{
 		Status:                      namespaceReplicationRepairStatusPlanned,
