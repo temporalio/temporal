@@ -71,11 +71,11 @@ func TestHandler(t *testing.T) {
 
 		buckets, err := snap.Histogram("my_histogram_ratio", append(systemTags, tags...)...)
 		require.NoError(t, err)
-		assert.Equal(t, []HistogramBucket{
-			{value: 1, upperBound: 1},
-			{value: 1, upperBound: 2},
-			{value: 2, upperBound: 5},
-			{value: 2, upperBound: math.Inf(1)},
+		require.Equal(t, []HistogramBucket{
+			{Value: 1, UpperBound: 1},
+			{Value: 1, UpperBound: 2},
+			{Value: 2, UpperBound: 5},
+			{Value: 2, UpperBound: math.Inf(1)},
 		}, buckets)
 	})
 }
