@@ -77,6 +77,10 @@ type (
 	DesiredLane struct {
 		// Key identifies the lane across restarts. The policy chooses its format.
 		Key string
+		// SchedulingClass selects one of 16 bounded execution groups in the pooled
+		// scheduler. It does not select a rate, and is not persisted. Zero is the
+		// default group. Policy limiters retain admission authority across changes.
+		SchedulingClass int
 		// Filter selects the HIGH priority tasks the lane carries.
 		Filter LaneFilter
 		// PolicyState is saved with the lane and returned in LaneStatus, so that the policy
@@ -114,8 +118,9 @@ type (
 
 	// LaneStatus describes a lane on the stream.
 	LaneStatus struct {
-		Key    string
-		Filter LaneFilter
+		Key             string
+		Filter          LaneFilter
+		SchedulingClass int
 		// SentCursor is the exclusive end of the tasks the lane has sent.
 		SentCursor int64
 		// Acked is the receiver's acknowledged position on the lane, and AckedTime the time
@@ -139,6 +144,14 @@ type (
 		// Reserve takes the budget to send one task, or reports how long the lane should wait
 		// before asking again. It must answer from memory, without blocking.
 		Reserve(now time.Time) (ok bool, retryAfter time.Duration)
+	}
+
+	// LaneLimiterReadiness lets the pooled scheduler avoid a flow-control wait
+	// for a lane that cannot send yet. Ready must not spend or hold credit.
+	// Like Reserve, it must answer from memory without blocking and support concurrent calls.
+	// A limiter without this optional capability is checked after flow control.
+	LaneLimiterReadiness interface {
+		Ready(now time.Time) (ok bool, retryAfter time.Duration)
 	}
 
 	manualLaneStreamPolicyFactory struct {
@@ -259,6 +272,14 @@ func newRateLaneLimiter(tasksPerSecond func() float64) *rateLaneLimiter {
 }
 
 func (l *rateLaneLimiter) Reserve(now time.Time) (bool, time.Duration) {
+	return l.reserve(now, true)
+}
+
+func (l *rateLaneLimiter) Ready(now time.Time) (bool, time.Duration) {
+	return l.reserve(now, false)
+}
+
+func (l *rateLaneLimiter) reserve(now time.Time, debit bool) (bool, time.Duration) {
 	tasksPerSecond := l.rate()
 	if tasksPerSecond <= 0 {
 		return true, 0
@@ -280,6 +301,9 @@ func (l *rateLaneLimiter) Reserve(now time.Time) (bool, time.Duration) {
 	}
 	delay := reservation.DelayFrom(now)
 	if delay <= 0 {
+		if !debit {
+			reservation.CancelAt(now)
+		}
 		return true, 0
 	}
 	// Return the token rather than holding it: the lane asks again after the delay.

@@ -62,6 +62,7 @@ type (
 		generator     test.Generator
 		once          sync.Once
 		laneStreams   bool
+		pooledLanes   bool
 	}
 )
 
@@ -71,6 +72,7 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 		name                    string
 		enableTransitionHistory bool
 		laneStreams             bool
+		pooledLanes             bool
 	}{
 		{
 			name:                    "DisableTransitionHistory",
@@ -85,11 +87,18 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 			enableTransitionHistory: true,
 			laneStreams:             true,
 		},
+		{
+			name:                    "EnableTransitionHistory_PooledLaneStreams",
+			enableTransitionHistory: true,
+			laneStreams:             true,
+			pooledLanes:             true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &streamBasedReplicationTestSuite{
 				namespaceName: "replication-test-" + common.GenerateRandomString(5),
 				laneStreams:   tc.laneStreams,
+				pooledLanes:   tc.pooledLanes,
 			}
 			s.enableTransitionHistory = tc.enableTransitionHistory
 			suite.Run(t, s)
@@ -108,6 +117,9 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	if s.laneStreams {
 		// Replication lanes split HIGH priority traffic, which requires the tiered stack.
 		s.dynamicConfigOverrides[dynamicconfig.EnableReplicationTaskTieredProcessing.Key()] = true
+	}
+	if s.pooledLanes {
+		s.dynamicConfigOverrides[dynamicconfig.ReplicationStreamSenderLaneScheduler.Key()] = "pooled"
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
@@ -1778,6 +1790,22 @@ func (s *streamBasedReplicationTestSuite) TestLaneReceiverLimit() {
 		defer func() { revert() }()
 		s.runLaneKillSwitchDrill(func() { revert = acceptNoLanes() })
 	})
+}
+
+func (s *streamBasedReplicationTestSuite) TestLaneSchedulerSwitch() {
+	if !s.pooledLanes {
+		s.T().Skip("requires pooled lane scheduling")
+	}
+	workflowIDs, release := s.startLaneBacklog()
+	defer release()
+	for _, scheduler := range []string{"per-lane", "pooled"} {
+		c := s.clusters[0]
+		s.awaitStreamRestart(c, "ReplicationStreamSender", func() {
+			c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamSenderLaneScheduler, scheduler)
+		})
+	}
+	release()
+	s.requireWorkflowsReplicated(workflowIDs)
 }
 
 // TestLaneRateChange raises the rate of a lane that holds a backlog it cannot send within the

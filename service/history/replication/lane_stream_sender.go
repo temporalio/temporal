@@ -58,8 +58,9 @@ type laneStreamSender struct {
 	ssRateLimiter           ServerSchedulerRateLimiter
 
 	// lanesEnabledSetting is ReplicationStreamSenderLanesEnabled when the stream started.
-	lanesEnabledSetting bool
-	lanePolicyFactory   LaneStreamPolicyFactory
+	lanesEnabledSetting  bool
+	pooledLaneScheduling bool
+	lanePolicyFactory    LaneStreamPolicyFactory
 	// lanePolicyMu serializes calls to lanePolicy, which is nil when the stream has no lane
 	// policy.
 	lanePolicyMu     sync.Mutex
@@ -145,6 +146,7 @@ func newLaneStreamSender(
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
 		lanesEnabledSetting:     lanesEnabledSetting,
+		pooledLaneScheduling:    usePooledLaneScheduling(config),
 		lanePolicyFactory:       lanePolicyFactory,
 		initialLaneState:        make(chan struct{}),
 		laneLimiters:            make(map[string]LaneLimiter),
@@ -206,11 +208,16 @@ func (s *laneStreamSender) Stop() {
 	s.logger.Info("StreamSender stopped.")
 }
 
-// IsValid returns false once ReplicationStreamSenderLanesEnabled changes, so that the
-// stream reconnects with lanes turned on or off.
+// IsValid returns false once lane enablement or scheduler mode changes, so that the
+// stream reconnects with the new implementation.
 func (s *laneStreamSender) IsValid() bool {
 	return atomic.LoadInt32(&s.status) == common.DaemonStatusStarted &&
-		s.config.ReplicationStreamSenderLanesEnabled() == s.lanesEnabledSetting
+		s.config.ReplicationStreamSenderLanesEnabled() == s.lanesEnabledSetting &&
+		usePooledLaneScheduling(s.config) == s.pooledLaneScheduling
+}
+
+func usePooledLaneScheduling(config *configs.Config) bool {
+	return config.ReplicationStreamSenderLaneScheduler != nil && config.ReplicationStreamSenderLaneScheduler() == "pooled"
 }
 
 func (s *laneStreamSender) Wait() {

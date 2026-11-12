@@ -25,13 +25,14 @@ const (
 )
 
 type senderLaneSnapshot struct {
-	id         string
-	logicalKey string
-	filter     LaneFilter
-	scope      queues.Scope
-	cursor     int64
-	acked      int64
-	ackedTime  time.Time
+	schedulingClass int
+	id              string
+	logicalKey      string
+	filter          LaneFilter
+	scope           queues.Scope
+	cursor          int64
+	acked           int64
+	ackedTime       time.Time
 	// retiring records retirement intent. A finite scope end is the fixed handoff boundary.
 	retiring bool
 	// paused is whether the receiver's last ack paused the lane.
@@ -271,6 +272,21 @@ func (r *senderLaneRegistry) SetPolicyState(logicalKey string, policyState []byt
 	if lane, ok := r.byKey[logicalKey]; ok {
 		lane.policyState = slices.Clone(policyState)
 	}
+}
+
+func (r *senderLaneRegistry) SetSchedulingClass(logicalKey string, class int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if lane, ok := r.byKey[logicalKey]; ok && lane.schedulingClass != class {
+		lane.schedulingClass = class
+		r.notifyChanged()
+	}
+}
+
+func (r *senderLaneRegistry) NotifyPolicyChanged() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.notifyChanged()
 }
 
 // ReadyRetirements returns lanes whose fixed prefix has been acknowledged and whose sender

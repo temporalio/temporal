@@ -170,3 +170,42 @@ func (mr *MockLaneLimiterMockRecorder) Reserve(now any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reserve", reflect.TypeOf((*MockLaneLimiter)(nil).Reserve), now)
 }
+
+// MockLaneLimiterReadiness is a mock of LaneLimiterReadiness interface.
+type MockLaneLimiterReadiness struct {
+	ctrl     *gomock.Controller
+	recorder *MockLaneLimiterReadinessMockRecorder
+	isgomock struct{}
+}
+
+// MockLaneLimiterReadinessMockRecorder is the mock recorder for MockLaneLimiterReadiness.
+type MockLaneLimiterReadinessMockRecorder struct {
+	mock *MockLaneLimiterReadiness
+}
+
+// NewMockLaneLimiterReadiness creates a new mock instance.
+func NewMockLaneLimiterReadiness(ctrl *gomock.Controller) *MockLaneLimiterReadiness {
+	mock := &MockLaneLimiterReadiness{ctrl: ctrl}
+	mock.recorder = &MockLaneLimiterReadinessMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockLaneLimiterReadiness) EXPECT() *MockLaneLimiterReadinessMockRecorder {
+	return m.recorder
+}
+
+// Ready mocks base method.
+func (m *MockLaneLimiterReadiness) Ready(now time.Time) (bool, time.Duration) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ready", now)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(time.Duration)
+	return ret0, ret1
+}
+
+// Ready indicates an expected call of Ready.
+func (mr *MockLaneLimiterReadinessMockRecorder) Ready(now any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ready", reflect.TypeOf((*MockLaneLimiterReadiness)(nil).Ready), now)
+}
