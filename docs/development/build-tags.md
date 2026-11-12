@@ -31,11 +31,12 @@ make unit-test-build-tags
 Without `temporal_minimal`, the `temporal_with_*` tags have no effect and every integration is
 included.
 
-| Tag                           | Integration                   | Dependencies it brings in |
-| ----------------------------- | ----------------------------- | ------------------------- |
-| `temporal_with_elasticsearch` | Elasticsearch visibility      | Elasticsearch client      |
-| `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK  |
-| `temporal_with_s3store`       | S3 archival                   | AWS SDK S3 client         |
+| Tag                           | Integration                   | Dependencies it brings in                          |
+| ----------------------------- | ----------------------------- | -------------------------------------------------- |
+| `temporal_with_elasticsearch` | Elasticsearch visibility      | Elasticsearch client                               |
+| `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK                           |
+| `temporal_with_prometheus`    | Built-in Prometheus reporting | Prometheus HTTP handler, Tally Prometheus reporter |
+| `temporal_with_s3store`       | S3 archival                   | AWS SDK S3 client                                  |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
 
