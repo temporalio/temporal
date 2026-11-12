@@ -274,6 +274,8 @@ message RecordWorkflowTaskStartedRequest {
   // Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
   // Sent only if the target version is different from the poller's version.
   temporal.api.deployment.v1.WorkerDeploymentVersion target_deployment_version = 13;
+  // Flow control limiters attached to this task.
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 14;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -385,6 +387,8 @@ message RecordActivityTaskStartedRequest {
   // start information is carried within this component, obviating the need to use the fields that apply to embedded
   // activities with the exception of version_directive.
   bytes component_ref = 14;
+  // Flow control limiters attached to this task.
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 15;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -806,6 +810,9 @@ message DescribeMutableStateResponse {
   // DatabaseMutableState is always available,
   // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
   temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
+  // Storage usage on this cluster as of the time of the request: the stored counters plus the
+  // interval since this cluster's last state transition. Equals the stored counters once closed.
+  temporal.server.api.persistence.v1.StorageUsage current_storage_usage = 3;
 }
 
 // At least one of the parameters needs to be provided.

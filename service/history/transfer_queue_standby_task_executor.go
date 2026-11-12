@@ -322,7 +322,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		// verify if parent got the completion event
-		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+		verifyCompletionRecorded := !transferTask.SkipParentVerification && mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
 		if verifyCompletionRecorded {
 			// load close event only if needed.
 			completionEvent, err := mutableState.GetCompletionEvent(ctx)
@@ -766,8 +766,9 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBefo
 	if postActionInfo == nil {
 		return nil
 	}
-	if !executionExistsOnSource(
+	exists, err := executionExistsOnSource(
 		ctx,
+		taskInfo,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
 		logger,
@@ -775,7 +776,11 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBefo
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
-	) {
+	)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, nil)
@@ -796,8 +801,9 @@ func (t *transferQueueStandbyTaskExecutor) checkStartChildExecutionStillExistsOn
 		return t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
 	}
 
-	if !executionExistsOnSource(
+	exists, err := executionExistsOnSource(
 		ctx,
+		taskInfo,
 		*startChildInfo.childWorkflowKey,
 		chasm.WorkflowArchetypeID,
 		logger,
@@ -805,7 +811,11 @@ func (t *transferQueueStandbyTaskExecutor) checkStartChildExecutionStillExistsOn
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
-	) {
+	)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
@@ -826,8 +836,9 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
 	}
 
-	if !executionExistsOnSource(
+	exists, err := executionExistsOnSource(
 		ctx,
+		taskInfo,
 		*verifyCompletionInfo.parentWorkflowKey,
 		getTaskArchetypeID(taskInfo),
 		logger,
@@ -835,7 +846,11 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
-	) {
+	)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)

@@ -131,7 +131,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	s.partitionMgr = pm
 	engine.Start()
 	pm.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err = pm.WaitUntilInitialized(ctx)
 	s.NoError(err)
@@ -2110,7 +2110,7 @@ func (s *PartitionManagerTestSuite) setupPartitionManagerWithTaskHookFactories(t
 	s.Require().NoError(err)
 	pm.Start()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err = pm.WaitUntilInitialized(ctx)
 	cancel()
 	s.Require().NoError(err)

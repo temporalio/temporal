@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -907,4 +908,200 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	snapshot := capture.Snapshot()
 	pluginMetrics := snapshot[metrics.WorkerPluginNameMetric.Name()]
 	assert.Empty(t, pluginMetrics, "should not record any plugin metrics when disabled")
+}
+
+func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:                 dynamicconfig.GetIntPropertyFn(1),
+		TTL:                        dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:                dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                   dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:           dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:             metricstest.NewCaptureHandler(),
+		MetricsConfig:              WorkerMetricsConfig{},
+		EventLogger:                eventLogger,
+		EnableWorkerConfigEvents:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		EnableWorkerMetricsEvents:  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		WorkerMetricsEventInterval: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(5 * time.Minute),
+	})
+	defer m.Stop()
+
+	hb := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		SdkName:           "temporal-go",
+	}
+
+	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{hb})
+	// First heartbeat: worker_config + worker_metrics
+	require.Len(t, eventLogger.records, 2)
+	require.Equal(t, "worker_config", eventLogger.records[0].EventName())
+	require.Equal(t, "worker_metrics", eventLogger.records[1].EventName())
+
+	// The next heartbeat emits neither another config event nor a throttled metrics event.
+	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{hb})
+	require.Len(t, eventLogger.records, 2)
+}
+
+func TestWorkerConfigEventNilLogger(t *testing.T) {
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:                 dynamicconfig.GetIntPropertyFn(1),
+		TTL:                        dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:                dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                   dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:           dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:             metricstest.NewCaptureHandler(),
+		MetricsConfig:              WorkerMetricsConfig{},
+		EventLogger:                nil,
+		EnableWorkerConfigEvents:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		EnableWorkerMetricsEvents:  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		WorkerMetricsEventInterval: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(5 * time.Minute),
+	})
+	defer m.Stop()
+
+	require.NotPanics(t, func() {
+		m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "w1", SdkName: "temporal-go"},
+		})
+	})
+}
+
+func newMetricsEventTestRegistry(t *testing.T) (*registryImpl, *captureEventLogger) {
+	t.Helper()
+	logger := &captureEventLogger{}
+	params := testDefaultRegistryParams(metricstest.NewCaptureHandler())
+	params.EventLogger = logger
+	params.EnableWorkerConfigEvents = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	params.EnableWorkerMetricsEvents = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	params.WorkerMetricsEventInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(5 * time.Minute)
+	registry := newRegistryImpl(params)
+	t.Cleanup(registry.Stop)
+	return registry, logger
+}
+
+func emittedMetricsWorkers(logger *captureEventLogger) []string {
+	var workers []string
+	for _, record := range logger.records {
+		if record.EventName() == "worker_metrics" {
+			var ns, key string
+			record.WalkAttributes(func(attr otellog.KeyValue) bool {
+				switch attr.Key {
+				case "namespace":
+					ns = attr.Value.AsString()
+				case "worker_instance_key":
+					key = attr.Value.AsString()
+				default:
+					return true
+				}
+				return true
+			})
+			workers = append(workers, ns+"/"+key)
+		}
+	}
+	return workers
+}
+
+func TestWorkerMetricsEventInterval(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		registry, logger := newMetricsEventTestRegistry(t)
+		captureHandler := metricstest.NewCaptureHandler()
+		registry.metricsEmitter.handler = captureHandler
+		capture := captureHandler.StartCapture()
+		defer captureHandler.StopCapture(capture)
+		record := func(used int32) *workerpb.WorkerHeartbeat {
+			hb := &workerpb.WorkerHeartbeat{
+				WorkerInstanceKey: "worker", TaskQueue: "queue",
+				ActivityTaskSlotsInfo: &workerpb.WorkerSlotsInfo{CurrentUsedSlots: used},
+			}
+			registry.RecordWorkerHeartbeats("ns", "namespace", nil, []*workerpb.WorkerHeartbeat{hb})
+			return hb
+		}
+
+		// The first heartbeat emits immediately.
+		record(1)
+		require.Equal(t, []string{"namespace/worker"}, emittedMetricsWorkers(logger))
+
+		// A throttled heartbeat must still refresh the worker in the registry.
+		<-time.After(5 * time.Second)
+		latest := record(2)
+		require.Len(t, emittedMetricsWorkers(logger), 1)
+		description, err := registry.DescribeWorker("ns", "worker")
+		require.NoError(t, err)
+		require.Same(t, latest, description, "throttling must not skip registry updates")
+
+		// No second event is emitted just before the configured five-minute interval expires.
+		<-time.After(5*time.Minute - 5*time.Second - time.Nanosecond)
+		record(3)
+		require.Len(t, emittedMetricsWorkers(logger), 1)
+		// Emit again exactly at the five-minute boundary.
+		<-time.After(time.Nanosecond)
+		record(4)
+		require.Equal(t, []string{"namespace/worker", "namespace/worker"}, emittedMetricsWorkers(logger))
+		require.Len(t, logger.records, 3, "config still emits only on registration")
+		require.Len(t, capture.Snapshot()[metrics.WorkerRegistryActivitySlotsUsed.Name()], 4,
+			"heartbeat-derived metrics must still process every heartbeat")
+	})
+}
+
+func TestWorkerMetricsEventIntervalIndependentWorkersAndNamespaces(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		registry, logger := newMetricsEventTestRegistry(t)
+		registry.workerMetricsEventInterval = func(ns string) time.Duration {
+			if ns == "ns-short" {
+				return time.Minute
+			}
+			return 5 * time.Minute
+		}
+		record := func(ns string, workers ...string) {
+			var heartbeats []*workerpb.WorkerHeartbeat
+			for _, worker := range workers {
+				heartbeats = append(heartbeats, &workerpb.WorkerHeartbeat{WorkerInstanceKey: worker, TaskQueue: "queue"})
+			}
+			registry.RecordWorkerHeartbeats(namespace.ID(ns), namespace.Name(ns), nil, heartbeats)
+		}
+
+		// Both namespaces emit the first event for workers with the same instance key.
+		record("ns-long", "w1")
+		record("ns-short", "w1")
+
+		// After one minute, only the new worker and the worker with the shorter interval emit.
+		<-time.After(time.Minute)
+		record("ns-long", "w1", "w2")
+		record("ns-short", "w1")
+		require.Equal(t, []string{"ns-long/w1", "ns-short/w1", "ns-long/w2", "ns-short/w1"}, emittedMetricsWorkers(logger))
+	})
+}
+
+func TestWorkerMetricsEventIntervalConfigChanges(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		registry, logger := newMetricsEventTestRegistry(t)
+		interval := 5 * time.Minute
+		registry.workerMetricsEventInterval = func(string) time.Duration { return interval }
+		heartbeats := []*workerpb.WorkerHeartbeat{{WorkerInstanceKey: "w1"}}
+
+		// Emit once, then verify that another heartbeat after one minute is still throttled.
+		registry.RecordWorkerHeartbeats("ns", "ns", nil, heartbeats)
+		<-time.After(time.Minute)
+		registry.RecordWorkerHeartbeats("ns", "ns", nil, heartbeats)
+		require.Len(t, emittedMetricsWorkers(logger), 1)
+
+		// Lowering the interval takes effect on the next heartbeat without restarting the registry.
+		interval = time.Minute
+		registry.RecordWorkerHeartbeats("ns", "ns", nil, heartbeats)
+		require.Len(t, emittedMetricsWorkers(logger), 2)
+	})
+}
+
+func TestWorkerMetricsEventIntervalDisabled(t *testing.T) {
+	for _, interval := range []time.Duration{0, -time.Minute} {
+		t.Run(interval.String(), func(t *testing.T) {
+			registry, logger := newMetricsEventTestRegistry(t)
+			registry.workerMetricsEventInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(interval)
+
+			// Zero and negative intervals suppress metrics events even when the emission flag is enabled.
+			registry.RecordWorkerHeartbeats("ns", "ns", nil, []*workerpb.WorkerHeartbeat{{WorkerInstanceKey: "w1"}})
+			require.Empty(t, emittedMetricsWorkers(logger))
+		})
+	}
 }

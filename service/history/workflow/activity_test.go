@@ -63,6 +63,7 @@ func (s *activitySuite) SetupTest() {
 	)
 
 	s.mockMutableState = historyi.NewMockMutableState(s.controller)
+	s.mockMutableState.EXPECT().Now().DoAndReturn(s.mockShard.GetTimeSource().Now).AnyTimes()
 
 	s.mockNamespaceRegistry = s.mockShard.Resource.NamespaceCache
 
@@ -147,7 +148,7 @@ func (s *activitySuite) TestGetPendingActivityInfoAcceptance() {
 	}
 
 	s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
-	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	pi, err := GetPendingActivityInfo(context.Background(), s.mockMutableState, ai)
 	s.NoError(err)
 	s.NotNil(pi)
 }
@@ -218,7 +219,7 @@ func (s *activitySuite) TestGetPendingActivityInfo_ActivityState() {
 		ai.StartedEventId = tc.startedEventId
 
 		s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
-		pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+		pi, err := GetPendingActivityInfo(context.Background(), s.mockMutableState, ai)
 		s.NoError(err)
 		s.NotNil(pi)
 
@@ -243,7 +244,7 @@ func (s *activitySuite) TestGetPendingActivityInfoNoRetryPolicy() {
 	}
 
 	s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
-	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	pi, err := GetPendingActivityInfo(context.Background(), s.mockMutableState, ai)
 	s.NoError(err)
 	s.NotNil(pi)
 	s.Equal(enumspb.PENDING_ACTIVITY_STATE_STARTED, pi.State)
@@ -274,7 +275,7 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	}
 
 	s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
-	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	pi, err := GetPendingActivityInfo(context.Background(), s.mockMutableState, ai)
 	s.NoError(err)
 	s.NotNil(pi)
 	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pi.State)
@@ -317,7 +318,7 @@ func (s *activitySuite) TestGetPendingActivityInfoNextAttemptScheduleTimeAndCurr
 	// Before dispatch to Matching: waiting for the retry, so we report when the next attempt is
 	// scheduled and the interval until then.
 	ai.ScheduledTime = timestamppb.New(now.Add(5 * time.Second))
-	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	pi, err := GetPendingActivityInfo(context.Background(), s.mockMutableState, ai)
 	s.NoError(err)
 	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pi.State)
 	s.Equal(ai.ScheduledTime, pi.NextAttemptScheduleTime)
@@ -325,7 +326,7 @@ func (s *activitySuite) TestGetPendingActivityInfoNextAttemptScheduleTimeAndCurr
 
 	// After dispatch to Matching: no next attempt schedule time or current retry interval.
 	ai.ScheduledTime = timestamppb.New(now.Add(-1 * time.Minute))
-	pi, err = GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	pi, err = GetPendingActivityInfo(context.Background(), s.mockMutableState, ai)
 	s.NoError(err)
 	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pi.State)
 	s.Nil(pi.NextAttemptScheduleTime)
@@ -385,7 +386,7 @@ func (s *activitySuite) TestResetPausedActivityAcceptance() {
 	ai.TimerTaskStatus = timerTaskStatus
 
 	prevStamp = ai.Stamp
-	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+	err = ResetActivity(context.Background(), s.mutableState, ai.ActivityId,
 		false, true, false, 0)
 	s.Require().NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
@@ -421,7 +422,7 @@ func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
 		TimerTaskStatusCreatedHeartbeat
 
 	prevStamp = ai.Stamp
-	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+	err = ResetActivity(context.Background(), s.mutableState, ai.ActivityId,
 		false, false, false, 0)
 	s.Require().NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
@@ -457,7 +458,7 @@ func (s *activitySuite) TestResetUnpausesRunningActivity() {
 		TimerTaskStatusCreatedStartToClose |
 		TimerTaskStatusCreatedHeartbeat
 
-	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+	err = ResetActivity(context.Background(), s.mutableState, ai.ActivityId,
 		false, false, false, 0)
 	s.Require().NoError(err)
 	s.False(ai.Paused, "ActivityInfo.Paused should be cleared by reset")
@@ -489,7 +490,7 @@ func (s *activitySuite) TestUnpauseActivityAcceptance() {
 		TimerTaskStatusCreatedHeartbeat
 	prevStamp := ai.Stamp
 
-	err = UnpauseActivity(s.mockShard, s.mutableState, ai, false, false, 0)
+	err = UnpauseActivity(s.mutableState, ai, false, false, 0)
 	s.Require().NoError(err)
 	s.False(ai.Paused, "ActivityInfo.Paused should be cleared by unpause")
 	s.Nil(ai.PauseInfo, "ActivityInfo.PauseInfo should be cleared by unpause")
@@ -518,7 +519,7 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 		TimerTaskStatusCreatedStartToClose |
 		TimerTaskStatusCreatedHeartbeat
 	prevStamp = ai.Stamp
-	_, err = UnpauseActivityWithResume(s.mockShard, s.mutableState, ai, false, 0)
+	_, err = UnpauseActivityWithResume(s.mutableState, ai, false, 0)
 	s.NoError(err)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
@@ -545,7 +546,7 @@ func (s *activitySuite) TestUnpauseActivityWithNewRun() {
 	prevStamp = ai.Stamp
 	fakeScheduledTime := time.Now().UTC().Add(5 * time.Minute)
 	ai.ScheduledTime = timestamppb.New(fakeScheduledTime)
-	_, err = UnpauseActivityWithResume(s.mockShard, s.mutableState, ai, true, 0)
+	_, err = UnpauseActivityWithResume(s.mutableState, ai, true, 0)
 	s.NoError(err)
 
 	// scheduled time should be reset to
@@ -576,7 +577,7 @@ func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
 	s.True(ai.Paused, "ActivityInfo.Paused was not unpaused")
 
 	prevStamp = ai.Stamp
-	_, err = UnpauseActivityWithReset(s.mockShard, s.mutableState, ai, false, true, 0)
+	_, err = UnpauseActivityWithReset(s.mutableState, ai, false, true, 0)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.False(ai.Paused, "ActivityInfo.Paused was not unpaused")
@@ -625,7 +626,7 @@ func (s *activitySuite) TestResetActivity_ScheduledEventLookupErrors() {
 				Return(nil, tc.lookupErr)
 
 			// resetOptions is what makes ResetActivity read the scheduled event.
-			err := ResetActivity(context.Background(), s.mockShard, s.mockMutableState, ai.ActivityId,
+			err := ResetActivity(context.Background(), s.mockMutableState, ai.ActivityId,
 				false, false, true, 0)
 			s.Require().Error(err)
 			tc.assertErr(err)

@@ -419,7 +419,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// override with smaller txn_id
 			events := s.genRandomEvents([]int64{5}, 1)
-			err := s.appendNewNode(branch, events, 0)
+			err := s.appendNewNode(branch, events, 1)
 			if err != nil {
 				return fmt.Errorf("append history node with smaller transaction ID: %w", err)
 			}

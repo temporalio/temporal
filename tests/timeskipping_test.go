@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -32,6 +34,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
@@ -1155,6 +1158,200 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingNexusOperationBlocksSkip
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
 	s.Less(wallElapsed, 5*time.Minute,
 		"wall elapsed = %v; the 1h timer must be skipped once the nexus operation completes", wallElapsed)
+}
+
+// TestTimeSkipping_HSMNexusRetryUsesWorkflowTime verifies that an HSM Nexus retry created
+// after the workflow has already skipped time retains its real-time backoff. HSM task deadlines
+// are workflow-logical timestamps; using the executor's wall clock would cause AddTasks to apply
+// the accumulated skip offset again and make the retry immediately eligible.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_HSMNexusRetryUsesWorkflowTime() {
+	const (
+		retryInterval     = 6 * time.Second
+		minimumRetryDelay = 3 * time.Second
+		maximumRetryDelay = 10 * time.Second
+	)
+
+	env := newNexusTestEnv(s.T(), true,
+		testcore.WithHistoryTaskRecorder(),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(nexusoperations.RetryPolicyInitialInterval, retryInterval),
+	)
+	tv := testvars.New(s.T())
+	attemptTimes := make(chan time.Time, 2)
+	var attempts atomic.Int32
+	handler := nexustest.Handler{
+		OnStartOperation: func(
+			_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			attemptTimes <- time.Now()
+			if attempts.Add(1) == 1 {
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional retryable error")
+			}
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), handler)
+	runID := s.startWorkflowWithTimeSkipping(env.TestEnv, tv, 4*time.Hour)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// WT1: establish a one-hour workflow-time offset before creating the Nexus operation.
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("pre-nexus-skip", time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// WT2: the timer has fired through time skipping. Schedule the HSM Nexus operation while
+	// the workflow clock is ahead of wall time.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.True(firedTimers(task)["pre-nexus-skip"])
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     testcore.MustToPayload(s.T(), "input"),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.NoError(err)
+
+	timeSkippingInfo := s.getMutableState(env.TestEnv, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.Positive(timeSkippingInfo.GetAccumulatedSkippedDuration().AsDuration())
+
+	var firstAttempt time.Time
+	select {
+	case firstAttempt = <-attemptTimes:
+	case <-time.After(maximumRetryDelay):
+		s.FailNow("first Nexus attempt was not dispatched")
+	}
+
+	// Assert on the timer written to persistence instead of waiting for the retry to execute.
+	// The recorder timestamp distinguishes it from state-machine timers written before the attempt.
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
+	s.NotNil(recorder)
+	findRetryTimer := func() *historytasks.StateMachineTimerTask {
+		recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+			NamespaceID: env.NamespaceID().String(),
+			WorkflowID:  tv.WorkflowID(),
+			RunID:       runID,
+		})
+		for _, rec := range recorded {
+			if rec.Timestamp.Before(firstAttempt) {
+				continue
+			}
+			if timer, ok := rec.Task.(*historytasks.StateMachineTimerTask); ok {
+				return timer
+			}
+		}
+		return nil
+	}
+
+	s.AwaitTruef(func() bool {
+		return findRetryTimer() != nil
+	}, maximumRetryDelay, 100*time.Millisecond, "Nexus retry timer was not generated")
+	retryTimer := findRetryTimer()
+	s.NotNil(retryTimer)
+
+	retryDelay := retryTimer.VisibilityTimestamp.Sub(firstAttempt)
+	s.GreaterOrEqual(retryDelay, minimumRetryDelay,
+		"Nexus retry timer was shifted into the past by the accumulated workflow-time offset")
+	s.LessOrEqual(retryDelay, maximumRetryDelay,
+		"Nexus retry timer was scheduled later than the configured retry interval allows")
+
+	_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		Reason:            "test cleanup",
+	})
+	s.NoError(err)
+}
+
+// TestTimeSkipping_PendingCHASMNexusOperationBlocksSkip verifies that a workflow-owned
+// CHASM Nexus operation prevents the workflow's timer from advancing virtual time.
+// Completing the operation allows the next workflow task to skip to the timer.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingCHASMNexusOperationBlocksSkip() {
+	env := newNexusTestEnv(s.T(), true,
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(chasmnexus.Enabled, true),
+		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, true),
+		testcore.WithDynamicConfig(chasmnexus.ChasmWorkflowOperationsRolloutPercent, 100),
+	)
+	tv := testvars.New(s.T())
+	started := make(chan struct{}, 1)
+	release := make(chan struct{}, 1)
+	defer close(release)
+	handler := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			select {
+			case <-release:
+				return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), handler)
+	runID := s.startWorkflowWithTimeSkipping(env.TestEnv, tv, 4*time.Hour)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint: endpointName, Service: "service", Operation: "operation",
+						Input: testcore.MustToPayload(s.T(), "input"),
+					},
+				},
+			},
+			startTimerCmd("timer-1", time.Hour),
+		}}, nil
+	})
+	s.Require().NoError(err)
+
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		s.FailNow("Nexus operation did not start")
+	}
+
+	ms := s.getMutableState(env.TestEnv, tv.WorkflowID(), runID)
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	scheduledEvent := s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+	_, inCHASM := ms.State.ChasmNodes["Operations#"+strconv.FormatInt(scheduledEvent.EventId, 10)]
+	s.True(inCHASM, "pending Nexus operation must be stored in the CHASM tree")
+	s.Zero(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration())
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
+
+	release <- struct{}{}
+	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.Require().NoError(err)
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{completeWorkflowCmd()}}, nil
+	})
+	s.Require().NoError(err)
+
+	history = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.Less(indexOfEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED),
+		indexOfEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 }
 
 // TestTimeSkipping_StartWithDelay_NoBound verifies that time-skipping with no

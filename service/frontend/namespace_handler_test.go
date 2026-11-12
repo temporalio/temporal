@@ -3,11 +3,13 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/embedded"
@@ -26,10 +28,12 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -119,6 +123,8 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockArchiverProvider,
 		s.fakeClock,
 		s.config,
+		nil,
+		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -1448,6 +1454,60 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NoAttrSet() {
 	s.NoError(err)
 }
 
+func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_OnlyAddBadBinary() {
+	namespaceName := s.getRandomNamespace()
+	version := int64(100)
+	nid := uuid.NewString()
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: 1,
+		},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   nid,
+				Name: namespaceName,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:   durationpb.New(7 * time.Hour * 24),
+				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters:          []string{cluster.TestCurrentClusterName},
+			},
+		},
+	}, nil)
+	var updateReq *persistence.UpdateNamespaceRequest
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.UpdateNamespaceRequest) error {
+			updateReq = req
+			return nil
+		},
+	)
+
+	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		Config: &namespacepb.NamespaceConfig{
+			BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+				"bad-checksum": {Reason: "some reason", Operator: "some operator"},
+			}},
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().NotNil(updateReq)
+	s.Contains(updateReq.Namespace.Config.BadBinaries.Binaries, "bad-checksum")
+	s.Equal(int64(1), updateReq.Namespace.ConfigVersion)
+}
+
 func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 	namespace := s.getRandomNamespace()
 	description := "some random description"
@@ -2261,10 +2321,11 @@ func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
 	s.Empty(rules)
 }
 
-func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
-	s.fakeClock.Update(time.Now())
-	expiredTime1 := s.fakeClock.Now().Add(-1 * time.Hour)
-	expiredTime2 := s.fakeClock.Now().Add(-2 * time.Hour)
+func TestWorkflowRuleEviction(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	expiredTime1 := now.Add(-time.Hour)
+	expiredTime2 := now.Add(-2 * time.Hour)
 
 	tests := []struct {
 		name        string
@@ -2280,6 +2341,16 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 			},
 		},
 		{
+			name: "unexpired rule is kept", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(now.Add(24 * time.Hour))}},
+			},
+		},
+		{
+			name: "rule expiring now is kept", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(now)}},
+			},
+		},
+		{
 			name: "single rule to delete", deletedRule: "rule 1", rules: map[string]*rulespb.WorkflowRule{
 				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
 			},
@@ -2290,18 +2361,93 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
 			},
 		},
+		{
+			name: "only oldest expired rule is deleted", deletedRule: "rule 2", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
+				"rule 3": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 3", ExpirationTime: timestamppb.New(now.Add(time.Hour))}},
+				"rule 4": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 4"}},
+			},
+		},
 	}
 
 	for _, tt := range tests {
-		oldLens := len(tt.rules)
-		s.handler.removeOldestExpiredWorkflowRule("", tt.rules)
-		if len(tt.deletedRule) == 0 {
-			s.Len(tt.rules, oldLens)
-		} else {
-			if _, exists := tt.rules[tt.deletedRule]; exists {
-				s.True(false, "Rule was not deleted")
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			handler := &namespaceHandler{timeSource: clock.NewEventTimeSource().Update(now), logger: log.NewNoopLogger()}
+			expected := maps.Clone(tt.rules)
+			if tt.deletedRule != "" {
+				delete(expected, tt.deletedRule)
 			}
-		}
+			handler.removeOldestExpiredWorkflowRule("", tt.rules)
+			require.Equal(t, expected, tt.rules)
+		})
+	}
+}
+
+func TestCreateWorkflowRuleAtLimit(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, tt := range []struct {
+		name           string
+		expirationTime *timestamppb.Timestamp
+		canEvict       bool
+	}{
+		{name: "no expiration"},
+		{name: "future expiration", expirationTime: timestamppb.New(now.Add(24 * time.Hour))},
+		{name: "expiration at current time", expirationTime: timestamppb.New(now)},
+		{name: "expired rule", expirationTime: timestamppb.New(now.Add(-time.Hour)), canEvict: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			metadataMgr := persistence.NewMockMetadataManager(gomock.NewController(t))
+			config := NewConfig(dc.NewNoopCollection(), 1024)
+			config.MaxWorkflowRulesPerNamespace = dc.GetIntPropertyFnFilteredByNamespace(2)
+			handler := &namespaceHandler{
+				metadataMgr: metadataMgr,
+				config:      config,
+				timeSource:  clock.NewEventTimeSource().Update(now),
+				logger:      log.NewNoopLogger(),
+				eventLogger: wideevents.NoopLogger(),
+			}
+			nsConfig := &persistencespb.NamespaceConfig{
+				WorkflowRules: map[string]*rulespb.WorkflowRule{
+					"expiring":  {Spec: &rulespb.WorkflowRuleSpec{Id: "expiring", ExpirationTime: tt.expirationTime}},
+					"permanent": {Spec: &rulespb.WorkflowRuleSpec{Id: "permanent"}},
+				},
+			}
+			expectedConfig := &persistencespb.NamespaceConfig{WorkflowRules: maps.Clone(nsConfig.WorkflowRules)}
+			metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
+			metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "test-namespace"}).Return(
+				&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{Config: nsConfig}}, nil,
+			)
+			expectedRule := &rulespb.WorkflowRule{
+				Spec: &rulespb.WorkflowRuleSpec{Id: "new"}, CreateTime: timestamppb.New(now),
+				CreatedByIdentity: "identity", Description: "description",
+			}
+			if tt.canEvict {
+				delete(expectedConfig.WorkflowRules, "expiring")
+				expectedConfig.WorkflowRules["new"] = expectedRule
+				metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, req *persistence.UpdateNamespaceRequest) error {
+						protorequire.ProtoEqual(t, expectedConfig, req.Namespace.Config)
+						return nil
+					},
+				)
+			}
+
+			rule, err := handler.CreateWorkflowRule(t.Context(), expectedRule.Spec, "identity", "description", "test-namespace", false, "")
+			if tt.canEvict {
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, expectedRule, rule)
+			} else {
+				require.ErrorContains(t, err, "Workflow Rule limit exceeded. Max: 2")
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Nil(t, rule)
+			}
+			protorequire.ProtoEqual(t, expectedConfig, nsConfig)
+		})
 	}
 }
 

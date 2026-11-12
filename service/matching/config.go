@@ -29,11 +29,13 @@ type (
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		PollWaitForNamespaceRateLimitToken   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
+		GradualMembershipChange              dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter // [cleanup-wv-pre-release]
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableTaskQueueUserDataRevisionMerge dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxVersionsInTaskQueue               dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
@@ -56,6 +58,9 @@ type (
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
 		EnablePollerAutoscalingMetrics           dynamicconfig.BoolPropertyFn
 		ExternalPayloadsEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerConfigEvents                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerMetricsEvents                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		WorkerMetricsEventInterval               dynamicconfig.DurationPropertyFnWithNamespaceFilter
 		WorkerRegistryNumBuckets                 dynamicconfig.IntPropertyFn
 		WorkerRegistryEntryTTL                   dynamicconfig.DurationPropertyFn
 		WorkerRegistryMinEvictAge                dynamicconfig.DurationPropertyFn
@@ -80,6 +85,8 @@ type (
 		GetUserDataLongPollTimeout               dynamicconfig.DurationPropertyFn
 		GetUserDataRefresh                       dynamicconfig.DurationPropertyFn
 		EphemeralDataUpdateInterval              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		DeploymentVersionMonitorGracePeriod      dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		DeploymentVersionMonitorInterval         dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		BacklogMetricsEmitInterval               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityBacklogForwarding                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BacklogNegligibleAge                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -153,14 +160,16 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		EphemeralDataUpdateInterval        func() time.Duration
-		BacklogMetricsEmitInterval         func() time.Duration
-		PriorityBacklogForwarding          func() bool
-		BacklogNegligibleAge               func() time.Duration
-		MaxWaitForPollerBeforeFwd          func() time.Duration
-		QueryPollerUnavailableWindow       func() time.Duration
-		WorkerControllerNoPollerHookWindow func() time.Duration
-		EmitTaskDispatchLatencyAtPoll      func() bool
+		EphemeralDataUpdateInterval         func() time.Duration
+		DeploymentVersionMonitorGracePeriod func() time.Duration
+		DeploymentVersionMonitorInterval    func() time.Duration
+		BacklogMetricsEmitInterval          func() time.Duration
+		PriorityBacklogForwarding           func() bool
+		BacklogNegligibleAge                func() time.Duration
+		MaxWaitForPollerBeforeFwd           func() time.Duration
+		QueryPollerUnavailableWindow        func() time.Duration
+		WorkerControllerNoPollerHookWindow  func() time.Duration
+		EmitTaskDispatchLatencyAtPoll       func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval     func() time.Duration
 		BacklogTaskForwardTimeout      func() time.Duration
@@ -280,6 +289,7 @@ func NewConfig(
 		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc), // [cleanup-wv-pre-release]
 		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
 		UseRevisionNumberForWorkerVersioning:     dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
+		EnableTaskQueueUserDataRevisionMerge:     dynamicconfig.MatchingEnableTaskQueueUserDataRevisionMerge.Get(dc),
 		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 		MaxVersionsInTaskQueue:                   dynamicconfig.MatchingMaxVersionsInTaskQueue.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
@@ -312,6 +322,9 @@ func NewConfig(
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
 		EnablePollerAutoscalingMetrics:           dynamicconfig.MatchingEnablePollerAutoscalingMetrics.Get(dc),
 		ExternalPayloadsEnabled:                  dynamicconfig.ExternalPayloadsEnabled.Get(dc),
+		EnableWorkerConfigEvents:                 dynamicconfig.MatchingEnableWorkerConfigEvents.Get(dc),
+		EnableWorkerMetricsEvents:                dynamicconfig.MatchingEnableWorkerMetricsEvents.Get(dc),
+		WorkerMetricsEventInterval:               dynamicconfig.MatchingWorkerMetricsEventInterval.Get(dc),
 		WorkerRegistryNumBuckets:                 dynamicconfig.MatchingWorkerRegistryNumBuckets.Get(dc),
 		WorkerRegistryEntryTTL:                   dynamicconfig.MatchingWorkerRegistryEntryTTL.Get(dc),
 		WorkerRegistryMinEvictAge:                dynamicconfig.MatchingWorkerRegistryMinEvictAge.Get(dc),
@@ -322,6 +335,7 @@ func NewConfig(
 		ForwarderMaxRatePerSecond:                dynamicconfig.MatchingForwarderMaxRatePerSecond.Get(dc),
 		ForwarderMaxChildrenPerNode:              dynamicconfig.MatchingForwarderMaxChildrenPerNode.Get(dc),
 		AlignMembershipChange:                    dynamicconfig.MatchingAlignMembershipChange.Get(dc),
+		GradualMembershipChange:                  dynamicconfig.MatchingGradualMembershipChange.Get(dc),
 		ShutdownDrainDuration:                    dynamicconfig.MatchingShutdownDrainDuration.Get(dc),
 		VersionCompatibleSetLimitPerQueue:        dynamicconfig.VersionCompatibleSetLimitPerQueue.Get(dc),
 		VersionBuildIdLimitPerQueue:              dynamicconfig.VersionBuildIdLimitPerQueue.Get(dc),
@@ -338,6 +352,8 @@ func NewConfig(
 		GetUserDataLongPollTimeout:               dynamicconfig.MatchingGetUserDataLongPollTimeout.Get(dc), // Use -10 seconds so that we send back empty response instead of timeout
 		GetUserDataRefresh:                       dynamicconfig.MatchingGetUserDataRefresh.Get(dc),
 		EphemeralDataUpdateInterval:              dynamicconfig.MatchingEphemeralDataUpdateInterval.Get(dc),
+		DeploymentVersionMonitorGracePeriod:      dynamicconfig.MatchingDeploymentVersionMonitorGracePeriod.Get(dc),
+		DeploymentVersionMonitorInterval:         dynamicconfig.MatchingDeploymentVersionMonitorInterval.Get(dc),
 		BacklogMetricsEmitInterval:               dynamicconfig.MatchingBacklogMetricsEmitInterval.Get(dc),
 		PriorityBacklogForwarding:                dynamicconfig.MatchingPriorityBacklogForwarding.Get(dc),
 		BacklogNegligibleAge:                     dynamicconfig.MatchingBacklogNegligibleAge.Get(dc),
@@ -417,6 +433,12 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		EphemeralDataUpdateInterval: func() time.Duration {
 			return config.EphemeralDataUpdateInterval(ns.String(), taskQueueName, taskType)
+		},
+		DeploymentVersionMonitorGracePeriod: func() time.Duration {
+			return config.DeploymentVersionMonitorGracePeriod(ns.String(), taskQueueName, taskType)
+		},
+		DeploymentVersionMonitorInterval: func() time.Duration {
+			return config.DeploymentVersionMonitorInterval(ns.String(), taskQueueName, taskType)
 		},
 		BacklogMetricsEmitInterval: func() time.Duration {
 			return config.BacklogMetricsEmitInterval(ns.String(), taskQueueName, taskType)

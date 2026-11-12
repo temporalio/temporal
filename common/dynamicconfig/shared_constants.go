@@ -1,6 +1,7 @@
 package dynamicconfig
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/common/primitives"
@@ -88,6 +89,58 @@ var DefaultDynamicRateLimitingParams = DynamicRateLimitingParams{
 	RateIncreaseStepSize: 0.1,
 	RateMultiMin:         0.8,
 	RateMultiMax:         1.0,
+}
+
+// TaskThrottleControllerSettings tunes host level pacing for history task retries
+// refused by namespace APS, persistence, or remote Nexus caller limits.
+// One budget is kept per (cause, namespace), with the destination added for remote
+// Nexus caller limits. Its admitted rate moves multiplicatively, down by Beta when
+// a control window loses more than LossThreshold and up by IncreaseRatio otherwise.
+type TaskThrottleControllerSettings struct {
+	// Enabled toggles the controller.
+	Enabled bool
+	// MinRate is the floor on a budget's admitted rate, in releases per second. Raising it
+	// is the lever for shortening recovery after a long incident. Values below one release
+	// per second are not honoured, because a budget that low can never earn the releases a
+	// decision needs.
+	MinRate float64
+	// MaxRate is the ceiling on a budget's admitted rate, in releases per second. It also
+	// bounds the burst, which is one window's worth of credit.
+	MaxRate float64
+	// InitialRate is the rate a budget starts at, and returns to when it is reset after
+	// going idle.
+	InitialRate float64
+	// KeyTTL is how long a budget survives untouched before it is evicted, or reset to
+	// InitialRate if it is touched again first, so a rate learned during an incident does
+	// not outlive it.
+	KeyTTL time.Duration
+	// Beta is the multiplicative decrease applied after a lossy window. Should be in (0, 1).
+	Beta float64
+	// IncreaseRatio is the fraction by which the rate grows after a clean window.
+	IncreaseRatio float64
+	// LossThreshold is the fraction of admitted releases that may be throttled before the
+	// rate decreases. It also sizes the evidence gate: a window decides nothing until it has
+	// seen 1/LossThreshold releases.
+	LossThreshold float64
+	// Window is the control window over which loss is evaluated. Keep it at a second or more:
+	// a blocked budget looks again every tenth of a window, so a shorter one polls harder, and
+	// at zero it polls without pausing at all.
+	Window time.Duration
+	// MaxKeys caps the budgets tracked by a host. Past the cap the controller fails open.
+	MaxKeys int
+}
+
+var DefaultTaskThrottleControllerSettings = TaskThrottleControllerSettings{
+	Enabled:       false,
+	MinRate:       1.0,
+	MaxRate:       10000.0,
+	InitialRate:   1000.0,
+	KeyTTL:        5 * time.Minute,
+	Beta:          0.85,
+	IncreaseRatio: 0.10,
+	LossThreshold: 0.05,
+	Window:        time.Second,
+	MaxKeys:       1024,
 }
 
 // ScheduleInvariantsScannerParams configures the schedule-invariants scanners. The three
@@ -273,4 +326,30 @@ type LatencyHealthCheckSettings struct {
 type LatencyHealthChecksPerPercentile struct {
 	// PercentileSettings stores settings for the health check of each percentile.
 	PercentileSettings []LatencyHealthCheckSettings
+}
+
+const (
+	HistoryReplicationRateLimiterScopeAll                  = "all"
+	HistoryReplicationRateLimiterScopeOpenForceReplication = "openForceReplication"
+)
+
+type HistoryReplicationRateLimiterSettings struct {
+	Enabled bool
+	Scope   string
+}
+
+func convertHistoryReplicationRateLimiterSettings(v any) (HistoryReplicationRateLimiterSettings, error) {
+	if enabled, err := convertBool(v); err == nil {
+		return HistoryReplicationRateLimiterSettings{Enabled: enabled, Scope: HistoryReplicationRateLimiterScopeAll}, nil
+	}
+	settings, err := ConvertStructure(HistoryReplicationRateLimiterSettings{})(v)
+	if err != nil {
+		return HistoryReplicationRateLimiterSettings{}, err
+	}
+	switch settings.Scope {
+	case HistoryReplicationRateLimiterScopeAll, HistoryReplicationRateLimiterScopeOpenForceReplication:
+		return settings, nil
+	default:
+		return HistoryReplicationRateLimiterSettings{}, fmt.Errorf("unknown history replication rate limiter scope: %q", settings.Scope)
+	}
 }

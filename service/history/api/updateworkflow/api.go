@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
@@ -179,6 +180,10 @@ func (u *Updater) applyRequest(
 		return nil, consts.ErrWorkflowClosing
 	}
 
+	if err := validateCallbacks(ctx, updateReg, ms, updateRequest); err != nil {
+		return nil, err
+	}
+
 	var (
 		alreadyExisted bool
 		err            error
@@ -190,15 +195,9 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 
-	callbacksAttached, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
+	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
 	if err != nil {
 		return nil, err
-	}
-	if callbacksAttached {
-		return &api.UpdateWorkflowAction{
-			Noop:               false,
-			CreateWorkflowTask: false,
-		}, nil
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
@@ -206,7 +205,9 @@ func (u *Updater) applyRequest(
 	// If update is duplicate, then WT for this update was already created.
 	if alreadyExisted || ms.HasPendingWorkflowTask() {
 		return &api.UpdateWorkflowAction{
-			Noop:               true,
+			// Persist only the event written by AttachCallbacks, if any. Persisting mutable state
+			// otherwise would convert a speculative workflow task to a normal one.
+			Noop:               !eventWritten,
 			CreateWorkflowTask: false,
 		}, nil
 	}
@@ -263,37 +264,53 @@ func (u *Updater) applyRequest(
 //	        - Yes: return nil as a hint to OnSuccess to link to the accepted event.
 //	        - No: link to the projected event.
 func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link {
+	requestID, ok := u.requestIDWithCompletionCallbacks()
+	if !ok {
+		return nil
+	}
+
+	if link := u.existingRequestIDLink(ms, u.wfKey, requestID); link != nil {
+		return link
+	}
+
+	updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()]
+	if updateInfo.GetCompletion() != nil {
+		// If the update is already completed, the request's callbacks are not
+		// recorded so the requestIDRef is not captured as it will not resolve.
+		return nil
+	}
+	return u.requestIDEventLink(u.wfKey, requestID, u.upd.EventLinkType(requestID))
+}
+
+func (u *Updater) requestIDWithCompletionCallbacks() (string, bool) {
 	request := u.req.GetRequest().GetRequest()
 	requestID := request.GetRequestId()
-	if requestID == "" {
+	return requestID, requestID != "" && len(request.GetCompletionCallbacks()) != 0
+}
+
+func (u *Updater) existingRequestIDLink(
+	ms historyi.MutableState,
+	wfKey definition.WorkflowKey,
+	requestID string,
+) *commonpb.Link {
+	requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]
+	if requestIDInfo == nil {
 		return nil
 	}
+	return u.requestIDEventLink(wfKey, requestID, requestIDInfo.GetEventType())
+}
 
-	// If there are no completion callbacks, dont set the
-	// requestIDRef link as it is not guaranteed to resolve.
-	if len(request.CompletionCallbacks) == 0 {
-		return nil
-	}
-
-	var eventType enumspb.EventType
-	if requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]; requestIDInfo != nil {
-		eventType = requestIDInfo.GetEventType()
-	} else {
-		updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[request.GetMeta().GetUpdateId()]
-		if updateInfo.GetCompletion() != nil {
-			// If the update is already completed, the request's callbacks are not
-			// recorded so the requestIDRef is not captured as it will not resolve.
-			return nil
-		}
-		eventType = u.upd.EventLinkType(requestID)
-	}
-
+func (u *Updater) requestIDEventLink(
+	wfKey definition.WorkflowKey,
+	requestID string,
+	eventType enumspb.EventType,
+) *commonpb.Link {
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
 				Namespace:  u.req.Request.Namespace,
-				WorkflowId: u.wfKey.WorkflowID,
-				RunId:      u.wfKey.RunID,
+				WorkflowId: wfKey.WorkflowID,
+				RunId:      wfKey.RunID,
 				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
 					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 						RequestId: requestID,
@@ -303,6 +320,38 @@ func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link 
 			},
 		},
 	}
+}
+
+// validateCallbacks rejects completion callbacks that would breach the execution's limits
+// before the Update reaches the worker: once the worker has accepted it, its callbacks are
+// attached without further checks. Callbacks of other Updates still in flight are reserved
+// against the limits; see update.Registry.InFlightCallbacks.
+func validateCallbacks(
+	ctx context.Context,
+	updateReg update.Registry,
+	ms historyi.MutableState,
+	updateRequest *updatepb.Request,
+) error {
+	if len(updateRequest.GetCompletionCallbacks()) == 0 {
+		return nil
+	}
+	updateID := updateRequest.GetMeta().GetUpdateId()
+
+	// A request for an Update that has already completed receives its outcome synchronously and
+	// attaches nothing, so it must get that outcome rather than a limit error.
+	if upd := updateReg.Find(ctx, updateID); upd != nil && upd.IsCompleted() {
+		return nil
+	}
+
+	inFlight, err := updateReg.InFlightCallbacks()
+	if err != nil {
+		return err
+	}
+	return ms.ValidateCallbackAddition(inFlight, chasmworkflow.CallbackAddition{
+		UpdateID:  updateID,
+		RequestID: updateRequest.GetRequestId(),
+		Callbacks: updateRequest.GetCompletionCallbacks(),
+	})
 }
 
 func (u *Updater) OnSuccess(
@@ -392,12 +441,16 @@ func (u *Updater) responseLink(status *update.Status) *commonpb.Link {
 	}
 	// If there isnt a requestIdRef link- due to empty callbacks/requestID- link
 	// to the Accepted event itself.
+	return u.acceptedEventLink(u.wfKey, acceptedEventID)
+}
+
+func (u *Updater) acceptedEventLink(wfKey definition.WorkflowKey, acceptedEventID int64) *commonpb.Link {
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
 				Namespace:  u.req.Request.Namespace,
-				WorkflowId: u.wfKey.WorkflowID,
-				RunId:      u.wfKey.RunID,
+				WorkflowId: wfKey.WorkflowID,
+				RunId:      wfKey.RunID,
 				Reference: &commonpb.Link_WorkflowEvent_EventRef{
 					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 						EventId:   acceptedEventID,
@@ -458,4 +511,27 @@ func (u *Updater) CreateResponse(
 			PropagatedNexusSerializationContext: nexusSerializationContext,
 		},
 	}
+}
+
+// CreateCompletedResponse creates a completed Update response linked to its callback attachment or acceptance event when available.
+func (u *Updater) CreateCompletedResponse(
+	ms historyi.MutableState,
+	wfKey definition.WorkflowKey,
+	outcome *updatepb.Outcome,
+	acceptedEventID int64,
+	nexusSerializationContext *nexuspb.PropagatedSerializationContext,
+) *historyservice.UpdateWorkflowExecutionResponse {
+	resp := u.CreateResponse(wfKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nexusSerializationContext)
+	if requestID, ok := u.requestIDWithCompletionCallbacks(); ok {
+		if link := u.existingRequestIDLink(ms, wfKey, requestID); link != nil {
+			resp.Response.Link = link
+			return resp
+		}
+	}
+	// Update completion events written before accepted_event_id was introduced may not carry
+	// the accepted event ID. Return the completed result without an invalid event reference.
+	if acceptedEventID != common.EmptyEventID {
+		resp.Response.Link = u.acceptedEventLink(wfKey, acceptedEventID)
+	}
+	return resp
 }
