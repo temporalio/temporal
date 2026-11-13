@@ -14,12 +14,18 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -372,4 +378,90 @@ func (s *activitiesSuite) TestReplicateBatch_InvalidHeartbeat() {
 	_, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, newShardedReq(payloadFor(0, execution1)))
 	s.Error(err)
 	s.ErrorContains(err, "decode heartbeat details")
+}
+
+func TestReplicateBatchCallerInfo(t *testing.T) {
+	t.Parallel()
+	for _, viaFrontend := range []bool{false, true} {
+		name := "history"
+		if viaFrontend {
+			name = "frontend"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			registry := namespace.NewMockRegistry(ctrl)
+			registry.EXPECT().GetNamespaceName(namespace.ID(mockedNamespaceID)).Return(namespace.Name(mockedNamespace), nil)
+			history := historyservicemock.NewMockHistoryServiceClient(ctrl)
+			admin := adminservicemock.NewMockAdminServiceClient(ctrl)
+			var caller headers.CallerInfo
+			if viaFrontend {
+				admin.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, _ *adminservice.GenerateLastHistoryReplicationTasksRequest, _ ...grpc.CallOption) (*adminservice.GenerateLastHistoryReplicationTasksResponse, error) {
+						caller = headers.GetCallerInfo(ctx)
+						return &adminservice.GenerateLastHistoryReplicationTasksResponse{}, nil
+					})
+			} else {
+				history.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, _ *historyservice.GenerateLastHistoryReplicationTasksRequest, _ ...grpc.CallOption) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+						caller = headers.GetCallerInfo(ctx)
+						return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
+					})
+			}
+			a := &shardedActivities{activities: &activities{
+				NamespaceRegistry: registry, HistoryClient: history, adminClient: admin,
+				forceReplicationMetricsHandler:   metrics.NoopMetricsHandler,
+				generateMigrationTaskViaFrontend: dynamicconfig.GetBoolPropertyFn(viaFrontend),
+				enableHistoryRateLimiter:         dynamicconfig.GetBoolPropertyFn(false),
+			}}
+			var suite testsuite.WorkflowTestSuite
+			env := suite.NewTestActivityEnvironment()
+			env.RegisterActivity(a)
+			req := newShardedReq(payloadFor(1, execution1))
+			req.DisableVerification = true
+			_, err := env.ExecuteActivity(a.ReplicateBatch, req)
+			require.NoError(t, err)
+			require.Equal(t, headers.NewPreemptableCallerInfo(mockedNamespace), caller)
+		})
+	}
+}
+
+func (s *activitiesSuite) TestReplicateBatchHeartbeatResumesVerification() {
+	env := s.initShardedEnv()
+	env.SetHeartbeatDetails(replicateBatchHeartbeat{InjectDone: true, ReleasedShards: []int32{1}, VerifiedExecs: []int{1}})
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).Return(&testNamespace, nil)
+	pending := &ExecutionInfo{BusinessID: "pending", RunID: "pending-run"}
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace:       mockedNamespace,
+		Execution:       &commonpb.WorkflowExecution{WorkflowId: pending.BusinessID, RunId: pending.RunID},
+		SkipForceReload: true,
+	})).Return(&adminservice.DescribeMutableStateResponse{}, nil)
+	// No inject calls, no re-verification of released or verified executions,
+	// and no SDK client for duplicate release signals are available in this test.
+	req := newShardedReq(BatchPayload{
+		1: {"released": {{RunID: "released-run"}}},
+		2: {"already-verified": {{RunID: "verified-run"}}, pending.BusinessID: {{RunID: pending.RunID}}},
+	})
+	value, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, req)
+	s.NoError(err)
+	var result replicateBatchResult
+	s.NoError(value.Get(&result))
+	s.Equal(replicateBatchResult{CompletedShards: []int32{1, 2}, VerifiedCount: 3}, result)
+}
+
+func (s *activitiesSuite) TestReplicateBatchWaitsForTargetNamespace() {
+	env := s.initShardedEnv()
+	env.SetHeartbeatDetails(replicateBatchHeartbeat{InjectDone: true})
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).Return(&testNamespace, nil)
+	gomock.InOrder(
+		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).
+			Return(nil, serviceerror.NewNamespaceNotFound(mockedNamespace)),
+		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).
+			Return(&adminservice.DescribeMutableStateResponse{}, nil),
+	)
+	value, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, newShardedReq(payloadFor(1, execution1)))
+	s.NoError(err)
+	var result replicateBatchResult
+	s.NoError(value.Get(&result))
+	s.Equal(replicateBatchResult{CompletedShards: []int32{1}, VerifiedCount: 1}, result)
 }

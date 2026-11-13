@@ -60,7 +60,7 @@ func makeExecs(shards int32, perShard int) []*ExecutionInfo {
 	bids := bidsForShards(testNamespaceID, shards, perShard)
 	var execs []*ExecutionInfo
 	idx := 0
-	for sh := range bids {
+	for sh := int32(1); sh <= shards; sh++ {
 		for _, bid := range bids[sh] {
 			execs = append(execs, &ExecutionInfo{
 				BusinessID: bid,
@@ -448,49 +448,14 @@ func TestSharded_TaskQueueReplicationFailure(t *testing.T) {
 
 // ---- Child workflow tests ----
 
-// childWorkerID is the deterministic workflow ID given to the child worker
-// spawned by childDirectRunner. Knowing this ID in advance lets the relay
-// goroutine forward promotion signals to the child via SignalExternalWorkflow.
-const childWorkerID = "test-sharded-child-worker"
-
-// childDirectRunner is a test-only wrapper workflow that spawns
-// shardedForceReplicationWorker as a child via workflow.ExecuteChildWorkflow.
-//
-// Two problems it solves:
-//
-//  1. The production child signals its parent execution (checkpoint and
-//     progress rollups), which the nil-parent guard in run() skips when the
-//     child runs as root. childDirectRunner provides a real parent so
-//     ParentWorkflowExecution is non-nil and those signal paths execute.
-//
-//  2. env.SignalWorkflow targets the top-level execution (childDirectRunner),
-//     not the child execution. childDirectRunner therefore relays the
-//     shardedResumeFullSignalName signal to the child via
-//     workflow.SignalExternalWorkflow so promotion signals from test
-//     callbacks reach the production code.
 func childDirectRunner(ctx workflow.Context, params shardedChildParams) (shardedChildResult, error) {
-	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		WorkflowID: childWorkerID,
-	})
-
-	// Relay promotion signal: when the test sends env.SignalWorkflow(shardedResumeFullSignalName, ...),
-	// it reaches this wrapper. Forward it to the child so the production
-	// handleReleaseSignals / resume goroutine inside shardedForceReplicationWorker receives it.
-	workflow.Go(ctx, func(gCtx workflow.Context) {
-		ch := workflow.GetSignalChannel(gCtx, shardedResumeFullSignalName)
-		var dummy struct{}
-		for ch.Receive(gCtx, &dummy) {
-			_ = workflow.SignalExternalWorkflow(gCtx, childWorkerID, "", shardedResumeFullSignalName, struct{}{}).Get(gCtx, nil)
-		}
-	})
-
 	var result shardedChildResult
-	err := workflow.ExecuteChildWorkflow(childCtx, shardedForceReplicationWorker, params).Get(ctx, &result)
+	err := workflow.ExecuteChildWorkflow(ctx, shardedForceReplicationWorker, params).Get(ctx, &result)
 	return result, err
 }
 
 // TestChild_HappyPath_TerminalChild: a single page of execs fits in one
-// batch; the child verifies them all and returns ReachedEnd=true.
+// batch; the child verifies them all and returns an empty next-page token.
 func TestChild_HappyPath_TerminalChild(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
@@ -513,7 +478,7 @@ func TestChild_HappyPath_TerminalChild(t *testing.T) {
 
 	var result shardedChildResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	require.True(t, result.ReachedEnd, "single-page namespace should set ReachedEnd=true")
+	require.Empty(t, result.NextPageToken, "single-page namespace should set an empty next-page token")
 	require.Equal(t, int64(5), result.VerifiedCount)
 }
 
@@ -543,11 +508,11 @@ func TestChild_VerifiedCountAccumulates(t *testing.T) {
 	var result shardedChildResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, int64(6), result.VerifiedCount)
-	require.True(t, result.ReachedEnd)
+	require.Empty(t, result.NextPageToken)
 }
 
 // TestChild_DisableVerification_ReachesEnd: with DisableVerification=true
-// the child completes with VerifiedCount=0 and ReachedEnd=true.
+// the child completes with VerifiedCount=0 and an empty next-page token.
 func TestChild_DisableVerification_ReachesEnd(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
@@ -572,64 +537,8 @@ func TestChild_DisableVerification_ReachesEnd(t *testing.T) {
 
 	var result shardedChildResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	require.True(t, result.ReachedEnd)
+	require.Empty(t, result.NextPageToken)
 	require.Equal(t, int64(0), result.VerifiedCount)
-}
-
-// TestChild_ThrottledPromotion_ReceivesSignal: a child started with
-// Handover=true runs at half rate but can receive a promotion signal
-// via the childDirectRunner relay and complete a terminal page. This verifies
-// that (a) childDirectRunner correctly relays the shardedResumeFullSignalName
-// signal to the production child, and (b) a throttled child completes
-// normally once promoted — i.e., that the promotion signal does not break
-// execution when no CAN hint is active.
-//
-// Note: the "pause at CAN hint and wait for promotion" path is not testable
-// via the child-workflow approach because env.SetContinueAsNewSuggested only
-// affects the root (childDirectRunner) env, not the grandchild
-// (shardedForceReplicationWorker) env. The CAN state is per-env and the
-// SDK provides no API to set it on an inner child env from outside.
-func TestChild_ThrottledPromotion_ReceivesSignal(t *testing.T) {
-	suite := &testsuite.WorkflowTestSuite{}
-	env := suite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflow(childDirectRunner)
-	env.RegisterWorkflow(shardedForceReplicationWorker)
-
-	execs := makeExecs(2, 5) // 10 execs, single terminal page
-	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		// From inside the activity body, schedule a delayed callback (runs on
-		// the workflow scheduler goroutine) to send the promotion signal.
-		// childDirectRunner's relay coroutine will forward it to the production
-		// child. Since the page is terminal, the child will proceed to
-		// completion rather than waiting for CAN-hint-triggered promotion.
-		env.RegisterDelayedCallback(func() {
-			env.SignalWorkflow(shardedResumeFullSignalName, struct{}{})
-		}, 0)
-		return &listWorkflowsResponse{
-			Executions:    execs,
-			NextPageToken: nil, // terminal — child reaches end naturally
-		}, nil
-	}, activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
-
-	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
-		return replicateBatchResult{
-			CompletedShards: req.Executions.sortedShards(),
-			VerifiedCount:   5,
-		}, nil
-	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
-
-	params := makeChildParams(2)
-	params.Handover = true // child begins at half rate
-	env.ExecuteWorkflow(childDirectRunner, params)
-
-	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
-
-	var result shardedChildResult
-	require.NoError(t, env.GetWorkflowResult(&result))
-	// Terminal page → child reaches end, even when starting throttled.
-	require.True(t, result.ReachedEnd, "terminal-page child should reach end regardless of throttle state")
-	require.Equal(t, int64(5), result.VerifiedCount)
 }
 
 // TestChild_ListingBackpressure_BlocksUntilSlotFree: with ConcurrentBatchCount=1
@@ -681,11 +590,49 @@ func TestChild_ListingBackpressure_BlocksUntilSlotFree(t *testing.T) {
 
 	var result shardedChildResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	require.True(t, result.ReachedEnd)
+	require.Empty(t, result.NextPageToken)
 	require.Equal(t, int64(4), result.VerifiedCount)
 
 	mu.Lock()
 	defer mu.Unlock()
 	require.Equal(t, []string{"L", "R", "L", "R", "L", "R", "L", "R"}, events,
 		"listing must block on the single dispatch slot, alternating list and replicate")
+}
+
+func TestShardedChildReusesReleasedShardWhileBatchRuns(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(pageThrough(makeExecs(2, 6), 100), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
+	secondBatch := make(chan struct{})
+	env.RegisterActivityWithOptions(func(ctx context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
+		switch req.BatchID {
+		case 1:
+			env.RegisterDelayedCallback(func() {
+				env.SignalWorkflow(releaseShardsSignalName, releaseShardsPayload{BatchID: req.BatchID, Shards: []int32{1}})
+			}, 0)
+			select {
+			case <-secondBatch:
+			case <-ctx.Done():
+				return replicateBatchResult{}, ctx.Err()
+			}
+		case 2:
+			shards := req.Executions.sortedShards()
+			if len(shards) != 1 || shards[0] != 1 {
+				return replicateBatchResult{}, temporal.NewNonRetryableApplicationError("batch reused an unreleased shard", "InvalidShard", nil)
+			}
+			close(secondBatch)
+		default:
+		}
+		return replicateBatchResult{VerifiedCount: int64(req.Executions.totalRuns())}, nil
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
+	params := makeChildParams(2)
+	params.MaxExecsPerShard = 5
+	params.BatchSize = 10
+	params.ConcurrentBatchCount = 2
+	env.ExecuteWorkflow(shardedForceReplicationWorker, params)
+	require.NoError(t, env.GetWorkflowError())
+	var result shardedChildResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, shardedChildResult{VerifiedCount: 12}, result)
 }

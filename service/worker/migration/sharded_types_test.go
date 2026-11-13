@@ -250,31 +250,6 @@ func TestVerifyHeartbeat_RoundTrip(t *testing.T) {
 	require.Equal(t, 3, gotDone)
 }
 
-// TestEffectiveMaxExecsPerShard: effectiveMaxExecsPerShard returns the full
-// MaxExecsPerShard outside a handover phase, and max(cap/2, 1) while in handover.
-func TestEffectiveMaxExecsPerShard(t *testing.T) {
-	cases := []struct {
-		name             string
-		handover         bool
-		maxExecsPerShard int
-		want             int
-	}{
-		{"not in handover returns full", false, 10, 10},
-		{"in handover returns half", true, 10, 5},
-		{"minimum of 1 enforced", true, 1, 1},
-		{"odd cap rounds down but floors at 1", true, 3, 1},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := &shardedWorkflowState{
-				params:   &shardedChildParams{MaxExecsPerShard: tc.maxExecsPerShard},
-				handover: tc.handover,
-			}
-			require.Equal(t, tc.want, s.effectiveMaxExecsPerShard())
-		})
-	}
-}
-
 // ---- shardBuckets ----
 
 // requireBucketInvariant asserts shardBuckets' core invariant: counts[sh]
@@ -560,6 +535,9 @@ func TestInFlightBatches_ReleaseAllDoesNotStompReclaimedShard(t *testing.T) {
 
 	b2 := b.claim(payloadForShards(1)) // b2 re-claims shard 1
 	require.True(t, b.isInFlight(1))
+	requireBatchInvariant(t, &b)
+	b.releaseShards(b1, []int32{1})
+	require.True(t, b.isInFlight(1), "a duplicate release must not clear the new claimant")
 	requireBatchInvariant(t, &b)
 
 	// b1's activity returns and clears its remaining claim (shard 2 only).

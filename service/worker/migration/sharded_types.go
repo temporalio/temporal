@@ -35,20 +35,10 @@ const (
 	// pack against it.
 	releaseShardsSignalName = "ReleaseShards"
 
-	// shardedCheckpointSignalName is sent by a child to the parent at
-	// its checkpoint — when GetContinueAsNewSuggested fires at a page
-	// boundary. Payload: shardedCheckpointPayload.
-	shardedCheckpointSignalName = "force-replication-sharded-checkpoint"
-
 	// shardedProgressSignalName carries a periodic (60 s) cumulative
 	// verified-count rollup from each live child to the parent.
 	// Payload: shardedProgressPayload.
 	shardedProgressSignalName = "force-replication-sharded-progress"
-
-	// shardedResumeFullSignalName is sent by the parent to a child to
-	// promote it to full-rate operation once its predecessor has
-	// completed. Payload: empty struct — presence is the signal.
-	shardedResumeFullSignalName = "force-replication-sharded-resume-full"
 
 	// defaultShardedListPageSize is the ListWorkflows page size when
 	// the sharded workflow's params.ListWorkflowsPageSize is unset.
@@ -282,7 +272,7 @@ type ShardedForceReplicationParams struct {
 
 // shardedChildParams is the input to each child worker workflow
 // (shardedForceReplicationWorker). It carries the configuration subset
-// needed by the child and the handover state for the child's listing range.
+// needed by the child for its listing range.
 type shardedChildParams struct {
 	// Configuration subset passed down from the parent.
 	Namespace, Query, NamespaceID, TargetClusterName                         string
@@ -296,39 +286,12 @@ type shardedChildParams struct {
 	// StartPageToken is the ListWorkflows continuation token from which
 	// this child begins listing. Nil for the very first child.
 	StartPageToken []byte
-
-	// Handover, when true, means the child begins in the startup handover
-	// phase: running at half MaxExecsPerShard until the parent signals
-	// resumeFullRate. Used during handover overlap so a new child and its
-	// not-yet-drained predecessor together stay ≤ MaxExecsPerShard per shard.
-	Handover bool
 }
 
-// shardedChildResult is the return value of each child worker workflow.
+// shardedChildResult describes a fully drained listing range.
 type shardedChildResult struct {
-	// VerifiedCount is the total number of executions verified by this
-	// child during its lifetime. Folded into the parent's retiredTotal
-	// on child completion.
 	VerifiedCount int64
-
-	// ReachedEnd is true when this child exhausted the namespace
-	// (ListWorkflows returned an empty next-page token) — meaning there
-	// is no more work for a successor. The parent uses this to skip
-	// starting a successor and to proceed toward terminal completion.
-	ReachedEnd bool
-}
-
-// shardedCheckpointPayload is the body of the shardedCheckpointSignalName
-// signal that a child sends to the parent when it reaches a
-// GetContinueAsNewSuggested hint at a page boundary. The parent starts a
-// successor from NextPageToken and, when this child completes, promotes the
-// successor to full rate.
-type shardedCheckpointPayload struct {
-	// ChildRunID identifies the sending child so the parent can track
-	// which child's successor has already been started.
-	ChildRunID string
-	// NextPageToken is the continuation token for the next page range.
-	// The successor starts listing from here.
+	// NextPageToken starts the next range. Empty means the namespace is exhausted.
 	NextPageToken []byte
 }
 
@@ -336,7 +299,7 @@ type shardedCheckpointPayload struct {
 // signal that each live child sends to the parent every 60 seconds.
 // The parent aggregates these to answer the force-replication-status query.
 type shardedProgressPayload struct {
-	// ChildRunID identifies the sending child within the parent's liveCounts map.
+	// ChildRunID identifies the sending child so the parent can ignore signals from earlier children.
 	ChildRunID string
 	// VerifiedCount is the child's cumulative verified-execution count
 	// at the time of this rollup signal.

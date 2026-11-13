@@ -13,37 +13,14 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-// shardedForceReplicationWorker is the child workflow spawned by
-// ShardedForceReplicationWorkflow for each listing range. It pages through
-// ListWorkflows starting from StartPageToken, routes each execution to a
-// destination history shard bucket, and dispatches packed inject+verify
-// activities (ReplicateBatch) as buckets fill.
-//
-// Lifecycle:
-//  1. List pages at effectiveMaxExecsPerShard rate until either the
-//     namespace is exhausted (ReachedEnd=true, no checkpoint) or
-//     GetContinueAsNewSuggested fires at a page boundary (send checkpoint
-//     signal to parent, enter the shutdown handover, stop listing).
-//  2. Drain remaining bucket execs via drainBuckets.
-//  3. Await all in-flight batches complete (batches.count() == 0).
-//  4. Return shardedChildResult{VerifiedCount, ReachedEnd}.
-//
-// A 60 s timer coroutine sends cumulative verifiedCount rollup signals to
-// the parent so the force-replication-status query stays up to date.
-//
-// Handover-hits-hint: a child started with Handover=true (not yet promoted)
-// pauses at a CAN hint and awaits the parent's resumeFullRate signal before
-// checkpointing. This ensures at most one handover is in flight at any time and
-// at most two children run concurrently.
+// shardedForceReplicationWorker lists and replicates a range of executions.
+// It stops listing at a page boundary when continue-as-new is suggested, drains
+// every buffered and in-flight execution, then returns the next page token.
 func shardedForceReplicationWorker(ctx workflow.Context, params shardedChildParams) (shardedChildResult, error) {
 	s := &shardedWorkflowState{
 		params:           &params,
 		namespaceID:      params.NamespaceID,
 		targetShardCount: params.TargetShardCount,
-		// Handover=true → started mid-handover (predecessor still running);
-		// runs at half rate until promoted. Handover=false → first child, no
-		// predecessor, full rate from the start.
-		handover: params.Handover,
 		metricsHandler: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
 			metrics.OperationTagName: metrics.MigrationWorkflowScope,
 			NamespaceTagName:         params.Namespace,
@@ -81,19 +58,6 @@ type shardedWorkflowState struct {
 	// returns the error.
 	lastErr error
 
-	// handover is set while this child is in a handover phase and must run
-	// at half rate so the other side of the handover can run alongside it
-	// without the combined per-shard in-flight count exceeding
-	// MaxExecsPerShard. Two distinct phases set it:
-	//   - Startup: a child started with Handover=true begins in handover
-	//     (predecessor still running) and clears it when the parent sends the
-	//     resumeFullRate signal (predecessor done). The first child
-	//     (Handover=false) has no predecessor and starts clear.
-	//   - Shutdown: a child re-enters handover when it checkpoints — sends its
-	//     checkpoint signal and stops listing — so the successor the parent
-	//     starts from that checkpoint can run at half alongside it.
-	handover bool
-
 	// verifiedCount accumulates verified executions for the final child
 	// result and the 60 s progress rollup signal to the parent.
 	verifiedCount int64
@@ -101,26 +65,6 @@ type shardedWorkflowState struct {
 	// metricsHandler is tagged with the workflow's fixed scope + namespace
 	// once at construction; recordVerified reuses it on every batch return.
 	metricsHandler sdkclient.MetricsHandler
-}
-
-// effectiveMaxExecsPerShard returns the full MaxExecsPerShard in the steady
-// state (not in a handover phase) and max(MaxExecsPerShard/2, 1) while in
-// handover.
-//
-// Half-rate applies throughout a handover phase, which spans two situations
-// (see the handover field):
-//   - Startup handover: this child was started alongside a still-running
-//     predecessor; together they must stay ≤ MaxExecsPerShard per shard.
-//   - Shutdown handover (after checkpointing): a successor has been started at
-//     half rate alongside us; same combined-load constraint.
-//
-// Minimum of 1 ensures at least one exec can always be packed regardless
-// of BatchSize or MaxExecsPerShard settings.
-func (s *shardedWorkflowState) effectiveMaxExecsPerShard() int {
-	if !s.handover {
-		return s.params.MaxExecsPerShard
-	}
-	return max(s.params.MaxExecsPerShard/2, 1)
 }
 
 // run is the child workflow body. See shardedForceReplicationWorker for
@@ -132,13 +76,11 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) (shardedChildResult, er
 	parentExec := workflow.GetInfo(ctx).ParentWorkflowExecution
 	s.startBackgroundCoroutines(ctx, parentExec)
 
-	reachedEnd := s.listUntilCheckpointOrEnd(ctx, parentExec)
+	nextPageToken := s.listUntilCheckpointOrEnd(ctx)
 	if s.lastErr != nil {
 		return shardedChildResult{}, s.lastErr
 	}
 
-	// Drain remaining buckets (at effectiveMaxExecsPerShard, which is
-	// half during the shutdown handover so the successor can run alongside).
 	s.drainBuckets(ctx)
 	if s.lastErr != nil {
 		return shardedChildResult{}, s.lastErr
@@ -146,7 +88,7 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) (shardedChildResult, er
 
 	// Await all in-flight batches. No cancellation — children always run
 	// to natural completion so their verified counts are exact.
-	if err := workflow.Await(ctx, func() bool { return s.batches.count() == 0 }); err != nil {
+	if err := workflow.Await(ctx, func() bool { return s.batches.count() == 0 || s.lastErr != nil }); err != nil {
 		return shardedChildResult{}, err
 	}
 	if s.lastErr != nil {
@@ -155,27 +97,13 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) (shardedChildResult, er
 
 	return shardedChildResult{
 		VerifiedCount: s.verifiedCount,
-		ReachedEnd:    reachedEnd,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 
-// startBackgroundCoroutines launches the promotion-signal handler and the
-// 60 s progress rollup. The rollup runs only when the worker has a parent to
-// signal (skipped when the worker runs standalone, e.g. in unit tests).
+// startBackgroundCoroutines reports progress every 60 seconds when the worker
+// has a parent to signal.
 func (s *shardedWorkflowState) startBackgroundCoroutines(ctx workflow.Context, parentExec *workflow.Execution) {
-	// Parent promotion handler: a one-shot signal that ends the startup
-	// handover (clears handover), advancing the child to full rate once the
-	// predecessor has completed. Runs until the signal arrives (or ctx is
-	// cancelled at workflow end). Only throttled children ever receive it, and
-	// always before they checkpoint, so it never races the shutdown handover.
-	workflow.Go(ctx, func(gCtx workflow.Context) {
-		ch := workflow.GetSignalChannel(gCtx, shardedResumeFullSignalName)
-		var dummy struct{}
-		if ch.Receive(gCtx, &dummy) {
-			s.handover = false
-		}
-	})
-
 	if parentExec == nil {
 		return
 	}
@@ -209,18 +137,15 @@ func (s *shardedWorkflowState) startBackgroundCoroutines(ctx workflow.Context, p
 	})
 }
 
-// listUntilCheckpointOrEnd drives the listing loop: page through ListWorkflows,
-// bucketing and opportunistically packing each page, until either the
-// namespace is exhausted (returns true) or a CAN hint at a fully-consumed page
-// boundary triggers a checkpoint (returns false). Latches s.lastErr on listing
-// failure.
-func (s *shardedWorkflowState) listUntilCheckpointOrEnd(ctx workflow.Context, parentExec *workflow.Execution) bool {
+// listUntilCheckpointOrEnd returns the next range's token at a page boundary,
+// or nil when listing is exhausted. Errors are latched in lastErr.
+func (s *shardedWorkflowState) listUntilCheckpointOrEnd(ctx workflow.Context) []byte {
 	currentPageToken := s.params.StartPageToken
 	for s.lastErr == nil {
 		executions, nextPageToken, err := s.listWorkflowPageWithToken(ctx, currentPageToken)
 		if err != nil {
 			s.lastErr = err
-			return false
+			return nil
 		}
 
 		for _, ex := range executions {
@@ -238,15 +163,14 @@ func (s *shardedWorkflowState) listUntilCheckpointOrEnd(ctx workflow.Context, pa
 		}
 
 		if len(nextPageToken) == 0 {
-			return true // namespace exhausted — terminal child, no successor needed
+			return nil
 		}
 		currentPageToken = nextPageToken
 
 		// Check the CAN hint at this fully-consumed page boundary, so
 		// currentPageToken is exact and safe to hand to a successor.
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
-			s.checkpointAtBoundary(ctx, parentExec, currentPageToken)
-			return false
+			return currentPageToken
 		}
 
 		// Backpressure: don't fetch the next page until a dispatch slot
@@ -256,63 +180,7 @@ func (s *shardedWorkflowState) listUntilCheckpointOrEnd(ctx workflow.Context, pa
 		// lastErr; the loop's lastErr guard then re-checks.
 		s.waitForDispatchSlot(ctx)
 	}
-	return false
-}
-
-// checkpointAtBoundary performs the handover checkpoint. If still in the startup
-// handover it first awaits promotion (so at most one handover is ever in
-// flight), then re-enters handover for the shutdown phase (dropping to half
-// rate) and signals the parent the next page token; the parent starts a
-// successor from there and promotes it once this child completes.
-//
-// The checkpoint signal is load-bearing: it is the only way the parent learns
-// where to resume, so if it fails the parent never starts a successor and every
-// execution past this page boundary is silently dropped. SignalExternalWorkflow
-// has no transient failure modes (it fails only for permanent reasons, e.g. the
-// parent no longer exists), so a failure is latched into lastErr to fail the
-// child rather than continue.
-func (s *shardedWorkflowState) checkpointAtBoundary(ctx workflow.Context, parentExec *workflow.Execution, pageToken []byte) {
-	if s.handover {
-		// Handover-hits-hint: still in the startup handover, predecessor
-		// running. Pausing here bounds our history at ~hint size and guarantees
-		// at most one handover is in flight at a time. Await promotion
-		// (predecessor completion, which clears handover), then checkpoint
-		// immediately.
-		if err := workflow.Await(ctx, func() bool { return !s.handover || s.lastErr != nil }); err != nil {
-			s.setLastErr(err)
-			return
-		}
-		if s.lastErr != nil {
-			return
-		}
-	}
-	s.handover = true
-	// Batches packed before handover may hold the full per-shard allowance.
-	// Drain them before starting a half-rate successor so the two children
-	// cannot exceed MaxExecsPerShard in aggregate on the same target shard.
-	err := workflow.Await(ctx, func() bool {
-		return s.batches.count() == 0 || s.lastErr != nil
-	})
-	if err != nil {
-		s.setLastErr(err)
-		return
-	}
-	if s.lastErr != nil {
-		return
-	}
-	if parentExec == nil {
-		return
-	}
-	err = workflow.SignalExternalWorkflow(ctx,
-		parentExec.ID, parentExec.RunID,
-		shardedCheckpointSignalName,
-		shardedCheckpointPayload{
-			ChildRunID:    workflow.GetInfo(ctx).WorkflowExecution.RunID,
-			NextPageToken: pageToken,
-		}).Get(ctx, nil)
-	if err != nil {
-		s.setLastErr(fmt.Errorf("checkpoint signal to parent: %w", err))
-	}
+	return nil
 }
 
 var (
@@ -473,13 +341,12 @@ func (s *shardedWorkflowState) spawnBatch(ctx workflow.Context, payload BatchPay
 }
 
 // tryPackStreaming attempts to pack and dispatch one batch from s.buckets.
-// Returns true if a batch was dispatched. Uses effectiveMaxExecsPerShard
-// as the per-shard cap so the half-rate constraint propagates into every
-// batch packed while the child is in a handover phase.
+// Returns true if a batch was dispatched. Uses MaxExecsPerShard
+// as the per-shard cap.
 //
 // No per-shard or total-bucket threshold: as soon as any free shard has
 // any execs and a dispatch slot is open, a batch fires. Safety is enforced
-// outside the packer — effectiveMaxExecsPerShard caps a single shard's
+// outside the packer — MaxExecsPerShard caps a single shard's
 // contribution, ConcurrentBatchCount caps in-flight batches, and
 // PerBatchGenerateRPS caps the per-batch source RPS.
 func (s *shardedWorkflowState) tryPackStreaming(ctx workflow.Context, relax bool) bool {
@@ -491,7 +358,7 @@ func (s *shardedWorkflowState) tryPackStreaming(ctx workflow.Context, relax bool
 		return false
 	}
 
-	effectiveCap := s.effectiveMaxExecsPerShard()
+	effectiveCap := s.params.MaxExecsPerShard
 	payload := BatchPayload{}
 	packed := 0
 	for _, sh := range shardIDs {
@@ -522,7 +389,7 @@ func (s *shardedWorkflowState) tryPackStreaming(ctx workflow.Context, relax bool
 // predictable batches when work is plentiful and small ones when it isn't
 // — either way it ships rather than waiting.
 //
-// relax=true (drain): hot shards (count > effectiveMaxExecsPerShard) first,
+// relax=true (drain): hot shards (count > MaxExecsPerShard) first,
 // fullest within hot. These need >1 round trip to drain, so total drain
 // wall-clock is bounded by the heaviest shard; starting their pipelines
 // first is the dominant lever. After all hot shards are claimed, remaining
@@ -538,7 +405,7 @@ func (s *shardedWorkflowState) shardIDsByPackPriority(relax bool) []int32 {
 		}
 	}
 	if relax {
-		maxPerShard := s.effectiveMaxExecsPerShard()
+		maxPerShard := s.params.MaxExecsPerShard
 		slices.SortFunc(out, func(a, b int32) int {
 			ca, cb := s.buckets.count(a), s.buckets.count(b)
 			aHot, bHot := ca > maxPerShard, cb > maxPerShard

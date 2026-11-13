@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -70,6 +71,7 @@ func (a *shardedActivities) ReplicateBatch(ctx context.Context, req *shardedBatc
 	if execCount == 0 {
 		return replicateBatchResult{}, nil
 	}
+	ctx = a.setCallerInfoForServerAPI(ctx, namespace.ID(req.NamespaceID))
 
 	var hb replicateBatchHeartbeat
 	if activity.HasHeartbeatDetails(ctx) {
@@ -453,6 +455,13 @@ func (a *shardedActivities) attemptVerifyExec(
 
 	result, err := a.verifySingleReplicationTask(ctx, vreq, remoteAdminClient, ns, ex.ExecutionInfo)
 	if err != nil {
+		// Namespace replication and history caches can lag frontend registration.
+		// Poll within the shard's no-progress deadline while they catch up.
+		if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok && appErr.Type() == "NamespaceNotFound" {
+			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(req.Namespace)).
+				Counter(metrics.VerifyReplicationTaskPending.Name()).Record(1)
+			return false, nil
+		}
 		return false, err
 	}
 	return result.isVerified(), nil
