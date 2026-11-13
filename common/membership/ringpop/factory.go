@@ -28,6 +28,7 @@ import (
 
 const (
 	defaultMaxJoinDuration      = 10 * time.Second
+	defaultSnapshotExpiry       = 5 * time.Minute
 	persistenceOperationTimeout = 10 * time.Second
 )
 
@@ -72,6 +73,9 @@ func newFactory(params factoryParams) (*factory, error) {
 
 	if cfg.MaxJoinDuration == 0 {
 		cfg.MaxJoinDuration = defaultMaxJoinDuration
+	}
+	if cfg.SnapshotExpiry == 0 {
+		cfg.SnapshotExpiry = defaultSnapshotExpiry
 	}
 
 	return &factory{
@@ -120,6 +124,7 @@ func (factory *factory) getMonitor() *monitor {
 			factory.MetadataManager,
 			factory.broadcastAddressResolver,
 			factory.Config.MaxJoinDuration,
+			factory.Config.SnapshotExpiry,
 			maxPropagationTime,
 			factory.getJoinTime(maxPropagationTime),
 			replicaPoints,
