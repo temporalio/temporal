@@ -53,17 +53,11 @@ func getBackoffInterval(
 }
 
 func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
-	var delay *time.Duration
-	afi, ok := failure.GetFailureInfo().(*failurepb.Failure_ApplicationFailureInfo)
-	if !ok {
-		return delay
+	// A delay that is not positive does not override the retry policy.
+	if d := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration(); d > 0 {
+		return &d
 	}
-	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
-	if p != nil {
-		d := p.AsDuration()
-		delay = &d
-	}
-	return delay
+	return nil
 }
 
 func nextBackoffInterval(

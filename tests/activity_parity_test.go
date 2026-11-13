@@ -530,6 +530,20 @@ func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptSchedule
 			})
 	})
 
+	// A zero next_retry_delay does not override the retry policy: the reported interval is the
+	// policy's.
+	s.Run("ZeroNextRetryDelay", func(s *activityParityTestSuite) {
+		t := s.T()
+		both(t, activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration, ZeroNextRetryDelay: true},
+			[]model.Event{model.Poll, model.FailRetryably},
+			activityInfo{
+				RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+				Attempt:                    2,
+				CurrentRetryInterval:       activityLongDuration,
+				NextAttemptScheduleTimeSet: true,
+			})
+	})
+
 	// Once the retry's dispatch deadline is due, both fields are nil. This projection does not by
 	// itself prove that the dispatch task reached Matching; the following running-attempt cases prove
 	// that with a Poll.
