@@ -725,6 +725,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	limit := c.config.MaxVersionsInTaskQueue()
 	// Using > instead of >= to give the Deployment a chance to delete some old versions if MatchingMaxVersionsInDeployment is also reached.
 	if worker_versioning.CountDeploymentVersions(deploymentData) > limit {
+		metrics.WorkerDeploymentLimitExceeded.With(c.partitionMgr.engine.metricsHandler).Record(1,
+			metrics.NamespaceTag(namespaceEntry.Name().String()), metrics.WorkerDeploymentLimitTypeTag(metrics.WorkerDeploymentLimitVersionsPerTaskQueue))
 		// Before retrying the error, hold the poller for some time so it does not retry immediately
 		// Parallel polls are already serialized using the lock.
 		time.Sleep(backoff)
@@ -968,8 +970,8 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 }
 
 // recordPollerScaleDecision emits the poller_scale_decision metric describing the direction of a
-// poller scaling decision (scale up, down, or hold) and the reason for it. It is a no-op unless the
-// opt-in dynamic config matching.enablePollerScalingDecisionMetrics is enabled for this namespace/task queue.
+// poller scaling decision (scale up, down, or hold) and the reason for it. It is a no-op when the
+// dynamic config matching.enablePollerScalingDecisionMetrics is disabled for this namespace/task queue.
 func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string, reason metrics.ReasonString) {
 	if !c.partitionMgr.config.EnablePollerScalingDecisionMetrics() {
 		return

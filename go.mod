@@ -50,7 +50,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
-	github.com/temporalio/ringpop-go v0.1.1
+	github.com/temporalio/ringpop-go v0.1.3
 	github.com/temporalio/sqlparser v0.1.0
 	github.com/temporalio/tchannel-go v1.22.1
 	github.com/tidwall/btree v1.8.1
@@ -74,7 +74,7 @@ require (
 	go.temporal.io/api v1.64.3
 	go.temporal.io/auto-scaled-workers v0.0.0-20261030203857-75274b664c29
 	go.temporal.io/sdk v1.49.0
-	go.temporal.io/testx v0.0.0-20261029001555-ddcb0739798d
+	go.temporal.io/testx v0.0.0-20261112171501-c4cea589f218
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0

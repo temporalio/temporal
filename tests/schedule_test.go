@@ -24,6 +24,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -479,11 +480,15 @@ func (suite *ScheduleCHASMSuite) TestPausedBehavior() {
 }
 
 func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklySkipCreateWithPatch() {
-	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, true)
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, true, 0)
 }
 
 func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklyAllowAllPatch() {
-	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, false)
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, false, 0)
+}
+
+func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklyWithWorkflowExecutionTimeout() {
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, true, 2*24*time.Hour)
 }
 
 func (suite *ScheduleCHASMSuite) TestMaxSkipCapsScheduleTimeSkipping() {
@@ -541,6 +546,7 @@ func testScheduleTimeSkippingWeekly(
 	t *testing.T,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	createWithPatch bool,
+	executionTimeout time.Duration,
 ) {
 	opts := append(
 		scheduleCommonOpts(t),
@@ -560,6 +566,10 @@ func testScheduleTimeSkippingWeekly(
 	fastForwardDuration := 3*week + 2*24*time.Hour
 	now := time.Now().UTC()
 	firstTick := now.Add(12 * time.Hour).Truncate(time.Second)
+	action := startWorkflowAction(s, wid, wt)
+	if executionTimeout > 0 {
+		action.GetStartWorkflow().WorkflowExecutionTimeout = durationpb.New(executionTimeout)
+	}
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{{
@@ -567,7 +577,7 @@ func testScheduleTimeSkippingWeekly(
 				Phase:    durationpb.New(time.Duration(firstTick.UnixNano() % week.Nanoseconds())),
 			}},
 		},
-		Action: startWorkflowAction(s, wid, wt),
+		Action: action,
 		Policies: &schedulepb.SchedulePolicies{
 			OverlapPolicy: overlapPolicy,
 		},
@@ -653,6 +663,21 @@ func testScheduleTimeSkippingWeekly(
 			&workflowScheduledStart,
 		))
 		require.Equal(t, expectedStart, workflowScheduledStart)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, workflowInfo.GetStatus())
+
+		if executionTimeout > 0 {
+			ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+				Namespace: s.Namespace().String(),
+				Execution: execution,
+				Archetype: chasm.WorkflowArchetype,
+			})
+			require.NoError(t, err)
+			require.WithinDuration(t,
+				workflowInfo.GetStartTime().AsTime().Add(executionTimeout),
+				ms.GetDatabaseMutableState().GetExecutionInfo().GetWorkflowExecutionExpirationTime().AsTime(),
+				time.Second,
+			)
+		}
 	}
 }
 
@@ -2134,9 +2159,11 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 // diverges: V1 keeps the previous result and failure, V2 clears both. An explicit nil
 // (binary/null) is a result for both.
 func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
-	// Must precede env creation, which otherwise fixes the default timeout.
-	ctx := testcontext.For(t, testcontext.WithTimeout(3*time.Minute))
-	s := newScheduleEnv(t, append(scheduleCommonOpts(t), testcore.WithWorkerService("V1 scheduler"))...)
+	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithWorkerService("V1 scheduler"),
+		testcore.WithTestTimeout(3*time.Minute),
+	)...)
+	ctx := testcontext.For(t)
 
 	type sched struct {
 		name, scheduleID, workflowID string
