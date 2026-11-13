@@ -1674,6 +1674,31 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 		s.Contains(handlerErr.Error(), "invalid callback token", "Response should indicate invalid callback token")
 	})
 
+	s.Run("CallbackTokenWithoutRequestID", func(s *NexusWorkflowTestSuite) {
+		env := s.newTestEnv(chasmEnabled)
+		gen := &commonnexus.CallbackTokenGenerator{}
+		validToken, err := s.generateValidCallbackToken(env.NamespaceID().String(), testcore.RandomizeStr("workflow"), uuid.NewString())
+		s.NoError(err)
+		decodedToken, err := commonnexus.DecodeCallbackToken(validToken)
+		s.NoError(err)
+		completionToken, err := gen.DecodeCompletion(decodedToken)
+		s.NoError(err)
+		completionToken.RequestId = ""
+		invalidToken, err := gen.Tokenize(completionToken)
+		s.NoError(err)
+
+		completion := nexusrpc.CompleteOperationOptions{
+			Result: testcore.MustToPayload(s.T(), "result"),
+			Header: nexus.Header{commonnexus.CallbackTokenHeader: invalidToken},
+		}
+		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
+		err = s.sendNexusCompletionRequest(s.Context(), publicCallbackURL, completion)
+		var handlerErr *nexus.HandlerError
+		s.ErrorAs(err, &handlerErr)
+		s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+		s.Contains(handlerErr.Error(), "invalid callback token")
+	})
+
 	s.Run("InvalidCallbackTokenNoIdentifier", func(s *NexusWorkflowTestSuite) {
 		env := s.newTestEnv(chasmEnabled)
 		completion := nexusrpc.CompleteOperationOptions{

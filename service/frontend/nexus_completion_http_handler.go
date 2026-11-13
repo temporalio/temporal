@@ -135,6 +135,9 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		h.Logger.Error("failed to decode completion from token", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
+	if completion.GetRequestId() == "" {
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+	}
 
 	// Determine the target namespace, workflow, and run ID from the completion token. The CHASM
 	// ComponentRef is canonical when present; otherwise the top-level HSM fields are used. Shared
