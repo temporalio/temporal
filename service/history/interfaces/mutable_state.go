@@ -150,8 +150,7 @@ type (
 		ValidateCallbackAddition(inFlight []chasmworkflow.CallbackAddition, addition chasmworkflow.CallbackAddition) error
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
+		GetCompletedUpdate(ctx context.Context, updateID string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error)
 		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		CheckResettable() error
 		// UpdateResetRunID saves the runID that resulted when this execution was reset.
@@ -226,6 +225,7 @@ type (
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
 		HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool
+		NumBufferedEvents() int
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
@@ -433,13 +433,16 @@ type (
 		HasRequestID(requestID string) bool
 		SetSuccessorRunID(runID string)
 
-		// Now returns the current time of the mutable state, which may be ahead of
-		// wall-clock time if time skipping has happened.
+		// Now returns the current logical time of the mutable state, which may be ahead of
+		// physical time if time skipping has happened.
 		Now() time.Time
-		// ToRealTimeWithCurrentOffset converts a virtual timestamp to wall-clock time using
-		// the current accumulated skipped duration. It cannot recover the wall-clock
-		// time at which a past virtual timestamp was generated.
-		ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time
+		// ToPhysicalTimeWithCurrentTimeSkippingOffset converts logical time to physical time by subtracting
+		// the current accumulated skipped duration. Zero time is returned unchanged.
+		// It cannot recover the physical time at which a past logical timestamp was generated.
+		ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time
+		// ToLogicalTimeWithCurrentTimeSkippingOffset converts physical time to logical time by adding
+		// the current accumulated skipped duration. Zero time is returned unchanged.
+		ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error

@@ -12,19 +12,23 @@ import (
 
 	"github.com/stretchr/testify/require"
 	testifysuite "github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/historyrequire"
-	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/testx/await"
+	"go.temporal.io/testx/testcontext"
 )
 
-// testingSuite is the constraint for suite types.
-type testingSuite interface {
+// TestingSuite is the constraint for suite types.
+type TestingSuite interface {
 	testifysuite.TestingSuite
 	//nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
-	copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite
+	copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) TestingSuite
 	//nolint:revive // see copySuite above.
 	initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context)
+}
+
+// AssertionsInitializer may be implemented by an embedded suite to bind
+// additional assertions after each test, subtest, or await attempt is initialized.
+type AssertionsInitializer interface {
+	InitAssertions()
 }
 
 // Scope provides the context and test handles for a test or await attempt.
@@ -54,11 +58,9 @@ func (s contextScope) Context() context.Context {
 //
 // It enforces a strict rule: a test method (or subtest) must either use assertions
 // directly OR create subtests via Run — not both.
-type Suite[T testingSuite] struct {
+type Suite[T TestingSuite] struct {
 	testifyBase
 	*require.Assertions
-	protorequire.ProtoAssertions
-	historyrequire.HistoryRequire
 
 	guardT      guardT
 	runParallel bool
@@ -71,9 +73,12 @@ type Suite[T testingSuite] struct {
 // ctx overrides the suite's context; nil means use the test context (see [Suite.Context]).
 //
 //nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
-func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite {
+func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) TestingSuite {
 	cp := reflect.New(reflect.TypeFor[T]().Elem()).Interface().(T)
 	cp.initSuite(t, parallel, assertT, ctx)
+	if initializer, ok := any(cp).(AssertionsInitializer); ok {
+		initializer.InitAssertions()
+	}
 	return cp
 }
 
@@ -93,13 +98,12 @@ func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.Testin
 	}
 	s.assertT = assertT
 	s.Assertions = require.New(assertT)
-	s.ProtoAssertions = protorequire.New(assertT)
-	s.HistoryRequire = historyrequire.New(assertT)
 }
 
 // T returns the *testing.T, panicking if the guard has been sealed.
 func (s *Suite[T]) T() *testing.T {
 	if s.guardT.hasSubtests.Load() {
+		//nolint:forbidigo // Panics are fine in testing code.
 		panic("parallelsuite: do not call T() after Run(); use the subtest callback's parameter instead")
 	}
 	return s.guardT.T
@@ -200,7 +204,7 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 // parallel. Any sequential setup must happen before calling Run.
 //
 // The suite must embed [Suite] and have no other fields.
-func Run[T testingSuite](t *testing.T, s T, args ...any) {
+func Run[T TestingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, true, args...)
 }
 
@@ -208,15 +212,16 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 //
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
-func RunLegacySequential[T testingSuite](t *testing.T, s T, args ...any) {
+func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, false, args...)
 }
 
-func run[T testingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
+func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
+		//nolint:forbidigo // Panics are fine in testing code.
 		panic(fmt.Sprintf("parallelsuite.Run: suite must be a pointer to a struct, got %v", typ))
 	}
 	structType := typ.Elem()
@@ -225,6 +230,7 @@ func run[T testingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 
 	methods := discoverTestMethods(typ, structType, args)
 	if len(methods) == 0 {
+		//nolint:forbidigo // Panics are fine in testing code.
 		panic(fmt.Sprintf("parallelsuite.Run: suite %s has no Test* methods", structType.Name()))
 	}
 
@@ -239,6 +245,9 @@ func run[T testingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	}
 
 	s.initSuite(t, true, nil, nil)
+	if initializer, ok := any(s).(AssertionsInitializer); ok {
+		initializer.InitAssertions()
+	}
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
@@ -249,23 +258,14 @@ func run[T testingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	}
 }
 
-var inheritedMethods map[string]bool
-
-func init() {
-	type ds struct{ Suite[*ds] }
-	ptrType := reflect.TypeFor[*ds]()
-	inheritedMethods = make(map[string]bool, ptrType.NumMethod())
-	for method := range ptrType.Methods() {
-		inheritedMethods[method.Name] = true
-	}
-}
-
 func validateSuiteStruct(structType reflect.Type) {
 	if !strings.HasSuffix(structType.Name(), "Suite") {
+		//nolint:forbidigo // Panics are fine in testing code.
 		panic(fmt.Sprintf("parallelsuite.Run: struct name %q must end with \"Suite\"", structType.Name()))
 	}
 
 	if structType.NumField() != 1 {
+		//nolint:forbidigo // Panics are fine in testing code.
 		panic(fmt.Sprintf(
 			"parallelsuite.Run: suite %s must have no fields besides the embedded parallelsuite.Suite; "+
 				"pass parameters as extra args to Run instead (got %d fields)",
@@ -274,6 +274,7 @@ func validateSuiteStruct(structType reflect.Type) {
 	}
 	f := structType.Field(0)
 	if !f.Anonymous {
+		//nolint:forbidigo // Panics are fine in testing code.
 		panic(fmt.Sprintf(
 			"parallelsuite.Run: suite %s must embed parallelsuite.Suite, found named field %q",
 			structType.Name(), f.Name,
@@ -297,6 +298,7 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
+		//nolint:forbidigo // Panics are fine in testing code.
 		panic(fmt.Sprintf("parallelsuite: invalid regexp for -testify.m: %s", err))
 	}
 	var filtered []reflect.Method
@@ -310,10 +312,13 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 
 func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect.Method {
 	expectedNumIn := 1 + len(args)
+	inheritedType := embeddedSuiteType(structType)
 
 	for method := range ptrType.Methods() {
 		name := method.Name
-		if !strings.HasPrefix(name, "Test") && !inheritedMethods[name] {
+		_, inherited := inheritedType.MethodByName(name)
+		if !strings.HasPrefix(name, "Test") && !inherited {
+			//nolint:forbidigo // Panics are fine in testing code.
 			panic(fmt.Sprintf(
 				"parallelsuite.Run: suite %s has exported method %s that does not start with Test; "+
 					"use a package-level function instead",
@@ -330,12 +335,14 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 
 		mt := method.Type
 		if mt.NumOut() != 0 {
+			//nolint:forbidigo // Panics are fine in testing code.
 			panic(fmt.Sprintf(
 				"parallelsuite.Run: method %s.%s must not have return values, got %v",
 				structType.Name(), method.Name, mt,
 			))
 		}
 		if mt.NumIn() != expectedNumIn {
+			//nolint:forbidigo // Panics are fine in testing code.
 			panic(fmt.Sprintf(
 				"parallelsuite.Run: method %s.%s has wrong number of parameters: expected %d, got %d (%v)",
 				structType.Name(), method.Name, expectedNumIn, mt.NumIn(), mt,
@@ -346,6 +353,7 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 			paramType := mt.In(1 + j)
 			argType := reflect.TypeOf(a)
 			if !argType.AssignableTo(paramType) {
+				//nolint:forbidigo // Panics are fine in testing code.
 				panic(fmt.Sprintf(
 					"parallelsuite.Run: method %s.%s parameter %d has type %v but Run arg has type %v",
 					structType.Name(), method.Name, j+1, paramType, argType,
@@ -356,4 +364,12 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 		methods = append(methods, method)
 	}
 	return methods
+}
+
+func embeddedSuiteType(structType reflect.Type) reflect.Type {
+	typ := structType.Field(0).Type
+	if typ.Kind() != reflect.Pointer {
+		typ = reflect.PointerTo(typ)
+	}
+	return typ
 }
