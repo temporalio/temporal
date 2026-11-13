@@ -256,6 +256,38 @@ func (a *shardedActivities) evaluateVerifyIteration(
 // Already-injected execs are re-injected harmlessly — replication dedupes
 // per (namespace, wf, run).
 func (a *shardedActivities) runInjectPhase(ctx context.Context, req *shardedBatchReq, execs []*shardedExecutionInfo, startIdx int) error {
+	// History-size throttling can wait longer than HeartbeatTimeout. Keep
+	// heartbeating the next unfinished execution while the limiter or RPC waits.
+	heartbeatTimeout := activity.GetInfo(ctx).HeartbeatTimeout
+	if heartbeatTimeout == 0 {
+		heartbeatTimeout = shardedReplicateBatchActivityOptions.HeartbeatTimeout
+	}
+	progressCh := make(chan int)
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		ticker := time.NewTicker(heartbeatTimeout / 2)
+		defer ticker.Stop()
+		nextIdx := startIdx
+		for {
+			select {
+			case idx, ok := <-progressCh:
+				if !ok {
+					return
+				}
+				nextIdx = idx
+			case <-ticker.C:
+			}
+			activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{NextInjectIdx: nextIdx})
+		}
+	}()
+	defer func() {
+		close(progressCh)
+		// Finish all inject heartbeats before the caller checkpoints InjectDone
+		// or starts recording verification progress.
+		<-heartbeatDone
+	}()
+
 	rateLimiter := quotas.NewRateLimiter(req.PerBatchGenerateRPS, int(math.Ceil(req.PerBatchGenerateRPS)))
 	for i := startIdx; i < len(execs); i++ {
 		ex := execs[i]
@@ -272,7 +304,7 @@ func (a *shardedActivities) runInjectPhase(ctx context.Context, req *shardedBatc
 				tag.WorkflowRunID(ex.RunID),
 				tag.Error(err))
 		}
-		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{NextInjectIdx: i + 1})
+		progressCh <- i + 1
 	}
 	return nil
 }

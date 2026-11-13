@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -34,8 +35,9 @@ type shardedHeartbeatRecordingInterceptor struct {
 	interceptor.WorkerInterceptorBase
 	interceptor.ActivityInboundInterceptorBase
 	interceptor.ActivityOutboundInterceptorBase
-	heartbeats []replicateBatchHeartbeat
-	T          *testing.T
+	heartbeats       [][]any
+	heartbeatTimeout time.Duration
+	onHeartbeat      func([]any)
 }
 
 func (i *shardedHeartbeatRecordingInterceptor) InterceptActivity(
@@ -52,18 +54,26 @@ func (i *shardedHeartbeatRecordingInterceptor) Init(outbound interceptor.Activit
 }
 
 func (i *shardedHeartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...any) {
-	require.Len(i.T, details, 1)
-	heartbeat, ok := details[0].(replicateBatchHeartbeat)
-	require.True(i.T, ok, "unexpected sharded heartbeat type %T", details[0])
-	i.heartbeats = append(i.heartbeats, heartbeat)
+	i.heartbeats = append(i.heartbeats, details)
+	if i.onHeartbeat != nil {
+		i.onHeartbeat(details)
+	}
 	i.ActivityOutboundInterceptorBase.Next.RecordHeartbeat(ctx, details...)
+}
+
+func (i *shardedHeartbeatRecordingInterceptor) GetInfo(ctx context.Context) activity.Info {
+	info := i.ActivityOutboundInterceptorBase.Next.GetInfo(ctx)
+	if i.heartbeatTimeout != 0 {
+		info.HeartbeatTimeout = i.heartbeatTimeout
+	}
+	return info
 }
 
 func (s *activitiesSuite) initShardedEnv() *testsuite.TestActivityEnvironment {
 	env := s.NewTestActivityEnvironment()
 	env.RegisterActivity(s.shardedActivities())
 	env.SetWorkerOptions(worker.Options{Interceptors: []interceptor.WorkerInterceptor{
-		&shardedHeartbeatRecordingInterceptor{T: s.T()},
+		&shardedHeartbeatRecordingInterceptor{},
 	}})
 	return env
 }
@@ -416,13 +426,106 @@ func TestReplicateBatchCallerInfo(t *testing.T) {
 			}}
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestActivityEnvironment()
+			recorder := &shardedHeartbeatRecordingInterceptor{}
+			env.SetWorkerOptions(worker.Options{Interceptors: []interceptor.WorkerInterceptor{recorder}})
 			env.RegisterActivity(a)
 			req := newShardedReq(payloadFor(1, execution1))
 			req.DisableVerification = true
 			_, err := env.ExecuteActivity(a.ReplicateBatch, req)
 			require.NoError(t, err)
 			require.Equal(t, headers.NewPreemptableCallerInfo(mockedNamespace), caller)
+			require.Equal(t, []any{replicateBatchHeartbeat{InjectDone: true}}, recorder.heartbeats[len(recorder.heartbeats)-1])
 		})
+	}
+}
+
+func TestReplicateBatchHeartbeatsDuringInjection(t *testing.T) {
+	t.Parallel()
+	for _, viaFrontend := range []bool{false, true} {
+		for _, waitFor := range []string{"limiter", "rpc"} {
+			route := "history"
+			if viaFrontend {
+				route = "frontend"
+			}
+			t.Run(route+"/"+waitFor, func(t *testing.T) {
+				t.Parallel()
+				ctrl := gomock.NewController(t)
+				registry := namespace.NewMockRegistry(ctrl)
+				registry.EXPECT().GetNamespaceName(namespace.ID(mockedNamespaceID)).Return(namespace.Name(mockedNamespace), nil)
+				history := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				admin := adminservicemock.NewMockAdminServiceClient(ctrl)
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+
+				// Resume at b. The limiter case finishes b and incurs enough debt
+				// to block c. The RPC case blocks b itself until cancellation.
+				nextIdx := 1
+				if waitFor == "limiter" {
+					nextIdx = 2
+				}
+				checkpointCount := 0
+				recorder := &shardedHeartbeatRecordingInterceptor{
+					heartbeatTimeout: 20 * time.Millisecond,
+					onHeartbeat: func(details []any) {
+						if len(details) == 1 {
+							if hb, ok := details[0].(replicateBatchHeartbeat); ok && hb.NextInjectIdx == nextIdx {
+								checkpointCount++
+								if checkpointCount == 2 {
+									cancel()
+								}
+							}
+						}
+					},
+				}
+				generate := func(ctx context.Context) error {
+					if waitFor == "rpc" {
+						<-ctx.Done()
+						return ctx.Err()
+					}
+					return nil
+				}
+				if viaFrontend {
+					admin.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+						func(ctx context.Context, _ *adminservice.GenerateLastHistoryReplicationTasksRequest, _ ...grpc.CallOption) (*adminservice.GenerateLastHistoryReplicationTasksResponse, error) {
+							return &adminservice.GenerateLastHistoryReplicationTasksResponse{HistoryLength: 150, StateTransitionCount: 150}, generate(ctx)
+						})
+				} else {
+					history.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+						func(ctx context.Context, _ *historyservice.GenerateLastHistoryReplicationTasksRequest, _ ...grpc.CallOption) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+							return &historyservice.GenerateLastHistoryReplicationTasksResponse{HistoryLength: 150, StateTransitionCount: 150}, generate(ctx)
+						})
+				}
+				a := &shardedActivities{activities: &activities{
+					NamespaceRegistry: registry, HistoryClient: history, adminClient: admin,
+					forceReplicationMetricsHandler:   metrics.NoopMetricsHandler,
+					generateMigrationTaskViaFrontend: dynamicconfig.GetBoolPropertyFn(viaFrontend),
+					enableHistoryRateLimiter:         dynamicconfig.GetBoolPropertyFn(false),
+				}}
+				var suite testsuite.WorkflowTestSuite
+				env := suite.NewTestActivityEnvironment()
+				env.SetWorkerOptions(worker.Options{
+					BackgroundActivityContext: ctx,
+					Interceptors:              []interceptor.WorkerInterceptor{recorder},
+				})
+				env.RegisterActivity(a)
+				env.SetHeartbeatDetails(replicateBatchHeartbeat{NextInjectIdx: 1})
+				req := newShardedReq(BatchPayload{1: {
+					"a": {{RunID: "a-run"}}, "b": {{RunID: "b-run"}}, "c": {{RunID: "c-run"}},
+				}})
+				req.DisableVerification = true
+				_, err := env.ExecuteActivity(a.ReplicateBatch, req)
+				require.True(t, temporal.IsCanceledError(err), "expected cancellation, got %v", err)
+				require.GreaterOrEqual(t, checkpointCount, 2)
+				for _, details := range recorder.heartbeats {
+					require.Len(t, details, 1)
+					hb, ok := details[0].(replicateBatchHeartbeat)
+					require.True(t, ok)
+					require.False(t, hb.InjectDone)
+					require.GreaterOrEqual(t, hb.NextInjectIdx, 1)
+					require.LessOrEqual(t, hb.NextInjectIdx, nextIdx)
+				}
+			})
+		}
 	}
 }
 
