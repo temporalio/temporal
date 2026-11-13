@@ -72,6 +72,7 @@ var testQueueOptions = Options{
 	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0),
 	MoveGroupTaskCountMultiplier:        dynamicconfig.GetFloatPropertyFn(3.0),
 	ShrinkPredicateMaxPendingKeys:       dynamicconfig.GetIntPropertyFn(10),
+	CompactQueueState:                   dynamicconfig.GetBoolPropertyFn(false),
 }
 
 func TestQueueBaseSuite(t *testing.T) {
@@ -116,6 +117,23 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 
 	s.Len(base.readerGroup.Readers(), 0)
 	s.Equal(int64(1), base.nonReadableScope.Range.InclusiveMin.TaskID)
+}
+
+func (s *queueBaseSuite) TestNewQueueBase_RequiresCompactQueueState() {
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: int64(10),
+		},
+		s.config,
+	)
+	s.options.CompactQueueState = nil
+
+	s.Require().PanicsWithValue(
+		"queues.Options.CompactQueueState must be set, usually from the history config's EnableQueueStateCompaction",
+		func() { s.newQueueBase(mockShard, tasks.CategoryTransfer, nil) },
+	)
 }
 
 func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
@@ -194,7 +212,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 		exclusiveReaderHighWatermark: base.nonReadableScope.Range.InclusiveMin,
 	}
 
-	s.ProtoEqual(persistenceState, ToPersistenceQueueState(queueState))
+	s.ProtoEqual(persistenceState, ToPersistenceQueueState(queueState, false))
 }
 
 func (s *queueBaseSuite) TestStartStop() {
@@ -248,7 +266,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 		exclusiveReaderHighWatermark: tasks.MinimumKey,
 	}
 
-	persistenceState := ToPersistenceQueueState(queueState)
+	persistenceState := ToPersistenceQueueState(queueState, false)
 
 	mockShard := shard.NewTestContext(
 		s.controller,
@@ -292,7 +310,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: tasks.MaximumKey,
 	}
-	persistenceState := ToPersistenceQueueState(queueState)
+	persistenceState := ToPersistenceQueueState(queueState, false)
 
 	mockShard := shard.NewTestContext(
 		s.controller,
@@ -361,7 +379,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: tasks.MaximumKey,
 	}
-	persistenceState := ToPersistenceQueueState(queueState)
+	persistenceState := ToPersistenceQueueState(queueState, false)
 
 	mockShard := shard.NewTestContext(
 		s.controller,
@@ -404,7 +422,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 		readerScopes:                 map[int64][]Scope{},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
 	}
-	persistenceState := ToPersistenceQueueState(queueState)
+	persistenceState := ToPersistenceQueueState(queueState, false)
 
 	mockShard := shard.NewTestContext(
 		s.controller,
@@ -587,6 +605,71 @@ func (s *queueBaseSuite) TestNewQueueBase_DeletionWatermarkIsLowestRangeAcrossPr
 	}
 }
 
+func (s *queueBaseSuite) TestCheckPoint_WritesCompactStateOnlyWhenTheOptionIsOn() {
+	namespaces := tasks.NewNamespacePredicate([]string{
+		"00000000-0000-0000-0000-00000000000a",
+		"00000000-0000-0000-0000-00000000000b",
+	})
+	// The first scope starts at the minimum key, so a checkpoint has nothing to delete.
+	middle := tasks.NewKey(time.Unix(0, 1_000_000).UTC(), 0)
+	end := tasks.NewKey(time.Unix(0, 2_000_000).UTC(), 0)
+	testCases := []struct {
+		name             string
+		compact          bool
+		wantTableEntries int
+		wantGroups       int
+		wantPlainScopes  int
+	}{
+		{name: "option off writes the old form", compact: false, wantTableEntries: 0, wantGroups: 0, wantPlainScopes: 2},
+		{name: "option on writes the table and a group", compact: true, wantTableEntries: 2, wantGroups: 1, wantPlainScopes: 0},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			persistenceState := ToPersistenceQueueState(&queueState{
+				readerScopes: map[int64][]Scope{
+					DefaultReaderId: {
+						NewScope(NewRange(tasks.MinimumKey, middle), namespaces),
+						NewScope(NewRange(middle, end), namespaces),
+					},
+				},
+				exclusiveReaderHighWatermark: tasks.MaximumKey,
+			}, false)
+			mockShard := shard.NewTestContext(
+				s.controller,
+				&persistencespb.ShardInfo{
+					ShardId: 0,
+					RangeId: 10,
+					QueueStates: map[int32]*persistencespb.QueueState{
+						int32(tasks.CategoryIDTimer): persistenceState,
+					},
+				},
+				s.config,
+			)
+			mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+			mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+			s.options.CompactQueueState = dynamicconfig.GetBoolPropertyFn(tc.compact)
+			base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
+			base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+
+			var written *persistencespb.QueueState
+			mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.UpdateShardRequest) error {
+					written = request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)]
+					return nil
+				},
+			).Times(1)
+
+			base.checkpoint()
+
+			s.Require().NotNil(written, "the checkpoint wrote the queue state")
+			reader := written.ReaderStates[DefaultReaderId]
+			s.Require().Len(written.NamespaceIdTable, tc.wantTableEntries, "namespace ID table entries")
+			s.Require().Len(reader.PredicateGroups, tc.wantGroups, "predicate groups")
+			s.Require().Len(reader.Scopes, tc.wantPlainScopes, "plain scopes")
+		})
+	}
+}
+
 func (s *queueBaseSuite) TestCheckPoint_RecordsSliceCountWithTaskCategoryTag() {
 	numSlices := 3
 	scopes := NewRandomScopes(numSlices)
@@ -596,7 +679,7 @@ func (s *queueBaseSuite) TestCheckPoint_RecordsSliceCountWithTaskCategoryTag() {
 		},
 		exclusiveReaderHighWatermark: tasks.MaximumKey,
 	}
-	persistenceState := ToPersistenceQueueState(queueState)
+	persistenceState := ToPersistenceQueueState(queueState, false)
 
 	mockShard := shard.NewTestContext(
 		s.controller,
@@ -644,7 +727,7 @@ func (s *queueBaseSuite) TestCheckPoint_RecordsSliceCountTotal() {
 		},
 		exclusiveReaderHighWatermark: tasks.MaximumKey,
 	}
-	persistenceState := ToPersistenceQueueState(queueState)
+	persistenceState := ToPersistenceQueueState(queueState, false)
 
 	mockShard := shard.NewTestContext(
 		s.controller,
@@ -694,7 +777,7 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 		},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
 	}
-	initialPersistenceState := ToPersistenceQueueState(initialQueueState)
+	initialPersistenceState := ToPersistenceQueueState(initialQueueState, false)
 
 	expectedQueueState := &queueState{
 		readerScopes: map[int64][]Scope{
@@ -703,7 +786,7 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 		},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
 	}
-	expectedPersistenceState := ToPersistenceQueueState(expectedQueueState)
+	expectedPersistenceState := ToPersistenceQueueState(expectedQueueState, false)
 
 	mockShard := shard.NewTestContext(
 		s.controller,
@@ -760,7 +843,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 				int32(tasks.CategoryIDTimer): ToPersistenceQueueState(&queueState{
 					readerScopes:                 map[int64][]Scope{},
 					exclusiveReaderHighWatermark: tasks.MaximumKey,
-				}),
+				}, false),
 			},
 		},
 		s.config,

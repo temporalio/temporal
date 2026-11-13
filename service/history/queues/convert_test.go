@@ -12,6 +12,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -32,12 +33,12 @@ func (s *convertSuite) SetupTest() {
 
 func (s *convertSuite) TestConvertPredicate_All() {
 	predicate := predicates.Universal[tasks.Task]()
-	s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate), nil))
+	s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate, nil), nil))
 }
 
 func (s *convertSuite) TestConvertPredicate_Empty() {
 	predicate := predicates.Empty[tasks.Task]()
-	s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate), nil))
+	s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate, nil), nil))
 }
 
 func (s *convertSuite) TestConvertPredicate_And() {
@@ -79,7 +80,7 @@ func (s *convertSuite) TestConvertPredicate_And() {
 	}
 
 	for _, predicate := range testCases {
-		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate), nil))
+		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate, nil), nil))
 	}
 }
 
@@ -122,7 +123,7 @@ func (s *convertSuite) TestConvertPredicate_Or() {
 	}
 
 	for _, predicate := range testCases {
-		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate), nil))
+		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate, nil), nil))
 	}
 }
 
@@ -146,7 +147,7 @@ func (s *convertSuite) TestConvertPredicate_Not() {
 	}
 
 	for _, predicate := range testCases {
-		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate), nil))
+		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate, nil), nil))
 	}
 }
 
@@ -158,7 +159,7 @@ func (s *convertSuite) TestConvertPredicate_NamespaceID() {
 	}
 
 	for _, predicate := range testCases {
-		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate), nil))
+		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate, nil), nil))
 	}
 }
 
@@ -174,7 +175,7 @@ func (s *convertSuite) TestConvertPredicate_TaskType() {
 	}
 
 	for _, predicate := range testCases {
-		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate), nil))
+		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate, nil), nil))
 	}
 }
 
@@ -198,7 +199,7 @@ func (s *convertSuite) TestConvertScope() {
 		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()}),
 	)
 
-	got, _ := FromPersistenceScope(ToPersistenceScope(scope), nil)
+	got, _ := FromPersistenceScope(ToPersistenceScope(scope, nil), nil)
 	s.Equal(scope, got)
 }
 
@@ -746,7 +747,7 @@ func (s *convertSuite) TestConvertQueueState() {
 	}
 
 	s.Equal(queueState, FromPersistenceQueueState(
-		ToPersistenceQueueState(queueState),
+		ToPersistenceQueueState(queueState, false),
 	))
 }
 
@@ -837,6 +838,782 @@ func TestFromPersistenceNamespaceIDPredicate_ResolvesIndexes(t *testing.T) {
 			)
 		})
 	}
+}
+
+func TestToPersistenceNamespaceIDPredicate_WritesIDsSorted(t *testing.T) {
+	// Eight IDs in unsorted order: map iteration order matches sorted order once in 8! runs.
+	ids := []string{
+		"00000000-0000-0000-0000-00000000000e",
+		"00000000-0000-0000-0000-000000000003",
+		"00000000-0000-0000-0000-00000000000a",
+		"00000000-0000-0000-0000-000000000001",
+		"00000000-0000-0000-0000-00000000000c",
+		"00000000-0000-0000-0000-000000000007",
+		"00000000-0000-0000-0000-00000000000b",
+		"00000000-0000-0000-0000-000000000005",
+	}
+
+	got := ToPersistenceNamespaceIDPredicate(tasks.NewNamespacePredicate(ids), nil)
+
+	require.Equal(t,
+		[]string{
+			"00000000-0000-0000-0000-000000000001",
+			"00000000-0000-0000-0000-000000000003",
+			"00000000-0000-0000-0000-000000000005",
+			"00000000-0000-0000-0000-000000000007",
+			"00000000-0000-0000-0000-00000000000a",
+			"00000000-0000-0000-0000-00000000000b",
+			"00000000-0000-0000-0000-00000000000c",
+			"00000000-0000-0000-0000-00000000000e",
+		},
+		got.GetNamespaceIdPredicateAttributes().NamespaceIds,
+	)
+}
+
+func TestNamespaceIDTableBuilder_InternsValidUUIDs(t *testing.T) {
+	first := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	second := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	builder := newNamespaceIDTableBuilder()
+
+	// Interned reports whether the ID went into the table; the other outcome is it stays a plain string.
+	type result struct {
+		Index    int32
+		Interned bool
+	}
+	steps := []struct {
+		name string
+		id   uuid.UUID
+		want result
+	}{
+		{"a new ID takes the first free slot, 0", first, result{Index: 0, Interned: true}},
+		{"another new ID takes the next slot, 1", second, result{Index: 1, Interned: true}},
+		{"an ID already in the table returns its existing slot, 0", first, result{Index: 0, Interned: true}},
+	}
+	for _, step := range steps {
+		index, interned := builder.intern(step.id.String())
+		require.Equal(t, step.want, result{Index: index, Interned: interned}, step.name)
+	}
+
+	require.Equal(t, [][]byte{first[:], second[:]}, builder.entries(),
+		"entries are the 16-byte IDs in slot order, with no duplicate for the repeated ID")
+}
+
+func TestNamespaceIDTableBuilder_RefusesIDsTheReaderWouldRewrite(t *testing.T) {
+	// The reader rebuilds an entry as lowercase hyphenated text, so an ID is only safe to intern
+	// if that text equals the original. Anything else must stay a plain string.
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{"empty string is not a UUID", ""},
+		{"free text is not a UUID", "not-a-uuid"},
+		{"uppercase would come back lowercase", "00000000-0000-0000-0000-00000000000A"},
+		{"no hyphens would come back hyphenated", "0000000000000000000000000000000b"},
+		{"braces would come back without braces", "{00000000-0000-0000-0000-00000000000b}"},
+		{"urn prefix would come back without the prefix", "urn:uuid:00000000-0000-0000-0000-00000000000b"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			builder := newNamespaceIDTableBuilder()
+
+			_, interned := builder.intern(tc.id)
+
+			require.False(t, interned, "intern(%q) must refuse it", tc.id)
+			require.Empty(t, builder.entries(), "a refused ID must not add a table entry")
+		})
+	}
+}
+
+func TestNamespaceIDTableBuilder_NilBuilderInternsNothing(t *testing.T) {
+	// A nil builder is how the writer says "write the old form", so it must refuse even a valid UUID.
+	var builder *namespaceIDTableBuilder
+
+	_, interned := builder.intern("00000000-0000-0000-0000-00000000000b")
+
+	require.False(t, interned, "a nil builder must refuse every ID")
+	require.Empty(t, builder.entries(), "a nil builder has no table entries")
+}
+
+func TestToPersistenceNamespaceIDPredicate_WritesIndexesWhenGivenABuilder(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	c := uuid.MustParse("00000000-0000-0000-0000-00000000000c")
+	// Supplied out of order; IDs are written sorted, so slots are assigned a, b, c.
+	predicate := tasks.NewNamespacePredicate([]string{c.String(), a.String(), b.String()})
+
+	type written struct {
+		NamespaceIDs []string
+		Indexes      []int32
+	}
+	tests := []struct {
+		name        string
+		builder     *namespaceIDTableBuilder
+		want        written
+		wantEntries [][]byte
+	}{
+		{
+			name:        "with a builder the IDs become table indexes and none stay as strings",
+			builder:     newNamespaceIDTableBuilder(),
+			want:        written{Indexes: []int32{0, 1, 2}},
+			wantEntries: [][]byte{a[:], b[:], c[:]},
+		},
+		{
+			name:    "with no builder the IDs stay as strings, the old form",
+			builder: nil,
+			want:    written{NamespaceIDs: []string{a.String(), b.String(), c.String()}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			attributes := ToPersistenceNamespaceIDPredicate(predicate, tc.builder).GetNamespaceIdPredicateAttributes()
+
+			require.Equal(t, tc.want, written{
+				NamespaceIDs: attributes.NamespaceIds,
+				Indexes:      attributes.NamespaceIdIndexes,
+			})
+			require.Equal(t, tc.wantEntries, tc.builder.entries(), "table entries in slot order")
+		})
+	}
+}
+
+func TestToPersistenceNamespaceIDPredicate_KeepsNonUUIDIDsAsStrings(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	// Sorts before both UUIDs, so if a refused ID took a slot, a and b would not get 0 and 1.
+	notUUID := "0000"
+	builder := newNamespaceIDTableBuilder()
+
+	attributes := ToPersistenceNamespaceIDPredicate(
+		tasks.NewNamespacePredicate([]string{b.String(), notUUID, a.String()}),
+		builder,
+	).GetNamespaceIdPredicateAttributes()
+
+	require.Equal(t, []string{notUUID}, attributes.NamespaceIds, "the non-UUID ID stays a string")
+	require.Equal(t, []int32{0, 1}, attributes.NamespaceIdIndexes, "the UUIDs take slots 0 and 1; the refused ID takes none")
+	require.Equal(t, [][]byte{a[:], b[:]}, builder.entries(), "the table holds only the UUIDs")
+}
+
+// namespaceLeaves returns the namespace attributes of every leaf in the tree, in traversal order.
+func namespaceLeaves(predicate *persistencespb.Predicate) []*persistencespb.NamespaceIdPredicateAttributes {
+	switch predicate.PredicateType {
+	case enumsspb.PREDICATE_TYPE_NAMESPACE_ID:
+		return []*persistencespb.NamespaceIdPredicateAttributes{predicate.GetNamespaceIdPredicateAttributes()}
+	case enumsspb.PREDICATE_TYPE_NOT:
+		return namespaceLeaves(predicate.GetNotPredicateAttributes().Predicate)
+	case enumsspb.PREDICATE_TYPE_AND:
+		return namespaceLeavesOf(predicate.GetAndPredicateAttributes().Predicates)
+	case enumsspb.PREDICATE_TYPE_OR:
+		return namespaceLeavesOf(predicate.GetOrPredicateAttributes().Predicates)
+	default:
+		return nil
+	}
+}
+
+func namespaceLeavesOf(children []*persistencespb.Predicate) []*persistencespb.NamespaceIdPredicateAttributes {
+	var leaves []*persistencespb.NamespaceIdPredicateAttributes
+	for _, child := range children {
+		leaves = append(leaves, namespaceLeaves(child)...)
+	}
+	return leaves
+}
+
+func TestToPersistencePredicate_WritesIndexesInCompositePredicates(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	c := uuid.MustParse("00000000-0000-0000-0000-00000000000c")
+	namespaces := func(ids ...uuid.UUID) tasks.Predicate {
+		strs := make([]string, 0, len(ids))
+		for _, id := range ids {
+			strs = append(strs, id.String())
+		}
+		return tasks.NewNamespacePredicate(strs)
+	}
+
+	type leaf struct {
+		NamespaceIDs []string
+		Indexes      []int32
+	}
+	tests := []struct {
+		name        string
+		predicate   tasks.Predicate
+		wantLeaves  []leaf
+		wantEntries [][]byte
+	}{
+		{
+			name:        "Not around a namespace leaf",
+			predicate:   predicates.Not(namespaces(a, b)),
+			wantLeaves:  []leaf{{Indexes: []int32{0, 1}}},
+			wantEntries: [][]byte{a[:], b[:]},
+		},
+		{
+			name:      "And of two leaves that share b: b has one slot, used by both",
+			predicate: predicates.And(namespaces(a, b), namespaces(b, c)),
+			wantLeaves: []leaf{
+				{Indexes: []int32{0, 1}},
+				{Indexes: []int32{1, 2}},
+			},
+			wantEntries: [][]byte{a[:], b[:], c[:]},
+		},
+		{
+			name:      "Or with a nested Not: slots follow first appearance, c before a",
+			predicate: predicates.Or(predicates.Not(namespaces(c)), namespaces(a)),
+			wantLeaves: []leaf{
+				{Indexes: []int32{0}},
+				{Indexes: []int32{1}},
+			},
+			wantEntries: [][]byte{c[:], a[:]},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			builder := newNamespaceIDTableBuilder()
+
+			persisted := ToPersistencePredicate(tc.predicate, builder)
+
+			var got []leaf
+			for _, attributes := range namespaceLeaves(persisted) {
+				got = append(got, leaf{NamespaceIDs: attributes.NamespaceIds, Indexes: attributes.NamespaceIdIndexes})
+			}
+			require.Equal(t, tc.wantLeaves, got, "every leaf holds indexes and no strings")
+			require.Equal(t, tc.wantEntries, builder.entries(), "each ID appears once in the table")
+		})
+	}
+}
+
+func TestToPersistencePredicate_LeavesNonNamespacePredicatesUnchangedByABuilder(t *testing.T) {
+	// One entry per set: these predicates keep their entries in a map, so two or more would
+	// serialize in an order that varies between calls and make the comparison flaky.
+	tests := []struct {
+		name      string
+		predicate tasks.Predicate
+	}{
+		//nolint:staticcheck // Deprecated predicates are still read from old shards, so they must survive a builder.
+		{"task type", tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT})},
+		//nolint:staticcheck // See above.
+		{"destination", tasks.NewDestinationPredicate([]string{"d1"})},
+		//nolint:staticcheck // See above.
+		{"outbound task group", tasks.NewOutboundTaskGroupPredicate([]string{"g1"})},
+		{"outbound task", tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+			{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
+		})},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			builder := newNamespaceIDTableBuilder()
+
+			withBuilder := ToPersistencePredicate(tc.predicate, builder)
+			withoutBuilder := ToPersistencePredicate(tc.predicate, nil)
+
+			require.True(t, proto.Equal(withoutBuilder, withBuilder),
+				"a builder must not change a %s predicate: without=%v with=%v", tc.name, withoutBuilder, withBuilder)
+			require.Empty(t, builder.entries(), "a %s predicate has no namespace IDs to put in the table", tc.name)
+		})
+	}
+}
+
+func TestToPersistenceQueueState_CompactWritesNamespaceIDTable(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	c := uuid.MustParse("00000000-0000-0000-0000-00000000000c")
+	// Reader 1's IDs are a subset of reader 2's, so the table is a, b, c whichever reader is
+	// visited first; reader order is 2.4c's concern, not this test's.
+	state := &queueState{
+		readerScopes: map[int64][]Scope{
+			1: {NewScope(NewRandomRange(), tasks.NewNamespacePredicate([]string{a.String(), b.String()}))},
+			2: {NewScope(NewRandomRange(), tasks.NewNamespacePredicate([]string{a.String(), b.String(), c.String()}))},
+		},
+		exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+	}
+
+	persisted := ToPersistenceQueueState(state, true)
+
+	require.Equal(t, [][]byte{a[:], b[:], c[:]}, persisted.NamespaceIdTable, "each namespace ID once, in slot order")
+
+	type leaf struct {
+		NamespaceIDs []string
+		Indexes      []int32
+	}
+	leafOf := func(readerID int64) []leaf {
+		var leaves []leaf
+		for _, scope := range persisted.ReaderStates[readerID].Scopes {
+			for _, attributes := range namespaceLeaves(scope.Predicate) {
+				leaves = append(leaves, leaf{NamespaceIDs: attributes.NamespaceIds, Indexes: attributes.NamespaceIdIndexes})
+			}
+		}
+		return leaves
+	}
+	require.Equal(t, []leaf{{Indexes: []int32{0, 1}}}, leafOf(1), "reader 1 holds indexes into the table, no strings")
+	require.Equal(t, []leaf{{Indexes: []int32{0, 1, 2}}}, leafOf(2), "reader 2 holds indexes into the table, no strings")
+}
+
+func TestQueueStateRoundTrip_CompactForm(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a").String()
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b").String()
+	c := uuid.MustParse("00000000-0000-0000-0000-00000000000c").String()
+	d := uuid.MustParse("00000000-0000-0000-0000-00000000000d").String()
+	namespaces := func(ids ...string) tasks.Predicate { return tasks.NewNamespacePredicate(ids) }
+	// A reader's scopes ascend by range, as they do in a running queue, so the reader's sort on
+	// restore cannot reorder them.
+	scopeAt := func(i int, predicate tasks.Predicate) Scope {
+		return NewScope(NewRange(
+			tasks.NewKey(time.Unix(0, int64(i)*10+10).UTC(), 0),
+			tasks.NewKey(time.Unix(0, int64(i)*10+15).UTC(), 0),
+		), predicate)
+	}
+	outbound := func(group string) tasks.Predicate {
+		return tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+			{TaskGroup: group, NamespaceID: "n1", Destination: "d1"},
+		})
+	}
+
+	tests := []struct {
+		name string
+		// readers maps reader ID to the predicate of each of its scopes.
+		readers             map[int64][]tasks.Predicate
+		wantTableEntries    int
+		wantPredicateGroups int
+	}{
+		{
+			name:    "universal only",
+			readers: map[int64][]tasks.Predicate{1: {predicates.Universal[tasks.Task]()}},
+		},
+		{
+			name:             "one namespace set",
+			readers:          map[int64][]tasks.Predicate{1: {namespaces(a, b)}},
+			wantTableEntries: 2,
+		},
+		{
+			name:             "Not of a namespace set",
+			readers:          map[int64][]tasks.Predicate{1: {predicates.Not(namespaces(a, b))}},
+			wantTableEntries: 2,
+		},
+		{
+			name: "And and Or mixing namespace leaves",
+			readers: map[int64][]tasks.Predicate{1: {
+				predicates.And(predicates.Or(namespaces(a, b), predicates.Not(namespaces(c))), namespaces(b)),
+			}},
+			wantTableEntries: 3,
+		},
+		{
+			name:             "a non-UUID ID stays a string beside UUIDs",
+			readers:          map[int64][]tasks.Predicate{1: {namespaces(a, "legacy-id")}},
+			wantTableEntries: 1,
+		},
+		{
+			name: "two readers sharing IDs",
+			readers: map[int64][]tasks.Predicate{
+				1: {namespaces(a, b)},
+				2: {namespaces(b, c), predicates.Universal[tasks.Task]()},
+			},
+			wantTableEntries: 3,
+		},
+		{
+			name: "outbound predicate",
+			readers: map[int64][]tasks.Predicate{1: {
+				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
+				}),
+			}},
+		},
+		{
+			name:    "a reader with no scopes",
+			readers: map[int64][]tasks.Predicate{1: {}},
+		},
+		{
+			name: "scopes alternating between two predicates",
+			readers: map[int64][]tasks.Predicate{1: {
+				namespaces(a, b), namespaces(c), namespaces(a, b), namespaces(c),
+			}},
+			wantTableEntries:    3,
+			wantPredicateGroups: 2,
+		},
+		{
+			name: "one predicate on every scope",
+			readers: map[int64][]tasks.Predicate{1: {
+				namespaces(a, b), namespaces(a, b), namespaces(a, b),
+			}},
+			wantTableEntries:    2,
+			wantPredicateGroups: 1,
+		},
+		{
+			name: "a group between plain scopes",
+			readers: map[int64][]tasks.Predicate{1: {
+				namespaces(c), namespaces(a, b), namespaces(d), namespaces(a, b),
+			}},
+			wantTableEntries:    4,
+			wantPredicateGroups: 1,
+		},
+		{
+			name: "a reader with a group beside a reader without",
+			readers: map[int64][]tasks.Predicate{
+				1: {namespaces(a, b), namespaces(a, b)},
+				2: {namespaces(c), namespaces(d)},
+			},
+			wantTableEntries:    4,
+			wantPredicateGroups: 1,
+		},
+		{
+			name:                "a repeated outbound predicate",
+			readers:             map[int64][]tasks.Predicate{1: {outbound("g1"), outbound("g2"), outbound("g1")}},
+			wantPredicateGroups: 1,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			state := &queueState{
+				readerScopes:                 map[int64][]Scope{},
+				exclusiveReaderHighWatermark: tasks.NewKey(time.Unix(0, 1_000_000).UTC(), 0),
+			}
+			for readerID, readerPredicates := range tc.readers {
+				scopes := []Scope{}
+				for i, predicate := range readerPredicates {
+					scopes = append(scopes, scopeAt(i, predicate))
+				}
+				state.readerScopes[readerID] = scopes
+			}
+
+			persisted := ToPersistenceQueueState(state, true)
+
+			require.Len(t, persisted.NamespaceIdTable, tc.wantTableEntries, "the compact form was written")
+			groups := 0
+			for _, readerState := range persisted.ReaderStates {
+				groups += len(readerState.PredicateGroups)
+			}
+			require.Equal(t, tc.wantPredicateGroups, groups, "predicate groups written across all readers")
+
+			restored := FromPersistenceQueueState(persisted)
+
+			require.Equal(t, state, restored, "reading it back gives the same state")
+			// queue_base takes scopes[0] as a reader's lowest key, so restored scopes must be range-ordered.
+			for readerID, scopes := range restored.readerScopes {
+				for i := 1; i < len(scopes); i++ {
+					require.LessOrEqual(t, scopes[i-1].Range.InclusiveMin.CompareTo(scopes[i].Range.InclusiveMin), 0,
+						"reader %d scope %d starts before scope %d", readerID, i, i-1)
+				}
+			}
+		})
+	}
+}
+
+func TestToPersistenceQueueState_NotCompactWritesTheOldForm(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	c := uuid.MustParse("00000000-0000-0000-0000-00000000000c")
+	// IDs are supplied out of order so the written strings show they are sorted.
+	state := &queueState{
+		readerScopes: map[int64][]Scope{
+			1: {NewScope(NewRandomRange(), tasks.NewNamespacePredicate([]string{b.String(), a.String()}))},
+			2: {NewScope(NewRandomRange(), tasks.NewNamespacePredicate([]string{c.String(), b.String(), a.String()}))},
+		},
+		exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+	}
+
+	persisted := ToPersistenceQueueState(state, false)
+
+	require.Empty(t, persisted.NamespaceIdTable, "no table")
+	type leaf struct {
+		NamespaceIDs []string
+		Indexes      []int32
+	}
+	leafOf := func(readerID int64) []leaf {
+		var leaves []leaf
+		for _, scope := range persisted.ReaderStates[readerID].Scopes {
+			for _, attributes := range namespaceLeaves(scope.Predicate) {
+				leaves = append(leaves, leaf{NamespaceIDs: attributes.NamespaceIds, Indexes: attributes.NamespaceIdIndexes})
+			}
+		}
+		return leaves
+	}
+	require.Equal(t, []leaf{{NamespaceIDs: []string{a.String(), b.String()}}}, leafOf(1), "reader 1: sorted strings, no indexes")
+	require.Equal(t, []leaf{{NamespaceIDs: []string{a.String(), b.String(), c.String()}}}, leafOf(2), "reader 2: sorted strings, no indexes")
+	for readerID, readerState := range persisted.ReaderStates {
+		require.Empty(t, readerState.PredicateGroups, "reader %d has no predicate groups", readerID)
+	}
+}
+
+func TestToPersistenceQueueState_CompactGroupsScopes(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	c := uuid.MustParse("00000000-0000-0000-0000-00000000000c")
+	d := uuid.MustParse("00000000-0000-0000-0000-00000000000d")
+	namespaces := func(ids ...uuid.UUID) tasks.Predicate {
+		strs := make([]string, 0, len(ids))
+		for _, id := range ids {
+			strs = append(strs, id.String())
+		}
+		return tasks.NewNamespacePredicate(strs)
+	}
+
+	type rangeBounds struct{ Min, Max int64 }
+	type inputScope struct {
+		Range     rangeBounds
+		Predicate tasks.Predicate
+	}
+	// plainScope and predicateGroup describe the persisted form; Indexes are table slots.
+	type plainScope struct {
+		Range   rangeBounds
+		Indexes []int32
+	}
+	type predicateGroup struct {
+		Indexes []int32
+		Ranges  []rangeBounds
+	}
+	// Ranges ascend in every case; ordering is 2.5c's concern.
+	tests := []struct {
+		name       string
+		scopes     []inputScope
+		wantPlain  []plainScope
+		wantGroups []predicateGroup
+	}{
+		{
+			name: "scopes sharing a predicate form one group and none stay plain",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(a, b)},
+				{rangeBounds{30, 40}, namespaces(a, b)},
+				{rangeBounds{50, 60}, namespaces(a, b)},
+			},
+			wantGroups: []predicateGroup{{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {30, 40}, {50, 60}}}},
+		},
+		{
+			name: "a predicate held by one scope stays plain beside a group",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(a, b)},
+				{rangeBounds{30, 40}, namespaces(a, b)},
+				{rangeBounds{50, 60}, namespaces(c)},
+			},
+			wantPlain:  []plainScope{{Range: rangeBounds{50, 60}, Indexes: []int32{2}}},
+			wantGroups: []predicateGroup{{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {30, 40}}}},
+		},
+		{
+			name: "a lone first predicate stays plain and a shared predicate appearing later is grouped",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(c)},
+				{rangeBounds{30, 40}, namespaces(a, b)},
+				{rangeBounds{50, 60}, namespaces(d)},
+				{rangeBounds{70, 80}, namespaces(a, b)},
+			},
+			wantPlain: []plainScope{
+				{Range: rangeBounds{10, 20}, Indexes: []int32{0}},
+				{Range: rangeBounds{50, 60}, Indexes: []int32{3}},
+			},
+			wantGroups: []predicateGroup{{Indexes: []int32{1, 2}, Ranges: []rangeBounds{{30, 40}, {70, 80}}}},
+		},
+		{
+			name: "scopes that share no predicate stay plain and write no group",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(c)},
+				{rangeBounds{30, 40}, namespaces(d)},
+			},
+			wantPlain: []plainScope{
+				{Range: rangeBounds{10, 20}, Indexes: []int32{0}},
+				{Range: rangeBounds{30, 40}, Indexes: []int32{1}},
+			},
+		},
+		{
+			name: "two different shared predicates each form their own group",
+			scopes: []inputScope{
+				{rangeBounds{10, 20}, namespaces(a, b)},
+				{rangeBounds{30, 40}, namespaces(c)},
+				{rangeBounds{50, 60}, namespaces(a, b)},
+				{rangeBounds{70, 80}, namespaces(c)},
+			},
+			wantGroups: []predicateGroup{
+				{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {50, 60}}},
+				{Indexes: []int32{2}, Ranges: []rangeBounds{{30, 40}, {70, 80}}},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			scopes := make([]Scope, 0, len(tc.scopes))
+			for _, s := range tc.scopes {
+				scopes = append(scopes, NewScope(
+					NewRange(tasks.NewImmediateKey(s.Range.Min), tasks.NewImmediateKey(s.Range.Max)),
+					s.Predicate,
+				))
+			}
+			state := &queueState{
+				readerScopes:                 map[int64][]Scope{1: scopes},
+				exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+			}
+
+			reader := ToPersistenceQueueState(state, true).ReaderStates[1]
+
+			var gotPlain []plainScope
+			for _, scope := range reader.Scopes {
+				gotPlain = append(gotPlain, plainScope{
+					Range:   rangeBounds{scope.Range.InclusiveMin.TaskId, scope.Range.ExclusiveMax.TaskId},
+					Indexes: scope.GetPredicate().GetNamespaceIdPredicateAttributes().GetNamespaceIdIndexes(),
+				})
+			}
+			var gotGroups []predicateGroup
+			for _, group := range reader.PredicateGroups {
+				var ranges []rangeBounds
+				for _, r := range group.Ranges {
+					ranges = append(ranges, rangeBounds{r.InclusiveMin.TaskId, r.ExclusiveMax.TaskId})
+				}
+				gotGroups = append(gotGroups, predicateGroup{
+					Indexes: group.GetPredicate().GetNamespaceIdPredicateAttributes().GetNamespaceIdIndexes(),
+					Ranges:  ranges,
+				})
+			}
+			require.Equal(t, tc.wantPlain, gotPlain, "scopes written plain")
+			require.Equal(t, tc.wantGroups, gotGroups, "predicate groups written")
+		})
+	}
+}
+
+func TestToPersistenceQueueState_CompactGroupsNonNamespacePredicates(t *testing.T) {
+	// One entry per set: these predicates keep entries in a map, so two or more would serialize
+	// in a varying order and make the comparison flaky.
+	tests := []struct {
+		name   string
+		shared tasks.Predicate
+		other  tasks.Predicate
+	}{
+		{
+			name: "outbound task",
+			shared: tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+				{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
+			}),
+			other: tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+				{TaskGroup: "g2", NamespaceID: "n2", Destination: "d2"},
+			}),
+		},
+		{
+			name: "outbound task group",
+			//nolint:staticcheck // Deprecated predicates are still read from old shards, so they must group.
+			shared: tasks.NewOutboundTaskGroupPredicate([]string{"g1"}),
+			//nolint:staticcheck // See above.
+			other: tasks.NewOutboundTaskGroupPredicate([]string{"g2"}),
+		},
+		{
+			name: "destination",
+			//nolint:staticcheck // See above.
+			shared: tasks.NewDestinationPredicate([]string{"d1"}),
+			//nolint:staticcheck // See above.
+			other: tasks.NewDestinationPredicate([]string{"d2"}),
+		},
+		{
+			name: "task type",
+			//nolint:staticcheck // See above.
+			shared: tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT}),
+			//nolint:staticcheck // See above.
+			other: tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT}),
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			state := &queueState{
+				readerScopes: map[int64][]Scope{
+					1: {
+						NewScope(NewRange(tasks.NewImmediateKey(10), tasks.NewImmediateKey(20)), tc.shared),
+						NewScope(NewRange(tasks.NewImmediateKey(30), tasks.NewImmediateKey(40)), tc.other),
+						NewScope(NewRange(tasks.NewImmediateKey(50), tasks.NewImmediateKey(60)), tc.shared),
+					},
+				},
+				exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+			}
+
+			reader := ToPersistenceQueueState(state, true).ReaderStates[1]
+
+			require.Len(t, reader.Scopes, 1, "the predicate held by one scope stays plain")
+			require.Equal(t, int64(30), reader.Scopes[0].Range.InclusiveMin.TaskId)
+			require.Len(t, reader.PredicateGroups, 1, "the repeated %s predicate forms one group", tc.name)
+			group := reader.PredicateGroups[0]
+			require.True(t, proto.Equal(ToPersistencePredicate(tc.shared, nil), group.Predicate),
+				"the group's predicate is the shared one: want %v, got %v", ToPersistencePredicate(tc.shared, nil), group.Predicate)
+			require.Len(t, group.Ranges, 2, "the group holds the two ranges that share it")
+			require.Equal(t, int64(10), group.Ranges[0].InclusiveMin.TaskId)
+			require.Equal(t, int64(50), group.Ranges[1].InclusiveMin.TaskId)
+		})
+	}
+}
+
+func TestToPersistenceQueueState_CompactFormIsSmaller(t *testing.T) {
+	const namespaceCount = 20
+	var namespaces [namespaceCount]string
+	for i := range namespaces {
+		var id uuid.UUID
+		id[15] = byte(i + 1)
+		namespaces[i] = id.String()
+	}
+	// 100 scopes, each over 10 of the 20 namespaces, the shape that makes plain text repeat IDs.
+	scopes := make([]Scope, 0, 100)
+	for i := range 100 {
+		ids := make([]string, 0, 10)
+		for j := range 10 {
+			ids = append(ids, namespaces[(i+j)%namespaceCount])
+		}
+		scopes = append(scopes, NewScope(NewRandomRange(), tasks.NewNamespacePredicate(ids)))
+	}
+	state := &queueState{
+		readerScopes:                 map[int64][]Scope{1: scopes},
+		exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+	}
+
+	plain, err := proto.Marshal(ToPersistenceQueueState(state, false))
+	require.NoError(t, err)
+	compact, err := proto.Marshal(ToPersistenceQueueState(state, true))
+	require.NoError(t, err)
+
+	t.Logf("plain %d bytes, compact %d bytes, %.1f%% smaller",
+		len(plain), len(compact), 100*float64(len(plain)-len(compact))/float64(len(plain)))
+	require.Less(t, len(compact), len(plain), "compact is %d bytes, plain is %d bytes", len(compact), len(plain))
+}
+
+func TestToPersistenceQueueState_NotCompactDoesNotGroup(t *testing.T) {
+	a := uuid.MustParse("00000000-0000-0000-0000-00000000000a")
+	b := uuid.MustParse("00000000-0000-0000-0000-00000000000b")
+	shared := func() tasks.Predicate { return tasks.NewNamespacePredicate([]string{a.String(), b.String()}) }
+	state := &queueState{
+		readerScopes: map[int64][]Scope{
+			1: {
+				NewScope(NewRange(tasks.NewImmediateKey(10), tasks.NewImmediateKey(20)), shared()),
+				NewScope(NewRange(tasks.NewImmediateKey(30), tasks.NewImmediateKey(40)), shared()),
+			},
+		},
+		exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+	}
+
+	reader := ToPersistenceQueueState(state, false).ReaderStates[1]
+
+	require.Empty(t, reader.PredicateGroups, "two scopes share a predicate, but compaction is off, so no group")
+	require.Len(t, reader.Scopes, 2, "both scopes stay plain")
+}
+
+func TestToPersistenceQueueState_CompactTableFollowsAscendingReaderID(t *testing.T) {
+	// Reader ID to namespace ID. Ascending reader ID gives d, 3, a, 1, c, 5, 8, e, which is neither
+	// sorted nor reversed, so only a deterministic reader order produces this table. Eight readers
+	// make a map-order pass by luck a 1 in 40,320 event.
+	namespaceByReader := []struct {
+		readerID  int64
+		namespace uuid.UUID
+	}{
+		{1, uuid.MustParse("00000000-0000-0000-0000-00000000000d")},
+		{2, uuid.MustParse("00000000-0000-0000-0000-000000000003")},
+		{3, uuid.MustParse("00000000-0000-0000-0000-00000000000a")},
+		{4, uuid.MustParse("00000000-0000-0000-0000-000000000001")},
+		{5, uuid.MustParse("00000000-0000-0000-0000-00000000000c")},
+		{6, uuid.MustParse("00000000-0000-0000-0000-000000000005")},
+		{7, uuid.MustParse("00000000-0000-0000-0000-000000000008")},
+		{8, uuid.MustParse("00000000-0000-0000-0000-00000000000e")},
+	}
+	state := &queueState{
+		readerScopes:                 map[int64][]Scope{},
+		exclusiveReaderHighWatermark: tasks.NewImmediateKey(100),
+	}
+	var wantTable [][]byte
+	for _, entry := range namespaceByReader {
+		state.readerScopes[entry.readerID] = []Scope{
+			NewScope(NewRandomRange(), tasks.NewNamespacePredicate([]string{entry.namespace.String()})),
+		}
+		wantTable = append(wantTable, entry.namespace[:])
+	}
+
+	persisted := ToPersistenceQueueState(state, true)
+
+	require.Equal(t, wantTable, persisted.NamespaceIdTable, "table entries follow ascending reader ID")
 }
 
 func TestFromPersistencePredicate_ResolvesIndexesInCompositePredicates(t *testing.T) {

@@ -2234,6 +2234,14 @@ NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicate
 		`Max number of pending task keys for which a multi-cursor slice shrinks its predicate back to exactly those
 keys.`,
 	)
+	EnableQueueStateCompaction = NewGlobalBoolSetting(
+		"history.enableQueueStateCompaction",
+		false,
+		`EnableQueueStateCompaction makes the history service persist multi-cursor queue state in compact form:
+namespace IDs as 16-byte entries in a shared table, and scopes that share a predicate grouped under one copy of it.
+Applies to the transfer, timer, visibility, archival and outbound queues, and to every shard in the cluster. Every
+history host must run a version that can read the compact form before this is enabled.`,
+	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
 		500,
