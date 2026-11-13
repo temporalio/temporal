@@ -97,9 +97,9 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.WorkflowTask:
 		err = t.processWorkflowTask(ctx, task)
 	case *tasks.CancelExecutionTask:
-		err = t.processCancelExecution(ctx, task)
+		err = t.processCancelExecution(ctx, task, executable)
 	case *tasks.SignalExecutionTask:
-		err = t.processSignalExecution(ctx, task)
+		err = t.processSignalExecution(ctx, task, executable)
 	case *tasks.StartChildExecutionTask:
 		eventDetails = make(map[string]any)
 		err = t.processStartChildExecution(ctx, task, eventDetails)
@@ -451,6 +451,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 	ctx context.Context,
 	transferTask *tasks.CancelExecutionTask,
+	executable queues.Executable,
 ) error {
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -476,7 +477,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistsOnSourceBeforeDiscard,
+			t.verifyPendingExternalTaskOnSource(executable),
 		),
 	)
 }
@@ -484,6 +485,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 	ctx context.Context,
 	transferTask *tasks.SignalExecutionTask,
+	executable queues.Executable,
 ) error {
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -509,7 +511,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistsOnSourceBeforeDiscard,
+			t.verifyPendingExternalTaskOnSource(executable),
 		),
 	)
 }
