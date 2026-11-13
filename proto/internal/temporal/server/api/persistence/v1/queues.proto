@@ -36,12 +36,11 @@ message QueueReaderLane {
   string logical_key = 1;
   // Tasks the lane is responsible for, starting at the lane's resume position.
   QueueSliceScope scope = 2;
-  // State the lane's policy saves with the lane, such as a learned rate, so the lane
-  // resumes at the right speed after a shard moves. Only the policy that created the
-  // lane writes or reads it; the queue code stores it and never interprets it. At most
-  // 256 bytes, because it is written with the shard's queue state. It may be empty,
-  // for example after a rollback through a binary that drops it, and policies must
-  // handle that.
+  // Opaque policy checkpoint, such as a learned rate, restored after shard ownership
+  // changes. The policy owns the format and compatibility; the queue code stores it
+  // without interpreting it. Limited to 256 bytes because it is persisted with the
+  // shard's queue state. Policies must tolerate empty state, including after a
+  // rollback through an older binary that drops it.
   bytes policy_state = 3;
 }
 

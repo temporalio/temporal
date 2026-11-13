@@ -71,7 +71,7 @@ message SyncReplicationState {
   ReplicationState low_priority_state = 4;
   // Namespace IDs the receiver reports as overwhelming the HIGH (live) traffic of this
   // stream's shard. A sender's lane policy may use them to decide which lanes exist.
-  // The open-source receiver reports none; a LaneFeedbackProvider supplies them.
+  // A LaneFeedbackProvider supplies the list; the default provider returns none.
   repeated string throttle_high_namespace_ids = 5;
   // Applied watermarks for the legacy namespace-isolation protocol, keyed by namespace ID.
   // Legacy fields 6 and 7 are retained for wire compatibility; their numbers must not be reused.
@@ -93,10 +93,12 @@ message SyncReplicationState {
   // Opaque receiver feedback for the sender's lane policy, such as per-namespace health.
   // A LaneFeedbackProvider produces the payload and a lane policy consumes it. The
   // replication layer transports the payload without interpreting it. The type URL
-  // versions the payload; policies ignore types they do not recognize. Receiver
-  // configuration limits the serialized feedback size because it rides on stream acks.
+  // identifies the payload type; providers and policies own schema compatibility.
+  // Policies ignore types they do not recognize. Receiver configuration limits the
+  // serialized feedback size because it rides on stream acks.
   // (-- api-linter: core::0146::any=disabled
-  //     aip.dev/not-precedent: This is not public. --)
+  //     aip.dev/not-precedent: Feedback schemas are owned by provider/policy
+  //     implementations. The replication transport carries them opaquely. --)
   google.protobuf.Any lane_feedback = 10;
   // The most lanes the receiver tracks on this stream. Set whenever
   // lane_protocol_version is at least 1; zero means the receiver accepts no lanes. The

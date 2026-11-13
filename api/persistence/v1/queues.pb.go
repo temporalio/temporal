@@ -201,12 +201,11 @@ type QueueReaderLane struct {
 	LogicalKey string `protobuf:"bytes,1,opt,name=logical_key,json=logicalKey,proto3" json:"logical_key,omitempty"`
 	// Tasks the lane is responsible for, starting at the lane's resume position.
 	Scope *QueueSliceScope `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	// State the lane's policy saves with the lane, such as a learned rate, so the lane
-	// resumes at the right speed after a shard moves. Only the policy that created the
-	// lane writes or reads it; the queue code stores it and never interprets it. At most
-	// 256 bytes, because it is written with the shard's queue state. It may be empty,
-	// for example after a rollback through a binary that drops it, and policies must
-	// handle that.
+	// Opaque policy checkpoint, such as a learned rate, restored after shard ownership
+	// changes. The policy owns the format and compatibility; the queue code stores it
+	// without interpreting it. Limited to 256 bytes because it is persisted with the
+	// shard's queue state. Policies must tolerate empty state, including after a
+	// rollback through an older binary that drops it.
 	PolicyState   []byte `protobuf:"bytes,3,opt,name=policy_state,json=policyState,proto3" json:"policy_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
