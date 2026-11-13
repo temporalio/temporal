@@ -534,8 +534,6 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
-	// Keyed on worker instance rather than identity, because a fleet commonly shares one
-	// configured identity and fair-share has to tell its members apart.
 	c.pollerShares.record(pollMetadata.workerInstanceKey, pollMetadata.pollerPoolInfo)
 }
 
@@ -878,13 +876,9 @@ func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 }
 
 // applyFairShare withholds a suggestion that would push this worker further from its share
-// of the fleet's pollers: no growth for a worker already above the fleet mean, no shrink for
-// one below it. It only ever withholds, never substitutes or redirects -- a withheld +1 is
-// dropped rather than handed to an under-share peer, so the fleet also grows somewhat less.
-//
-// makePollerScalingDecisionImpl has already counted the suggestion by the time we withhold
-// it, so scale_up and scale_down count suggestions proposed, and hold{over_share,under_share}
-// the subset denied.
+// of the fleet's pollers: no growth above the fleet mean, no shrink below it. It only ever
+// withholds -- a withheld +1 is dropped rather than handed to an under-share peer. The
+// suggestion is already counted by this point, so hold{over,under}_share is the subset denied.
 func (c *physicalTaskQueueManagerImpl) applyFairShare(
 	decision *taskqueuepb.PollerScalingDecision,
 	pollMetadata *pollMetadata,

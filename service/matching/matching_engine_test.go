@@ -6259,8 +6259,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
-			// Shutdown now evicts the worker from poller history by instance key, so this
-			// reaches the "partition not loaded" debug log on this fixture's empty engine.
 			logger: log.NewNoopLogger(),
 		}
 
@@ -6298,8 +6296,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
-			// Shutdown now evicts the worker from poller history by instance key, so this
-			// reaches the "partition not loaded" debug log on this fixture's empty engine.
 			logger: log.NewNoopLogger(),
 		}
 
@@ -6333,8 +6329,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
-			// Shutdown now evicts the worker from poller history by instance key, so this
-			// reaches the "partition not loaded" debug log on this fixture's empty engine.
 			logger: log.NewNoopLogger(),
 		}
 
@@ -6462,8 +6456,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
-			// Shutdown now evicts the worker from poller history by instance key, so this
-			// reaches the "partition not loaded" debug log on this fixture's empty engine.
 			logger: log.NewNoopLogger(),
 		}
 
@@ -6492,8 +6484,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
-			// Shutdown now evicts the worker from poller history by instance key, so this
-			// reaches the "partition not loaded" debug log on this fixture's empty engine.
 			logger: log.NewNoopLogger(),
 		}
 

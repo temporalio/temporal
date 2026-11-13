@@ -21,12 +21,9 @@ const (
 )
 
 // pollerShareTracker holds the most recent poller-pool report from each worker polling one
-// physical queue, and compares a worker's poller count against the fleet's mean.
-//
-// It exists because scaling suggestions ride on dispatched tasks: under FIFO matching a
-// worker's share of dispatched tasks equals its share of pollers, so growth is proportional
-// to current size in both directions. The equilibrium is degenerate -- any imbalance between
-// identical workers is preserved rather than corrected.
+// physical queue, and compares a worker's poller count against the fleet's mean. It exists
+// because scaling suggestions ride on dispatched tasks, so growth is proportional to current
+// size and imbalance between identical workers persists rather than correcting.
 type pollerShareTracker struct {
 	ttl        time.Duration
 	timeSource clock.TimeSource
