@@ -113,17 +113,43 @@ func (cc *compiledCalendar) matches(ts time.Time) bool {
 // Returns the earliest time that matches this calendar spec that is after the given time.
 // All times are considered to have 1 second resolution.
 func (cc *compiledCalendar) next(ts time.Time) time.Time {
-	// set time zone
-	ts = ts.In(cc.tz)
+	// The UTC offset is constant between two transitions of the time zone, so each wall
+	// clock time occurs exactly once at that offset. Each period between transitions is
+	// searched at its own offset. A wall clock time that a transition skips is never
+	// returned. A wall clock time that a transition repeats is returned once per period.
+	for period := ts.In(cc.tz); period.Year() <= maxCalendarYear; {
+		_, offset := period.Zone()
+		next := cc.nextAtOffset(ts, time.Duration(offset)*time.Second)
+		_, end := period.ZoneBounds()
+		if end.IsZero() {
+			return next
+		}
+		if !end.After(period) {
+			// ZoneBounds treats every year as 365 days long when the period lasts until the
+			// end of the year. On the last day of a leap year it returns the start of that
+			// day. The offset does not change before the start of the next day in UTC.
+			end = period.Truncate(24 * time.Hour).Add(24 * time.Hour)
+		}
+		if !next.IsZero() && next.Before(end) {
+			return next
+		}
+		// The first second of the following period is a candidate.
+		ts, period = end.Add(-time.Second), end.In(cc.tz)
+	}
+	return time.Time{}
+}
+
+// Returns the earliest time after the given time whose wall clock time at the given UTC
+// offset matches this calendar spec.
+//
+//revive:disable-next-line:cognitive-complexity
+func (cc *compiledCalendar) nextAtOffset(ts time.Time, offset time.Duration) time.Time {
+	// A UTC time shifted by the offset has the wall clock fields of that offset.
+	ts = ts.UTC().Add(offset)
 
 	// get ymdhms from ts
 	y, mo, d := ts.Date()
 	h, m, s := ts.Clock()
-	dstoffset := 0 * time.Hour
-	if ts.Add(-time.Hour).Hour() == h {
-		// we're in the second copy of a dst repeated hour
-		dstoffset = 1 * time.Hour
-	}
 
 	// looking for first matching time after ts, so add 1 second
 	s++
@@ -135,17 +161,7 @@ Outer:
 			m, s = m+1, 0
 		}
 		if m >= 60 {
-			prev := time.Date(y, mo, d, h, 0, 0, 0, cc.tz)
 			h, m = h+1, 0
-			next := time.Date(y, mo, d, h, 0, 0, 0, cc.tz)
-			// if we moved to the next hour but it's two hours later, then we skipped over
-			// a dst repeated hour. try it again with an offset.
-			if dstoffset == 0 && next.Sub(prev) > time.Hour {
-				h = h - 1
-				dstoffset = 1 * time.Hour
-			} else {
-				dstoffset = 0
-			}
 		}
 		if h >= 24 {
 			d, h = d+1, 0
@@ -162,26 +178,22 @@ Outer:
 		// try to match year, month, etc. from outside in
 		if !cc.year(y) {
 			y, mo, d, h, m, s = y+1, time.January, 1, 0, 0, 0
-			dstoffset = 0
 			continue Outer
 		}
 		for !cc.month(int(mo)) {
 			mo, d, h, m, s = mo+1, 1, 0, 0, 0
-			dstoffset = 0
 			if mo > time.December {
 				continue Outer
 			}
 		}
-		for !cc.dayOfMonth(d) || !cc.dayOfWeek(int(time.Date(y, mo, d, h, m, s, 0, cc.tz).Weekday())) {
+		for !cc.dayOfMonth(d) || !cc.dayOfWeek(int(time.Date(y, mo, d, 0, 0, 0, 0, time.UTC).Weekday())) {
 			d, h, m, s = d+1, 0, 0, 0
-			dstoffset = 0
 			if d > daysInMonth(mo, y) {
 				continue Outer
 			}
 		}
 		for !cc.hour(h) {
 			h, m, s = h+1, 0, 0
-			dstoffset = 0
 			if h >= 24 {
 				continue Outer
 			}
@@ -199,14 +211,7 @@ Outer:
 			}
 		}
 		// everything matches
-		nextTs := time.Date(y, mo, d, h, m, s, 0, cc.tz)
-		// we might have reached a nonexistent time that got jumped over by a dst transition.
-		// we can tell if the hour is different from what we think it should be.
-		if nextTs.Hour() != h {
-			h, m, s = h+1, 0, 0
-			continue Outer
-		}
-		return nextTs.Add(dstoffset)
+		return time.Date(y, mo, d, h, m, s, 0, time.UTC).Add(-offset).In(cc.tz)
 	}
 
 	// no more matching times (up to max we checked)
