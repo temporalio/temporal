@@ -377,6 +377,12 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	}
 
 	ms, err = wfCtx.LoadMutableState(ctx, r.shardContext)
+	if err == nil && ms.HasPendingChasmSpeculativeTransition() {
+		// Replication must apply to persisted state not the cached one.
+		// TODO: Consider a CHASM-only persistence read to reduce reload cost.
+		wfCtx.Clear()
+		ms, err = wfCtx.LoadMutableState(ctx, r.shardContext)
+	}
 	switch err.(type) {
 	case *serviceerror.NotFound:
 		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName, captureMutableState)

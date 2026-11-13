@@ -204,6 +204,10 @@ func (e *ChasmEngine) startExecution(
 		return chasm.StartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for StartExecution")
 	}
 
+	if options.Speculative {
+		return chasm.StartExecutionResult{}, chasm.ErrSpeculativeStartExecution
+	}
+
 	currentExecutionReleaseFn, err := e.lockCurrentExecution(
 		ctx,
 		shardContext,
@@ -513,15 +517,35 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		}
 	}
 
-	// TODO: Support WithSpeculative() TransitionOption.
-
 	e.setContextMetadata(ctx, chasmTree)
 
-	if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(
-		ctx,
-		shardContext,
-	); err != nil {
-		return nil, err
+	decision := chasm.TransitionDecision{PersistNow: true}
+	if transitionOptions.Speculative {
+		if err := chasmTree.ApplySpeculativeTransition(ctx); err != nil {
+			return nil, err
+		}
+		if decision, err = chasmTree.SpeculativeTransitionDecision(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	if decision.PersistNow {
+		if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext); err != nil {
+			return nil, err
+		}
+	} else {
+		// The transition stays in the cached mutable state until the next normal transaction closes.
+		if err := mutableState.SetChasmSpeculativeTransitionPending(); err != nil {
+			return nil, err
+		}
+		if decision.NotifyPollers {
+			workflowKey := mutableState.GetWorkflowKey()
+			e.NotifyExecution(chasm.ExecutionKey{
+				NamespaceID: workflowKey.NamespaceID,
+				BusinessID:  workflowKey.WorkflowID,
+				RunID:       workflowKey.RunID,
+			})
+		}
 	}
 
 	serializedRef, err := mutableContext.Ref(component)

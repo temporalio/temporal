@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -931,6 +932,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
+	mockMutableState.EXPECT().HasPendingChasmSpeculativeTransition().Return(false)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 		TransitionHistory: []*persistencespb.VersionedTransition{
@@ -1025,6 +1027,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
+	mockMutableState.EXPECT().HasPendingChasmSpeculativeTransition().Return(false)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 		TransitionHistory: []*persistencespb.VersionedTransition{
@@ -1116,6 +1119,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
+	mockMutableState.EXPECT().HasPendingChasmSpeculativeTransition().Return(false)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 		TransitionHistory: []*persistencespb.VersionedTransition{
@@ -1302,6 +1306,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
+	mockMutableState.EXPECT().HasPendingChasmSpeculativeTransition().Return(false)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 		TransitionHistory: []*persistencespb.VersionedTransition{
@@ -2629,4 +2634,169 @@ func (s *workflowReplicatorSuite) TestApplySnapshotHistorySwitchKeepsParentVerif
 		s.T().Context(), tests.NamespaceID, s.workflowID, s.runID, chasm.WorkflowArchetypeID,
 		workflowContext, wcache.NoopReleaseFn, mutableState, snapshot, nil, nil, "source",
 	))
+}
+
+type replicationTestComponent struct {
+	chasm.UnimplementedComponent
+	Data *commonpb.Payload
+	X    chasm.Field[*commonpb.Payload]
+	Y    chasm.Field[*commonpb.Payload]
+}
+
+func (*replicationTestComponent) LifecycleState(chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
+type replicationTestLibrary struct{ chasm.UnimplementedLibrary }
+
+func (*replicationTestLibrary) Name() string { return "replication_test" }
+
+func (*replicationTestLibrary) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*replicationTestComponent]("component"),
+	}
+}
+
+func (s *workflowReplicatorSuite) TestReplicateVersionedTransitionDiscardsSpeculativeChanges() {
+	for _, tc := range []struct {
+		name        string
+		snapshot    bool
+		speculative bool
+		readError   bool
+	}{
+		{name: "mutation", speculative: true},
+		{name: "snapshot", snapshot: true, speculative: true},
+		{name: "clean cache"},
+		{name: "reload failure", speculative: true, readError: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			config := s.mockShard.GetConfig()
+			config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+			config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+			registry := chasm.NewRegistry(s.logger)
+			require.NoError(t, registry.Register(&replicationTestLibrary{}))
+			s.mockShard.SetChasmRegistry(registry)
+			archetypeID, ok := registry.ComponentIDFor(&replicationTestComponent{})
+			require.True(t, ok)
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
+			s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.GlobalNamespaceEntry.Name(), nil).AnyTimes()
+
+			initialVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1}
+			newVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 2}
+			dataNode := func(value string) *persistencespb.ChasmNode {
+				blob, err := serialization.Encode(&commonpb.Payload{Data: []byte(value)}, serialization.WithDeterministicProto3)
+				require.NoError(t, err)
+				return &persistencespb.ChasmNode{
+					Metadata: &persistencespb.ChasmNodeMetadata{
+						InitialVersionedTransition:    common.CloneProto(initialVT),
+						LastUpdateVersionedTransition: common.CloneProto(initialVT),
+						Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
+							DataAttributes: &persistencespb.ChasmDataAttributes{},
+						},
+					},
+					Data: blob,
+				}
+			}
+			persisted := &persistencespb.WorkflowMutableState{
+				ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+					NamespaceId: string(tests.NamespaceID), WorkflowId: s.workflowID,
+					VersionHistories:  &historyspb.VersionHistories{Histories: []*historyspb.VersionHistory{{}}},
+					TransitionHistory: []*persistencespb.VersionedTransition{initialVT},
+				},
+				ExecutionState: &persistencespb.WorkflowExecutionState{
+					RunId: s.runID, State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+				NextEventId: 1,
+				ChasmNodes: map[string]*persistencespb.ChasmNode{
+					"": {Metadata: &persistencespb.ChasmNodeMetadata{
+						InitialVersionedTransition:    common.CloneProto(initialVT),
+						LastUpdateVersionedTransition: common.CloneProto(initialVT),
+						Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+							ComponentAttributes: &persistencespb.ChasmComponentAttributes{TypeId: archetypeID},
+						},
+					}},
+					"X": dataNode("persisted"),
+					"Y": dataNode("persisted"),
+				},
+			}
+			cached, err := workflow.NewMutableStateFromDB(s.mockShard, s.mockEventCache, s.logger, tests.GlobalNamespaceEntry, common.CloneProto(persisted), 1)
+			require.NoError(t, err)
+			if tc.speculative {
+				tree := cached.ChasmTree().(*chasm.Node)
+				mutableContext := chasm.NewMutableContext(t.Context(), tree)
+				component, err := tree.Component(mutableContext, chasm.ComponentRef{})
+				require.NoError(t, err)
+				component.(*replicationTestComponent).X.Get(mutableContext).Data = []byte("speculative")
+				require.NoError(t, tree.ApplySpeculativeTransition(t.Context()))
+				require.NoError(t, cached.SetChasmSpeculativeTransitionPending())
+			}
+			wfCtx := workflow.NewContext(config, cached.GetWorkflowKey(), archetypeID, s.logger, s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler(), limiter.NewKeyedBytesLimiter(), testhooks.TestHooks{})
+			wfCtx.MutableState = cached
+			s.mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), s.mockShard, tests.NamespaceID, gomock.Any(), archetypeID, gomock.Any()).Return(wfCtx, wcache.NoopReleaseFn, nil)
+			readErr := serviceerror.NewUnavailable("reload failed")
+			if tc.speculative {
+				read := s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+					ShardID: s.mockShard.GetShardID(), NamespaceID: string(tests.NamespaceID),
+					WorkflowID: s.workflowID, RunID: s.runID, ArchetypeID: archetypeID,
+				})
+				if tc.readError {
+					read.Return(nil, readErr)
+				} else {
+					read.Return(&persistence.GetWorkflowExecutionResponse{State: common.CloneProto(persisted), DBRecordVersion: 1}, nil)
+				}
+			}
+
+			incoming := common.CloneProto(persisted)
+			incoming.ExecutionInfo.TransitionHistory = append(incoming.ExecutionInfo.TransitionHistory, newVT)
+			incoming.ChasmNodes["Y"] = dataNode("replicated")
+			incoming.ChasmNodes["Y"].Metadata.LastUpdateVersionedTransition = newVT
+			artifact := &replicationspb.VersionedTransitionArtifact{}
+			if tc.snapshot {
+				artifact.StateAttributes = &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+					SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{State: incoming},
+				}
+			} else {
+				artifact.StateAttributes = &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes{
+					SyncWorkflowStateMutationAttributes: &replicationspb.SyncWorkflowStateMutationAttributes{
+						ExclusiveStartVersionedTransition: initialVT,
+						StateMutation: &persistencespb.WorkflowMutableStateMutation{
+							ExecutionInfo: incoming.ExecutionInfo, ExecutionState: incoming.ExecutionState,
+							UpdatedChasmNodes: map[string]*persistencespb.ChasmNode{"Y": incoming.ChasmNodes["Y"]},
+						},
+					},
+				}
+			}
+			var actualX, actualY string
+			var mutation *persistence.WorkflowMutation
+			transactionManager := NewMockTransactionManager(s.controller)
+			s.workflowStateReplicator.transactionMgr = transactionManager
+			if !tc.readError {
+				transactionManager.EXPECT().UpdateWorkflow(gomock.Any(), false, archetypeID, gomock.Any(), nil).DoAndReturn(
+					func(ctx context.Context, _ bool, _ chasm.ArchetypeID, wf Workflow, _ Workflow) error {
+						ms := wf.GetMutableState()
+						tree := ms.ChasmTree().(*chasm.Node)
+						immutableContext := chasm.NewContext(ctx, tree)
+						component, err := tree.Component(immutableContext, chasm.ComponentRef{})
+						if err != nil {
+							return err
+						}
+						actualX = string(component.(*replicationTestComponent).X.Get(immutableContext).Data)
+						actualY = string(component.(*replicationTestComponent).Y.Get(immutableContext).Data)
+						mutation, _, err = ms.CloseTransactionAsMutation(ctx, historyi.TransactionPolicyPassive)
+						return err
+					})
+			}
+			err = s.workflowStateReplicator.ReplicateVersionedTransition(t.Context(), archetypeID, artifact, "new-active")
+			if tc.readError {
+				require.ErrorIs(t, err, readErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, "persisted", actualX)
+			require.Equal(t, "replicated", actualY)
+			require.NotContains(t, mutation.UpsertChasmNodes, "X")
+			require.Contains(t, mutation.UpsertChasmNodes, "Y")
+		})
+	}
 }

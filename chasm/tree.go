@@ -1870,6 +1870,59 @@ func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutati
 	return n.mutation, nil
 }
 
+// ApplySpeculativeTransition runs the in-memory part of CloseTransaction for a transition.
+func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
+	if err := n.executeImmediatePureTasks(); err != nil {
+		return err
+	}
+
+	if err := n.syncSubComponents(); err != nil {
+		return err
+	}
+
+	// Resolved pointers become regular pointers, so resolving again at CloseTransaction is a no-op.
+	if n.needsPointerResolution {
+		return n.resolveDeferredPointers()
+	}
+	return nil
+}
+
+// TransitionDecision describes the engine's actions for a transition.
+type TransitionDecision struct {
+	// PersistNow requires saving the transition before the update returns.
+	PersistNow bool
+	// NotifyPollers wakes PollComponent waiters when the transition stays in memory.
+	NotifyPollers bool
+}
+
+// SpeculativeTransitionDecision returns how the engine handles the current speculative transition.
+// Call it after ApplySpeculativeTransition.
+func (n *Node) SpeculativeTransitionDecision(ctx context.Context) (TransitionDecision, error) {
+	closes, err := n.speculativeTransitionClosesExecution(ctx)
+	if err != nil {
+		return TransitionDecision{}, err
+	}
+	return TransitionDecision{PersistNow: closes, NotifyPollers: true}, nil
+}
+
+// speculativeTransitionClosesExecution reports whether the root is closed in memory while the
+// persisted execution is still open.
+func (n *Node) speculativeTransitionClosesExecution(ctx context.Context) (bool, error) {
+	if n.backend.IsWorkflow() ||
+		n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return false, nil
+	}
+	if n.terminated {
+		return true, nil
+	}
+	immutableContext := NewContext(ctx, n)
+	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return false, err
+	}
+	return rootComponent.LifecycleState(immutableContext).IsClosed(), nil
+}
+
 func (n *Node) executeImmediatePureTasks() error {
 
 	// We must sync structure before running any tasks here because,

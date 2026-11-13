@@ -184,13 +184,19 @@ type UpdateWithStartExecutionResult[O any] struct {
 // EngineUpdateWithStartExecutionResult is a type alias for the result type returned by the UpdateWithStart Engine implementation.
 type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struct{}]
 
-// (only) this transition will not be persisted
-// The next non-speculative transition will persist this transition as well.
-// Compared to the ExecutionEphemeral() operation on RegistrableComponent,
-// the scope of this operation is limited to a certain transition,
-// while the ExecutionEphemeral() applies to all transitions.
-// TODO: we need to figure out a way to run the tasks
-// generated in a speculative transition
+// WithSpeculative applies the transition to the memory only.
+//
+// A speculative transition is persisted when the next normal transition comes in. The caller must make that
+// a non speculative transition to persist.
+//   - The transition is not durable. Cache eviction, a shard move, a host restart, or any error
+//     from a later transition on the execution drops it. Report normal rejections from the update
+//     function as output rather than as an error.
+//   - Reads and PollComponent waiters see the transition while the execution is cached, so a
+//     waiter can see state that is later lost.
+//   - Immediate pure tasks run. Other tasks added by the transition are created when it is persisted.
+//   - Replication ignores states
+//
+// TODO: Add option to support all task.
 func WithSpeculative() TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.Speculative = true
@@ -284,7 +290,7 @@ func WithRefConsistencyLevel(level RefConsistencyLevel) TransitionOption {
 //   - opts: Optional [TransitionOption] functions to configure creation behavior:
 //   - [WithBusinessIDPolicy]: Controls duplicate handling and conflict resolution
 //   - [WithRequestID]: Sets a request ID for idempotency
-//   - [WithSpeculative]: Defers persistence until the next non-speculative transition
+//   - [WithSpeculative] is not supported and returns [ErrSpeculativeStartExecution]
 //
 // Returns:
 //   - O: The output value produced by startFn

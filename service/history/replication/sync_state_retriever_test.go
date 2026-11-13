@@ -29,6 +29,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -271,7 +272,8 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 				},
 			},
 		})
-	mu.EXPECT().ChasmTree().Return(mockChasmTree)
+	mockChasmTree.EXPECT().IsDirty().Return(false)
+	mu.EXPECT().ChasmTree().Return(mockChasmTree).Times(2)
 
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
@@ -374,7 +376,8 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_WithEve
 				},
 			},
 		})
-	mu.EXPECT().ChasmTree().Return(mockChasmTree)
+	mockChasmTree.EXPECT().IsDirty().Return(false)
+	mu.EXPECT().ChasmTree().Return(mockChasmTree).Times(2)
 
 	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken: versionHistories.Histories[0].GetBranchToken(),
@@ -461,7 +464,8 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_NoEvent
 			},
 		},
 	})
-	mu.EXPECT().ChasmTree().Return(mockChasmTree)
+	mockChasmTree.EXPECT().IsDirty().Return(false)
+	mu.EXPECT().ChasmTree().Return(mockChasmTree).Times(2)
 
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
 		context.Background(),
@@ -574,6 +578,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 			}
 			mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 			mu.EXPECT().HasBufferedEvents().Return(false)
+			s.expectNoSpeculativeTransition(mu)
 			mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 				ExecutionInfo: executionInfo,
 			})
@@ -630,6 +635,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 	}
 	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+	s.expectNoSpeculativeTransition(mu)
 	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 		ExecutionInfo: executionInfo,
 	})
@@ -645,6 +651,83 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes())
 	s.Nil(result.VersionedTransitionArtifact.EventBatches)
 	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
+}
+
+func (s *syncWorkflowStateSuite) TestSyncWorkflowState_SpeculativeTransitionPending_ReturnsPersistedState() {
+	mu := historyi.NewMockMutableState(s.controller)
+	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), s.workflowKey,
+		chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
+		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
+	versionHistories := &historyspb.VersionHistories{
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("branchToken1"),
+				Items:       []*historyspb.VersionHistoryItem{{EventId: 2, Version: 13}},
+			},
+		},
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: s.namespaceID,
+		WorkflowId:  s.execution.WorkflowId,
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 2, TransitionCount: 15},
+		},
+		VersionHistories: versionHistories,
+	}
+
+	// The cached mutable state holds a speculative request ID that isn't persisted.
+	cachedChasmTree := historyi.NewMockChasmTree(s.controller)
+	cachedChasmTree.EXPECT().IsDirty().Return(true).AnyTimes()
+	cachedChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	mu.EXPECT().ChasmTree().Return(cachedChasmTree).AnyTimes()
+	mu.EXPECT().HasBufferedEvents().Return(false)
+	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+	mu.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: s.execution.RunId}).AnyTimes()
+	mu.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
+		ExecutionInfo: executionInfo,
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:      s.execution.RunId,
+			RequestIds: map[string]*persistencespb.RequestIDInfo{"speculative-request": {}},
+		},
+	}).AnyTimes()
+
+	// The suite's shard is stopped after each test, and this test reads through the shard.
+	mockShard := shard.NewTestContext(s.controller, &persistencespb.ShardInfo{ShardId: 0, RangeId: 1}, tests.NewDynamicConfig())
+	defer mockShard.StopForTest()
+	retriever := NewSyncStateRetriever(mockShard, s.workflowCache, s.workflowConsistencyChecker, s.eventBlobCache, s.logger)
+	stateMachineRegistry := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(stateMachineRegistry))
+	mockShard.SetStateMachineRegistry(stateMachineRegistry)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
+	mockShard.Resource.ExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     mockShard.GetShardID(),
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.execution.WorkflowId,
+		RunID:       s.execution.RunId,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State: &persistencespb.WorkflowMutableState{
+			ExecutionInfo: common.CloneProto(executionInfo),
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				RunId: s.execution.RunId,
+			},
+			NextEventId: 3,
+		},
+	}, nil)
+
+	result, err := retriever.GetSyncWorkflowStateArtifact(
+		context.Background(),
+		s.namespaceID,
+		s.execution,
+		chasm.WorkflowArchetypeID,
+		nil,
+		versionHistories)
+	s.NoError(err)
+	snapshot := result.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().GetState()
+	s.NotNil(snapshot)
+	s.Equal(s.execution.RunId, snapshot.GetExecutionState().GetRunId())
+	s.NotContains(snapshot.GetExecutionState().GetRequestIds(), "speculative-request")
 }
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
@@ -1017,4 +1100,10 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents_RangeSpansFailover() {
 	s.Equal(int64(30), lastID)
 	s.Equal(newVersion, lastVer)
 	s.NotEqual(firstVer, lastVer, "one shipped range, two versions: this is why each bound needs its own")
+}
+
+func (s *syncWorkflowStateSuite) expectNoSpeculativeTransition(mu *historyi.MockMutableState) {
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	chasmTree.EXPECT().IsDirty().Return(false)
+	mu.EXPECT().ChasmTree().Return(chasmTree)
 }

@@ -4297,6 +4297,139 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
+// cleanTestComponentTree returns a test tree with its creation transaction already closed, and a
+// counter of NextTransitionCount calls made after that.
+func (s *nodeSuite) cleanTestComponentTree() (*Node, *int) {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	transitionCountCalls := 0
+	s.nodeBackend.HandleNextTransitionCount = func() int64 {
+		transitionCountCalls++
+		return 2
+	}
+	return root, &transitionCountCalls
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_KeepsMutation() {
+	root, transitionCountCalls := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: "speculative"}
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.True(root.IsDirty())
+	s.Zero(*transitionCountCalls)
+
+	mutations, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "")
+	s.Positive(*transitionCountCalls)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_RunsImmediatePureTasks() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	mutableContext.AddTask(component, taskAttributes, &TestPureTask{Data: []byte("immediate")})
+
+	executionCount := 0
+	// Times(1) also checks the real close does not run the task again.
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Execute(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).
+		DoAndReturn(func(MutableContext, any, TaskAttributes, *TestPureTask) error {
+			executionCount++
+			return nil
+		}).Times(1)
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Equal(1, executionCount)
+
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_SyncsNewSubComponent() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).SubComponent2 = NewComponentField(mutableContext, &TestSubComponent2{
+		SubComponent2Data: &protoMessageType{CreateRequestId: "sub2"},
+	})
+	s.NotContains(root.children, "SubComponent2")
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Contains(root.children, "SubComponent2")
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Contains(root.children, "SubComponent2")
+}
+
+func (s *nodeSuite) TestSpeculativeTransitionDecision() {
+	s.useStatefulExecutionState()
+	node := s.testComponentTree()
+	_, err := node.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	chasmCtx := NewMutableContext(context.Background(), node)
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	s.NoError(err)
+
+	// A transition that leaves the execution running stays speculative and notifies pollers.
+	tc.(*TestComponent).ComponentData.CreateRequestId = "updated"
+	decision, err := node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.Equal(TransitionDecision{PersistNow: false, NotifyPollers: true}, decision)
+
+	// A transition that closes the execution must be persisted.
+	tc.(*TestComponent).Complete(chasmCtx)
+	decision, err = node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.True(decision.PersistNow)
+}
+
+func (s *nodeSuite) TestSpeculativeTransitionDecision_Terminated() {
+	s.useStatefulExecutionState()
+	node := s.testComponentTree()
+	_, err := node.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	node.terminated = true
+	decision, err := node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.True(decision.PersistNow)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_KeepsNewTasks() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.TasksByCategory = nil
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("deferred")})
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Empty(s.nodeBackend.TasksByCategory)
+
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTransfer], 1)
+}
+
 func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	root := s.testComponentTree()
 
