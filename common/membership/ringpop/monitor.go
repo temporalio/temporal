@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/temporalio/ringpop-go"
-	"github.com/temporalio/ringpop-go/discovery/statichosts"
 	"github.com/temporalio/ringpop-go/swim"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -25,6 +24,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/membership/ringpop/snapshothosts"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 )
@@ -46,6 +46,10 @@ const (
 	// allows join/leave times to be. 15 seconds is enough to allow aligning to 10 seconds plus
 	// 3 seconds of propagation time buffer.
 	maxScheduledEventTimeSeconds = 15
+
+	// An expired host snapshot is refreshed on the next partition-healing attempt.
+	// A failed refresh leaves the snapshot expired so the next attempt retries.
+	snapshotExpiry = time.Minute * 5
 )
 
 type monitor struct {
@@ -232,7 +236,7 @@ func (rpo *monitor) bootstrapRingPop() error {
 			ParallelismFactor: 10,
 			JoinSize:          1,
 			MaxJoinDuration:   rpo.maxJoinDuration,
-			DiscoverProvider:  statichosts.New(hostPorts...),
+			DiscoverProvider:  snapshothosts.New(rpo.logger, rpo.refreshCurrentHostports, snapshotExpiry, hostPorts...),
 		}
 
 		_, err = rpo.rp.Bootstrap(bootParams)
