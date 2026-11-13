@@ -12,6 +12,9 @@ type fieldInternal struct {
 	// Detached field option. When true, the node created from this field
 	// will be detached regardless of the component type's registration.
 	detached bool
+
+	// Ephemeral field option. When true, the node created from this field is never persisted.
+	ephemeral bool
 }
 
 func newFieldInternalWithValue(ft fieldType, v any) fieldInternal {

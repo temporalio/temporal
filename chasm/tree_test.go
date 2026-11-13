@@ -5672,6 +5672,157 @@ func (s *nodeSuite) TestCloseTransaction_PersistsAcrossTransactions() {
 	s.ProtoEqual(md, ctx2.UserMetadata(c2))
 }
 
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+
+	// An ephemeral item in a map that wasn't persisted before: neither the item, its subtree, nor the map is persisted.
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	tc := c.(*TestComponent)
+	tc.SubComponents = Map[string, *TestSubComponent1]{
+		"ephemeral": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "ephemeral"},
+			SubComponent11: NewComponentField(ctx, &TestSubComponent11{
+				SubComponent11Data: &protoMessageType{RunId: "ephemeral-child"},
+			}),
+		}, ComponentFieldEphemeral()),
+	}
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.assertNoSubComponentsPaths(mutation.UpdatedNodes)
+	s.assertNoSubComponentsPaths(mutation.DeletedNodes)
+	s.assertNoSubComponentsPaths(root.Snapshot(nil).Nodes)
+	childNode, ok := root.findNode([]string{"SubComponents", "ephemeral", "SubComponent11"})
+	s.True(ok)
+	s.True(childNode.isEphemeral())
+
+	// Mutating the ephemeral item and setting request links on it doesn't persist it either. Adding a durable item
+	// persists the map along with the durable item.
+	nextTC = 3
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+	}}
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	tc = c.(*TestComponent)
+	ephemeral := tc.SubComponents["ephemeral"].Get(ctx)
+	ephemeral.SubComponent1Data.RunId = "ephemeral-updated"
+	s.NoError(ctx.SetRequestLinks(ephemeral, "req", []*commonpb.Link{link}))
+	tc.SubComponents["durable"] = NewComponentField(ctx, &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{RunId: "durable"},
+	})
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "SubComponents")
+	s.Contains(mutation.UpdatedNodes, "SubComponents/durable")
+	s.NotContains(mutation.UpdatedNodes, "SubComponents/ephemeral")
+	s.NotContains(mutation.UpdatedNodes, "SubComponents/ephemeral/SubComponent11")
+	s.NotContains(root.Snapshot(nil).Nodes, "SubComponents/ephemeral")
+
+	// The ephemeral item keeps its in-memory state across transactions.
+	readCtx := NewContext(context.Background(), root)
+	c, err = root.Component(readCtx, ComponentRef{})
+	s.NoError(err)
+	ephemeral = c.(*TestComponent).SubComponents["ephemeral"].Get(readCtx)
+	s.Equal("ephemeral-updated", ephemeral.SubComponent1Data.GetRunId())
+	links, err := readCtx.RequestLinks(ephemeral, "req")
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{link}, links)
+
+	// Removing the ephemeral item leaves no tombstones, removing the durable item does.
+	nextTC = 4
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	delete(c.(*TestComponent).SubComponents, "ephemeral")
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.assertNoSubComponentsPaths(mutation.DeletedNodes)
+
+	nextTC = 5
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	delete(c.(*TestComponent).SubComponents, "durable")
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Equal(map[string]struct{}{"SubComponents": {}, "SubComponents/durable": {}}, mutation.DeletedNodes)
+}
+
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RemovedBeforePersisting() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"ephemeral": NewComponentField(ctx, &TestSubComponent1{}, ComponentFieldEphemeral()),
+	}
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	// Emptying the map removes the never-persisted collection without a tombstone.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = nil
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.assertNoSubComponentsPaths(mutation.DeletedNodes)
+	_, ok := root.findNode([]string{"SubComponents"})
+	s.False(ok)
+}
+
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RejectsTasks() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	tl, ok := s.logger.(*testlogger.TestLogger)
+	s.Require().True(ok)
+	tl.Expect(testlogger.Error, "tasks can't be added to ephemeral components")
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	ephemeral := &TestSubComponent1{SubComponent1Data: &protoMessageType{}}
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"ephemeral": NewComponentField(ctx, ephemeral, ComponentFieldEphemeral()),
+	}
+	ctx.AddTask(ephemeral, TaskAttributes{}, &TestSideEffectTask{Data: []byte("task")})
+	_, err = root.CloseTransaction(context.Background(), true)
+	var internalErr *serviceerror.Internal
+	s.ErrorAs(err, &internalErr)
+}
+
+func (s *nodeSuite) assertNoSubComponentsPaths(nodes any) {
+	var paths []string
+	switch nodes := nodes.(type) {
+	case map[string]*persistencespb.ChasmNode:
+		paths = slices.Collect(maps.Keys(nodes))
+	case map[string]struct{}:
+		paths = slices.Collect(maps.Keys(nodes))
+	default:
+		s.FailNow("unexpected type", "%T", nodes)
+	}
+	for _, path := range paths {
+		s.False(strings.HasPrefix(path, "SubComponents"), "unexpected path %q", path)
+	}
+}
+
 // TestSetUserMetadata_NilClearsPersistedValue verifies that SetUserMetadata
 // called with nil clears any previously-persisted user metadata on the
 // component (rather than being treated as a no-op).
