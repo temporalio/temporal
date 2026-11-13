@@ -423,6 +423,12 @@ func (c *ContextImpl) completeOperation(op *operation) error {
 
 func (c *ContextImpl) completeSubmission(s *submission) error {
 	p := c.pipeline
+	// claimRequest is the copy of s.request that its group is built from. It's made without holding
+	// mu, since copying serializes the events and the next speculative lock holder needs mu to queue.
+	// Only this goroutine claims s while s is the head, and s.request isn't written after submit.
+	var claimRequest *persistence.UpdateWorkflowExecutionRequest
+	var claimErr error
+	copied := false
 	for {
 		p.mu.Lock()
 		if s.completion.Ready() {
@@ -442,8 +448,14 @@ func (c *ContextImpl) completeSubmission(s *submission) error {
 			}
 			return err
 		}
+		if index == 0 && !copied {
+			p.mu.Unlock()
+			claimRequest, _, _, claimErr = clonePipelineRequest(s.request)
+			copied = true
+			continue
+		}
 		if index == 0 && p.canClaim() {
-			group, err := p.claimHead(s)
+			group, err := p.claimHead(s, claimRequest, claimErr)
 			if err != nil {
 				p.invalidate(0, err)
 				release := p.releaseIdlePin()
@@ -479,11 +491,12 @@ func (c *ContextImpl) completeSubmission(s *submission) error {
 	}
 }
 
-func (p *persistencePipeline) claimHead(s *submission) (*commitGroup, error) {
+// claimHead builds a group from the head submission s, starting from request, a copy of s.request,
+// or fails with copyErr if the copy failed.
+func (p *persistencePipeline) claimHead(s *submission, request *persistence.UpdateWorkflowExecutionRequest, copyErr error) (*commitGroup, error) {
 	claimedAt := time.Now()
-	request, _, _, err := clonePipelineRequest(s.request)
-	if err != nil {
-		return nil, err
+	if copyErr != nil {
+		return nil, copyErr
 	}
 	count, size := 1, s.bytes
 	for p.coalescing && count < len(p.pending) && count < maxPipelineBatch {
