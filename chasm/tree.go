@@ -396,7 +396,11 @@ func (n *Node) SetRootComponent(
 	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
 		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
 	}
-	return root.syncSubComponents()
+	if err := root.syncSubComponents(); err != nil {
+		return err
+	}
+	root.setValueState(valueStateNeedSyncStructure)
+	return nil
 }
 
 // setValue sets the value field of the node.

@@ -1366,6 +1366,15 @@ var (
 		WithDescription("Paginated workflow task completions aborted because the buffer was lost."),
 	)
 
+	WorkflowHeartbeatNotificationBufferedInput = NewCounterDef(
+		"workflow_heartbeat_notification_buffered_input",
+		WithDescription("Events buffered during a started workflow task that could trigger a workflow-heartbeat notification."),
+	)
+	WorkflowHeartbeatNotificationEstimatedFirstBufferedInput = NewCounterDef(
+		"workflow_heartbeat_notification_estimated_first_buffered_input",
+		WithDescription("The first buffered event to initiate a workflow-heartbeat notification."),
+	)
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
@@ -1525,8 +1534,8 @@ var (
 	PollerScaleDecisionCounter = NewCounterDef(
 		"poller_scale_decision",
 		WithDescription(
-			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
-				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
+			"Count of poller scaling decisions made by a physical task queue manager. Emitted unless the "+
+				"dynamic config matching.enablePollerScalingDecisionMetrics is disabled. Dimensions: namespace, taskqueue, "+
 				"task_type, partition, decision (scale_up/scale_down/hold), "+
 				"reason (idle/delay/ratio/rate_limited/task_queue_rate_limited)"),
 	)
