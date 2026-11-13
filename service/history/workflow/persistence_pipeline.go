@@ -55,6 +55,9 @@ type commitGroup struct {
 	inFlightAtClaim  int
 	// claimedAt is when the claim began, for the dispatch latency timer.
 	claimedAt time.Time
+	// published is closed when the group leaves inFlight, so the next group can wait for its turn
+	// without waking on every pipeline change.
+	published chan struct{}
 }
 
 type operation struct {
@@ -84,6 +87,11 @@ type persistencePipeline struct {
 	pinned                   bool
 	cacheSize                atomic.Int64
 	metricsHandler           metrics.Handler
+
+	// admission is closed only when the admission state changes, so blocked speculative locks don't
+	// wake for every submit, claim, and publish. admissionAt is the state when admission was made.
+	admission   chan struct{}
+	admissionAt admissionState
 }
 
 // Tag values for the pipeline wait timers.
@@ -95,6 +103,13 @@ const (
 	admissionReasonCommittedWaiter = "committed_waiter"
 	admissionReasonSubmissionLimit = "submission_limit"
 )
+
+// admissionState is what LockSpeculative's admission check reads.
+type admissionState struct {
+	waiting bool
+	full    bool
+	invalid bool
+}
 
 type pipelineContextKey struct{}
 
@@ -118,9 +133,24 @@ func readyPersistenceFuture(err error) *future.FutureImpl[struct{}] {
 	return f
 }
 
+// notify wakes every goroutine waiting on changed, and blocked speculative locks only if the admission
+// state changed. Every change to waiters, the submission count, or err is followed by notify under mu.
 func (p *persistencePipeline) notify() {
 	close(p.changed)
 	p.changed = make(chan struct{})
+	if state := p.currentAdmission(); state != p.admissionAt {
+		close(p.admission)
+		p.admission = make(chan struct{})
+		p.admissionAt = state
+	}
+}
+
+func (p *persistencePipeline) currentAdmission() admissionState {
+	return admissionState{
+		waiting: len(p.waiters) != 0,
+		full:    p.submissions() >= maxPipelineSubmissions,
+		invalid: p.err != nil,
+	}
 }
 
 func (p *persistencePipeline) tail() *submission {
@@ -280,7 +310,7 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 		waiting := len(p.waiters) != 0
 		blocked := waiting || p.submissions() >= maxPipelineSubmissions
 		invalid := p.err != nil
-		changed := p.changed
+		admission := p.admission
 		p.mu.Unlock()
 		if invalid {
 			recordBlocked()
@@ -295,7 +325,7 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 			testhooks.Call(c.testHooks, testhooks.HistoryPersistencePipelineAdmissionBlocked, namespace.ID(c.workflowKey.NamespaceID))
 			start := time.Now()
 			select {
-			case <-changed:
+			case <-admission:
 				blockedFor += time.Since(start)
 				continue
 			case <-ctx.Done():
@@ -482,7 +512,7 @@ func (p *persistencePipeline) claimHead(s *submission) (*commitGroup, error) {
 	}
 	request.UpdateWorkflowMutation.DBRecordVersion = version + 1
 	request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize = historySize
-	group := &commitGroup{members: slices.Clone(p.pending[:count]), request: request, claimedAt: claimedAt}
+	group := &commitGroup{members: slices.Clone(p.pending[:count]), request: request, claimedAt: claimedAt, published: make(chan struct{})}
 	for _, member := range group.members {
 		close(member.dequeued)
 	}
@@ -576,10 +606,11 @@ func (c *ContextImpl) submitPersistenceGroup(group *commitGroup) {
 	}
 
 	p.mu.Lock()
+	// Groups publish in claim order, so wait for the group ahead of this one.
 	for p.inFlight[0] != group {
-		changed := p.changed
+		ahead := p.inFlight[slices.Index(p.inFlight, group)-1].published
 		p.mu.Unlock()
-		<-changed
+		<-ahead
 		p.mu.Lock()
 	}
 	if err == nil && group.dependencyFailed {
@@ -646,6 +677,7 @@ func (c *ContextImpl) publishPersistenceGroup(group *commitGroup, delta int64, e
 	if c.config.HistoryCacheLimitSizeBased {
 		p.cacheSize.Store(int64(c.cacheSizeLocked()))
 	}
+	close(p.inFlight[0].published)
 	p.inFlight = p.inFlight[1:]
 	for _, s := range members {
 		s.completion.Set(struct{}{}, err)

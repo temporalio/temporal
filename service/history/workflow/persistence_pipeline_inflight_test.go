@@ -489,3 +489,57 @@ func TestContextRecordsLockHoldWithoutPipeline(t *testing.T) {
 	require.NoError(t, c.Unlock())
 	require.Equal(t, []string{lockHolderOperation}, lockHolders(capture))
 }
+
+func TestPersistencePipelineAdmissionWakesOnlyOnAdmissionChange(t *testing.T) {
+	t.Parallel()
+	c := pipelineTestContext(t, false, func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		return pipelineTestResponse(0), nil
+	})
+	p := c.pipeline
+	admission := func() chan struct{} {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.admission
+	}
+	change := func(f func()) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		f()
+		p.notify()
+	}
+	closed := func(ch chan struct{}) bool {
+		select {
+		case <-ch:
+			return true
+		default:
+			return false
+		}
+	}
+
+	before := admission()
+	change(func() {})
+	require.False(t, closed(before), "a notify without an admission change woke blocked admissions")
+
+	waiter := make(chan struct{})
+	change(func() { p.waiters = append(p.waiters, waiter) })
+	require.True(t, closed(before), "a committed waiter arriving didn't wake blocked admissions")
+	before = admission()
+	change(func() {})
+	require.False(t, closed(before))
+	change(func() { p.waiters = nil })
+	require.True(t, closed(before), "the last committed waiter leaving didn't wake blocked admissions")
+
+	before = admission()
+	for i := range maxPipelineSubmissions - 1 {
+		_, err := p.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+i)))
+		require.NoError(t, err)
+	}
+	require.False(t, closed(before), "submissions under the limit woke blocked admissions")
+	_, err := p.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+maxPipelineSubmissions)))
+	require.NoError(t, err)
+	require.True(t, closed(before), "reaching the submission limit didn't wake blocked admissions")
+
+	before = admission()
+	change(func() { p.invalidate(0, pipelineDependencyError()) })
+	require.True(t, closed(before), "invalidating the queue didn't wake blocked admissions")
+}

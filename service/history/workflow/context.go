@@ -171,6 +171,7 @@ func NewContext(
 	if config.WorkflowPersistencePipeline {
 		contextImpl.pipeline = &persistencePipeline{
 			changed:        make(chan struct{}),
+			admission:      make(chan struct{}),
 			coalescing:     config.WorkflowPersistenceCoalescing,
 			maxInFlight:    max(config.WorkflowPersistencePipelineMaxInFlight, 1),
 			metricsHandler: contextImpl.metricsHandler,
