@@ -115,7 +115,7 @@ func Test_NonRetriableErrors(t *testing.T) {
 func TestGetBackoffIntervalNextRetryDelay(t *testing.T) {
 	t.Parallel()
 
-	// The retry policy below gives an interval of 2s for the second attempt.
+	// The retry policy below gives an interval of 2s after the second attempt.
 	testCases := []struct {
 		name           string
 		nextRetryDelay *durationpb.Duration

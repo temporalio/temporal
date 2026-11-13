@@ -260,8 +260,8 @@ func (s *retryActivitySuite) TestRetryActivity_should_use_retry_policy_when_next
 	s.failure.GetApplicationFailureInfo().NextRetryDelay = durationpb.New(0)
 	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
 	s.Require().NoError(err)
-	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, state)
-	s.Equal(expectedScheduledTime, s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
+	s.Require().Equal(enumspb.RETRY_STATE_IN_PROGRESS, state)
+	s.Require().Equal(expectedScheduledTime, s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
 }
 
 func (s *retryActivitySuite) TestRetryActivity_when_no_next_backoff_interval_should_fail() {
