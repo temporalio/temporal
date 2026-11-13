@@ -56,6 +56,7 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 		result            *commonpb.Payload
 		opErr             *nexus.OperationError
 		wantCounter       string
+		wantReason        string
 		includeBackendTag bool
 	}{
 		{
@@ -72,6 +73,7 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 				OriginalFailure: &nexus.Failure{Message: "operation failed"},
 			},
 			wantCounter: chasmnexus.NexusOperationFailedCount.Name(),
+			wantReason:  "operation_error",
 		},
 		{
 			name: "canceled",
@@ -128,6 +130,7 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 			require.Equal(t, "namespace-name", counter[0].Tags["namespace"])
 			require.Equal(t, "workflow-type", counter[0].Tags["workflowType"])
 			require.Equal(t, "endpoint", counter[0].Tags["nexus_endpoint"])
+			require.Equal(t, tc.wantReason, counter[0].Tags["reason"], "only the failed counter carries a reason")
 
 			// Exactly the outcome counter under test is recorded, and no sibling counters leak.
 			for _, name := range allOutcomeCounters {
