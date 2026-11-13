@@ -527,7 +527,6 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	scheduler *Scheduler,
 ) (result processBufferResult) {
 	runningWorkflows := invoker.runningWorkflowExecutions()
-	isRunning := len(runningWorkflows) > 0
 	result.missedCatchupByActionRunning = make(map[bool]int64)
 
 	// Processing ignores starts that are already executing or backing off. An existing
@@ -538,7 +537,9 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
-	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, isRunning, scheduler.resolveOverlapPolicy)
+	// A selected start blocks overlapping work even before its RPC records a
+	// RunId. Its eventual result will release or reconsider deferred starts.
+	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, invoker.hasPendingOrRunningStart(), scheduler.resolveOverlapPolicy)
 
 	// ProcessBuffer will drop starts by omitting them from NewBuffer. Start with the
 	// diff between the input and NewBuffer, and add any executing starts.
@@ -575,7 +576,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 				// was already past this start's deadline.
 				// Note: if no prior action completed, DesiredTime is zero-valued,
 				// so After(deadline) is false, correctly yielding actionRunning=false.
-				actionRunning := isRunning ||
+				actionRunning := len(runningWorkflows) > 0 ||
 					start.GetDesiredTime().AsTime().After(deadline)
 				result.missedCatchupByActionRunning[actionRunning]++
 			}

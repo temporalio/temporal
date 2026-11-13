@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -673,12 +674,19 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 					},
 					Links:             originalLinks,
 					OnConflictOptions: onConflictOpts,
+					PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
+						Endpoint:  "endpoint",
+						Service:   "service",
+						Operation: "operation",
+					},
 				}
+				metricCapture := env.StartNamespaceMetricCapture()
 
 				// First call attaches both values.
 				resp1, err := env.FrontendClient().StartActivityExecution(s.Context(), startReq)
 				require.NoError(t, err)
 				require.False(t, resp1.GetStarted())
+				require.Len(t, metricCapture.Metric(metrics.NexusActivityUseExisting.Name()), 1)
 
 				// A retry with the same request ID is ignored even if its payload changed.
 				startReq.CompletionCallbacks = []*commonpb.Callback{
@@ -688,6 +696,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				resp2, err := env.FrontendClient().StartActivityExecution(s.Context(), startReq)
 				require.NoError(t, err)
 				require.False(t, resp2.GetStarted())
+				require.Len(t, metricCapture.Metric(metrics.NexusActivityUseExisting.Name()), 1, "a retry must not count again")
 
 				descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 					Namespace:  env.Namespace().String(),

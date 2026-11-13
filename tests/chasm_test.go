@@ -188,8 +188,7 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 // update request IDs are recorded in the CHASM request IDs data node and start request IDs in the execution
 // state, and the two are deduplicated independently.
 func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
-	cenv := newChasmTestEnv(s.Context(), s.T(),
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, true))
+	cenv := newChasmTestEnv(s.Context(), s.T())
 	tv := testvars.New(s.T())
 
 	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
@@ -263,6 +262,50 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
 	s.ElementsMatch([]string{requestID1, requestID2, startRequestID}, slices.Collect(maps.Keys(requestIDs.GetRequestIds())))
 	executionRequestIDs := slices.Collect(maps.Keys(dbState.GetExecutionState().GetRequestIds()))
 	s.ElementsMatch([]string{startRequestID}, executionRequestIDs)
+}
+
+func (s *ChasmSuite) TestPayloadStoreRequestIDDedupAcrossFlagChanges() {
+	for _, enabledOnRecord := range []bool{false, true} {
+		s.Run(fmt.Sprintf("EnabledOnRecord=%t", enabledOnRecord), func(s *ChasmSuite) {
+			cenv := newChasmTestEnv(s.Context(), s.T())
+			tv := testvars.New(s.T())
+			cenv.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, enabledOnRecord)
+
+			storeID := tv.WorkflowID()
+			requestID := tv.RequestID()
+			_, err := tests.NewPayloadStoreHandler(cenv.chasmCtx, tests.NewPayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+
+			addPayload := func(key string) error {
+				_, err := tests.AddPayloadHandler(cenv.chasmCtx, tests.AddPayloadRequest{
+					NamespaceID: cenv.NamespaceID(),
+					StoreID:     storeID,
+					PayloadKey:  key,
+					Payload:     payload.EncodeString(key),
+					RequestID:   requestID,
+				})
+				return err
+			}
+			s.NoError(addPayload("first"))
+
+			cenv.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, !enabledOnRecord)
+			cenv.CloseShard(cenv.NamespaceID().String(), storeID)
+
+			err = addPayload("retry")
+			var failedPrecondition *serviceerror.FailedPrecondition
+			s.ErrorAs(err, &failedPrecondition)
+
+			descResp, err := tests.DescribePayloadStoreHandler(cenv.chasmCtx, tests.DescribePayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+			s.Equal(int64(1), descResp.State.TotalCount)
+		})
+	}
 }
 
 func (s *ChasmSuite) TestPayloadStore_PureTask() {
@@ -970,6 +1013,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_UpdateExisting() {
 			return nil, nil
 		},
 		nil,
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),
 	)
 	s.NoError(err)
 	s.False(newFnCalled, "newFn should not be called")
@@ -1038,6 +1082,182 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_CreateNew() {
 	s.NoError(err)
 	s.False(descResp.State.Closed, "Store should not be closed")
 	s.Equal(int64(42), descResp.State.TotalCount) // Update was applied during creation.
+}
+
+// TestUpdateWithStartExecution_CreateNew_PersistsUpdateNodesAndTasks verifies that sub-components and
+// tasks added by updateFn on a brand new execution are persisted in the same write as the start.
+func (s *ChasmSuite) TestUpdateWithStartExecution_CreateNew_PersistsUpdateNodesAndTasks() {
+	cenv := newChasmTestEnv(s.Context(), s.T())
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	keptPayload := payload.EncodeString("kept-value")
+
+	result, err := chasm.UpdateWithStartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: cenv.NamespaceID().String(),
+			BusinessID:  storeID,
+		},
+		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mutableContext)
+		},
+		func(store *tests.PayloadStore, mutableContext chasm.MutableContext, _ any) (any, error) {
+			// Adds a data node under the Payloads map.
+			_, err := store.AddPayload(mutableContext, tests.AddPayloadRequest{
+				PayloadKey: "kept",
+				Payload:    keptPayload,
+			})
+			if err != nil {
+				return nil, err
+			}
+			// Adds a data node and a pure TTL task that removes it.
+			_, err = store.AddPayload(mutableContext, tests.AddPayloadRequest{
+				PayloadKey: "expiring",
+				Payload:    payload.EncodeString("expiring-value"),
+				TTL:        1 * time.Second,
+			})
+			return nil, err
+		},
+		nil,
+	)
+	s.NoError(err)
+	s.True(result.Created)
+
+	// Read the persisted mutable state, not the cached one, to prove the update was written together
+	// with the start.
+	adminDescResp, err := cenv.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: cenv.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      result.ExecutionKey.RunID,
+		},
+		ArchetypeId: tests.ArchetypeID,
+	})
+	s.NoError(err)
+	persistedNodes := adminDescResp.GetDatabaseMutableState().GetChasmNodes()
+	keptNode, ok := persistedNodes["Payloads#kept"]
+	s.Require().True(ok, "payload node added by updateFn must be persisted, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
+	persistedPayload := &commonpb.Payload{}
+	s.NoError(serialization.Decode(keptNode.GetData(), persistedPayload))
+	s.Equal(keptPayload.GetData(), persistedPayload.GetData())
+
+	// The TTL task added by updateFn must be persisted too: once it fires, only the kept payload remains.
+	s.AwaitTrue(func() bool {
+		descResp, err := tests.DescribePayloadStoreHandler(
+			ctx,
+			tests.DescribePayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			},
+		)
+		s.NoError(err)
+		return descResp.State.TotalCount == 1
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// TestUpdateWithStartExecution_ExistingClosed verifies that UpdateWithStart on a closed execution
+// starts a new run with the update applied, through the reuse policy path.
+func (s *ChasmSuite) TestUpdateWithStartExecution_ExistingClosed() {
+	cenv := newChasmTestEnv(s.Context(), s.T())
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+
+	createResp, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      cenv.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyAllowDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+	originalRunID := createResp.RunID
+
+	_, err = tests.ClosePayloadStoreHandler(
+		ctx,
+		tests.ClosePayloadStoreRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	newFnCalled := false
+	newPayload := payload.EncodeString("new-run-value")
+	result, err := chasm.UpdateWithStartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: cenv.NamespaceID().String(),
+			BusinessID:  storeID,
+		},
+		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			newFnCalled = true
+			return tests.NewPayloadStore(mutableContext)
+		},
+		func(store *tests.PayloadStore, mutableContext chasm.MutableContext, _ any) (any, error) {
+			_, err := store.AddPayload(mutableContext, tests.AddPayloadRequest{
+				PayloadKey: "new-run-key",
+				Payload:    newPayload,
+			})
+			return nil, err
+		},
+		nil,
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyFail),
+	)
+	s.NoError(err)
+	s.True(newFnCalled, "newFn should be called when the existing execution is closed")
+	s.True(result.Created)
+	s.NotEqual(originalRunID, result.ExecutionKey.RunID, "a new run should be started")
+
+	// The new run is current and has the update applied.
+	descResp, err := tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.False(descResp.State.Closed)
+	s.Equal(int64(1), descResp.State.TotalCount)
+
+	adminDescResp, err := cenv.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: cenv.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      result.ExecutionKey.RunID,
+		},
+		ArchetypeId: tests.ArchetypeID,
+	})
+	s.NoError(err)
+	persistedNodes := adminDescResp.GetDatabaseMutableState().GetChasmNodes()
+	node, ok := persistedNodes["Payloads#new-run-key"]
+	s.Require().True(ok, "payload node added by updateFn must be persisted on the new run, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
+	persistedPayload := &commonpb.Payload{}
+	s.NoError(serialization.Decode(node.GetData(), persistedPayload))
+	s.Equal(newPayload.GetData(), persistedPayload.GetData())
+
+	// The original run is untouched.
+	originalDescResp, err := cenv.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: cenv.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      originalRunID,
+		},
+		ArchetypeId: tests.ArchetypeID,
+	})
+	s.NoError(err)
+	_, ok = originalDescResp.GetDatabaseMutableState().GetChasmNodes()["Payloads#new-run-key"]
+	s.False(ok, "update must not be applied to the closed run")
 }
 
 func (s *ChasmSuite) TestPayloadStore_ApproximateExecutionSize() {
