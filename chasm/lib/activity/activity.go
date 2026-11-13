@@ -187,7 +187,7 @@ func NewStandaloneActivity(
 			StartToCloseTimeout:    request.GetStartToCloseTimeout(),
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
-			AsyncHandoffOptions:    request.GetAsyncHandoffOptions(),
+			HandoffOptions:         request.GetHandoffOptions(),
 			Priority:               request.Priority,
 			StartDelay:             request.GetStartDelay(),
 			OriginalOptions: &apiactivitypb.ActivityOptions{
@@ -197,7 +197,7 @@ func NewStandaloneActivity(
 				StartToCloseTimeout:    common.CloneProto(request.GetStartToCloseTimeout()),
 				HeartbeatTimeout:       common.CloneProto(request.GetHeartbeatTimeout()),
 				RetryPolicy:            common.CloneProto(request.GetRetryPolicy()),
-				AsyncHandoffOptions:    common.CloneProto(request.GetAsyncHandoffOptions()),
+				HandoffOptions:         common.CloneProto(request.GetHandoffOptions()),
 				Priority:               common.CloneProto(request.GetPriority()),
 				StartDelay:             common.CloneProto(request.GetStartDelay()),
 			},
@@ -293,14 +293,14 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	links := ctx.Links(a)
 
 	var handoffAttempt int32
-	if a.GetAsyncHandoffOptions() != nil {
+	if a.GetHandoffOptions() != nil {
 		handoffAttempt = attempt.GetAsyncHandoffState().GetCount()
 	}
 
 	return &historyservice.RecordActivityTaskStartedResponse{
 		StartedTime:                 attempt.GetStartedTime(),
 		HandoffAttempt:              handoffAttempt,
-		AsyncHandoffOptions:         a.GetAsyncHandoffOptions(),
+		HandoffOptions:              a.GetHandoffOptions(),
 		Attempt:                     attempt.GetCount(),
 		Priority:                    a.GetPriority(),
 		RetryPolicy:                 a.GetRetryPolicy(),
@@ -583,7 +583,7 @@ func (a *Activity) RecordHeartbeat(
 	})
 
 	heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration()
-	if options := a.GetAsyncHandoffOptions(); options != nil {
+	if options := a.GetHandoffOptions(); options != nil {
 		heartbeatTimeout = activeHeartbeatTimeout(
 			a.GetAwaitingCompletion(), heartbeatTimeout, options.GetHeartbeatTimeout().AsDuration())
 	}
@@ -698,7 +698,7 @@ func (a *Activity) HandleHandoff(
 	a.AwaitingCompletion = true
 	a.AsyncHandoffTime = timestamppb.New(ctx.Now(a))
 
-	if a.GetAsyncHandoffOptions() != nil {
+	if a.GetHandoffOptions() != nil {
 		// Retire submission timers without invalidating the current token or carried budget.
 		a.LastAttempt.Get(ctx).Stamp++
 		if err := a.issueHandoffTimers(ctx, false, true); err != nil {
@@ -725,7 +725,7 @@ func (a *Activity) isActivityTaskStampValid(ctx chasm.Context, token *tokenspb.T
 	tokenStamp := token.GetActivityAttemptStamp()
 	startedStamp := a.LastAttempt.Get(ctx).GetStartedStamp()
 	if tokenStamp == 0 || startedStamp == 0 {
-		return a.GetAsyncHandoffOptions() == nil || token.GetAttempt() == ByIDTokenAttempt
+		return a.GetHandoffOptions() == nil || token.GetAttempt() == ByIDTokenAttempt
 	}
 
 	return tokenStamp == startedStamp

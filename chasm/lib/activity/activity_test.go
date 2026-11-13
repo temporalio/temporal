@@ -1101,7 +1101,7 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 		ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
 		ScheduleToStartTimeout: durationpb.New(20 * time.Second),
 		StartToCloseTimeout:    durationpb.New(10 * time.Second),
-		AsyncHandoffOptions: &apiactivitypb.AsyncHandoffOptions{
+		HandoffOptions: &apiactivitypb.HandoffOptions{
 			StartToHandoffTimeout: durationpb.New(10 * time.Second),
 			HandoffToCloseTimeout: durationpb.New(8 * time.Second),
 			RetryPolicy:           common.CloneProto(defaultRetryPolicy),
@@ -1120,7 +1120,7 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 
 	original := common.CloneProto(activity.GetOriginalOptions())
 	// Mutate a nested field to verify current options don't share memory with the original snapshot.
-	activity.AsyncHandoffOptions.StartToHandoffTimeout.Seconds++
+	activity.HandoffOptions.StartToHandoffTimeout.Seconds++
 
 	beforeUpdate := common.CloneProto(activity.ActivityState)
 	options, err := activity.mergeActivityOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
@@ -1148,7 +1148,7 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 
 	originalOptions := activity.GetOriginalOptions()
 	protorequire.ProtoEqual(t, original, originalOptions)
-	require.Equal(t, 5*time.Second, activity.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration())
+	require.Equal(t, 5*time.Second, activity.GetHandoffOptions().GetStartToHandoffTimeout().AsDuration())
 	require.Equal(t, "original-task-queue", originalOptions.GetTaskQueue().GetName())
 	require.Equal(t, 10*time.Second, originalOptions.GetRetryPolicy().GetInitialInterval().AsDuration())
 	require.Equal(t, "original-fairness-key", originalOptions.GetPriority().GetFairnessKey())

@@ -211,13 +211,13 @@ type retryEvent struct {
 }
 
 func (a *Activity) retryTypeForFailure() activitypb.ActivityRetryType {
-	return retryTypeForFailure(a.GetAsyncHandoffOptions() != nil, a.GetAwaitingCompletion())
+	return retryTypeForFailure(a.GetHandoffOptions() != nil, a.GetAwaitingCompletion())
 }
 
 func (a *Activity) retryPolicyAndCount(ctx chasm.Context, retryType activitypb.ActivityRetryType) (*commonpb.RetryPolicy, int32) {
 	attempt := a.LastAttempt.Get(ctx)
 	if retryType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
-		return a.GetAsyncHandoffOptions().GetRetryPolicy(), attempt.GetAsyncHandoffState().GetCount()
+		return a.GetHandoffOptions().GetRetryPolicy(), attempt.GetAsyncHandoffState().GetCount()
 	}
 
 	return a.GetRetryPolicy(), attempt.GetCount()
@@ -229,7 +229,7 @@ func (a *Activity) tryReschedule(ctx chasm.MutableContext, event retryEvent) (en
 	if event.serverTimeoutType == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
 		retryType = a.retryTypeForFailure()
 	} else {
-		retryType = retryTypeForTimeout(a.GetAsyncHandoffOptions() != nil, a.GetAwaitingCompletion(), event.serverTimeoutType)
+		retryType = retryTypeForTimeout(a.GetHandoffOptions() != nil, a.GetAwaitingCompletion(), event.serverTimeoutType)
 	}
 
 	if retryType == activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED {
@@ -237,7 +237,7 @@ func (a *Activity) tryReschedule(ctx chasm.MutableContext, event retryEvent) (en
 	}
 
 	startToCloseExpiredWhileScheduled := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
-		event.serverTimeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE && a.GetAsyncHandoffOptions() != nil &&
+		event.serverTimeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE && a.GetHandoffOptions() != nil &&
 		a.LastAttempt.Get(ctx).GetAsyncHandoffState().GetStartToCloseStartedTime() != nil
 	if !a.hasAttemptInProgress() && !startToCloseExpiredWhileScheduled {
 		return enumspb.RETRY_STATE_UNSPECIFIED, serviceerror.NewInternal("activity retry has no active attempt")
@@ -397,7 +397,7 @@ func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, a
 
 // reissueRunningAttemptTimers also reissues a carried start-to-close window during handoff backoff.
 func (a *Activity) reissueRunningAttemptTimers(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) error {
-	if a.GetAsyncHandoffOptions() != nil {
+	if a.GetHandoffOptions() != nil {
 		return a.issueHandoffTimers(ctx, true, a.hasAttemptInProgress())
 	}
 
@@ -426,7 +426,7 @@ func (a *Activity) handoffDeadlines(ctx chasm.Context, deliveryActive bool) (han
 	attempt := a.LastAttempt.Get(ctx)
 	state := attempt.GetAsyncHandoffState()
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
-	options := a.GetAsyncHandoffOptions()
+	options := a.GetHandoffOptions()
 
 	return calculateHandoffDeadlines(handoffDeadlineInput{
 		StartToCloseTimeout:         a.GetStartToCloseTimeout().AsDuration(),
@@ -486,7 +486,7 @@ func (a *Activity) clearStartToCloseState(ctx chasm.MutableContext) {
 func (a *Activity) startAttemptTimers(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) error {
 	attempt.PendingRetryType = activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
 
-	if a.GetAsyncHandoffOptions() == nil {
+	if a.GetHandoffOptions() == nil {
 		return a.issueAttemptTimers(ctx, attempt)
 	}
 
@@ -507,7 +507,7 @@ func (a *Activity) resetHandoffAttempt(ctx chasm.MutableContext) {
 	attempt := a.LastAttempt.Get(ctx)
 	a.clearStartToCloseState(ctx)
 	attempt.PendingRetryType = activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
-	if a.GetAsyncHandoffOptions() != nil {
+	if a.GetHandoffOptions() != nil {
 		if attempt.AsyncHandoffState == nil {
 			attempt.AsyncHandoffState = &activitypb.ActivityAttemptState_AsyncHandoffState{}
 		}

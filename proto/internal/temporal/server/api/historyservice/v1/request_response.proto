@@ -409,7 +409,7 @@ message RecordActivityTaskStartedResponse {
   // Handoff attempt within the activity attempt. Zero when handoff options are absent.
   int32 handoff_attempt = 15;
   // Normalized handoff options for this activity task.
-  temporal.api.activity.v1.AsyncHandoffOptions async_handoff_options = 16;
+  temporal.api.activity.v1.HandoffOptions handoff_options = 16;
 }
 
 message RespondWorkflowTaskCompletedRequest {

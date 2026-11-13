@@ -49,7 +49,7 @@ type activityConfig struct {
 	MaxRetryInterval       time.Duration // RetryPolicy MaximumInterval; 0 => RetryInterval
 	NextRetryDelay         time.Duration // ApplicationFailureInfo.NextRetryDelay sent with RespondFailed
 	NonRetryableErrorTypes []string      // RetryPolicy NonRetryableErrorTypes
-	AsyncHandoffOptions    *activitypb.AsyncHandoffOptions
+	HandoffOptions         *activitypb.HandoffOptions
 
 	StartToClose     time.Duration // 0 => activityLongDuration, so it does not fire
 	ScheduleToClose  time.Duration // 0 = unset
@@ -102,7 +102,7 @@ func (c activityConfig) startToClose() time.Duration {
 
 // forTrace replaces missing values in the config with appropriate values for the given trace.
 func (c activityConfig) forTrace(trace []model.Event) activityConfig {
-	c.AsyncHandoffOptions = common.CloneProto(c.AsyncHandoffOptions)
+	c.HandoffOptions = common.CloneProto(c.HandoffOptions)
 	awaitingCompletion := false
 	for _, e := range trace {
 		switch e.Type {
@@ -113,21 +113,21 @@ func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 		case model.StartToCloseElapsesType:
 			c.StartToClose = cmp.Or(c.StartToClose, activityShortTimeout)
 		case model.HeartbeatElapsesType:
-			usePreHandoffHeartbeat := c.AsyncHandoffOptions != nil && !awaitingCompletion
+			usePreHandoffHeartbeat := c.HandoffOptions != nil && !awaitingCompletion
 			if usePreHandoffHeartbeat {
-				if c.AsyncHandoffOptions.GetHeartbeatTimeout().AsDuration() == 0 {
-					c.AsyncHandoffOptions.HeartbeatTimeout = durationpb.New(activityShortTimeout)
+				if c.HandoffOptions.GetHeartbeatTimeout().AsDuration() == 0 {
+					c.HandoffOptions.HeartbeatTimeout = durationpb.New(activityShortTimeout)
 				}
 			} else {
 				c.HeartbeatTimeout = cmp.Or(c.HeartbeatTimeout, activityShortTimeout)
 			}
 		case model.StartToHandoffElapsesType:
-			if c.AsyncHandoffOptions != nil && c.AsyncHandoffOptions.GetStartToHandoffTimeout().AsDuration() == 0 {
-				c.AsyncHandoffOptions.StartToHandoffTimeout = durationpb.New(activityShortTimeout)
+			if c.HandoffOptions != nil && c.HandoffOptions.GetStartToHandoffTimeout().AsDuration() == 0 {
+				c.HandoffOptions.StartToHandoffTimeout = durationpb.New(activityShortTimeout)
 			}
 		case model.HandoffToCloseElapsesType:
-			if c.AsyncHandoffOptions != nil && c.AsyncHandoffOptions.GetHandoffToCloseTimeout().AsDuration() == 0 {
-				c.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(activityShortTimeout)
+			if c.HandoffOptions != nil && c.HandoffOptions.GetHandoffToCloseTimeout().AsDuration() == 0 {
+				c.HandoffOptions.HandoffToCloseTimeout = durationpb.New(activityShortTimeout)
 			}
 		case model.HandoffType:
 			awaitingCompletion = true
@@ -157,15 +157,15 @@ func (c activityConfig) timerDuration(e model.Event, awaitingCompletion bool) ti
 	case model.ScheduleToStartElapsesType:
 		return c.ScheduleToStart
 	case model.HeartbeatElapsesType:
-		usePreHandoffHeartbeat := c.AsyncHandoffOptions != nil && !awaitingCompletion
+		usePreHandoffHeartbeat := c.HandoffOptions != nil && !awaitingCompletion
 		if usePreHandoffHeartbeat {
-			return c.AsyncHandoffOptions.GetHeartbeatTimeout().AsDuration()
+			return c.HandoffOptions.GetHeartbeatTimeout().AsDuration()
 		}
 		return c.HeartbeatTimeout
 	case model.StartToHandoffElapsesType:
-		return c.AsyncHandoffOptions.GetStartToHandoffTimeout().AsDuration()
+		return c.HandoffOptions.GetStartToHandoffTimeout().AsDuration()
 	case model.HandoffToCloseElapsesType:
-		return c.AsyncHandoffOptions.GetHandoffToCloseTimeout().AsDuration()
+		return c.HandoffOptions.GetHandoffToCloseTimeout().AsDuration()
 	default:
 		panic("unknown event type: " + e.Type.String())
 	}
@@ -188,7 +188,7 @@ type activityInfo struct {
 // activityHandoffInfo is handoff metadata projected from an activity's Describe response.
 type activityHandoffInfo struct {
 	handoffTime            *timestamppb.Timestamp
-	options                *activitypb.AsyncHandoffOptions
+	options                *activitypb.HandoffOptions
 	awaitingCompletion     bool
 	startToCloseTimeout    time.Duration
 	scheduleToCloseTimeout time.Duration
@@ -213,7 +213,7 @@ type activityTerminalOutcome struct {
 // modelConfig is the model's view of the activity: which options are configured at all, plus the two
 // ways the options alone settle that no retry can follow. Deriving it means the two cannot disagree.
 func (c activityConfig) modelConfig() model.Config {
-	handoffRetryInterval := cmp.Or(c.AsyncHandoffOptions.GetRetryPolicy().GetInitialInterval().AsDuration(),
+	handoffRetryInterval := cmp.Or(c.HandoffOptions.GetRetryPolicy().GetInitialInterval().AsDuration(),
 		retrypolicy.DefaultDefaultRetrySettings.InitialInterval)
 
 	return model.Config{
@@ -224,13 +224,13 @@ func (c activityConfig) modelConfig() model.Config {
 		HasScheduleToStart:          c.ScheduleToStart > 0,
 		HasHeartbeat:                c.HeartbeatTimeout > 0,
 		NonRetryableTimeouts:        nonRetryableTimeouts(c.NonRetryableErrorTypes),
-		AsyncHandoffOptions:         c.AsyncHandoffOptions != nil,
+		HandoffOptions:              c.HandoffOptions != nil,
 		HasStartToClose:             c.startToClose() > 0,
-		HasStartToHandoff:           c.AsyncHandoffOptions.GetStartToHandoffTimeout().AsDuration() > 0,
-		HasHandoffToClose:           c.AsyncHandoffOptions.GetHandoffToCloseTimeout().AsDuration() > 0,
-		HasHandoffHeartbeat:         c.AsyncHandoffOptions.GetHeartbeatTimeout().AsDuration() > 0,
-		HandoffMaxAttempts:          c.AsyncHandoffOptions.GetRetryPolicy().GetMaximumAttempts(),
-		HandoffNonRetryableTimeouts: nonRetryableTimeouts(c.AsyncHandoffOptions.GetRetryPolicy().GetNonRetryableErrorTypes()),
+		HasStartToHandoff:           c.HandoffOptions.GetStartToHandoffTimeout().AsDuration() > 0,
+		HasHandoffToClose:           c.HandoffOptions.GetHandoffToCloseTimeout().AsDuration() > 0,
+		HasHandoffHeartbeat:         c.HandoffOptions.GetHeartbeatTimeout().AsDuration() > 0,
+		HandoffMaxAttempts:          c.HandoffOptions.GetRetryPolicy().GetMaximumAttempts(),
+		HandoffNonRetryableTimeouts: nonRetryableTimeouts(c.HandoffOptions.GetRetryPolicy().GetNonRetryableErrorTypes()),
 
 		// In reality, the server decides this based on how long the attempt took, and any
 		// NextRetryDelay sent by the worker. The model cannot express that. Instead it supports a
@@ -238,7 +238,7 @@ func (c activityConfig) modelConfig() model.Config {
 		// This will be wrong if an attempt runs long enough that the delay no longer fits.
 		RetryOutlivesScheduleToClose: c.ScheduleToClose > 0 &&
 			cmp.Or(c.NextRetryDelay, c.retryInterval()) >= c.ScheduleToClose,
-		HandoffRetryOutlivesScheduleToClose: c.AsyncHandoffOptions != nil && c.ScheduleToClose > 0 &&
+		HandoffRetryOutlivesScheduleToClose: c.HandoffOptions != nil && c.ScheduleToClose > 0 &&
 			cmp.Or(c.NextRetryDelay, handoffRetryInterval) >= c.ScheduleToClose,
 	}
 }
@@ -514,7 +514,7 @@ func expectedRunState(s model.AbstractState) enumspb.PendingActivityState {
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 	case model.Started:
 		if s.AwaitingCompletion {
-			return enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION
+			return enumspb.PENDING_ACTIVITY_STATE_HANDED_OFF
 		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case model.CancelRequested:
@@ -530,7 +530,7 @@ func expectedRunState(s model.AbstractState) enumspb.PendingActivityState {
 			return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
 		}
 		if s.AwaitingCompletion {
-			return enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION
+			return enumspb.PENDING_ACTIVITY_STATE_HANDED_OFF
 		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	default:

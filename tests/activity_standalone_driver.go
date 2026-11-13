@@ -160,7 +160,7 @@ func (d *saaDriver) startRequest(c activityConfig, activityID, taskQueue string)
 		ScheduleToStartTimeout: opt(c.ScheduleToStart),
 		HeartbeatTimeout:       opt(c.HeartbeatTimeout),
 		StartDelay:             opt(c.StartDelay),
-		AsyncHandoffOptions:    c.AsyncHandoffOptions,
+		HandoffOptions:         c.HandoffOptions,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:        durationpb.New(c.retryInterval()),
 			BackoffCoefficient:     cmp.Or(c.BackoffCoefficient, 1.0),
@@ -248,7 +248,7 @@ func (a *saaHandle) handoffInfo(t require.TestingT) activityHandoffInfo {
 	info := a.describe(t).GetInfo()
 	return activityHandoffInfo{
 		handoffTime:            info.GetAsyncHandoffTime(),
-		options:                info.GetAsyncHandoffOptions(),
+		options:                info.GetHandoffOptions(),
 		awaitingCompletion:     info.GetAwaitingCompletion(),
 		startToCloseTimeout:    info.GetStartToCloseTimeout().AsDuration(),
 		scheduleToCloseTimeout: info.GetScheduleToCloseTimeout().AsDuration(),

@@ -233,7 +233,7 @@ func TestHandoffRetryFitPolicySelection(t *testing.T) {
 			t.Parallel()
 
 			cfg := Config{
-				InitialAttemptStarted: true, AsyncHandoffOptions: true,
+				InitialAttemptStarted: true, HandoffOptions: true,
 				HasStartToClose: true, HasHandoffToClose: true, HasScheduleToClose: true,
 				MaxAttempts: 3, HandoffMaxAttempts: 3,
 				RetryOutlivesScheduleToClose:        testCase.activityRetryOutlives,
@@ -253,14 +253,14 @@ func TestHandoffTimerEligibility(t *testing.T) {
 	t.Parallel()
 
 	enabled := Config{
-		AsyncHandoffOptions: true, HasStartToClose: true,
+		HandoffOptions: true, HasStartToClose: true,
 		HasStartToHandoff: true, HasHandoffToClose: true,
 	}
 	phaseOnly := enabled
 	phaseOnly.HasStartToClose = false
-	noPhaseTimeouts := Config{AsyncHandoffOptions: true, HasStartToClose: true}
-	postHeartbeatOnly := Config{AsyncHandoffOptions: true, HasStartToClose: true, HasHeartbeat: true}
-	preHeartbeatOnly := Config{AsyncHandoffOptions: true, HasStartToClose: true, HasHandoffHeartbeat: true}
+	noPhaseTimeouts := Config{HandoffOptions: true, HasStartToClose: true}
+	postHeartbeatOnly := Config{HandoffOptions: true, HasStartToClose: true, HasHeartbeat: true}
+	preHeartbeatOnly := Config{HandoffOptions: true, HasStartToClose: true, HasHandoffHeartbeat: true}
 	for _, testCase := range []struct {
 		name  string
 		cfg   Config
@@ -312,7 +312,7 @@ func TestHandoffTimerEligibility(t *testing.T) {
 func TestHandoffStartToCloseLifecycle(t *testing.T) {
 	t.Parallel()
 
-	cfg := Config{AsyncHandoffOptions: true, HasStartToClose: true}
+	cfg := Config{HandoffOptions: true, HasStartToClose: true}
 	t.Run("pause stops the clock until the next pickup", func(t *testing.T) {
 		t.Parallel()
 
@@ -411,7 +411,7 @@ func TestHandoffRetryPolicySelection(t *testing.T) {
 			t.Parallel()
 
 			cfg := Config{
-				InitialAttemptStarted: true, AsyncHandoffOptions: true, HasStartToClose: true,
+				InitialAttemptStarted: true, HandoffOptions: true, HasStartToClose: true,
 				HasHeartbeat: true, HasHandoffHeartbeat: true,
 				MaxAttempts: testCase.activityMax, HandoffMaxAttempts: testCase.handoffMax,
 				HandoffNonRetryableTimeouts: testCase.handoffExclusions,

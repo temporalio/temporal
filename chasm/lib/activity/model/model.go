@@ -33,13 +33,13 @@ type Outcome struct {
 // Initial is the state of a newly created Activity.
 func Initial(cfg Config) AbstractState {
 	s := AbstractState{Status: Scheduled, AttemptCount: 1}
-	if cfg.AsyncHandoffOptions {
+	if cfg.HandoffOptions {
 		s.HandoffAttempt = 1
 	}
 
 	if cfg.InitialAttemptStarted {
 		s.Status = Started
-		s.HandoffStartToCloseStarted = cfg.AsyncHandoffOptions
+		s.HandoffStartToCloseStarted = cfg.HandoffOptions
 		return s
 	}
 	if cfg.HasStartDelay {
@@ -131,7 +131,7 @@ func poll(cfg Config, s AbstractState, _ Event) Outcome {
 	n := s
 	n.Status = Started
 	n.AwaitingCompletion = false
-	n.HandoffStartToCloseStarted = cfg.AsyncHandoffOptions
+	n.HandoffStartToCloseStarted = cfg.HandoffOptions
 	return Outcome{Next: n}
 }
 
@@ -295,7 +295,7 @@ func reset(cfg Config, s AbstractState, e Event) Outcome {
 		n := s
 		n.AttemptCount = 1
 		n.HandoffStartToCloseStarted = false
-		if cfg.AsyncHandoffOptions {
+		if cfg.HandoffOptions {
 			n.HandoffAttempt = 1
 		}
 
@@ -375,7 +375,7 @@ func scheduleToCloseElapses(cfg Config, s AbstractState, _ Event) Outcome {
 // startToCloseElapses and heartbeatElapses represent the end of the nominal per-attempt timeouts
 // configured by the driver. The product behavior is that either one ends the running attempt.
 func startToCloseElapses(cfg Config, s AbstractState, e Event) Outcome {
-	handoffStartToCloseInactive := cfg.AsyncHandoffOptions &&
+	handoffStartToCloseInactive := cfg.HandoffOptions &&
 		(!cfg.HasStartToClose || !s.HandoffStartToCloseStarted)
 
 	if handoffStartToCloseInactive {
@@ -387,7 +387,7 @@ func startToCloseElapses(cfg Config, s AbstractState, e Event) Outcome {
 
 func heartbeatElapses(cfg Config, s AbstractState, e Event) Outcome {
 	hasHeartbeat := cfg.HasHeartbeat
-	if cfg.AsyncHandoffOptions && !s.AwaitingCompletion {
+	if cfg.HandoffOptions && !s.AwaitingCompletion {
 		hasHeartbeat = cfg.HasHandoffHeartbeat
 	}
 
@@ -399,7 +399,7 @@ func heartbeatElapses(cfg Config, s AbstractState, e Event) Outcome {
 }
 
 func startToHandoffElapses(cfg Config, s AbstractState, e Event) Outcome {
-	canExpire := cfg.AsyncHandoffOptions &&
+	canExpire := cfg.HandoffOptions &&
 		cfg.HasStartToHandoff &&
 		!s.AwaitingCompletion &&
 		deliveryActive(s)
@@ -412,7 +412,7 @@ func startToHandoffElapses(cfg Config, s AbstractState, e Event) Outcome {
 }
 
 func handoffToCloseElapses(cfg Config, s AbstractState, e Event) Outcome {
-	canExpire := cfg.AsyncHandoffOptions &&
+	canExpire := cfg.HandoffOptions &&
 		cfg.HasHandoffToClose &&
 		s.AwaitingCompletion &&
 		deliveryActive(s)
@@ -494,7 +494,7 @@ func deliveryActive(s AbstractState) bool {
 }
 
 func handoffRetry(cfg Config, s AbstractState, startToCloseExpired bool) bool {
-	return cfg.AsyncHandoffOptions && !s.AwaitingCompletion && !startToCloseExpired
+	return cfg.HandoffOptions && !s.AwaitingCompletion && !startToCloseExpired
 }
 
 func advanceRetry(cfg Config, s AbstractState, startToCloseExpired bool) AbstractState {
@@ -504,7 +504,7 @@ func advanceRetry(cfg Config, s AbstractState, startToCloseExpired bool) Abstrac
 	} else {
 		n.AttemptCount++
 		n.HandoffStartToCloseStarted = false
-		if cfg.AsyncHandoffOptions {
+		if cfg.HandoffOptions {
 			n.HandoffAttempt = 1
 		}
 	}
@@ -534,7 +534,7 @@ func retryOutlivesScheduleToClose(cfg Config, s AbstractState, startToCloseExpir
 
 func attemptTimedOut(cfg Config, s AbstractState, e Event) Outcome {
 	startToCloseExpired := e.Type == StartToCloseElapsesType
-	startToCloseExpiredWhileScheduled := cfg.AsyncHandoffOptions &&
+	startToCloseExpiredWhileScheduled := cfg.HandoffOptions &&
 		s.Status == Scheduled &&
 		s.HandoffStartToCloseStarted &&
 		startToCloseExpired
@@ -608,7 +608,7 @@ func applyDeferredReset(cfg Config, s AbstractState) Outcome {
 	n := s
 	n.AttemptCount = 1
 	n.HandoffStartToCloseStarted = false
-	if cfg.AsyncHandoffOptions {
+	if cfg.HandoffOptions {
 		n.HandoffAttempt = 1
 	}
 

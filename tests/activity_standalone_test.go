@@ -15678,7 +15678,7 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 			Input:               defaultInput,
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           env.Tv().RequestID(),
-			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{},
+			HandoffOptions:      &activitypb.HandoffOptions{},
 		}
 		start, err := env.FrontendClient().StartActivityExecution(ctx, startRequest)
 		require.NoError(t, err)
@@ -15762,10 +15762,10 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 		env.OverrideDynamicConfig(activity.WorkflowAsyncHandoffEnabled, true)
 
 		// Neither workflow update API may opt an activity into the standalone-only feature.
-		for _, path := range []string{"async_handoff_options", "asyncHandoffOptions.heartbeatTimeout"} {
+		for _, path := range []string{"handoff_options", "handoffOptions.heartbeatTimeout"} {
 			_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
 				Namespace: env.Namespace().String(), WorkflowId: run.GetID(), RunId: run.GetRunID(), ActivityId: task.GetActivityId(),
-				ActivityOptions: &activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+				ActivityOptions: &activitypb.ActivityOptions{HandoffOptions: &activitypb.HandoffOptions{}},
 				UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{path}},
 			})
 			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
@@ -15773,7 +15773,7 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 			_, err = env.FrontendClient().UpdateActivityOptions(ctx, &workflowservice.UpdateActivityOptionsRequest{
 				Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
 				Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: task.GetActivityId()},
-				ActivityOptions: &activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+				ActivityOptions: &activitypb.ActivityOptions{HandoffOptions: &activitypb.HandoffOptions{}},
 				UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{path}},
 			})
 			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))

@@ -17,13 +17,13 @@ var (
 	StandaloneAsyncHandoffEnabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.standaloneAsyncHandoffEnabled",
 		false,
-		`Enables standalone activity handoff reporting and new async handoff options.`,
+		`Enables standalone activity handoff reporting and handoff options.`,
 	)
 
 	WorkflowAsyncHandoffEnabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.workflowAsyncHandoffEnabled",
 		false,
-		`Enables workflow activity handoff reporting and new async handoff options.`,
+		`Enables workflow activity handoff reporting and handoff options.`,
 	)
 
 	LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(

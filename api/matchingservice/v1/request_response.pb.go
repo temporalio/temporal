@@ -665,9 +665,9 @@ type PollActivityTaskQueueResponse struct {
 	// Handoff attempt within the activity attempt. Zero when handoff options are absent.
 	HandoffAttempt int32 `protobuf:"varint,22,opt,name=handoff_attempt,json=handoffAttempt,proto3" json:"handoff_attempt,omitempty"`
 	// Normalized handoff options for this activity task.
-	AsyncHandoffOptions *v18.AsyncHandoffOptions `protobuf:"bytes,23,opt,name=async_handoff_options,json=asyncHandoffOptions,proto3" json:"async_handoff_options,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	HandoffOptions *v18.HandoffOptions `protobuf:"bytes,23,opt,name=handoff_options,json=handoffOptions,proto3" json:"handoff_options,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PollActivityTaskQueueResponse) Reset() {
@@ -854,9 +854,9 @@ func (x *PollActivityTaskQueueResponse) GetHandoffAttempt() int32 {
 	return 0
 }
 
-func (x *PollActivityTaskQueueResponse) GetAsyncHandoffOptions() *v18.AsyncHandoffOptions {
+func (x *PollActivityTaskQueueResponse) GetHandoffOptions() *v18.HandoffOptions {
 	if x != nil {
-		return x.AsyncHandoffOptions
+		return x.HandoffOptions
 	}
 	return nil
 }
@@ -6377,7 +6377,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x10forwarded_source\x18\x04 \x01(\tR\x0fforwardedSource\x12V\n" +
 	"\n" +
 	"conditions\x18\x05 \x01(\v26.temporal.server.api.matchingservice.v1.PollConditionsR\n" +
-	"conditions\"\xd9\f\n" +
+	"conditions\"\xc9\f\n" +
 	"\x1dPollActivityTaskQueueResponse\x12\x1d\n" +
 	"\n" +
 	"task_token\x18\x01 \x01(\fR\ttaskToken\x12X\n" +
@@ -6403,8 +6403,8 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\fretry_policy\x18\x13 \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\x12&\n" +
 	"\x0factivity_run_id\x18\x14 \x01(\tR\ractivityRunId\x12\x8a\x01\n" +
 	"&propagated_nexus_serialization_context\x18\x15 \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR#propagatedNexusSerializationContext\x12'\n" +
-	"\x0fhandoff_attempt\x18\x16 \x01(\x05R\x0ehandoffAttempt\x12a\n" +
-	"\x15async_handoff_options\x18\x17 \x01(\v2-.temporal.api.activity.v1.AsyncHandoffOptionsR\x13asyncHandoffOptions\"\x9d\x05\n" +
+	"\x0fhandoff_attempt\x18\x16 \x01(\x05R\x0ehandoffAttempt\x12Q\n" +
+	"\x0fhandoff_options\x18\x17 \x01(\v2(.temporal.api.activity.v1.HandoffOptionsR\x0ehandoffOptions\"\x9d\x05\n" +
 	"\x16AddWorkflowTaskRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12C\n" +
@@ -6900,7 +6900,7 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes =
 	(*v11.Priority)(nil),                               // 116: temporal.api.common.v1.Priority
 	(*v11.RetryPolicy)(nil),                            // 117: temporal.api.common.v1.RetryPolicy
 	(*v17.PropagatedSerializationContext)(nil),         // 118: temporal.api.nexus.v1.PropagatedSerializationContext
-	(*v18.AsyncHandoffOptions)(nil),                    // 119: temporal.api.activity.v1.AsyncHandoffOptions
+	(*v18.HandoffOptions)(nil),                         // 119: temporal.api.activity.v1.HandoffOptions
 	(*v19.VectorClock)(nil),                            // 120: temporal.server.api.clock.v1.VectorClock
 	(*v110.TaskVersionDirective)(nil),                  // 121: temporal.server.api.taskqueue.v1.TaskVersionDirective
 	(*v110.TaskForwardInfo)(nil),                       // 122: temporal.server.api.taskqueue.v1.TaskForwardInfo
@@ -6994,7 +6994,7 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_depIdxs =
 	116, // 40: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.priority:type_name -> temporal.api.common.v1.Priority
 	117, // 41: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
 	118, // 42: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.propagated_nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
-	119, // 43: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.async_handoff_options:type_name -> temporal.api.activity.v1.AsyncHandoffOptions
+	119, // 43: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.handoff_options:type_name -> temporal.api.activity.v1.HandoffOptions
 	102, // 44: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
 	106, // 45: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
 	114, // 46: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration

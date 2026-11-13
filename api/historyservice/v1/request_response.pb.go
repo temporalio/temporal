@@ -1948,9 +1948,9 @@ type RecordActivityTaskStartedResponse struct {
 	// Handoff attempt within the activity attempt. Zero when handoff options are absent.
 	HandoffAttempt int32 `protobuf:"varint,15,opt,name=handoff_attempt,json=handoffAttempt,proto3" json:"handoff_attempt,omitempty"`
 	// Normalized handoff options for this activity task.
-	AsyncHandoffOptions *v117.AsyncHandoffOptions `protobuf:"bytes,16,opt,name=async_handoff_options,json=asyncHandoffOptions,proto3" json:"async_handoff_options,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	HandoffOptions *v117.HandoffOptions `protobuf:"bytes,16,opt,name=handoff_options,json=handoffOptions,proto3" json:"handoff_options,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskStartedResponse) Reset() {
@@ -2088,9 +2088,9 @@ func (x *RecordActivityTaskStartedResponse) GetHandoffAttempt() int32 {
 	return 0
 }
 
-func (x *RecordActivityTaskStartedResponse) GetAsyncHandoffOptions() *v117.AsyncHandoffOptions {
+func (x *RecordActivityTaskStartedResponse) GetHandoffOptions() *v117.HandoffOptions {
 	if x != nil {
-		return x.AsyncHandoffOptions
+		return x.HandoffOptions
 	}
 	return nil
 }
@@ -11045,7 +11045,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12A\n" +
 	"\x1dtask_dispatch_revision_number\x18\r \x01(\x03R\x1ataskDispatchRevisionNumber\x12#\n" +
 	"\rcomponent_ref\x18\x0e \x01(\fR\fcomponentRef\x12H\n" +
-	"\blimiters\x18\x0f \x03(\v2,.temporal.server.api.taskqueue.v1.LimiterRefR\blimiters:\x06\x92\xc4\x03\x02\b\x01J\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xa7\b\n" +
+	"\blimiters\x18\x0f \x03(\v2,.temporal.server.api.taskqueue.v1.LimiterRefR\blimiters:\x06\x92\xc4\x03\x02\b\x01J\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\x97\b\n" +
 	"!RecordActivityTaskStartedResponse\x12N\n" +
 	"\x0fscheduled_event\x18\x01 \x01(\v2%.temporal.api.history.v1.HistoryEventR\x0escheduledEvent\x12=\n" +
 	"\fstarted_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12\x18\n" +
@@ -11062,8 +11062,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\rstart_version\x18\f \x01(\x03R\fstartVersion\x12&\n" +
 	"\x0factivity_run_id\x18\r \x01(\tR\ractivityRunId\x12u\n" +
 	"\x1bnexus_serialization_context\x18\x0e \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR\x19nexusSerializationContext\x12'\n" +
-	"\x0fhandoff_attempt\x18\x0f \x01(\x05R\x0ehandoffAttempt\x12a\n" +
-	"\x15async_handoff_options\x18\x10 \x01(\v2-.temporal.api.activity.v1.AsyncHandoffOptionsR\x13asyncHandoffOptions\"\xdc\x01\n" +
+	"\x0fhandoff_attempt\x18\x0f \x01(\x05R\x0ehandoffAttempt\x12Q\n" +
+	"\x0fhandoff_options\x18\x10 \x01(\v2(.temporal.api.activity.v1.HandoffOptionsR\x0ehandoffOptions\"\xdc\x01\n" +
 	"#RespondWorkflowTaskCompletedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12o\n" +
 	"\x10complete_request\x18\x02 \x01(\v2D.temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequestR\x0fcompleteRequest:!\x92\xc4\x03\x1d2\x1bcomplete_request.task_token\"\xa7\x03\n" +
@@ -11856,7 +11856,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_goTypes = 
 	(*v17.HistoryEvent)(nil),                              // 210: temporal.api.history.v1.HistoryEvent
 	(*v14.Priority)(nil),                                  // 211: temporal.api.common.v1.Priority
 	(*v14.RetryPolicy)(nil),                               // 212: temporal.api.common.v1.RetryPolicy
-	(*v117.AsyncHandoffOptions)(nil),                      // 213: temporal.api.activity.v1.AsyncHandoffOptions
+	(*v117.HandoffOptions)(nil),                           // 213: temporal.api.activity.v1.HandoffOptions
 	(*v1.RespondWorkflowTaskCompletedRequest)(nil),        // 214: temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest
 	(*v1.PollActivityTaskQueueResponse)(nil),              // 215: temporal.api.workflowservice.v1.PollActivityTaskQueueResponse
 	(*v1.RespondWorkflowTaskFailedRequest)(nil),           // 216: temporal.api.workflowservice.v1.RespondWorkflowTaskFailedRequest
@@ -12031,7 +12031,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	211, // 88: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.priority:type_name -> temporal.api.common.v1.Priority
 	212, // 89: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
 	201, // 90: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
-	213, // 91: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.async_handoff_options:type_name -> temporal.api.activity.v1.AsyncHandoffOptions
+	213, // 91: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.handoff_options:type_name -> temporal.api.activity.v1.HandoffOptions
 	214, // 92: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedRequest.complete_request:type_name -> temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest
 	12,  // 93: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.started_response:type_name -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse
 	215, // 94: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.activity_tasks:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueResponse
