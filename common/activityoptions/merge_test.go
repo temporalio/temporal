@@ -201,8 +201,8 @@ func TestMergeActivityOptionsCoversAllFields(t *testing.T) {
 		"taskQueue.normalName": {},
 		// non_retryable_error_types is a repeated field; set/clear semantics
 		// do not map cleanly onto a single field-mask path (no append/remove).
-		"retryPolicy.nonRetryableErrorTypes":                     {},
-		"asyncHandoffOptions.retryPolicy.nonRetryableErrorTypes": {},
+		"retryPolicy.nonRetryableErrorTypes":                {},
+		"handoffOptions.retryPolicy.nonRetryableErrorTypes": {},
 	}
 
 	// Enumerate all valid field-mask paths for ActivityOptions via protoreflect.
@@ -227,7 +227,7 @@ func TestMergeActivityOptionsCoversAllFields(t *testing.T) {
 		ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		StartToCloseTimeout:    durationpb.New(3 * time.Second),
 		HeartbeatTimeout:       durationpb.New(1 * time.Second),
-		AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+		HandoffOptions: &activitypb.HandoffOptions{
 			StartToHandoffTimeout: durationpb.New(2 * time.Second),
 			HandoffToCloseTimeout: durationpb.New(4 * time.Second),
 			HeartbeatTimeout:      durationpb.New(time.Second),
@@ -348,28 +348,28 @@ func TestMergeActivityOptionsHandoff(t *testing.T) {
 
 	for _, testCase := range []struct {
 		name                 string
-		from, into, expected *activitypb.AsyncHandoffOptions
+		from, into, expected *activitypb.HandoffOptions
 		paths                []string
 		invalid              bool
 	}{
-		{name: "remove entire message", into: &activitypb.AsyncHandoffOptions{}, paths: []string{"async_handoff_options"}},
-		{name: "empty message preserves presence", from: &activitypb.AsyncHandoffOptions{}, paths: []string{"asyncHandoffOptions"}, expected: &activitypb.AsyncHandoffOptions{}},
-		{name: "unselected options unchanged", from: &activitypb.AsyncHandoffOptions{}, into: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, expected: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}},
-		{name: "clear duration", from: &activitypb.AsyncHandoffOptions{}, into: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, paths: []string{"asyncHandoffOptions.startToHandoffTimeout"}, expected: &activitypb.AsyncHandoffOptions{}},
-		{name: "missing duration parent", paths: []string{"asyncHandoffOptions.startToHandoffTimeout"}, invalid: true},
-		{name: "missing whole policy parent", paths: []string{"asyncHandoffOptions.retryPolicy"}, invalid: true},
-		{name: "missing nested policy parent", from: &activitypb.AsyncHandoffOptions{}, paths: []string{"asyncHandoffOptions.retryPolicy.maximumAttempts"}, invalid: true},
-		{name: "missing both nested parents", paths: []string{"asyncHandoffOptions.retryPolicy.maximumAttempts"}, invalid: true},
-		{name: "whole removal does not hide missing child parent", paths: []string{"asyncHandoffOptions", "asyncHandoffOptions.heartbeatTimeout"}, invalid: true},
-		{name: "create nested policy", from: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 3}}, paths: []string{"asyncHandoffOptions.retryPolicy.maximumAttempts"}, expected: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 3}}},
-		{name: "replace non-retryable types", from: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"new"}}}, into: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"old"}}}, paths: []string{"asyncHandoffOptions.retryPolicy"}, expected: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"new"}}}},
-		{name: "clear non-retryable types", from: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{}}, into: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"old"}}}, paths: []string{"asyncHandoffOptions.retryPolicy"}, expected: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{}}},
+		{name: "remove entire message", into: &activitypb.HandoffOptions{}, paths: []string{"handoff_options"}},
+		{name: "empty message preserves presence", from: &activitypb.HandoffOptions{}, paths: []string{"handoffOptions"}, expected: &activitypb.HandoffOptions{}},
+		{name: "unselected options unchanged", from: &activitypb.HandoffOptions{}, into: &activitypb.HandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, expected: &activitypb.HandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}},
+		{name: "clear duration", from: &activitypb.HandoffOptions{}, into: &activitypb.HandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, paths: []string{"handoffOptions.startToHandoffTimeout"}, expected: &activitypb.HandoffOptions{}},
+		{name: "missing duration parent", paths: []string{"handoffOptions.startToHandoffTimeout"}, invalid: true},
+		{name: "missing whole policy parent", paths: []string{"handoffOptions.retryPolicy"}, invalid: true},
+		{name: "missing nested policy parent", from: &activitypb.HandoffOptions{}, paths: []string{"handoffOptions.retryPolicy.maximumAttempts"}, invalid: true},
+		{name: "missing both nested parents", paths: []string{"handoffOptions.retryPolicy.maximumAttempts"}, invalid: true},
+		{name: "whole removal does not hide missing child parent", paths: []string{"handoffOptions", "handoffOptions.heartbeatTimeout"}, invalid: true},
+		{name: "create nested policy", from: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 3}}, paths: []string{"handoffOptions.retryPolicy.maximumAttempts"}, expected: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 3}}},
+		{name: "replace non-retryable types", from: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"new"}}}, into: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"old"}}}, paths: []string{"handoffOptions.retryPolicy"}, expected: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"new"}}}},
+		{name: "clear non-retryable types", from: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{}}, into: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"old"}}}, paths: []string{"handoffOptions.retryPolicy"}, expected: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{}}},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			from := &activitypb.ActivityOptions{AsyncHandoffOptions: testCase.from}
-			into := &activitypb.ActivityOptions{AsyncHandoffOptions: testCase.into}
+			from := &activitypb.ActivityOptions{HandoffOptions: testCase.from}
+			into := &activitypb.ActivityOptions{HandoffOptions: testCase.into}
 			fields := util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: testCase.paths})
 			err := MergeActivityOptions(into, from, fields)
 			if testCase.invalid {
@@ -378,7 +378,7 @@ func TestMergeActivityOptionsHandoff(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			protorequire.ProtoEqual(t, &activitypb.ActivityOptions{AsyncHandoffOptions: testCase.expected}, into)
+			protorequire.ProtoEqual(t, &activitypb.ActivityOptions{HandoffOptions: testCase.expected}, into)
 		})
 	}
 }

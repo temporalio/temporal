@@ -121,7 +121,7 @@ func (a *Activity) updateActivityExecutionOptionsResponse() *activitypb.UpdateAc
 				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
 				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
 				RetryPolicy:            a.GetRetryPolicy(),
-				AsyncHandoffOptions:    a.GetAsyncHandoffOptions(),
+				HandoffOptions:         a.GetHandoffOptions(),
 				Priority:               a.GetPriority(),
 				StartDelay:             a.GetStartDelay(),
 			},
@@ -188,7 +188,7 @@ func (a *Activity) mergeActivityOptions(
 		HeartbeatTimeout:       common.CloneProto(a.HeartbeatTimeout),
 		Priority:               common.CloneProto(a.Priority),
 		RetryPolicy:            common.CloneProto(a.RetryPolicy),
-		AsyncHandoffOptions:    common.CloneProto(a.GetAsyncHandoffOptions()),
+		HandoffOptions:         common.CloneProto(a.GetHandoffOptions()),
 		StartDelay:             common.CloneProto(a.StartDelay),
 	}
 
@@ -203,16 +203,16 @@ func (a *Activity) mergeActivityOptions(
 	}
 
 	// Normalize merged timeouts based on whether handoff options are present.
-	if ao.GetAsyncHandoffOptions() != nil {
-		incoming := req.GetActivityOptions().GetAsyncHandoffOptions()
-		_, replaceHandoff := updateFields["asyncHandoffOptions"]
-		_, replaceHandoffPolicy := updateFields["asyncHandoffOptions.retryPolicy"]
+	if ao.GetHandoffOptions() != nil {
+		incoming := req.GetActivityOptions().GetHandoffOptions()
+		_, replaceHandoff := updateFields["handoffOptions"]
+		_, replaceHandoffPolicy := updateFields["handoffOptions.retryPolicy"]
 
 		// Apply defaults when adding handoff options or replacing a whole options/policy message.
 		// Leaf edits to existing options preserve unselected policy values.
 		needsRetryDefaults := replaceHandoffPolicy ||
 			(replaceHandoff && incoming != nil) ||
-			(a.GetAsyncHandoffOptions() == nil && incoming != nil && util.FieldMaskHasSubPath(updateFields, "asyncHandoffOptions"))
+			(a.GetHandoffOptions() == nil && incoming != nil && util.FieldMaskHasSubPath(updateFields, "handoffOptions"))
 		var retryDefaults *retrypolicy.DefaultRetrySettings
 		if needsRetryDefaults {
 			defaults := activityContextFromChasm(ctx).config.DefaultActivityRetryPolicy(ctx.NamespaceEntry().Name().String())
@@ -454,7 +454,7 @@ func (a *Activity) handleReset(
 			return nil, err
 		}
 
-		if a.GetAsyncHandoffOptions() == nil && a.GetOriginalOptions().GetAsyncHandoffOptions() != nil &&
+		if a.GetHandoffOptions() == nil && a.GetOriginalOptions().GetHandoffOptions() != nil &&
 			!activityContextFromChasm(ctx).config.StandaloneAsyncHandoffEnabled(ctx.NamespaceEntry().Name().String()) {
 			return nil, serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
 		}
@@ -632,7 +632,7 @@ func (a *Activity) applyActivityOptions(options *apiactivitypb.ActivityOptions) 
 	a.HeartbeatTimeout = options.HeartbeatTimeout
 	a.Priority = options.Priority
 	a.RetryPolicy = options.RetryPolicy
-	a.AsyncHandoffOptions = options.AsyncHandoffOptions
+	a.HandoffOptions = options.HandoffOptions
 	a.StartDelay = options.StartDelay
 }
 
@@ -642,14 +642,14 @@ func (a *Activity) applyActivityOptionsUpdate(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	updateFields map[string]struct{},
 ) error {
-	hadHandoffOptions := a.GetAsyncHandoffOptions() != nil
-	incoming := req.GetActivityOptions().GetAsyncHandoffOptions()
-	_, replaceHandoff := updateFields["asyncHandoffOptions"]
+	hadHandoffOptions := a.GetHandoffOptions() != nil
+	incoming := req.GetActivityOptions().GetHandoffOptions()
+	_, replaceHandoff := updateFields["handoffOptions"]
 
 	// Replacing existing handoff options resets an omitted retry policy to namespace defaults,
 	// so any pending policy-derived retry backoff is recalculated. Adding or re-adding options
 	// without a supplied retry policy preserves the pending retry backoff.
-	handoffPolicyUpdated := util.FieldMaskHasPathOrSubPath(updateFields, "asyncHandoffOptions.retryPolicy") ||
+	handoffPolicyUpdated := util.FieldMaskHasPathOrSubPath(updateFields, "handoffOptions.retryPolicy") ||
 		(replaceHandoff && incoming != nil && (hadHandoffOptions || incoming.GetRetryPolicy() != nil))
 
 	var options *apiactivitypb.ActivityOptions
@@ -664,7 +664,7 @@ func (a *Activity) applyActivityOptionsUpdate(
 	}
 
 	// Check new opt-in admission before changing execution state.
-	willHaveHandoffOptions := options.GetAsyncHandoffOptions() != nil
+	willHaveHandoffOptions := options.GetHandoffOptions() != nil
 	if !hadHandoffOptions && willHaveHandoffOptions && !activityContextFromChasm(ctx).config.StandaloneAsyncHandoffEnabled(ctx.NamespaceEntry().Name().String()) {
 		return serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
 	}
@@ -687,8 +687,8 @@ func (a *Activity) applyRetryAndHandoffStateUpdate(
 	handoffPolicyUpdated bool,
 ) error {
 	attempt := a.LastAttempt.Get(ctx)
-	hadHandoffOptions := a.GetAsyncHandoffOptions() != nil
-	willHaveHandoffOptions := options.GetAsyncHandoffOptions() != nil
+	hadHandoffOptions := a.GetHandoffOptions() != nil
+	willHaveHandoffOptions := options.GetHandoffOptions() != nil
 
 	pendingType := a.pendingRetryType(attempt)
 	handoffAttempt, startToCloseStartedAt, err := a.handoffStateForOptionsUpdate(ctx, willHaveHandoffOptions)
@@ -702,7 +702,7 @@ func (a *Activity) applyRetryAndHandoffStateUpdate(
 	if !pendingHandoffPolicyAbsent && a.shouldRecalculateCurrentRetryInterval(attempt, restoreOriginal, updateFields, handoffPolicyUpdated) {
 		policy, count := options.GetRetryPolicy(), attempt.GetCount()
 		if pendingType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
-			policy, count = options.GetAsyncHandoffOptions().GetRetryPolicy(), handoffAttempt
+			policy, count = options.GetHandoffOptions().GetRetryPolicy(), handoffAttempt
 		}
 
 		if count <= 0 {
@@ -748,7 +748,7 @@ func (a *Activity) applyRetryAndHandoffStateUpdate(
 // no clock should run. Inconsistent current state returns an error.
 func (a *Activity) handoffStateForOptionsUpdate(ctx chasm.Context, willHaveHandoffOptions bool) (int32, time.Time, error) {
 	attempt := a.LastAttempt.Get(ctx)
-	hadHandoffOptions := a.GetAsyncHandoffOptions() != nil
+	hadHandoffOptions := a.GetHandoffOptions() != nil
 	pendingType := a.pendingRetryType(attempt)
 	if !hadHandoffOptions && !willHaveHandoffOptions && pendingType != activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
 		return 0, time.Time{}, nil

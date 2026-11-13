@@ -268,7 +268,7 @@ func (h *heartbeatTimeoutTaskHandler) Validate(
 		return false, nil
 	}
 
-	if activity.GetAsyncHandoffOptions() != nil {
+	if activity.GetHandoffOptions() != nil {
 		deadlines, err := activity.handoffDeadlines(ctx, true)
 		if err != nil {
 			return false, err
@@ -331,7 +331,7 @@ func newHandoffStartToCloseTimeoutTaskHandler() *handoffStartToCloseTimeoutTaskH
 }
 
 func (h *handoffStartToCloseTimeoutTaskHandler) Validate(ctx chasm.Context, a *Activity, invocation chasm.TaskInvocation, task *activitypb.HandoffStartToCloseTimeoutTask) (bool, error) {
-	if a.GetAsyncHandoffOptions() == nil || a.GetStartToCloseTimeout().AsDuration() <= 0 {
+	if a.GetHandoffOptions() == nil || a.GetStartToCloseTimeout().AsDuration() <= 0 {
 		return false, nil
 	}
 
@@ -375,7 +375,7 @@ func newStartToHandoffTimeoutTaskHandler() *startToHandoffTimeoutTaskHandler {
 }
 
 func (h *startToHandoffTimeoutTaskHandler) Validate(ctx chasm.Context, a *Activity, invocation chasm.TaskInvocation, task *activitypb.StartToHandoffTimeoutTask) (bool, error) {
-	if a.GetAsyncHandoffOptions() == nil {
+	if a.GetHandoffOptions() == nil {
 		return false, nil
 	}
 
@@ -406,7 +406,7 @@ func newHandoffToCloseTimeoutTaskHandler() *handoffToCloseTimeoutTaskHandler {
 }
 
 func (h *handoffToCloseTimeoutTaskHandler) Validate(ctx chasm.Context, a *Activity, invocation chasm.TaskInvocation, task *activitypb.HandoffToCloseTimeoutTask) (bool, error) {
-	if a.GetAsyncHandoffOptions() == nil {
+	if a.GetHandoffOptions() == nil {
 		return false, nil
 	}
 

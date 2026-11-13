@@ -175,22 +175,22 @@ func (s *activityParityTestSuite) TestMetrics() {
 		// TODO: Compare these shared metric series with WFA once workflow handoff is supported.
 		{
 			name: "TerminalHandoffTimeout", trace: []model.Event{model.Poll, model.StartToHandoffElapses},
-			cfg:     activityConfig{MaxAttempts: 1, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 1}}},
+			cfg:     activityConfig{MaxAttempts: 1, HandoffOptions: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 1}}},
 			saaOnly: true, anchor: metrics.ActivityTimeout.Name(), taskTimeouts: 1, terminalTimeouts: 1,
 		},
 		{
 			name: "RetryableHandoffTimeout", trace: []model.Event{model.Poll, model.StartToHandoffElapses},
-			cfg:     activityConfig{MaxAttempts: 2, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 2, InitialInterval: durationpb.New(activityLongDuration)}}},
+			cfg:     activityConfig{MaxAttempts: 2, HandoffOptions: &activitypb.HandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 2, InitialInterval: durationpb.New(activityLongDuration)}}},
 			saaOnly: true, anchor: metrics.ActivityTaskTimeout.Name(), taskTimeouts: 1,
 		},
 		{
 			name: "TerminalCompletionTimeout", trace: []model.Event{model.Poll, model.Handoff, model.HandoffToCloseElapses},
-			cfg:     activityConfig{MaxAttempts: 1, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+			cfg:     activityConfig{MaxAttempts: 1, HandoffOptions: &activitypb.HandoffOptions{}},
 			saaOnly: true, anchor: metrics.ActivityTimeout.Name(), taskTimeouts: 1, terminalTimeouts: 1,
 		},
 		{
 			name: "RetryableCompletionTimeout", trace: []model.Event{model.Poll, model.Handoff, model.HandoffToCloseElapses},
-			cfg:     activityConfig{MaxAttempts: 2, RetryInterval: activityLongDuration, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+			cfg:     activityConfig{MaxAttempts: 2, RetryInterval: activityLongDuration, HandoffOptions: &activitypb.HandoffOptions{}},
 			saaOnly: true, anchor: metrics.ActivityTaskTimeout.Name(), taskTimeouts: 1,
 		},
 		{name: "RetryableTaskFailure", trace: []model.Event{model.Poll, model.FailRetryably}, cfg: activityConfig{MaxAttempts: 2}},

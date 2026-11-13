@@ -399,7 +399,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		req.RequestEagerExecution = false
 	}
 
-	if req.GetAsyncHandoffOptions() != nil && !h.config.StandaloneAsyncHandoffEnabled(req.GetNamespace()) {
+	if req.GetHandoffOptions() != nil && !h.config.StandaloneAsyncHandoffEnabled(req.GetNamespace()) {
 		return nil, serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
 	}
 
@@ -462,7 +462,7 @@ func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecution
 		StartToCloseTimeout:    req.StartToCloseTimeout,
 		HeartbeatTimeout:       req.HeartbeatTimeout,
 		RetryPolicy:            req.RetryPolicy,
-		AsyncHandoffOptions:    req.AsyncHandoffOptions,
+		HandoffOptions:         req.HandoffOptions,
 	}
 }
 
@@ -573,7 +573,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 	}
 
 	updatesWorkflowHandoffOptions := req.GetWorkflowId() != "" && req.GetUpdateMask() != nil &&
-		util.FieldMaskHasPathOrSubPath(util.ParseFieldMask(req.GetUpdateMask()), "asyncHandoffOptions")
+		util.FieldMaskHasPathOrSubPath(util.ParseFieldMask(req.GetUpdateMask()), "handoffOptions")
 	// Workflow activity updates do not yet persist handoff options, regardless of the feature flag.
 	if updatesWorkflowHandoffOptions {
 		return nil, serviceerror.NewInvalidArgument("async handoff options are not supported for workflow activities")
@@ -612,7 +612,7 @@ func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req
 	req.StartToCloseTimeout = opts.StartToCloseTimeout
 	req.HeartbeatTimeout = opts.HeartbeatTimeout
 	req.RetryPolicy = opts.RetryPolicy
-	req.AsyncHandoffOptions = opts.AsyncHandoffOptions
+	req.HandoffOptions = opts.HandoffOptions
 }
 
 func (h *frontendHandler) RespondActivityTaskHandoff(

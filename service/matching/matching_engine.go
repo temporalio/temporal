@@ -3782,7 +3782,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		Priority:                            historyResponse.Priority,
 		RetryPolicy:                         historyResponse.RetryPolicy,
 		HandoffAttempt:                      historyResponse.GetHandoffAttempt(),
-		AsyncHandoffOptions:                 historyResponse.GetAsyncHandoffOptions(),
+		HandoffOptions:                      historyResponse.GetHandoffOptions(),
 	}
 }
 

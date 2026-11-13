@@ -455,7 +455,7 @@ func TestTransitionRescheduled(t *testing.T) {
 
 				a, ctx := newHandoffRetryTestActivity(t)
 				if testCase.withoutOptions {
-					a.AsyncHandoffOptions = nil
+					a.HandoffOptions = nil
 				}
 
 				attempt := a.LastAttempt.Get(ctx)
@@ -1556,7 +1556,7 @@ func TestHandoffStartClocks(t *testing.T) {
 				a.ScheduleToCloseTimeout = nil
 				a.ScheduleToStartTimeout = nil
 				a.FirstAttemptStartedTime = nil
-				startToHandoffTimeout := a.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration()
+				startToHandoffTimeout := a.GetHandoffOptions().GetStartToHandoffTimeout().AsDuration()
 				attempt := a.LastAttempt.Get(ctx)
 				*attempt = activitypb.ActivityAttemptState{}
 				if eager {

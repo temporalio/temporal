@@ -1140,12 +1140,12 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 					t := s.T()
 					env := newActivityParityEnv(t)
 					cfg := activityConfig{}
-					options := &activitypb.AsyncHandoffOptions{
+					options := &activitypb.HandoffOptions{
 						StartToHandoffTimeout: durationpb.New(time.Minute),
 						HandoffToCloseTimeout: durationpb.New(time.Hour),
 					}
 					if testCase.configured {
-						cfg.AsyncHandoffOptions = options
+						cfg.HandoffOptions = options
 					}
 					trace := []model.Event{model.Poll}
 					if testCase.handedOff {
@@ -1163,31 +1163,31 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 						})
 					}
 
-					response, err := update(&activitypb.ActivityOptions{AsyncHandoffOptions: options}, "async_handoff_options")
+					response, err := update(&activitypb.ActivityOptions{HandoffOptions: options}, "handoff_options")
 					require.NoError(t, err)
-					require.NotNil(t, response.GetActivityOptions().GetAsyncHandoffOptions().GetRetryPolicy())
+					require.NotNil(t, response.GetActivityOptions().GetHandoffOptions().GetRetryPolicy())
 
 					// Existing executions remain editable after disablement, including nested policy replacement.
 					env.GetTestCluster().OverrideDynamicConfig(t, activity.StandaloneAsyncHandoffEnabled, []dynamicconfig.ConstrainedValue{{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: false}})
-					_, err = update(&activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+					_, err = update(&activitypb.ActivityOptions{HandoffOptions: &activitypb.HandoffOptions{
 						HeartbeatTimeout: durationpb.New(time.Minute),
 						RetryPolicy:      &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), MaximumAttempts: 3},
-					}}, "asyncHandoffOptions.heartbeatTimeout", "asyncHandoffOptions.retryPolicy")
+					}}, "handoffOptions.heartbeatTimeout", "handoffOptions.retryPolicy")
 					require.NoError(t, err)
-					require.EqualValues(t, 3, a.describe(t).GetInfo().GetAsyncHandoffOptions().GetRetryPolicy().GetMaximumAttempts())
+					require.EqualValues(t, 3, a.describe(t).GetInfo().GetHandoffOptions().GetRetryPolicy().GetMaximumAttempts())
 
-					_, err = update(&activitypb.ActivityOptions{}, "async_handoff_options")
+					_, err = update(&activitypb.ActivityOptions{}, "handoff_options")
 					require.NoError(t, err)
 					removed := a.describe(t).GetInfo()
-					require.Nil(t, removed.GetAsyncHandoffOptions())
+					require.Nil(t, removed.GetHandoffOptions())
 					require.Zero(t, removed.GetHandoffAttempt())
 
-					_, err = update(&activitypb.ActivityOptions{AsyncHandoffOptions: options}, "async_handoff_options")
+					_, err = update(&activitypb.ActivityOptions{HandoffOptions: options}, "handoff_options")
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
-					require.Nil(t, a.describe(t).GetInfo().GetAsyncHandoffOptions())
+					require.Nil(t, a.describe(t).GetInfo().GetHandoffOptions())
 
 					env.GetTestCluster().OverrideDynamicConfig(t, activity.StandaloneAsyncHandoffEnabled, []dynamicconfig.ConstrainedValue{{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true}})
-					_, err = update(&activitypb.ActivityOptions{AsyncHandoffOptions: options}, "async_handoff_options")
+					_, err = update(&activitypb.ActivityOptions{HandoffOptions: options}, "handoff_options")
 					require.NoError(t, err)
 					_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
 						Namespace: env.Namespace().String(), ActivityId: a.activityID, RunId: a.runID, RestoreOriginal: true,
@@ -1195,7 +1195,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 					require.NoError(t, err)
 
 					restored := a.describe(t).GetInfo()
-					protorequire.ProtoEqual(t, before.GetAsyncHandoffOptions(), restored.GetAsyncHandoffOptions())
+					protorequire.ProtoEqual(t, before.GetHandoffOptions(), restored.GetHandoffOptions())
 					require.Equal(t, before.GetAttempt(), restored.GetAttempt())
 					require.Equal(t, before.GetAwaitingCompletion(), restored.GetAwaitingCompletion())
 					protorequire.ProtoEqual(t, before.GetAsyncHandoffTime(), restored.GetAsyncHandoffTime())
@@ -1234,7 +1234,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 					env := newActivityParityEnv(t)
 					cfg := activityConfig{
 						RetryInterval: time.Hour,
-						AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+						HandoffOptions: &activitypb.HandoffOptions{
 							RetryPolicy: &commonpb.RetryPolicy{
 								InitialInterval:    durationpb.New(time.Hour),
 								MaximumInterval:    durationpb.New(time.Hour),
@@ -1262,8 +1262,8 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 
 					expectedHandoffAttempt := before.GetHandoffAttempt()
 					if testCase.removeAndReadd {
-						update(&activitypb.ActivityOptions{}, "async_handoff_options")
-						update(&activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}}, "async_handoff_options")
+						update(&activitypb.ActivityOptions{}, "handoff_options")
+						update(&activitypb.ActivityOptions{HandoffOptions: &activitypb.HandoffOptions{}}, "handoff_options")
 						readded := a.describe(t).GetInfo()
 						require.EqualValues(t, 1, readded.GetHandoffAttempt())
 						require.Equal(t, time.Hour, readded.GetCurrentRetryInterval().AsDuration())
@@ -1274,7 +1274,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 					if testCase.updateActivityPolicy {
 						update(&activitypb.ActivityOptions{RetryPolicy: policy}, "retry_policy.initial_interval")
 					} else {
-						update(&activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{RetryPolicy: policy}}, "async_handoff_options.retry_policy.initial_interval")
+						update(&activitypb.ActivityOptions{HandoffOptions: &activitypb.HandoffOptions{RetryPolicy: policy}}, "handoff_options.retry_policy.initial_interval")
 					}
 
 					after := a.describe(t).GetInfo()
@@ -1294,7 +1294,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 
 	s.Run("RecordHandoffAndCompleteExternally", func(s *activityParityTestSuite) {
 		cfg := activityConfig{
-			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+			HandoffOptions: &activitypb.HandoffOptions{
 				StartToHandoffTimeout: durationpb.New(time.Minute),
 				HandoffToCloseTimeout: durationpb.New(time.Hour),
 			},
@@ -1305,8 +1305,8 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 			info := a.handoffInfo(t)
 			require.NotNil(t, info.handoffTime)
 			require.NotNil(t, info.options)
-			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetStartToHandoffTimeout(), info.options.GetStartToHandoffTimeout())
-			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetHandoffToCloseTimeout(), info.options.GetHandoffToCloseTimeout())
+			protorequire.ProtoEqual(t, cfg.HandoffOptions.GetStartToHandoffTimeout(), info.options.GetStartToHandoffTimeout())
+			protorequire.ProtoEqual(t, cfg.HandoffOptions.GetHandoffToCloseTimeout(), info.options.GetHandoffToCloseTimeout())
 
 			a.driveEvent(t, completion)
 			require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
@@ -1347,7 +1347,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 	s.Run("CompletesWithOnlyPhaseTimeouts", func(s *activityParityTestSuite) {
 		cfg := activityConfig{
 			DisableStartToClose: true,
-			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+			HandoffOptions: &activitypb.HandoffOptions{
 				StartToHandoffTimeout: durationpb.New(time.Minute),
 				HandoffToCloseTimeout: durationpb.New(time.Hour),
 			},
@@ -1361,14 +1361,14 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 			require.EqualValues(t, 1, task.GetHandoffAttempt())
 			require.Zero(t, task.GetStartToCloseTimeout().AsDuration())
 			require.Zero(t, task.GetScheduleToCloseTimeout().AsDuration())
-			require.NotNil(t, task.GetAsyncHandoffOptions().GetRetryPolicy())
-			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetStartToHandoffTimeout(), task.GetAsyncHandoffOptions().GetStartToHandoffTimeout())
-			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetHandoffToCloseTimeout(), task.GetAsyncHandoffOptions().GetHandoffToCloseTimeout())
+			require.NotNil(t, task.GetHandoffOptions().GetRetryPolicy())
+			protorequire.ProtoEqual(t, cfg.HandoffOptions.GetStartToHandoffTimeout(), task.GetHandoffOptions().GetStartToHandoffTimeout())
+			protorequire.ProtoEqual(t, cfg.HandoffOptions.GetHandoffToCloseTimeout(), task.GetHandoffOptions().GetHandoffToCloseTimeout())
 
 			info := a.handoffInfo(t)
 			require.Zero(t, info.startToCloseTimeout)
 			require.Zero(t, info.scheduleToCloseTimeout)
-			protorequire.ProtoEqual(t, task.GetAsyncHandoffOptions(), info.options)
+			protorequire.ProtoEqual(t, task.GetHandoffOptions(), info.options)
 
 			a.driveEvent(t, model.Complete)
 			require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
@@ -1402,11 +1402,11 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 	s.Run("RepeatedHandoffPreservesTimestamp", func(s *activityParityTestSuite) {
 		for _, testCase := range []struct {
 			name    string
-			options *activitypb.AsyncHandoffOptions
+			options *activitypb.HandoffOptions
 		}{
 			{
 				name: "WithHandoffOptions",
-				options: &activitypb.AsyncHandoffOptions{
+				options: &activitypb.HandoffOptions{
 					StartToHandoffTimeout: durationpb.New(time.Minute),
 					HandoffToCloseTimeout: durationpb.New(time.Hour),
 				},
@@ -1414,7 +1414,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 			{name: "WithoutHandoffOptions"},
 		} {
 			s.Run(testCase.name, func(s *activityParityTestSuite) {
-				cfg := activityConfig{AsyncHandoffOptions: testCase.options}
+				cfg := activityConfig{HandoffOptions: testCase.options}
 				trace := []model.Event{model.Poll, model.Handoff}
 
 				check := func(t *testing.T, a parityActivity) {
@@ -1497,7 +1497,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 	s.Run("ModelConformance", func(s *activityParityTestSuite) {
 		cfg := activityConfig{
 			MaxAttempts: 5,
-			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+			HandoffOptions: &activitypb.HandoffOptions{
 				RetryPolicy: &commonpb.RetryPolicy{
 					InitialInterval:    durationpb.New(activityShortDispatchDelay),
 					MaximumInterval:    durationpb.New(activityShortDispatchDelay),
@@ -1553,7 +1553,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 			s.Run(testCase.name, func(s *activityParityTestSuite) {
 				cfg := activityConfig{
 					StartToClose: 10 * time.Second, RetryInterval: time.Second, MaxAttempts: 2,
-					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+					HandoffOptions: &activitypb.HandoffOptions{
 						RetryPolicy: &commonpb.RetryPolicy{InitialInterval: durationpb.New(testCase.retryInterval)},
 					},
 				}
@@ -1597,7 +1597,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		cfg := activityConfig{
 			StartToClose: time.Hour,
 			MaxAttempts:  1,
-			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+			HandoffOptions: &activitypb.HandoffOptions{
 				StartToHandoffTimeout: durationpb.New(2 * time.Minute),
 				HandoffToCloseTimeout: durationpb.New(time.Hour),
 				RetryPolicy:           &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second)},
@@ -1694,7 +1694,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 				cfg := activityConfig{
 					DisableStartToClose: true,
 					MaxAttempts:         1,
-					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+					HandoffOptions: &activitypb.HandoffOptions{
 						StartToHandoffTimeout: durationpb.New(testCase.startToHandoffTimeout),
 						HandoffToCloseTimeout: durationpb.New(testCase.handoffToCloseTimeout),
 						RetryPolicy:           &commonpb.RetryPolicy{MaximumAttempts: 1},
@@ -1731,7 +1731,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		const maxHandoffAttempts int32 = 3
 		cfg := activityConfig{
 			MaxAttempts: 5,
-			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+			HandoffOptions: &activitypb.HandoffOptions{
 				RetryPolicy: &commonpb.RetryPolicy{
 					InitialInterval:    durationpb.New(activityShortDispatchDelay),
 					MaximumInterval:    durationpb.New(activityShortDispatchDelay),
@@ -1809,7 +1809,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 	s.Run("PendingOperatorRequests", func(s *activityParityTestSuite) {
 		cfg := activityConfig{
 			MaxAttempts: 3,
-			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+			HandoffOptions: &activitypb.HandoffOptions{
 				RetryPolicy: &commonpb.RetryPolicy{
 					InitialInterval:    durationpb.New(activityShortDispatchDelay),
 					MaximumInterval:    durationpb.New(activityShortDispatchDelay),
@@ -1884,7 +1884,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 				trace:               []model.Event{model.Poll, model.Handoff, model.Reset},
 				startToCloseTimeout: 5 * activityShortTimeout,
 				heartbeatResponse:   &workflowservice.RecordActivityTaskHeartbeatResponse{ActivityReset: true},
-				expectedRunState:    enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION,
+				expectedRunState:    enumspb.PENDING_ACTIVITY_STATE_HANDED_OFF,
 				finish:              []model.Event{model.StartToCloseElapses, model.Poll, model.Complete},
 				expectedOutcome:     activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
 			},
@@ -1927,7 +1927,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		cfg := activityConfig{
 			MaxAttempts:     3,
 			ScheduleToStart: 5 * time.Second,
-			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+			HandoffOptions: &activitypb.HandoffOptions{
 				RetryPolicy: &commonpb.RetryPolicy{
 					InitialInterval:    durationpb.New(activityShortDispatchDelay),
 					MaximumInterval:    durationpb.New(activityShortDispatchDelay),
@@ -1999,7 +1999,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 			s.Run(testCase.name, func(s *activityParityTestSuite) {
 				cfg := activityConfig{
 					MaxAttempts: 3, RetryInterval: testCase.activityRetry, ScheduleToClose: scheduleToClose,
-					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+					HandoffOptions: &activitypb.HandoffOptions{
 						RetryPolicy: &commonpb.RetryPolicy{
 							InitialInterval:    durationpb.New(testCase.handoffRetry),
 							MaximumInterval:    durationpb.New(testCase.handoffRetry),

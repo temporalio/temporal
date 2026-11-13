@@ -187,8 +187,8 @@ func TestActivityModelHandoffRetryFit(t *testing.T) {
 
 			cfg := activityConfig{
 				RetryInterval: time.Millisecond, ScheduleToClose: testCase.scheduleToClose,
-				NextRetryDelay:      testCase.nextRetryDelay,
-				AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{RetryPolicy: testCase.handoffPolicy},
+				NextRetryDelay: testCase.nextRetryDelay,
+				HandoffOptions: &activitypb.HandoffOptions{RetryPolicy: testCase.handoffPolicy},
 			}
 			prediction := cfg.modelConfig()
 			require.True(t, prediction.HandoffRetryOutlivesScheduleToClose)

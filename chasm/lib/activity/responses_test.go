@@ -101,7 +101,7 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	startToCloseTimeout := durationpb.New(2 * time.Minute)
 	heartbeatTimeout := durationpb.New(3 * time.Minute)
 	retryPolicy := &commonpb.RetryPolicy{MaximumAttempts: 2}
-	handoffOptions := &apiactivitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}
+	handoffOptions := &apiactivitypb.HandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}
 	priority := &commonpb.Priority{PriorityKey: 1}
 	propagatedNexusSerializationContext := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "service", Operation: "operation"}
 
@@ -114,7 +114,7 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 			StartToCloseTimeout:    startToCloseTimeout,
 			HeartbeatTimeout:       heartbeatTimeout,
 			RetryPolicy:            retryPolicy,
-			AsyncHandoffOptions:    handoffOptions,
+			HandoffOptions:         handoffOptions,
 			Priority:               priority,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
@@ -170,7 +170,7 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	require.Equal(t, int64(3*time.Minute/time.Second), response.GetHeartbeatTimeout().GetSeconds())
 	require.EqualValues(t, 2, response.GetRetryPolicy().GetMaximumAttempts())
 	require.EqualValues(t, 1, response.GetHandoffAttempt())
-	protorequire.ProtoEqual(t, &apiactivitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, response.GetAsyncHandoffOptions())
+	protorequire.ProtoEqual(t, &apiactivitypb.HandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, response.GetHandoffOptions())
 	require.EqualValues(t, 1, response.GetPriority().GetPriorityKey())
 	require.Equal(t, "endpoint", response.GetPropagatedNexusSerializationContext().GetEndpoint())
 }
@@ -182,7 +182,7 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 		name                 string
 		status               activitypb.ActivityExecutionStatus
 		keepPaused, awaiting bool
-		options              *apiactivitypb.AsyncHandoffOptions
+		options              *apiactivitypb.HandoffOptions
 		wantState            enumspb.PendingActivityState
 		wantAwaiting         bool
 	}{
@@ -194,16 +194,16 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 		{
 			name:      "before handoff",
 			status:    activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			options:   &apiactivitypb.AsyncHandoffOptions{},
+			options:   &apiactivitypb.HandoffOptions{},
 			wantState: enumspb.PENDING_ACTIVITY_STATE_STARTED,
 		},
 		{
 			name:         "awaiting external completion",
 			status:       activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			awaiting:     true,
-			wantState:    enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION,
+			wantState:    enumspb.PENDING_ACTIVITY_STATE_HANDED_OFF,
 			wantAwaiting: true,
-			options: &apiactivitypb.AsyncHandoffOptions{
+			options: &apiactivitypb.HandoffOptions{
 				StartToHandoffTimeout: durationpb.New(time.Minute),
 				HandoffToCloseTimeout: durationpb.New(time.Hour),
 				HeartbeatTimeout:      durationpb.New(30 * time.Second),
@@ -214,20 +214,20 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 			name:         "handoff without options",
 			status:       activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			awaiting:     true,
-			wantState:    enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION,
+			wantState:    enumspb.PENDING_ACTIVITY_STATE_HANDED_OFF,
 			wantAwaiting: true,
 		},
 		{
 			name:      "pending reset before handoff",
 			status:    activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-			options:   &apiactivitypb.AsyncHandoffOptions{},
+			options:   &apiactivitypb.HandoffOptions{},
 			wantState: enumspb.PENDING_ACTIVITY_STATE_STARTED,
 		},
 		{
 			name:         "pause request takes precedence",
 			status:       activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 			awaiting:     true,
-			options:      &apiactivitypb.AsyncHandoffOptions{},
+			options:      &apiactivitypb.HandoffOptions{},
 			wantState:    enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
 			wantAwaiting: true,
 		},
@@ -235,7 +235,7 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 			name:         "cancellation request takes precedence",
 			status:       activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 			awaiting:     true,
-			options:      &apiactivitypb.AsyncHandoffOptions{},
+			options:      &apiactivitypb.HandoffOptions{},
 			wantState:    enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED,
 			wantAwaiting: true,
 		},
@@ -243,8 +243,8 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 			name:         "pending reset retains phase",
 			status:       activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 			awaiting:     true,
-			options:      &apiactivitypb.AsyncHandoffOptions{},
-			wantState:    enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION,
+			options:      &apiactivitypb.HandoffOptions{},
+			wantState:    enumspb.PENDING_ACTIVITY_STATE_HANDED_OFF,
 			wantAwaiting: true,
 		},
 		{
@@ -252,7 +252,7 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 			status:       activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 			keepPaused:   true,
 			awaiting:     true,
-			options:      &apiactivitypb.AsyncHandoffOptions{},
+			options:      &apiactivitypb.HandoffOptions{},
 			wantState:    enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
 			wantAwaiting: true,
 		},
@@ -260,21 +260,21 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 			name:      "queued retry retains historical handoff",
 			status:    activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			awaiting:  true,
-			options:   &apiactivitypb.AsyncHandoffOptions{},
+			options:   &apiactivitypb.HandoffOptions{},
 			wantState: enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
 		},
 		{
 			name:      "fully paused activity has no active phase",
 			status:    activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 			awaiting:  true,
-			options:   &apiactivitypb.AsyncHandoffOptions{},
+			options:   &apiactivitypb.HandoffOptions{},
 			wantState: enumspb.PENDING_ACTIVITY_STATE_PAUSED,
 		},
 		{
 			name:      "closed activity retains only historical handoff",
 			status:    activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 			awaiting:  true,
-			options:   &apiactivitypb.AsyncHandoffOptions{},
+			options:   &apiactivitypb.HandoffOptions{},
 			wantState: enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
 		},
 	} {
@@ -300,12 +300,12 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 
 			a := &Activity{
 				ActivityState: &activitypb.ActivityState{
-					Status:              tc.status,
-					ResetShouldPause:    tc.keepPaused,
-					AwaitingCompletion:  tc.awaiting,
-					AsyncHandoffTime:    handoffTime,
-					AsyncHandoffOptions: tc.options,
-					ScheduleTime:        timestamppb.New(defaultTime),
+					Status:             tc.status,
+					ResetShouldPause:   tc.keepPaused,
+					AwaitingCompletion: tc.awaiting,
+					AsyncHandoffTime:   handoffTime,
+					HandoffOptions:     tc.options,
+					ScheduleTime:       timestamppb.New(defaultTime),
 				},
 				LastAttempt: chasm.NewDataField(ctx, attempt),
 				RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{}),
@@ -321,7 +321,7 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 			require.Equal(t, tc.wantAwaiting, info.GetAwaitingCompletion())
 			require.EqualValues(t, 3, info.GetAttempt())
 			require.Equal(t, wantCount, info.GetHandoffAttempt())
-			protorequire.ProtoEqual(t, tc.options, info.GetAsyncHandoffOptions())
+			protorequire.ProtoEqual(t, tc.options, info.GetHandoffOptions())
 			protorequire.ProtoEqual(t, handoffTime, info.GetAsyncHandoffTime())
 		})
 	}

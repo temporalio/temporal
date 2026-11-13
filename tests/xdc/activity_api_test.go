@@ -327,7 +327,7 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 		expectedRunState       enumspb.PendingActivityState
 		expectedHandoffAttempt int32
 	}{
-		{name: "AwaitingCompletion", expectedRunState: enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION, expectedHandoffAttempt: 1},
+		{name: "HandedOff", expectedRunState: enumspb.PENDING_ACTIVITY_STATE_HANDED_OFF, expectedHandoffAttempt: 1},
 		{name: "StartToCloseExpiresDuringHandoffBackoff", handoffRetry: true, expectedRunState: enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, expectedHandoffAttempt: 2},
 	} {
 		s.Run(testCase.name, func() {
@@ -339,13 +339,13 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 				Namespace: ns, ActivityId: tv.ActivityID(), ActivityType: tv.ActivityType(), TaskQueue: tv.TaskQueue(),
 				StartToCloseTimeout: durationpb.New(time.Hour),
 				RetryPolicy:         &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), BackoffCoefficient: 1, MaximumAttempts: 3},
-				AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+				HandoffOptions: &activitypb.HandoffOptions{
 					StartToHandoffTimeout: durationpb.New(time.Hour), HandoffToCloseTimeout: durationpb.New(time.Hour),
 					RetryPolicy: &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Hour), MaximumAttempts: 3},
 				},
 			}
 			if !testCase.handoffRetry {
-				request.AsyncHandoffOptions = nil
+				request.HandoffOptions = nil
 			}
 
 			started, err := s.clusters[0].FrontendClient().StartActivityExecution(ctx, request)
@@ -390,7 +390,7 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 			require.Equal(t, !testCase.handoffRetry, before.GetInfo().GetAwaitingCompletion())
 			if !testCase.handoffRetry {
 				require.Zero(t, before.GetInfo().GetHandoffAttempt())
-				require.Nil(t, before.GetInfo().GetAsyncHandoffOptions())
+				require.Nil(t, before.GetInfo().GetHandoffOptions())
 				require.NotNil(t, before.GetInfo().GetAsyncHandoffTime())
 			} else {
 				require.Equal(t, testCase.expectedHandoffAttempt, before.GetInfo().GetHandoffAttempt())
@@ -401,7 +401,7 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 				Namespace: ns, ActivityId: request.ActivityId, RunId: started.GetRunId(),
 				ActivityOptions: &activitypb.ActivityOptions{
 					StartToCloseTimeout: durationpb.New(30 * time.Minute),
-					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+					HandoffOptions: &activitypb.HandoffOptions{
 						StartToHandoffTimeout: durationpb.New(30 * time.Minute),
 						HandoffToCloseTimeout: durationpb.New(30 * time.Minute),
 						RetryPolicy: &commonpb.RetryPolicy{
@@ -409,14 +409,14 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 						},
 					},
 				},
-				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout", "async_handoff_options"}},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout", "handoff_options"}},
 			})
 			require.NoError(t, err)
 			afterUpdate, err := s.clusters[0].FrontendClient().DescribeActivityExecution(ctx, describe)
 			require.NoError(t, err)
 			require.Equal(t, testCase.expectedHandoffAttempt, afterUpdate.GetInfo().GetHandoffAttempt())
 			protorequire.ProtoEqual(t, before.GetInfo().GetAsyncHandoffTime(), afterUpdate.GetInfo().GetAsyncHandoffTime())
-			protorequire.ProtoEqual(t, updated.GetActivityOptions().GetAsyncHandoffOptions(), afterUpdate.GetInfo().GetAsyncHandoffOptions())
+			protorequire.ProtoEqual(t, updated.GetActivityOptions().GetHandoffOptions(), afterUpdate.GetInfo().GetHandoffOptions())
 			require.Equal(t, 30*time.Minute, afterUpdate.GetInfo().GetStartToCloseTimeout().AsDuration())
 			if testCase.handoffRetry {
 				// The revised delay has elapsed. Describe hides it, but no worker picks up the queued retry.
@@ -436,7 +436,7 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 				require.Equal(t, testCase.expectedHandoffAttempt, replicated.GetInfo().GetHandoffAttempt())
 				require.Equal(t, before.GetInfo().GetAwaitingCompletion(), replicated.GetInfo().GetAwaitingCompletion())
 				protorequire.ProtoEqual(t, before.GetInfo().GetAsyncHandoffTime(), replicated.GetInfo().GetAsyncHandoffTime())
-				protorequire.ProtoEqual(t, before.GetInfo().GetAsyncHandoffOptions(), replicated.GetInfo().GetAsyncHandoffOptions())
+				protorequire.ProtoEqual(t, before.GetInfo().GetHandoffOptions(), replicated.GetInfo().GetHandoffOptions())
 				protorequire.ProtoEqual(t, before.GetInfo().GetStartToCloseTimeout(), replicated.GetInfo().GetStartToCloseTimeout())
 				protorequire.ProtoEqual(t, before.GetInfo().GetCurrentRetryInterval(), replicated.GetInfo().GetCurrentRetryInterval())
 				protorequire.ProtoEqual(t, before.GetInfo().GetLastAttemptCompleteTime(), replicated.GetInfo().GetLastAttemptCompleteTime())
@@ -452,7 +452,7 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 				task = poll(client)
 				require.EqualValues(t, 1, task.GetAttempt())
 				require.EqualValues(t, 2, task.GetHandoffAttempt())
-				protorequire.ProtoEqual(t, before.GetInfo().GetAsyncHandoffOptions(), task.GetAsyncHandoffOptions())
+				protorequire.ProtoEqual(t, before.GetInfo().GetHandoffOptions(), task.GetHandoffOptions())
 				protorequire.ProtoEqual(t, before.GetInfo().GetStartToCloseTimeout(), task.GetStartToCloseTimeout())
 
 				// Put that delivery back in a long backoff to check its replicated carried clock.
@@ -490,21 +490,21 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 					Namespace: ns, ActivityId: request.ActivityId, RunId: started.GetRunId(),
 					ActivityOptions: &activitypb.ActivityOptions{
 						StartToCloseTimeout: durationpb.New(time.Hour),
-						AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+						HandoffOptions: &activitypb.HandoffOptions{
 							StartToHandoffTimeout: durationpb.New(time.Hour),
 							HandoffToCloseTimeout: durationpb.New(time.Hour),
 						},
 					},
 					UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
 						"start_to_close_timeout",
-						"async_handoff_options.start_to_handoff_timeout",
-						"async_handoff_options.handoff_to_close_timeout",
+						"handoff_options.start_to_handoff_timeout",
+						"handoff_options.handoff_to_close_timeout",
 					}},
 				})
 				require.NoError(t, err)
 				protorequire.ProtoEqual(t, request.GetStartToCloseTimeout(), restored.GetActivityOptions().GetStartToCloseTimeout())
-				protorequire.ProtoEqual(t, request.GetAsyncHandoffOptions().GetStartToHandoffTimeout(), restored.GetActivityOptions().GetAsyncHandoffOptions().GetStartToHandoffTimeout())
-				protorequire.ProtoEqual(t, request.GetAsyncHandoffOptions().GetHandoffToCloseTimeout(), restored.GetActivityOptions().GetAsyncHandoffOptions().GetHandoffToCloseTimeout())
+				protorequire.ProtoEqual(t, request.GetHandoffOptions().GetStartToHandoffTimeout(), restored.GetActivityOptions().GetHandoffOptions().GetStartToHandoffTimeout())
+				protorequire.ProtoEqual(t, request.GetHandoffOptions().GetHandoffToCloseTimeout(), restored.GetActivityOptions().GetHandoffOptions().GetHandoffToCloseTimeout())
 
 				task = poll(client)
 				require.EqualValues(t, 2, task.GetAttempt())
@@ -516,7 +516,7 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 				after, err := client.DescribeActivityExecution(ctx, describe)
 				require.NoError(t, err)
 				protorequire.ProtoEqual(t, before.GetInfo().GetAsyncHandoffTime(), after.GetInfo().GetAsyncHandoffTime())
-				protorequire.ProtoEqual(t, before.GetInfo().GetAsyncHandoffOptions(), after.GetInfo().GetAsyncHandoffOptions())
+				protorequire.ProtoEqual(t, before.GetInfo().GetHandoffOptions(), after.GetInfo().GetHandoffOptions())
 				protorequire.ProtoEqual(t, before.GetInfo().GetStartToCloseTimeout(), after.GetInfo().GetStartToCloseTimeout())
 			}
 

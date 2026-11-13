@@ -179,7 +179,7 @@ message ActivityState {
   google.protobuf.Timestamp async_handoff_time = 27;
 
   // Present when the activity uses separate handoff and external-completion timeout/retry settings.
-  temporal.api.activity.v1.AsyncHandoffOptions async_handoff_options = 28;
+  temporal.api.activity.v1.HandoffOptions handoff_options = 28;
 }
 
 message ActivityCancelState {
@@ -218,7 +218,7 @@ enum ActivityRetryType {
   ACTIVITY_RETRY_TYPE_UNSPECIFIED = 0;
   // Uses ActivityOptions.retry_policy and advances the activity attempt.
   ACTIVITY_RETRY_TYPE_ACTIVITY = 1;
-  // Uses AsyncHandoffOptions.retry_policy and advances only the handoff attempt.
+  // Uses HandoffOptions.retry_policy and advances only the handoff attempt.
   ACTIVITY_RETRY_TYPE_HANDOFF = 2;
 }
 

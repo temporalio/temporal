@@ -53,7 +53,7 @@ type Config struct {
 	HasScheduleToStart          bool
 	HasHeartbeat                bool
 	HasStartDelay               bool
-	AsyncHandoffOptions         bool
+	HandoffOptions              bool
 	HasStartToClose             bool // Used by opted-in activities; legacy traces always configure start-to-close.
 	HasStartToHandoff           bool
 	HasHandoffToClose           bool

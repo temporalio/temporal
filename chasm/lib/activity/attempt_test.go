@@ -406,7 +406,7 @@ func TestHandoffRetryPolicySelection(t *testing.T) {
 			if testCase.zeroInitialInterval {
 				policy := a.RetryPolicy
 				if testCase.expectedType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
-					policy = a.AsyncHandoffOptions.RetryPolicy
+					policy = a.HandoffOptions.RetryPolicy
 				}
 				policy.InitialInterval = durationpb.New(0)
 			}
@@ -515,10 +515,10 @@ func TestHandoffRetryEligibility(t *testing.T) {
 			}
 
 			if testCase.handoffNil {
-				a.AsyncHandoffOptions.RetryPolicy = nil
+				a.HandoffOptions.RetryPolicy = nil
 			}
 
-			policy := a.GetAsyncHandoffOptions().GetRetryPolicy()
+			policy := a.GetHandoffOptions().GetRetryPolicy()
 			if testCase.expectedType == activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY {
 				policy = a.GetRetryPolicy()
 			}
@@ -618,7 +618,7 @@ func TestHandoffRetryOperatorPrecedence(t *testing.T) {
 			a, ctx := newHandoffRetryTestActivity(t)
 			a.AwaitingCompletion = testCase.handedOff
 			if !testCase.optionsPresent {
-				a.AsyncHandoffOptions = nil
+				a.HandoffOptions = nil
 			}
 
 			a.Status = testCase.requestedStatus
@@ -665,7 +665,7 @@ func newHandoffRetryTestActivity(t *testing.T) (*Activity, *chasm.MockMutableCon
 				BackoffCoefficient: 2,
 				MaximumAttempts:    5,
 			},
-			AsyncHandoffOptions: &apiactivitypb.AsyncHandoffOptions{
+			HandoffOptions: &apiactivitypb.HandoffOptions{
 				StartToHandoffTimeout: durationpb.New(30 * time.Second),
 				HandoffToCloseTimeout: durationpb.New(50 * time.Second),
 				RetryPolicy: &commonpb.RetryPolicy{
@@ -711,7 +711,7 @@ func TestTryRescheduleRejectsInvalidTimeout(t *testing.T) {
 
 			a, ctx := newHandoffRetryTestActivity(t)
 			if testCase.withoutOptions {
-				a.AsyncHandoffOptions = nil
+				a.HandoffOptions = nil
 			}
 
 			beforeState := common.CloneProto(a.ActivityState)

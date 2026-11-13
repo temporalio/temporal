@@ -48,7 +48,7 @@ func ValidateAndNormalizeStandaloneActivity(
 		return err
 	}
 
-	if options.GetAsyncHandoffOptions() != nil {
+	if options.GetHandoffOptions() != nil {
 		// TODO: Reuse shared handoff timeout validation for opted-in workflow activities when WFA
 		// async handoff is supported, preserving workflow-specific limits.
 		defaults := getDefaultActivityRetrySettings(namespaceName.String())
@@ -263,8 +263,8 @@ func validateOriginalOptionsRestorable(original *activitypb.ActivityOptions) err
 		return serviceerror.NewInvalidArgument("cannot restore original options: no original task queue was recorded for this activity")
 	}
 
-	noPhaseCoverage := original.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration() <= 0 ||
-		original.GetAsyncHandoffOptions().GetHandoffToCloseTimeout().AsDuration() <= 0
+	noPhaseCoverage := original.GetHandoffOptions().GetStartToHandoffTimeout().AsDuration() <= 0 ||
+		original.GetHandoffOptions().GetHandoffToCloseTimeout().AsDuration() <= 0
 	if original.GetScheduleToCloseTimeout().AsDuration() <= 0 &&
 		original.GetStartToCloseTimeout().AsDuration() <= 0 && noPhaseCoverage {
 		return serviceerror.NewInvalidArgument("cannot restore original options: a positive schedule-to-close or start-to-close timeout, or both handoff phase timeouts, is required")
@@ -524,30 +524,30 @@ func validateAndNormalizeRequestCancelActivityExecutionRequest(
 // form, as produced by util.ConvertPathToCamel) that UpdateActivityExecutionOptions supports.
 // It must stay in sync with the fields handled in MergeActivityOptions.
 var supportedActivityOptionsUpdatePaths = map[string]struct{}{
-	"taskQueue.name":                                     {},
-	"scheduleToCloseTimeout":                             {},
-	"scheduleToStartTimeout":                             {},
-	"startToCloseTimeout":                                {},
-	"heartbeatTimeout":                                   {},
-	"priority":                                           {},
-	"priority.priorityKey":                               {},
-	"priority.fairnessKey":                               {},
-	"priority.fairnessWeight":                            {},
-	"retryPolicy":                                        {},
-	"retryPolicy.initialInterval":                        {},
-	"retryPolicy.backoffCoefficient":                     {},
-	"retryPolicy.maximumInterval":                        {},
-	"retryPolicy.maximumAttempts":                        {},
-	"startDelay":                                         {},
-	"asyncHandoffOptions":                                {},
-	"asyncHandoffOptions.startToHandoffTimeout":          {},
-	"asyncHandoffOptions.handoffToCloseTimeout":          {},
-	"asyncHandoffOptions.heartbeatTimeout":               {},
-	"asyncHandoffOptions.retryPolicy":                    {},
-	"asyncHandoffOptions.retryPolicy.initialInterval":    {},
-	"asyncHandoffOptions.retryPolicy.backoffCoefficient": {},
-	"asyncHandoffOptions.retryPolicy.maximumInterval":    {},
-	"asyncHandoffOptions.retryPolicy.maximumAttempts":    {},
+	"taskQueue.name":                                {},
+	"scheduleToCloseTimeout":                        {},
+	"scheduleToStartTimeout":                        {},
+	"startToCloseTimeout":                           {},
+	"heartbeatTimeout":                              {},
+	"priority":                                      {},
+	"priority.priorityKey":                          {},
+	"priority.fairnessKey":                          {},
+	"priority.fairnessWeight":                       {},
+	"retryPolicy":                                   {},
+	"retryPolicy.initialInterval":                   {},
+	"retryPolicy.backoffCoefficient":                {},
+	"retryPolicy.maximumInterval":                   {},
+	"retryPolicy.maximumAttempts":                   {},
+	"startDelay":                                    {},
+	"handoffOptions":                                {},
+	"handoffOptions.startToHandoffTimeout":          {},
+	"handoffOptions.handoffToCloseTimeout":          {},
+	"handoffOptions.heartbeatTimeout":               {},
+	"handoffOptions.retryPolicy":                    {},
+	"handoffOptions.retryPolicy.initialInterval":    {},
+	"handoffOptions.retryPolicy.backoffCoefficient": {},
+	"handoffOptions.retryPolicy.maximumInterval":    {},
+	"handoffOptions.retryPolicy.maximumAttempts":    {},
 }
 
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
@@ -691,7 +691,7 @@ func validateAndNormalizeUpdateActivityExecutionOptionsRequest(
 		}
 	}
 
-	if util.FieldMaskHasPathOrSubPath(updateFields, "asyncHandoffOptions") {
+	if util.FieldMaskHasPathOrSubPath(updateFields, "handoffOptions") {
 		return validateHandoffOptionsUpdate(opts, updateFields, getDefaultActivityRetrySettings(req.GetNamespace()))
 	}
 
@@ -962,11 +962,11 @@ func validateAndNormalizeHandoffOptions(options *activitypb.ActivityOptions, ret
 		return serviceerror.NewInternal("activity options projection is nil")
 	}
 
-	if options.GetAsyncHandoffOptions() == nil {
+	if options.GetHandoffOptions() == nil {
 		return nil
 	}
 
-	handoff := options.GetAsyncHandoffOptions()
+	handoff := options.GetHandoffOptions()
 	for _, timeout := range []struct {
 		name  string
 		value *durationpb.Duration
@@ -975,9 +975,9 @@ func validateAndNormalizeHandoffOptions(options *activitypb.ActivityOptions, ret
 		{name: "ScheduleToStartTimeout", value: options.ScheduleToStartTimeout},
 		{name: "StartToCloseTimeout", value: options.StartToCloseTimeout},
 		{name: "HeartbeatTimeout", value: options.HeartbeatTimeout},
-		{name: "AsyncHandoffOptions.StartToHandoffTimeout", value: handoff.StartToHandoffTimeout},
-		{name: "AsyncHandoffOptions.HandoffToCloseTimeout", value: handoff.HandoffToCloseTimeout},
-		{name: "AsyncHandoffOptions.HeartbeatTimeout", value: handoff.HeartbeatTimeout},
+		{name: "HandoffOptions.StartToHandoffTimeout", value: handoff.StartToHandoffTimeout},
+		{name: "HandoffOptions.HandoffToCloseTimeout", value: handoff.HandoffToCloseTimeout},
+		{name: "HandoffOptions.HeartbeatTimeout", value: handoff.HeartbeatTimeout},
 	} {
 		if err := timestamp.ValidateAndCapProtoDuration(timeout.value); err != nil {
 			return serviceerror.NewInvalidArgumentf("invalid %s: %v", timeout.name, err)
@@ -1036,31 +1036,31 @@ func capPositive(value *durationpb.Duration, bounds ...*durationpb.Duration) *du
 
 // validateHandoffOptionsUpdate validates selected values; coverage is checked after merging with stored options.
 func validateHandoffOptionsUpdate(options *activitypb.ActivityOptions, fields map[string]struct{}, defaults retrypolicy.DefaultRetrySettings) error {
-	handoff := options.GetAsyncHandoffOptions()
-	if util.FieldMaskHasSubPath(fields, "asyncHandoffOptions") && handoff == nil {
-		return serviceerror.NewInvalidArgument("AsyncHandoffOptions is not provided")
+	handoff := options.GetHandoffOptions()
+	if util.FieldMaskHasSubPath(fields, "handoffOptions") && handoff == nil {
+		return serviceerror.NewInvalidArgument("HandoffOptions is not provided")
 	}
 
-	if util.FieldMaskHasSubPath(fields, "asyncHandoffOptions.retryPolicy") && handoff.GetRetryPolicy() == nil {
-		return serviceerror.NewInvalidArgument("AsyncHandoffOptions.RetryPolicy is not provided")
+	if util.FieldMaskHasSubPath(fields, "handoffOptions.retryPolicy") && handoff.GetRetryPolicy() == nil {
+		return serviceerror.NewInvalidArgument("HandoffOptions.RetryPolicy is not provided")
 	}
 
 	if handoff == nil {
 		return nil
 	}
 
-	_, replaceOptions := fields["asyncHandoffOptions"]
+	_, replaceOptions := fields["handoffOptions"]
 	for _, field := range []struct {
 		path, name string
 		value      *durationpb.Duration
 	}{
-		{path: "asyncHandoffOptions.startToHandoffTimeout", name: "StartToHandoffTimeout", value: handoff.StartToHandoffTimeout},
-		{path: "asyncHandoffOptions.handoffToCloseTimeout", name: "HandoffToCloseTimeout", value: handoff.HandoffToCloseTimeout},
-		{path: "asyncHandoffOptions.heartbeatTimeout", name: "HeartbeatTimeout", value: handoff.HeartbeatTimeout},
+		{path: "handoffOptions.startToHandoffTimeout", name: "StartToHandoffTimeout", value: handoff.StartToHandoffTimeout},
+		{path: "handoffOptions.handoffToCloseTimeout", name: "HandoffToCloseTimeout", value: handoff.HandoffToCloseTimeout},
+		{path: "handoffOptions.heartbeatTimeout", name: "HeartbeatTimeout", value: handoff.HeartbeatTimeout},
 	} {
 		if _, selected := fields[field.path]; selected || replaceOptions {
 			if err := timestamp.ValidateAndCapProtoDuration(field.value); err != nil {
-				return serviceerror.NewInvalidArgumentf("invalid AsyncHandoffOptions.%s: %v", field.name, err)
+				return serviceerror.NewInvalidArgumentf("invalid HandoffOptions.%s: %v", field.name, err)
 			}
 		}
 	}
@@ -1069,11 +1069,11 @@ func validateHandoffOptionsUpdate(options *activitypb.ActivityOptions, fields ma
 }
 
 func validateHandoffRetryPolicyUpdate(
-	handoff *activitypb.AsyncHandoffOptions,
+	handoff *activitypb.HandoffOptions,
 	fields map[string]struct{},
 	defaults retrypolicy.DefaultRetrySettings,
 ) error {
-	if _, replacePolicy := fields["asyncHandoffOptions.retryPolicy"]; replacePolicy {
+	if _, replacePolicy := fields["handoffOptions.retryPolicy"]; replacePolicy {
 		if handoff.RetryPolicy == nil {
 			handoff.RetryPolicy = &commonpb.RetryPolicy{}
 		}
@@ -1082,7 +1082,7 @@ func validateHandoffRetryPolicyUpdate(
 		return retrypolicy.Validate(handoff.RetryPolicy)
 	}
 
-	if _, replaceOptions := fields["asyncHandoffOptions"]; replaceOptions && handoff.GetRetryPolicy() != nil {
+	if _, replaceOptions := fields["handoffOptions"]; replaceOptions && handoff.GetRetryPolicy() != nil {
 		// Validate a copy so omitted-policy intent remains available to the History update path.
 		policy := common.CloneProto(handoff.GetRetryPolicy())
 		retrypolicy.EnsureDefaults(policy, defaults)
@@ -1094,8 +1094,8 @@ func validateHandoffRetryPolicyUpdate(
 		path, name string
 		value      *durationpb.Duration
 	}{
-		{path: "asyncHandoffOptions.retryPolicy.initialInterval", name: "InitialInterval", value: policy.GetInitialInterval()},
-		{path: "asyncHandoffOptions.retryPolicy.maximumInterval", name: "MaximumInterval", value: policy.GetMaximumInterval()},
+		{path: "handoffOptions.retryPolicy.initialInterval", name: "InitialInterval", value: policy.GetInitialInterval()},
+		{path: "handoffOptions.retryPolicy.maximumInterval", name: "MaximumInterval", value: policy.GetMaximumInterval()},
 	} {
 		if _, selected := fields[field.path]; selected {
 			if err := timestamp.ValidateAndCapProtoDuration(field.value); err != nil {
@@ -1104,11 +1104,11 @@ func validateHandoffRetryPolicyUpdate(
 		}
 	}
 
-	if _, selected := fields["asyncHandoffOptions.retryPolicy.backoffCoefficient"]; selected && policy.GetBackoffCoefficient() < 1 {
+	if _, selected := fields["handoffOptions.retryPolicy.backoffCoefficient"]; selected && policy.GetBackoffCoefficient() < 1 {
 		return serviceerror.NewInvalidArgument("handoff BackoffCoefficient cannot be less than 1")
 	}
 
-	if _, selected := fields["asyncHandoffOptions.retryPolicy.maximumAttempts"]; selected && policy.GetMaximumAttempts() < 0 {
+	if _, selected := fields["handoffOptions.retryPolicy.maximumAttempts"]; selected && policy.GetMaximumAttempts() < 0 {
 		return serviceerror.NewInvalidArgument("handoff MaximumAttempts cannot be negative")
 	}
 

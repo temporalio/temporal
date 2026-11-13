@@ -593,17 +593,17 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 				now := defaultTime.Add(15 * time.Second)
 				ctx.HandleNow = func(chasm.Component) time.Time { return now }
 				a.StartToCloseTimeout = durationpb.New(2 * time.Minute)
-				a.AsyncHandoffOptions.StartToHandoffTimeout = durationpb.New(time.Minute)
-				a.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(90 * time.Second)
-				a.AsyncHandoffOptions.HeartbeatTimeout = durationpb.New(testCase.preHandoffHeartbeatTimeout)
+				a.HandoffOptions.StartToHandoffTimeout = durationpb.New(time.Minute)
+				a.HandoffOptions.HandoffToCloseTimeout = durationpb.New(90 * time.Second)
+				a.HandoffOptions.HeartbeatTimeout = durationpb.New(testCase.preHandoffHeartbeatTimeout)
 
 				a.HeartbeatTimeout = durationpb.New(30 * time.Second)
 				ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "test-namespace-id", BusinessId: "test-activity"}).Marshal()
 				require.NoError(t, err)
 
 				before := common.CloneProto(a.LastAttempt.Get(ctx))
-				startToHandoffDeadline := before.GetStartedTime().AsTime().Add(a.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration())
-				handoffToCloseTimeout := a.GetAsyncHandoffOptions().GetHandoffToCloseTimeout().AsDuration()
+				startToHandoffDeadline := before.GetStartedTime().AsTime().Add(a.GetHandoffOptions().GetStartToHandoffTimeout().AsDuration())
+				handoffToCloseTimeout := a.GetHandoffOptions().GetHandoffToCloseTimeout().AsDuration()
 				postHandoffHeartbeatTimeout := a.GetHeartbeatTimeout().AsDuration()
 				token := &tokenspb.Task{Attempt: before.GetCount(), ActivityAttemptStamp: before.GetStartedStamp(), ComponentRef: ref}
 				_, err = a.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{Token: token, Request: &historyservice.RecordActivityTaskHeartbeatRequest{NamespaceId: "test-namespace-id", HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{Details: payloads.EncodeString("external-job")}}})
@@ -706,7 +706,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 					expectedState = enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 				case "no policy":
 					if typ == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
-						a.AsyncHandoffOptions.RetryPolicy = nil
+						a.HandoffOptions.RetryPolicy = nil
 					} else {
 						a.RetryPolicy = nil
 					}
@@ -749,7 +749,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 		a, ctx := newHandoffRetryTestActivity(t)
 		now := ctx.Now(a)
 		ctx.HandleNow = func(chasm.Component) time.Time { return now }
-		a.StartToCloseTimeout = a.GetAsyncHandoffOptions().GetStartToHandoffTimeout()
+		a.StartToCloseTimeout = a.GetHandoffOptions().GetStartToHandoffTimeout()
 		require.NoError(t, a.issueHandoffTimers(ctx, true, true))
 		require.Len(t, ctx.Tasks, 2)
 
@@ -814,7 +814,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 			t.Parallel()
 
 			a, ctx := newHandoffRetryTestActivity(t)
-			a.AsyncHandoffOptions = nil
+			a.HandoffOptions = nil
 			beforeActivity := common.CloneProto(a.ActivityState)
 			beforeAttempt := common.CloneProto(a.LastAttempt.Get(ctx))
 
