@@ -1,12 +1,14 @@
 package matching
 
 import (
-	"sync"
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 )
+
+const pollerShareInitMaxSize = 1000
 
 // shareVerdict says where one worker's poller count sits relative to its fleet's mean.
 type shareVerdict int
@@ -24,24 +26,16 @@ const (
 // physical queue, and compares a worker's poller count against the fleet's mean. It exists
 // because scaling suggestions ride on dispatched tasks, so growth is proportional to current
 // size and imbalance between identical workers persists rather than correcting.
+//
+// Entries expire on the same TTL as pollerHistory, which covers workers that stopped polling
+// without shutting down cleanly.
 type pollerShareTracker struct {
-	ttl        time.Duration
-	timeSource clock.TimeSource
-
-	mu      sync.Mutex
-	reports map[string]pollerShareReport
-}
-
-type pollerShareReport struct {
-	target   int64
-	reported time.Time
+	reports cache.Cache // workerInstanceKey -> target (int64)
 }
 
 func newPollerShareTracker(ttl time.Duration, timeSource clock.TimeSource) *pollerShareTracker {
 	return &pollerShareTracker{
-		ttl:        ttl,
-		timeSource: timeSource,
-		reports:    make(map[string]pollerShareReport),
+		reports: cache.New(pollerShareInitMaxSize, &cache.Options{TTL: ttl, TimeSource: timeSource}),
 	}
 }
 
@@ -55,12 +49,7 @@ func (t *pollerShareTracker) record(workerInstanceKey string, info *taskqueuepb.
 	if t == nil || workerInstanceKey == "" || info.GetTargetPollers() <= 0 {
 		return
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.reports[workerInstanceKey] = pollerShareReport{
-		target:   int64(info.GetTargetPollers()),
-		reported: t.timeSource.Now(),
-	}
+	t.reports.Put(workerInstanceKey, int64(info.GetTargetPollers()))
 }
 
 // forget drops a worker that has shut down. Without this a departed worker keeps inflating
@@ -70,9 +59,7 @@ func (t *pollerShareTracker) forget(workerInstanceKey string) {
 	if t == nil {
 		return
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	delete(t.reports, workerInstanceKey)
+	t.reports.Delete(workerInstanceKey)
 }
 
 // classify compares one worker's poller count against the fleet mean. band is a multiplier
@@ -83,40 +70,31 @@ func (t *pollerShareTracker) classify(workerInstanceKey string, band float64) sh
 		return shareUnknown
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	now := t.timeSource.Now()
-	var self pollerShareReport
-	var totalTarget int64
+	var own, total int64
 	live := 0
-	for key, report := range t.reports {
-		// Covers workers that stopped polling without shutting down cleanly -- crashes and
-		// killed pods, where forget never runs. Swept here rather than on a timer because
-		// this is the only reader that cares.
-		if now.Sub(report.reported) > t.ttl {
-			delete(t.reports, key)
-			continue
-		}
-		totalTarget += report.target
+	ite := t.reports.Iterator()
+	defer ite.Close()
+	for ite.HasNext() {
+		entry := ite.Next()
+		target := entry.Value().(int64)
+		total += target
 		live++
-		if key == workerInstanceKey {
-			self = report
+		if entry.Key().(string) == workerInstanceKey {
+			own = target
 		}
 	}
 
 	// A lone reporter is trivially at its own mean; it takes a peer before the comparison
 	// means anything.
-	if live < 2 || self.target == 0 {
+	if live < 2 || own == 0 {
 		return shareUnknown
 	}
 
-	own := float64(self.target)
-	fleet := float64(totalTarget) / float64(live)
+	fleet := float64(total) / float64(live)
 	switch {
-	case own > fleet*band:
+	case float64(own) > fleet*band:
 		return shareOver
-	case own*band < fleet:
+	case float64(own)*band < fleet:
 		return shareUnder
 	default:
 		return shareFair
