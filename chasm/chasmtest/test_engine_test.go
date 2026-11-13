@@ -356,6 +356,154 @@ func countTasks(t *testing.T, e *chasmtest.Engine, ref chasm.ComponentRef, categ
 	return len(byCategory[category])
 }
 
+// TestPollComponentReturnsContextError: like the production engine, a poll whose predicate is never
+// satisfied returns the context's error once the context is done, rather than (nil, nil).
+func TestPollComponentReturnsContextError(t *testing.T) {
+	neverSatisfied := func(*tests.PayloadStore, chasm.Context, any) (any, bool, error) {
+		return nil, false, nil
+	}
+
+	t.Run("deadline exceeded", func(t *testing.T) {
+		e, ref := startStore(t, 0)
+		ctx, cancel := context.WithTimeout(engineContext(e), 10*time.Millisecond)
+		defer cancel()
+		_, newRef, err := chasm.PollComponent(ctx, ref, neverSatisfied, nil)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.Nil(t, newRef)
+	})
+
+	t.Run("canceled", func(t *testing.T) {
+		e, ref := startStore(t, 0)
+		ctx, cancel := context.WithCancel(engineContext(e))
+		cancel()
+		_, newRef, err := chasm.PollComponent(ctx, ref, neverSatisfied, nil)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Nil(t, newRef)
+	})
+}
+
+// TestPollComponentWakesOnTransition: like the production engine, a transition that changes the tree
+// wakes pollers waiting on the execution without an explicit NotifyExecution call, including pollers
+// whose ref has no RunID.
+func TestPollComponentWakesOnTransition(t *testing.T) {
+	e, ref := startStore(t, 0)
+	currentRef := ref
+	currentRef.RunID = ""
+
+	// The predicate runs twice before the poller blocks: once before subscribing and once after.
+	// Waiting for both keeps the poller off the tree while the update below changes it.
+	evaluations := make(chan struct{}, 3)
+	ctx, cancel := context.WithTimeout(engineContext(e), 10*time.Second)
+	defer cancel()
+	pollErr := make(chan error, 1)
+	go func() {
+		_, newRef, err := chasm.PollComponent(ctx, currentRef,
+			func(s *tests.PayloadStore, _ chasm.Context, _ any) (any, bool, error) {
+				_, ok := s.Payloads["second"]
+				evaluations <- struct{}{}
+				return nil, ok, nil
+			}, nil)
+		if err == nil && newRef == nil {
+			err = errors.New("poll returned no ref")
+		}
+		pollErr <- err
+	}()
+	<-evaluations
+	<-evaluations
+
+	_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "second", 0)
+		}, nil)
+	require.NoError(t, err)
+	require.NoError(t, <-pollErr)
+}
+
+// TestStartExecutionGeneratesRunID: like the production engine, each new run gets its own RunID, so
+// earlier runs of the business ID stay addressable by theirs.
+func TestStartExecutionGeneratesRunID(t *testing.T) {
+	e, first := startStore(t, 0)
+	require.NotEmpty(t, first.RunID)
+
+	_, _, err := chasm.UpdateComponent(engineContext(e), first,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (tests.ClosePayloadStoreResponse, error) {
+			return s.Close(mc, nil)
+		}, nil)
+	require.NoError(t, err)
+
+	key := first.ExecutionKey
+	key.RunID = ""
+	result, err := chasm.StartExecution(engineContext(e), key,
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		}, nil)
+	require.NoError(t, err)
+	require.True(t, result.Created)
+	require.NotEmpty(t, result.ExecutionKey.RunID)
+	require.NotEqual(t, first.RunID, result.ExecutionKey.RunID)
+
+	// The first run is still there, and still has its payload.
+	_, err = chasm.ReadComponent(engineContext(e), first,
+		func(s *tests.PayloadStore, _ chasm.Context, _ any) (any, error) {
+			if _, ok := s.Payloads["first"]; !ok {
+				return nil, errors.New("first run lost its payload")
+			}
+			return nil, nil
+		}, nil)
+	require.NoError(t, err)
+}
+
+// TestFailedUpdateIsDiscarded: like the production engine, which reloads mutable state when a
+// transition fails, changes made by a failed update are not committed by a later transition.
+func TestFailedUpdateIsDiscarded(t *testing.T) {
+	e, ref := startStore(t, 0)
+	failure := errors.New("update failed")
+	_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			if err := addPayload(s, mc, "discarded", 0); err != nil {
+				return nil, err
+			}
+			return nil, failure
+		}, nil)
+	require.ErrorIs(t, err, failure)
+
+	_, _, err = chasm.UpdateComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "second", 0)
+		}, nil)
+	require.NoError(t, err)
+
+	payloads, err := chasm.ReadComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, _ chasm.Context, _ any) ([]string, error) {
+			return slices.Sorted(maps.Keys(s.Payloads)), nil
+		}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"first", "second"}, payloads)
+}
+
+// TestStartExecutionRejectsTerminateExisting: like the production engine, the TerminateExisting
+// conflict policy is not supported, and the running execution is left alone.
+func TestStartExecutionRejectsTerminateExisting(t *testing.T) {
+	e, ref := startStore(t, 0)
+	key := ref.ExecutionKey
+	key.RunID = ""
+	_, err := chasm.StartExecution(engineContext(e), key,
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			t.Fatal("startFn should not be called")
+			return nil, nil
+		}, nil,
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyTerminateExisting))
+	var unimplemented *serviceerror.Unimplemented
+	require.ErrorAs(t, err, &unimplemented)
+
+	state, err := chasm.ReadComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, ctx chasm.Context, _ any) (chasm.LifecycleState, error) {
+			return s.LifecycleState(ctx), nil
+		}, nil)
+	require.NoError(t, err)
+	require.Equal(t, chasm.LifecycleStateRunning, state)
+}
+
 func engineContext(e *chasmtest.Engine) context.Context {
 	return chasm.NewEngineContext(context.Background(), e)
 }

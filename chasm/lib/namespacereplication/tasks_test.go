@@ -402,8 +402,8 @@ func requireAuthoritativeMetric(
 // mutate optionally seeds initial state (e.g. a committed local apply for peer tests).
 func (env *nsreplTestEnv) start(mutation *namespacereplicationpb.NamespaceMutation, mutate func(*NamespaceMutationComponent)) chasm.ComponentRef {
 	env.t.Helper()
-	key := chasm.ExecutionKey{NamespaceID: "namespace-id", BusinessID: "ns-id:uuid", RunID: "run-id"}
-	_, err := chasm.StartExecution(
+	key := chasm.ExecutionKey{NamespaceID: "namespace-id", BusinessID: "ns-id:uuid"}
+	result, err := chasm.StartExecution(
 		env.engineCtx,
 		key,
 		func(mctx chasm.MutableContext, m *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
@@ -417,7 +417,7 @@ func (env *nsreplTestEnv) start(mutation *namespacereplicationpb.NamespaceMutati
 		mutation,
 	)
 	require.NoError(env.t, err)
-	return chasm.NewComponentRef[*NamespaceMutationComponent](key)
+	return chasm.NewComponentRef[*NamespaceMutationComponent](result.ExecutionKey)
 }
 
 func (env *nsreplTestEnv) read(ref chasm.ComponentRef) *NamespaceMutationComponent {
