@@ -114,10 +114,11 @@ type Config struct {
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
 	// the artificial delay added to standby cluster's view of active cluster's time
-	StandbyClusterDelay                  dynamicconfig.DurationPropertyFn
-	StandbyTaskMissingEventsResendDelay  dynamicconfig.DurationPropertyFnWithTaskTypeFilter
-	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFnWithTaskTypeFilter
-	ChasmStandbyTaskDiscardDelay         dynamicconfig.DurationPropertyFnWithChasmTaskTypeFilter
+	StandbyClusterDelay                   dynamicconfig.DurationPropertyFn
+	StandbyTaskMissingEventsResendDelay   dynamicconfig.DurationPropertyFnWithTaskTypeFilter
+	StandbyTaskMissingEventsDiscardDelay  dynamicconfig.DurationPropertyFnWithTaskTypeFilter
+	StandbyTaskRemoteVerificationInterval dynamicconfig.DurationPropertyFnWithTaskTypeFilter
+	ChasmStandbyTaskDiscardDelay          dynamicconfig.DurationPropertyFnWithChasmTaskTypeFilter
 
 	QueuePendingTaskCriticalCount      dynamicconfig.IntPropertyFn
 	QueueReaderStuckCriticalAttempts   dynamicconfig.IntPropertyFn
@@ -594,10 +595,11 @@ func NewConfig(
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
-		StandbyClusterDelay:                  dynamicconfig.StandbyClusterDelay.Get(dc),
-		StandbyTaskMissingEventsResendDelay:  dynamicconfig.StandbyTaskMissingEventsResendDelay.Get(dc),
-		StandbyTaskMissingEventsDiscardDelay: dynamicconfig.StandbyTaskMissingEventsDiscardDelay.Get(dc),
-		ChasmStandbyTaskDiscardDelay:         dynamicconfig.ChasmStandbyTaskDiscardDelay.Get(dc),
+		StandbyClusterDelay:                   dynamicconfig.StandbyClusterDelay.Get(dc),
+		StandbyTaskMissingEventsResendDelay:   dynamicconfig.StandbyTaskMissingEventsResendDelay.Get(dc),
+		StandbyTaskMissingEventsDiscardDelay:  dynamicconfig.StandbyTaskMissingEventsDiscardDelay.Get(dc),
+		StandbyTaskRemoteVerificationInterval: dynamicconfig.StandbyTaskRemoteVerificationInterval.Get(dc),
+		ChasmStandbyTaskDiscardDelay:          dynamicconfig.ChasmStandbyTaskDiscardDelay.Get(dc),
 
 		QueuePendingTaskCriticalCount:      dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
 		QueueReaderStuckCriticalAttempts:   dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),

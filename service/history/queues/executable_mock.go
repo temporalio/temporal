@@ -304,6 +304,20 @@ func (mr *MockExecutableMockRecorder) Nack(err any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockExecutable)(nil).Nack), err)
 }
 
+// RemoteVerificationState mocks base method.
+func (m *MockExecutable) RemoteVerificationState() RemoteVerificationState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoteVerificationState")
+	ret0, _ := ret[0].(RemoteVerificationState)
+	return ret0
+}
+
+// RemoteVerificationState indicates an expected call of RemoteVerificationState.
+func (mr *MockExecutableMockRecorder) RemoteVerificationState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteVerificationState", reflect.TypeOf((*MockExecutable)(nil).RemoteVerificationState))
+}
+
 // Reschedule mocks base method.
 func (m *MockExecutable) Reschedule() {
 	m.ctrl.T.Helper()
@@ -328,6 +342,18 @@ func (m *MockExecutable) RetryPolicy() backoff.RetryPolicy {
 func (mr *MockExecutableMockRecorder) RetryPolicy() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryPolicy", reflect.TypeOf((*MockExecutable)(nil).RetryPolicy))
+}
+
+// SetRemoteVerificationState mocks base method.
+func (m *MockExecutable) SetRemoteVerificationState(arg0 RemoteVerificationState) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRemoteVerificationState", arg0)
+}
+
+// SetRemoteVerificationState indicates an expected call of SetRemoteVerificationState.
+func (mr *MockExecutableMockRecorder) SetRemoteVerificationState(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRemoteVerificationState", reflect.TypeOf((*MockExecutable)(nil).SetRemoteVerificationState), arg0)
 }
 
 // SetScheduledTime mocks base method.
