@@ -256,10 +256,9 @@ func (c *ContextImpl) lockCommitted(ctx context.Context, priority locks.Priority
 				return ctx.Err()
 			}
 		}
-		if err := c.lock.Acquire(ctx, priority, 1); err != nil {
+		if err := c.acquireLock(ctx, priority, lockAcquirerCommitted, lockHolderRecheck); err != nil {
 			return err
 		}
-		c.lockAcquired(lockHolderRecheck)
 		p.mu.Lock()
 		if p.waiters[0] != waiter {
 			p.mu.Unlock()
@@ -332,10 +331,9 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 				return ctx.Err()
 			}
 		}
-		if err := c.lock.Acquire(ctx, priority, 1); err != nil {
+		if err := c.acquireLock(ctx, priority, lockAcquirerSpeculative, lockHolderRecheck); err != nil {
 			return err
 		}
-		c.lockAcquired(lockHolderRecheck)
 		wait := p.lockTimed()
 		blocked = len(p.waiters) != 0 || p.err != nil || p.submissions() >= maxPipelineSubmissions
 		p.mu.Unlock()
@@ -559,8 +557,7 @@ func (c *ContextImpl) executePersistenceGroup(group *commitGroup) {
 		err = serviceerror.NewInternal("workflow persistence panicked")
 	}
 	// Publication must settle a claimed write even when the shard or caller is canceled.
-	_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
-	c.lockAcquired(lockHolderPublish)
+	_ = c.acquireLock(context.Background(), locks.PriorityHigh, lockAcquirerPublish, lockHolderPublish)
 	c.publishPersistenceGroup(group, delta, err)
 	c.releaseLock()
 	if recovered != nil {
@@ -631,8 +628,7 @@ func (c *ContextImpl) submitPersistenceGroup(group *commitGroup) {
 	}
 	p.mu.Unlock()
 	// Publication must settle a claimed write even when the shard or caller is canceled.
-	_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
-	c.lockAcquired(lockHolderPublish)
+	_ = c.acquireLock(context.Background(), locks.PriorityHigh, lockAcquirerPublish, lockHolderPublish)
 	c.publishPersistenceGroup(group, delta, err)
 	c.releaseLock()
 	if recovered != nil {
@@ -905,8 +901,7 @@ func (c *ContextImpl) makeOperationCommitted(ctx context.Context, discard bool) 
 		<-changed
 	}
 	for {
-		_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
-		c.lockAcquired(lockHolderRecheck)
+		_ = c.acquireLock(context.Background(), locks.PriorityHigh, lockAcquirerCommitted, lockHolderRecheck)
 		p.mu.Lock()
 		remaining := p.tail()
 		p.mu.Unlock()

@@ -56,10 +56,12 @@ type (
 		operation      *operation
 		pipelineShard  historyi.ShardContext
 
-		// lockHolder and lockAcquiredAt describe the current lock holder for the hold duration timer.
-		// Only the holder reads or writes them.
+		// lockHolder, lockAcquiredAt, lockAcquirer, and lockWait describe the current lock holder for the
+		// hold duration and acquire wait timers. Only the holder reads or writes them.
 		lockHolder     string
 		lockAcquiredAt time.Time
+		lockAcquirer   string
+		lockWait       time.Duration
 
 		// taskCompletionBuffer holds the intermediate pages of an in-progress
 		// pagination of RespondWorkflowTaskCompleted requests; nil when no
@@ -115,6 +117,14 @@ type (
 )
 
 var _ historyi.WorkflowContext = (*ContextImpl)(nil)
+
+// Acquirer tag values for WorkflowContextLockAcquireWait: the path that took the lock.
+const (
+	lockAcquirerOperation   = "operation"
+	lockAcquirerCommitted   = "committed"
+	lockAcquirerSpeculative = "speculative"
+	lockAcquirerPublish     = "publish"
+)
 
 // Holder tag values for WorkflowContextLockHoldDuration. A recheck hold is one that is released
 // right away because the pipeline state does not admit the caller yet.
@@ -192,11 +202,7 @@ func (c *ContextImpl) Lock(
 	lockPriority locks.Priority,
 ) error {
 	if c.pipeline == nil {
-		if err := c.lock.Acquire(ctx, lockPriority, 1); err != nil {
-			return err
-		}
-		c.lockAcquired(lockHolderOperation)
-		return nil
+		return c.acquireLock(ctx, lockPriority, lockAcquirerOperation, lockHolderOperation)
 	}
 	return c.lockCommitted(ctx, lockPriority)
 }
@@ -205,8 +211,20 @@ func (c *ContextImpl) TryLock(lockPriority locks.Priority) bool {
 	if !c.lock.TryAcquire(lockPriority, 1) {
 		return false
 	}
+	c.lockAcquirer = ""
 	c.lockAcquired(lockHolderTryLock)
 	return true
+}
+
+// acquireLock takes the lock and keeps how long acquirer waited for it, which releaseLock records.
+func (c *ContextImpl) acquireLock(ctx context.Context, priority locks.Priority, acquirer, holder string) error {
+	start := time.Now()
+	if err := c.lock.Acquire(ctx, priority, 1); err != nil {
+		return err
+	}
+	c.lockAcquirer, c.lockWait = acquirer, time.Since(start)
+	c.lockAcquired(holder)
+	return nil
 }
 
 func (c *ContextImpl) lockAcquired(holder string) {
@@ -214,9 +232,16 @@ func (c *ContextImpl) lockAcquired(holder string) {
 	c.lockAcquiredAt = time.Now()
 }
 
+// releaseLock records the hold and acquire wait timers after releasing, so recording doesn't lengthen
+// the hold. The values are read first because the next holder overwrites them.
 func (c *ContextImpl) releaseLock() {
-	metrics.WorkflowContextLockHoldDuration.With(c.metricsHandler).Record(time.Since(c.lockAcquiredAt), metrics.StringTag("holder", c.lockHolder))
+	held, holder := time.Since(c.lockAcquiredAt), c.lockHolder
+	acquirer, wait := c.lockAcquirer, c.lockWait
 	c.lock.Release(1)
+	metrics.WorkflowContextLockHoldDuration.With(c.metricsHandler).Record(held, metrics.StringTag("holder", holder))
+	if acquirer != "" {
+		metrics.WorkflowContextLockAcquireWait.With(c.metricsHandler).Record(wait, metrics.StringTag("acquirer", acquirer))
+	}
 }
 
 func (c *ContextImpl) Unlock() error {

@@ -1574,6 +1574,7 @@ var (
 	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
 	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
 	WorkflowContextLockHoldDuration               = NewTimerDef("workflow_context_lock_hold_duration")
+	WorkflowContextLockAcquireWait                = NewTimerDef("workflow_context_lock_acquire_wait")
 	WorkflowPersistencePipelineDispatchLatency    = NewTimerDef("workflow_persistence_pipeline_dispatch_latency")
 	WorkflowPersistencePipelineClaimLatency       = NewTimerDef("workflow_persistence_pipeline_claim_latency")
 	WorkflowPersistencePipelineMutexWait          = NewTimerDef("workflow_persistence_pipeline_mutex_wait")

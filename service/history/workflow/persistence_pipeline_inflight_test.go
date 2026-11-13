@@ -475,6 +475,12 @@ func TestPersistencePipelineRecordsLockHoldByHolder(t *testing.T) {
 		lockHolderSpeculative, lockHolderCommitted,
 		lockHolderTryLock,
 	}, lockHolders(capture))
+	// A TryLock records no acquire wait.
+	require.Equal(t, []string{
+		lockAcquirerSpeculative,
+		lockAcquirerCommitted, lockAcquirerPublish, lockAcquirerCommitted,
+		lockAcquirerSpeculative, lockAcquirerCommitted,
+	}, recordedTags(capture, metrics.WorkflowContextLockAcquireWait.Name(), "acquirer"))
 	dispatches := capture.SnapshotMetric(metrics.WorkflowPersistencePipelineDispatchLatency.Name())
 	require.Len(t, dispatches, 1)
 	require.IsType(t, time.Duration(0), dispatches[0].Value)
@@ -488,6 +494,7 @@ func TestContextRecordsLockHoldWithoutPipeline(t *testing.T) {
 	require.NoError(t, c.Lock(t.Context(), locks.PriorityHigh))
 	require.NoError(t, c.Unlock())
 	require.Equal(t, []string{lockHolderOperation}, lockHolders(capture))
+	require.Equal(t, []string{lockAcquirerOperation}, recordedTags(capture, metrics.WorkflowContextLockAcquireWait.Name(), "acquirer"))
 }
 
 func TestPersistencePipelineAdmissionWakesOnlyOnAdmissionChange(t *testing.T) {
