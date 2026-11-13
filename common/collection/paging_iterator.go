@@ -47,22 +47,18 @@ func NewPagingIteratorWithToken[V any](
 
 // HasNext return whether has next item or err
 func (iter *PagingIteratorImpl[V]) HasNext() bool {
-	// pagination encounters error
-	if iter.pageErr != nil {
-		return true
-	}
-
-	// still have local cached item to return
-	if iter.nextPageItemIndex < len(iter.pageItems) {
-		return true
-	}
-
-	if len(iter.pageToken) != 0 {
+	for {
+		if iter.pageErr != nil {
+			return true
+		}
+		if iter.nextPageItemIndex < len(iter.pageItems) {
+			return true
+		}
+		if len(iter.pageToken) == 0 {
+			return false
+		}
 		iter.getNextPage()
-		return iter.HasNext()
 	}
-
-	return false
 }
 
 // Next return next item or err
