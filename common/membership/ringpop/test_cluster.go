@@ -2,6 +2,8 @@ package ringpop
 
 import (
 	"context"
+	"errors"
+	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
 	"go.temporal.io/server/common/config"
@@ -223,6 +226,247 @@ func (c *testCluster) FindHostByAddr(addr string) (membership.HostInfo, bool) {
 		}
 	}
 	return nil, false
+}
+
+// snapshotRefreshStore is a shared persistence fake for testing discovery across isolated nodes
+type snapshotRefreshStore struct {
+	mu sync.Mutex
+
+	// members stores membership records keyed by the node monitors' hostports.
+	members map[string]*persistence.ClusterMember
+	// blocked records the hostports whose persistence calls should fail.
+	blocked map[string]bool
+}
+
+// manager creates a mock persistence manager for a node identified by source
+func (s *snapshotRefreshStore) manager(ctrl *gomock.Controller, source string) *persistence.MockClusterMetadataManager {
+	manager := persistence.NewMockClusterMetadataManager(ctrl)
+
+	// Prune expired membership records unless this node is blocked from persistence
+	manager.EXPECT().PruneClusterMembership(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ *persistence.PruneClusterMembershipRequest) error {
+			if s.isBlocked(source) {
+				return errors.New("persistence unavailable")
+			}
+
+			now := time.Now().UTC()
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			for hostport, member := range s.members {
+				if member.RecordExpiry.Before(now) {
+					delete(s.members, hostport)
+				}
+			}
+			return nil
+		}).AnyTimes()
+
+	// Upsert cluster membership and heartbeat unless this node is blocked from persistence
+	manager.EXPECT().UpsertClusterMembership(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpsertClusterMembershipRequest) error {
+			if s.isBlocked(source) {
+				return errors.New("persistence unavailable")
+			}
+
+			member := &persistence.ClusterMember{
+				Role:          request.Role,
+				HostID:        append([]byte(nil), request.HostID...),
+				RPCAddress:    append(net.IP(nil), request.RPCAddress...),
+				RPCPort:       request.RPCPort,
+				SessionStart:  request.SessionStart,
+				LastHeartbeat: time.Now(),
+				RecordExpiry:  time.Now().Add(request.RecordExpiry),
+			}
+			s.mu.Lock()
+			s.members[source] = member
+			s.mu.Unlock()
+			return nil
+		}).AnyTimes()
+
+	// Get cluster members from the database unless this node is blocked
+	manager.EXPECT().GetClusterMembers(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
+			if s.isBlocked(source) {
+				return nil, errors.New("persistence unavailable")
+			}
+
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			response := &persistence.GetClusterMembersResponse{}
+			for _, member := range s.members {
+				if time.Since(member.LastHeartbeat) <= request.LastHeartbeatWithin {
+					response.ActiveMembers = append(response.ActiveMembers, cloneClusterMember(member))
+				}
+			}
+			return response, nil
+		}).AnyTimes()
+	return manager
+}
+
+// isBlocked reports whether persistence calls from source should fail
+func (s *snapshotRefreshStore) isBlocked(source string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.blocked[source]
+}
+
+// block prevents persistence calls from the specified hostports
+func (s *snapshotRefreshStore) block(hostports []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, hostport := range hostports {
+		s.blocked[hostport] = true
+	}
+}
+
+// unblock allows persistence calls from the specified hostports again
+func (s *snapshotRefreshStore) unblock(hostports []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, hostport := range hostports {
+		s.blocked[hostport] = false
+	}
+}
+
+// membersAreStale reports whether each listed member's last heartbeat is older than maxAge
+func (s *snapshotRefreshStore) membersAreStale(hostports []string, maxAge time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, hostport := range hostports {
+		member, ok := s.members[hostport]
+		if !ok || member == nil || time.Since(member.LastHeartbeat) <= maxAge {
+			return false
+		}
+	}
+	return true
+}
+
+// cloneClusterMember returns a copy of member, including copies of its mutable fields
+func cloneClusterMember(member *persistence.ClusterMember) *persistence.ClusterMember {
+	if member == nil {
+		return nil
+	}
+
+	clone := *member
+	clone.HostID = append([]byte(nil), member.HostID...)
+	clone.RPCAddress = append(net.IP(nil), member.RPCAddress...)
+	return &clone
+}
+
+// snapshotRefreshTestCluster groups monitors that share a snapshotRefreshStore
+type snapshotRefreshTestCluster struct {
+	// monitors[i] is the monitor running at addrs[i].
+	monitors []*monitor
+	channels []*tchannel.Channel
+	addrs    []string
+}
+
+// addMonitor creates and starts a monitor backed by the shared snapshot refresh store
+func (c *snapshotRefreshTestCluster) addMonitor(t *testing.T, store *snapshotRefreshStore, app string, snapshotExpiry time.Duration) {
+	t.Helper()
+
+	channel, err := tchannel.NewChannel(app, nil)
+	require.NoError(t, err)
+	require.NoError(t, channel.ListenAndServe("127.0.0.1:0"))
+
+	resolver := func() (string, error) {
+		return buildBroadcastHostPort(channel.PeerInfo(), "127.0.0.1")
+	}
+	addr, err := resolver()
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	manager := store.manager(ctrl, addr)
+
+	ringPop, err := ringpop.New(app, ringpop.Channel(channel), ringpop.AddressResolverFunc(resolver))
+	require.NoError(t, err)
+
+	_, port, err := splitHostPortTyped(addr)
+	require.NoError(t, err)
+
+	monitor := newMonitor(
+		primitives.HistoryService,
+		config.ServicePortMap{primitives.HistoryService: int(port)},
+		ringPop,
+		log.NewTestLogger(),
+		manager,
+		resolver,
+		2*time.Second,
+		snapshotExpiry,
+		3*time.Second,
+		time.Time{},
+		100,
+	)
+	c.monitors = append(c.monitors, monitor)
+	c.channels = append(c.channels, channel)
+	c.addrs = append(c.addrs, addr)
+
+	monitor.Start()
+	t.Cleanup(func() {
+		monitor.Stop()
+		channel.Close()
+	})
+}
+
+// hasPartitionedViews reports whether the monitors' visibility graph has multiple components
+// (non-overlapping subsets) to detect partitioned membership views
+func (c *snapshotRefreshTestCluster) hasPartitionedViews() bool {
+	visibility := make(map[string]map[string]struct{}, len(c.addrs))
+
+	for _, addr := range c.addrs {
+		visibility[addr] = make(map[string]struct{})
+	}
+	for i, monitor := range c.monitors {
+		members, err := monitor.GetReachableMembers()
+		if err != nil {
+			return false
+		}
+		source := c.addrs[i]
+		for _, member := range members {
+			if _, ok := visibility[member]; !ok {
+				visibility[member] = make(map[string]struct{})
+			}
+			visibility[source][member] = struct{}{}
+			visibility[member][source] = struct{}{}
+		}
+	}
+
+	visited := make(map[string]struct{}, len(visibility))
+	components := 0
+	for addr := range visibility {
+		if _, ok := visited[addr]; ok {
+			continue
+		}
+
+		components++
+		if components > 1 {
+			return true
+		}
+
+		toVisit := []string{addr}
+		for len(toVisit) > 0 {
+			current := toVisit[len(toVisit)-1]
+			toVisit = toVisit[:len(toVisit)-1]
+			if _, ok := visited[current]; ok {
+				continue
+			}
+			visited[current] = struct{}{}
+			for neighbor := range visibility[current] {
+				toVisit = append(toVisit, neighbor)
+			}
+		}
+	}
+	return false
+}
+
+// allHaveMembers reports whether every monitor currently sees count reachable members
+func (c *snapshotRefreshTestCluster) allHaveMembers(count int) bool {
+	for _, monitor := range c.monitors {
+		members, err := monitor.GetReachableMembers()
+		if err != nil || len(members) != count {
+			return false
+		}
+	}
+	return true
 }
 
 // gatedTestMonitor is a monitor that isn't started yet, and whose bootstrap blocks fetching
