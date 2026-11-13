@@ -264,6 +264,50 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
 	s.ElementsMatch([]string{startRequestID}, executionRequestIDs)
 }
 
+func (s *ChasmSuite) TestPayloadStoreRequestIDDedupAcrossFlagChanges() {
+	for _, enabledOnRecord := range []bool{false, true} {
+		s.Run(fmt.Sprintf("EnabledOnRecord=%t", enabledOnRecord), func(s *ChasmSuite) {
+			cenv := newChasmTestEnv(s.Context(), s.T())
+			tv := testvars.New(s.T())
+			cenv.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, enabledOnRecord)
+
+			storeID := tv.WorkflowID()
+			requestID := tv.RequestID()
+			_, err := tests.NewPayloadStoreHandler(cenv.chasmCtx, tests.NewPayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+
+			addPayload := func(key string) error {
+				_, err := tests.AddPayloadHandler(cenv.chasmCtx, tests.AddPayloadRequest{
+					NamespaceID: cenv.NamespaceID(),
+					StoreID:     storeID,
+					PayloadKey:  key,
+					Payload:     payload.EncodeString(key),
+					RequestID:   requestID,
+				})
+				return err
+			}
+			s.NoError(addPayload("first"))
+
+			cenv.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, !enabledOnRecord)
+			cenv.CloseShard(cenv.NamespaceID().String(), storeID)
+
+			err = addPayload("retry")
+			var failedPrecondition *serviceerror.FailedPrecondition
+			s.ErrorAs(err, &failedPrecondition)
+
+			descResp, err := tests.DescribePayloadStoreHandler(cenv.chasmCtx, tests.DescribePayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+			s.Equal(int64(1), descResp.State.TotalCount)
+		})
+	}
+}
+
 func (s *ChasmSuite) TestPayloadStore_PureTask() {
 	cenv := newChasmTestEnv(s.Context(), s.T())
 	tv := testvars.New(s.T())

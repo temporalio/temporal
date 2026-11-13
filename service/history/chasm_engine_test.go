@@ -150,6 +150,72 @@ func (s *chasmEngineSuite) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
+func (s *chasmEngineSuite) TestStartExecutionNamespaceNotActive() {
+	tv := testvars.New(s.T())
+	nsEntry := s.namespaceEntry.Clone(
+		namespace.WithID(tv.NamespaceID().String()),
+		namespace.WithActiveCluster(cluster.TestAlternativeClusterName),
+	)
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(nsEntry.ID()).Return(nsEntry, nil).AnyTimes()
+
+	result, err := s.engine.StartExecution(
+		s.T().Context(),
+		chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+			NamespaceID: nsEntry.ID().String(),
+			BusinessID:  tv.WorkflowID(),
+		}),
+		func(chasm.MutableContext) (chasm.RootComponent, error) {
+			s.FailNow("startFn must not run on the passive cluster")
+			return nil, nil
+		},
+		chasm.WithRequestID(tv.Any().String()),
+	)
+
+	s.Equal(serviceerror.NewNamespaceNotActive(
+		nsEntry.Name().String(), cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName,
+	), err)
+	s.Equal(chasm.StartExecutionResult{}, result)
+}
+
+func (s *chasmEngineSuite) TestUpdateWithStartExecutionNamespaceNotActive() {
+	for _, assumeNew := range []bool{false, true} {
+		s.Run(fmt.Sprintf("AssumeNew=%t", assumeNew), func() {
+			tv := testvars.New(s.T())
+			nsEntry := s.namespaceEntry.Clone(
+				namespace.WithID(tv.NamespaceID().String()),
+				namespace.WithActiveCluster(cluster.TestAlternativeClusterName),
+			)
+			s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(nsEntry.ID()).Return(nsEntry, nil).AnyTimes()
+			opts := []chasm.TransitionOption{chasm.WithRequestID(tv.Any().String())}
+			if assumeNew {
+				opts = append(opts, chasm.WithAssumeNew())
+			}
+
+			result, err := s.engine.UpdateWithStartExecution(
+				s.T().Context(),
+				chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+					NamespaceID: nsEntry.ID().String(),
+					BusinessID:  tv.WorkflowID(),
+				}),
+				func(chasm.MutableContext) (chasm.RootComponent, error) {
+					s.FailNow("startFn must not run on the passive cluster")
+					return nil, nil
+				},
+				func(chasm.MutableContext, chasm.Component) error {
+					s.FailNow("updateFn must not run on the passive cluster")
+					return nil
+				},
+				opts...,
+			)
+
+			s.Equal(serviceerror.NewNamespaceNotActive(
+				nsEntry.Name().String(), cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName,
+			), err)
+			s.Equal(chasm.EngineUpdateWithStartExecutionResult{}, result)
+		})
+	}
+}
+
 func (s *chasmEngineSuite) TestStartExecution_BrandNew() {
 	tv := testvars.New(s.T())
 
@@ -1217,7 +1283,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_FailedUpdateNotRecorded() {
 
 // TestUpdateComponent_UpdateRequestID verifies that an update request ID (chasm.WithRequestID) is recorded
 // in the request IDs data node when history.enableChasmRequestIDDataNode is on and in the execution state
-// when it is off, that its reuse is rejected, including after the flag is turned off, and that an update
+// when it is off, that its reuse is rejected across flag changes, and that an update
 // without a request ID does not rewrite the node.
 func (s *chasmEngineSuite) TestUpdateComponent_UpdateRequestID() {
 	testCases := []struct {
@@ -1228,6 +1294,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_UpdateRequestID() {
 		{name: "DataNodeEnabled", enabledOnRecord: true, enabledOnReuse: true},
 		{name: "DataNodeDisabled", enabledOnRecord: false, enabledOnReuse: false},
 		{name: "DataNodeDisabledAfterRecord", enabledOnRecord: true, enabledOnReuse: false},
+		{name: "DataNodeEnabledAfterRecord", enabledOnRecord: false, enabledOnReuse: true},
 	}
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {

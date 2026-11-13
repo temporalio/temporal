@@ -184,18 +184,34 @@ func (e *ChasmEngine) StartExecution(
 	return result, e.convertError(err, executionRef, options.RequestID)
 }
 
+func (e *ChasmEngine) prepareStartExecution(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+) (historyi.ShardContext, chasm.ArchetypeID, error) {
+	shardContext, err := e.getShardContext(ctx, ref)
+	if err != nil {
+		return nil, chasm.UnspecifiedArchetypeID, err
+	}
+
+	_, err = api.GetActiveNamespace(shardContext, namespace.ID(ref.NamespaceID), ref.BusinessID)
+	if err != nil {
+		return nil, chasm.UnspecifiedArchetypeID, err
+	}
+
+	archetypeID, err := ref.ArchetypeID(e.registry)
+	if err != nil {
+		return nil, chasm.UnspecifiedArchetypeID, err
+	}
+	return shardContext, archetypeID, nil
+}
+
 func (e *ChasmEngine) startExecution(
 	ctx context.Context,
 	executionRef chasm.ComponentRef,
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	options chasm.TransitionOptions,
 ) (result chasm.StartExecutionResult, retErr error) {
-	shardContext, err := e.getShardContext(ctx, executionRef)
-	if err != nil {
-		return chasm.StartExecutionResult{}, err
-	}
-
-	archetypeID, err := executionRef.ArchetypeID(e.registry)
+	shardContext, archetypeID, err := e.prepareStartExecution(ctx, executionRef)
 	if err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
@@ -289,12 +305,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 	options chasm.TransitionOptions,
 	updateTransitionOptions chasm.TransitionOptions,
 ) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
-	shardContext, err := e.getShardContext(ctx, executionRef)
-	if err != nil {
-		return chasm.EngineUpdateWithStartExecutionResult{}, err
-	}
-
-	archetypeID, err := executionRef.ArchetypeID(e.registry)
+	shardContext, archetypeID, err := e.prepareStartExecution(ctx, executionRef)
 	if err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
@@ -635,11 +646,7 @@ func (e *ChasmEngine) updateComponent(
 	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, transitionOptions, false)
 }
 
-// isUpdateRequestIDUsed reports whether an UpdateComponent request ID was already recorded for the
-// execution (see recordUpdateRequestID). Start request IDs are deduplicated independently, as
-// StartWorkflow and SignalWorkflow request IDs are for workflows, except that while
-// history.enableChasmRequestIDDataNode is off an update request ID is recorded in the execution state
-// too. The data node is always checked, so IDs recorded in it stay honored if the flag is turned off.
+// isUpdateRequestIDUsed checks the data node and legacy execution state for an accepted update.
 func (e *ChasmEngine) isUpdateRequestIDUsed(
 	logger log.Logger,
 	mutableState historyi.MutableState,
@@ -657,7 +664,9 @@ func (e *ChasmEngine) isUpdateRequestIDUsed(
 	if !e.config.EnableChasmRequestIDDataNode(nsName) {
 		return mutableState.HasRequestID(transitionOptions.RequestID), nil
 	}
-	return false, nil
+	// TODO: Remove the legacy execution-state lookup after the data-node rollout.
+	legacyRequestIDInfo := mutableState.GetExecutionState().GetRequestIds()[transitionOptions.RequestID]
+	return legacyRequestIDInfo.GetAttachTime() != nil, nil
 }
 
 // recordUpdateRequestID records an accepted UpdateComponent request ID.
