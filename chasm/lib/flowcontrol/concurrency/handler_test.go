@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
@@ -304,7 +305,7 @@ func TestHandlerApplyBatchWithoutReserveRequiresExistingComponent(t *testing.T) 
 		&fcpb.ConcurrencyServiceBatchRequest{ReleaseSlots: []string{"missing"}},
 	)
 	require.Len(t, ress, 2)
-	require.Error(t, ress[0].err)
+	require.ErrorAs(t, ress[0].err, new(*serviceerror.NotFound))
 	require.ErrorIs(t, ress[1].err, ress[0].err)
 	require.Nil(t, ress[0].res)
 	require.Nil(t, ress[1].res)
