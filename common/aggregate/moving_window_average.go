@@ -43,18 +43,17 @@ func (a *MovingWindowAvgImpl) Record(val int64) {
 	a.Lock()
 	defer a.Unlock()
 
+	if a.count == int64(a.maxBufferSize) {
+		a.sum -= a.buffer[a.headIdx].value
+		a.count--
+		a.headIdx = (a.headIdx + 1) % a.maxBufferSize
+	}
+
 	a.buffer[a.tailIdx] = timestampedData{timestamp: time.Now(), value: val}
 	a.tailIdx = (a.tailIdx + 1) % a.maxBufferSize
 
 	a.sum += val
 	a.count++
-
-	if a.tailIdx == a.headIdx {
-		// buffer full, expire oldest element
-		a.sum -= a.buffer[a.headIdx].value
-		a.count--
-		a.headIdx = (a.headIdx + 1) % a.maxBufferSize
-	}
 }
 
 func (a *MovingWindowAvgImpl) Average() float64 {
@@ -69,11 +68,12 @@ func (a *MovingWindowAvgImpl) Average() float64 {
 }
 
 func (a *MovingWindowAvgImpl) expireOldValuesLocked() {
-	for ; a.headIdx != a.tailIdx; a.headIdx = (a.headIdx + 1) % a.maxBufferSize {
+	for a.count > 0 {
 		if time.Since(a.buffer[a.headIdx].timestamp) < a.windowSize {
 			break
 		}
 		a.sum -= a.buffer[a.headIdx].value
 		a.count--
+		a.headIdx = (a.headIdx + 1) % a.maxBufferSize
 	}
 }
