@@ -3,6 +3,7 @@ package timestamp
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -53,9 +54,19 @@ func ParseDurationDefaultSeconds(s string) (time.Duration, error) {
 }
 
 func ParseHHMMSSDuration(d string) (time.Duration, error) {
-	var hours, minutes, seconds time.Duration
-	_, err := fmt.Sscanf(d, "%d:%d:%d", &hours, &minutes, &seconds)
-	if err != nil {
+	hourStr, remainder, ok := strings.Cut(d, ":")
+	if !ok {
+		return 0, errInvalidDuration
+	}
+	minuteStr, secondStr, ok := strings.Cut(remainder, ":")
+	if !ok {
+		return 0, errInvalidDuration
+	}
+
+	hours, hourErr := strconv.ParseInt(hourStr, 10, 64)
+	minutes, minuteErr := strconv.ParseInt(minuteStr, 10, 64)
+	seconds, secondErr := strconv.ParseInt(secondStr, 10, 64)
+	if hourErr != nil || minuteErr != nil || secondErr != nil {
 		return 0, errInvalidDuration
 	}
 	if hours < 0 {
@@ -68,5 +79,9 @@ func ParseHHMMSSDuration(d string) (time.Duration, error) {
 		return 0, errInvalidDurationSeconds
 	}
 
-	return hours*time.Hour + minutes*time.Minute + seconds*time.Second, nil
+	minuteAndSecond := time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second
+	if hours > int64((math.MaxInt64-minuteAndSecond)/time.Hour) {
+		return 0, errInvalidDuration
+	}
+	return time.Duration(hours)*time.Hour + minuteAndSecond, nil
 }
