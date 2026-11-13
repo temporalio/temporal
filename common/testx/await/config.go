@@ -3,8 +3,6 @@ package await
 import (
 	"os"
 	"time"
-
-	"go.temporal.io/server/common/debug"
 )
 
 const attemptTimeoutEnvVar = "TEMPORAL_AWAIT_ATTEMPT_TIMEOUT"
@@ -18,7 +16,7 @@ type config struct {
 
 func newConfig() config {
 	return config{
-		attemptTimeout: envDuration(attemptTimeoutEnvVar, 10*time.Second) * debug.TimeoutMultiplier,
+		attemptTimeout: envDuration(attemptTimeoutEnvVar, 10*time.Second),
 	}
 }
 
