@@ -2,11 +2,11 @@ package reapplyevents
 
 import (
 	"context"
+	"slices"
 
 	"github.com/google/uuid"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -81,28 +81,33 @@ func Invoke(
 			}
 
 			if !mutableState.IsWorkflowExecutionRunning() {
+				if !slices.ContainsFunc(toReapplyEvents, func(event *historypb.HistoryEvent) bool {
+					return ndc.CanReapplyOnReset(shardContext.StateMachineRegistry(), event)
+				}) {
+					// For a closed workflow, if none of the events can be reapplied (e.g. no signal, no update, etc.), skip reset.
+					return &api.UpdateWorkflowAction{
+						Noop:               true,
+						CreateWorkflowTask: false,
+					}, nil
+				}
+
 				// need to reset target workflow (which is also the current workflow)
 				// to accept events to be reapplied
 				baseRunID := mutableState.GetExecutionState().GetRunId()
 				resetRunID := uuid.New()
-				baseRebuildLastEventID := mutableState.GetLastCompletedWorkflowTaskStartedEventId()
+				baseRebuildLastEventID, err := ndc.GetEventsReapplicationResetEventID(ctx, shardContext, mutableState)
+				if err != nil {
+					return nil, err
+				}
 				if baseRebuildLastEventID == common.EmptyEventID {
-					// No completed workflow task. Pick the reset anchor by scenario:
-					//  - real pending workflow task: anchor at its ScheduledEventID. The resetter
-					//    rebuilds to that workflow task and fails it (synthesizing a started event
-					//    if it has not started yet), so the scheduled event is a sufficient anchor
-					//    whether or not the task already started.
-					//  - transient (failing, attempt > 1) or speculative pending task: not a
-					//    usable anchor - it has no persisted WorkflowTaskScheduled event (its
-					//    ScheduledEventID is a not-yet-written NextEventID placeholder), so skip it.
-					//  - no workflow task at all: nothing to anchor on.
-					// In the latter two, baseRebuildLastEventID stays EmptyEventID and the
-					// version-history lookup below fails the reapply.
-					if workflowTask := mutableState.GetPendingWorkflowTask(); workflowTask != nil &&
-						!mutableState.IsTransientWorkflowTask() &&
-						workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-						baseRebuildLastEventID = workflowTask.ScheduledEventID
-					}
+					shardContext.GetLogger().Warn("Cannot reset workflow without a workflow task. Ignoring reapply events.",
+						tag.WorkflowID(workflowID),
+						tag.WorkflowRunID(baseRunID),
+					)
+					return &api.UpdateWorkflowAction{
+						Noop:               true,
+						CreateWorkflowTask: false,
+					}, nil
 				}
 
 				baseVersionHistories := mutableState.GetExecutionInfo().GetVersionHistories()

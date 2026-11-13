@@ -10,7 +10,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -308,7 +307,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		// need to reset target workflow (which is also the current workflow)
 		// to accept events to be reapplied
 		if !slices.ContainsFunc(totalEvents, func(event *historypb.HistoryEvent) bool {
-			return canReapplyOnReset(r.shardContext.StateMachineRegistry(), event)
+			return CanReapplyOnReset(r.shardContext.StateMachineRegistry(), event)
 		}) {
 			// For a closed workflow, if none of the events can be reapplied (e.g. no signal, no update, etc.), skip reset.
 			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
@@ -319,22 +318,17 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.NewString()
-		baseRebuildLastEventID := baseMutableState.GetLastCompletedWorkflowTaskStartedEventId()
+		baseRebuildLastEventID, err := GetEventsReapplicationResetEventID(ctx, r.shardContext, baseMutableState)
+		if err != nil {
+			return 0, historyi.TransactionPolicyActive, err
+		}
 		if baseRebuildLastEventID == common.EmptyEventID {
-			// No completed workflow task. Pick the reset anchor by scenario:
-			//  - real pending workflow task: anchor at its ScheduledEventID. The resetter
-			//    rebuilds to that workflow task and fails it (synthesizing a started event if it
-			//    has not started yet), so the scheduled event is a sufficient anchor whether or
-			//    not the task already started.
-			//  - transient (failing, attempt > 1) or speculative pending task: not a usable
-			//    anchor - it has no persisted WorkflowTaskScheduled event (its ScheduledEventID
-			//    is a not-yet-written NextEventID placeholder), so skip it.
-			//  - no workflow task at all: nothing to anchor on.
-			if workflowTask := baseMutableState.GetPendingWorkflowTask(); workflowTask != nil &&
-				!baseMutableState.IsTransientWorkflowTask() &&
-				workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-				baseRebuildLastEventID = workflowTask.ScheduledEventID
-			}
+			r.logger.Warn("Cannot reset workflow without a workflow task. Ignoring reapply events.",
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(baseRunID),
+			)
+			// the target workflow is not reset so it is still the current workflow. It need to persist updated version histories.
+			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
 		}
 
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
