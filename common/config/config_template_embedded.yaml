@@ -196,6 +196,7 @@ persistence:
 global:
     membership:
         maxJoinDuration: 30s
+        snapshotExpiry: "{{ default "5m" (env "TEMPORAL_MEMBERSHIP_SNAPSHOT_EXPIRY") }}"
         broadcastAddress: "{{ default "" (env "TEMPORAL_BROADCAST_ADDRESS") }}"
     pprof:
         port: {{ default "0" (env "PPROF_PORT") }}

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/util"
@@ -110,6 +111,63 @@ func (s *RpoSuite) TestMonitor() {
 	s.NoError(err, "RemoveListener() failed")
 
 	testService.Stop()
+}
+
+func (s *RpoSuite) TestSnapshotRefreshHealsPartition() {
+	t := s.T()
+
+	store := &snapshotRefreshStore{
+		members: make(map[string]*persistence.ClusterMember),
+		blocked: make(map[string]bool),
+	}
+	cluster := &snapshotRefreshTestCluster{}
+
+	// Make the cached seed list expire before the partition healer next requests it.
+	// We can test that the partition persists without snapshot refresh by changing the
+	// following to something absurd, like time.Hour*24*30*12*10 (~10 years).
+	snapshotExpiry := time.Millisecond
+
+	// 1. Start the original two nodes and let the mock record their heartbeats.
+	for range 2 {
+		cluster.addMonitor(t, store, "snapshot-refresh", snapshotExpiry)
+	}
+	await.RequireTrue(t, func() bool {
+		return cluster.allHaveMembers(2)
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// 2. Keep the original nodes' cached seeds while they lose access to persistence. Wait until
+	// their last successful heartbeats have aged out before starting the third node.
+	store.block(cluster.addrs)
+	await.RequireTrue(t, func() bool {
+		return store.membersAreStale(cluster.addrs, healthyHostLastHeartbeatCutoff)
+	}, healthyHostLastHeartbeatCutoff+5*time.Second, 100*time.Millisecond)
+
+	// 3. Start the third node. Its initial database query should return only its own fresh record,
+	// so it bootstraps alone.
+	cluster.addMonitor(t, store, "snapshot-refresh", snapshotExpiry)
+
+	// 4. Check that a partition exists between the original two nodes and the third node.
+	await.RequireTrue(t, func() bool {
+		return cluster.hasPartitionedViews()
+	}, 10*time.Second, 100*time.Millisecond)
+	for _, oldMonitor := range cluster.monitors[:2] {
+		members, err := oldMonitor.GetReachableMembers()
+		require.NoError(t, err)
+		require.ElementsMatch(t, cluster.addrs[:2], members)
+	}
+	newMembers, err := cluster.monitors[2].GetReachableMembers()
+	require.NoError(t, err)
+	require.ElementsMatch(t, cluster.addrs[2:], newMembers)
+
+	// 4. Release the original nodes’ heartbeat writes.
+	store.unblock(cluster.addrs[:2])
+
+	// 5. Wait for the rings to converge.
+	// With three known hosts, Ringpop’s default healer has a 100% chance of running on each 30-second tick;
+	// allow for the next tick and the time needed to complete healing.
+	await.RequireTrue(t, func() bool {
+		return cluster.allHaveMembers(3)
+	}, time.Minute, 100*time.Millisecond)
 }
 
 func (s *RpoSuite) TestScheduledUpdates() {
