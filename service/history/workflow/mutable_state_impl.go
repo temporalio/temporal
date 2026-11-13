@@ -7713,6 +7713,10 @@ func (ms *MutableStateImpl) SetChasmSpeculativeTransitionPending() error {
 	return nil
 }
 
+func (ms *MutableStateImpl) HasPendingChasmSpeculativeTransition() bool {
+	return ms.chasmSpeculativeTransitionPending
+}
+
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and
 // mutable state should move to a new versioned transition.
 func (ms *MutableStateImpl) isStateDirty() bool {

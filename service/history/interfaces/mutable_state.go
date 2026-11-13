@@ -356,6 +356,7 @@ type (
 
 		IsDirty() bool
 		SetChasmSpeculativeTransitionPending() error
+		HasPendingChasmSpeculativeTransition() bool
 		IsTransitionHistoryEnabled() bool
 		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)

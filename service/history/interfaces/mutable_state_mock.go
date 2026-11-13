@@ -3111,6 +3111,20 @@ func (mr *MockMutableStateMockRecorder) HasParentExecution() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasParentExecution", reflect.TypeOf((*MockMutableState)(nil).HasParentExecution))
 }
 
+// HasPendingChasmSpeculativeTransition mocks base method.
+func (m *MockMutableState) HasPendingChasmSpeculativeTransition() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasPendingChasmSpeculativeTransition")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasPendingChasmSpeculativeTransition indicates an expected call of HasPendingChasmSpeculativeTransition.
+func (mr *MockMutableStateMockRecorder) HasPendingChasmSpeculativeTransition() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingChasmSpeculativeTransition", reflect.TypeOf((*MockMutableState)(nil).HasPendingChasmSpeculativeTransition))
+}
+
 // HasPendingWorkflowTask mocks base method.
 func (m *MockMutableState) HasPendingWorkflowTask() bool {
 	m.ctrl.T.Helper()
