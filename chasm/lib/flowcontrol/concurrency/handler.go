@@ -56,7 +56,7 @@ func NewHandler(
 
 func initFn(_ chasm.MutableContext, creq chasmReq) (*Component, error) {
 	// For now (whole-queue limits), we should always have an initial config here.
-	// For per-task limits, this may be missing and set via api later.
+	// For keyed limiters, this may be missing and set via api later.
 	c := &Component{
 		ConcurrencyState: &fcpb.ConcurrencyState{
 			Config: &taskqueuepb.ConcurrencyLimit{
@@ -140,10 +140,11 @@ func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.C
 		c.WakeAll = true
 	}
 
-	// capture Generation after maybe incrementing
+	// capture Generation after maybe having incremented
 	availableSlots := c.availableSlots()
 	for i := range creq.items {
 		ress[i].Generation = c.Generation
+		// TODO(fc): per-client hints instead of giving everyone the same one
 		ress[i].AvailableSlotsHint = availableSlots
 	}
 
@@ -260,7 +261,7 @@ func (h *Handler) Wait(ctx context.Context, req *fcpb.ConcurrencyServiceWaitRequ
 	for {
 		// CHASM requires that PollComponent be monotonic: if it returns true at some state,
 		// then it should return true at future states. Our predicate is "is state.wake_up_to
-		// >= req.start_time" (or state.wake_all means wake_upto = forever in the future). But
+		// >= req.start_time" (or state.wake_all means wake_up_to = forever in the future). But
 		// when we go from having slots to not having slots, we need to reset wake_up_to to
 		// some time in the past, so that everyone is blocked again. So we need to add a
 		// "generation" on top of the timestamps. Essentially, the state moves the pair
