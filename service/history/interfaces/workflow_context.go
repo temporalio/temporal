@@ -34,6 +34,7 @@ type (
 		Lock(ctx context.Context, lockPriority locks.Priority) error
 		TryLock(lockPriority locks.Priority) bool
 		LockSpeculative(ctx context.Context, lockPriority locks.Priority) error
+		PipelineCommittedWrite() bool
 		Unlock() error
 		PersistenceFuture() future.Future[struct{}]
 

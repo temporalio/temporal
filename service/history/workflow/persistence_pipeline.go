@@ -92,6 +92,9 @@ type persistencePipeline struct {
 	// wake for every submit, claim, and publish. admissionAt is the state when admission was made.
 	admission   chan struct{}
 	admissionAt admissionState
+	// taskCompletions lets committed operations send their write through the pipeline. See
+	// PipelineCommittedWrite.
+	taskCompletions bool
 }
 
 // Tag values for the pipeline wait timers.
@@ -219,6 +222,27 @@ func (c *ContextImpl) SetPersistencePin(acquire, release func()) {
 func (c *ContextImpl) PersistencePipelineEnabled() bool { return c.pipeline != nil }
 
 func (c *ContextImpl) PipelinedOperation() bool { return c.operation != nil && c.operation.pipelined }
+
+// PipelineCommittedWrite lets the committed operation holding the lock send its next write through the
+// pipeline, so Unlock releases the lock before the write is durable and then waits for it. The operation
+// already waited for earlier writes when it took the lock, so it decided on durable state. The caller must
+// not act on the write as durable until Unlock returns without error: no update effects, query answers,
+// or history reads that need it. Returns false, leaving the write synchronous, when the setting is off,
+// the pipeline is invalid, or the lock wasn't taken for a committed operation.
+func (c *ContextImpl) PipelineCommittedWrite() bool {
+	if c.pipeline == nil || !c.pipeline.taskCompletions || c.operation == nil || c.operation.pipelined {
+		return false
+	}
+	p := c.pipeline
+	p.mu.Lock()
+	invalid := p.err != nil
+	p.mu.Unlock()
+	if invalid {
+		return false
+	}
+	c.operation.pipelined = true
+	return true
+}
 
 func (p *persistencePipeline) releaseIdlePin() func() {
 	if p.pinned && p.tail() == nil {

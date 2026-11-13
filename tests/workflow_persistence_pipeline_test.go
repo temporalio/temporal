@@ -46,15 +46,18 @@ func TestWorkflowPersistencePipeline(t *testing.T) {
 		name                 string
 		pipeline, coalescing bool
 		maxInFlight          int
+		taskCompletions      bool
 	}{
-		{"off", false, false, 1}, {"pipeline", true, false, 1}, {"coalescing", true, true, 1},
-		{"inflight", true, false, 4}, {"inflight-coalescing", true, true, 4},
+		{"off", false, false, 1, false}, {"pipeline", true, false, 1, false}, {"coalescing", true, true, 1, false},
+		{"inflight", true, false, 4, false}, {"inflight-coalescing", true, true, 4, false},
+		{"inflight-task-completions", true, false, 4, true},
 	} {
 		t.Run(mode.name, func(t *testing.T) {
 			env := testcore.NewEnv(t,
 				testcore.WithDynamicConfig(dynamicconfig.WorkflowPersistencePipeline, mode.pipeline),
 				testcore.WithDynamicConfig(dynamicconfig.WorkflowPersistenceCoalescing, mode.coalescing),
 				testcore.WithDynamicConfig(dynamicconfig.WorkflowPersistencePipelineMaxInFlight, mode.maxInFlight),
+				testcore.WithDynamicConfig(dynamicconfig.WorkflowPersistencePipelineTaskCompletions, mode.taskCompletions),
 				testcore.WithDynamicConfig(dynamicconfig.FrontendRPS, 100000),
 				testcore.WithDynamicConfig(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 100000),
 				testcore.WithDynamicConfig(dynamicconfig.HistoryRPS, 100000),
@@ -184,7 +187,10 @@ func TestWorkflowPersistencePipeline(t *testing.T) {
 						maxBatch = max(maxBatch, value)
 					}
 					sawBatch = sawBatch || maxBatch > 1
-					if mode.pipeline {
+					if mode.taskCompletions {
+						// Workflow task completions go through the pipeline too.
+						require.Greater(t, logical, int64(work.signals))
+					} else if mode.pipeline {
 						require.Equal(t, int64(work.signals), logical)
 					} else {
 						require.Empty(t, batches)

@@ -267,6 +267,20 @@ func (mr *MockWorkflowContextMockRecorder) PersistenceFuture() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistenceFuture", reflect.TypeOf((*MockWorkflowContext)(nil).PersistenceFuture))
 }
 
+// PipelineCommittedWrite mocks base method.
+func (m *MockWorkflowContext) PipelineCommittedWrite() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PipelineCommittedWrite")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// PipelineCommittedWrite indicates an expected call of PipelineCommittedWrite.
+func (mr *MockWorkflowContextMockRecorder) PipelineCommittedWrite() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PipelineCommittedWrite", reflect.TypeOf((*MockWorkflowContext)(nil).PipelineCommittedWrite))
+}
+
 // ReapplyEvents mocks base method.
 func (m *MockWorkflowContext) ReapplyEvents(ctx context.Context, shardContext ShardContext, eventBatches []*persistence0.WorkflowEvents) error {
 	m.ctrl.T.Helper()

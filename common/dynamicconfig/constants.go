@@ -2012,6 +2012,10 @@ See DynamicRateLimitingParams comments for more details.`,
 		"history.workflowPersistencePipelineMaxInFlight", 1,
 		`Maximum workflow persistence commit groups in flight per execution. Values above 1 submit groups asynchronously and need a store that pipelines them. Requires pipelining and history service restart.`,
 	)
+	WorkflowPersistencePipelineTaskCompletions = NewGlobalBoolSetting(
+		"history.workflowPersistencePipelineTaskCompletions", false,
+		`Lets a workflow task completion with no updates, queries, or new run send its write through the persistence pipeline and release the workflow lock before the write is durable. It still waits for earlier writes first. Requires pipelining and history service restart.`,
+	)
 	HistoryCacheSizeBasedLimit = NewGlobalBoolSetting(
 		"history.cacheSizeBasedLimit",
 		false,

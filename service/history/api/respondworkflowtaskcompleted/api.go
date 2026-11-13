@@ -109,7 +109,7 @@ func NewWorkflowTaskCompletedHandler(
 func (handler *WorkflowTaskCompletedHandler) Invoke(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
-) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
+) (retResp *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
 	// By default, retError is passed to workflow lease release method in deferred function.
 	// If error is passed, then workflow context and mutable state are cleared.
 	// If no changes to mutable state are made or changes already persisted (in memory version corresponds to the database),
@@ -161,6 +161,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		ms.SetContextMetadata(ctx)
 	}
 
+	// pipelinedWrite is set when the completion's write went through the persistence pipeline, so it's
+	// durable only once the lease release returns without error. newWorkflowTaskAfterWrite then builds
+	// the inline new task, whose history includes this write, after the release.
+	var pipelinedWrite bool
+	var newWorkflowTaskAfterWrite func() (*workflowservice.PollWorkflowTaskQueueResponse, error)
 	defer func() {
 		var errForRelease error
 		if releaseLeaseWithError {
@@ -194,7 +199,19 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			}
 		}
 
-		workflowLease.GetReleaseFn()(errForRelease)
+		releaseErr := workflowLease.GetReleaseFn()(errForRelease)
+		if !pipelinedWrite || retError != nil {
+			return
+		}
+		if releaseErr != nil {
+			retResp, retError = nil, releaseErr
+			return
+		}
+		if newWorkflowTaskAfterWrite != nil {
+			if retResp.NewWorkflowTask, retError = newWorkflowTaskAfterWrite(); retError != nil {
+				retResp = nil
+			}
+		}
 	}()
 
 	if !ms.IsWorkflowExecutionRunning() ||
@@ -695,6 +712,15 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// OR new WT is normal, then mutable state needs to be persisted.
 		// Otherwise, (both current and new WT are speculative) mutable state is updated in memory only but not persisted.
 		if completedEvent != nil || newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
+			// Pipeline only completions that do nothing after the write that needs it durable: no
+			// update effects or aborts, speculative task, query answers, or pagination buffer.
+			pipelinedWrite = ms.IsWorkflowExecutionRunning() &&
+				updateRegistry.Len() == 0 &&
+				!ms.GetQueryRegistry().HasBufferedQuery() &&
+				len(req.GetCompleteRequest().GetQueryResults()) == 0 &&
+				newWorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE &&
+				releasePagination == nil &&
+				weContext.PipelineCommittedWrite()
 			updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 		}
 	}
@@ -827,9 +853,16 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
 
-		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
-		if err != nil {
-			return nil, err
+		if pipelinedWrite {
+			startedResponse := resp.StartedResponse
+			newWorkflowTaskAfterWrite = func() (*workflowservice.PollWorkflowTaskQueueResponse, error) {
+				return handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, startedResponse)
+			}
+		} else {
+			resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 

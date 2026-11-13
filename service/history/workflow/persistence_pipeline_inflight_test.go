@@ -550,3 +550,54 @@ func TestPersistencePipelineAdmissionWakesOnlyOnAdmissionChange(t *testing.T) {
 	change(func() { p.invalidate(0, pipelineDependencyError()) })
 	require.True(t, closed(before), "invalidating the queue didn't wake blocked admissions")
 }
+
+func TestPersistencePipelineCommittedWriteReleasesLockBeforeDurable(t *testing.T) {
+	t.Parallel()
+	f := newAsyncPipelineFixture(t, 2, false)
+	f.c.pipeline.taskCompletions = true
+	require.NoError(t, f.c.Lock(t.Context(), locks.PriorityHigh))
+	require.True(t, f.c.PipelineCommittedWrite())
+	// Queue the operation's write as executeWorkflowTransaction does for a pipelined operation.
+	s, err := f.c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	require.NoError(t, err)
+	f.c.operation.submissions = append(f.c.operation.submissions, s)
+
+	unlocked := make(chan error, 1)
+	go func() { unlocked <- f.c.Unlock() }()
+	w := await.Rcv(t, f.submits)
+	require.True(t, f.c.TryLock(locks.PriorityHigh), "the lock is still held while the write is in flight")
+	require.NoError(t, f.c.Unlock())
+	select {
+	case err := <-unlocked:
+		require.Failf(t, "Unlock returned before the write was durable", "error: %v", err)
+	default:
+	}
+	w.receipt.complete(nil)
+	require.NoError(t, await.Rcv(t, unlocked))
+	require.Equal(t, []int64{42}, f.publishedVersions())
+}
+
+func TestPersistencePipelineCommittedWriteRefusals(t *testing.T) {
+	t.Parallel()
+	f := newAsyncPipelineFixture(t, 2, false)
+	require.NoError(t, f.c.Lock(t.Context(), locks.PriorityHigh))
+	require.False(t, f.c.PipelineCommittedWrite(), "the setting is off")
+	require.NoError(t, f.c.Unlock())
+
+	f.c.pipeline.taskCompletions = true
+	require.False(t, f.c.PipelineCommittedWrite(), "no operation holds the lock")
+
+	require.NoError(t, f.c.LockSpeculative(t.Context(), locks.PriorityHigh))
+	require.False(t, f.c.PipelineCommittedWrite(), "a speculative operation is already pipelined")
+	require.NoError(t, f.c.Unlock())
+
+	require.NoError(t, f.c.Lock(t.Context(), locks.PriorityHigh))
+	f.c.pipeline.mu.Lock()
+	f.c.pipeline.err = pipelineDependencyError()
+	f.c.pipeline.mu.Unlock()
+	require.False(t, f.c.PipelineCommittedWrite(), "the pipeline is invalid")
+	f.c.pipeline.mu.Lock()
+	f.c.pipeline.err = nil
+	f.c.pipeline.mu.Unlock()
+	require.NoError(t, f.c.Unlock())
+}

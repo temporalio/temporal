@@ -186,6 +186,7 @@ func NewContext(
 			maxInFlight:    max(config.WorkflowPersistencePipelineMaxInFlight, 1),
 			metricsHandler: contextImpl.metricsHandler,
 		}
+		contextImpl.pipeline.taskCompletions = config.WorkflowPersistencePipelineTaskCompletions
 		contextImpl.pipeline.cacheSize.Store(1)
 	}
 	softassert.That(
