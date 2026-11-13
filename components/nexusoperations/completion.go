@@ -143,23 +143,24 @@ func CompletionHandler(
 	result *commonpb.Payload,
 	opFailedError *nexus.OperationError,
 ) error {
-	// The initial version of the completion token did not include a request ID.
-	// Only retry Access without a run ID if the request ID is not empty.
-	isRetryableNotFoundErr := requestID != ""
+	if requestID == "" {
+		return serviceerror.NewNotFound("operation not found")
+	}
+	isRetryableNotFoundErr := true
 	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
-			return err
-		}
 		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
-			return nil
+			return err
 		}
-		if requestID != "" && operation.RequestId != requestID {
+		if operation.RequestId != requestID {
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
+		}
+		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
+			return err
 		}
 		if opFailedError != nil {
 			err = handleOperationError(node, operation, opFailedError)

@@ -1313,6 +1313,24 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		s.Contains(string(body), "invalid callback token", "Response should indicate invalid callback token")
 	})
 
+	s.Run("CallbackTokenWithoutRequestID", func() {
+		gen := &commonnexus.CallbackTokenGenerator{}
+		validToken, err := s.generateValidCallbackToken(s.GetNamespaceID(s.Namespace().String()), testcore.RandomizeStr("workflow"), uuid.NewString())
+		s.NoError(err)
+		decodedToken, err := commonnexus.DecodeCallbackToken(validToken)
+		s.NoError(err)
+		completionToken, err := gen.DecodeCompletion(decodedToken)
+		s.NoError(err)
+		completionToken.RequestId = ""
+		invalidToken, err := gen.Tokenize(completionToken)
+		s.NoError(err)
+
+		publicCallbackURL := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
+		res, _, body := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackURL, completion, invalidToken)
+		s.Equal(http.StatusBadRequest, res.StatusCode)
+		s.Contains(body, "invalid callback token")
+	})
+
 	s.Run("InvalidCallbackTokenNoIdentifier", func() {
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		// metrics collection is not initialized before callback validation
