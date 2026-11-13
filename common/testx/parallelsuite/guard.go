@@ -17,6 +17,7 @@ type guardT struct {
 
 func (g *guardT) Helper() {
 	if g.hasSubtests.Load() {
+		//nolint:forbidigo // Panics are fine in testing code.
 		panic(fmt.Sprintf(
 			"parallelsuite: assertion called on %q after Run() was called; "+
 				"use the callback parameter's assertions inside Run() instead",

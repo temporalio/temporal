@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/common/testing/testcontext"
-	"go.temporal.io/server/common/util"
+	"go.temporal.io/testx/testcontext"
 )
 
 const requireMisuseHint = "use the *await.T passed to the callback, not s.T() or suite assertion methods"
@@ -60,6 +59,7 @@ func Requiref(ctx context.Context, tb testing.TB, condition func(*T), timeout, p
 	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "Requiref", requireMisuseHint, true)
 }
 
+//revive:disable-next-line:cognitive-complexity
 func run(
 	parentCtx context.Context,
 	tb testing.TB,
@@ -89,13 +89,13 @@ func run(
 	deadline := time.Now().Add(cfg.totalTimeout)
 	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline {
 		// Cap at the parent context's deadline if it's earlier than our timeout.
-		deadline = util.MinTime(deadline, parentDeadline)
+		deadline = minTime(deadline, parentDeadline)
 	}
 
 	// Cap at the test's deadline if it's earlier than our deadline.
 	// Ideally, the parent context already accounts for the test's deadline - but we are being defensive.
 	if testDeadline, hasDeadline := testcontext.GoTestDeadline(tb); hasDeadline {
-		deadline = util.MinTime(deadline, testDeadline)
+		deadline = minTime(deadline, testDeadline)
 	}
 
 	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)
@@ -120,8 +120,11 @@ func run(
 
 		// Run attempt.
 		res := runAttempt(t, condition, attemptCancel, funcName, cancellable)
+		// Capture the error before cleanup; attemptCancel marks every attempt canceled.
+		attemptErr := attemptCtx.Err()
 		attemptCancel()
 		if res.panicVal != nil {
+			//nolint:forbidigo // Preserve panics from the caller's condition.
 			panic(res.panicVal) // propagate to caller
 		}
 		if res.deadlocked {
@@ -140,7 +143,7 @@ func run(
 		// Attempt-timeout expiry: attemptCtx is done but awaitCtx is not.
 		// An attempt timeout is retryable while the await is still active. Track
 		// it separately so the final report identifies the responsible timeout.
-		attemptHitOwnTimeout := attemptCtx.Err() == context.DeadlineExceeded && awaitCtx.Err() == nil
+		attemptHitOwnTimeout := attemptErr == context.DeadlineExceeded && awaitCtx.Err() == nil
 		if attemptHitOwnTimeout {
 			report.recordAttemptTimeout()
 		}
@@ -165,7 +168,7 @@ func run(
 		}
 
 		// Success: attempt completed without failures.
-		if !res.stopped && !t.Failed() && !attemptHitOwnTimeout {
+		if !res.stopped && !t.Failed() && attemptErr == nil {
 			return
 		}
 
@@ -277,4 +280,12 @@ func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) 
 
 func deadlineReached(deadline time.Time) bool {
 	return !time.Now().Before(deadline)
+}
+
+// minTime returns the earlier of two given time.Time
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }
