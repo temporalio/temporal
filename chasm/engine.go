@@ -115,6 +115,7 @@ type TransitionOptions struct {
 	RequestID        string
 	RequestIDType    RequestIDType
 	Speculative      bool
+	AssumeNew        bool
 }
 
 // RequestIDType says which code path checks a request ID for retries, which decides where the request ID
@@ -168,11 +169,15 @@ type StartExecutionResult struct {
 //     the execution already existed (based on the [BusinessIDReusePolicy] and
 //     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
 //     existing execution was returned instead.
-//   - UpdateOutput: The output value returned by the update function.
+//   - Deduplicated: Indicates the request ID was already applied to the execution, so the update
+//     function was not applied again and UpdateOutput is the zero value.
+//   - UpdateOutput: The output value returned by the update function. It is the zero value when
+//     Deduplicated is true or an error is returned.
 type UpdateWithStartExecutionResult[O any] struct {
 	ExecutionKey ExecutionKey
 	ExecutionRef []byte
 	Created      bool
+	Deduplicated bool
 	UpdateOutput O
 }
 
@@ -189,6 +194,13 @@ type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struc
 func WithSpeculative() TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.Speculative = true
+	}
+}
+
+// WithAssumeNew hints to UpdateWithStartExecution() that the execution most likely does not exist yet.
+func WithAssumeNew() TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.AssumeNew = true
 	}
 }
 
@@ -343,14 +355,19 @@ func UpdateWithStartExecution[C RootComponent, I any, O any](
 		opts...,
 	)
 	if err != nil {
-		return UpdateWithStartExecutionResult[O]{
-			UpdateOutput: output,
-		}, err
+		return UpdateWithStartExecutionResult[O]{}, err
+	}
+	// updateFn may have run on a candidate execution that was discarded, so its output only
+	// belongs to the result when the update was applied.
+	if result.Deduplicated {
+		var zero O
+		output = zero
 	}
 	return UpdateWithStartExecutionResult[O]{
 		ExecutionKey: result.ExecutionKey,
 		ExecutionRef: result.ExecutionRef,
 		Created:      result.Created,
+		Deduplicated: result.Deduplicated,
 		UpdateOutput: output,
 	}, nil
 }
