@@ -484,6 +484,7 @@ func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservic
 		a.FirstAttemptStartedTime = attempt.GetStartedTime()
 	}
 	attempt.StartRequestId = request.GetRequestId()
+	attempt.Limiters = request.GetLimiters()
 	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
 	attempt.WorkerControlTaskQueue = request.GetPollRequest().GetWorkerControlTaskQueue()

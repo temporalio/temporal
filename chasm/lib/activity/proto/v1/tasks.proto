@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.activity.proto.v1;
 
+import "temporal/server/api/taskqueue/v1/message.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
 enum DispatchReason {
@@ -33,6 +35,10 @@ message ActivityDispatchTask {
 
   // Bucket for the configured start delay, independent of actual dispatch time.
   StartDelayBucket start_delay_bucket = 3;
+}
+
+message ReleaseLimiterTask {
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 1;
 }
 
 message ScheduleToStartTimeoutTask {

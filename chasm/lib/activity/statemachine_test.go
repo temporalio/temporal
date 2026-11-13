@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -480,12 +481,18 @@ func TestTransitionStarted(t *testing.T) {
 		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
+	limiters := []*taskqueuespb.LimiterRef{{
+		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+		Key:         "queue-key",
+		SlotId:      "slot-id",
+	}}
 	componentRef := []byte("test-component-ref")
 	err := TransitionStarted.Apply(activity, ctx, &historyservice.RecordActivityTaskStartedRequest{
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			Identity:               "test-worker",
 			WorkerControlTaskQueue: "test-control-queue",
 		},
+		Limiters:     limiters,
 		ComponentRef: componentRef,
 		// TODO: change this and serverside once versioning is supported in SAA.
 		// LastDeploymentVersion represents the worker that actually accepted the task,
@@ -504,6 +511,7 @@ func TestTransitionStarted(t *testing.T) {
 	require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
 	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
 	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
+	protorequire.ProtoSliceEqual(t, limiters, attemptState.GetLimiters())
 	require.Equal(t, componentRef, attemptState.ComponentRef)
 	require.Equal(t, "test-control-queue", attemptState.WorkerControlTaskQueue)
 
@@ -516,6 +524,30 @@ func TestTransitionStarted(t *testing.T) {
 	_, ok := ctx.Tasks[0].Payload.(*activitypb.StartToCloseTimeoutTask)
 	require.True(t, ok, "expected ScheduleToStartTimeoutTask")
 	require.Equal(t, defaultTime.Add(defaultStartToCloseTimeout), ctx.Tasks[0].Attributes.ScheduledTime)
+}
+
+func TestReleaseAttemptLimiters(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	concurrencyLimiter := &taskqueuespb.LimiterRef{
+		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+		Key:         "queue-key",
+		SlotId:      "slot-id",
+	}
+	attemptState := &activitypb.ActivityAttemptState{
+		Limiters: []*taskqueuespb.LimiterRef{concurrencyLimiter},
+	}
+	activity := &Activity{LastAttempt: chasm.NewDataField(ctx, attemptState)}
+
+	activity.releaseAttemptLimiters(ctx)
+
+	require.Nil(t, attemptState.GetLimiters())
+	require.Len(t, ctx.Tasks, 1)
+	releaseTask, ok := ctx.Tasks[0].Payload.(*activitypb.ReleaseLimiterTask)
+	require.True(t, ok)
+	protorequire.ProtoSliceEqual(t, []*taskqueuespb.LimiterRef{concurrencyLimiter}, releaseTask.GetLimiters())
+
+	activity.releaseAttemptLimiters(ctx)
+	require.Len(t, ctx.Tasks, 1)
 }
 
 func TestTransitionTimedout(t *testing.T) {
@@ -1390,4 +1422,65 @@ func TestResetDuringRetryBackoff(t *testing.T) {
 	valid, err = handler.Validate(ctx, act, chasm.TaskInvocation{}, dispatchTask)
 	require.NoError(t, err)
 	require.True(t, valid)
+}
+
+func TestAttemptExitReleasesLimiters(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		status activitypb.ActivityExecutionStatus
+		apply  func(*Activity, chasm.MutableContext) error
+	}{
+		{"complete", activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionCompleted.Apply(a, ctx, completeEvent{baseHandler: metrics.NoopMetricsHandler, enrichedHandler: metrics.NoopMetricsHandler})
+		}},
+		{"fail", activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionFailed.Apply(a, ctx, failedEvent{baseHandler: metrics.NoopMetricsHandler, enrichedHandler: metrics.NoopMetricsHandler})
+		}},
+		{"terminate", activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionTerminated.Apply(a, ctx, terminateEvent{metricsHandler: metrics.NoopMetricsHandler})
+		}},
+		{"cancel", activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionCanceled.Apply(a, ctx, cancelEvent{metricsHandler: metrics.NoopMetricsHandler})
+		}},
+		{"schedule to close timeout", activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionTimedOut.Apply(a, ctx, timeoutEvent{timeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, metricsHandler: metrics.NoopMetricsHandler})
+		}},
+		{"retry", activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionRescheduled.Apply(a, ctx, rescheduleEvent{retryInterval: time.Second})
+		}},
+		{"pause after failure", activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, rescheduleEvent{})
+		}},
+		{"reset to paused", activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionResetAttemptFailedToPaused.Apply(a, ctx, rescheduleEvent{})
+		}},
+		{"reset to scheduled", activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED, func(a *Activity, ctx chasm.MutableContext) error {
+			return TransitionResetAttemptFailedToScheduled.Apply(a, ctx, rescheduleEvent{})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := &chasm.MockMutableContext{}
+			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			injectActivityContext(t, ctx)
+			limiters := []*taskqueuespb.LimiterRef{{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "queue", SlotId: "slot"}}
+			attempt := &activitypb.ActivityAttemptState{Count: 1, Limiters: limiters}
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{Status: tc.status},
+				LastAttempt:   chasm.NewDataField(ctx, attempt),
+				Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+			require.NoError(t, tc.apply(activity, ctx))
+			require.Empty(t, attempt.GetLimiters())
+			var releases []*activitypb.ReleaseLimiterTask
+			for _, task := range ctx.Tasks {
+				if release, ok := task.Payload.(*activitypb.ReleaseLimiterTask); ok {
+					releases = append(releases, release)
+				}
+			}
+			require.Len(t, releases, 1)
+			protorequire.ProtoEqual(t, &activitypb.ReleaseLimiterTask{Limiters: limiters}, releases[0])
+		})
+	}
 }
