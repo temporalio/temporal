@@ -49,6 +49,16 @@ func (c *clientImpl) ApplyNamespaceMutation(
 	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
 }
 
+func (c *clientImpl) ApplyRemoteClusterNamespaceRepair(
+	ctx context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ApplyRemoteClusterNamespaceRepair(ctx, request, opts...)
+}
+
 func (c *clientImpl) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -427,6 +437,16 @@ func (c *clientImpl) RebuildMutableState(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RebuildMutableState(ctx, request, opts...)
+}
+
+func (c *clientImpl) ReconcileNamespaceMutationComponents(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ReconcileNamespaceMutationComponents(ctx, request, opts...)
 }
 
 func (c *clientImpl) RefreshWorkflowTasks(

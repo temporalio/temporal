@@ -36,6 +36,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/workflow"
@@ -117,6 +118,9 @@ type (
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
+		timeSource                 clock.TimeSource
+		chasmVisibilityManager     chasm.VisibilityManager
+		chasmNsReplClient          namespacereplicationpb.NamespaceReplicationServiceClient
 		schedulerClient            schedulerpb.SchedulerServiceClient
 		metricsHandler             metrics.Handler
 
@@ -152,6 +156,8 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
+		ChasmVisibilityManager              chasm.VisibilityManager
+		ChasmNsReplClient                   namespacereplicationpb.NamespaceReplicationServiceClient
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
 		MetricsHandler                      metrics.Handler
@@ -211,6 +217,9 @@ func NewAdminHandler(
 		taskCategoryRegistry:       args.CategoryRegistry,
 		matchingClient:             args.matchingClient,
 		chasmRegistry:              args.ChasmRegistry,
+		timeSource:                 args.TimeSource,
+		chasmVisibilityManager:     args.ChasmVisibilityManager,
+		chasmNsReplClient:          args.ChasmNsReplClient,
 		schedulerClient:            args.SchedulerClient,
 		metricsHandler:             args.MetricsHandler,
 	}
@@ -1069,6 +1078,9 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if request == nil {
 		return nil, serviceerror.NewInvalidArgument("request is required")
 	}
+	if err := validateNamespaceMutationAttribution(request); err != nil {
+		return nil, err
+	}
 	// Shadow must expose the same feature prerequisite as authoritative applies.
 	if !adh.clusterMetadata.IsGlobalNamespaceEnabled() {
 		comparisonReason = "global_namespace_disabled"
@@ -1103,7 +1115,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if !request.GetShadow() {
 		ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
 			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
-			Transport: nsreplication.CHASMReplicationTransport,
+			Transport: namespaceMutationTransport(request),
 		})
 		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
@@ -1133,7 +1145,8 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
 			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
-				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer()},
+				Admission:      nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer()},
+				OperatorRepair: request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
 			})
 		}, policy, func(err error) bool {
 			_, retryable := errors.AsType[*serviceerror.Unavailable](err)
@@ -2060,6 +2073,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		Name: request.GetNamespace(),
 		ID:   request.GetId(),
 	}
+	observedAt := adh.timeSource.Now()
 	resp, err := adh.persistenceMetadataManager.GetNamespace(ctx, req)
 	if err != nil {
 		return nil, err
@@ -2069,6 +2083,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 	replicationConfig := resp.Namespace.GetReplicationConfig()
 
 	nsResponse := &adminservice.GetNamespaceResponse{
+		ObservationTime: timestamppb.New(observedAt),
 		Info: &namespacepb.NamespaceInfo{
 			Name:        info.Name,
 			State:       info.State,

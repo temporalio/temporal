@@ -225,3 +225,97 @@ func (s *adminHandlerSuite) Test_GetRemoteClusterNamespace_PeerErrors() {
 		})
 	}
 }
+
+func remoteRepairTestMutation() *adminservice.ApplyNamespaceMutationRequest {
+	return &adminservice.ApplyNamespaceMutationRequest{
+		SourceCluster:        "active",
+		NamespaceTaskPayload: []byte("payload"),
+		Attribution: &adminservice.NamespaceMutationAttribution{
+			Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+			RepairId: "repair-id",
+			Reason:   "repair",
+		},
+	}
+}
+
+func (s *adminHandlerSuite) Test_ApplyRemoteClusterNamespaceRepair_RejectsInvalidRequests() {
+	shadow := remoteRepairTestMutation()
+	shadow.Shadow = true
+	delivery := remoteRepairTestMutation()
+	delivery.Attribution = nil
+	for _, test := range []struct {
+		name     string
+		request  *adminservice.ApplyRemoteClusterNamespaceRepairRequest
+		clusters map[string]cluster.ClusterInformation
+		code     codes.Code
+		message  string
+	}{
+		{name: "nil request", code: codes.InvalidArgument},
+		{name: "empty cluster name", request: &adminservice.ApplyRemoteClusterNamespaceRepairRequest{Mutation: remoteRepairTestMutation()}, code: codes.InvalidArgument, message: "cluster name is required"},
+		{name: "no mutation", request: &adminservice.ApplyRemoteClusterNamespaceRepairRequest{ClusterName: "peer"}, code: codes.InvalidArgument, message: "mutation is required"},
+		{name: "shadow mutation", request: &adminservice.ApplyRemoteClusterNamespaceRepairRequest{ClusterName: "peer", Mutation: shadow}, code: codes.InvalidArgument, message: "shadow mutations are not relayed"},
+		{name: "not an operator repair", request: &adminservice.ApplyRemoteClusterNamespaceRepairRequest{ClusterName: "peer", Mutation: delivery}, code: codes.InvalidArgument, message: "only operator-repair mutations are relayed"},
+		{name: "current cluster", request: &adminservice.ApplyRemoteClusterNamespaceRepairRequest{ClusterName: s.currentClusterName, Mutation: remoteRepairTestMutation()}, code: codes.InvalidArgument, message: "is the current cluster"},
+		{
+			name:     "connection disabled",
+			request:  &adminservice.ApplyRemoteClusterNamespaceRepairRequest{ClusterName: "peer", Mutation: remoteRepairTestMutation()},
+			clusters: s.remoteNamespaceTestClusters(false),
+			code:     codes.FailedPrecondition,
+			message:  `connection to remote cluster "peer" is disabled`,
+		},
+	} {
+		s.Run(test.name, func() {
+			if test.clusters != nil {
+				s.mockMetadata.EXPECT().GetAllClusterInfo().Return(test.clusters).Times(1)
+			}
+			_, err := s.handler.ApplyRemoteClusterNamespaceRepair(context.Background(), test.request)
+			s.Equal(test.code, serviceerror.ToStatus(err).Code(), err)
+			s.ErrorContains(err, test.message)
+		})
+	}
+}
+
+func (s *adminHandlerSuite) Test_ApplyRemoteClusterNamespaceRepair_WritesVerifiedPeer() {
+	mutation := remoteRepairTestMutation()
+	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(s.remoteNamespaceTestClusters(true)).Times(1)
+	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(remoteNamespaceTestAddress, gomock.Any(), gomock.Any()).Return(s.mockAdminClient).Times(1)
+	describe := s.mockAdminClient.EXPECT().DescribeCluster(gomock.Any(), gomock.Any()).Return(&adminservice.DescribeClusterResponse{ClusterName: "peer"}, nil).Times(1)
+	s.mockAdminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *adminservice.ApplyNamespaceMutationRequest, _ ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+			s.True(proto.Equal(mutation, request), "the mutation is relayed unchanged")
+			return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+		},
+	).After(describe).Times(1)
+
+	response, err := s.handler.ApplyRemoteClusterNamespaceRepair(context.Background(), &adminservice.ApplyRemoteClusterNamespaceRepairRequest{ClusterName: "peer", Mutation: mutation})
+	s.NoError(err)
+	s.Equal("peer", response.GetClusterName())
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetResponse().GetOutcome())
+}
+
+func (s *adminHandlerSuite) Test_ApplyRemoteClusterNamespaceRepair_PeerErrors() {
+	for _, test := range []struct {
+		name     string
+		describe string
+		applyErr error
+		code     codes.Code
+		message  string
+	}{
+		// No write may reach a cluster that does not identify as the requested peer.
+		{name: "identity mismatch", describe: "other", code: codes.FailedPrecondition, message: `remote cluster identity mismatch: expected "peer", got "other"`},
+		{name: "peer rejects the write", describe: "peer", applyErr: serviceerror.NewInvalidArgument("name / UUID collision"), code: codes.InvalidArgument, message: "collision"},
+		{name: "peer unavailable", describe: "peer", applyErr: serviceerror.NewUnavailable("connection refused"), code: codes.Unavailable, message: "connection refused"},
+	} {
+		s.Run(test.name, func() {
+			s.mockMetadata.EXPECT().GetAllClusterInfo().Return(s.remoteNamespaceTestClusters(true)).Times(1)
+			s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(remoteNamespaceTestAddress, gomock.Any(), gomock.Any()).Return(s.mockAdminClient).Times(1)
+			s.mockAdminClient.EXPECT().DescribeCluster(gomock.Any(), gomock.Any()).Return(&adminservice.DescribeClusterResponse{ClusterName: test.describe}, nil).Times(1)
+			if test.describe == "peer" {
+				s.mockAdminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(nil, test.applyErr).Times(1)
+			}
+			_, err := s.handler.ApplyRemoteClusterNamespaceRepair(context.Background(), &adminservice.ApplyRemoteClusterNamespaceRepairRequest{ClusterName: "peer", Mutation: remoteRepairTestMutation()})
+			s.Equal(test.code, serviceerror.ToStatus(err).Code(), err)
+			s.ErrorContains(err, test.message)
+		})
+	}
+}

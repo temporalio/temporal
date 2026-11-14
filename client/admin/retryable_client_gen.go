@@ -71,6 +71,21 @@ func (c *retryableClient) ApplyNamespaceMutation(
 	return resp, err
 }
 
+func (c *retryableClient) ApplyRemoteClusterNamespaceRepair(
+	ctx context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+	var resp *adminservice.ApplyRemoteClusterNamespaceRepairResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ApplyRemoteClusterNamespaceRepair(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -635,6 +650,21 @@ func (c *retryableClient) RebuildMutableState(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RebuildMutableState(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ReconcileNamespaceMutationComponents(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
+	var resp *adminservice.ReconcileNamespaceMutationComponentsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ReconcileNamespaceMutationComponents(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

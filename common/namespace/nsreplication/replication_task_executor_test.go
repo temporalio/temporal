@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -32,6 +34,57 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestOperatorRepairPreservesLocalConfigAndRejectsIdentityCollision(t *testing.T) {
+	t.Parallel()
+	for _, collision := range []bool{false, true} {
+		t.Run(fmt.Sprintf("collision=%v", collision), func(t *testing.T) {
+			t.Parallel()
+			metadata := persistence.NewMockMetadataManager(gomock.NewController(t))
+			localConfig := &persistencespb.NamespaceConfig{
+				Retention: durationpb.New(time.Hour), ArchivalBucket: "local-bucket",
+				WorkflowRules: map[string]*rulespb.WorkflowRule{"local-rule": {}},
+				BadBinaries:   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{"old": {Reason: "old"}}},
+			}
+			stored := &persistencespb.NamespaceDetail{
+				Info:   &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments", State: enumspb.NAMESPACE_STATE_REGISTERED},
+				Config: proto.CloneOf(localConfig), ConfigVersion: 10,
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "source", Clusters: []string{"source", "target"}},
+			}
+			if collision {
+				stored.Info.Id = "other-id"
+			}
+			metadata.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 30}, nil)
+			metadata.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "payments"}).Return(
+				&persistence.GetNamespaceResponse{Namespace: stored, IsGlobalNamespace: true}, nil,
+			)
+			if !collision {
+				metadata.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+					want := proto.CloneOf(localConfig)
+					want.Retention = durationpb.New(72 * time.Hour)
+					want.BadBinaries = nil
+					protorequire.ProtoEqual(t, want, request.Namespace.Config)
+					require.Equal(t, int64(11), request.Namespace.ConfigVersion)
+					require.Equal(t, int64(30), request.NotificationVersion)
+					return nil
+				})
+			}
+			executor := NewTaskExecutor("source", metadata, NewNoopDataMerger(), NewDefaultAdmitter(), log.NewNoopLogger(), testhooks.TestHooks{})
+			_, err := executor.(*taskExecutorImpl).handleNamespaceUpdateReplicationTask(t.Context(), &replicationspb.NamespaceTaskAttributes{
+				NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE, Id: "namespace-id",
+				Info:              &namespacepb.NamespaceInfo{Name: "payments", State: enumspb.NAMESPACE_STATE_REGISTERED},
+				Config:            &namespacepb.NamespaceConfig{WorkflowExecutionRetentionTtl: durationpb.New(72 * time.Hour)},
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{ActiveClusterName: "source", Clusters: []*replicationpb.ClusterReplicationConfig{{ClusterName: "source"}, {ClusterName: "target"}}},
+				ConfigVersion:     11,
+			}, MutationApplyOptions{OperatorRepair: true})
+			if collision {
+				require.ErrorIs(t, err, ErrNameUUIDCollision)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
 
 func TestNamespaceReplicationCreatesCompleteSnapshot(t *testing.T) {
 	t.Parallel()

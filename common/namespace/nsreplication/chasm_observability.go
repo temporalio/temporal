@@ -12,12 +12,14 @@ import (
 )
 
 const (
+	OperatorRepair            = "operator_repair"
 	CHASMApplyStageReceive    = "receive"
 	CHASMApplyStageLocal      = "local"
 	CHASMApplyStagePeer       = "peer"
 	CHASMApplyStageComponent  = "component"
 	CHASMReplicationTransport = "chasm"
 
+	CHASMApplyOutcomeManuallyReconciled    = "manually_reconciled"
 	CHASMApplyOutcomeApplied               = "applied"
 	CHASMApplyOutcomeCreated               = "created"
 	CHASMApplyOutcomeDuplicate             = "duplicate"
@@ -40,6 +42,8 @@ const (
 
 // CHASMAuthoritativeApplyObservation describes one authoritative CHASM lifecycle observation.
 type CHASMAuthoritativeApplyObservation struct {
+	Transport                   string
+	Mode                        string
 	Task                        *replicationspb.NamespaceTaskAttributes
 	Stage                       string
 	Outcome                     string
@@ -69,7 +73,7 @@ func RecordCHASMAuthoritativeApply(
 		metrics.TargetClusterTag(observation.TargetCluster),
 		metrics.OperationTag(OperationMetricValue(observation.Task.GetNamespaceOperation())),
 		metrics.StringTag(chasmApplyStageTag, observation.Stage),
-		metrics.StringTag("mode", chasmAuthoritativeMode),
+		metrics.StringTag("mode", chasmObservationMode(observation)),
 		metrics.OutcomeTag(observation.Outcome),
 	}
 	// Counters carry the namespace; per-namespace durations are in lifecycle events.
@@ -126,12 +130,15 @@ func EmitCHASMAuthoritativeApply(
 }
 
 // chasmAuthoritativePhase keeps processed for receiver observations, matching
-// legacy receivers. Source-side local and component observations use their own
-// phases so they are not counted as receiver processing.
+// legacy receivers. Source-side local, peer and component observations use
+// their own phases so they are not counted as receiver processing.
 func chasmAuthoritativePhase(stage string) wideevents.NamespaceReplicationPhase {
 	switch stage {
 	case CHASMApplyStageLocal:
 		return wideevents.NamespaceReplicationLocalApply
+	case CHASMApplyStagePeer:
+		// Manual reconciliation closes peer deliveries, so it shares their phase.
+		return wideevents.NamespaceReplicationPeerDelivery
 	case CHASMApplyStageComponent:
 		return wideevents.NamespaceReplicationCompleted
 	default:
@@ -165,8 +172,8 @@ func CHASMAuthoritativeApplyEventData(
 	if eventData.Details == nil {
 		eventData.Details = make(map[string]any)
 	}
-	eventData.Details["transport"] = CHASMReplicationTransport
-	eventData.Details["mode"] = chasmAuthoritativeMode
+	eventData.Details["transport"] = chasmObservationTransport(observation)
+	eventData.Details["mode"] = chasmObservationMode(observation)
 	eventData.Details[chasmApplyStageTag] = observation.Stage
 	if observation.ComponentBusinessID != "" {
 		eventData.Details["component_business_id"] = observation.ComponentBusinessID
@@ -179,4 +186,17 @@ func CHASMAuthoritativeApplyEventData(
 		eventData.Details["pending_age_ms"] = max(*observation.PendingAge, 0).Milliseconds()
 	}
 	return eventData, true
+}
+func chasmObservationTransport(observation CHASMAuthoritativeApplyObservation) string {
+	if observation.Transport != "" {
+		return observation.Transport
+	}
+	return CHASMReplicationTransport
+}
+
+func chasmObservationMode(observation CHASMAuthoritativeApplyObservation) string {
+	if observation.Mode != "" {
+		return observation.Mode
+	}
+	return chasmAuthoritativeMode
 }

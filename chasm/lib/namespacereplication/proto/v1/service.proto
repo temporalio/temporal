@@ -3,18 +3,18 @@ syntax = "proto3";
 package temporal.server.chasm.lib.namespacereplication.proto.v1;
 
 import "chasm/lib/namespacereplication/proto/v1/message.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 import "temporal/server/api/common/v1/api_category.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpb";
 
-// NamespaceReplicationService is the internal (frontend → history) RPC that
-// frontend uses to trigger namespace mutations through the CHASM-based
-// replication transport. The history-side handler starts one
-// NamespaceMutationComponent for each mutation and waits for the local phase
-// (ApplyLocalTask) to resolve. Peer fan-out (ApplyPeerTask) continues
-// asynchronously after the RPC returns.
+// NamespaceReplicationService routes namespace mutation operations from frontend
+// to the owning history host.
 service NamespaceReplicationService {
+  // TriggerNamespaceMutation starts a component and waits for local apply to
+  // resolve. Peer fan-out continues asynchronously after the RPC returns.
   rpc TriggerNamespaceMutation(TriggerNamespaceMutationRequest) returns (TriggerNamespaceMutationResponse) {
     // Route by the SAME (namespace, business_id) pair the handler uses to build
     // the component's ExecutionKey, so the RPC lands on the history host that
@@ -24,6 +24,18 @@ service NamespaceReplicationService {
     //   business_id         -> ExecutionKey.BusinessID  (namespace_id + ":" + uuid)
     // Routing here MUST stay in lockstep with handler.go's executionKey(); the
     // TestTriggerNamespaceMutationRoutingMatchesExecution test pins that.
+    option (temporal.server.api.routing.v1.routing).namespace_id = "system_namespace_id";
+    option (temporal.server.api.routing.v1.routing).business_id = "business_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // ReconcileNamespaceMutation records manual reconciliation of pending peer
+  // deliveries on one exact execution under its execution lock. It preserves
+  // existing terminal outcomes and completes the component when all peers are terminal.
+  // Namespace metadata repair and verification happen before this call; frontend
+  // handles discovery and paging. This call updates only the CHASM component.
+  // Eligibility is checked against the verified versions and local-resolution cutoff.
+  rpc ReconcileNamespaceMutation(ReconcileNamespaceMutationRequest) returns (ReconcileNamespaceMutationResponse) {
     option (temporal.server.api.routing.v1.routing).namespace_id = "system_namespace_id";
     option (temporal.server.api.routing.v1.routing).business_id = "business_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
@@ -54,3 +66,31 @@ message TriggerNamespaceMutationRequest {
 }
 
 message TriggerNamespaceMutationResponse {}
+
+message ReconcileNamespaceMutationRequest {
+  // System namespace containing the component; used with business_id for shard routing.
+  string system_namespace_id = 1;
+  // Business ID of the namespace-mutation execution discovered by frontend.
+  string business_id = 2;
+  // Exact run to reconcile, preventing selection of another execution with the same business ID.
+  string run_id = 3;
+  // ID of the repaired namespace; must match the component's mutation.
+  string namespace_id = 4;
+  // Identifier correlating this reconciliation with the repair's metadata writes.
+  string repair_id = 5;
+  // Operator-provided explanation persisted on manually closed peer deliveries.
+  string reason = 6;
+  // Only mutations whose successful local phase resolved at or before this time are eligible.
+  google.protobuf.Timestamp cutoff = 7;
+  // Current peers in the frozen authoritative source replica set (excluding
+  // the source cell). Pending deliveries outside this set are abandoned without
+  // inspecting or updating the removed peers, which may retain stale membership.
+  repeated string authoritative_peer_cells = 8;
+  // Subset of authoritative_peer_cells whose repaired state passed caller verification.
+  // Pending deliveries to other current peers remain open.
+  repeated string verified_peer_cells = 9;
+  // Upper bound on eligible mutation config versions. Presence is significant even when zero.
+  google.protobuf.Int64Value verified_config_version = 10;
+  // Upper bound on eligible mutation failover versions. Presence is significant even when zero.
+  google.protobuf.Int64Value verified_failover_version = 11;
+}

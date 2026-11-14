@@ -20,14 +20,24 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	NamespaceReplicationService_TriggerNamespaceMutation_FullMethodName = "/temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService/TriggerNamespaceMutation"
+	NamespaceReplicationService_TriggerNamespaceMutation_FullMethodName   = "/temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService/TriggerNamespaceMutation"
+	NamespaceReplicationService_ReconcileNamespaceMutation_FullMethodName = "/temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService/ReconcileNamespaceMutation"
 )
 
 // NamespaceReplicationServiceClient is the client API for NamespaceReplicationService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type NamespaceReplicationServiceClient interface {
+	// TriggerNamespaceMutation starts a component and waits for local apply to
+	// resolve. Peer fan-out continues asynchronously after the RPC returns.
 	TriggerNamespaceMutation(ctx context.Context, in *TriggerNamespaceMutationRequest, opts ...grpc.CallOption) (*TriggerNamespaceMutationResponse, error)
+	// ReconcileNamespaceMutation records manual reconciliation of pending peer
+	// deliveries on one exact execution under its execution lock. It preserves
+	// existing terminal outcomes and completes the component when all peers are terminal.
+	// Namespace metadata repair and verification happen before this call; frontend
+	// handles discovery and paging. This call updates only the CHASM component.
+	// Eligibility is checked against the verified versions and local-resolution cutoff.
+	ReconcileNamespaceMutation(ctx context.Context, in *ReconcileNamespaceMutationRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationResponse, error)
 }
 
 type namespaceReplicationServiceClient struct {
@@ -47,11 +57,29 @@ func (c *namespaceReplicationServiceClient) TriggerNamespaceMutation(ctx context
 	return out, nil
 }
 
+func (c *namespaceReplicationServiceClient) ReconcileNamespaceMutation(ctx context.Context, in *ReconcileNamespaceMutationRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationResponse, error) {
+	out := new(ReconcileNamespaceMutationResponse)
+	err := c.cc.Invoke(ctx, NamespaceReplicationService_ReconcileNamespaceMutation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NamespaceReplicationServiceServer is the server API for NamespaceReplicationService service.
 // All implementations must embed UnimplementedNamespaceReplicationServiceServer
 // for forward compatibility
 type NamespaceReplicationServiceServer interface {
+	// TriggerNamespaceMutation starts a component and waits for local apply to
+	// resolve. Peer fan-out continues asynchronously after the RPC returns.
 	TriggerNamespaceMutation(context.Context, *TriggerNamespaceMutationRequest) (*TriggerNamespaceMutationResponse, error)
+	// ReconcileNamespaceMutation records manual reconciliation of pending peer
+	// deliveries on one exact execution under its execution lock. It preserves
+	// existing terminal outcomes and completes the component when all peers are terminal.
+	// Namespace metadata repair and verification happen before this call; frontend
+	// handles discovery and paging. This call updates only the CHASM component.
+	// Eligibility is checked against the verified versions and local-resolution cutoff.
+	ReconcileNamespaceMutation(context.Context, *ReconcileNamespaceMutationRequest) (*ReconcileNamespaceMutationResponse, error)
 	mustEmbedUnimplementedNamespaceReplicationServiceServer()
 }
 
@@ -61,6 +89,9 @@ type UnimplementedNamespaceReplicationServiceServer struct {
 
 func (UnimplementedNamespaceReplicationServiceServer) TriggerNamespaceMutation(context.Context, *TriggerNamespaceMutationRequest) (*TriggerNamespaceMutationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TriggerNamespaceMutation not implemented")
+}
+func (UnimplementedNamespaceReplicationServiceServer) ReconcileNamespaceMutation(context.Context, *ReconcileNamespaceMutationRequest) (*ReconcileNamespaceMutationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReconcileNamespaceMutation not implemented")
 }
 func (UnimplementedNamespaceReplicationServiceServer) mustEmbedUnimplementedNamespaceReplicationServiceServer() {
 }
@@ -94,6 +125,24 @@ func _NamespaceReplicationService_TriggerNamespaceMutation_Handler(srv interface
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NamespaceReplicationService_ReconcileNamespaceMutation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconcileNamespaceMutationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NamespaceReplicationServiceServer).ReconcileNamespaceMutation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NamespaceReplicationService_ReconcileNamespaceMutation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NamespaceReplicationServiceServer).ReconcileNamespaceMutation(ctx, req.(*ReconcileNamespaceMutationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NamespaceReplicationService_ServiceDesc is the grpc.ServiceDesc for NamespaceReplicationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -104,6 +153,10 @@ var NamespaceReplicationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TriggerNamespaceMutation",
 			Handler:    _NamespaceReplicationService_TriggerNamespaceMutation_Handler,
+		},
+		{
+			MethodName: "ReconcileNamespaceMutation",
+			Handler:    _NamespaceReplicationService_ReconcileNamespaceMutation_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

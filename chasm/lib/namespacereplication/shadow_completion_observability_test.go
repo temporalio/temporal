@@ -182,6 +182,31 @@ func scheduleShadowLocal(t *testing.T, env *nsreplTestEnv, ref chasm.ComponentRe
 	require.NoError(t, err)
 }
 
+func TestShadowCompletionManualReconciliationPreservesFailures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		peer namespacereplicationpb.PeerApplyOutcome
+		want string
+	}{
+		{namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH, "manually_reconciled"},
+		{namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH, "mismatch"},
+		{namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL, "error"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			t.Parallel()
+			c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{Shadow: true, NamespaceDetail: testDetail(), PeerCells: []string{"a", "b"}})
+			c.Status = namespacereplicationpb.COMPONENT_STATUS_COMPLETED
+			c.PeerApply["a"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED
+			c.PeerApply["b"].Outcome = tc.peer
+			record := newShadowCompletionRecord(c, time.Now())
+			require.Equal(t, tc.want, record.outcome)
+			require.Equal(t, 1, record.peerOutcomeCounts[tc.peer.String()])
+			c.PeerApply["a"].Outcome, c.PeerApply["b"].Outcome = tc.peer, namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED
+			require.Equal(t, tc.want, newShadowCompletionRecord(c, time.Now()).outcome)
+		})
+	}
+}
+
 func TestShadowCompletionSnapshot(t *testing.T) {
 	t.Parallel()
 	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{

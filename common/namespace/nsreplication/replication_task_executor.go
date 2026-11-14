@@ -67,6 +67,9 @@ type (
 	MutationApplyOptions struct {
 		// Admission controls processing when the namespace does not exist locally.
 		Admission AdmissionOptions
+		// OperatorRepair preserves receiver-local configuration and checks namespace
+		// identity before updating an existing snapshot.
+		OperatorRepair bool
 	}
 
 	// TaskExecutorOption configures a namespace replication task executor.
@@ -256,7 +259,7 @@ func (h *taskExecutorImpl) executeValidatedTask(
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
 		return h.handleNamespaceCreationReplicationTask(ctx, task)
 	case enumsspb.NAMESPACE_OPERATION_UPDATE:
-		return h.handleNamespaceUpdateReplicationTask(ctx, task)
+		return h.handleNamespaceUpdateReplicationTask(ctx, task, options)
 	default:
 		return ApplyOutcomeUnspecified, ErrInvalidNamespaceOperation
 	}
@@ -413,6 +416,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
+	options MutationApplyOptions,
 ) (ApplyOutcome, error) {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.State)
@@ -443,6 +447,9 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	localNamespacePreMutation := h.cloneLocalNamespaceForReplicationEvent(ctx, resp.Namespace)
 
 	recordUpdated := false
+	if options.OperatorRepair && resp.Namespace.GetInfo().GetId() != task.GetId() {
+		return ApplyOutcomeUnspecified, ErrNameUUIDCollision
+	}
 	request := &persistence.UpdateNamespaceRequest{
 		Namespace:           resp.Namespace,
 		NotificationVersion: notificationVersion,
@@ -475,17 +482,20 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			Owner:       task.Info.GetOwnerEmail(),
 			Data:        data,
 		}
-		request.Namespace.Config = &persistencespb.NamespaceConfig{
-			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
-			HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
-			HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
-			VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
-			VisibilityArchivalUri:        task.Config.GetVisibilityArchivalUri(),
-			CustomSearchAttributeAliases: task.Config.GetCustomSearchAttributeAliases(),
+		config := &persistencespb.NamespaceConfig{}
+		if options.OperatorRepair && request.Namespace.Config != nil {
+			// Repair changes replicated fields without clearing receiver-local config,
+			// including when preparing the active source's config version.
+			config = proto.CloneOf(request.Namespace.Config)
 		}
-		if task.Config.GetBadBinaries() != nil {
-			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
-		}
+		config.Retention = task.Config.GetWorkflowExecutionRetentionTtl()
+		config.HistoryArchivalState = task.Config.GetHistoryArchivalState()
+		config.HistoryArchivalUri = task.Config.GetHistoryArchivalUri()
+		config.VisibilityArchivalState = task.Config.GetVisibilityArchivalState()
+		config.VisibilityArchivalUri = task.Config.GetVisibilityArchivalUri()
+		config.CustomSearchAttributeAliases = task.Config.GetCustomSearchAttributeAliases()
+		request.Namespace.Config = config
+		request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
 		request.Namespace.ReplicationConfig.Clusters = ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
 		request.Namespace.ConfigVersion = task.GetConfigVersion()
 	}

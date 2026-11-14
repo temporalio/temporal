@@ -28,6 +28,8 @@ import (
 const namespaceReplicationWarningInitialHistory = "target is missing the initial failover history entry; configuration repair will not change failover history"
 
 const (
+	namespaceReplicationRoleSource                      = "SOURCE"
+	namespaceReplicationRoleTarget                      = "TARGET"
 	namespaceReplicationStatusHealthy                   = "HEALTHY"
 	namespaceReplicationStatusRepairRequired            = "REPAIR_REQUIRED"
 	namespaceReplicationStatusBlocked                   = "BLOCKED"
@@ -106,6 +108,10 @@ type namespaceReplicationObservation struct {
 	// the first source read and must not be used as a baseline.
 	sourceSnapshot  *adminservice.GetNamespaceResponse
 	targetSnapshots map[string]*adminservice.GetNamespaceResponse
+	// sourceStable is set only after the final source read matches the source
+	// snapshot used to compare targets. Repair must not reconcile CHASM peers
+	// from a partial observation whose authority may have moved mid-scan.
+	sourceStable bool
 }
 
 // namespaceReplicationReader reads namespace state for verification. The source
@@ -365,7 +371,7 @@ func (v *namespaceReplicationVerifier) observe(
 	sourceFailoverVersion := source.GetFailoverVersion()
 	result.Clusters = append(result.Clusters, namespaceReplicationClusterVerification{
 		Cluster:             result.SourceCluster,
-		Role:                "SOURCE",
+		Role:                namespaceReplicationRoleSource,
 		Presence:            namespaceReplicationPresencePresent,
 		ConfigVersion:       &sourceConfigVersion,
 		ConfigFingerprint:   result.SourceConfigFingerprint,
@@ -429,6 +435,7 @@ func (v *namespaceReplicationVerifier) observe(
 	// The source is unchanged across the scan, so this snapshot is the baseline
 	// that callers such as repair may act on.
 	observation.sourceSnapshot = finalSource
+	observation.sourceStable = true
 
 	deriveNamespaceReplicationStatus(result)
 	return observation, nil
@@ -443,7 +450,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 ) (result namespaceReplicationClusterVerification, namespace *adminservice.GetNamespaceResponse) {
 	result = namespaceReplicationClusterVerification{
 		Cluster:       cluster,
-		Role:          "TARGET",
+		Role:          namespaceReplicationRoleTarget,
 		Presence:      namespaceReplicationPresenceUnavailable,
 		ConfigMatch:   namespaceReplicationMatchUnknown,
 		FailoverMatch: namespaceReplicationMatchUnknown,

@@ -20,56 +20,58 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	AdminService_RebuildMutableState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RebuildMutableState"
-	AdminService_ImportWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/ImportWorkflowExecution"
-	AdminService_DescribeMutableState_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/DescribeMutableState"
-	AdminService_DescribeHistoryHost_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/DescribeHistoryHost"
-	AdminService_GetShard_FullMethodName                            = "/temporal.server.api.adminservice.v1.AdminService/GetShard"
-	AdminService_CloseShard_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/CloseShard"
-	AdminService_ListHistoryTasks_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/ListHistoryTasks"
-	AdminService_RemoveTask_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/RemoveTask"
-	AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2"
-	AdminService_GetWorkflowExecutionRawHistory_FullMethodName      = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
-	AdminService_GetReplicationMessages_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
-	AdminService_GetNamespaceReplicationMessages_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
-	AdminService_ApplyNamespaceMutation_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ApplyNamespaceMutation"
-	AdminService_GetDLQReplicationMessages_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
-	AdminService_ReapplyEvents_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
-	AdminService_AddSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
-	AdminService_RemoveSearchAttributes_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/RemoveSearchAttributes"
-	AdminService_GetSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes"
-	AdminService_DescribeCluster_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/DescribeCluster"
-	AdminService_ListClusters_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListClusters"
-	AdminService_ListClusterMembers_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers"
-	AdminService_AddOrUpdateRemoteCluster_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster"
-	AdminService_RemoveRemoteCluster_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster"
-	AdminService_GetDLQMessages_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/GetDLQMessages"
-	AdminService_PurgeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
-	AdminService_MergeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
-	AdminService_RefreshWorkflowTasks_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/RefreshWorkflowTasks"
-	AdminService_StartAdminBatchOperation_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/StartAdminBatchOperation"
-	AdminService_ResendReplicationTasks_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ResendReplicationTasks"
-	AdminService_GetTaskQueueTasks_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks"
-	AdminService_DeleteWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
-	AdminService_StreamWorkflowReplicationMessages_FullMethodName   = "/temporal.server.api.adminservice.v1.AdminService/StreamWorkflowReplicationMessages"
-	AdminService_GetNamespace_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/GetNamespace"
-	AdminService_GetRemoteClusterNamespace_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/GetRemoteClusterNamespace"
-	AdminService_GetDLQTasks_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/GetDLQTasks"
-	AdminService_PurgeDLQTasks_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQTasks"
-	AdminService_MergeDLQTasks_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQTasks"
-	AdminService_DescribeDLQJob_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/DescribeDLQJob"
-	AdminService_CancelDLQJob_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/CancelDLQJob"
-	AdminService_AddTasks_FullMethodName                            = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
-	AdminService_ListQueues_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
-	AdminService_DeepHealthCheck_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
-	AdminService_SyncWorkflowState_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState"
-	AdminService_GenerateLastHistoryReplicationTasks_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/GenerateLastHistoryReplicationTasks"
-	AdminService_DescribeTaskQueuePartition_FullMethodName          = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
-	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
-	AdminService_GetTaskQueueUserData_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
-	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
-	AdminService_ListExecutions_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/ListExecutions"
-	AdminService_CountExecutions_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/CountExecutions"
+	AdminService_RebuildMutableState_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/RebuildMutableState"
+	AdminService_ImportWorkflowExecution_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ImportWorkflowExecution"
+	AdminService_DescribeMutableState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/DescribeMutableState"
+	AdminService_DescribeHistoryHost_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/DescribeHistoryHost"
+	AdminService_GetShard_FullMethodName                             = "/temporal.server.api.adminservice.v1.AdminService/GetShard"
+	AdminService_CloseShard_FullMethodName                           = "/temporal.server.api.adminservice.v1.AdminService/CloseShard"
+	AdminService_ListHistoryTasks_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/ListHistoryTasks"
+	AdminService_RemoveTask_FullMethodName                           = "/temporal.server.api.adminservice.v1.AdminService/RemoveTask"
+	AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2"
+	AdminService_GetWorkflowExecutionRawHistory_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
+	AdminService_GetReplicationMessages_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
+	AdminService_GetNamespaceReplicationMessages_FullMethodName      = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
+	AdminService_ApplyNamespaceMutation_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/ApplyNamespaceMutation"
+	AdminService_GetDLQReplicationMessages_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
+	AdminService_ReapplyEvents_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
+	AdminService_AddSearchAttributes_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
+	AdminService_RemoveSearchAttributes_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/RemoveSearchAttributes"
+	AdminService_GetSearchAttributes_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes"
+	AdminService_DescribeCluster_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/DescribeCluster"
+	AdminService_ListClusters_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/ListClusters"
+	AdminService_ListClusterMembers_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers"
+	AdminService_AddOrUpdateRemoteCluster_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster"
+	AdminService_RemoveRemoteCluster_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster"
+	AdminService_GetDLQMessages_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/GetDLQMessages"
+	AdminService_PurgeDLQMessages_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
+	AdminService_MergeDLQMessages_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
+	AdminService_RefreshWorkflowTasks_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RefreshWorkflowTasks"
+	AdminService_StartAdminBatchOperation_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/StartAdminBatchOperation"
+	AdminService_ResendReplicationTasks_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/ResendReplicationTasks"
+	AdminService_GetTaskQueueTasks_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks"
+	AdminService_DeleteWorkflowExecution_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
+	AdminService_StreamWorkflowReplicationMessages_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/StreamWorkflowReplicationMessages"
+	AdminService_GetNamespace_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/GetNamespace"
+	AdminService_GetRemoteClusterNamespace_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/GetRemoteClusterNamespace"
+	AdminService_ApplyRemoteClusterNamespaceRepair_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/ApplyRemoteClusterNamespaceRepair"
+	AdminService_GetDLQTasks_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/GetDLQTasks"
+	AdminService_PurgeDLQTasks_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQTasks"
+	AdminService_MergeDLQTasks_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQTasks"
+	AdminService_DescribeDLQJob_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/DescribeDLQJob"
+	AdminService_CancelDLQJob_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/CancelDLQJob"
+	AdminService_AddTasks_FullMethodName                             = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
+	AdminService_ListQueues_FullMethodName                           = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
+	AdminService_DeepHealthCheck_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
+	AdminService_SyncWorkflowState_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState"
+	AdminService_GenerateLastHistoryReplicationTasks_FullMethodName  = "/temporal.server.api.adminservice.v1.AdminService/GenerateLastHistoryReplicationTasks"
+	AdminService_DescribeTaskQueuePartition_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
+	AdminService_ForceUnloadTaskQueuePartition_FullMethodName        = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
+	AdminService_GetTaskQueueUserData_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
+	AdminService_MigrateSchedule_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
+	AdminService_ReconcileNamespaceMutationComponents_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/ReconcileNamespaceMutationComponents"
+	AdminService_ListExecutions_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/ListExecutions"
+	AdminService_CountExecutions_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/CountExecutions"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -108,6 +110,8 @@ type AdminServiceClient interface {
 	// Shadow requests validate the transported payload and never write receiver
 	// namespace state. Authoritative requests apply the mutation when it is newer
 	// than the receiver state and report the resulting apply outcome.
+	// Operator repair uses this direct apply path to repair namespace metadata
+	// without starting another replication execution or publishing a queue task.
 	ApplyNamespaceMutation(ctx context.Context, in *ApplyNamespaceMutationRequest, opts ...grpc.CallOption) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(ctx context.Context, in *GetDLQReplicationMessagesRequest, opts ...grpc.CallOption) (*GetDLQReplicationMessagesResponse, error)
@@ -157,6 +161,12 @@ type AdminServiceClient interface {
 	// replicas while talking only to their local frontend. It is read-only and
 	// verifies the remote cluster's identity before reading the namespace.
 	GetRemoteClusterNamespace(ctx context.Context, in *GetRemoteClusterNamespaceRequest, opts ...grpc.CallOption) (*GetRemoteClusterNamespaceResponse, error)
+	// ApplyRemoteClusterNamespaceRepair relays an operator-repair namespace
+	// mutation to a connected remote cluster through this cluster's remote-cluster
+	// client, so repair tools write peers while talking only to their local
+	// frontend. It verifies the remote cluster's identity before writing and
+	// refuses mutations that are not attributed to operator repair.
+	ApplyRemoteClusterNamespaceRepair(ctx context.Context, in *ApplyRemoteClusterNamespaceRepairRequest, opts ...grpc.CallOption) (*ApplyRemoteClusterNamespaceRepairResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
 	//     aip.dev/not-precedent:  --)
@@ -174,6 +184,15 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
+	// ReconcileNamespaceMutationComponents closes outstanding CHASM peer deliveries
+	// after namespace data has been repaired and verified by the caller. It updates
+	// component state only; it does not repair namespace metadata. Call the active
+	// source cluster with the verified source versions, replica set, and cutoff.
+	// Current peers must be verified before their deliveries can be closed. Removed
+	// peers' deliveries are abandoned without inspecting or updating those peers.
+	// Each call processes one visibility page and returns per-execution results.
+	// Visibility is eventually consistent; repeat discovery to find delayed records.
+	ReconcileNamespaceMutationComponents(ctx context.Context, in *ReconcileNamespaceMutationComponentsRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationComponentsResponse, error)
 	ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
 	CountExecutions(ctx context.Context, in *CountExecutionsRequest, opts ...grpc.CallOption) (*CountExecutionsResponse, error)
 }
@@ -514,6 +533,15 @@ func (c *adminServiceClient) GetRemoteClusterNamespace(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *adminServiceClient) ApplyRemoteClusterNamespaceRepair(ctx context.Context, in *ApplyRemoteClusterNamespaceRepairRequest, opts ...grpc.CallOption) (*ApplyRemoteClusterNamespaceRepairResponse, error) {
+	out := new(ApplyRemoteClusterNamespaceRepairResponse)
+	err := c.cc.Invoke(ctx, AdminService_ApplyRemoteClusterNamespaceRepair_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error) {
 	out := new(GetDLQTasksResponse)
 	err := c.cc.Invoke(ctx, AdminService_GetDLQTasks_FullMethodName, in, out, opts...)
@@ -640,6 +668,15 @@ func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateSch
 	return out, nil
 }
 
+func (c *adminServiceClient) ReconcileNamespaceMutationComponents(ctx context.Context, in *ReconcileNamespaceMutationComponentsRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationComponentsResponse, error) {
+	out := new(ReconcileNamespaceMutationComponentsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ReconcileNamespaceMutationComponents_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error) {
 	out := new(ListExecutionsResponse)
 	err := c.cc.Invoke(ctx, AdminService_ListExecutions_FullMethodName, in, out, opts...)
@@ -694,6 +731,8 @@ type AdminServiceServer interface {
 	// Shadow requests validate the transported payload and never write receiver
 	// namespace state. Authoritative requests apply the mutation when it is newer
 	// than the receiver state and report the resulting apply outcome.
+	// Operator repair uses this direct apply path to repair namespace metadata
+	// without starting another replication execution or publishing a queue task.
 	ApplyNamespaceMutation(context.Context, *ApplyNamespaceMutationRequest) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(context.Context, *GetDLQReplicationMessagesRequest) (*GetDLQReplicationMessagesResponse, error)
@@ -743,6 +782,12 @@ type AdminServiceServer interface {
 	// replicas while talking only to their local frontend. It is read-only and
 	// verifies the remote cluster's identity before reading the namespace.
 	GetRemoteClusterNamespace(context.Context, *GetRemoteClusterNamespaceRequest) (*GetRemoteClusterNamespaceResponse, error)
+	// ApplyRemoteClusterNamespaceRepair relays an operator-repair namespace
+	// mutation to a connected remote cluster through this cluster's remote-cluster
+	// client, so repair tools write peers while talking only to their local
+	// frontend. It verifies the remote cluster's identity before writing and
+	// refuses mutations that are not attributed to operator repair.
+	ApplyRemoteClusterNamespaceRepair(context.Context, *ApplyRemoteClusterNamespaceRepairRequest) (*ApplyRemoteClusterNamespaceRepairResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
 	//     aip.dev/not-precedent:  --)
@@ -760,6 +805,15 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
+	// ReconcileNamespaceMutationComponents closes outstanding CHASM peer deliveries
+	// after namespace data has been repaired and verified by the caller. It updates
+	// component state only; it does not repair namespace metadata. Call the active
+	// source cluster with the verified source versions, replica set, and cutoff.
+	// Current peers must be verified before their deliveries can be closed. Removed
+	// peers' deliveries are abandoned without inspecting or updating those peers.
+	// Each call processes one visibility page and returns per-execution results.
+	// Visibility is eventually consistent; repeat discovery to find delayed records.
+	ReconcileNamespaceMutationComponents(context.Context, *ReconcileNamespaceMutationComponentsRequest) (*ReconcileNamespaceMutationComponentsResponse, error)
 	ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error)
 	CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
@@ -871,6 +925,9 @@ func (UnimplementedAdminServiceServer) GetNamespace(context.Context, *GetNamespa
 func (UnimplementedAdminServiceServer) GetRemoteClusterNamespace(context.Context, *GetRemoteClusterNamespaceRequest) (*GetRemoteClusterNamespaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetRemoteClusterNamespace not implemented")
 }
+func (UnimplementedAdminServiceServer) ApplyRemoteClusterNamespaceRepair(context.Context, *ApplyRemoteClusterNamespaceRepairRequest) (*ApplyRemoteClusterNamespaceRepairResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyRemoteClusterNamespaceRepair not implemented")
+}
 func (UnimplementedAdminServiceServer) GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQTasks not implemented")
 }
@@ -912,6 +969,9 @@ func (UnimplementedAdminServiceServer) GetTaskQueueUserData(context.Context, *Ge
 }
 func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
+}
+func (UnimplementedAdminServiceServer) ReconcileNamespaceMutationComponents(context.Context, *ReconcileNamespaceMutationComponentsRequest) (*ReconcileNamespaceMutationComponentsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReconcileNamespaceMutationComponents not implemented")
 }
 func (UnimplementedAdminServiceServer) ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListExecutions not implemented")
@@ -1552,6 +1612,24 @@ func _AdminService_GetRemoteClusterNamespace_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ApplyRemoteClusterNamespaceRepair_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyRemoteClusterNamespaceRepairRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ApplyRemoteClusterNamespaceRepair(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ApplyRemoteClusterNamespaceRepair_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ApplyRemoteClusterNamespaceRepair(ctx, req.(*ApplyRemoteClusterNamespaceRepairRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_GetDLQTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDLQTasksRequest)
 	if err := dec(in); err != nil {
@@ -1804,6 +1882,24 @@ func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ReconcileNamespaceMutationComponents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconcileNamespaceMutationComponentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ReconcileNamespaceMutationComponents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ReconcileNamespaceMutationComponents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ReconcileNamespaceMutationComponents(ctx, req.(*ReconcileNamespaceMutationComponentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_ListExecutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListExecutionsRequest)
 	if err := dec(in); err != nil {
@@ -1980,6 +2076,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_GetRemoteClusterNamespace_Handler,
 		},
 		{
+			MethodName: "ApplyRemoteClusterNamespaceRepair",
+			Handler:    _AdminService_ApplyRemoteClusterNamespaceRepair_Handler,
+		},
+		{
 			MethodName: "GetDLQTasks",
 			Handler:    _AdminService_GetDLQTasks_Handler,
 		},
@@ -2034,6 +2134,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MigrateSchedule",
 			Handler:    _AdminService_MigrateSchedule_Handler,
+		},
+		{
+			MethodName: "ReconcileNamespaceMutationComponents",
+			Handler:    _AdminService_ReconcileNamespaceMutationComponents_Handler,
 		},
 		{
 			MethodName: "ListExecutions",

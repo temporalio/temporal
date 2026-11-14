@@ -65,6 +65,20 @@ func (c *metricClient) ApplyNamespaceMutation(
 	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
 }
 
+func (c *metricClient) ApplyRemoteClusterNamespaceRepair(
+	ctx context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ApplyRemoteClusterNamespaceRepairResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientApplyRemoteClusterNamespaceRepair")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ApplyRemoteClusterNamespaceRepair(ctx, request, opts...)
+}
+
 func (c *metricClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -595,6 +609,20 @@ func (c *metricClient) RebuildMutableState(
 	}()
 
 	return c.client.RebuildMutableState(ctx, request, opts...)
+}
+
+func (c *metricClient) ReconcileNamespaceMutationComponents(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ReconcileNamespaceMutationComponentsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientReconcileNamespaceMutationComponents")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ReconcileNamespaceMutationComponents(ctx, request, opts...)
 }
 
 func (c *metricClient) RefreshWorkflowTasks(

@@ -215,6 +215,8 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		chasmRegistry,
+		nil, // CHASM visibility manager
+		nil, // CHASM repair client
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
 		nil, // metricsHandler
@@ -1342,6 +1344,9 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
+	sourceClock := clock.NewEventTimeSource()
+	sourceClock.Update(time.Unix(100, 0))
+	s.handler.timeSource = sourceClock
 	namespaceID := "someId"
 	nsResponse := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -1368,7 +1373,10 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	}
 	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: namespaceID,
-	}).Return(nsResponse, nil)
+	}).DoAndReturn(func(context.Context, *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+		sourceClock.Update(time.Unix(200, 0))
+		return nsResponse, nil
+	})
 	resp, err := s.handler.GetNamespace(context.Background(), &adminservice.GetNamespaceRequest{
 		Attributes: &adminservice.GetNamespaceRequest_Id{
 			Id: namespaceID,
@@ -1376,6 +1384,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
+	s.Equal(time.Unix(100, 0).UTC(), resp.GetObservationTime().AsTime())
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {

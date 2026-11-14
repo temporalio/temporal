@@ -25,6 +25,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.ApplyNamespaceMutationResponse:
 		return nil
+	case *adminservice.ApplyRemoteClusterNamespaceRepairRequest:
+		return nil
+	case *adminservice.ApplyRemoteClusterNamespaceRepairResponse:
+		return nil
 	case *adminservice.CancelDLQJobRequest:
 		return nil
 	case *adminservice.CancelDLQJobResponse:
@@ -203,6 +207,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *adminservice.RebuildMutableStateResponse:
+		return nil
+	case *adminservice.ReconcileNamespaceMutationComponentsRequest:
+		return nil
+	case *adminservice.ReconcileNamespaceMutationComponentsResponse:
 		return nil
 	case *adminservice.RefreshWorkflowTasksRequest:
 		return []tag.Tag{

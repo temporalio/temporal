@@ -58,7 +58,7 @@ func TestLocalCommitObservedWhenTriggerPollTimesOut(t *testing.T) {
 				committedRef = ref
 				require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 			}}
-			response, err := newServiceHandler(log.NewNoopLogger()).TriggerNamespaceMutation(chasm.NewEngineContext(t.Context(), engine), request)
+			response, err := newServiceHandler(log.NewNoopLogger(), nil).TriggerNamespaceMutation(chasm.NewEngineContext(t.Context(), engine), request)
 			require.ErrorIs(t, err, context.DeadlineExceeded)
 			require.Nil(t, response)
 			require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, env.read(committedRef).GetLocalApply().GetOutcome())

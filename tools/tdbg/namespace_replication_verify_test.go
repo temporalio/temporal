@@ -1373,6 +1373,7 @@ func testNamespaceResponse(
 			{FailoverTime: timestamppb.New(time.Unix(20, 0)), FailoverVersion: failoverVersion},
 		},
 		IsGlobalNamespace: true,
+		ObservationTime:   timestamppb.New(time.Unix(102, 0)),
 	}
 }
 
@@ -1396,11 +1397,72 @@ func (namespaceReplicationErrorWriter) Write([]byte) (int, error) {
 
 type testNamespaceReplicationAdminClient struct {
 	adminservice.AdminServiceClient
-	describeClusterFn func() (*adminservice.DescribeClusterResponse, error)
-	getNamespaceFn    func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error)
-	// remoteClusterNamespaceFn overrides the relay; otherwise peers serve it.
+	describeClusterFn                      func() (*adminservice.DescribeClusterResponse, error)
+	getNamespaceFn                         func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error)
+	applyNamespaceMutationFn               func(*adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error)
+	reconcileNamespaceMutationComponentsFn func(*adminservice.ReconcileNamespaceMutationComponentsRequest) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error)
+	// remoteClusterNamespaceFn and remoteClusterRepairFn override the relays;
+	// otherwise peers serve them.
 	remoteClusterNamespaceFn func(*adminservice.GetRemoteClusterNamespaceRequest) (*adminservice.GetRemoteClusterNamespaceResponse, error)
+	remoteClusterRepairFn    func(*adminservice.ApplyRemoteClusterNamespaceRepairRequest) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error)
 	peers                    map[string]*testNamespaceReplicationAdminClient
+}
+
+func (c *testNamespaceReplicationAdminClient) ApplyNamespaceMutation(
+	_ context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	return c.applyNamespaceMutationFn(request)
+}
+
+func (c *testNamespaceReplicationAdminClient) ReconcileNamespaceMutationComponents(
+	_ context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
+	return c.reconcileNamespaceMutationComponentsFn(request)
+}
+
+// relayPeer mirrors the server relays' routing: an unknown peer and a peer
+// reporting another identity fail before the peer is read or written.
+func (c *testNamespaceReplicationAdminClient) relayPeer(clusterName string) (*testNamespaceReplicationAdminClient, string, error) {
+	peer := c.peers[clusterName]
+	if peer == nil {
+		return nil, "", serviceerror.NewFailedPreconditionf("unknown remote cluster %q", clusterName)
+	}
+	describe, err := peer.describeClusterFn()
+	if err != nil {
+		return nil, "", err
+	}
+	if describe.GetClusterName() != clusterName {
+		return nil, "", serviceerror.NewFailedPreconditionf(
+			"remote cluster identity mismatch: expected %q, got %q",
+			clusterName,
+			describe.GetClusterName(),
+		)
+	}
+	return peer, describe.GetClusterName(), nil
+}
+
+// ApplyRemoteClusterNamespaceRepair mirrors the server write relay.
+func (c *testNamespaceReplicationAdminClient) ApplyRemoteClusterNamespaceRepair(
+	_ context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+	if c.remoteClusterRepairFn != nil {
+		return c.remoteClusterRepairFn(request)
+	}
+	peer, clusterName, err := c.relayPeer(request.GetClusterName())
+	if err != nil {
+		return nil, err
+	}
+	response, err := peer.applyNamespaceMutationFn(request.GetMutation())
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.ApplyRemoteClusterNamespaceRepairResponse{ClusterName: clusterName, Response: response}, nil
 }
 
 func (c *testNamespaceReplicationAdminClient) DescribeCluster(
@@ -1430,20 +1492,9 @@ func (c *testNamespaceReplicationAdminClient) GetRemoteClusterNamespace(
 	if c.remoteClusterNamespaceFn != nil {
 		return c.remoteClusterNamespaceFn(request)
 	}
-	peer := c.peers[request.GetClusterName()]
-	if peer == nil {
-		return nil, serviceerror.NewFailedPreconditionf("unknown remote cluster %q", request.GetClusterName())
-	}
-	describe, err := peer.describeClusterFn()
+	peer, clusterName, err := c.relayPeer(request.GetClusterName())
 	if err != nil {
 		return nil, err
-	}
-	if describe.GetClusterName() != request.GetClusterName() {
-		return nil, serviceerror.NewFailedPreconditionf(
-			"remote cluster identity mismatch: expected %q, got %q",
-			request.GetClusterName(),
-			describe.GetClusterName(),
-		)
 	}
 	namespaceRequest := &adminservice.GetNamespaceRequest{}
 	if request.GetRemoteNamespaceId() != "" {
@@ -1455,5 +1506,5 @@ func (c *testNamespaceReplicationAdminClient) GetRemoteClusterNamespace(
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.GetRemoteClusterNamespaceResponse{ClusterName: describe.GetClusterName(), Namespace: response}, nil
+	return &adminservice.GetRemoteClusterNamespaceResponse{ClusterName: clusterName, Namespace: response}, nil
 }

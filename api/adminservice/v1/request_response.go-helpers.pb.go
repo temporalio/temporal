@@ -2484,6 +2484,80 @@ func (this *GetRemoteClusterNamespaceResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ApplyRemoteClusterNamespaceRepairRequest to the protobuf v3 wire format
+func (val *ApplyRemoteClusterNamespaceRepairRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ApplyRemoteClusterNamespaceRepairRequest from the protobuf v3 wire format
+func (val *ApplyRemoteClusterNamespaceRepairRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ApplyRemoteClusterNamespaceRepairRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ApplyRemoteClusterNamespaceRepairRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ApplyRemoteClusterNamespaceRepairRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ApplyRemoteClusterNamespaceRepairRequest
+	switch t := that.(type) {
+	case *ApplyRemoteClusterNamespaceRepairRequest:
+		that1 = t
+	case ApplyRemoteClusterNamespaceRepairRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ApplyRemoteClusterNamespaceRepairResponse to the protobuf v3 wire format
+func (val *ApplyRemoteClusterNamespaceRepairResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ApplyRemoteClusterNamespaceRepairResponse from the protobuf v3 wire format
+func (val *ApplyRemoteClusterNamespaceRepairResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ApplyRemoteClusterNamespaceRepairResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ApplyRemoteClusterNamespaceRepairResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ApplyRemoteClusterNamespaceRepairResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ApplyRemoteClusterNamespaceRepairResponse
+	switch t := that.(type) {
+	case *ApplyRemoteClusterNamespaceRepairResponse:
+		that1 = t
+	case ApplyRemoteClusterNamespaceRepairResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type GetDLQTasksRequest to the protobuf v3 wire format
 func (val *GetDLQTasksRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -3808,6 +3882,191 @@ func (this *CountExecutionsResponse) Equal(that interface{}) bool {
 	case *CountExecutionsResponse:
 		that1 = t
 	case CountExecutionsResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NamespaceMutationAttribution to the protobuf v3 wire format
+func (val *NamespaceMutationAttribution) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NamespaceMutationAttribution from the protobuf v3 wire format
+func (val *NamespaceMutationAttribution) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NamespaceMutationAttribution) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NamespaceMutationAttribution values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NamespaceMutationAttribution) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NamespaceMutationAttribution
+	switch t := that.(type) {
+	case *NamespaceMutationAttribution:
+		that1 = t
+	case NamespaceMutationAttribution:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ReconcileNamespaceMutationComponentsRequest to the protobuf v3 wire format
+func (val *ReconcileNamespaceMutationComponentsRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ReconcileNamespaceMutationComponentsRequest from the protobuf v3 wire format
+func (val *ReconcileNamespaceMutationComponentsRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ReconcileNamespaceMutationComponentsRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ReconcileNamespaceMutationComponentsRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ReconcileNamespaceMutationComponentsRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ReconcileNamespaceMutationComponentsRequest
+	switch t := that.(type) {
+	case *ReconcileNamespaceMutationComponentsRequest:
+		that1 = t
+	case ReconcileNamespaceMutationComponentsRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ReconcileNamespaceMutationComponentsResponse to the protobuf v3 wire format
+func (val *ReconcileNamespaceMutationComponentsResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ReconcileNamespaceMutationComponentsResponse from the protobuf v3 wire format
+func (val *ReconcileNamespaceMutationComponentsResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ReconcileNamespaceMutationComponentsResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ReconcileNamespaceMutationComponentsResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ReconcileNamespaceMutationComponentsResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ReconcileNamespaceMutationComponentsResponse
+	switch t := that.(type) {
+	case *ReconcileNamespaceMutationComponentsResponse:
+		that1 = t
+	case ReconcileNamespaceMutationComponentsResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NamespaceMutationComponentReconciliation to the protobuf v3 wire format
+func (val *NamespaceMutationComponentReconciliation) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NamespaceMutationComponentReconciliation from the protobuf v3 wire format
+func (val *NamespaceMutationComponentReconciliation) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NamespaceMutationComponentReconciliation) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NamespaceMutationComponentReconciliation values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NamespaceMutationComponentReconciliation) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NamespaceMutationComponentReconciliation
+	switch t := that.(type) {
+	case *NamespaceMutationComponentReconciliation:
+		that1 = t
+	case NamespaceMutationComponentReconciliation:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NamespaceMutationPeerReconciliation to the protobuf v3 wire format
+func (val *NamespaceMutationPeerReconciliation) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NamespaceMutationPeerReconciliation from the protobuf v3 wire format
+func (val *NamespaceMutationPeerReconciliation) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NamespaceMutationPeerReconciliation) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NamespaceMutationPeerReconciliation values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NamespaceMutationPeerReconciliation) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NamespaceMutationPeerReconciliation
+	switch t := that.(type) {
+	case *NamespaceMutationPeerReconciliation:
+		that1 = t
+	case NamespaceMutationPeerReconciliation:
 		that1 = &t
 	default:
 		return false

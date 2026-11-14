@@ -257,6 +257,138 @@ func (ReplicationFlowControlCommand) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_enums_v1_replication_proto_rawDescGZIP(), []int{2}
 }
 
+// NamespaceReconciliationOutcome reports the disposition of a peer delivery
+// during operator repair.
+type NamespaceReconciliationOutcome int32
+
+const (
+	NAMESPACE_RECONCILIATION_OUTCOME_UNSPECIFIED NamespaceReconciliationOutcome = 0
+	// Operator repair closed the peer delivery.
+	NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED NamespaceReconciliationOutcome = 1
+	// The delivery had already reached a terminal outcome.
+	NAMESPACE_RECONCILIATION_OUTCOME_ALREADY_TERMINAL NamespaceReconciliationOutcome = 2
+	// The current replica was not verified and its delivery remains open.
+	NAMESPACE_RECONCILIATION_OUTCOME_NOT_VERIFIED NamespaceReconciliationOutcome = 3
+)
+
+// Enum value maps for NamespaceReconciliationOutcome.
+var (
+	NamespaceReconciliationOutcome_name = map[int32]string{
+		0: "NAMESPACE_RECONCILIATION_OUTCOME_UNSPECIFIED",
+		1: "NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED",
+		2: "NAMESPACE_RECONCILIATION_OUTCOME_ALREADY_TERMINAL",
+		3: "NAMESPACE_RECONCILIATION_OUTCOME_NOT_VERIFIED",
+	}
+	NamespaceReconciliationOutcome_value = map[string]int32{
+		"NAMESPACE_RECONCILIATION_OUTCOME_UNSPECIFIED":      0,
+		"NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED":       1,
+		"NAMESPACE_RECONCILIATION_OUTCOME_ALREADY_TERMINAL": 2,
+		"NAMESPACE_RECONCILIATION_OUTCOME_NOT_VERIFIED":     3,
+	}
+)
+
+func (x NamespaceReconciliationOutcome) Enum() *NamespaceReconciliationOutcome {
+	p := new(NamespaceReconciliationOutcome)
+	*p = x
+	return p
+}
+
+func (x NamespaceReconciliationOutcome) String() string {
+	switch x {
+	case NAMESPACE_RECONCILIATION_OUTCOME_UNSPECIFIED:
+		return "Unspecified"
+	case NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED:
+		return "Reconciled"
+	case NAMESPACE_RECONCILIATION_OUTCOME_ALREADY_TERMINAL:
+		return "AlreadyTerminal"
+	case NAMESPACE_RECONCILIATION_OUTCOME_NOT_VERIFIED:
+		return "NotVerified"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (NamespaceReconciliationOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_api_enums_v1_replication_proto_enumTypes[3].Descriptor()
+}
+
+func (NamespaceReconciliationOutcome) Type() protoreflect.EnumType {
+	return &file_temporal_server_api_enums_v1_replication_proto_enumTypes[3]
+}
+
+func (x NamespaceReconciliationOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NamespaceReconciliationOutcome.Descriptor instead.
+func (NamespaceReconciliationOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_api_enums_v1_replication_proto_rawDescGZIP(), []int{3}
+}
+
+// ManualReconciliationBasis records why an operator closed a peer delivery.
+type ManualReconciliationBasis int32
+
+const (
+	MANUAL_RECONCILIATION_BASIS_UNSPECIFIED ManualReconciliationBasis = 0
+	// The configured peer's namespace state was verified after repair.
+	MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET ManualReconciliationBasis = 1
+	// The source no longer includes this peer. Delivery was abandoned without
+	// inspecting or updating the peer, which may retain stale membership.
+	MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP ManualReconciliationBasis = 2
+)
+
+// Enum value maps for ManualReconciliationBasis.
+var (
+	ManualReconciliationBasis_name = map[int32]string{
+		0: "MANUAL_RECONCILIATION_BASIS_UNSPECIFIED",
+		1: "MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET",
+		2: "MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP",
+	}
+	ManualReconciliationBasis_value = map[string]int32{
+		"MANUAL_RECONCILIATION_BASIS_UNSPECIFIED":        0,
+		"MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET":    1,
+		"MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP": 2,
+	}
+)
+
+func (x ManualReconciliationBasis) Enum() *ManualReconciliationBasis {
+	p := new(ManualReconciliationBasis)
+	*p = x
+	return p
+}
+
+func (x ManualReconciliationBasis) String() string {
+	switch x {
+	case MANUAL_RECONCILIATION_BASIS_UNSPECIFIED:
+		return "Unspecified"
+	case MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET:
+		return "VerifiedTarget"
+	case MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP:
+		return "RemovedMembership"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (ManualReconciliationBasis) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_api_enums_v1_replication_proto_enumTypes[4].Descriptor()
+}
+
+func (ManualReconciliationBasis) Type() protoreflect.EnumType {
+	return &file_temporal_server_api_enums_v1_replication_proto_enumTypes[4]
+}
+
+func (x ManualReconciliationBasis) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ManualReconciliationBasis.Descriptor instead.
+func (ManualReconciliationBasis) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_api_enums_v1_replication_proto_rawDescGZIP(), []int{4}
+}
+
 var File_temporal_server_api_enums_v1_replication_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_enums_v1_replication_proto_rawDesc = "" +
@@ -285,7 +417,16 @@ const file_temporal_server_api_enums_v1_replication_proto_rawDesc = "" +
 	"\x1dReplicationFlowControlCommand\x120\n" +
 	",REPLICATION_FLOW_CONTROL_COMMAND_UNSPECIFIED\x10\x00\x12+\n" +
 	"'REPLICATION_FLOW_CONTROL_COMMAND_RESUME\x10\x01\x12*\n" +
-	"&REPLICATION_FLOW_CONTROL_COMMAND_PAUSE\x10\x02B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
+	"&REPLICATION_FLOW_CONTROL_COMMAND_PAUSE\x10\x02*\xed\x01\n" +
+	"\x1eNamespaceReconciliationOutcome\x120\n" +
+	",NAMESPACE_RECONCILIATION_OUTCOME_UNSPECIFIED\x10\x00\x12/\n" +
+	"+NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED\x10\x01\x125\n" +
+	"1NAMESPACE_RECONCILIATION_OUTCOME_ALREADY_TERMINAL\x10\x02\x121\n" +
+	"-NAMESPACE_RECONCILIATION_OUTCOME_NOT_VERIFIED\x10\x03*\xad\x01\n" +
+	"\x19ManualReconciliationBasis\x12+\n" +
+	"'MANUAL_RECONCILIATION_BASIS_UNSPECIFIED\x10\x00\x12/\n" +
+	"+MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET\x10\x01\x122\n" +
+	".MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP\x10\x02B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
 
 var (
 	file_temporal_server_api_enums_v1_replication_proto_rawDescOnce sync.Once
@@ -299,11 +440,13 @@ func file_temporal_server_api_enums_v1_replication_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_enums_v1_replication_proto_rawDescData
 }
 
-var file_temporal_server_api_enums_v1_replication_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_temporal_server_api_enums_v1_replication_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_temporal_server_api_enums_v1_replication_proto_goTypes = []any{
-	(ReplicationTaskType)(0),           // 0: temporal.server.api.enums.v1.ReplicationTaskType
-	(NamespaceOperation)(0),            // 1: temporal.server.api.enums.v1.NamespaceOperation
-	(ReplicationFlowControlCommand)(0), // 2: temporal.server.api.enums.v1.ReplicationFlowControlCommand
+	(ReplicationTaskType)(0),            // 0: temporal.server.api.enums.v1.ReplicationTaskType
+	(NamespaceOperation)(0),             // 1: temporal.server.api.enums.v1.NamespaceOperation
+	(ReplicationFlowControlCommand)(0),  // 2: temporal.server.api.enums.v1.ReplicationFlowControlCommand
+	(NamespaceReconciliationOutcome)(0), // 3: temporal.server.api.enums.v1.NamespaceReconciliationOutcome
+	(ManualReconciliationBasis)(0),      // 4: temporal.server.api.enums.v1.ManualReconciliationBasis
 }
 var file_temporal_server_api_enums_v1_replication_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -323,7 +466,7 @@ func file_temporal_server_api_enums_v1_replication_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_replication_proto_rawDesc), len(file_temporal_server_api_enums_v1_replication_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      5,
 			NumMessages:   0,
 			NumExtensions: 0,
 			NumServices:   0,

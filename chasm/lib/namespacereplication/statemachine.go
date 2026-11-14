@@ -4,6 +4,7 @@ import (
 	"time"
 
 	failurepb "go.temporal.io/api/failure/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -349,6 +350,43 @@ var TransitionPeerRetryReady = chasm.NewTransition(
 			TargetCell: event.TargetCell,
 			Attempt:    event.Attempt,
 		})
+		return nil
+	},
+)
+
+// EventPeerManuallyReconciled records that an operator repair superseded a
+// pending peer delivery. It is intentionally separate from EventPeerCompleted:
+// repair is not another transport attempt and must preserve the actual attempt
+// count, timestamps, and last failure.
+type EventPeerManuallyReconciled struct {
+	Time       time.Time
+	Cutoff     time.Time
+	TargetCell string
+	RepairID   string
+	Reason     string
+	Basis      enumsspb.ManualReconciliationBasis
+}
+
+func peerNeedsReconciliation(status *namespacereplicationpb.PeerApplyStatus) bool {
+	return status.GetOutcome() == namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING || status.GetOutcome() == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
+}
+
+var TransitionPeerManuallyReconciled = chasm.NewTransition(
+	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
+	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+	func(c *NamespaceMutationComponent, _ chasm.MutableContext, event EventPeerManuallyReconciled) error {
+		status := c.GetPeerApply()[event.TargetCell]
+		if !peerNeedsReconciliation(status) {
+			return nil
+		}
+		status.Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED
+		status.ManualReconciliation = &namespacereplicationpb.ManualReconciliation{
+			RepairId:     event.RepairID,
+			Reason:       event.Reason,
+			ReconciledAt: timestamppb.New(event.Time),
+			Cutoff:       timestamppb.New(event.Cutoff),
+			Basis:        event.Basis,
+		}
 		return nil
 	},
 )
