@@ -800,6 +800,7 @@ func (s *xdcBaseSuite) completeWorkflowTaskAndReturnNext(
 func (s *xdcBaseSuite) blockReplicationForWorkflow(
 	clusterIndex int,
 	workflowID string,
+	transform ...func(*replicationspb.ReplicationTask) error,
 ) <-chan *blockedReplicationTask {
 	s.T().Helper()
 	// The interceptor runs on the receiving cluster, so clusterIndex identifies the replication
@@ -814,6 +815,11 @@ func (s *xdcBaseSuite) blockReplicationForWorkflow(
 		) error {
 			if workflowIDFromReplicationTask(task) != workflowID {
 				return execute()
+			}
+			for _, fn := range transform {
+				if err := fn(task); err != nil {
+					return err
+				}
 			}
 			blockedTask := &blockedReplicationTask{
 				execute: execute,
