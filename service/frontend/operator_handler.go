@@ -2,8 +2,10 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -636,6 +638,12 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 		},
 	)
 
+	// The RPC factory treats an address it cannot dial as fatal and exits the process,
+	// so the request has to be rejected before it reaches the factory.
+	if err := validateRemoteClusterAddress(request.GetFrontendAddress()); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterAddress, request.GetFrontendAddress(), err)
+	}
+
 	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
 		admin.DefaultTimeout,
@@ -795,6 +803,17 @@ func (h *OperatorHandlerImpl) ListClusters(
 		Clusters:      clusterMetadataList,
 		NextPageToken: resp.NextPageToken,
 	}, nil
+}
+
+// validateRemoteClusterAddress checks that address is a host:port pair. The RPC factory
+// splits the address with net.SplitHostPort to build the TLS config and treats a failure
+// there as fatal, so it must be caught here.
+func validateRemoteClusterAddress(address string) error {
+	if address == "" {
+		return errors.New("address must not be empty")
+	}
+	_, _, err := net.SplitHostPort(address)
+	return err
 }
 
 func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservice.DescribeClusterResponse) error {
