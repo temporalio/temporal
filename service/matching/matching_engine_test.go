@@ -1322,7 +1322,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 
-	expectedEventIDs := make(map[int64]struct{}, taskCount)
 	for i := range int64(taskCount) {
 		scheduledEventID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
@@ -1335,7 +1334,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		s.NoError(err)
-		expectedEventIDs[scheduledEventID] = struct{}{}
 	}
 	s.Equal(taskCount, s.taskManager.getTaskCount(tlID))
 
@@ -1372,6 +1370,8 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		}).AnyTimes()
 
 	for i := int64(0); i < taskCount; {
+		scheduledEventID := i * 3
+
 		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -1395,27 +1395,20 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.True(validateTimeRange(result.StartedTime.AsTime(), time.Minute))
 		s.Equal(time.Second*50, result.StartToCloseTimeout.AsDuration())
 		s.Equal(time.Second*10, result.HeartbeatTimeout.AsDuration())
-		taskToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
-		s.NoError(err)
-		s.Contains(expectedEventIDs, taskToken.ScheduledEventId)
-		delete(expectedEventIDs, taskToken.ScheduledEventId)
-		if !s.fairness {
-			s.Equal(i*3, taskToken.ScheduledEventId)
-		}
-		expectedToken := &tokenspb.Task{
+		taskToken := &tokenspb.Task{
 			Attempt:          1,
 			NamespaceId:      namespaceID,
 			WorkflowId:       workflowID,
 			RunId:            runID,
-			ScheduledEventId: taskToken.ScheduledEventId,
+			ScheduledEventId: scheduledEventID,
 			ActivityId:       activityID,
 			ActivityType:     activityTypeName,
 		}
 
-		protorequire.ProtoEqual(s.T(), expectedToken, taskToken)
+		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
+		s.Equal(serializedToken, result.TaskToken)
 		i++
 	}
-	s.Empty(expectedEventIDs)
 	s.expectEmptyBacklog(tlID)
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
