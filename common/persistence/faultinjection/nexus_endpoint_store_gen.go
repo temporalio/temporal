@@ -9,6 +9,7 @@ package faultinjection
 import (
 	"context"
 
+	"go.temporal.io/server/common/faultinjection"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
 )
 
@@ -16,14 +17,14 @@ type (
 	// faultInjectionNexusEndpointStore implements NexusEndpointStore interface with fault injection.
 	faultInjectionNexusEndpointStore struct {
 		_sourcePersistence.NexusEndpointStore
-		generator faultGenerator
+		generator faultinjection.Generator[any, struct{}]
 	}
 )
 
 // newFaultInjectionNexusEndpointStore returns faultInjectionNexusEndpointStore.
 func newFaultInjectionNexusEndpointStore(
 	baseStore _sourcePersistence.NexusEndpointStore,
-	generator faultGenerator,
+	generator faultinjection.Generator[any, struct{}],
 ) *faultInjectionNexusEndpointStore {
 	return &faultInjectionNexusEndpointStore{
 		NexusEndpointStore: baseStore,
@@ -33,36 +34,36 @@ func newFaultInjectionNexusEndpointStore(
 
 // CreateOrUpdateNexusEndpoint wraps NexusEndpointStore.CreateOrUpdateNexusEndpoint.
 func (d faultInjectionNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Context, request *_sourcePersistence.InternalCreateOrUpdateNexusEndpointRequest) (err error) {
-	err = d.generator.generate("CreateOrUpdateNexusEndpoint", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "CreateOrUpdateNexusEndpoint", any(request), func() (struct{}, error) {
 		err = d.NexusEndpointStore.CreateOrUpdateNexusEndpoint(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // DeleteNexusEndpoint wraps NexusEndpointStore.DeleteNexusEndpoint.
 func (d faultInjectionNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, request *_sourcePersistence.DeleteNexusEndpointRequest) (err error) {
-	err = d.generator.generate("DeleteNexusEndpoint", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteNexusEndpoint", any(request), func() (struct{}, error) {
 		err = d.NexusEndpointStore.DeleteNexusEndpoint(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetNexusEndpoint wraps NexusEndpointStore.GetNexusEndpoint.
 func (d faultInjectionNexusEndpointStore) GetNexusEndpoint(ctx context.Context, request *_sourcePersistence.GetNexusEndpointRequest) (ip1 *_sourcePersistence.InternalNexusEndpoint, err error) {
-	err = d.generator.generate("GetNexusEndpoint", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetNexusEndpoint", any(request), func() (struct{}, error) {
 		ip1, err = d.NexusEndpointStore.GetNexusEndpoint(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // ListNexusEndpoints wraps NexusEndpointStore.ListNexusEndpoints.
 func (d faultInjectionNexusEndpointStore) ListNexusEndpoints(ctx context.Context, request *_sourcePersistence.ListNexusEndpointsRequest) (ip1 *_sourcePersistence.InternalListNexusEndpointsResponse, err error) {
-	err = d.generator.generate("ListNexusEndpoints", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "ListNexusEndpoints", any(request), func() (struct{}, error) {
 		ip1, err = d.NexusEndpointStore.ListNexusEndpoints(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }

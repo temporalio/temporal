@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -73,11 +74,12 @@ func NewHTTPAPIServer(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
 	operatorHandler *OperatorHandlerImpl,
-	interceptors []grpc.UnaryServerInterceptor,
+	interceptors []interceptor.Interceptor,
 	metricsHandler metrics.Handler,
 	router *mux.Router,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	faultGenerator httpfaults.Generator,
 ) (*HTTPAPIServer, error) {
 	// Create a TCP listener the same as the frontend one but with different port
 	tcpAddrRef, _ := grpcListener.Addr().(*net.TCPAddr)
@@ -177,7 +179,7 @@ func NewHTTPAPIServer(
 	// Set the / handler as our function that wraps serve mux.
 	router.PathPrefix("/").HandlerFunc(h.serveHTTP)
 	// Register the router as the HTTP server handler.
-	h.server.Handler = router
+	h.server.Handler = httpfaults.WrapInbound(faultGenerator, router)
 
 	// Put the remote address on the context
 	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {
@@ -337,7 +339,7 @@ func (h *HTTPAPIServer) incomingHeaderMatcher(headerName string) (string, bool) 
 // expected to be handled by the caller.
 type inlineClientConn struct {
 	methods           map[string]*serviceMethod
-	interceptor       grpc.UnaryServerInterceptor
+	interceptor       interceptor.Interceptor
 	requestsCounter   metrics.CounterIface
 	namespaceRegistry namespace.Registry
 }
@@ -345,8 +347,8 @@ type inlineClientConn struct {
 var _ grpc.ClientConnInterface = (*inlineClientConn)(nil)
 
 type serviceMethod struct {
-	info    grpc.UnaryServerInfo
-	handler grpc.UnaryHandler
+	info    interceptor.MethodInfo
+	handler interceptor.Handler
 }
 
 var contextType = reflect.TypeFor[context.Context]()
@@ -355,7 +357,7 @@ var errorType = reflect.TypeFor[error]()
 
 func newInlineClientConn(
 	servers map[string]any,
-	interceptors []grpc.UnaryServerInterceptor,
+	interceptors []interceptor.Interceptor,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 ) *inlineClientConn {
@@ -384,7 +386,7 @@ func newInlineClientConn(
 			}
 			fullMethod := "/" + qualifiedServerName + "/" + reflectMethod.Name
 			methods[fullMethod] = &serviceMethod{
-				info: grpc.UnaryServerInfo{Server: server, FullMethod: fullMethod},
+				info: interceptor.MethodInfo{Server: server, FullMethod: fullMethod},
 				handler: func(ctx context.Context, req any) (any, error) {
 					ret := methodVal.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)})
 					err, _ := ret[1].Interface().(error)
@@ -396,7 +398,7 @@ func newInlineClientConn(
 
 	return &inlineClientConn{
 		methods:           methods,
-		interceptor:       chainUnaryServerInterceptors(interceptors),
+		interceptor:       interceptor.Chain(interceptors...),
 		requestsCounter:   metrics.HTTPServiceRequests.With(metricsHandler),
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -470,37 +472,4 @@ func (*inlineClientConn) NewStream(
 	...grpc.CallOption,
 ) (grpc.ClientStream, error) {
 	return nil, errHTTPGRPCStreamNotSupported
-}
-
-// Mostly taken from https://github.com/grpc/grpc-go/blob/v1.56.1/server.go#L1124-L1158
-// with slight modifications.
-func chainUnaryServerInterceptors(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
-	switch len(interceptors) {
-	case 0:
-		return nil
-	case 1:
-		return interceptors[0]
-	default:
-		return chainUnaryInterceptors(interceptors)
-	}
-}
-
-func chainUnaryInterceptors(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		return interceptors[0](ctx, req, info, getChainUnaryHandler(interceptors, 0, info, handler))
-	}
-}
-
-func getChainUnaryHandler(
-	interceptors []grpc.UnaryServerInterceptor,
-	curr int,
-	info *grpc.UnaryServerInfo,
-	finalHandler grpc.UnaryHandler,
-) grpc.UnaryHandler {
-	if curr == len(interceptors)-1 {
-		return finalHandler
-	}
-	return func(ctx context.Context, req any) (any, error) {
-		return interceptors[curr+1](ctx, req, info, getChainUnaryHandler(interceptors, curr+1, info, finalHandler))
-	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/faultinjection"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/mock"
 	"go.uber.org/mock/gomock"
@@ -50,17 +51,17 @@ func TestFaultInjection_Inject(t *testing.T) {
 
 	for _, tc := range []struct {
 		name         string
-		methodConfig config.FaultInjectionMethodConfig
+		methodConfig faultinjection.Config
 		expectErr    bool
 	}{
 		{
 			name:         "No errors",
-			methodConfig: config.FaultInjectionMethodConfig{},
+			methodConfig: faultinjection.Config{},
 			expectErr:    false,
 		},
 		{
 			name: "All errors",
-			methodConfig: config.FaultInjectionMethodConfig{
+			methodConfig: faultinjection.Config{
 				Errors: map[string]float64{
 					"ResourceExhausted": 0.3,
 					"Timeout":           0.7,
@@ -75,7 +76,7 @@ func TestFaultInjection_Inject(t *testing.T) {
 				Targets: config.FaultInjectionTargets{
 					DataStores: map[config.DataStoreName]config.FaultInjectionDataStoreConfig{
 						config.QueueV2Name: {
-							Methods: map[string]config.FaultInjectionMethodConfig{
+							Methods: map[string]faultinjection.Config{
 								"EnqueueMessage":      tc.methodConfig,
 								"ReadMessages":        tc.methodConfig,
 								"CreateQueue":         tc.methodConfig,
