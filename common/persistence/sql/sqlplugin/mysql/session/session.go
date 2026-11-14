@@ -170,7 +170,7 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 		attrs[isolationLevelAttrName] = defaultIsolationLevel
 	}
 
-	// these attrs are always overriden
+	// these attrs are always overridden
 	maps.Copy(attrs, dsnAttrOverrides)
 
 	if !paramInterpolationAllowed(dbKind) {
