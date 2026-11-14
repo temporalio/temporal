@@ -358,6 +358,127 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	s.Equal("Child Done", childResult)
 }
 
+// TestChildWorkflowExecution_Identity verifies that a child workflow's WorkflowExecutionStarted.identity
+// is populated from the identity of the worker that completed the parent's workflow task which issued the
+// StartChildWorkflowExecution command, not from whichever worker happens to poll the child's task queue.
+func (s *ChildWorkflowSuite) TestChildWorkflowExecution_Identity() {
+	env := testcore.NewEnv(s.T())
+	tvParent := env.Tv().Sub("parent")
+	tvChild := env.Tv().Sub("child")
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           tvParent.RequestID(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tvParent.WorkflowID(),
+		WorkflowType:        tvParent.WorkflowType(),
+		TaskQueue:           tvParent.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            tvParent.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	childExecutionStarted := false
+	var childCompletedEventFromParent *historypb.HistoryEvent
+	wtHandlerParent := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if !childExecutionStarted {
+			childExecutionStarted = true
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+						WorkflowId:          tvChild.WorkflowID(),
+						WorkflowType:        tvChild.WorkflowType(),
+						TaskQueue:           tvChild.TaskQueue(),
+						Input:               payloads.EncodeString("child-workflow-input"),
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}}, nil
+		}
+		if task.PreviousStartedEventId > 0 {
+			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
+					// no-op: just acknowledge, keep waiting for the child to complete.
+					return []*commandpb.Command{}, nil
+				}
+				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
+					childCompletedEventFromParent = event
+					return []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+								Result: payloads.EncodeString("Done"),
+							},
+						},
+					}}, nil
+				}
+			}
+		}
+		return nil, nil
+	}
+
+	var childStartedEvent *historypb.HistoryEvent
+	wtHandlerChild := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if task.PreviousStartedEventId <= 0 {
+			childStartedEvent = task.History.Events[0]
+		}
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Child Done"),
+				},
+			},
+		}}, nil
+	}
+
+	pollerParent := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	pollerChild := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// First workflow task: parent issues StartChildWorkflowExecution.
+	_, err = pollerParent.PollAndHandleWorkflowTask(tvParent, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandlerParent(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.NoError(err)
+	s.True(childExecutionStarted)
+
+	// Second parent workflow task: acknowledge ChildWorkflowExecutionStarted, keep waiting.
+	_, err = pollerParent.PollAndHandleWorkflowTask(tvParent, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandlerParent(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.NoError(err)
+
+	// Child's first (and only) workflow task carries its WorkflowExecutionStarted event, and
+	// completes the child. Note the child poller uses its own identity (tvChild.WorkerIdentity()),
+	// distinct from the parent's, to prove the started event's identity doesn't just leak in from
+	// whoever happens to poll/complete the child's own workflow task.
+	_, err = pollerChild.PollAndHandleWorkflowTask(tvChild, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandlerChild(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.NoError(err)
+	s.NotNil(childStartedEvent)
+	childStartedEventAttrs := childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
+	// The child's start identity should come from the parent's WorkflowTaskCompleted event
+	// (i.e. whoever issued the StartChildWorkflowExecution command), not from the worker that
+	// happens to poll the child's task queue.
+	s.Equal(tvParent.WorkerIdentity(), childStartedEventAttrs.GetIdentity())
+	s.NotEqual(tvChild.WorkerIdentity(), childStartedEventAttrs.GetIdentity())
+
+	// Third parent workflow task: process ChildWorkflowExecutionCompleted and complete the parent.
+	_, err = pollerParent.PollAndHandleWorkflowTask(tvParent, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandlerParent(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.NoError(err)
+	s.NotNil(childCompletedEventFromParent)
+}
+
 func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	env := testcore.NewEnv(s.T())
 
