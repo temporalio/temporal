@@ -112,6 +112,10 @@ type (
 		// LoggerRPS sets the RPS of the logger provided to prometheus. Default of 0 means no limit.
 		LoggerRPS float64 `yaml:"loggerRPS"`
 
+		// TLS if specified will make the listener serve HTTPS using the given certificate.
+		// Only supported with the opentelemetry framework.
+		TLS *PrometheusTLSConfig `yaml:"tls"`
+
 		// Configs below are kept for backwards compatibility with previously exposed tally prometheus.Configuration.
 
 		// Deprecated. ListenNetwork if specified will be used instead of using tcp network.
@@ -148,6 +152,14 @@ type (
 		// specify which characters are valid and/or should be replaced before metrics
 		// are emitted.
 		SanitizeOptions *SanitizeOptions `yaml:"sanitizeOptions"`
+	}
+
+	// PrometheusTLSConfig contains the certificate used by the prometheus listener to serve HTTPS.
+	PrometheusTLSConfig struct {
+		// CertFile is the path to the PEM-encoded certificate.
+		CertFile string `yaml:"certFile"`
+		// KeyFile is the path to the PEM-encoded private key.
+		KeyFile string `yaml:"keyFile"`
 	}
 )
 
@@ -474,6 +486,10 @@ func newPrometheusScope(
 func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 	if c == nil {
 		return NoopMetricsHandler, nil
+	}
+
+	if c.Prometheus != nil && c.Prometheus.TLS != nil && c.Prometheus.Framework != FrameworkOpentelemetry {
+		return nil, errors.New("prometheus tls is only supported with the opentelemetry framework")
 	}
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
