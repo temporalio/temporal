@@ -17,6 +17,7 @@ const (
 	internalTaskQueuePerNSPrefix         = "temporal-sys-per-ns-"
 
 	MigrationActivityTQ           = "temporal-sys-migration-activity-tq"
+	MigrationShardedActivityTQ    = "temporal-sys-migration-sharded-activity-tq"
 	AddSearchAttributesActivityTQ = "temporal-sys-add-search-attributes-activity-tq"
 	DeleteNamespaceActivityTQ     = "temporal-sys-delete-namespace-activity-tq"
 	DLQActivityTQ                 = "temporal-sys-dlq-activity-tq"

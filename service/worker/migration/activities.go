@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -31,6 +32,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/wideevents"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
@@ -122,6 +124,7 @@ type (
 		adminClient                      adminservice.AdminServiceClient
 		clientFactory                    serverClient.Factory
 		clientBean                       serverClient.Bean
+		clusterMetadata                  cluster.Metadata
 		Logger                           log.Logger
 		EventLogger                      otellog.Logger
 		MetricsHandler                   metrics.Handler
@@ -131,6 +134,12 @@ type (
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
 		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
+		// sdkClientFactory resolves the system SDK client lazily for the
+		// sharded ReplicateBatch activity's mid-flight ReleaseShards signal.
+		// Eager resolution at fx-wire time tries to dial the frontend before
+		// it's listening; the factory's internal sync.Once guarantees a
+		// single dial on first use.
+		sdkClientFactory sdk.ClientFactory
 	}
 
 	shardStatus struct {
@@ -973,16 +982,20 @@ func (a *activities) verifySingleReplicationTask(
 	})
 	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
 
+	nsTag := metrics.NamespaceTag(request.Namespace)
+
 	switch e := err.(type) {
 	case nil:
 		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, execution, mu)
 		if err == nil && result.status == verified {
-			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
+			a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
+		} else if err == nil && !result.isVerified() {
+			a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskPending.Name()).Record(1)
 		}
 		return result, err
 
 	case *serviceerror.NotFound:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
+		a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
 		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workflow being deleted due to retention.
 		// A better solution is to only check the existence for workflow which is close to retention period.
 		return a.checkSkipWorkflowExecution(ctx, request, execution, ns)
@@ -996,16 +1009,17 @@ func (a *activities) verifySingleReplicationTask(
 		if e.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 			// The passive cluster holds the workflow cache lock while applying history
 			// during SyncWorkflowStateTask. This is actually a small sign of progress.
+			a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskBusy.Name()).Record(1)
 			return verifyResult{status: notVerified}, nil
 		}
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
+		a.forceReplicationMetricsHandler.WithTags(nsTag, metrics.ServiceErrorTypeTag(err)).
 			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
 		return verifyResult{
 			status: notVerified,
 		}, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
 
 	default:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
+		a.forceReplicationMetricsHandler.WithTags(nsTag, metrics.ServiceErrorTypeTag(err)).
 			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
 
 		return verifyResult{
