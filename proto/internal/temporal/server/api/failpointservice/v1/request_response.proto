@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package temporal.server.api.failpointservice.v1;
+
+import "temporal/server/api/enums/v1/failpoint.proto";
+import "temporal/server/api/failpointservice/v1/message.proto";
+
+option go_package = "go.temporal.io/server/api/failpointservice/v1;failpointservice";
+
+// DisableFailpointRequest specifies which failpoint to disable.
+message DisableFailpointRequest {
+  // key is the failpoint key to disable.
+  temporal.server.api.enums.v1.FailpointKey key = 1;
+}
+
+// DisableFailpointResponse is returned after disabling a failpoint.
+message DisableFailpointResponse {}
+
+// DisableAllFailpointsRequest disables all failpoints.
+message DisableAllFailpointsRequest {}
+
+// DisableAllFailpointsResponse is returned after disabling all failpoints.
+message DisableAllFailpointsResponse {}
+
+// InjectPanicRequest configures a failpoint to panic.
+message InjectPanicRequest {
+  // key is the failpoint key to configure.
+  temporal.server.api.enums.v1.FailpointKey key = 1;
+  // panic_value is the string value passed to panic(errors.New(...)).
+  string panic_value = 2;
+  // recurrence specifies whether this triggers once or always.
+  temporal.server.api.enums.v1.FailpointRecurrence recurrence = 3;
+}
+
+// InjectPanicResponse is returned after configuring a panic failpoint.
+message InjectPanicResponse {}
+
+// InjectBlockRequest configures a failpoint to block.
+message InjectBlockRequest {
+  // key is the failpoint key to configure.
+  temporal.server.api.enums.v1.FailpointKey key = 1;
+  // recurrence specifies whether this triggers once or always.
+  temporal.server.api.enums.v1.FailpointRecurrence recurrence = 2;
+}
+
+// InjectBlockResponse is returned after configuring a block failpoint.
+message InjectBlockResponse {}
+
+// WaitForBlockRequest specifies which block failpoint to wait for.
+message WaitForBlockRequest {
+  // key is the failpoint key to wait for.
+  temporal.server.api.enums.v1.FailpointKey key = 1;
+}
+
+// WaitForBlockResponse is returned when a block failpoint is triggered.
+message WaitForBlockResponse {}
+
+// InjectReturnRequest configures a failpoint to return an error.
+message InjectReturnRequest {
+  // key is the failpoint key to configure.
+  temporal.server.api.enums.v1.FailpointKey key = 1;
+  // error_message is the error message for the returned error.
+  string error_message = 2;
+  // recurrence specifies whether this triggers once or always.
+  temporal.server.api.enums.v1.FailpointRecurrence recurrence = 3;
+}
+
+// InjectReturnResponse is returned after configuring a return failpoint.
+message InjectReturnResponse {}
+
+// ListFailpointsRequest requests a list of all failpoints.
+message ListFailpointsRequest {}
+
+// ListFailpointsResponse contains information about all failpoints.
+message ListFailpointsResponse {
+  // failpoints is the list of failpoint information.
+  repeated FailpointInfo failpoints = 1;
+}
