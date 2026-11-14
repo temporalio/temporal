@@ -385,13 +385,14 @@ func (p *queueBase) rangeCompleteTasks(
 	ctx, cancel := newQueueIOContext()
 	defer cancel()
 
-	if err := historyshard.RangeCompleteHistoryTasks(ctx, p.shard, &persistence.RangeCompleteHistoryTasksRequest{
+	request := &persistence.RangeCompleteHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
 		RangeID:             rangeID,
 		TaskCategory:        p.category,
 		InclusiveMinTaskKey: oldExclusiveDeletionHighWatermark,
 		ExclusiveMaxTaskKey: newExclusiveDeletionHighWatermark,
-	}); err != nil {
+	}
+	if err := historyshard.RangeCompleteHistoryTasks(ctx, p.shard, request); err != nil {
 		p.logger.Error("Error range completing queue task", tag.Error(err))
 		return err
 	}

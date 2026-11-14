@@ -191,12 +191,13 @@ func (m *sqlExecutionStore) rangeCompleteHistoryImmediateTasks(
 		return m.rangeCompleteReplicationTasks(ctx, tx, request)
 	}
 
-	if _, err := tx.RangeDeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
+	filter := sqlplugin.HistoryImmediateTasksRangeFilter{
 		ShardID:            request.ShardID,
 		CategoryID:         int32(categoryID),
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-	}); err != nil {
+	}
+	if _, err := tx.RangeDeleteFromHistoryImmediateTasks(ctx, filter); err != nil {
 		return serviceerror.NewUnavailablef(
 			"RangeCompleteTransferTask operation failed. CategoryID: %v. Error: %v", categoryID, err,
 		)
@@ -301,12 +302,13 @@ func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 
 	start := request.InclusiveMinTaskKey.FireTime
 	end := request.ExclusiveMaxTaskKey.FireTime
-	if _, err := tx.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
+	filter := sqlplugin.HistoryScheduledTasksRangeFilter{
 		ShardID:                         request.ShardID,
 		CategoryID:                      int32(categoryID),
 		InclusiveMinVisibilityTimestamp: start,
 		ExclusiveMaxVisibilityTimestamp: end,
-	}); err != nil {
+	}
+	if _, err := tx.RangeDeleteFromHistoryScheduledTasks(ctx, filter); err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteHistoryTask operation failed. CategoryID: %v. Error: %v", categoryID, err)
 	}
 	return nil
@@ -373,11 +375,12 @@ func (m *sqlExecutionStore) rangeCompleteTransferTasks(
 	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := tx.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
+	filter := sqlplugin.TransferTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-	}); err != nil {
+	}
+	if _, err := tx.RangeDeleteFromTransferTasks(ctx, filter); err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteTransferTask operation failed. Error: %v", err)
 	}
 	return nil
@@ -450,11 +453,12 @@ func (m *sqlExecutionStore) rangeCompleteTimerTasks(
 ) error {
 	start := request.InclusiveMinTaskKey.FireTime
 	end := request.ExclusiveMaxTaskKey.FireTime
-	if _, err := tx.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
+	filter := sqlplugin.TimerTasksRangeFilter{
 		ShardID:                         request.ShardID,
 		InclusiveMinVisibilityTimestamp: start,
 		ExclusiveMaxVisibilityTimestamp: end,
-	}); err != nil {
+	}
+	if _, err := tx.RangeDeleteFromTimerTasks(ctx, filter); err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteTimerTask operation failed. Error: %v", err)
 	}
 	return nil
@@ -587,11 +591,12 @@ func (m *sqlExecutionStore) rangeCompleteReplicationTasks(
 	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := tx.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
+	filter := sqlplugin.ReplicationTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-	}); err != nil {
+	}
+	if _, err := tx.RangeDeleteFromReplicationTasks(ctx, filter); err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteReplicationTask operation failed. Error: %v", err)
 	}
 	return nil
@@ -763,11 +768,12 @@ func (m *sqlExecutionStore) rangeCompleteVisibilityTasks(
 	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := tx.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
+	filter := sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-	}); err != nil {
+	}
+	if _, err := tx.RangeDeleteFromVisibilityTasks(ctx, filter); err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteVisibilityTask operation failed. Error: %v", err)
 	}
 	return nil
