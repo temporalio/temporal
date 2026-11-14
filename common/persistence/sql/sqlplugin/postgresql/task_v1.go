@@ -23,9 +23,9 @@ const (
 		`VALUES(:range_hash, :task_queue_id, :task_id, :data, :data_encoding)`
 
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id IN (SELECT task_id FROM
+		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id = ANY(ARRAY(SELECT task_id FROM
 		 tasks WHERE range_hash = $1 AND task_queue_id = $2 AND task_id < $3 ` +
-		`ORDER BY task_queue_id,task_id LIMIT $4 )`
+		`ORDER BY task_queue_id,task_id LIMIT $4 ))`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
