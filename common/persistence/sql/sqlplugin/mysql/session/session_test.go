@@ -119,6 +119,20 @@ func (s *sessionTestSuite) TestBuildDSN() {
 			outIsolationVal: "'repeatable-read'",
 			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
 		},
+		{
+			name: "empty isolation level falls back to default",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"transaction_isolation": ""},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
 	}
 
 	for _, dbKind := range []sqlplugin.DbKind{sqlplugin.DbKindMain, sqlplugin.DbKindVisibility} {

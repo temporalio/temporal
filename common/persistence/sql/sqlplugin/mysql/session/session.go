@@ -183,8 +183,8 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 }
 
 func hasAttr(attrs map[string]string, key string) bool {
-	_, ok := attrs[key]
-	return ok
+	// An empty value counts as unset so a blank isolation level uses the default.
+	return attrs[key] != ""
 }
 
 func sanitizeAttr(inkey string, invalue string) (string, string) {
@@ -192,7 +192,7 @@ func sanitizeAttr(inkey string, invalue string) (string, string) {
 	value := strings.ToLower(strings.TrimSpace(invalue))
 	switch key {
 	case isolationLevelAttrName, isolationLevelAttrNameLegacy:
-		if value[0] != '\'' { // mysql sys variable values must be enclosed in single quotes
+		if len(value) > 0 && value[0] != '\'' { // mysql sys variable values must be enclosed in single quotes
 			value = "'" + value + "'"
 		}
 		return key, value
