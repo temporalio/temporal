@@ -3,6 +3,7 @@ package metricstest
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,11 +71,11 @@ func TestHandler(t *testing.T) {
 
 		buckets, err := snap.Histogram("my_histogram_ratio", append(systemTags, tags...)...)
 		require.NoError(t, err)
-		assert.Equal(t, []HistogramBucket{
-			{value: 1, upperBound: 1},
-			{value: 1, upperBound: 2},
-			{value: 2, upperBound: 5},
-			{value: 2, upperBound: math.Inf(1)},
+		require.Equal(t, []HistogramBucket{
+			{Value: 1, UpperBound: 1},
+			{Value: 1, UpperBound: 2},
+			{Value: 2, UpperBound: 5},
+			{Value: 2, UpperBound: math.Inf(1)},
 		}, buckets)
 	})
 }
@@ -112,9 +113,17 @@ func TestCaptureHandler(t *testing.T) {
 		handler.Counter("test_counter").Record(1)
 		handler.Counter("test_counter").Record(2)
 		handler.Gauge("test_gauge").Record(42.0)
+		handler.Timer("test_timer").Record(time.Second)
+		handler.Histogram("test_histogram", metrics.Bytes).Record(1024)
 
-		snapshot := capture.Snapshot()
-		assert.Len(t, snapshot["test_counter"], 2)
-		assert.Len(t, snapshot["test_gauge"], 1)
+		require.Equal(t, CaptureSnapshot{
+			"test_counter": {
+				{Value: int64(1), Tags: map[string]string{}},
+				{Value: int64(2), Tags: map[string]string{}},
+			},
+			"test_gauge":     {{Value: 42.0, Tags: map[string]string{}}},
+			"test_timer":     {{Value: time.Second, Tags: map[string]string{}}},
+			"test_histogram": {{Value: int64(1024), Tags: map[string]string{}, Unit: metrics.Bytes}},
+		}, capture.Snapshot())
 	})
 }

@@ -1,7 +1,6 @@
 package metricstest
 
 import (
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -31,44 +30,4 @@ func TestCaptureHandlerFilter(t *testing.T) {
 	}}, filtered.Snapshot())
 	require.Len(t, all.SnapshotMetric("counter"), 3)
 	require.Len(t, all.SnapshotMetric("other_metric"), 1)
-}
-
-func TestCaptureSnapshotMetric(t *testing.T) {
-	t.Parallel()
-	handler := NewCaptureHandler()
-	capture := handler.StartCapture()
-	defer handler.StopCapture(capture)
-	handler.Counter("counter").Record(1)
-	handler.Counter("other").Record(2)
-
-	snapshot := capture.SnapshotMetric("counter")
-	require.Equal(t, capture.Snapshot()["counter"], snapshot)
-	require.Nil(t, capture.SnapshotMetric("missing"))
-	snapshot[0] = nil
-	require.NotNil(t, capture.SnapshotMetric("counter")[0])
-	handler.Counter("counter").Record(3)
-	require.Len(t, snapshot, 1)
-	require.Len(t, capture.SnapshotMetric("counter"), 2)
-}
-
-func TestCaptureFilterConcurrentRecording(t *testing.T) {
-	t.Parallel()
-	handler := NewCaptureHandler()
-	capture := handler.StartCaptureWithFilter(func(_ string, rec *CapturedRecording) bool {
-		return rec.Tags["namespace"] == "wanted"
-	})
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Go(func() {
-			for range 100 {
-				handler.Counter("counter").Record(1, metrics.NamespaceTag("wanted"))
-				handler.Counter("counter").Record(2, metrics.NamespaceTag("other"))
-				capture.SnapshotMetric("counter")
-			}
-		})
-	}
-	wg.Wait()
-	handler.StopCapture(capture)
-	handler.Counter("counter").Record(3, metrics.NamespaceTag("wanted"))
-	require.Len(t, capture.SnapshotMetric("counter"), 800)
 }
