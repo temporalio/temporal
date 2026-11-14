@@ -6231,6 +6231,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			// Shutdown now evicts the worker from poller history by instance key, so this
+			// reaches the "partition not loaded" debug log on this fixture's empty engine.
+			logger: log.NewNoopLogger(),
 		}
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
@@ -6256,6 +6259,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			logger: log.NewNoopLogger(),
 		}
 
 		workerKey := "test-worker"
@@ -6292,6 +6296,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			logger: log.NewNoopLogger(),
 		}
 
 		// Set up pollers for worker1 and worker2
@@ -6324,6 +6329,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			logger: log.NewNoopLogger(),
 		}
 
 		workerKey := "test-worker"
@@ -6370,7 +6376,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
-		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+		mockPM.EXPECT().RemovePoller(gomock.Any(), gomock.Any()).AnyTimes()
 		mockUDM := NewMockuserDataManager(ctrl)
 		mockUDM.EXPECT().PartitionScale().Return(nil)
 		mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
@@ -6450,6 +6456,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			logger: log.NewNoopLogger(),
 		}
 
 		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
@@ -6477,6 +6484,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			logger: log.NewNoopLogger(),
 		}
 
 		workerKey := "test-worker"
@@ -6532,7 +6540,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName)).AnyTimes()
-		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+		mockPM.EXPECT().RemovePoller(gomock.Any(), gomock.Any()).AnyTimes()
 		mockUDM := NewMockuserDataManager(ctrl)
 		mockUDM.EXPECT().PartitionScale().Return(scaleInfo)
 		mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
@@ -6831,7 +6839,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 				mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
 			}
 			// Each partition must get RemovePoller called exactly once with the worker identity.
-			mockPM.EXPECT().RemovePoller(pollerIdentity("worker-identity")).Times(1)
+			mockPM.EXPECT().RemovePoller(pollerIdentity("worker-identity"), gomock.Any()).Times(1)
 			mockPMs[i] = mockPM
 			partitionsMap[partition.Key()] = mockPM
 		}

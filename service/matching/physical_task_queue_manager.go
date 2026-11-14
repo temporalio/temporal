@@ -83,6 +83,9 @@ type (
 		matchingClient      matchingservice.MatchingServiceClient
 		clusterMeta         cluster.Metadata
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
+		// pollerShares tracks the poller count each worker reported about its own pool, used
+		// to spread scaling suggestions evenly across the fleet.
+		pollerShares *pollerShareTracker
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory                   *pollerHistory
 		currentPolls                    atomic.Int64
@@ -160,6 +163,10 @@ func newPhysicalTaskQueueManager(
 	pqMgr.deploymentRegistrationCh <- struct{}{} // seed
 
 	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
+	pqMgr.pollerShares = newPollerShareTracker(
+		partitionMgr.config.PollerHistoryTTL(),
+		partitionMgr.engine.timeSource,
+	)
 
 	pqMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
@@ -527,12 +534,14 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
+	c.pollerShares.record(pollMetadata.workerInstanceKey, pollMetadata.pollerPoolInfo)
 }
 
-func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity) {
+func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity, workerInstanceKey string) {
 	if c.pollerHistory != nil {
 		c.pollerHistory.removePoller(id)
 	}
+	c.pollerShares.forget(workerInstanceKey)
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
@@ -858,10 +867,40 @@ func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	ctx context.Context,
 	pollStartTime time.Time,
 	task *internalTask,
+	pollMetadata *pollMetadata,
 ) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, task, func() *taskqueuepb.TaskQueueStats {
+	decision := c.makePollerScalingDecisionImpl(pollStartTime, task, func() *taskqueuepb.TaskQueueStats {
 		return c.partitionMgr.GetPhysicalQueueAdjustedStats(ctx, c)
 	})
+	return c.applyFairShare(decision, pollMetadata)
+}
+
+// applyFairShare withholds a suggestion that would push this worker further from its share
+// of the fleet's pollers: no growth above the fleet mean, no shrink below it. It only ever
+// withholds -- a withheld +1 is dropped rather than handed to an under-share peer. The
+// suggestion is already counted by this point, so hold{over,under}_share is the subset denied.
+func (c *physicalTaskQueueManagerImpl) applyFairShare(
+	decision *taskqueuepb.PollerScalingDecision,
+	pollMetadata *pollMetadata,
+) *taskqueuepb.PollerScalingDecision {
+	band := c.partitionMgr.config.PollerScalingFairnessBand()
+	if decision == nil || pollMetadata == nil || band <= 1 {
+		return decision
+	}
+	delta := decision.GetPollRequestDeltaSuggestion()
+	switch c.pollerShares.classify(pollMetadata.workerInstanceKey, band) {
+	case shareOver:
+		if delta > 0 {
+			c.recordPollerScaleDecision(metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonOverShare)
+			return nil
+		}
+	case shareUnder:
+		if delta < 0 {
+			c.recordPollerScaleDecision(metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonUnderShare)
+			return nil
+		}
+	}
+	return decision
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
