@@ -770,6 +770,31 @@ func (s *commandAttrValidatorSuite) TestValidateCommandSequence_InvalidTerminalC
 	}
 }
 
+// TestValidateCommandSequence_InvalidTerminalCommand_LargeSequence is a
+// regression test for a large command sequence (e.g. thousands of
+// RecordMarker commands) producing an error message long enough to exceed
+// the gRPC/HTTP2 header size limit, causing the connection to be dropped
+// (RST_STREAM) instead of the intended error being returned to the worker
+// (#3284).
+func (s *commandAttrValidatorSuite) TestValidateCommandSequence_InvalidTerminalCommand_LargeSequence() {
+	const numCommands = 5000
+	commands := make([]*commandpb.Command, 0, numCommands+1)
+	commands = append(commands, terminalCommands[0])
+	for i := 0; i < numCommands; i++ {
+		commands = append(commands, &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER})
+	}
+
+	err := s.validator.ValidateCommandSequence(commands)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+
+	// The gRPC/HTTP2 default header size limit is 8192 bytes (see #3284);
+	// stay well under that regardless of how many commands were sent so the
+	// error itself is never what breaks the connection.
+	s.Less(len(err.Error()), 4096, "error message must stay bounded regardless of command count")
+	s.Contains(err.Error(), "more)", "message should indicate the list was truncated")
+}
+
 func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_InternalTaskQueue() {
 	testCases := []struct {
 		name            string
