@@ -2,9 +2,12 @@ package scanner
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -32,6 +35,16 @@ import (
 	"go.temporal.io/server/service/worker/scanner/scheduleinvariants"
 )
 
+const (
+	// cronScheduleChangedTerminationReason is the termination reason used when a scanner
+	// workflow is restarted because its configured cron schedule changed.
+	cronScheduleChangedTerminationReason = "scanner cron schedule changed"
+)
+
+// errCronScheduleChanged indicates that a running scanner workflow was terminated
+// because its cron schedule changed, and the workflow start should be retried.
+var errCronScheduleChanged = errors.New("scanner workflow terminated because cron schedule changed, retrying start")
+
 type (
 	// Config defines the configuration for scanner
 	Config struct {
@@ -50,6 +63,8 @@ type (
 		BuildIdScavengerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
+		// HistoryScannerCronSchedule is the cron schedule on which the history scanner workflow runs
+		HistoryScannerCronSchedule dynamicconfig.StringPropertyFn
 		// ExecutionsScannerEnabled indicates if executions scanner should be started as part of scanner
 		ExecutionsScannerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerDataMinAge indicates the cleanup threshold of history branch data
@@ -186,7 +201,7 @@ func (s *Scanner) Start() error {
 
 	if s.context.cfg.HistoryScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, historyScannerWFStartOptions, historyScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, s.historyScannerWFStartOptions(), historyScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
@@ -304,6 +319,25 @@ func (s *Scanner) startWorker(work worker.Worker) error {
 	return nil
 }
 
+// historyScannerWFStartOptions returns the start options for the history scanner
+// workflow with the dynamically configured cron schedule applied. An empty or
+// invalid cron specification falls back to the default schedule.
+func (s *Scanner) historyScannerWFStartOptions() sdkclient.StartWorkflowOptions {
+	options := historyScannerWFStartOptions
+	if schedule := s.context.cfg.HistoryScannerCronSchedule(); schedule != "" {
+		if err := backoff.ValidateSchedule(schedule); err != nil {
+			s.context.logger.Warn("Ignoring invalid history scanner cron schedule, using default schedule",
+				tag.NewStringTag("cron-schedule", schedule),
+				tag.NewStringTag("default-cron-schedule", options.CronSchedule),
+				tag.Error(err),
+			)
+		} else {
+			options.CronSchedule = schedule
+		}
+	}
+	return options
+}
+
 // startWorkflowWithRetry starts a scanner workflow, retrying until it succeeds or the
 // scanner shuts down. workflowType may be either a registered type-name string or the
 // workflow function itself (registered under its Go function name).
@@ -338,15 +372,73 @@ func (s *Scanner) startWorkflow(
 	workflowArgs ...any,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 	_, err := client.ExecuteWorkflow(ctx, options, workflowType, workflowArgs...)
-	cancel()
 	if err != nil {
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
-			return nil
+			return s.restartWorkflowIfCronScheduleChanged(ctx, client, options, workflowType)
 		}
 		s.context.logger.Error("error starting workflow", tag.WorkflowType(workflowType), tag.Error(err))
 		return err
 	}
 	s.context.logger.Info("workflow successfully started", tag.WorkflowType(workflowType))
 	return nil
+}
+
+// restartWorkflowIfCronScheduleChanged terminates an already running scanner workflow
+// if it was started with a cron schedule different from the currently configured one
+// (e.g. the schedule was changed via dynamic config). It returns errCronScheduleChanged
+// after a successful termination so that the retry loop in startWorkflowWithRetry
+// restarts the workflow on the configured schedule.
+func (s *Scanner) restartWorkflowIfCronScheduleChanged(
+	ctx context.Context,
+	client sdkclient.Client,
+	options sdkclient.StartWorkflowOptions,
+	workflowType string,
+) error {
+	if options.CronSchedule == "" {
+		return nil
+	}
+	currentSchedule, err := s.runningWorkflowCronSchedule(ctx, client, options.ID)
+	if err != nil {
+		s.context.logger.Warn("unable to determine cron schedule of running scanner workflow",
+			tag.WorkflowType(workflowType), tag.Error(err))
+		return nil
+	}
+	if currentSchedule == options.CronSchedule {
+		return nil
+	}
+	s.context.logger.Info("terminating scanner workflow to apply changed cron schedule",
+		tag.WorkflowType(workflowType),
+		tag.NewStringTag("current-cron-schedule", currentSchedule),
+		tag.NewStringTag("new-cron-schedule", options.CronSchedule),
+	)
+	if err := client.TerminateWorkflow(ctx, options.ID, "", cronScheduleChangedTerminationReason); err != nil {
+		s.context.logger.Error("error terminating scanner workflow to apply changed cron schedule",
+			tag.WorkflowType(workflowType), tag.Error(err))
+		return err
+	}
+	return errCronScheduleChanged
+}
+
+// runningWorkflowCronSchedule returns the cron schedule that the current run of the
+// given workflow was started with.
+func (s *Scanner) runningWorkflowCronSchedule(
+	ctx context.Context,
+	client sdkclient.Client,
+	workflowID string,
+) (string, error) {
+	iter := client.GetWorkflowHistory(ctx, workflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	if iter == nil || !iter.HasNext() {
+		return "", errors.New("workflow history is empty")
+	}
+	event, err := iter.Next()
+	if err != nil {
+		return "", err
+	}
+	attributes := event.GetWorkflowExecutionStartedEventAttributes()
+	if attributes == nil {
+		return "", fmt.Errorf("first history event is not WorkflowExecutionStarted: %v", event.GetEventType())
+	}
+	return attributes.GetCronSchedule(), nil
 }
