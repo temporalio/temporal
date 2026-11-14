@@ -27,6 +27,8 @@ func TestWildCardStringsToRegexp(t *testing.T) {
 	require.Regexp(t, re, "bd")
 	require.Regexp(t, re, "bcd")
 	require.NotRegexp(t, re, "bc")
+	require.NotRegexp(t, re, "az-extra")
+	require.NotRegexp(t, re, "prefix-bd")
 
 	re, err = util.WildCardStringsToRegexp([]string{})
 	require.NoError(t, err)
