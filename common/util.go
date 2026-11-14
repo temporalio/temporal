@@ -569,6 +569,9 @@ func CreateHistoryStartWorkflowRequest(
 	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
 		startRequest = CloneProto(startRequest)
 	}
+	// TODO: derive deadlines in history from the virtual start time instead. Until then, callers that
+	// pre-shift now (child workflows) must not also set TimeSkippingStatePropagation on startRequest.
+	now = now.Add(startRequest.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration())
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:                  namespaceID,
 		StartRequest:                 startRequest,
@@ -694,12 +697,13 @@ func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
-// GrantEagerDispatch asks Matching whether it may eagerly dispatch one activity task.
+// GrantEagerDispatch asks Matching whether it may eagerly dispatch one task.
 func GrantEagerDispatch(
 	ctx context.Context,
 	client matchingservice.MatchingServiceClient,
 	namespaceID string,
 	taskQueue string,
+	taskQueueType enumspb.TaskQueueType,
 	priority *commonpb.Priority,
 	version *deploymentspb.WorkerDeploymentVersion,
 ) bool {
@@ -711,7 +715,7 @@ func GrantEagerDispatch(
 		NamespaceId: namespaceID,
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     taskQueue,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			TaskQueueType: taskQueueType,
 		},
 		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{
 			Count:    1,
@@ -826,7 +830,10 @@ func GetRPCStatus(err error) (*status.Status, bool) {
 
 // IsRetryableRPCError checks if the error is a retryable gRPC error.
 //
-// This does not unwrap err, see [GetRPCStatus].
+// Wrapping is handled exactly as [GetRPCStatus] handles it, which is not the
+// same for both status conventions: a wrapped error carrying a GRPCStatus()
+// method is still recognized, while one implementing only the older Status()
+// method must be unwrapped by the caller first.
 func IsRetryableRPCError(err error) bool {
 	st, ok := GetRPCStatus(err)
 	if !ok {

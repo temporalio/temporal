@@ -395,6 +395,61 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationLinks() {
 	// TestNewStandaloneOperationAttachesLinks and TestOperationAttachLinks.
 }
 
+func (s *NexusStandaloneTestSuite) TestStartRetryAfterLinkLimitReduced() {
+	s.T().Skip("Known issue: candidate link validation runs before request-ID deduplication")
+
+	for _, tc := range []struct {
+		name              string
+		onConflictOptions *nexusoperationpb.OnConflictOptions
+	}{
+		{name: "WithoutOnConflictOptions"},
+		{
+			name: "AttachLinksOnConflict",
+			onConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId: true,
+				AttachLinks:     true,
+			},
+		},
+	} {
+		s.Run(tc.name, func(s *NexusStandaloneTestSuite) {
+			t := s.T()
+			ctx := s.Context()
+			env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.MaxLinksPerComponent, 2))
+			req := &workflowservice.StartNexusOperationExecutionRequest{
+				OperationId:      env.Tv().Any().String(),
+				Endpoint:         env.createAsyncEndpoint(ctx, t),
+				RequestId:        env.Tv().RequestID(),
+				IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+				Links: []*commonpb.Link{
+					standaloneNexusTestLink(env, "retry-wf-1"),
+					standaloneNexusTestLink(env, "retry-wf-2"),
+				},
+				OnConflictOptions: tc.onConflictOptions,
+			}
+			firstResp, err := env.startNexusOperation(ctx, req)
+			require.NoError(t, err)
+			require.True(t, firstResp.GetStarted())
+			expectedRetry := &workflowservice.StartNexusOperationExecutionResponse{RunId: firstResp.GetRunId()}
+
+			// A retry succeeds before the limit changes.
+			retryResp, err := env.startNexusOperation(ctx, req)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, expectedRetry, retryResp)
+
+			restoreLimit := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerComponent, 1)
+			defer restoreLimit()
+
+			// A lower link limit must not reject work already accepted under this request ID.
+			retryResp, err = env.startNexusOperation(ctx, req)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, expectedRetry, retryResp)
+
+			describeResp := env.describeNexusOperation(ctx, t, req.GetOperationId())
+			protorequire.ProtoElementsMatch(t, req.GetLinks(), describeResp.GetInfo().GetLinks())
+		})
+	}
+}
+
 func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
@@ -2499,6 +2554,16 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransition
 	callback := s.Rcv(callbackCh)
 	callbackToken := callback.token
 	callbackURL := callback.url
+
+	// The handler hands out the callback token before its start response is recorded. Completing before
+	// then takes the completion-before-start path, which drops the start response and its handler links.
+	_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+		Namespace:   env.Namespace().String(),
+		OperationId: "test-op",
+		RunId:       startResp.RunId,
+		WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+	})
+	s.NoError(err)
 
 	gen := &commonnexus.CallbackTokenGenerator{}
 	decodedToken, err := commonnexus.DecodeCallbackToken(callbackToken)

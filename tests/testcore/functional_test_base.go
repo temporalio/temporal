@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -31,6 +32,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	persistenceclient "go.temporal.io/server/common/persistence/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -129,6 +131,13 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 		} else {
 			maps.Copy(params.DynamicConfigOverrides, overrides)
 		}
+	}
+}
+
+// WithAdditionalServerOptions adds server options to each test cluster.
+func WithAdditionalServerOptions(options ...temporal.ServerOption) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.AdditionalServerOptions = append(params.AdditionalServerOptions, options...)
 	}
 }
 
@@ -343,6 +352,7 @@ func (s *functionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.
+	testtelemetry.AttachTestName(s.T())
 	ctx := testcontext.For(s.T())
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
 	s.namespaceID, err = s.RegisterNamespace(ctx, s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
@@ -374,12 +384,14 @@ func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persist
 // in each partition.
 func (s *functionalTestBase) SetupTest() {
 	s.checkTestShard()
+	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 }
 
 func (s *functionalTestBase) SetupSubTest() {
+	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 }
 
@@ -543,7 +555,18 @@ func (s *functionalTestBase) RegisterNamespace(
 		},
 		IsGlobalNamespace: false,
 	}
-	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(ctx, namespaceRequest)
+
+	// Parallel namespace creation can exhaust the normal retry budget, so test setup uses a larger
+	// budget for transient errors across all persistence backends.
+	metadataMgr := persistence.NewMetadataPersistenceRetryableClient(
+		s.testCluster.testBase.MetadataManager,
+		backoff.NewExponentialRetryPolicy(100*time.Millisecond).
+			WithMaximumInterval(time.Second).
+			WithMaximumAttempts(10).
+			WithExpirationInterval(10*time.Second),
+		persistenceclient.IsPersistenceTransientError,
+	)
+	_, err := metadataMgr.CreateNamespace(ctx, namespaceRequest)
 
 	if err != nil {
 		return namespace.EmptyID, err

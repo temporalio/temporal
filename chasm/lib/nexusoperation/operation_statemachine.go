@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -23,7 +24,8 @@ var TransitionScheduled = chasm.NewTransition(
 		o.Attempt++
 		// Emit an invocation task to start the operation.
 		// The destination is the endpoint name, which routes the task to the correct outbound queue.
-		ctx.AddTask(o, chasm.TaskAttributes{Destination: o.GetEndpoint()}, &nexusoperationpb.InvocationTask{
+		// System endpoint tasks have no destination and are scheduled on the transfer queue.
+		ctx.AddTask(o, chasm.TaskAttributes{Destination: taskDestination(o.GetEndpoint())}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
 		})
 
@@ -95,7 +97,7 @@ var transitionRescheduled = chasm.NewTransition(
 		o.NextAttemptScheduleTime = nil
 
 		// Emit a new invocation task for the retry attempt
-		ctx.AddTask(o, chasm.TaskAttributes{Destination: o.GetEndpoint()}, &nexusoperationpb.InvocationTask{
+		ctx.AddTask(o, chasm.TaskAttributes{Destination: taskDestination(o.GetEndpoint())}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
 		})
 
@@ -233,7 +235,16 @@ var TransitionFailed = chasm.NewTransition(
 		}
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated failures.
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
-		o.emitOnFailedMetrics(ctx, closeTime)
+
+		var reason metrics.ReasonString
+		if fromAttempt {
+			reason = OperationFailedReason(event.Failure)
+		} else {
+			// Use FailedReasonOperationError: the request was accepted, but the operation failed.
+			reason = FailedReasonOperationError
+		}
+		o.emitOnFailedMetrics(ctx, closeTime, reason)
+
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
 	},
 )

@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -17,6 +19,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
 	testspb "go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
@@ -24,10 +27,12 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -52,18 +57,20 @@ type chasmTestEnv struct {
 }
 
 // newChasmTestEnv creates a chasmTestEnv backed by a dedicated cluster with
-// EnableChasm overridden for the test.
-func newChasmTestEnv(suiteContext context.Context, t *testing.T) chasmTestEnv {
+// EnableChasm overridden for the test. Additional options are applied after the defaults.
+func newChasmTestEnv(suiteContext context.Context, t *testing.T, opts ...testcore.TestOption) chasmTestEnv {
 	t.Helper()
 
 	// WithDedicatedCluster acquires an exclusive pooled slot — no fresh cluster
 	// creation per test, unlike passing startup dynamic config.
 	env := testcore.NewEnv(
 		t,
-		testcore.WithDedicatedCluster(),
-		testcore.WithWorkerService("delete namespace workflow"),
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
+		append([]testcore.TestOption{
+			testcore.WithDedicatedCluster(),
+			testcore.WithWorkerService("delete namespace workflow"),
+			testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+			testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
+		}, opts...)...,
 	)
 
 	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(suiteContext)
@@ -175,6 +182,130 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 	s.NoError(err)
 	s.Equal(int64(1), descResp.State.TotalCount)
 	s.Positive(descResp.State.TotalSize)
+}
+
+// TestPayloadStore_UpdateComponent_RequestIDDedup verifies UpdateComponent request ID dedup end to end:
+// update request IDs are recorded in the CHASM request IDs data node and start request IDs in the execution
+// state, and the two are deduplicated independently.
+func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
+	cenv := newChasmTestEnv(s.Context(), s.T())
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	startRequestID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+			RequestID:   startRequestID,
+		},
+	)
+	s.NoError(err)
+
+	addPayload := func(key, requestID string) error {
+		_, err := tests.AddPayloadHandler(
+			ctx,
+			tests.AddPayloadRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+				PayloadKey:  key,
+				Payload:     payload.EncodeString(key),
+				RequestID:   requestID,
+			},
+		)
+		return err
+	}
+
+	requestID1 := tv.Any().String()
+	requestID2 := tv.Any().String()
+	s.NoError(addPayload("key1", requestID1))
+
+	// Reusing a request ID is rejected without applying the update.
+	err = addPayload("key2", requestID1)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+
+	// A different request ID is applied.
+	s.NoError(addPayload("key3", requestID2))
+
+	// The start request ID isn't an update request ID, so an update reusing it is applied.
+	s.NoError(addPayload("key4", startRequestID))
+
+	descResp, err := tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(3), descResp.State.TotalCount, "the rejected update must not have been applied")
+
+	// Check where the request IDs were persisted.
+	adminDescResp, err := cenv.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: cenv.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+		},
+		ArchetypeId: tests.ArchetypeID,
+	})
+	s.NoError(err)
+	dbState := adminDescResp.GetDatabaseMutableState()
+	requestIDsNode, ok := dbState.GetChasmNodes()["__chasm_requestIDs"]
+	s.Require().True(ok)
+	requestIDs := &persistencespb.ChasmRequestIDs{}
+	s.NoError(serialization.Decode(requestIDsNode.GetData(), requestIDs))
+	s.ElementsMatch([]string{requestID1, requestID2, startRequestID}, slices.Collect(maps.Keys(requestIDs.GetRequestIds())))
+	executionRequestIDs := slices.Collect(maps.Keys(dbState.GetExecutionState().GetRequestIds()))
+	s.ElementsMatch([]string{startRequestID}, executionRequestIDs)
+}
+
+func (s *ChasmSuite) TestPayloadStoreRequestIDDedupAcrossFlagChanges() {
+	for _, enabledOnRecord := range []bool{false, true} {
+		s.Run(fmt.Sprintf("EnabledOnRecord=%t", enabledOnRecord), func(s *ChasmSuite) {
+			cenv := newChasmTestEnv(s.Context(), s.T())
+			tv := testvars.New(s.T())
+			cenv.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, enabledOnRecord)
+
+			storeID := tv.WorkflowID()
+			requestID := tv.RequestID()
+			_, err := tests.NewPayloadStoreHandler(cenv.chasmCtx, tests.NewPayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+
+			addPayload := func(key string) error {
+				_, err := tests.AddPayloadHandler(cenv.chasmCtx, tests.AddPayloadRequest{
+					NamespaceID: cenv.NamespaceID(),
+					StoreID:     storeID,
+					PayloadKey:  key,
+					Payload:     payload.EncodeString(key),
+					RequestID:   requestID,
+				})
+				return err
+			}
+			s.NoError(addPayload("first"))
+
+			cenv.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, !enabledOnRecord)
+			cenv.CloseShard(cenv.NamespaceID().String(), storeID)
+
+			err = addPayload("retry")
+			var failedPrecondition *serviceerror.FailedPrecondition
+			s.ErrorAs(err, &failedPrecondition)
+
+			descResp, err := tests.DescribePayloadStoreHandler(cenv.chasmCtx, tests.DescribePayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+			s.Equal(int64(1), descResp.State.TotalCount)
+		})
+	}
 }
 
 func (s *ChasmSuite) TestPayloadStore_PureTask() {
@@ -882,6 +1013,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_UpdateExisting() {
 			return nil, nil
 		},
 		nil,
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),
 	)
 	s.NoError(err)
 	s.False(newFnCalled, "newFn should not be called")
@@ -950,6 +1082,182 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_CreateNew() {
 	s.NoError(err)
 	s.False(descResp.State.Closed, "Store should not be closed")
 	s.Equal(int64(42), descResp.State.TotalCount) // Update was applied during creation.
+}
+
+// TestUpdateWithStartExecution_CreateNew_PersistsUpdateNodesAndTasks verifies that sub-components and
+// tasks added by updateFn on a brand new execution are persisted in the same write as the start.
+func (s *ChasmSuite) TestUpdateWithStartExecution_CreateNew_PersistsUpdateNodesAndTasks() {
+	cenv := newChasmTestEnv(s.Context(), s.T())
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	keptPayload := payload.EncodeString("kept-value")
+
+	result, err := chasm.UpdateWithStartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: cenv.NamespaceID().String(),
+			BusinessID:  storeID,
+		},
+		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mutableContext)
+		},
+		func(store *tests.PayloadStore, mutableContext chasm.MutableContext, _ any) (any, error) {
+			// Adds a data node under the Payloads map.
+			_, err := store.AddPayload(mutableContext, tests.AddPayloadRequest{
+				PayloadKey: "kept",
+				Payload:    keptPayload,
+			})
+			if err != nil {
+				return nil, err
+			}
+			// Adds a data node and a pure TTL task that removes it.
+			_, err = store.AddPayload(mutableContext, tests.AddPayloadRequest{
+				PayloadKey: "expiring",
+				Payload:    payload.EncodeString("expiring-value"),
+				TTL:        1 * time.Second,
+			})
+			return nil, err
+		},
+		nil,
+	)
+	s.NoError(err)
+	s.True(result.Created)
+
+	// Read the persisted mutable state, not the cached one, to prove the update was written together
+	// with the start.
+	adminDescResp, err := cenv.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: cenv.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      result.ExecutionKey.RunID,
+		},
+		ArchetypeId: tests.ArchetypeID,
+	})
+	s.NoError(err)
+	persistedNodes := adminDescResp.GetDatabaseMutableState().GetChasmNodes()
+	keptNode, ok := persistedNodes["Payloads#kept"]
+	s.Require().True(ok, "payload node added by updateFn must be persisted, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
+	persistedPayload := &commonpb.Payload{}
+	s.NoError(serialization.Decode(keptNode.GetData(), persistedPayload))
+	s.Equal(keptPayload.GetData(), persistedPayload.GetData())
+
+	// The TTL task added by updateFn must be persisted too: once it fires, only the kept payload remains.
+	s.AwaitTrue(func() bool {
+		descResp, err := tests.DescribePayloadStoreHandler(
+			ctx,
+			tests.DescribePayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			},
+		)
+		s.NoError(err)
+		return descResp.State.TotalCount == 1
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// TestUpdateWithStartExecution_ExistingClosed verifies that UpdateWithStart on a closed execution
+// starts a new run with the update applied, through the reuse policy path.
+func (s *ChasmSuite) TestUpdateWithStartExecution_ExistingClosed() {
+	cenv := newChasmTestEnv(s.Context(), s.T())
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+
+	createResp, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      cenv.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyAllowDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+	originalRunID := createResp.RunID
+
+	_, err = tests.ClosePayloadStoreHandler(
+		ctx,
+		tests.ClosePayloadStoreRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	newFnCalled := false
+	newPayload := payload.EncodeString("new-run-value")
+	result, err := chasm.UpdateWithStartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: cenv.NamespaceID().String(),
+			BusinessID:  storeID,
+		},
+		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			newFnCalled = true
+			return tests.NewPayloadStore(mutableContext)
+		},
+		func(store *tests.PayloadStore, mutableContext chasm.MutableContext, _ any) (any, error) {
+			_, err := store.AddPayload(mutableContext, tests.AddPayloadRequest{
+				PayloadKey: "new-run-key",
+				Payload:    newPayload,
+			})
+			return nil, err
+		},
+		nil,
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyFail),
+	)
+	s.NoError(err)
+	s.True(newFnCalled, "newFn should be called when the existing execution is closed")
+	s.True(result.Created)
+	s.NotEqual(originalRunID, result.ExecutionKey.RunID, "a new run should be started")
+
+	// The new run is current and has the update applied.
+	descResp, err := tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.False(descResp.State.Closed)
+	s.Equal(int64(1), descResp.State.TotalCount)
+
+	adminDescResp, err := cenv.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: cenv.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      result.ExecutionKey.RunID,
+		},
+		ArchetypeId: tests.ArchetypeID,
+	})
+	s.NoError(err)
+	persistedNodes := adminDescResp.GetDatabaseMutableState().GetChasmNodes()
+	node, ok := persistedNodes["Payloads#new-run-key"]
+	s.Require().True(ok, "payload node added by updateFn must be persisted on the new run, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
+	persistedPayload := &commonpb.Payload{}
+	s.NoError(serialization.Decode(node.GetData(), persistedPayload))
+	s.Equal(newPayload.GetData(), persistedPayload.GetData())
+
+	// The original run is untouched.
+	originalDescResp, err := cenv.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: cenv.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      originalRunID,
+		},
+		ArchetypeId: tests.ArchetypeID,
+	})
+	s.NoError(err)
+	_, ok = originalDescResp.GetDatabaseMutableState().GetChasmNodes()["Payloads#new-run-key"]
+	s.False(ok, "update must not be applied to the closed run")
 }
 
 func (s *ChasmSuite) TestPayloadStore_ApproximateExecutionSize() {
@@ -1086,6 +1394,104 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 		require.NoError(t, err)
 		require.Empty(t, resp.Executions)
 	}, 20*time.Second*debug.TimeoutMultiplier, time.Second)
+}
+
+// TestArchetypeRetention verifies that a retention registered via chasm.WithRetention overrides the
+// namespace retention and is floored at the namespace min retention. It asserts on the scheduled
+// DeleteHistoryEventTask instead of waiting for the retention period to elapse.
+func (s *ChasmSuite) TestArchetypeRetention() {
+	const (
+		namespaceRetention = 24 * time.Hour
+		minRetention       = 2 * time.Hour
+	)
+
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithHistoryTaskRecorder(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.NamespaceMinRetentionGlobal, minRetention),
+		testcore.WithDynamicConfig(dynamicconfig.NamespaceMinRetentionLocal, minRetention),
+		testcore.WithDynamicConfig(dynamicconfig.RetentionTimerJitterDuration, time.Duration(0)),
+	)
+	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(s.Context())
+	s.NoError(err)
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
+	s.NotNil(recorder)
+
+	testCases := []struct {
+		name               string
+		archetypeRetention time.Duration
+		expectedRetention  time.Duration
+	}{
+		{
+			name:              "no archetype retention uses namespace retention",
+			expectedRetention: namespaceRetention,
+		},
+		{
+			name:               "archetype retention overrides with longer retention",
+			archetypeRetention: 30 * 24 * time.Hour,
+			expectedRetention:  30 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype retention overrides with shorter retention",
+			archetypeRetention: 12 * time.Hour,
+			expectedRetention:  12 * time.Hour,
+		},
+		{
+			name:               "archetype retention is floored at namespace min retention",
+			archetypeRetention: time.Minute,
+			expectedRetention:  minRetention,
+		},
+	}
+
+	for _, tc := range testCases {
+		// Sequential because the retention override applies to the whole dedicated cluster.
+		s.RunSequential(tc.name, func(s *ChasmSuite) {
+			tv := testvars.New(s.T())
+			ctx, cancel := context.WithTimeout(chasmCtx, chasmTestTimeout)
+			defer cancel()
+
+			defer env.OverrideDynamicConfig(tests.Retention, tc.archetypeRetention)()
+
+			storeID := tv.Any().String()
+			createResp, err := tests.NewPayloadStoreHandler(ctx, tests.NewPayloadStoreRequest{
+				NamespaceID: env.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+
+			beforeClose := time.Now()
+			_, err = tests.ClosePayloadStoreHandler(ctx, tests.ClosePayloadStoreRequest{
+				NamespaceID: env.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+			afterClose := time.Now()
+
+			var deleteTask *historytasks.DeleteHistoryEventTask
+			await.Require(s.Context(), s.T(), func(t *await.T) {
+				recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+					NamespaceID: env.NamespaceID().String(),
+					WorkflowID:  storeID,
+					RunID:       createResp.RunID,
+				})
+				for _, rec := range recorded {
+					if task, ok := rec.Task.(*historytasks.DeleteHistoryEventTask); ok {
+						deleteTask = task
+					}
+				}
+				require.NotNil(t, deleteTask, "expected a DeleteHistoryEventTask for retention")
+			}, 5*time.Second, 50*time.Millisecond)
+
+			s.Equal(tests.ArchetypeID, deleteTask.ArchetypeID)
+			// Persisted task timestamps are rounded to millisecond precision.
+			s.WithinRange(
+				deleteTask.VisibilityTimestamp,
+				beforeClose.Add(tc.expectedRetention).Add(-time.Millisecond),
+				afterClose.Add(tc.expectedRetention).Add(time.Millisecond),
+			)
+		})
+	}
 }
 
 // TODO: More tests here...

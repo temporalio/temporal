@@ -82,7 +82,7 @@ func TestFairTaskReaderBacklogCountAfterOutOfOrderCompletion(t *testing.T) {
 		entry, ok := reader.outstandingTasks.Get(outstandingTask{level: fairLevel{pass: 1, id: id}})
 		require.True(t, ok)
 		require.NotNil(t, entry.task)
-		entry.task.finish(taskFinishResult{consumedToken: true})
+		entry.task.finish(nil)
 	}
 	write := func(task *persistencespb.AllocatedTaskInfo) {
 		reader.getAndPinAckLevel()

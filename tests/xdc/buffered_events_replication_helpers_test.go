@@ -147,6 +147,25 @@ func (s *xdcBaseSuite) createBufferedEventsNamespace(ctx context.Context) buffer
 	return bufferedEventsNamespace{Name: name, ID: response.NamespaceInfo.Id}
 }
 
+// runWithEventBatchSizes runs test once with each transaction written as a single history batch and
+// once with every event in its own batch, so a replicated transaction spans several batches.
+func (s *xdcBaseSuite) runWithEventBatchSizes(test func()) {
+	for _, tc := range []struct {
+		name                     string
+		maxEventBatchSizeInBytes int
+	}{
+		{name: "SingleBatch", maxEventBatchSizeInBytes: 0},
+		{name: "SplitBatches", maxEventBatchSizeInBytes: 1},
+	} {
+		s.Run(tc.name, func() {
+			for _, cluster := range s.clusters {
+				cluster.OverrideDynamicConfig(s.T(), dynamicconfig.MaximumEventBatchSizeInBytes, tc.maxEventBatchSizeInBytes)
+			}
+			test()
+		})
+	}
+}
+
 func (s *xdcBaseSuite) enableWorkflowPauseForTest() {
 	s.T().Helper()
 	for _, cluster := range s.clusters {

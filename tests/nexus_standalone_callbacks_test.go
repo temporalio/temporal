@@ -391,6 +391,115 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		s.Len(newDescribeResp.GetCompletionCallbacks(), 2)
 	})
 
+	// A start that carries on_conflict_options but creates the operation attaches its callback once.
+	s.Run("AttachOptionsOnNewStart", func(s *NexusStandaloneCallbacksTestSuite) {
+		ctx := s.Context()
+		endpointName := env.createAsyncEndpoint(ctx, s.T())
+
+		operationID := testvars.New(s.T()).Any().String()
+		startReq := &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "first-request",
+			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb1")},
+			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		}
+		startResp, err := env.startNexusOperation(ctx, startReq)
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+		s.Len(env.describeNexusOperation(ctx, s.T(), operationID).GetCompletionCallbacks(), 1)
+
+		// A retry returns the same run without attaching again.
+		retryResp, err := env.startNexusOperation(ctx, startReq)
+		s.NoError(err)
+		s.False(retryResp.GetStarted())
+		s.Equal(startResp.GetRunId(), retryResp.GetRunId())
+		s.Len(env.describeNexusOperation(ctx, s.T(), operationID).GetCompletionCallbacks(), 1)
+	})
+
+	s.Run("AttachOnConflictRejectedByFailPolicy", func(s *NexusStandaloneCallbacksTestSuite) {
+		ctx := s.Context()
+		endpointName := env.createAsyncEndpoint(ctx, s.T())
+
+		operationID := testvars.New(s.T()).Any().String()
+		startResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "first-request",
+			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb1")},
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		_, err = env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "second-request",
+			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb2")},
+			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_FAIL,
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		})
+		var alreadyStartedErr *serviceerror.NexusOperationExecutionAlreadyStarted
+		s.ErrorAs(err, &alreadyStartedErr)
+		s.Equal(startResp.GetRunId(), alreadyStartedErr.RunId)
+		s.Equal("first-request", alreadyStartedErr.StartRequestId)
+
+		callbackInfos := env.describeNexusOperation(ctx, s.T(), operationID).GetCompletionCallbacks()
+		s.Require().Len(callbackInfos, 1)
+		s.Equal("http://localhost/cb1", callbackInfos[0].GetInfo().GetCallback().GetNexus().GetUrl())
+	})
+
+	// A closed operation is not reused, so the attach request starts a new run.
+	s.Run("AttachOnConflictAfterClose", func(s *NexusStandaloneCallbacksTestSuite) {
+		ctx := s.Context()
+		endpointName := env.createAsyncEndpoint(ctx, s.T())
+
+		operationID := testvars.New(s.T()).Any().String()
+		startResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "first-request",
+			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb1")},
+		})
+		s.NoError(err)
+
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: operationID,
+			RunId:       startResp.GetRunId(),
+			RequestId:   "terminate-request",
+			Reason:      "test termination",
+		})
+		s.NoError(err)
+
+		attachResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "second-request",
+			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb2")},
+			IdReusePolicy:       enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		})
+		s.NoError(err)
+		s.True(attachResp.GetStarted())
+		s.NotEqual(startResp.GetRunId(), attachResp.GetRunId())
+
+		callbackInfos := env.describeNexusOperation(ctx, s.T(), operationID).GetCompletionCallbacks()
+		s.Require().Len(callbackInfos, 1)
+		s.Equal("http://localhost/cb2", callbackInfos[0].GetInfo().GetCallback().GetNexus().GetUrl())
+	})
+
 	// Confirm that SANO fails with callback kinds that are not enabled.
 	s.Run("RejectNonNexusCallbacks", func(s *NexusStandaloneCallbacksTestSuite) {
 		for _, tc := range []struct {

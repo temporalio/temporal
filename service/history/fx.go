@@ -6,10 +6,12 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/sony/gobreaker"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/namespacereplication"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
@@ -28,7 +30,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resource"
@@ -48,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/callbacks"
 	hsmnexusoperations "go.temporal.io/server/service/history/hsm/nexusoperations"
 	hsmnexusworkflow "go.temporal.io/server/service/history/hsm/nexusoperations/workflow"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -74,6 +77,7 @@ var Module = fx.Options(
 	fx.Provide(CallbackDestinationBlockedProvider),
 	fx.Provide(CallbackValidatorProvider),
 	fx.Provide(NexusOperationDestinationBlockedProvider),
+	fx.Provide(NexusOperationDestinationThrottledProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),
@@ -130,6 +134,7 @@ var Module = fx.Options(
 	activity.HistoryModule,
 	scheduler.Module,
 	callback.Module,
+	namespacereplication.Module,
 	chasmnexus.Module,
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
@@ -161,6 +166,18 @@ func NexusOperationDestinationBlockedProvider(
 			Destination: destination,
 		})
 		return cb.State() != gobreaker.StateClosed
+	}
+}
+
+func NexusOperationDestinationThrottledProvider(
+	throttleState *queues.ThrottleState,
+) chasmnexus.DestinationThrottledFn {
+	return func(namespaceName namespace.Name, destination string) bool {
+		return throttleState.IsThrottled(queues.ThrottleKey{
+			Cause:         enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+			NamespaceName: namespaceName,
+			Destination:   destination,
+		})
 	}
 }
 
@@ -429,8 +446,8 @@ func RateLimitInterceptorProvider(
 
 func ESProcessorConfigProvider(
 	serviceConfig *configs.Config,
-) *elasticsearch.ProcessorConfig {
-	return &elasticsearch.ProcessorConfig{
+) *esconfig.ProcessorConfig {
+	return &esconfig.ProcessorConfig{
 		IndexerConcurrency:       serviceConfig.IndexerConcurrency,
 		ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
 		ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
@@ -479,7 +496,7 @@ func PersistenceRateLimitingParamsProvider(
 }
 
 func VisibilityManagerConfigProvider(
-	esProcessorConfig *elasticsearch.ProcessorConfig,
+	esProcessorConfig *esconfig.ProcessorConfig,
 	serviceConfig *configs.Config,
 ) *visibility.ManagerConfig {
 	return &visibility.ManagerConfig{
@@ -573,11 +590,14 @@ func WorkflowResendSchedulerProvider(
 }
 
 func ReplicationProgressCacheProvider(
+	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 	logger log.Logger,
 	handler metrics.Handler,
 ) replication.ProgressCache {
-	return replication.NewProgressCache(serviceConfig, logger, handler)
+	c := replication.NewProgressCache(serviceConfig, logger, handler)
+	lc.Append(fx.StartStopHook(c.Start, c.Stop))
+	return c
 }
 
 func VersionMembershipCacheProvider(

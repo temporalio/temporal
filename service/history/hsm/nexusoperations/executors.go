@@ -32,6 +32,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -69,6 +70,7 @@ type TaskExecutorOptions struct {
 	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 	HistoryClient          resource.HistoryClient
 	ChasmRegistry          *chasm.Registry
+	TestHooks              testhooks.TestHooks
 }
 
 func RegisterExecutor(
@@ -222,13 +224,15 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
 	var timeoutType enumspb.TimeoutType
+	currentWorkflowTime := args.workflowTimeSnapshot.Add(env.Now().Sub(args.wallTimeSnapshot))
+	elapsedSinceScheduled := currentWorkflowTime.Sub(args.scheduledTime)
 	// Adjust timeout based on remaining operation timeouts.
 	// ScheduleToStart takes precedence over ScheduleToClose since it is already capped by it.
 	if args.scheduleToStartTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToStartTimeout-time.Since(args.scheduledTime))
+		callTimeout = min(callTimeout, args.scheduleToStartTimeout-elapsedSinceScheduled)
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
 	} else if args.scheduleToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-time.Since(args.scheduledTime))
+		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-elapsedSinceScheduled)
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	}
 	// Inform the handler of the operation timeout via header.
@@ -238,7 +242,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		opTimeout = args.startToCloseTimeout
 	}
 	if args.scheduleToCloseTimeout > 0 {
-		opTimeout = min(args.scheduleToCloseTimeout-time.Since(args.scheduledTime), opTimeout)
+		opTimeout = min(args.scheduleToCloseTimeout-elapsedSinceScheduled, opTimeout)
 	}
 	header := nexus.Header(args.header)
 	if header == nil {
@@ -336,6 +340,12 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	e.logCallFailure(traceCtx, callErr, failureSource)
 
+	if e.Config.EnableOutboundTaskThrottleController() && e.Config.TaskThrottleControllerSettings().Enabled {
+		if retryErr := commonnexus.CallerRPSLimitError(callErr); retryErr != nil {
+			return retryErr
+		}
+	}
+
 	err = e.saveResult(ctx, env, ref, result, callErr)
 
 	if callErr != nil && isDestinationDown(callErr) {
@@ -352,6 +362,8 @@ type startArgs struct {
 	endpointName             string
 	endpointID               string
 	scheduledTime            time.Time
+	workflowTimeSnapshot     time.Time
+	wallTimeSnapshot         time.Time
 	scheduleToStartTimeout   time.Duration
 	scheduleToCloseTimeout   time.Duration
 	startToCloseTimeout      time.Duration
@@ -380,6 +392,8 @@ func (e taskExecutor) loadOperationArgs(
 		args.operation = operation.Operation
 		args.requestID = operation.RequestId
 		args.scheduledTime = operation.ScheduledTime.AsTime()
+		args.workflowTimeSnapshot = node.WorkflowTime()
+		args.wallTimeSnapshot = env.Now()
 		args.scheduleToCloseTimeout = operation.ScheduleToCloseTimeout.AsDuration()
 		args.scheduleToStartTimeout = operation.ScheduleToStartTimeout.AsDuration()
 		args.startToCloseTimeout = operation.StartToCloseTimeout.AsDuration()
@@ -408,7 +422,13 @@ func (e taskExecutor) loadOperationArgs(
 	return
 }
 
-func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) error {
+func (e taskExecutor) saveResult(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
+	callErr error,
+) error {
 	// emitMetrics is derived from the operation's resulting state inside the Access closure and
 	// invoked only after the write transaction commits successfully, so a failed commit (which
 	// retries the task) does not double-count the metric. See operationMetricsHandler's doc comment.
@@ -418,11 +438,12 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 		if err != nil {
 			return err
 		}
+		var failedReason metrics.ReasonString
 		switch {
 		case callErr != nil:
-			err = e.handleStartOperationError(env, node, operation, callErr)
+			failedReason, err = e.handleStartOperationError(node, operation, callErr)
 		case result.Pending != nil:
-			err = e.saveStartedResult(env, node, operation, result)
+			err = e.saveStartedResult(node, operation, result)
 		default:
 			// Operation completed synchronously. Store the result and update the state machine.
 			links := commonnexus.ConvertNexusLinksToProtoLinks(result.Links, e.Logger)
@@ -437,7 +458,10 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 		if err != nil {
 			return err
 		}
-		emitMetrics = e.deferredOperationMetric(finalOp, callErr, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		emitMetrics = e.deferredOperationMetric(finalOp, callErr, failedReason, node.NamespaceName(), node.WorkflowTypeName(), node.WorkflowTime())
+		if finalOp.State() == enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT {
+			return e.deleteTimedOutOperation(node)
+		}
 		return nil
 	})
 	if err != nil {
@@ -451,7 +475,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 
 // saveStartedResult transitions the operation to started in response to an async (pending) start
 // response so it can later complete via callback.
-func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, operation Operation, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]) error {
+func (e taskExecutor) saveStartedResult(node *hsm.Node, operation Operation, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
 		return err
@@ -473,7 +497,7 @@ func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, ope
 	})
 	return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 		return TransitionStarted.Apply(operation, EventStarted{
-			Time:       env.Now(),
+			Time:       event.GetEventTime().AsTime(),
 			Node:       node,
 			Attributes: event.GetNexusOperationStartedEventAttributes(),
 		})
@@ -485,7 +509,15 @@ func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, ope
 // scheduled/backing-off). The returned closure is invoked by the caller after the write transaction
 // commits so the metric is not double-counted if the commit fails and the task is retried. callErr
 // carries the timeout type for the below-min-request-timeout case.
-func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, namespaceName, workflowType string, closeTime time.Time) func() {
+// failedReason applies only to failed operations.
+func (e taskExecutor) deferredOperationMetric(
+	op Operation,
+	callErr error,
+	failedReason metrics.ReasonString,
+	namespaceName string,
+	workflowType string,
+	closeTime time.Time,
+) func() {
 	switch op.State() {
 	case enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED:
 		return func() {
@@ -497,7 +529,7 @@ func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, names
 		}
 	case enumsspb.NEXUS_OPERATION_STATE_FAILED:
 		return func() {
-			emitOperationFailed(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, closeTime)
+			emitOperationFailed(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, failedReason, closeTime)
 		}
 	case enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT:
 		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
@@ -525,7 +557,12 @@ func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, names
 // to its resulting state: terminally failed/canceled/timed-out, or backing off for a retryable
 // attempt failure. It does not emit metrics; saveResult derives the caller-side metric from the
 // resulting state (see deferredOperationMetric).
-func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
+// The returned reason is used only when the operation ends in FAILED.
+func (e taskExecutor) handleStartOperationError(
+	node *hsm.Node,
+	operation Operation,
+	callErr error,
+) (metrics.ReasonString, error) {
 	var handlerErr *nexus.HandlerError
 	var opErr *nexus.OperationError
 	var opTimeoutBelowMinErr *operationTimeoutBelowMinError
@@ -538,7 +575,8 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		}
 		// Fall through all uncaught errors to retryable
 	case errors.As(callErr, &opErr):
-		return handleOperationError(node, operation, opErr)
+		// An underlying handler error does not make this a rejected start request.
+		return chasmnexus.FailedReasonOperationError, handleOperationError(node, operation, opErr)
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 		// Although Failure is nullable, Nexus SDK is expected to always populate this field
@@ -553,7 +591,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		return handleNonRetryableStartOperationError(node, operation, callErr)
 	case errors.As(callErr, &opTimeoutBelowMinErr):
 		// Not enough time to execute another request, resolve the operation with a timeout.
-		return e.recordOperationTimeout(node, opTimeoutBelowMinErr.timeoutType)
+		return "", e.recordOperationTimeout(node, opTimeoutBelowMinErr.timeoutType)
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		// If timed out, we don't leak internal info to the user
 		callErr = errRequestTimedOut
@@ -563,11 +601,11 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 
 	failure, err := callErrToFailure(callErr, true)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+	return "", hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 		return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
-			Time:        env.Now(),
+			Time:        node.WorkflowTime(),
 			Failure:     failure,
 			Node:        node,
 			RetryPolicy: e.Config.RetryPolicy(),
@@ -575,14 +613,18 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	})
 }
 
-func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, callErr error) error {
+func handleNonRetryableStartOperationError(
+	node *hsm.Node,
+	operation Operation,
+	callErr error,
+) (metrics.ReasonString, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return err
+		return "", err
 	}
 	cause, err := callErrToFailure(callErr, false)
 	if err != nil {
-		return err
+		return "", err
 	}
 	attrs := &historypb.NexusOperationFailedEventAttributes{
 		Failure: createNexusOperationFailure(
@@ -600,7 +642,7 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 		}
 	})
 
-	return FailedEventDefinition{}.Apply(node.Parent, event)
+	return chasmnexus.OperationFailedReason(cause), FailedEventDefinition{}.Apply(node.Parent, event)
 }
 
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
@@ -611,23 +653,23 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 	})
 }
 
-func (e taskExecutor) executeScheduleToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToCloseTimeoutTask) error {
-	return e.executeOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+func (e taskExecutor) executeScheduleToCloseTimeoutTask(_ hsm.Environment, node *hsm.Node, task ScheduleToCloseTimeoutTask) error {
+	return e.executeOperationTimeout(node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
 }
 
-func (e taskExecutor) executeScheduleToStartTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToStartTimeoutTask) error {
-	return e.executeOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+func (e taskExecutor) executeScheduleToStartTimeoutTask(_ hsm.Environment, node *hsm.Node, task ScheduleToStartTimeoutTask) error {
+	return e.executeOperationTimeout(node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
 }
 
-func (e taskExecutor) executeStartToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task StartToCloseTimeoutTask) error {
-	return e.executeOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+func (e taskExecutor) executeStartToCloseTimeoutTask(_ hsm.Environment, node *hsm.Node, task StartToCloseTimeoutTask) error {
+	return e.executeOperationTimeout(node, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 }
 
 // executeOperationTimeout is the entry point for the timeout timer tasks: it records the timeout
 // event (recordOperationTimeout) and emits the timeout metric. The write transaction is owned by the
 // HSM task framework (it commits after this returns), so emission here is pre-commit — the same
 // property the server's own activity-timeout metric has in timer_queue_active_task_executor.go.
-func (e taskExecutor) executeOperationTimeout(env hsm.Environment, node *hsm.Node, timeoutType enumspb.TimeoutType) error {
+func (e taskExecutor) executeOperationTimeout(node *hsm.Node, timeoutType enumspb.TimeoutType) error {
 	if err := e.recordOperationTimeout(node, timeoutType); err != nil {
 		return err
 	}
@@ -635,8 +677,19 @@ func (e taskExecutor) executeOperationTimeout(env hsm.Environment, node *hsm.Nod
 	if err != nil {
 		return err
 	}
-	emitOperationTimedOut(e.MetricsHandler, e.metricTagConfig(), op, node.NamespaceName(), node.WorkflowTypeName(), timeoutType.String(), env.Now())
+	if err := e.deleteTimedOutOperation(node); err != nil {
+		return err
+	}
+	emitOperationTimedOut(e.MetricsHandler, e.metricTagConfig(), op, node.NamespaceName(), node.WorkflowTypeName(), timeoutType.String(), node.WorkflowTime())
 	return nil
+}
+
+func (e taskExecutor) deleteTimedOutOperation(node *hsm.Node) error {
+	// Tests can retain timeout nodes to reproduce executions persisted by older servers.
+	if retain, _ := testhooks.Get(e.TestHooks, testhooks.NexusRetainTimedOutOperation, namespace.Name(node.NamespaceName())); retain {
+		return nil
+	}
+	return node.Parent.DeleteChild(node.Key)
 }
 
 // recordOperationTimeout records the NEXUS_OPERATION_TIMED_OUT history event and transitions the
@@ -714,13 +767,15 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
 	var timeoutType enumspb.TimeoutType
+	currentWorkflowTime := args.workflowTimeSnapshot.Add(env.Now().Sub(args.wallTimeSnapshot))
+	elapsedSinceScheduled := currentWorkflowTime.Sub(args.scheduledTime)
 	// Adjust timeout based on remaining operation timeouts.
 	if args.startToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.startToCloseTimeout-time.Since(args.startedTime))
+		callTimeout = min(callTimeout, args.startToCloseTimeout-currentWorkflowTime.Sub(args.startedTime))
 		timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
 	}
 	if args.scheduleToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-time.Since(args.scheduledTime))
+		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-elapsedSinceScheduled)
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	}
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
@@ -798,6 +853,12 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	e.logCallFailure(traceCtx, callErr, failureSource)
 
+	if e.Config.EnableOutboundTaskThrottleController() && e.Config.TaskThrottleControllerSettings().Enabled {
+		if retryErr := commonnexus.CallerRPSLimitError(callErr); retryErr != nil {
+			return retryErr
+		}
+	}
+
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
 
 	if callErr != nil && isDestinationDown(callErr) {
@@ -811,6 +872,8 @@ type cancelArgs struct {
 	service, operation, token, endpointID, endpointName, requestID string
 	scheduledTime                                                  time.Time
 	startedTime                                                    time.Time
+	workflowTimeSnapshot                                           time.Time
+	wallTimeSnapshot                                               time.Time
 	startToCloseTimeout                                            time.Duration
 	scheduleToCloseTimeout                                         time.Duration
 	scheduledEventID                                               int64
@@ -839,6 +902,8 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.requestID = op.RequestId
 		args.scheduledTime = op.ScheduledTime.AsTime()
 		args.startedTime = op.StartedTime.AsTime()
+		args.workflowTimeSnapshot = n.WorkflowTime()
+		args.wallTimeSnapshot = env.Now()
 		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
 		args.startToCloseTimeout = op.StartToCloseTimeout.AsDuration()
 		args.scheduledEventID, err = hsm.EventIDFromToken(op.ScheduledEventToken)
@@ -887,13 +952,13 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 						})
 					}
 					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-						Time:    env.Now(),
+						Time:    n.WorkflowTime(),
 						Failure: failure,
 						Node:    n,
 					})
 				}
 				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
-					Time:        env.Now(),
+					Time:        n.WorkflowTime(),
 					Failure:     failure,
 					Node:        n,
 					RetryPolicy: e.Config.RetryPolicy(),
@@ -916,7 +981,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 				})
 			}
 			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
-				Time: env.Now(),
+				Time: n.WorkflowTime(),
 				Node: n,
 			})
 		})

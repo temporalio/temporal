@@ -74,7 +74,7 @@ type (
 
 		// InFlightCallbacks returns every set of completion callbacks held by an Update that is
 		// admitted but not yet accepted: its original request's callbacks, and any
-		// buffered by AttachCallbacks while it was with the worker.
+		// buffered by AttachCallbacks before acceptance.
 		//
 		// These callbacks are not yet persisted, so they are missing from the execution's
 		// persisted callback totals, yet they will be persisted if the Update is accepted. By
@@ -333,9 +333,7 @@ func (r *registry) RejectUnprocessed(
 
 	var rejectedUpdateIDs []string
 	for _, upd := range updatesToReject {
-		if err := upd.reject(unprocessedUpdateFailure, effects); err != nil {
-			return nil
-		}
+		upd.reject(unprocessedUpdateFailure, effects)
 		rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
 	}
 	return rejectedUpdateIDs
@@ -498,7 +496,7 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 
 	// Update is not found in an internal map, but could have already completed,
 	// so check in the store.
-	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
+	completedUpdate, err := r.store.GetCompletedUpdate(ctx, id)
 
 	// Swallow NotFound error because it means that Update doesn't exist.
 	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
@@ -508,9 +506,11 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	// Other errors go to the future of completed Update,
 	// because it means that Update exists, was found, but there is something broken in it
 	// (UpdateInfo in mutable state is invalid or Update completion event is not found).
+	var updOutcome *updatepb.Outcome
 	acceptedEventID := common.EmptyEventID
 	if err == nil {
-		acceptedEventID, err = r.store.GetUpdateAcceptedEventID(ctx, id)
+		updOutcome = completedUpdate.GetOutcome()
+		acceptedEventID = completedUpdate.GetAcceptedEventId()
 	}
 
 	// The Update is completed and its outcome loaded from the corresponding history event.

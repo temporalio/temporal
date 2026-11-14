@@ -790,6 +790,7 @@ func (s *queueBaseSuite) newQueueBase(
 		func() string {
 			return ""
 		},
+		nil,
 	)
 	return newQueueBase(
 		mockShard,

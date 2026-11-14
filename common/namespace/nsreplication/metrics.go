@@ -69,7 +69,7 @@ func recordOutcome(
 		metrics.SourceClusterTag(metadata.SourceCluster),
 		metrics.TargetClusterTag(metadata.TargetCluster),
 		metrics.TransportTag(metadata.Transport),
-		metrics.OperationTag(namespaceReplicationOperation(task)),
+		metrics.OperationTag(OperationMetricValue(task.GetNamespaceOperation())),
 		metrics.OutcomeTag(outcome),
 	}
 	counterTags := append(tags, metrics.NamespaceTag(task.GetInfo().GetName()))
@@ -82,8 +82,9 @@ func recordOutcome(
 	metrics.NamespaceReplicationApplyEndToEndLatency.With(metricsHandler).Record(latency, tags...)
 }
 
-func namespaceReplicationOperation(task *replicationspb.NamespaceTaskAttributes) string {
-	switch task.GetNamespaceOperation() {
+// OperationMetricValue returns the bounded operation label shared by namespace replication metrics.
+func OperationMetricValue(operation enumsspb.NamespaceOperation) string {
+	switch operation {
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
 		return metricsOperationCreate
 	case enumsspb.NAMESPACE_OPERATION_UPDATE:

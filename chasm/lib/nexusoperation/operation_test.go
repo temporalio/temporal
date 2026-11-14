@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -248,6 +250,24 @@ func TestHandleNexusCompletion(t *testing.T) {
 		}
 	}
 
+	t.Run("InvalidRequestID", func(t *testing.T) {
+		for _, tc := range []struct{ name, requestID string }{
+			{"empty", ""},
+			{"mismatched", "other-request-id"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx := newCtx()
+				op := newScheduledTestOperation(t, ctx)
+				err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+					RequestId: tc.requestID,
+					Outcome:   &persistencespb.ChasmNexusCompletion_Success{Success: mustToPayload(t, "result")},
+				})
+				require.ErrorAs(t, err, new(*serviceerror.NotFound))
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.GetStatus())
+			})
+		}
+	})
+
 	t.Run("Success", func(t *testing.T) {
 		t.Run("AfterStarted", func(t *testing.T) {
 			ctx := newCtx()
@@ -400,70 +420,100 @@ func TestHandleNexusCompletion(t *testing.T) {
 func TestDescribeCircuitBreaker(t *testing.T) {
 	t.Parallel()
 
-	for _, status := range protoutils.EnumValues[nexusoperationpb.OperationStatus]() {
-		for _, cancellationStatus := range protoutils.EnumValues[nexusoperationpb.CancellationStatus]() {
-			for _, breaker := range []string{"closed", "open", "unavailable"} {
-				t.Run(status.String()+"/"+cancellationStatus.String()+"/"+breaker, func(t *testing.T) {
-					t.Parallel()
+	for _, endpoint := range []string{"test-endpoint", commonnexus.SystemEndpoint} {
+		for _, status := range protoutils.EnumValues[nexusoperationpb.OperationStatus]() {
+			for _, cancellationStatus := range protoutils.EnumValues[nexusoperationpb.CancellationStatus]() {
+				for _, breaker := range []string{"closed", "open"} {
+					t.Run(endpoint+"/"+status.String()+"/"+cancellationStatus.String()+"/"+breaker, func(t *testing.T) {
+						t.Parallel()
 
-					ctx := newCallbackTestContext()
-					calls := 0
-					if breaker != "unavailable" {
+						// System endpoint tasks run on the transfer queue, which has no circuit breaker.
+						checksBreaker := endpoint != commonnexus.SystemEndpoint
+						blocked := checksBreaker && breaker == "open"
+
+						ctx := newCallbackTestContext()
+						calls := 0
 						ctx.GoCtx = context.WithValue(context.Background(), OperationContextKey, &OperationContext{
 							DestinationBlocked: func(namespaceID, destination string) bool {
 								calls++
 								require.Equal(t, "ns-id", namespaceID)
-								require.Equal(t, "test-endpoint", destination)
+								require.Equal(t, endpoint, destination)
 								return breaker == "open"
 							},
 						})
-					}
-					op := newTestOperation()
-					op.Status = status
-					op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
-					op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
-					if cancellationStatus != nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
-						op.Cancellation = chasm.NewComponentField(ctx, newCancellation(&nexusoperationpb.CancellationState{
-							Status: cancellationStatus,
-						}))
-					}
+						op := newTestOperation()
+						op.Endpoint = endpoint
+						op.Status = status
+						op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
+						op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
+						if cancellationStatus != nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
+							op.Cancellation = chasm.NewComponentField(ctx, newCancellation(&nexusoperationpb.CancellationState{
+								Status: cancellationStatus,
+							}))
+						}
 
-					resp, err := op.buildDescribeResponse(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
-						FrontendRequest: &workflowservice.DescribeNexusOperationExecutionRequest{},
+						resp, err := op.buildDescribeResponse(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
+							FrontendRequest: &workflowservice.DescribeNexusOperationExecutionRequest{},
+						})
+						require.NoError(t, err)
+						info := resp.GetFrontendResponse().GetInfo()
+						state, reason := PendingOperationState(status), ""
+						if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED && blocked {
+							state, reason = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED, "The circuit breaker is open."
+						}
+						require.Equal(t, state, info.GetState())
+						require.Equal(t, reason, info.GetBlockedReason())
+						require.Equal(t, operationExecutionStatus(status), info.GetStatus())
+						cancelState, cancelReason := CancellationAPIState(cancellationStatus), ""
+						if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED && blocked {
+							cancelState, cancelReason = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED, "The circuit breaker is open."
+						}
+						require.Equal(t, cancelState, info.GetCancellationInfo().GetState())
+						require.Equal(t, cancelReason, info.GetCancellationInfo().GetBlockedReason())
+						expectedCalls := 0
+						if checksBreaker {
+							if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+								expectedCalls++
+							}
+							if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED {
+								expectedCalls++
+							}
+						}
+						require.Equal(t, expectedCalls, calls)
+						require.Equal(t, status, op.Status)
+						if cancellation, ok := op.Cancellation.TryGet(ctx); ok {
+							require.Equal(t, cancellationStatus, cancellation.Status)
+						}
 					})
-					require.NoError(t, err)
-					info := resp.GetFrontendResponse().GetInfo()
-					state, reason := PendingOperationState(status), ""
-					if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED && breaker == "open" {
-						state, reason = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED, "The circuit breaker is open."
-					}
-					require.Equal(t, state, info.GetState())
-					require.Equal(t, reason, info.GetBlockedReason())
-					require.Equal(t, operationExecutionStatus(status), info.GetStatus())
-					cancelState, cancelReason := CancellationAPIState(cancellationStatus), ""
-					if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED && breaker == "open" {
-						cancelState, cancelReason = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED, "The circuit breaker is open."
-					}
-					require.Equal(t, cancelState, info.GetCancellationInfo().GetState())
-					require.Equal(t, cancelReason, info.GetCancellationInfo().GetBlockedReason())
-					expectedCalls := 0
-					if breaker != "unavailable" {
-						if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
-							expectedCalls++
-						}
-						if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED {
-							expectedCalls++
-						}
-					}
-					require.Equal(t, expectedCalls, calls)
-					require.Equal(t, status, op.Status)
-					if cancellation, ok := op.Cancellation.TryGet(ctx); ok {
-						require.Equal(t, cancellationStatus, cancellation.Status)
-					}
-				})
+				}
 			}
 		}
 	}
+}
+
+func TestDestinationBlocked_Panics(t *testing.T) {
+	t.Parallel()
+
+	for _, endpoint := range []string{"test-endpoint", commonnexus.SystemEndpoint} {
+		t.Run(endpoint+"/missing OperationContext", func(t *testing.T) {
+			t.Parallel()
+
+			ctx := newCallbackTestContext()
+			ctx.GoCtx = context.Background()
+			op := newTestOperation()
+			op.Endpoint = endpoint
+			require.Panics(t, func() { op.DestinationBlocked(ctx) })
+		})
+	}
+
+	t.Run("unset DestinationBlocked", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := newCallbackTestContext()
+		ctx.GoCtx = context.WithValue(context.Background(), OperationContextKey, &OperationContext{})
+		op := newTestOperation()
+		require.Panics(t, func() { op.DestinationBlocked(ctx) })
+	})
 }
 
 func TestDescribeOutcome(t *testing.T) {
@@ -587,4 +637,53 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 	info.GetSearchAttributes().GetIndexedFields()["injected"] = payload.EncodeString("x")
 	require.NotContains(t, op.Visibility.Get(ctx).CustomSearchAttributes(ctx), "injected",
 		"DescribeNexusOperation response SearchAttributes must be a copy, not the live Visibility map")
+}
+
+func TestDescribeCallerRPSThrottled(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		breakerOpen bool
+		backingOff  bool
+		wantReason  string
+	}{
+		{name: "throttled", wantReason: "Requests from this namespace to the endpoint are being rate limited."},
+		{name: "breaker takes precedence", breakerOpen: true, wantReason: "The circuit breaker is open."},
+		{name: "backing off", backingOff: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := newCallbackTestContext()
+			ctx.GoCtx = context.WithValue(t.Context(), OperationContextKey, &OperationContext{
+				DestinationBlocked: func(string, string) bool { return tc.breakerOpen },
+				DestinationThrottled: func(ns namespace.Name, destination string) bool {
+					require.Equal(t, namespace.Name("ns-name"), ns)
+					require.Equal(t, "endpoint", destination)
+					return true
+				},
+			})
+			op := newTestOperation()
+			op.Endpoint = "endpoint"
+			op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
+			cancel := newCancellation(&nexusoperationpb.CancellationState{Status: nexusoperationpb.CANCELLATION_STATUS_SCHEDULED})
+			if tc.backingOff {
+				op.Status = nexusoperationpb.OPERATION_STATUS_BACKING_OFF
+				cancel.Status = nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF
+			}
+			op.Cancellation = chasm.NewComponentField(ctx, cancel)
+			op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
+			op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
+			opStatus, cancelStatus := op.Status, cancel.Status
+			info := op.buildExecutionInfo(ctx)
+			wantState, wantCancelState := PendingOperationState(opStatus), CancellationAPIState(cancelStatus)
+			if tc.wantReason != "" {
+				wantState = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+				wantCancelState = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			}
+			require.Equal(t, wantState, info.State)
+			require.Equal(t, wantCancelState, info.CancellationInfo.State)
+			require.Equal(t, tc.wantReason, info.BlockedReason)
+			require.Equal(t, tc.wantReason, info.CancellationInfo.BlockedReason)
+		})
+	}
 }
