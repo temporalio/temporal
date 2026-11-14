@@ -295,8 +295,9 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	defer cancel()
 
-	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(
+	err := shard.RangeCompleteHistoryTasks(
 		ctx,
+		r.shard,
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			RangeID:             rangeID,

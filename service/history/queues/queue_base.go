@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/quotas"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	historyshard "go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -384,7 +385,7 @@ func (p *queueBase) rangeCompleteTasks(
 	ctx, cancel := newQueueIOContext()
 	defer cancel()
 
-	if err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
+	if err := historyshard.RangeCompleteHistoryTasks(ctx, p.shard, &persistence.RangeCompleteHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
 		RangeID:             rangeID,
 		TaskCategory:        p.category,
