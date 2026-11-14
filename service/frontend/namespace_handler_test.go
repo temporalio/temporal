@@ -3,6 +3,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 	"testing"
@@ -884,6 +885,92 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 		resp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 		s.Equal(errInvalidRetentionPeriod, err)
 		s.Nil(resp)
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidHistoryArchivalURIIncludesUnderlyingError() {
+	retention := durationpb.New(24 * time.Hour)
+	underlyingErr := errors.New("Forbidden: Forbidden\n\tstatus code: 403")
+
+	s.archivalMetadata = archiver.NewArchivalMetadata(
+		dc.NewNoopCollection(),
+		"enabled",
+		true,
+		"disabled",
+		false,
+		&config.ArchivalNamespaceDefaults{
+			History: config.HistoryArchivalNamespaceDefaults{
+				State: "disabled",
+				URI:   "s3://default",
+			},
+		},
+	)
+	s.handler.archivalMetadata = s.archivalMetadata
+
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NamespaceNotFound{})
+
+	mockHistoryArchiver := archiver.NewMockHistoryArchiver(s.controller)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver("s3").Return(mockHistoryArchiver, nil)
+	mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(underlyingErr)
+
+	resp, err := s.handler.RegisterNamespace(s.T().Context(), &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        "namespace-to-register",
+		WorkflowExecutionRetentionPeriod: retention,
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_ENABLED,
+		HistoryArchivalUri:               "s3://bucket/prefix",
+	})
+
+	s.Require().Nil(resp)
+	s.Require().ErrorIs(err, underlyingErr)
+	s.Require().ErrorContains(err, `failed to validate history archival URI "s3://bucket/prefix"`)
+	s.Require().ErrorContains(err, "status code: 403")
+}
+
+func TestArchivalURIErrorContext(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name            string
+		visibility      bool
+		providerFailure bool
+		wantContext     string
+	}{
+		{name: "history provider", providerFailure: true, wantContext: `failed to get history archiver for scheme "s3"`},
+		{name: "history validation", wantContext: `failed to validate history archival URI "s3://bucket/prefix"`},
+		{name: "visibility provider", visibility: true, providerFailure: true, wantContext: `failed to get visibility archiver for scheme "s3"`},
+		{name: "visibility validation", visibility: true, wantContext: `failed to validate visibility archival URI "s3://bucket/prefix"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			archiverProvider := provider.NewMockArchiverProvider(controller)
+			handler := &namespaceHandler{archiverProvider: archiverProvider}
+			cause := errors.New("Forbidden: Forbidden\n\tstatus code: 403")
+			validate := handler.validateHistoryArchivalURI
+			if tt.visibility {
+				validate = handler.validateVisibilityArchivalURI
+				if tt.providerFailure {
+					archiverProvider.EXPECT().GetVisibilityArchiver("s3").Return(nil, cause)
+				} else {
+					visibility := archiver.NewMockVisibilityArchiver(controller)
+					archiverProvider.EXPECT().GetVisibilityArchiver("s3").Return(visibility, nil)
+					visibility.EXPECT().ValidateURI(gomock.Any()).Return(cause)
+				}
+			} else if tt.providerFailure {
+				archiverProvider.EXPECT().GetHistoryArchiver("s3").Return(nil, cause)
+			} else {
+				history := archiver.NewMockHistoryArchiver(controller)
+				archiverProvider.EXPECT().GetHistoryArchiver("s3").Return(history, nil)
+				history.EXPECT().ValidateURI(gomock.Any()).Return(cause)
+			}
+			err := validate("s3://bucket/prefix")
+			require.EqualError(t, err, tt.wantContext+": "+cause.Error())
+			require.ErrorIs(t, err, cause)
+		})
 	}
 }
 
