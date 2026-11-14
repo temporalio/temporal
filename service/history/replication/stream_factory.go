@@ -3,6 +3,7 @@
 package replication
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -74,7 +75,7 @@ type (
 	selectedStreamSender struct {
 		ManagedStreamSender
 		implementation       string
-		selectImplementation func() string
+		selectImplementation func() (string, error)
 	}
 
 	// selectedStreamReceiver is invalid once the implementation selected for its stream
@@ -83,7 +84,7 @@ type (
 	selectedStreamReceiver struct {
 		ManagedStreamReceiver
 		implementation       string
-		selectImplementation func() string
+		selectImplementation func() (string, error)
 	}
 )
 
@@ -111,16 +112,19 @@ func (streamSenderFactory) NewStreamSender(
 	serverShardKey ClusterShardKey,
 	config *configs.Config,
 ) ManagedStreamSender {
+	// Read live config both at construction and when IsValid checks for a mode change.
 	selectImplementation := func() (string, error) {
 		return selectStreamImplementation(
 			config.ReplicationStreamImplementation().Sender,
 			clientClusterName,
 			serverShardKey.ShardID,
+			config.NumberOfShards,
 		)
 	}
 	implementation, err := selectImplementation()
 	if err != nil {
-		shardContext.GetLogger().Error("Invalid ReplicationStreamImplementation config. Using the legacy stream sender.", tag.Error(err))
+		shardContext.GetThrottledLogger().Error("Invalid ReplicationStreamImplementation rule",
+			tag.ClusterName(clientClusterName), tag.NewStringTag("implementation", implementation), tag.Error(err))
 	}
 	metrics.ReplicationStreamImplementationSelected.With(shardContext.GetMetricsHandler()).Record(
 		1,
@@ -157,12 +161,9 @@ func (streamSenderFactory) NewStreamSender(
 		)
 	}
 	return &selectedStreamSender{
-		ManagedStreamSender: sender,
-		implementation:      implementation,
-		selectImplementation: func() string {
-			implementation, _ := selectImplementation()
-			return implementation
-		},
+		ManagedStreamSender:  sender,
+		implementation:       implementation,
+		selectImplementation: selectImplementation,
 	}
 }
 
@@ -173,16 +174,19 @@ func (streamReceiverFactory) NewStreamReceiver(
 	serverShardKey ClusterShardKey,
 ) ManagedStreamReceiver {
 	remoteClusterName := processToolBox.ClusterMetadata.ClusterNameForFailoverVersion(true, int64(serverShardKey.ClusterID))
+	// Read live config both at construction and when IsValid checks for a mode change.
 	selectImplementation := func() (string, error) {
 		return selectStreamImplementation(
 			processToolBox.Config.ReplicationStreamImplementation().Receiver,
 			remoteClusterName,
 			clientShardKey.ShardID,
+			processToolBox.Config.NumberOfShards,
 		)
 	}
 	implementation, err := selectImplementation()
 	if err != nil {
-		processToolBox.Logger.Error("Invalid ReplicationStreamImplementation config. Using the legacy stream receiver.", tag.Error(err))
+		processToolBox.ThrottledLogger.Error("Invalid ReplicationStreamImplementation rule",
+			tag.ClusterName(remoteClusterName), tag.NewStringTag("implementation", implementation), tag.Error(err))
 	}
 	metrics.ReplicationStreamImplementationSelected.With(processToolBox.MetricsHandler).Record(
 		1,
@@ -199,73 +203,85 @@ func (streamReceiverFactory) NewStreamReceiver(
 	return &selectedStreamReceiver{
 		ManagedStreamReceiver: receiver,
 		implementation:        implementation,
-		selectImplementation: func() string {
-			implementation, _ := selectImplementation()
-			return implementation
-		},
+		selectImplementation:  selectImplementation,
 	}
 }
 
 func (s *selectedStreamSender) IsValid() bool {
-	return s.selectImplementation() == s.implementation && s.ManagedStreamSender.IsValid()
+	// The selector returns a usable implementation even on error: invalid matching rules
+	// select legacy, and entries without a remote cluster are ignored. Construction logs errors.
+	implementation, _ := s.selectImplementation()
+	return implementation == s.implementation && s.ManagedStreamSender.IsValid()
 }
 
 func (r *selectedStreamReceiver) IsValid() bool {
-	return r.selectImplementation() == r.implementation && r.ManagedStreamReceiver.IsValid()
+	// Apply the selector's fallback result, as selectedStreamSender.IsValid does.
+	implementation, _ := r.selectImplementation()
+	return implementation == r.implementation && r.ManagedStreamReceiver.IsValid()
 }
 
 // selectStreamImplementation returns the implementation of the stream with remoteCluster on the
-// local shard shardID. It returns legacy when no rule matches. If any rule is invalid, it returns
-// legacy and an error, so an invalid config never selects the lane implementation.
+// local shard shardID. Invalid or duplicate rules for this remote select legacy. Rules for other
+// remotes do not affect this stream. Entries without a remote are ignored and reported as errors,
+// without changing the selected implementation.
 func selectStreamImplementation(
 	rules []dynamicconfig.ReplicationStreamImplementationRule,
 	remoteCluster string,
 	shardID int32,
+	shardCount int32,
 ) (string, error) {
-	if err := validateStreamImplementationRules(rules); err != nil {
-		return streamImplementationLegacy, err
-	}
-	for _, rule := range rules {
-		if rule.RemoteCluster == remoteCluster && streamImplementationRuleMatchesShard(rule, shardID) {
-			return rule.Implementation, nil
-		}
-	}
-	return streamImplementationLegacy, nil
-}
-
-func validateStreamImplementationRules(rules []dynamicconfig.ReplicationStreamImplementationRule) error {
-	remoteClusters := make(map[string]struct{}, len(rules))
+	matchingRule := -1
+	var configErr error
 	for i, rule := range rules {
 		if rule.RemoteCluster == "" {
-			return fmt.Errorf("rule %d: RemoteCluster is empty", i)
+			configErr = errors.Join(configErr, fmt.Errorf("rule %d: RemoteCluster is empty", i))
+			continue
 		}
-		if _, ok := remoteClusters[rule.RemoteCluster]; ok {
-			return fmt.Errorf("rule %d: more than one rule for RemoteCluster %q", i, rule.RemoteCluster)
+		if rule.RemoteCluster != remoteCluster {
+			continue
 		}
-		remoteClusters[rule.RemoteCluster] = struct{}{}
+		if matchingRule >= 0 {
+			return streamImplementationLegacy, errors.Join(configErr,
+				fmt.Errorf("rule %d: more than one rule for RemoteCluster %q", i, rule.RemoteCluster))
+		}
+		matchingRule = i
+	}
+	if matchingRule < 0 {
+		return streamImplementationLegacy, configErr
+	}
+	rule := rules[matchingRule]
+	if err := validateStreamImplementationRule(rule); err != nil {
+		return streamImplementationLegacy, errors.Join(configErr, fmt.Errorf("rule %d: %w", matchingRule, err))
+	}
+	if streamImplementationRuleMatchesShard(rule, shardID, shardCount) {
+		return rule.Implementation, configErr
+	}
+	return streamImplementationLegacy, configErr
+}
 
-		if rule.Implementation != streamImplementationLegacy && rule.Implementation != streamImplementationLane {
-			return fmt.Errorf("rule %d: unknown Implementation %q", i, rule.Implementation)
-		}
-		if (len(rule.ShardIDs) > 0) == (rule.ShardPercent != 0) {
-			return fmt.Errorf("rule %d: set exactly one of ShardIDs and ShardPercent", i)
-		}
-		if rule.ShardPercent < 0 || rule.ShardPercent > 100 {
-			return fmt.Errorf("rule %d: ShardPercent %d is outside 1-100", i, rule.ShardPercent)
-		}
-		for _, shardID := range rule.ShardIDs {
-			if shardID < 1 {
-				return fmt.Errorf("rule %d: invalid shard ID %d", i, shardID)
-			}
+func validateStreamImplementationRule(rule dynamicconfig.ReplicationStreamImplementationRule) error {
+	if rule.Implementation != streamImplementationLegacy && rule.Implementation != streamImplementationLane {
+		return fmt.Errorf("unknown Implementation %q", rule.Implementation)
+	}
+	if (len(rule.ShardIDs) > 0) == (rule.ShardPercent != 0) {
+		return errors.New("set exactly one of ShardIDs and ShardPercent")
+	}
+	if rule.ShardPercent < 0 || rule.ShardPercent > 100 {
+		return fmt.Errorf("ShardPercent %d is outside 1-100", rule.ShardPercent)
+	}
+	for _, shardID := range rule.ShardIDs {
+		if shardID < 1 {
+			return fmt.Errorf("invalid shard ID %d", shardID)
 		}
 	}
 	return nil
 }
 
-func streamImplementationRuleMatchesShard(rule dynamicconfig.ReplicationStreamImplementationRule, shardID int32) bool {
+func streamImplementationRuleMatchesShard(rule dynamicconfig.ReplicationStreamImplementationRule, shardID, shardCount int32) bool {
 	if len(rule.ShardIDs) > 0 {
 		return slices.Contains(rule.ShardIDs, shardID)
 	}
-	// Shard IDs start at 1. The percentage applies within each block of 100 shard IDs.
-	return int((shardID-1)%100) < rule.ShardPercent
+	// Select the first ceil(shardCount * percent / 100) shards. Raising the percentage
+	// only adds shards. Use int64 so large shard counts cannot overflow the products.
+	return int64(shardID-1)*100 < int64(rule.ShardPercent)*int64(shardCount)
 }

@@ -346,7 +346,8 @@ type ReplicationStreamImplementationRule struct {
 	Implementation string
 	// ShardIDs lists the local shards the rule applies to. Set either ShardIDs or ShardPercent.
 	ShardIDs []int32
-	// ShardPercent applies the rule to this percentage of local shards, from 1 to 100.
+	// ShardPercent applies the rule to this percentage of local shards, from 1 to 100,
+	// rounded up to a whole shard. It selects the lowest shard IDs; increasing it only adds shards.
 	ShardPercent int
 }
 

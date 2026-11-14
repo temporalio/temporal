@@ -1,7 +1,9 @@
 package replication
 
 import (
+	"errors"
 	"maps"
+	"math"
 	"slices"
 	"testing"
 
@@ -36,9 +38,9 @@ func TestSelectStreamImplementation(t *testing.T) {
 		{name: "ShardIDMatches", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", []int32{3, 7}, 0)}, shardID: 7, expected: streamImplementationLane},
 		{name: "ShardIDDoesNotMatch", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", []int32{3}, 0)}, shardID: 7, expected: streamImplementationLegacy},
 		{name: "OtherRemoteCluster", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("other", []int32{7}, 0)}, shardID: 7, expected: streamImplementationLegacy},
-		{name: "ShardPercentIncludesShard", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", nil, 10)}, shardID: 10, expected: streamImplementationLane},
-		{name: "ShardPercentExcludesShard", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", nil, 10)}, shardID: 11, expected: streamImplementationLegacy},
-		{name: "ShardPercentRepeatsEvery100Shards", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", nil, 10)}, shardID: 110, expected: streamImplementationLane},
+		{name: "ShardPercentIncludesShard", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", nil, 10)}, shardID: 52, expected: streamImplementationLane},
+		{name: "ShardPercentExcludesShard", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", nil, 10)}, shardID: 53, expected: streamImplementationLegacy},
+		{name: "ShardPercentDoesNotRepeatEvery100Shards", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", nil, 10)}, shardID: 110, expected: streamImplementationLegacy},
 		{name: "ShardPercent100", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", nil, 100)}, shardID: 512, expected: streamImplementationLane},
 		{
 			name: "ExplicitLegacy",
@@ -74,19 +76,39 @@ func TestSelectStreamImplementation(t *testing.T) {
 		{name: "NegativeShardPercent", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", nil, -1)}, shardID: 7, expected: streamImplementationLegacy, expectInvalid: true},
 		{name: "InvalidShardID", rules: []dynamicconfig.ReplicationStreamImplementationRule{laneRule("remote", []int32{0, 7}, 0)}, shardID: 7, expected: streamImplementationLegacy, expectInvalid: true},
 		{
-			name: "InvalidRuleForOtherClusterSelectsLegacy",
+			name: "InvalidRuleForOtherClusterDoesNotChangeSelection",
 			rules: []dynamicconfig.ReplicationStreamImplementationRule{
 				laneRule("remote", []int32{7}, 0),
 				laneRule("other", nil, 0),
 			},
+			shardID:  7,
+			expected: streamImplementationLane,
+		},
+		{
+			name: "DuplicateRulesForOtherClusterDoNotChangeSelection",
+			rules: []dynamicconfig.ReplicationStreamImplementationRule{
+				laneRule("other", []int32{7}, 0),
+				laneRule("other", []int32{8}, 0),
+				laneRule("remote", []int32{7}, 0),
+			},
+			shardID:  7,
+			expected: streamImplementationLane,
+		},
+		{
+			name: "EmptyRemoteClusterIsReportedWithoutChangingSelection",
+			rules: []dynamicconfig.ReplicationStreamImplementationRule{
+				laneRule("", nil, 0),
+				laneRule("remote", []int32{7}, 0),
+			},
 			shardID:       7,
-			expected:      streamImplementationLegacy,
+			expected:      streamImplementationLane,
 			expectInvalid: true,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			implementation, err := selectStreamImplementation(tc.rules, "remote", tc.shardID)
+			t.Parallel()
+			implementation, err := selectStreamImplementation(tc.rules, "remote", tc.shardID, 512)
 			require.Equal(t, tc.expected, implementation)
 			if tc.expectInvalid {
 				require.Error(t, err)
@@ -99,32 +121,38 @@ func TestSelectStreamImplementation(t *testing.T) {
 
 func TestSelectedStreamIsValid(t *testing.T) {
 	testCases := []struct {
-		name        string
-		selected    string
-		streamValid bool
-		expected    bool
+		name           string
+		implementation string
+		selected       string
+		selectionErr   error
+		streamValid    bool
+		expected       bool
 	}{
-		{name: "SameImplementation", selected: streamImplementationLegacy, streamValid: true, expected: true},
-		{name: "StreamInvalid", selected: streamImplementationLegacy, streamValid: false, expected: false},
-		{name: "ImplementationChanged", selected: streamImplementationLane, streamValid: true, expected: false},
+		{name: "SameImplementation", implementation: streamImplementationLegacy, selected: streamImplementationLegacy, streamValid: true, expected: true},
+		{name: "StreamInvalid", implementation: streamImplementationLegacy, selected: streamImplementationLegacy, streamValid: false, expected: false},
+		{name: "ImplementationChanged", implementation: streamImplementationLegacy, selected: streamImplementationLane, streamValid: true, expected: false},
+		{name: "InvalidRuleRollsLaneBack", implementation: streamImplementationLane, selected: streamImplementationLegacy, selectionErr: errors.New("invalid rule"), streamValid: true, expected: false},
+		{name: "InvalidRuleKeepsLegacy", implementation: streamImplementationLegacy, selected: streamImplementationLegacy, selectionErr: errors.New("invalid rule"), streamValid: true, expected: true},
+		{name: "IgnoredEntryKeepsLane", implementation: streamImplementationLane, selected: streamImplementationLane, selectionErr: errors.New("missing remote cluster"), streamValid: true, expected: true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ctrl := gomock.NewController(t)
 			sender := NewMockManagedStreamSender(ctrl)
 			sender.EXPECT().IsValid().Return(tc.streamValid).AnyTimes()
 			receiver := NewMockManagedStreamReceiver(ctrl)
 			receiver.EXPECT().IsValid().Return(tc.streamValid).AnyTimes()
-			selectImplementation := func() string { return tc.selected }
+			selectImplementation := func() (string, error) { return tc.selected, tc.selectionErr }
 
 			selectedSender := &selectedStreamSender{
 				ManagedStreamSender:  sender,
-				implementation:       streamImplementationLegacy,
+				implementation:       tc.implementation,
 				selectImplementation: selectImplementation,
 			}
 			selectedReceiver := &selectedStreamReceiver{
 				ManagedStreamReceiver: receiver,
-				implementation:        streamImplementationLegacy,
+				implementation:        tc.implementation,
 				selectImplementation:  selectImplementation,
 			}
 			require.Equal(t, tc.expected, selectedSender.IsValid())
@@ -165,7 +193,9 @@ func TestStreamSenderFactory(t *testing.T) {
 			{RemoteCluster: "remote", Implementation: streamImplementationLane, ShardIDs: []int32{7}},
 		},
 	})
-	require.Equal(t, streamImplementationLane, legacySender.selectImplementation())
+	implementation, err := legacySender.selectImplementation()
+	require.NoError(t, err)
+	require.Equal(t, streamImplementationLane, implementation)
 
 	laneSender := newSender()
 	require.IsType(t, &laneStreamSender{}, laneSender.ManagedStreamSender)
@@ -197,7 +227,9 @@ func TestStreamReceiverFactory(t *testing.T) {
 			{RemoteCluster: "remote", Implementation: streamImplementationLane, ShardIDs: []int32{7}},
 		},
 	})
-	require.Equal(t, streamImplementationLane, legacyReceiver.selectImplementation())
+	implementation, err := legacyReceiver.selectImplementation()
+	require.NoError(t, err)
+	require.Equal(t, streamImplementationLane, implementation)
 
 	laneReceiver := newReceiver()
 	require.IsType(t, &laneStreamReceiver{}, laneReceiver.ManagedStreamReceiver)
@@ -231,4 +263,126 @@ func TestStreamFactoriesRecordSameImplementationTags(t *testing.T) {
 	recordings := capture.Snapshot()[metrics.ReplicationStreamImplementationSelected.Name()]
 	require.Len(t, recordings, 2)
 	require.Equal(t, slices.Sorted(maps.Keys(recordings[0].Tags)), slices.Sorted(maps.Keys(recordings[1].Tags)))
+}
+
+func TestStreamImplementationPercentage(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		shards   int32
+		percent  int
+		selected int
+	}{
+		{"SmallClusterOnePercent", 4, 1, 1},
+		{"SmallClusterTenPercent", 4, 10, 1},
+		{"ExactQuarter", 4, 25, 1},
+		{"RoundedUpQuarter", 4, 26, 2},
+		{"ThirtyTwoShards", 32, 10, 4},
+		{"OneHundredShards", 100, 10, 10},
+		{"FiveHundredTwelveShards", 512, 10, 52},
+		{"AllShards", 512, 100, 512},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rule := dynamicconfig.ReplicationStreamImplementationRule{ShardPercent: tc.percent}
+			selected := 0
+			for id := int32(1); id <= tc.shards; id++ {
+				if streamImplementationRuleMatchesShard(rule, id, tc.shards) {
+					selected++
+				}
+			}
+			require.Equal(t, tc.selected, selected)
+		})
+	}
+}
+
+func TestStreamImplementationPercentageOnlyAddsShards(t *testing.T) {
+	t.Parallel()
+	const shards = 512
+	previous := make([]bool, shards+1)
+	for percent := 1; percent <= 100; percent++ {
+		rule := dynamicconfig.ReplicationStreamImplementationRule{ShardPercent: percent}
+		for id := int32(1); id <= shards; id++ {
+			selected := streamImplementationRuleMatchesShard(rule, id, shards)
+			if previous[id] {
+				require.True(t, selected, "shard %d must remain selected at %d percent", id, percent)
+			}
+			previous[id] = selected
+		}
+	}
+	require.True(t, streamImplementationRuleMatchesShard(dynamicconfig.ReplicationStreamImplementationRule{ShardPercent: 100}, math.MaxInt32, math.MaxInt32))
+	require.False(t, streamImplementationRuleMatchesShard(dynamicconfig.ReplicationStreamImplementationRule{ShardPercent: 99}, math.MaxInt32, math.MaxInt32))
+}
+
+func TestStreamFactoriesScopeInvalidRules(t *testing.T) {
+	t.Parallel()
+	rule := func(remote, implementation string) dynamicconfig.ReplicationStreamImplementationRule {
+		return dynamicconfig.ReplicationStreamImplementationRule{RemoteCluster: remote, Implementation: implementation, ShardIDs: []int32{7}}
+	}
+	for _, role := range []string{"sender", "receiver"} {
+		t.Run(role, func(t *testing.T) {
+			t.Parallel()
+			for _, tc := range []struct {
+				name           string
+				rules          []dynamicconfig.ReplicationStreamImplementationRule
+				implementation string
+				diagnostic     bool
+			}{
+				{"InvalidOtherCluster", []dynamicconfig.ReplicationStreamImplementationRule{rule("remote", "lane"), rule("other", "typo")}, "lane", false},
+				{"EmptyCluster", []dynamicconfig.ReplicationStreamImplementationRule{rule("", "lane"), rule("remote", "lane")}, "lane", true},
+				{"InvalidMatchingCluster", []dynamicconfig.ReplicationStreamImplementationRule{rule("remote", "typo")}, "legacy", true},
+				{"LocalShardCount", []dynamicconfig.ReplicationStreamImplementationRule{{RemoteCluster: "remote", Implementation: "lane", ShardPercent: 10}}, "legacy", false},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+					ctrl := gomock.NewController(t)
+					// Errors must use the service's shared throttled logger.
+					throttled := log.NewMockLogger(ctrl)
+					if tc.diagnostic {
+						throttled.EXPECT().Error("Invalid ReplicationStreamImplementation rule", gomock.Any(), gomock.Any(), gomock.Any())
+					}
+					dc := dynamicconfig.NewMemoryClient()
+					dc.OverrideSetting(dynamicconfig.ReplicationStreamImplementation, dynamicconfig.ReplicationStreamImplementationSettings{Sender: tc.rules, Receiver: tc.rules})
+					config := configs.NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()), 32)
+					var selected string
+					var selectImplementation func() (string, error)
+					if role == "sender" {
+						shard := historyi.NewMockShardContext(ctrl)
+						shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+						shard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
+						if tc.diagnostic {
+							shard.EXPECT().GetThrottledLogger().Return(throttled)
+						}
+						sender := NewStreamSenderFactory().NewStreamSender(nil, shard, nil, nil, nil, "remote", 1, NewClusterShardKey(2, 1), NewClusterShardKey(1, 7), config).(*selectedStreamSender)
+						selected, selectImplementation = sender.implementation, sender.selectImplementation
+						if tc.implementation == "lane" {
+							require.IsType(t, &laneStreamSender{}, sender.ManagedStreamSender)
+						} else {
+							require.IsType(t, &StreamSenderImpl{}, sender.ManagedStreamSender)
+						}
+					} else {
+						metadata := cluster.NewMockMetadata(ctrl)
+						metadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("remote").AnyTimes()
+						toolbox := ProcessToolBox{Config: config, ClusterMetadata: metadata, MetricsHandler: metrics.NoopMetricsHandler, Logger: log.NewNoopLogger(), ThrottledLogger: throttled}
+						receiver := NewStreamReceiverFactory().NewStreamReceiver(toolbox, nil, NewClusterShardKey(1, 7), NewClusterShardKey(2, 1)).(*selectedStreamReceiver)
+						selected, selectImplementation = receiver.implementation, receiver.selectImplementation
+						if tc.implementation == "lane" {
+							require.IsType(t, &laneStreamReceiver{}, receiver.ManagedStreamReceiver)
+						} else {
+							require.IsType(t, &StreamReceiverImpl{}, receiver.ManagedStreamReceiver)
+						}
+					}
+					require.Equal(t, tc.implementation, selected)
+					// The retained selector must reread config after construction.
+					dc.OverrideSetting(dynamicconfig.ReplicationStreamImplementation, dynamicconfig.ReplicationStreamImplementationSettings{
+						Sender:   []dynamicconfig.ReplicationStreamImplementationRule{rule("remote", "typo")},
+						Receiver: []dynamicconfig.ReplicationStreamImplementationRule{rule("remote", "typo")},
+					})
+					selected, err := selectImplementation()
+					require.Equal(t, streamImplementationLegacy, selected)
+					require.ErrorContains(t, err, "unknown Implementation")
+				})
+			}
+		})
+	}
 }
