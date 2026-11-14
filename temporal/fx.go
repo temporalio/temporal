@@ -150,7 +150,7 @@ var (
 		chasm.Module,
 		serialization.Module,
 		FxLogAdapter,
-		fx.Invoke(ServerLifetimeHooks),
+		fx.Invoke(goMemoryLimitLifetimeHooks, ServerLifetimeHooks),
 	)
 )
 
