@@ -429,6 +429,7 @@ comma := ,
 # end of the variable name is set. Each temporal_with_* tag needs one.
 EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
 EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
+EXCLUDED_PACKAGES_temporal_with_ringpop := github.com/temporalio/ringpop-go github.com/temporalio/tchannel-go github.com/apache/thrift/lib/go/thrift
 EXCLUDED_PACKAGES_temporal_with_s3store := github.com/aws/aws-sdk-go-v2/service/s3
 EXCLUDED_PACKAGES_temporal_with_cassandra := github.com/gocql/gocql
 

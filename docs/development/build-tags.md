@@ -36,9 +36,15 @@ included.
 | `temporal_with_cassandra`     | Cassandra persistence         | Cassandra driver          |
 | `temporal_with_elasticsearch` | Elasticsearch visibility      | Elasticsearch client      |
 | `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK  |
+| `temporal_with_ringpop`       | Dynamic service membership    | Ringpop, TChannel, Thrift |
 | `temporal_with_s3store`       | S3 archival                   | AWS SDK S3 client         |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
+
+Without `temporal_with_ringpop`, a minimal server requires static service membership supplied through
+`temporal.WithStaticHosts`. Supply hosts for every required service and a self-address from its host
+list for every service running in the process. An embedding program must supply these hosts; the
+standalone `temporal-server` binary requires `temporal_with_ringpop` for dynamic service discovery.
 
 `make build-tags-check`, which runs in CI, checks the packages each `temporal_with_*` tag compiles out
 of the `temporal_minimal` server, as listed in the `EXCLUDED_PACKAGES_<tag>` variables in the

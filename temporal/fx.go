@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/membership/ringpop"
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -256,13 +255,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	// check that when static hosts are defined, they are defined for all required hosts
-	if len(so.hostsByService) > 0 {
-		for _, service := range DefaultServices {
-			hosts := so.hostsByService[primitives.ServiceName(service)]
-			if len(hosts.All) == 0 {
-				return serverOptionsProvider{}, fmt.Errorf("%w: %v", missingServiceInStaticHosts, service)
-			}
-		}
+	if err := so.validateStaticHosts(); err != nil {
+		return serverOptionsProvider{}, err
 	}
 
 	if so.config.Global.Authorization.RemoteClusterAuth.Require && so.tokenProvider == nil {
@@ -390,7 +384,7 @@ type (
 // into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
 // service graphs. This is a workaround to achieve something similar.
 func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
-	membershipModule := ringpop.MembershipModule
+	membershipModule := defaultMembershipModule()
 	if len(params.StaticServiceHosts) > 0 {
 		membershipModule = static.MembershipModule(params.StaticServiceHosts)
 	}
