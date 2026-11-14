@@ -1624,16 +1624,21 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	}
 
 	wfStarted := make(chan struct{}, 1)
-	currentChanged := make(chan struct{}, 1)
+	var replayed atomic.Bool
 
 	childv1 := func(ctx workflow.Context) (string, error) {
 		env.verifyWorkflowVersioning(s, tv1Child, vbPinned, tv1Child.Deployment(), override, nil)
 		return "v1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
-		wfStarted <- struct{}{}
-		// wait for current version to change
-		<-currentChanged
+		if workflow.IsReplaying(ctx) {
+			replayed.Store(true)
+		} else {
+			wfStarted <- struct{}{}
+		}
+		// wait for current version to change. Use a signal rather than a Go channel so the
+		// workflow yields while waiting and doesn't trip the SDK deadlock detector.
+		workflow.GetSignalChannel(ctx, "currentChanged").Receive(ctx, nil)
 
 		// run two child workflows
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
@@ -1694,7 +1699,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	s.NoError(err)
 	// wait for it to start on v1
 	s.Rcv(wfStarted)
-	close(wfStarted) // force panic if replayed
 
 	// make v2 current for both parent and child and unblock the wf to start the child
 	env.updateTaskQueueDeploymentDataWithRoutingConfig(s, tv2, &deploymentpb.RoutingConfig{
@@ -1713,10 +1717,11 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 		}}, []string{}, tqTypeWf)
 	}
-	currentChanged <- struct{}{}
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "currentChanged", nil))
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
+	s.False(replayed.Load(), "workflow was unexpectedly replayed")
 	s.Equal("v1", out)
 }
 
@@ -2141,7 +2146,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 	}
 
 	wfStarted := make(chan struct{}, 10)
-	currentChanged := make(chan struct{}, 10)
+	var replayed atomic.Bool
 
 	childv1 := func(ctx workflow.Context) (string, error) {
 		panic("child should not run on v1")
@@ -2150,9 +2155,14 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 		return "v2", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
-		wfStarted <- struct{}{}
-		// wait for current version to change
-		<-currentChanged
+		if workflow.IsReplaying(ctx) {
+			replayed.Store(true)
+		} else {
+			wfStarted <- struct{}{}
+		}
+		// wait for current version to change. Use a signal rather than a Go channel so the
+		// workflow yields while waiting and doesn't trip the SDK deadlock detector.
+		workflow.GetSignalChannel(ctx, "currentChanged").Receive(ctx, nil)
 
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 			TaskQueue:  tv2Child.TaskQueue().GetName(),
@@ -2241,15 +2251,15 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 
 	// wait for it to start on v1
 	s.Rcv(wfStarted)
-	close(wfStarted)
 
 	// make v2 current for both parent and child and unblock the wf to start the child
 	env.setCurrentDeployment(s, tv2)
 
-	currentChanged <- struct{}{}
+	s.NoError(sdkClient.SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "currentChanged", nil))
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
+	s.False(replayed.Load(), "workflow was unexpectedly replayed")
 	s.Equal("v2", out)
 
 	if parentBehavior == vbPinned {
@@ -3072,7 +3082,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wfStarted := make(chan struct{}, 10)
-	currentChanged := make(chan struct{}, 10)
+	var replayed atomic.Bool
 
 	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
 		switch attempt {
@@ -3090,9 +3100,14 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 			} else {
 				env.verifyWorkflowVersioning(s, tv1, vbUnspecified, nil, override, tv1.DeploymentVersionTransition())
 			}
-			wfStarted <- struct{}{}
-			// wait for current version to change.
-			<-currentChanged
+			if workflow.IsReplaying(ctx) {
+				replayed.Store(true)
+			} else {
+				wfStarted <- struct{}{}
+			}
+			// wait for current version to change. Use a signal rather than a Go channel so the
+			// workflow yields while waiting and doesn't trip the SDK deadlock detector.
+			workflow.GetSignalChannel(ctx, "currentChanged").Receive(ctx, nil)
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 1:
 			env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), override, nil)
@@ -3195,14 +3210,14 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 
 	// wait for it to start on v1
 	s.Rcv(wfStarted)
-	close(wfStarted) // force panic if replayed
 
 	// make v2 current
 	env.setCurrentDeployment(s, tv2)
-	currentChanged <- struct{}{}
+	s.NoError(sdkClient.SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "currentChanged", nil))
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
+	s.False(replayed.Load(), "workflow was unexpectedly replayed")
 	if expectPinnedInherit {
 		s.Equal("v1", out)
 		env.verifyVersioningSAs(s, tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1)
