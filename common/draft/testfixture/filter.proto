@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package temporal.api.drafttest.v1;
+
+import "google/protobuf/any.proto";
+import "temporal/api/protometa/v1/draft.proto";
+
+option go_package = "go.temporal.io/server/common/draft/testfixture;testfixture";
+
+message Message {
+  string stable = 1;
+  string feature_a = 2 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  string feature_b = 3 [(temporal.api.protometa.v1.draft) = "feature-b"];
+  Message child = 4 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  repeated Message items = 5;
+  map<string, Message> by_name = 6;
+  optional int32 optional_a = 7 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  oneof choice {
+    string choice_a = 8 [(temporal.api.protometa.v1.draft) = "feature-a"];
+    Message choice_child = 9;
+  }
+  bytes raw = 10;
+  google.protobuf.Any opaque = 11;
+}
+
+message StableMessage { string stable = 1; }
+
+message Parent { Message message = 1; }
+message MapParent { map<string, Parent> values = 1; }
+
+message WholeDraft {
+  option (temporal.api.protometa.v1.draft_message) = "feature-a";
+  string value = 1;
+  enum State { ZERO = 0; ONE = 1; }
+  message Nested {
+    option (temporal.api.protometa.v1.draft_message) = "feature-b";
+    string value = 1;
+  }
+  // Unannotated; draft only through its lexical parent.
+  message Plain { string value = 1; }
+}
+message EmptyDraft {
+  option (temporal.api.protometa.v1.draft_message) = "feature-a";
+}
+message DraftReferences {
+  string stable = 1;
+  WholeDraft child = 2;
+  repeated WholeDraft items = 3;
+  map<string, WholeDraft> values = 4;
+  WholeDraft.State state = 5;
+  WholeDraft.Nested nested = 6;
+  WholeDraft both = 7 [(temporal.api.protometa.v1.draft) = "feature-b"];
+  oneof choice {
+    WholeDraft draft_child = 8;
+    string stable_choice = 9;
+  }
+}
+// The only reference to a draft nested enum.
+message EnumOnlyRef { WholeDraft.State state = 1; }
+// The only reference to an unannotated message nested in a draft message.
+message LexicalRef { WholeDraft.Plain p = 1; }

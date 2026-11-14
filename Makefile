@@ -255,6 +255,10 @@ ERRORTYPE := $(LOCALBIN)/errortype
 $(ERRORTYPE): | $(LOCALBIN)
 	$(call go-install-tool,$(ERRORTYPE),fillmore-labs.com/errortype,$(ERRORTYPE_VER))
 
+DRAFTAPI := $(LOCALBIN)/draftapi
+$(DRAFTAPI): cmd/tools/draftapi/main.go $(wildcard tools/draftapi/*.go) go.mod go.sum | $(LOCALBIN)
+	go build -o $@ ./cmd/tools/draftapi
+
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
 MOCKGEN_VER := v0.6.0
 MOCKGEN := $(LOCALBIN)/mockgen
@@ -311,7 +315,7 @@ rm -rf $${tmpdir} ;\
 endef
 
 ##### Proto #####
-$(API_BINPB): go.mod go.sum $(PROTO_FILES)
+$(API_BINPB): go.mod go.sum $(PROTO_FILES) $(wildcard common/draft/testfixture/*.proto)
 	@printf $(COLOR) "Generating proto dependencies image..."
 	@./cmd/tools/getproto/run.sh --out $@
 
@@ -338,7 +342,7 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 		-protoc-gen-go-helpers-bin=$(PROTOC_GEN_GO_HELPERS) \
 		$(PROTO_DIRS)
 
-proto-codegen:
+proto-codegen: $(API_BINPB) $(PROTOC_GEN_GO)
 	@printf $(COLOR) "Generate service clients..."
 	@go generate -run genrpcwrappers ./client/...
 	@printf $(COLOR) "Generate server interceptors..."
@@ -347,6 +351,8 @@ proto-codegen:
 	@go generate -run genroutingkeyextractor ./common/rpc/interceptor/...
 	@printf $(COLOR) "Generate search attributes helpers..."
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
+	@printf $(COLOR) "Generate draft omission fixtures..."
+	@API_BINPB=$(abspath $(API_BINPB)) PROTOC_GEN_GO=$(abspath $(PROTOC_GEN_GO)) go generate ./common/draft/testfixture
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
@@ -404,7 +410,7 @@ lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
-.PHONY: lint-code lint-code-fast
+.PHONY: lint-code lint-code-fast lint-draft-api
 # --new-from-rev filters reported issues _after_ analysis; this target also reduces package inputs _before_ analysis.
 lint-code-fast:
 	@if ! git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null; then \
@@ -415,7 +421,7 @@ lint-code-fast:
 	targets=$$({ \
 		git diff --no-renames --name-only "$$base" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
-	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	} | sed '/\/testdata\//d; s|^|./|; s|/[^/]*$$||' | sort -u \
 	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
 	if [ -z "$$targets" ]; then \
 		printf $(COLOR) "No changed Go packages to lint."; \
@@ -434,6 +440,10 @@ lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 		--config=.github/.golangci.yml \
 		$(LINT_CODE_TARGETS)
 	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
+	@$(MAKE) lint-draft-api
+
+lint-draft-api: $(DRAFTAPI)
+	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(DRAFTAPI)" $(LINT_CODE_TARGETS)
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."

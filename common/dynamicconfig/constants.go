@@ -671,6 +671,12 @@ ScheduleInvariantsScannerParams comments for details.`,
 	)
 
 	// keys for frontend
+	FrontendEnabledDraftFeatureAPIs = NewNamespaceTypedSettingWithConverter(
+		"frontend.enabledDraftFeatureAPIs",
+		convertStrictStringList,
+		[]string(nil),
+		`FrontendEnabledDraftFeatureAPIs lists draft API feature names exposed for a namespace in requests and responses. Empty by default.`,
+	)
 	FrontendAllowedExperiments = NewNamespaceTypedSetting(
 		"frontend.allowedExperiments",
 		[]string(nil),

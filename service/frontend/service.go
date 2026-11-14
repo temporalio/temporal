@@ -256,8 +256,9 @@ type Config struct {
 	EnableWorkflowTaskCompletionPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowTaskCompletionBufferSizeLimit   dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
-	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	HTTPAllowedHosts        dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	AllowedExperiments      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	EnabledDraftFeatureAPIs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
 	// CHASM archetypes
 	Activity *activity.Config
@@ -446,8 +447,9 @@ func NewConfig(
 		EnableWorkflowTaskCompletionPagination:  dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
 		WorkflowTaskCompletionBufferSizeLimit:   dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
 
-		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
-		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
+		HTTPAllowedHosts:        dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
+		AllowedExperiments:      dynamicconfig.FrontendAllowedExperiments.Get(dc),
+		EnabledDraftFeatureAPIs: dynamicconfig.FrontendEnabledDraftFeatureAPIs.Get(dc),
 
 		Activity: activity.ConfigProvider(dc),
 	}

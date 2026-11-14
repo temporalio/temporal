@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package temporal.api.testdraft.v1;
+
+option go_package = "go.temporal.io/api/testdraft/v1;testdraft";
+
+import "draft.proto";
+
+message Stable {
+  string stable = 1;
+  string draft = 2 [(temporal.api.protometa.v1.draft) = "field-feature"];
+  map<string, string> draft_map = 3 [(temporal.api.protometa.v1.draft) = "map-feature"];
+  oneof choice {
+    string stable_choice = 4;
+    string draft_choice = 5 [(temporal.api.protometa.v1.draft) = "branch-feature"];
+  }
+  oneof draft_union {
+    option (temporal.api.protometa.v1.draft_oneof) = "oneof-feature";
+    string member = 6;
+  }
+  Draft whole = 7;
+  Draft both = 8 [(temporal.api.protometa.v1.draft) = "field-feature"];
+  repeated Draft list = 9;
+  map<string, Draft.Nested> by_name = 10;
+  Draft.NestedEnum inherited_enum = 11;
+  oneof mixed {
+    Draft draft_child = 12;
+    string ordinary = 13;
+  }
+  Draft.SecondNested nested_both = 14;
+  message StableNested { string stable = 1; }
+  message DraftNested {
+    option (temporal.api.protometa.v1.draft_message) = "nested-feature";
+    string value = 1;
+  }
+}
+
+message Draft {
+  option (temporal.api.protometa.v1.draft_message) = "message-feature";
+  string value = 1;
+  message Nested { string value = 1; }
+  enum NestedEnum { ZERO = 0; }
+  message SecondNested {
+    option (temporal.api.protometa.v1.draft_message) = "nested-other-feature";
+    string value = 1;
+  }
+}
+
+enum StableEnum {
+  STABLE_ZERO = 0;
+  DRAFT_VALUE = 1 [(temporal.api.protometa.v1.draft_enum_value) = "value-feature"];
+  STABLE_ALIAS = 2;
+  DRAFT_ALIAS = 2 [(temporal.api.protometa.v1.draft_enum_value) = "alias-feature"];
+  option allow_alias = true;
+}
+
+enum DraftEnum {
+  option (temporal.api.protometa.v1.draft_enum) = "enum-feature";
+  DRAFT_ZERO = 0;
+}
+
+service StableService {
+  rpc StableCall(Stable) returns (Stable);
+  rpc DraftCall(Stable) returns (Stable) {
+    option (temporal.api.protometa.v1.draft_method) = "method-feature";
+  }
+}
+
+service DraftService {
+  option (temporal.api.protometa.v1.draft_service) = "service-feature";
+  rpc Call(Stable) returns (Stable);
+}
+
+service EmptyDraftService {
+  option (temporal.api.protometa.v1.draft_service) = "empty-service-feature";
+}

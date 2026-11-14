@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/draft"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -361,6 +362,29 @@ type nexusHandler struct {
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
+	enabledDraftFeatureAPIs       dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	omitDraftFields               func(any, *draft.Selection) (bool, error)
+}
+
+func omitNexusDraftFields(omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, roots ...any) error {
+	if omit == nil {
+		omit = draft.Omit
+	}
+	for _, root := range roots {
+		if _, err := omit(root, selection); err != nil {
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		}
+	}
+	return nil
+}
+
+func newNexusDraftSelection(get dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string], namespaceName string) *draft.Selection {
+	return draft.NewSelection(func() []string {
+		if get == nil {
+			return nil
+		}
+		return get(namespaceName)
+	})
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -473,6 +497,10 @@ func (h *nexusHandler) StartOperation(
 		oc.logger.Error("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
+	selection := newNexusDraftSelection(h.enabledDraftFeatureAPIs, oc.namespace.Name().String())
+	if err := omitNexusDraftFields(h.omitDraftFields, selection, request.Request); err != nil {
+		return nil, err
+	}
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
@@ -486,6 +514,9 @@ func (h *nexusHandler) StartOperation(
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, t.Failure); err != nil {
+			return nil, err
+		}
 		// Set the failure source to "worker" if we've reached this case.
 		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
 		// the worker.
@@ -504,6 +535,10 @@ func (h *nexusHandler) StartOperation(
 		return nil, he
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
+		//nolint:staticcheck // Deprecated worker outcomes still require omission for backward compatibility.
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, t.HandlerError.GetFailure()); err != nil {
+			return nil, err
+		}
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
@@ -516,6 +551,9 @@ func (h *nexusHandler) StartOperation(
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 
 	case *matchingservice.DispatchNexusTaskResponse_Response:
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, t.Response); err != nil {
+			return nil, err
+		}
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_SyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
@@ -538,6 +576,10 @@ func (h *nexusHandler) StartOperation(
 			}, nil
 
 		case *nexuspb.StartOperationResponse_OperationError:
+			//nolint:staticcheck // Deprecated worker outcomes still require omission for backward compatibility.
+			if err := omitNexusDraftFields(h.omitDraftFields, selection, t.OperationError.GetFailure()); err != nil {
+				return nil, err
+			}
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
 			oc.setFailureSource(commonnexus.FailureSourceWorker)
 			opErr := &nexus.OperationError{
@@ -556,6 +598,9 @@ func (h *nexusHandler) StartOperation(
 			return nil, opErr
 
 		case *nexuspb.StartOperationResponse_Failure:
+			if err := omitNexusDraftFields(h.omitDraftFields, selection, t.Failure); err != nil {
+				return nil, err
+			}
 			// Set the failure source to "worker" if we've reached this case.
 			// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
 			// the worker.
@@ -652,6 +697,7 @@ func (h *nexusHandler) forwardStartOperation(
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
+	nexus.AddHandlerLinks(ctx, resp.Links...)
 
 	if resp.Successful != nil {
 		return &nexus.HandlerStartOperationResultSync[any]{Value: resp.Successful.Reader}, nil
@@ -693,6 +739,10 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		}
 		return err
 	}
+	selection := newNexusDraftSelection(h.enabledDraftFeatureAPIs, oc.namespace.Name().String())
+	if err := omitNexusDraftFields(h.omitDraftFields, selection, request.Request); err != nil {
+		return err
+	}
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
@@ -706,6 +756,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, t.Failure); err != nil {
+			return err
+		}
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
 		// Set the failure source to "worker" if we've reached this case.
 		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
@@ -724,6 +777,10 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return he
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
+		//nolint:staticcheck // Deprecated worker outcomes still require omission for backward compatibility.
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, t.HandlerError.GetFailure()); err != nil {
+			return err
+		}
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
@@ -736,6 +793,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 
 	case *matchingservice.DispatchNexusTaskResponse_Response:
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, t.Response); err != nil {
+			return err
+		}
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		return nil
 	}

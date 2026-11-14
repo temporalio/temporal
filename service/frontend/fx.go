@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/draft"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -93,6 +94,7 @@ var Module = fx.Options(
 	fx.Provide(MuxRouterProvider),
 	fx.Provide(ConfigProvider),
 	fx.Provide(ServiceErrorInterceptorProvider),
+	fx.Provide(DraftFieldsInterceptorProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(interceptor.NewRoutingKeyExtractor),
@@ -231,6 +233,10 @@ func (n *namespaceChecker) Exists(name namespace.Name) error {
 	return err
 }
 
+func DraftFieldsInterceptorProvider(cfg *Config, registry namespace.Registry, logger log.Logger) *interceptor.DraftFieldsInterceptor {
+	return interceptor.NewDraftFieldsInterceptor(cfg.EnabledDraftFeatureAPIs, registry, logger, draft.Omit)
+}
+
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	cfg *config.Config,
@@ -238,6 +244,7 @@ func GrpcServerOptionsProvider(
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
 	serviceErrorInterceptor *interceptor.ServiceErrorInterceptor,
+	draftFieldsInterceptor *interceptor.DraftFieldsInterceptor,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
 	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -289,14 +296,16 @@ func GrpcServerOptionsProvider(
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		// Order of interceptors is important
-		// Mask error interceptor should be the most outer interceptor since it handle the errors format
-		// Service Error Interceptor should be the next most outer interceptor on error handling
+		// Filter successful responses, including early interceptor returns.
+		draftFieldsInterceptor.OutgoingIntercept,
+		// Preserve error masking outside the service error formatters.
 		maskInternalErrorDetailsInterceptor.Intercept,
 		serviceErrorInterceptor.Intercept,
 		interceptor.NewFrontendServiceErrorInterceptor(logger),
 		// BusinessID interceptor extracts business ID and adds it to context for use, must be before any interceptor that touches namespaces (namespaceValidator, handoverInterceptor)
 		businessIDInterceptor.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
+		draftFieldsInterceptor.IncomingIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,

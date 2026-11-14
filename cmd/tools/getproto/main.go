@@ -34,26 +34,29 @@ func fatalIfErr(err error) {
 
 func findProtoImports() []string {
 	importMap := make(map[string]struct{})
-	fatalIfErr(filepath.WalkDir("proto/internal", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	for _, root := range []string{"proto/internal", "common/draft/testfixture"} {
+		if _, err := os.Stat(root); os.IsNotExist(err) {
+			continue
 		}
-		if d.Type().IsRegular() && strings.HasSuffix(path, ".proto") {
-			protoFile, err := os.ReadFile(path)
-			fatalIfErr(err)
-			for line := range strings.SplitSeq(string(protoFile), "\n") {
-				if match := matchImport.FindStringSubmatch(line); len(match) > 0 {
-					i := match[1]
-					if strings.HasPrefix(i, "temporal/api/") ||
-						strings.HasPrefix(i, "google/") ||
-						strings.HasPrefix(i, "nexus/") {
-						importMap[i] = struct{}{}
+		fatalIfErr(filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.Type().IsRegular() && strings.HasSuffix(path, ".proto") {
+				protoFile, err := os.ReadFile(path)
+				fatalIfErr(err)
+				for line := range strings.SplitSeq(string(protoFile), "\n") {
+					if match := matchImport.FindStringSubmatch(line); len(match) > 0 {
+						i := match[1]
+						if supportedImport(i) {
+							importMap[i] = struct{}{}
+						}
 					}
 				}
 			}
-		}
-		return nil
-	}))
+			return nil
+		}))
+	}
 	return expmaps.Keys(importMap)
 }
 
@@ -66,8 +69,17 @@ func getImportName(i string) string {
 }
 
 func mangle(p string) string {
+	p = strings.Replace(p, "temporal/api/", "temporal/api_next/", 1)
 	mangled := strings.ReplaceAll(p, "/", "_")
 	return "File_" + strings.ReplaceAll(mangled, ".", "_")
+}
+
+func stablePath(p string) string {
+	return strings.Replace(p, "temporal/api_next/", "temporal/api/", 1)
+}
+
+func supportedImport(path string) bool {
+	return strings.HasPrefix(path, "temporal/api/") || strings.HasPrefix(path, "google/") || strings.HasPrefix(path, "nexusannotations/")
 }
 
 func genFileList(protoImports []string) {
@@ -156,8 +168,8 @@ func checkImports(files map[string]protoreflect.FileDescriptor) {
 		imports := fd.Imports()
 		num := imports.Len()
 		for i := range num {
-			imp := imports.Get(i).Path()
-			if strings.HasPrefix(imp, "temporal/api/") || strings.HasPrefix(imp, "google/") || strings.HasPrefix(imp, "nexus/") {
+			imp := stablePath(imports.Get(i).Path())
+			if supportedImport(imp) {
 				if _, ok := files[imp]; !ok {
 					missing[imp] = struct{}{}
 				}
@@ -182,14 +194,35 @@ func main() {
 		initSeeds() // doesn't return
 	}
 
+	var missing []string
+	for _, path := range findProtoImports() {
+		if _, ok := importMap[path]; !ok {
+			missing = append(missing, path)
+		}
+	}
+	if len(missing) > 0 {
+		addImports(missing)
+	}
 	checkImports(importMap) // doesn't return if any errors
 
-	set := &descriptorpb.FileDescriptorSet{}
-	for _, fd := range importMap {
-		set.File = append(set.File, protodesc.ToFileDescriptorProto(fd))
-	}
-
+	set := descriptorSet(importMap)
 	b, err := proto.Marshal(set)
 	fatalIfErr(err)
 	fatalIfErr(os.WriteFile(*out, b, 0644))
+}
+
+func descriptorSet(files map[string]protoreflect.FileDescriptor) *descriptorpb.FileDescriptorSet {
+	set := &descriptorpb.FileDescriptorSet{}
+	paths := expmaps.Keys(files)
+	sort.Strings(paths)
+	for _, path := range paths {
+		fd := protodesc.ToFileDescriptorProto(files[path])
+		fd.Name = proto.String(stablePath(fd.GetName()))
+		for i, dependency := range fd.Dependency {
+			fd.Dependency[i] = stablePath(dependency)
+		}
+		set.File = append(set.File, fd)
+	}
+
+	return set
 }

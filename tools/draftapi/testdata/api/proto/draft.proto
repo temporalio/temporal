@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package temporal.api.protometa.v1;
+
+option go_package = "go.temporal.io/api/protometa/v1;protometa";
+
+import "google/protobuf/descriptor.proto";
+
+// Deliberately different numbers from the real API: detection must use the schema.
+extend google.protobuf.FieldOptions { string draft = 50101; }
+extend google.protobuf.MessageOptions { string draft_message = 50102; }
+extend google.protobuf.EnumOptions { string draft_enum = 50103; }
+extend google.protobuf.EnumValueOptions { string draft_enum_value = 50104; }
+extend google.protobuf.ServiceOptions { string draft_service = 50105; }
+extend google.protobuf.MethodOptions { string draft_method = 50106; }
+extend google.protobuf.OneofOptions { string draft_oneof = 50107; }

@@ -1,0 +1,14 @@
+syntax = "proto3";
+package temporal.api.testreferences.v1;
+option go_package = "go.temporal.io/api/testreferences/v1;testreferences";
+import "message.proto";
+message References {
+  temporal.api.testdraft.v1.Draft value = 1;
+  repeated temporal.api.testdraft.v1.Draft list = 2;
+  map<string, temporal.api.testdraft.v1.Draft.Nested> by_name = 3;
+  temporal.api.testdraft.v1.Draft.NestedEnum state = 4;
+  oneof choice {
+    temporal.api.testdraft.v1.Draft child = 5;
+    string stable = 6;
+  }
+}
