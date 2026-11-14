@@ -6,6 +6,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+// WorkflowHeartbeatNotificationUpdateAdmittedMetricTag is a dummy event type: admitting an Update writes no history
+// event (WorkflowExecutionUpdateAdmitted is only written when reapplying on reset).
+const WorkflowHeartbeatNotificationUpdateAdmittedMetricTag = "UpdateAdmitted"
+
 // isWorkflowHeartbeatNotificationInputType reports whether an event type is eligible for a Workflow Task heartbeat notification.
 // Buffering alone does not make an event eligible; for example, ActivityTaskStarted records progress but does not normally require a new Workflow Task.
 func isWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool {
@@ -48,34 +52,40 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 		return
 	}
 
-	eventTypes := make([]string, 0, len(newBufferedEvents))
+	filteredNewBufferedEventTypes := make([]string, 0, len(newBufferedEvents))
 	for _, event := range newBufferedEvents {
 		if isWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
-			eventTypes = append(eventTypes, event.GetEventType().String())
+			filteredNewBufferedEventTypes = append(filteredNewBufferedEventTypes, event.GetEventType().String())
 		}
 	}
-	if len(eventTypes) == 0 {
+	if len(filteredNewBufferedEventTypes) == 0 {
 		return
 	}
 
 	// TODO: Relaxed accuracy for the estimate to avoid iterating and comparing buffered events:
 	// any prior buffered event counts, not only workflow-heartbeat-notification-eligible ones.
 	hadBufferedInput := c.MutableState.NumBufferedEvents() > len(newBufferedEvents)
-	// TODO: Account for pending Updates. Only events are counted for now because UpdateRegistry is not a
-	// read-only method, so the first-input estimate is slightly exaggerated depending on the namespace's Update traffic.
-	firstBufferedInput := !hadBufferedInput
+	firstBufferedInput := !hadBufferedInput && !c.hasPendingUpdateForWorkflowHeartbeatNotification()
 	namespaceEntry := c.MutableState.GetNamespaceEntry()
 	if namespaceEntry == nil {
 		return
 	}
 	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(namespaceEntry.Name().String()))
 
-	for _, eventType := range eventTypes {
-		inputHandler := handler.WithTags(metrics.StringTag("event_type", eventType))
+	for _, eventType := range filteredNewBufferedEventTypes {
+		inputHandler := handler.WithTags(metrics.EventTypeTag(eventType))
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(inputHandler).Record(1)
 		if firstBufferedInput {
 			metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(inputHandler).Record(1)
 			firstBufferedInput = false
 		}
 	}
+}
+
+// hasPendingUpdateForWorkflowHeartbeatNotification checks for unsent Updates in the existing, current-version Registry.
+// It reads c.updateRegistry directly; calling c.UpdateRegistry could clear or create a Registry.
+func (c *ContextImpl) hasPendingUpdateForWorkflowHeartbeatNotification() bool {
+	return c.updateRegistry != nil &&
+		c.updateRegistry.FailoverVersion() == c.MutableState.GetCurrentVersion() &&
+		c.updateRegistry.HasOutgoingMessages(false)
 }

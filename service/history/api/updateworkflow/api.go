@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
@@ -50,12 +51,14 @@ type Updater struct {
 	// Variables referencing mutable state data.
 	// WARNING: any references to mutable state data *have to* be copied
 	// to avoid data races when used outside the workflow lease.
-	taskQueue              *taskqueuepb.TaskQueue
-	priority               *commonpb.Priority
-	normalTaskQueueName    string
-	scheduledEventID       int64
-	scheduleToStartTimeout time.Duration
-	workflowTaskStamp      int32
+	taskQueue                                     *taskqueuepb.TaskQueue
+	priority                                      *commonpb.Priority
+	normalTaskQueueName                           string
+	scheduledEventID                              int64
+	scheduleToStartTimeout                        time.Duration
+	workflowTaskStamp                             int32
+	bufferedForWorkflowHeartbeatNotification      bool
+	firstBufferedForWorkflowHeartbeatNotification bool
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -106,8 +109,25 @@ func (u *Updater) Invoke(
 	if err != nil {
 		return nil, err
 	}
-
 	return u.OnSuccess(ctx)
+}
+
+func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string) {
+
+	if !u.bufferedForWorkflowHeartbeatNotification {
+		return
+	}
+
+	handler := u.shardCtx.GetMetricsHandler().WithTags(
+		metrics.OperationTag(metrics.WorkflowContextScope),
+		metrics.NamespaceTag(namespaceName),
+		metrics.EventTypeTag(workflow.WorkflowHeartbeatNotificationUpdateAdmittedMetricTag),
+	)
+	metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
+
+	if u.firstBufferedForWorkflowHeartbeatNotification {
+		metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
+	}
 }
 
 func (u *Updater) ApplyRequest(
@@ -182,13 +202,18 @@ func (u *Updater) applyRequest(
 	if err := validateCallbacks(ctx, updateReg, ms, updateRequest); err != nil {
 		return nil, err
 	}
-
+	startedWorkflowTask := ms.HasStartedWorkflowTask()
 	var (
 		alreadyExisted bool
 		err            error
 	)
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
+	}
+	if startedWorkflowTask && !alreadyExisted {
+		u.bufferedForWorkflowHeartbeatNotification = true
+		// TODO(whn): Refine the mildly relaxed accuracy without scanning all buffered event types.
+		u.firstBufferedForWorkflowHeartbeatNotification = (ms.NumBufferedEvents() == 0 && !updateReg.HasOutgoingMessages(false))
 	}
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
@@ -394,7 +419,12 @@ func (u *Updater) OnSuccess(
 	if err != nil {
 		return nil, err
 	}
-	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
+	namespaceName := ns.Name().String()
+
+	// WHN should be before the long polling
+	u.emitWorkflowHeartbeatNotificationMetrics(namespaceName)
+
+	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(namespaceName)
 	waitStage := u.req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
 	status, err := u.upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)

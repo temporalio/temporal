@@ -10,8 +10,19 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 )
+
+type bufferedWorkflowHeartbeatNotificationUpdateRegistry struct {
+	update.Registry
+	hasOutgoing bool
+}
+
+func (r bufferedWorkflowHeartbeatNotificationUpdateRegistry) FailoverVersion() int64 { return 1 }
+func (r bufferedWorkflowHeartbeatNotificationUpdateRegistry) HasOutgoingMessages(bool) bool {
+	return r.hasOutgoing
+}
 
 func TestIsWorkflowHeartbeatNotificationInputType(t *testing.T) {
 	t.Parallel()
@@ -53,6 +64,7 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 		started       bool
 		newEvents     []enumspb.EventType
 		priorEvents   []enumspb.EventType
+		pendingUpdate bool
 		bufferedTypes []string
 		firstType     string
 		nilNamespace  bool
@@ -69,6 +81,13 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
 			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED},
+			bufferedTypes: []string{"TimerFired"},
+		},
+		{
+			name:          "previous update",
+			started:       true,
+			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
+			pendingUpdate: true,
 			bufferedTypes: []string{"TimerFired"},
 		},
 		{
@@ -120,6 +139,9 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 					namespaceEntry = nil
 				}
 				mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry)
+				if len(tc.priorEvents) == 0 || tc.firstType != "" || tc.pendingUpdate {
+					mutableState.EXPECT().GetCurrentVersion().Return(int64(1))
+				}
 			}
 
 			metricsHandler := metricstest.NewCaptureHandler()
@@ -128,6 +150,9 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			workflowContext := &ContextImpl{
 				MutableState:   mutableState,
 				metricsHandler: metricsHandler,
+				updateRegistry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{
+					hasOutgoing: tc.pendingUpdate,
+				},
 			}
 			newEvents := make([]*historypb.HistoryEvent, 0, len(tc.newEvents))
 			for _, eventType := range tc.newEvents {
@@ -148,6 +173,48 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 				require.Len(t, first, 1)
 				require.Equal(t, tc.firstType, first[0].Tags["event_type"])
 			}
+		})
+	}
+}
+
+func TestHasPendingUpdateForWorkflowHeartbeatNotification(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name              string
+		registry          update.Registry
+		version           int64
+		wantPendingUpdate bool
+	}{
+		{
+			name:              "current registry has pending update",
+			registry:          bufferedWorkflowHeartbeatNotificationUpdateRegistry{hasOutgoing: true},
+			version:           1,
+			wantPendingUpdate: true,
+		},
+		{
+			name:     "current registry has no pending update",
+			registry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{},
+			version:  1,
+		},
+		{
+			name:     "stale registry with outgoing update",
+			registry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{hasOutgoing: true},
+			version:  2,
+		},
+		{
+			name: "no registry",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mutableState := historyi.NewMockMutableState(gomock.NewController(t))
+			if tc.registry != nil {
+				mutableState.EXPECT().GetCurrentVersion().Return(tc.version)
+			}
+			workflowContext := &ContextImpl{MutableState: mutableState, updateRegistry: tc.registry}
+			require.Equal(t, tc.wantPendingUpdate, workflowContext.hasPendingUpdateForWorkflowHeartbeatNotification())
 		})
 	}
 }

@@ -106,7 +106,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return newActivity, nil
 	}
 	startOpts := []chasm.TransitionOption{
-		chasm.WithStartRequestID(frontendReq.GetRequestId()),
+		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	}
 
