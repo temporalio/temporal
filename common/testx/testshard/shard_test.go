@@ -47,6 +47,31 @@ func TestFromEnv(t *testing.T) {
 	}
 }
 
+func TestShouldRunTestCompatibility(t *testing.T) {
+	t.Setenv("TEST_SHARD_SALT", "")
+	for _, tc := range []struct {
+		name    string
+		salt    string
+		envSalt string
+		owner   string
+	}{
+		{name: "TestSuite/TestMethod", salt: "-salt-2827", owner: "2"},
+		{name: "TestSuite/TestOther", salt: "-salt-2827", owner: "0"},
+		{name: "TestSuite/TestMethod", salt: "-salt-2827", envSalt: "-test-salt", owner: "1"},
+	} {
+		t.Run(tc.name+tc.salt+tc.envSalt, func(t *testing.T) {
+			t.Setenv("TEST_SHARD_SALT", tc.envSalt)
+			t.Setenv("TEST_TOTAL_SHARDS", "4")
+			for _, index := range []string{"0", "1", "2", "3"} {
+				t.Setenv("TEST_SHARD_INDEX", index)
+				shard, err := FromEnv(WithSalt(tc.salt))
+				require.NoError(t, err)
+				require.Equal(t, index == tc.owner, shard.ShouldRunTest(tc.name))
+			}
+		})
+	}
+}
+
 func TestSkipUnlessInShardInheritsSelection(t *testing.T) {
 	t.Parallel()
 	selected := Shard{total: 1, salt: "selected-salt"}

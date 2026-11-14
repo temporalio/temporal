@@ -14,6 +14,7 @@ import (
 	testifysuite "github.com/stretchr/testify/suite"
 	"go.temporal.io/testx/await"
 	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/testx/testshard"
 )
 
 // TestingSuite is the constraint for suite types.
@@ -204,6 +205,8 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 // parallel. Any sequential setup must happen before calling Run.
 //
 // The suite must embed [Suite] and have no other fields.
+// TEST_TOTAL_SHARDS and TEST_SHARD_INDEX enable automatic sharding by full method name.
+// Nested subtests stay with their method. See [testshard.FromEnv] for configuration.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, true, args...)
 }
@@ -218,6 +221,9 @@ func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
 
 func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
+
+	shard, err := testshard.FromEnv()
+	require.NoError(t, err)
 
 	typ := reflect.TypeFor[T]()
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
@@ -239,6 +245,17 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 		return // all methods filtered by -testify.m; nothing to run
 	}
 
+	ownsMethod := false
+	for _, method := range methods {
+		if shard.ShouldRunTest(t.Name() + "/" + method.Name) {
+			ownsMethod = true
+			break
+		}
+	}
+	if !ownsMethod {
+		t.Skip("Skipping suite: no test methods belong to this shard")
+	}
+
 	argVals := make([]reflect.Value, len(args))
 	for i, a := range args {
 		argVals[i] = reflect.ValueOf(a)
@@ -251,6 +268,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
+			shard.SkipUnlessInShard(t)
 			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
