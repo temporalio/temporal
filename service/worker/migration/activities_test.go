@@ -916,7 +916,7 @@ func (s *activitiesSuite) TestClassifyShardReplicationStatus_UninitializedAckWat
 		AckedTaskVisibilityTime: nil,
 	}
 
-	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second, false)
 
 	s.False(status.isReady)
 	s.Zero(status.laggingTasks) // must NOT be maxTaskId - 0
@@ -935,7 +935,7 @@ func (s *activitiesSuite) TestClassifyShardReplicationStatus_UninitializedAckWat
 		AckedTaskVisibilityTime: timestamppb.New(time.Unix(0, 0)),
 	}
 
-	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second, false)
 
 	s.False(status.isReady)
 	s.Zero(status.laggingTasks)
@@ -956,7 +956,7 @@ func (s *activitiesSuite) TestClassifyShardReplicationStatus_GenuineLagNotFlagge
 		AckedTaskVisibilityTime: timestamppb.New(now.Add(-30 * time.Second)),
 	}
 
-	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second, false)
 
 	s.Equal(int64(2000), status.laggingTasks)
 	s.Equal(30*time.Second, status.timeLag)
@@ -988,7 +988,8 @@ func (s *activitiesSuite) TestCheckReplicationOnce_UninitializedAckWatermarkNotR
 		},
 	}, nil).Times(1)
 
-	ready, err := s.a.checkReplicationOnce(context.Background(), req)
+	checkpoint := replicationCheckpoint{now: time.Now}
+	ready, err := s.a.checkReplicationOnce(context.Background(), req, &checkpoint)
 	s.NoError(err)
 	s.False(ready)
 }
