@@ -537,6 +537,74 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 	s.Empty(response.Tasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestRangeCompleteHistoryTasks_Batched() {
+	testCategories := []tasks.Category{tasks.CategoryTimer, fakeScheduledTaskCategory}
+	batchSizes := []int{0, 1, 3, 4, 10}
+
+	for _, category := range testCategories {
+		for _, batchSize := range batchSizes {
+			baseTime := time.Now().UTC().Truncate(time.Second)
+			var tasksList []tasks.Task
+			for i := 0; i < 6; i++ {
+				tTime := baseTime.Add(time.Duration(i+1) * 10 * time.Second)
+				tID := int64(100 + i)
+				var task tasks.Task
+				if category == tasks.CategoryTimer {
+					task = &tasks.UserTimerTask{
+						WorkflowKey:         s.WorkflowKey,
+						TaskID:              tID,
+						VisibilityTimestamp: tTime,
+					}
+				} else {
+					ft := tasks.NewFakeTask(s.WorkflowKey, fakeScheduledTaskCategory, tTime)
+					ft.SetTaskID(tID)
+					task = ft
+				}
+				tasksList = append(tasksList, task)
+			}
+
+			err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
+				ShardID:     s.ShardID,
+				RangeID:     s.RangeID,
+				NamespaceID: s.WorkflowKey.NamespaceID,
+				WorkflowID:  s.WorkflowKey.WorkflowID,
+				ArchetypeID: chasm.WorkflowArchetypeID,
+				Tasks: map[tasks.Category][]tasks.Task{
+					category: tasksList,
+				},
+			})
+			s.NoError(err)
+
+			minKey := tasks.NewKey(baseTime.Add(15*time.Second), 0)
+			maxKey := tasks.NewKey(baseTime.Add(55*time.Second), 0)
+
+			err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
+				ShardID:             s.ShardID,
+				TaskCategory:        category,
+				InclusiveMinTaskKey: minKey,
+				ExclusiveMaxTaskKey: maxKey,
+				BatchSize:           batchSize,
+			})
+			s.NoError(err)
+
+			inRangeTasks := s.PaginateTasks(category, minKey, maxKey, 10)
+			s.Empty(inRangeTasks)
+
+			allRemainingTasks := s.PaginateTasks(category, tasks.NewKey(baseTime, 0), tasks.NewKey(baseTime.Add(100*time.Second), 0), 10)
+			s.Len(allRemainingTasks, 2)
+
+			// Cleanup remaining tasks
+			err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
+				ShardID:             s.ShardID,
+				TaskCategory:        category,
+				InclusiveMinTaskKey: tasks.NewKey(baseTime, 0),
+				ExclusiveMaxTaskKey: tasks.NewKey(baseTime.Add(100*time.Second), 0),
+			})
+			s.NoError(err)
+		}
+	}
+}
+
 func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	category tasks.Category,
 	numTasks int,

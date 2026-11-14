@@ -99,6 +99,8 @@ type (
 		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountMultiplier        dynamicconfig.FloatPropertyFn
 		ShrinkPredicateMaxPendingKeys       dynamicconfig.IntPropertyFn
+		RangeCompleteBatchSize              dynamicconfig.IntPropertyFn
+		RangeCompleteTimeout                dynamicconfig.DurationPropertyFn
 	}
 )
 
@@ -379,14 +381,29 @@ func (p *queueBase) rangeCompleteTasks(
 		newExclusiveDeletionHighWatermark.TaskID = 0
 	}
 
-	ctx, cancel := newQueueIOContext()
+	var timeout time.Duration
+	if p.options.RangeCompleteTimeout != nil {
+		timeout = p.options.RangeCompleteTimeout() * debug.TimeoutMultiplier
+	}
+	if timeout <= 0 {
+		timeout = queueIOTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
+
+	var batchSize int
+	if p.options.RangeCompleteBatchSize != nil {
+		batchSize = p.options.RangeCompleteBatchSize()
+	}
 
 	if err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
 		TaskCategory:        p.category,
 		InclusiveMinTaskKey: oldExclusiveDeletionHighWatermark,
 		ExclusiveMaxTaskKey: newExclusiveDeletionHighWatermark,
+		BatchSize:           batchSize,
 	}); err != nil {
 		p.logger.Error("Error range completing queue task", tag.Error(err))
 		return err
