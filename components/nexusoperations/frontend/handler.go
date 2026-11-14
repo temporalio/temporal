@@ -95,6 +95,9 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		h.Logger.Error("failed to decode completion from token", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
+	if completion.GetRequestId() == "" {
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+	}
 	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(completion.NamespaceId))
 	if err != nil {
 		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(completion.NamespaceId), tag.Error(err))
