@@ -1115,7 +1115,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		return err
 	}
 	if transactionPolicy == historyi.TransactionPolicyActive {
-		c.emitWorkflowHeartbeatNotificationBufferedInputMetrics(payload.ExecutionMutation.NewBufferedEvents)
+		c.handleBufferedInputsForWorkflowHeartbeatNotification(shardContext, payload.ExecutionMutation.NewBufferedEvents)
 	}
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
