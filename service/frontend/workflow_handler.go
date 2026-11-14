@@ -418,6 +418,10 @@ func NewWorkflowHandler(
 	return handler
 }
 
+func (wh *WorkflowHandler) String() string {
+	return fmt.Sprintf("%T(%p)", wh, wh)
+}
+
 // Start starts the handler
 func (wh *WorkflowHandler) Start() {
 	if atomic.CompareAndSwapInt32(

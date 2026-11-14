@@ -371,6 +371,10 @@ func NewEngine(
 	return e
 }
 
+func (e *matchingEngineImpl) String() string {
+	return fmt.Sprintf("%T(%p)", e, e)
+}
+
 func (e *matchingEngineImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&e.status,

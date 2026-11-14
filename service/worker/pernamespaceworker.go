@@ -132,6 +132,10 @@ func (wm *PerNamespaceWorkerManager) Running() bool {
 	return wm.status.Load() == common.DaemonStatusStarted
 }
 
+func (wm *PerNamespaceWorkerManager) String() string {
+	return fmt.Sprintf("%T(%p)", wm, wm)
+}
+
 func (wm *PerNamespaceWorkerManager) Start(
 	self membership.HostInfo,
 	serviceResolver membership.ServiceResolver,

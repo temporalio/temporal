@@ -3,6 +3,8 @@
 package queues
 
 import (
+	"fmt"
+
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
@@ -182,6 +184,10 @@ func NewScheduler(
 		channelWeightUpdateCh:   channelWeightUpdateCh,
 		executionAwareScheduler: executionAwareScheduler,
 	}
+}
+
+func (s *schedulerImpl) String() string {
+	return fmt.Sprintf("%T(%p)", s, s)
 }
 
 func (s *schedulerImpl) Start() {
