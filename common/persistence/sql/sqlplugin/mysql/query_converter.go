@@ -218,20 +218,101 @@ func (c *queryConverter) BuildCountStmt(
 		groupByClause = fmt.Sprintf(" GROUP BY %s", strings.Join(groupBy, ", "))
 	}
 
+	// The joins make MySQL count far more slowly (#10991), so skip them when every
+	// column the query touches lives on executions_visibility itself.
+	joinClause := ""
+	if countNeedsJoins(queryParams) {
+		joinClause = fmt.Sprintf(
+			" LEFT JOIN custom_search_attributes USING (%s, %s)"+
+				" LEFT JOIN chasm_search_attributes USING (%s, %s)",
+			sadefs.GetSqlDbColName(sadefs.NamespaceID),
+			sadefs.GetSqlDbColName(sadefs.RunID),
+			sadefs.GetSqlDbColName(sadefs.NamespaceID),
+			sadefs.GetSqlDbColName(sadefs.RunID),
+		)
+	}
+
 	return fmt.Sprintf(
-		"SELECT %s FROM executions_visibility ev "+
-			"LEFT JOIN custom_search_attributes USING (%s, %s) "+
-			"LEFT JOIN chasm_search_attributes USING (%s, %s)"+
-			"%s"+
-			"%s",
+		"SELECT %s FROM executions_visibility ev%s%s%s",
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
-		sadefs.GetSqlDbColName(sadefs.NamespaceID),
-		sadefs.GetSqlDbColName(sadefs.RunID),
-		sadefs.GetSqlDbColName(sadefs.NamespaceID),
-		sadefs.GetSqlDbColName(sadefs.RunID),
+		joinClause,
 		whereString,
 		groupByClause,
 	), nil
+}
+
+func countNeedsJoins(queryParams *query.QueryParams[sqlparser.Expr]) bool {
+	for _, col := range queryParams.GroupBy {
+		if !isExecutionsVisibilityColumn(col) {
+			return true
+		}
+	}
+	return exprNeedsJoins(queryParams.QueryExpr)
+}
+
+// isExecutionsVisibilityColumn reports whether col is stored on executions_visibility.
+// Preallocated custom search attributes (Keyword01, ...) live in custom_search_attributes
+// and CHASM ones (TemporalKeyword01, ...) in chasm_search_attributes.
+func isExecutionsVisibilityColumn(col *query.SAColumn) bool {
+	return sadefs.IsReserved(col.FieldName) &&
+		!sadefs.IsChasmSearchAttribute(col.FieldName) &&
+		!sadefs.IsPreallocatedCSAFieldName(col.FieldName, col.ValueType)
+}
+
+// exprNeedsJoins answers true for any node it doesn't recognize, so a new expression
+// type can only cost performance, never produce a query that references a missing column.
+func exprNeedsJoins(expr sqlparser.Expr) bool {
+	switch e := expr.(type) {
+	case nil:
+		return false
+	case *query.SAColumn:
+		return !isExecutionsVisibilityColumn(e)
+	case *query.UnsafeSQLString, *sqlparser.SQLVal, sqlparser.BoolVal, *sqlparser.NullVal:
+		return false
+	case sqlparser.ValTuple:
+		for _, v := range e {
+			if exprNeedsJoins(v) {
+				return true
+			}
+		}
+		return false
+	case *sqlparser.AndExpr:
+		return exprNeedsJoins(e.Left) || exprNeedsJoins(e.Right)
+	case *sqlparser.OrExpr:
+		return exprNeedsJoins(e.Left) || exprNeedsJoins(e.Right)
+	case *sqlparser.NotExpr:
+		return exprNeedsJoins(e.Expr)
+	case *sqlparser.ParenExpr:
+		return exprNeedsJoins(e.Expr)
+	case *sqlparser.ComparisonExpr:
+		return exprNeedsJoins(e.Left) || exprNeedsJoins(e.Right) || exprNeedsJoins(e.Escape)
+	case *sqlparser.RangeCond:
+		return exprNeedsJoins(e.Left) || exprNeedsJoins(e.From) || exprNeedsJoins(e.To)
+	case *sqlparser.IsExpr:
+		return exprNeedsJoins(e.Expr)
+	case *sqlparser.FuncExpr:
+		return selectExprsNeedJoins(e.Exprs)
+	case *sqlparser.MatchExpr:
+		return selectExprsNeedJoins(e.Columns) || exprNeedsJoins(e.Expr)
+	case *castExpr:
+		return exprNeedsJoins(e.Value)
+	case *memberOfExpr:
+		return exprNeedsJoins(e.Value) || exprNeedsJoins(e.JSONArr)
+	case *jsonOverlapsExpr:
+		return exprNeedsJoins(e.JSONDoc1) || exprNeedsJoins(e.JSONDoc2)
+	default:
+		return true
+	}
+}
+
+func selectExprsNeedJoins(exprs sqlparser.SelectExprs) bool {
+	for _, se := range exprs {
+		aliased, ok := se.(*sqlparser.AliasedExpr)
+		if !ok || exprNeedsJoins(aliased.Expr) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *queryConverter) buildJSONOverlapsExpr(
