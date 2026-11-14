@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -196,7 +197,9 @@ func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 }
 
 func TestHandler_PatchSchedule_DedupsRequestID(t *testing.T) {
-	e := newSchedulerTestEngine(t, defaultSchedule())
+	schedule := defaultSchedule()
+	schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	e := newSchedulerTestEngine(t, schedule)
 	h := scheduler.NewTestHandler(e.logger)
 	patch := func(requestID string) {
 		_, err := h.PatchSchedule(e.engineCtx, &schedulerpb.PatchScheduleRequest{
