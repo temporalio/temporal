@@ -48,6 +48,8 @@ func (*noopChasmTree) RefreshTasks() error {
 
 func (*noopChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {}
 
+func (*noopChasmTree) MarkNeedsTimeSkippingTaskRegenForWorkflows() {}
+
 func (*noopChasmTree) IsStateDirty() bool {
 	return false
 }

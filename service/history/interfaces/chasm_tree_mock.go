@@ -245,6 +245,18 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
 }
 
+// MarkNeedsTimeSkippingTaskRegenForWorkflows mocks base method.
+func (m *MockChasmTree) MarkNeedsTimeSkippingTaskRegenForWorkflows() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkNeedsTimeSkippingTaskRegenForWorkflows")
+}
+
+// MarkNeedsTimeSkippingTaskRegenForWorkflows indicates an expected call of MarkNeedsTimeSkippingTaskRegenForWorkflows.
+func (mr *MockChasmTreeMockRecorder) MarkNeedsTimeSkippingTaskRegenForWorkflows() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkNeedsTimeSkippingTaskRegenForWorkflows", reflect.TypeOf((*MockChasmTree)(nil).MarkNeedsTimeSkippingTaskRegenForWorkflows))
+}
+
 // MarkTotalTimeSkippedUpdatedInPassive mocks base method.
 func (m *MockChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {
 	m.ctrl.T.Helper()
