@@ -31,7 +31,6 @@ import (
 // sharedOptions provides the dependencies that both the history service and the frontend need.
 var sharedOptions = fx.Options(
 	fx.Provide(configProvider),
-	fx.Provide(linkValidatorProvider),
 	fx.Provide(commonnexus.NewCallbackTokenGenerator),
 	fx.Provide(endpointRegistryProvider),
 	fx.Invoke(endpointRegistryLifetimeHooks),

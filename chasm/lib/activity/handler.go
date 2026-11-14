@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -41,7 +42,7 @@ type handler struct {
 	config            *Config
 	historyHandler    historyservice.HistoryServiceServer
 	callbackValidator callbacks.Validator
-	linkValidator     *linkValidator
+	linkValidator     commonlinks.Validator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
 	matchingClient    resource.MatchingClient
@@ -52,7 +53,7 @@ func newHandler(
 	config *Config,
 	historyHandler historyservice.HistoryServiceServer,
 	callbackValidator callbacks.Validator,
-	linkValidator *linkValidator,
+	linkValidator commonlinks.Validator,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	matchingClient resource.MatchingClient,

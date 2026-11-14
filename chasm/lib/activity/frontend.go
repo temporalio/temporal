@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -45,7 +46,7 @@ var ErrStandaloneActivityOperatorCommandsDisabled = serviceerror.NewUnimplemente
 type frontendHandler struct {
 	FrontendHandler
 	callbackValidator callbacks.Validator
-	linkValidator     *linkValidator
+	linkValidator     commonlinks.Validator
 	client            activitypb.ActivityServiceClient
 	config            *Config
 	logger            log.Logger
@@ -58,7 +59,7 @@ type frontendHandler struct {
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
 	callbackValidator callbacks.Validator,
-	linkValidator *linkValidator,
+	linkValidator commonlinks.Validator,
 	client activitypb.ActivityServiceClient,
 	config *Config,
 	logger log.Logger,
@@ -434,7 +435,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		}
 	}
 
-	if err := h.linkValidator.ValidateRequestWithCallbacks(req.GetNamespace(), req.GetLinks(), req.GetCompletionCallbacks()); err != nil {
+	if err := h.linkValidator.Validate(req.GetNamespace(), req.GetLinks(), req.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
 

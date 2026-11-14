@@ -307,6 +307,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 
 	cbValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), s.mockNamespaceCache)
 	s.NoError(err)
+	linkValidator := test.NewLinksValidator(s.T(), test.NewLinksValidatorConfig())
 
 	saValidator := searchattribute.NewValidator(
 		s.mockResource.GetSearchAttributesProvider(),
@@ -325,6 +326,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	)
 	return NewWorkflowHandler(
 		cbValidator,
+		linkValidator,
 		config,
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
@@ -374,6 +376,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			}, log.NewNoopLogger())),
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
+			linkValidator,
 		),
 		nil,
 		metrics.NoopMetricsHandler,
@@ -1149,7 +1152,6 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDupli
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
@@ -1352,7 +1354,6 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregatedLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace(callbacks.AddressMatchRules{
 		Rules: []callbacks.AddressMatchRule{
 			{
@@ -1505,7 +1506,6 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkf
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1567,7 +1567,6 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Priority() {
 func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWorkflowExecutionRequest{
@@ -1599,7 +1598,6 @@ func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks()
 func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1702,7 +1700,6 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Succeed_WithCustom
 func (s *WorkflowHandlerSuite) TestRequestCancelWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -6846,8 +6843,10 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 
 func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
 	wh := s.getWorkflowHandler(config)
+	linkCfg := test.NewLinksValidatorConfig()
+	linkCfg.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh.linkValidator = test.NewLinksValidator(s.T(), linkCfg)
 	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.testNamespace.String(),
