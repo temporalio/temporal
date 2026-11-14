@@ -15,6 +15,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // grpcRetrier wraps RPCs with the server's standard transient-error retry policy.
@@ -35,6 +37,9 @@ const (
 )
 
 func (t *grpcRetrier) do(ctx context.Context, opName string, f func() error) error {
+	isRetryable := func(err error) bool {
+		return !isOversizedResponse(err) && common.IsServiceTransientError(err)
+	}
 	attempt := 0
 	policy := t.policy
 	if policy == nil {
@@ -45,13 +50,37 @@ func (t *grpcRetrier) do(ctx context.Context, opName string, f func() error) err
 	_, err := backoff.ThrottleRetryContextWithReturn(ctx, func(context.Context) (struct{}, error) {
 		attempt++
 		err := f()
-		if err != nil && common.IsServiceTransientError(err) && attempt > retryLogAfterAttempt && t.log != nil {
+		if err != nil && isRetryable(err) && attempt > retryLogAfterAttempt && t.log != nil {
 			_, _ = fmt.Fprintf(t.log, "    transient error on %s; retrying attempt %d/%d: %v\n",
 				opName, attempt, retryMaxAttempts, err)
 		}
 		return struct{}{}, err
-	}, policy, common.IsServiceTransientError)
+	}, policy, isRetryable)
 	return err
+}
+
+// Receive-size failures are ResourceExhausted too, but repeating the same request cannot resolve them.
+func isOversizedResponse(err error) bool {
+	return status.Code(err) == codes.ResourceExhausted &&
+		strings.Contains(status.Convert(err).Message(), "received message larger than max")
+}
+
+func (t *grpcRetrier) page(ctx context.Context, opName string, pageSize *int32, fetch func() error) error {
+	return t.do(ctx, opName, func() error {
+		for {
+			err := fetch()
+			if !isOversizedResponse(err) {
+				return err
+			}
+			if *pageSize == 1 {
+				return fmt.Errorf("%s response exceeds the receive limit at page size 1: %w", opName, err)
+			}
+			*pageSize = max(1, *pageSize/2)
+			if t.log != nil {
+				_, _ = fmt.Fprintf(t.log, "    oversized response on %s; reducing page size to %d\n", opName, *pageSize)
+			}
+		}
+	})
 }
 
 // NewGRPCScheduleLoader returns a ScheduleLoader backed by the workflow-service frontend. log receives rate-limit
@@ -73,16 +102,17 @@ type grpcScheduleLoader struct {
 // (LookupSchedule) is left to the caller, which fans it out concurrently.
 func (l *grpcScheduleLoader) ListScheduleIDs(ctx context.Context, namespace string, yield func(id string) error) error {
 	var pageToken []byte
+	pageSize := int32(visibilityPageSize)
 	for {
 		var resp *workflowservice.ListSchedulesResponse
-		err := l.retrier.do(ctx, fmt.Sprintf("ListSchedules(%s)", namespace), func() error {
+		err := l.retrier.page(ctx, fmt.Sprintf("ListSchedules(%s)", namespace), &pageSize, func() error {
 			if err := l.listLimiter.Wait(ctx, namespace); err != nil {
 				return err
 			}
 			var rpcErr error
 			resp, rpcErr = l.client.ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
 				Namespace:       namespace,
-				MaximumPageSize: visibilityPageSize,
+				MaximumPageSize: pageSize,
 				NextPageToken:   pageToken,
 			})
 			return rpcErr
@@ -178,8 +208,7 @@ type grpcExecutionLoader struct {
 	limiter requestLimiter
 }
 
-// visibilityPageSize is the per-call page size for visibility queries. 1000 is a safe default; the server may clamp
-// to a lower max, and each call is bounded by the 4MB gRPC limit (~5000 rows in practice).
+// visibilityPageSize is the initial page size. Oversized responses reduce it for the rest of the listing.
 const visibilityPageSize = 1000
 const pageProgressEvery = 5
 
@@ -229,8 +258,9 @@ func (l *grpcExecutionLoader) paginate(ctx context.Context, namespace string, sc
 	}
 	var pageToken []byte
 	var page, entries, skipped int
+	pageSize := int32(visibilityPageSize)
 	for {
-		resp, err := l.fetchPage(ctx, namespace, query, pageToken, opLabel)
+		resp, err := l.fetchPage(ctx, namespace, query, pageToken, opLabel, &pageSize)
 		if err != nil {
 			return nil, err
 		}
@@ -249,9 +279,9 @@ func (l *grpcExecutionLoader) paginate(ctx context.Context, namespace string, sc
 	}
 }
 
-func (l *grpcExecutionLoader) fetchPage(ctx context.Context, namespace, query string, pageToken []byte, opLabel string) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+func (l *grpcExecutionLoader) fetchPage(ctx context.Context, namespace, query string, pageToken []byte, opLabel string, pageSize *int32) (*workflowservice.ListWorkflowExecutionsResponse, error) {
 	var resp *workflowservice.ListWorkflowExecutionsResponse
-	err := l.retrier.do(ctx, opLabel, func() error {
+	err := l.retrier.page(ctx, opLabel, pageSize, func() error {
 		if err := l.limiter.Wait(ctx, namespace); err != nil {
 			return err
 		}
@@ -259,7 +289,7 @@ func (l *grpcExecutionLoader) fetchPage(ctx context.Context, namespace, query st
 		resp, rpcErr = l.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace:     namespace,
 			Query:         query,
-			PageSize:      visibilityPageSize,
+			PageSize:      *pageSize,
 			NextPageToken: pageToken,
 		})
 		return rpcErr

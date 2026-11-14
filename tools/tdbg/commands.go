@@ -35,6 +35,8 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1166,7 +1168,7 @@ func describeSchedulerChasmState(c *cli.Context, adminClient adminservice.AdminS
 		Execution: &commonpb.WorkflowExecution{WorkflowId: scheduleID},
 		Archetype: chasm.SchedulerArchetype,
 	})
-	if common.IsNotFoundError(err) {
+	if common.IsNotFoundError(err) || status.Code(err) == codes.NotFound {
 		return v2ScheduleStatus{}, nil
 	}
 	if err != nil {
@@ -1200,7 +1202,7 @@ func describeWorkflowTypeName(c *cli.Context, adminClient adminservice.AdminServ
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 		Archetype: chasm.WorkflowArchetype,
 	})
-	if common.IsNotFoundError(err) {
+	if common.IsNotFoundError(err) || status.Code(err) == codes.NotFound {
 		return v1ScheduleStatus{}, nil
 	}
 	if err != nil {
