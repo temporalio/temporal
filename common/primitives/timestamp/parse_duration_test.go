@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -33,6 +34,7 @@ func (s *ParseDurationSuite) TestParseDuration() {
 		{"7", -1},         // error
 		{"", -1},          // error
 		{"10000000h", -1}, // error out of bounds
+		{"106752d", -1},   // error out of bounds
 	} {
 		got, err := ParseDuration(c.input)
 		if c.expected == -1 {
@@ -101,5 +103,31 @@ func (s *ParseDurationSuite) TestParseHHMMSSDuration() {
 		} else {
 			s.Equal(c.expected, got)
 		}
+	}
+}
+
+func TestParseDurationFractionalDays(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		input string
+		want  time.Duration
+	}{
+		{".00000001d", 864 * time.Microsecond},
+		{"-.00000001d", -864 * time.Microsecond},
+		{"1h.00000001d", time.Hour + 864*time.Microsecond},
+		{".3d", 7*time.Hour + 12*time.Minute},
+		{"08d", 8 * 24 * time.Hour},
+		{"1.d", 24 * time.Hour},
+		{".000000000001d", 86 * time.Nanosecond},
+		{".000000000000001d", 0},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseDuration(tc.input)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
 	}
 }
