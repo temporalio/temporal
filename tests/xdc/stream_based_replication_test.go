@@ -1790,9 +1790,9 @@ func (s *streamBasedReplicationTestSuite) TestLaneRateChange() {
 	s.requireWorkflowsReplicated(workflowIDs)
 }
 
-// TestLaneInvalidConfig makes the isolation config invalid while a lane holds a backlog. The
-// open-source policy then asks to retire every lane at once: the lane must send its backlog
-// without its rate limit and retire.
+// TestLaneInvalidConfig makes the isolation config invalid for each remote cluster while a lane
+// holds a backlog. The open-source policy then asks to retire every lane to that remote at once:
+// the lane must send its backlog without its rate limit and retire.
 func (s *streamBasedReplicationTestSuite) TestLaneInvalidConfig() {
 	workflowIDs, stopSlowLane := s.startLaneBacklog()
 	defer stopSlowLane()
@@ -1803,7 +1803,17 @@ func (s *streamBasedReplicationTestSuite) TestLaneInvalidConfig() {
 		}
 	}()
 	for _, c := range s.clusters {
-		invalid := []dynamicconfig.ReplicationLaneIsolationEntry{{NamespaceID: s.namespaceID, TasksPerSecond: 1000}}
+		// An entry without a positive TasksPerSecond is invalid. Entries without RemoteCluster
+		// are ignored instead, so each entry names a remote.
+		var invalid []dynamicconfig.ReplicationLaneIsolationEntry
+		for _, remote := range s.clusters {
+			if remote.ClusterName() != c.ClusterName() {
+				invalid = append(invalid, dynamicconfig.ReplicationLaneIsolationEntry{
+					RemoteCluster: remote.ClusterName(),
+					NamespaceID:   s.namespaceID,
+				})
+			}
+		}
 		reverts = append(reverts, c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, invalid))
 	}
 	s.requireWorkflowsReplicated(workflowIDs)
