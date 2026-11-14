@@ -1,4 +1,4 @@
-package testlogger
+package engine
 
 import (
 	"fmt"
@@ -7,20 +7,19 @@ import (
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
-	"go.temporal.io/server/common/log/tag"
 )
 
 // CapturedLog is a single log call recorded by a Capture.
-type CapturedLog struct {
+type CapturedLog[F Field] struct {
 	Level   Level
 	Message string
-	Tags    []tag.Tag
+	Tags    []F
 }
 
 // CapturedLogPattern describes a captured log using formatted tag values.
 // Tags match a subset of the captured log's tags; AnyTagValue requires a tag
 // without constraining its value.
-type CapturedLogPattern struct {
+type CapturedLogPattern[F Field] struct {
 	Level   Level
 	Message string
 	Tags    map[string]any
@@ -31,13 +30,13 @@ type anyTagValue struct{}
 // AnyTagValue matches any formatted value for a tag that must be present.
 var AnyTagValue = &anyTagValue{}
 
-func (p CapturedLogPattern) matches(record CapturedLog) bool {
+func (p CapturedLogPattern[F]) matches(record CapturedLog[F]) bool {
 	if record.Level != p.Level || record.Message != p.Message {
 		return false
 	}
 
 	for key, expected := range p.Tags {
-		if !slices.ContainsFunc(record.Tags, func(actual tag.Tag) bool {
+		if !slices.ContainsFunc(record.Tags, func(actual F) bool {
 			if actual.Key() != key {
 				return false
 			}
@@ -50,7 +49,7 @@ func (p CapturedLogPattern) matches(record CapturedLog) bool {
 	return true
 }
 
-func (p CapturedLogPattern) formattedTags() map[string]string {
+func (p CapturedLogPattern[F]) formattedTags() map[string]string {
 	formatted := make(map[string]string, len(p.Tags))
 	for key, value := range p.Tags {
 		if _, anyValue := value.(*anyTagValue); anyValue {
@@ -68,15 +67,15 @@ type captureFilterTag struct {
 }
 
 // Capture is an opt-in recording of TestLogger calls.
-type Capture struct {
+type Capture[F Field] struct {
 	filterTags map[captureFilterTag]struct{}
 
 	mu      sync.Mutex
-	records []CapturedLog
+	records []CapturedLog[F]
 }
 
-func newCapture(anyTags []tag.Tag) *Capture {
-	capture := &Capture{}
+func newCapture[F Field](anyTags []F) *Capture[F] {
+	capture := &Capture[F]{}
 	if len(anyTags) == 0 {
 		return capture
 	}
@@ -88,11 +87,11 @@ func newCapture(anyTags []tag.Tag) *Capture {
 }
 
 // Snapshot returns a defensive copy of the captured log calls.
-func (c *Capture) Snapshot() []CapturedLog {
+func (c *Capture[F]) Snapshot() []CapturedLog[F] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	records := make([]CapturedLog, len(c.records))
+	records := make([]CapturedLog[F], len(c.records))
 	for i, record := range c.records {
 		records[i] = record
 		records[i].Tags = slices.Clone(record.Tags)
@@ -101,7 +100,7 @@ func (c *Capture) Snapshot() []CapturedLog {
 }
 
 // RequireContains fails the test with tag diffs when the capture does not include a matching log.
-func (c *Capture) RequireContains(t TestingT, pattern CapturedLogPattern) {
+func (c *Capture[F]) RequireContains(t TestingT, pattern CapturedLogPattern[F]) {
 	t.Helper()
 	records := c.Snapshot()
 	if slices.ContainsFunc(records, pattern.matches) {
@@ -140,7 +139,7 @@ func (c *Capture) RequireContains(t TestingT, pattern CapturedLogPattern) {
 	t.Fatalf("%s", failure.String())
 }
 
-func (c *Capture) record(record CapturedLog) {
+func (c *Capture[F]) record(record CapturedLog[F]) {
 	if len(c.filterTags) > 0 {
 		matched := false
 		for _, t := range record.Tags {
