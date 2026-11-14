@@ -995,6 +995,19 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == "",
 		`EnableServerVersionCheck is a flag that controls whether or not periodic version checking is enabled`,
 	)
+	EnableServerVersionCheckLogging = NewGlobalBoolSetting(
+		"frontend.enableServerVersionCheckLogging",
+		true,
+		`EnableServerVersionCheckLogging controls logging of version recommendations and alerts. Embedded servers can disable it without disabling version reporting.`,
+	)
+	ServerVersionCheckSchedule = NewGlobalTypedSettingWithConverter(
+		"frontend.serverVersionCheckSchedule",
+		convertServerVersionCheckSchedule,
+		[]time.Duration{5 * time.Minute, 30 * time.Minute, time.Hour, 4 * time.Hour, 24 * time.Hour},
+		`ServerVersionCheckSchedule lists when the frontend checks the server version, as durations after startup.
+A check always runs at startup. After the last entry, checks repeat every 24h. Entries must be positive and
+strictly increasing; otherwise the default is used. Read once when the frontend starts.`,
+	)
 	EnableTokenNamespaceEnforcement = NewGlobalBoolSetting(
 		"frontend.enableTokenNamespaceEnforcement",
 		true,
