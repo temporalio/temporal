@@ -152,6 +152,12 @@ const (
 	CLIFlagForce = CLIOptForce + ", f"
 	// CLIFlagDisableInitialHostLookup is the cli flag for only using supplied hosts to connect to the database
 	CLIFlagDisableInitialHostLookup = "disable-initial-host-lookup"
+	// CLIFlagPasswordCommand is the cli flag for the executable whose stdout is used as the password
+	CLIFlagPasswordCommand = "password-command"
+	// CLIFlagPasswordCommandArg is the cli flag for an argument passed to the password command
+	CLIFlagPasswordCommandArg = "password-command-arg"
+	// CLIFlagPasswordCommandTimeout is the cli flag for the password command timeout
+	CLIFlagPasswordCommandTimeout = "password-command-timeout"
 
 	// CLIFlagEnableTLS enables cassandra client TLS
 	CLIFlagEnableTLS = "tls"

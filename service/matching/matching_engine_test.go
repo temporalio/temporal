@@ -6184,6 +6184,10 @@ func defaultTestConfig() *Config {
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
 	// Always update metadata on append in tests so backlog count assertions are exact.
 	config.MetadataUpdateOnAppendInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
+	config.UseSignalsV2ForPollerScaling = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
+	config.PollerScalingTaskAddToDispatchRatio = dynamicconfig.GetFloatPropertyFnFilteredByTaskQueue(1.2)
+	config.PollerScalingWaitTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(time.Second)
+	config.EnablePollerScalingDecisionMetrics = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	return config
 }
 

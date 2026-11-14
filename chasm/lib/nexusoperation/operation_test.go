@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -248,6 +249,24 @@ func TestHandleNexusCompletion(t *testing.T) {
 			},
 		}
 	}
+
+	t.Run("InvalidRequestID", func(t *testing.T) {
+		for _, tc := range []struct{ name, requestID string }{
+			{"empty", ""},
+			{"mismatched", "other-request-id"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx := newCtx()
+				op := newScheduledTestOperation(t, ctx)
+				err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+					RequestId: tc.requestID,
+					Outcome:   &persistencespb.ChasmNexusCompletion_Success{Success: mustToPayload(t, "result")},
+				})
+				require.ErrorAs(t, err, new(*serviceerror.NotFound))
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.GetStatus())
+			})
+		}
+	})
 
 	t.Run("Success", func(t *testing.T) {
 		t.Run("AfterStarted", func(t *testing.T) {

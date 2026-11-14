@@ -307,7 +307,7 @@ func (o *Operation) HandleNexusCompletion(
 	completion *persistencespb.ChasmNexusCompletion,
 ) error {
 	// Request ID lets us reject a stale or misrouted completion.
-	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
+	if completion.GetRequestId() == "" || o.GetRequestId() != completion.GetRequestId() {
 		return serviceerror.NewNotFound("operation not found")
 	}
 
@@ -821,12 +821,12 @@ func (o *Operation) emitOnSucceededMetrics(ctx chasm.Context, closeTime time.Tim
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
-func (o *Operation) emitOnFailedMetrics(ctx chasm.Context, closeTime time.Time) {
+func (o *Operation) emitOnFailedMetrics(ctx chasm.Context, closeTime time.Time, reason metrics.ReasonString) {
 	outcomeTag := metrics.OutcomeTag(
 		strings.ToLower(nexusoperationpb.OPERATION_STATUS_FAILED.String()),
 	)
 	handler := o.metricsHandler(ctx)
-	NexusOperationFailedCount.With(handler).Record(1)
+	NexusOperationFailedCount.With(handler).Record(1, metrics.ReasonTag(reason))
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 

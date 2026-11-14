@@ -426,17 +426,10 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		return false, err
 	}
 
-	localShards := resp.Shards
-
-	if int(waitRequest.ShardCount) != len(localShards) {
-		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(localShards), waitRequest.ShardCount)
-	}
-
-	shardStatuses := make([]shardStatus, 0, len(localShards))
-	var handoverInfosMissingCount int
-
-	// check that every shard is ready to handover
-	for _, localShard := range localShards {
+	// Shard movement can make multiple hosts report the same shard. Keep the
+	// report with the latest acknowledged replication task for the remote cluster.
+	localShards := make(map[int32]*historyservice.ShardReplicationStatus, len(resp.Shards))
+	for _, localShard := range resp.Shards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
 		if !hasRemoteShardProgress {
 			a.Logger.Info("GetReplicationStatus response missing expected remote cluster for shard during handover",
@@ -448,6 +441,23 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
 		}
+
+		previous, ok := localShards[localShard.ShardId]
+		if !ok || remoteShardProgress.AckedTaskId > previous.RemoteClusters[waitRequest.RemoteCluster].AckedTaskId {
+			localShards[localShard.ShardId] = localShard
+		}
+	}
+
+	if int(waitRequest.ShardCount) != len(localShards) {
+		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(localShards), waitRequest.ShardCount)
+	}
+
+	shardStatuses := make([]shardStatus, 0, len(localShards))
+	var handoverInfosMissingCount int
+
+	// check that every shard is ready to handover
+	for _, localShard := range localShards {
+		remoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
 
 		handoverInfo, hasHandoverInfo := localShard.HandoverNamespaces[waitRequest.Namespace]
 		if !hasHandoverInfo {

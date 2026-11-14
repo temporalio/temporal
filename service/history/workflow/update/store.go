@@ -17,8 +17,7 @@ type (
 	// UpdateStore represents the update package's requirements for reading Updates from the store.
 	UpdateStore interface {
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
+		GetCompletedUpdate(ctx context.Context, updateID string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error)
 		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		GetCurrentVersion() int64
 		IsWorkflowExecutionRunning() bool

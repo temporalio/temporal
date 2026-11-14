@@ -71,10 +71,10 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.45.0
 	go.opentelemetry.io/otel/trace v1.45.0
 	go.opentelemetry.io/proto/otlp v1.11.0
-	go.temporal.io/api v1.64.2-0.20261103192821-b45fe8d89699
+	go.temporal.io/api v1.64.3
 	go.temporal.io/auto-scaled-workers v0.0.0-20261030203857-75274b664c29
 	go.temporal.io/sdk v1.49.0
-	go.temporal.io/testx v0.0.0-20261029001555-ddcb0739798d
+	go.temporal.io/testx v0.0.0-20261112171501-c4cea589f218
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
@@ -93,6 +93,7 @@ require (
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.51.0
+	pgregory.net/rapid v1.3.0
 )
 
 require (
