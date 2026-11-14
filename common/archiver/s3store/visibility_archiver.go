@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -26,6 +27,7 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 		s3cli          S3API
+		storageClass   types.StorageClass
 		queryParser    QueryParser
 	}
 
@@ -66,6 +68,9 @@ func newVisibilityArchiver(
 	metricsHandler metrics.Handler,
 	s3config *config.S3Archiver,
 ) (*visibilityArchiver, error) {
+	if err := s3config.Validate(); err != nil {
+		return nil, err
+	}
 	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion(s3config.Region),
 		awsconfig.WithClientLogMode(aws.ClientLogMode(s3config.LogLevel)),
@@ -80,7 +85,8 @@ func newVisibilityArchiver(
 			o.BaseEndpoint = s3config.Endpoint
 			o.UsePathStyle = s3config.S3ForcePathStyle
 		}),
-		queryParser: NewQueryParser(),
+		queryParser:  NewQueryParser(),
+		storageClass: types.StorageClass(s3config.StorageClass),
 	}, nil
 }
 
@@ -141,12 +147,12 @@ func (v *visibilityArchiver) Archive(
 		var err error
 		if featureCatalog.VisibilityArchivalRecordDeduplication {
 			var uploaded bool
-			uploaded, err = UploadIfHashChanged(ctx, v.s3cli, URI, key, encodedVisibilityRecord, recordHash)
+			uploaded, err = uploadIfHashChanged(ctx, v.s3cli, URI, key, encodedVisibilityRecord, recordHash, v.storageClass)
 			if err == nil && !uploaded {
 				metrics.VisibilityArchiverBlobExistsCount.With(handler).Record(1)
 			}
 		} else {
-			err = Upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord)
+			err = upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord, nil, v.storageClass)
 		}
 		if err != nil {
 			archiveFailReason = errWriteKey
