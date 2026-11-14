@@ -4,12 +4,6 @@ package temporal.server.api.enums.v1;
 
 option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
-// FailpointKey identifies a specific failpoint in the system.
-// Keys are added together with the failpoints that use them.
-enum FailpointKey {
-  FAILPOINT_KEY_UNSPECIFIED = 0;
-}
-
 // FailpointAction defines what a failpoint should do when triggered.
 enum FailpointAction {
   // FAILPOINT_ACTION_UNSPECIFIED is invalid and should not be used.
