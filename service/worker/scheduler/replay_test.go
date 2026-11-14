@@ -56,6 +56,7 @@ var versionReleases = []versionRelease{
 var versionFixtures = map[scheduler.SchedulerWorkflowVersion]string{
 	scheduler.MigrationHandoffFixes:        "replay_migration_v1_to_v2.json.gz",
 	scheduler.RefreshCompletionDesiredTime: "replay_version_override_v14.json.gz",
+	scheduler.ChunkedCatchup:               "replay_chunked_catchup_v15.json.gz",
 }
 
 // TestReplays replays every recorded history under the current binary, so a history an older
