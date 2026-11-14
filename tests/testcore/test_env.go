@@ -6,14 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,6 +35,7 @@ import (
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/testx/testshard"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -264,7 +262,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	t.Helper()
 
 	// Check test sharding early, before any expensive operations.
-	checkTestShard(t)
+	// Test sharding is based on environment variables.
+	// This distributes tests across multiple CI shards for parallel execution.
+	testshard.SkipUnlessInShard(t, testshard.WithSalt(strings.TrimSpace(shardSalt)))
 
 	options := testOptions{t: t}
 	for _, opt := range opts {
@@ -722,31 +722,6 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	default:
 		return false
 	}
-}
-
-// checkTestShard supports test sharding based on environment variables.
-// This distributes tests across multiple CI shards for parallel execution.
-func checkTestShard(t *testing.T) {
-	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
-	indexStr := os.Getenv("TEST_SHARD_INDEX")
-	if totalStr == "" || indexStr == "" {
-		return
-	}
-	total, err := strconv.Atoi(totalStr)
-	if err != nil || total < 1 {
-		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
-	}
-	index, err := strconv.Atoi(indexStr)
-	if err != nil || index < 0 || index >= total {
-		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
-	}
-
-	nameToHash := t.Name() + strings.TrimSpace(shardSalt)
-	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
-	if testIndex != index {
-		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
-	}
-	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
 }
 
 type dedicatedClusterGuard struct {
