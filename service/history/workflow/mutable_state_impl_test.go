@@ -229,6 +229,25 @@ func (s *mutableStateSuite) TearDownTest() {
 	s.mockShard.StopForTest()
 }
 
+func (s *mutableStateSuite) TestWorkflowTaskNotificationMetadataLifecycle() {
+	startedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
+	s.mutableState.workflowTaskManager.UpdateWorkflowTask(&historyi.WorkflowTaskInfo{
+		ScheduledEventID:       4,
+		StartedEventID:         5,
+		StartedClock:           startedClock,
+		WorkerControlTaskQueue: "worker-control",
+	})
+
+	startedClock.Clock = 6
+	s.Equal(int64(3), s.mutableState.GetStartedWorkflowTask().StartedClock.GetClock())
+	s.Equal("worker-control", s.mutableState.GetStartedWorkflowTask().WorkerControlTaskQueue)
+	s.Equal(int64(3), s.mutableState.GetExecutionInfo().GetWorkflowTaskStartedClock().GetClock())
+
+	s.mutableState.workflowTaskManager.UpdateWorkflowTask(&historyi.WorkflowTaskInfo{})
+	s.Nil(s.mutableState.GetExecutionInfo().GetWorkflowTaskStartedClock())
+	s.Empty(s.mutableState.workflowTaskWorkerControlTaskQueue)
+}
+
 func (s *mutableStateSuite) SetupSubTest() {
 	// create a fresh mutable state for each sub test
 	// this will be invoked upon s.Run()

@@ -331,6 +331,10 @@ message WorkflowExecutionInfo {
   // never reads or sets it. The value describes the local copy of the record, so it is not
   // replicated, and applying a replicated snapshot or mutation keeps the local value.
   bytes persistence_metadata = 118;
+
+  // The shard clock matching used to build the started workflow task's token, so history can rebuild
+  // the same token for a workflow heartbeat notification. Not in history events.
+  temporal.server.api.clock.v1.VectorClock workflow_task_started_clock = 119;
 }
 
 message TimeSkippingInfo {

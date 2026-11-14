@@ -1046,9 +1046,13 @@ func (s *Starter) generateResponse(
 		}, nil
 	}
 
-	clock, err := shardCtx.NewVectorClock()
-	if err != nil {
-		return nil, err
+	clock := workflowTaskInfo.StartedClock
+	if clock == nil {
+		var err error
+		clock, err = shardCtx.NewVectorClock()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewWorkflowTaskToken(

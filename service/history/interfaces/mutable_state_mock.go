@@ -3728,6 +3728,30 @@ func (mr *MockMutableStateMockRecorder) SetWorkflowTaskStartToCloseTimeoutTask(t
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowTaskStartToCloseTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).SetWorkflowTaskStartToCloseTimeoutTask), task)
 }
 
+// SetWorkflowTaskStartedClock mocks base method.
+func (m *MockMutableState) SetWorkflowTaskStartedClock(startedClock *clock.VectorClock) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetWorkflowTaskStartedClock", startedClock)
+}
+
+// SetWorkflowTaskStartedClock indicates an expected call of SetWorkflowTaskStartedClock.
+func (mr *MockMutableStateMockRecorder) SetWorkflowTaskStartedClock(startedClock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowTaskStartedClock", reflect.TypeOf((*MockMutableState)(nil).SetWorkflowTaskStartedClock), startedClock)
+}
+
+// SetWorkflowTaskWorkerControlTaskQueue mocks base method.
+func (m *MockMutableState) SetWorkflowTaskWorkerControlTaskQueue(workerControlTaskQueue string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetWorkflowTaskWorkerControlTaskQueue", workerControlTaskQueue)
+}
+
+// SetWorkflowTaskWorkerControlTaskQueue indicates an expected call of SetWorkflowTaskWorkerControlTaskQueue.
+func (mr *MockMutableStateMockRecorder) SetWorkflowTaskWorkerControlTaskQueue(workerControlTaskQueue any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowTaskWorkerControlTaskQueue", reflect.TypeOf((*MockMutableState)(nil).SetWorkflowTaskWorkerControlTaskQueue), workerControlTaskQueue)
+}
+
 // ShouldResetActivityTimerTaskMask mocks base method.
 func (m *MockMutableState) ShouldResetActivityTimerTaskMask(current, incoming *persistence.ActivityInfo) bool {
 	m.ctrl.T.Helper()

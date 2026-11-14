@@ -252,7 +252,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
 
-func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInstanceKey() {
+func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInformation() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 	pollerID := uuid.NewString()
@@ -271,13 +271,17 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInst
 	).Return(resp, nil)
 
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
-		workerInstanceKey: workerInstanceKey,
+		workerInstanceKey:             workerInstanceKey,
+		workerControlTaskQueue:        "worker-control",
+		workflowHeartbeatCapabilities: &workflowservice.PollWorkflowTaskQueueRequest_Capabilities{SupportsWorkflowHeartbeatNotification: true},
 	})
 	t.Require().NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
 		"WorkerInstanceKey should be preserved when forwarding workflow poll")
+	t.Equal("worker-control", request.GetPollRequest().GetWorkerControlTaskQueue())
+	t.True(request.GetPollRequest().GetCapabilities().GetSupportsWorkflowHeartbeatNotification())
 }
 
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
