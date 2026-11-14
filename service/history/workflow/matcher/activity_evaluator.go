@@ -115,7 +115,7 @@ func (m *activityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonEx
 	if !ok {
 		return false, NewMatcherError("invalid value: %s", sqlparser.String(expr.Right))
 	}
-	valStr := sqlparser.String(valExpr)
+	valStr := sqlquery.SQLValString(valExpr)
 
 	switch colNameStr {
 	case activityTypeNameColName:

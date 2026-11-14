@@ -38,6 +38,13 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 			},
 		},
 		{
+			query:     `WorkflowId = 'order-o''brien C:\\workflows'`,
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				workflowID: new(`order-o'brien C:\workflows`),
+			},
+		},
+		{
 			query:     "WorkflowTypeName = \"random workflowTypeName\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
