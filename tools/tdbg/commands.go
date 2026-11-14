@@ -621,12 +621,12 @@ func AdminListGossipMembers(c *cli.Context, clientFactory ClientFactory) error {
 // AdminListClusterMembers outputs a list of cluster members
 func AdminListClusterMembers(c *cli.Context, clientFactory ClientFactory) error {
 	role, _ := StringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
-	// TODO: refactor this: parseTime shouldn't be used for duration.
-	heartbeatFlag, err := parseTime(c.String(FlagFrom), time.Time{}, time.Now().UTC())
+	now := time.Now().UTC()
+	heartbeatSince, err := parseTime(c.String(FlagHeartbeatedWithin), now, now)
 	if err != nil {
 		return fmt.Errorf("unable to parse Heartbeat time: %s", err)
 	}
-	heartbeat := time.Duration(heartbeatFlag.UnixNano())
+	heartbeat := now.Sub(heartbeatSince)
 
 	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
