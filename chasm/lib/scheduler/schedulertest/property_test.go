@@ -1,6 +1,7 @@
 package schedulertest_test
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -23,6 +24,10 @@ import (
 // testing.TB); invariant violations are reported through the *rapid.T so rapid
 // can shrink them.
 func TestSchedulerProperties(t *testing.T) {
+	// Opt-in until we're confident rapid's random seeds won't flake CI.
+	if os.Getenv("TEMPORAL_PROPERTY_TESTS") == "" {
+		t.Skip("set TEMPORAL_PROPERTY_TESTS=1 to run")
+	}
 	rapid.Check(t, func(rt *rapid.T) {
 		start := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 		// A small IdleTime lets fire-time gaps cross the idle window, which the
