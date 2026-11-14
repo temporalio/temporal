@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -682,6 +683,13 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 	// Unexpected but retryable error
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
+		// A durable workflow-task timeout remains necessary when its dependency
+		// returns. Keep it retryable through Unavailable failures; explicit
+		// terminal errors and configured DLQ patterns are handled above.
+		if _, unavailable := errors.AsType[*serviceerror.Unavailable](err); unavailable &&
+			e.GetType() == enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT && e.GetCategory() == tasks.CategoryTimer {
+			return err
+		}
 		// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			append([]tag.Tag{
