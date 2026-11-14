@@ -58,13 +58,14 @@ func (d *wfaDriver) testContext() context.Context {
 // wfaHandle is a handle to a workflow-scheduled activity.
 type wfaHandle struct {
 	activityDriverState
-	model      *activityModel // the model state reached, so driveEvent can check each event
-	d          *wfaDriver
-	run        sdkclient.WorkflowRun
-	workflowID string
-	runID      string
-	activityID string
-	taskQueue  string
+	model         *activityModel // the model state reached, so driveEvent can check each event
+	d             *wfaDriver
+	run           sdkclient.WorkflowRun
+	workflowID    string
+	runID         string
+	activityID    string
+	taskQueue     string
+	lastHeartbeat *workflowservice.RecordActivityTaskHeartbeatResponse
 }
 
 // driveTrace starts a workflow, which schedules an activity, and then advances that activity
@@ -399,9 +400,10 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 	ctx := a.testContext()
 	switch e.Type {
 	case model.HeartbeatType:
-		_, err := fc.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		resp, err := fc.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,
 		})
+		a.lastHeartbeat = resp
 		return err
 	case model.RespondCompletedType:
 		_, err := fc.RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
