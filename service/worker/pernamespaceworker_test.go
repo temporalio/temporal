@@ -3,6 +3,7 @@ package worker
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/mocksdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/mock/gomock"
@@ -418,6 +420,95 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 	cli2.EXPECT().Close()
 	s.manager.namespaceCallback(nsRestored, true)
 	time.Sleep(50 * time.Millisecond)
+}
+
+func (s *perNsWorkerManagerSuite) TestSoftDeleteNs() {
+	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+	var started1, stopped1, started2 atomic.Bool
+	awaitTrue := func(b *atomic.Bool) {
+		await.Require(s.T().Context(), s.T(), func(t *await.T) {
+			require.True(t, b.Load())
+		}, 5*time.Second, 10*time.Millisecond)
+	}
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: true,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: false,
+	}).AnyTimes()
+
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
+	cli1 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
+	wkr1 := mocksdk.NewMockWorker(s.controller)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
+	s.cmp1.EXPECT().Register(wkr1, ns, workercommon.RegistrationDetails{TotalWorkers: 1, Multiplicity: 1})
+	wkr1.EXPECT().Start().Do(func() { started1.Store(true) })
+
+	s.manager.namespaceCallback(ns, false)
+	awaitTrue(&started1)
+
+	nsSoftDeleted := testns("ns1", enumspb.NAMESPACE_STATE_SOFT_DELETED)
+	wkr1.EXPECT().Stop()
+	cli1.EXPECT().Close().Do(func() { stopped1.Store(true) })
+	s.manager.namespaceCallback(nsSoftDeleted, false)
+	awaitTrue(&stopped1)
+
+	nsRestored := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
+	cli2 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli2)
+	wkr2 := mocksdk.NewMockWorker(s.controller)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli2}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
+	s.cmp1.EXPECT().Register(wkr2, ns, workercommon.RegistrationDetails{TotalWorkers: 1, Multiplicity: 1})
+	wkr2.EXPECT().Start().Do(func() { started2.Store(true) })
+
+	s.manager.namespaceCallback(nsRestored, false)
+	awaitTrue(&started2)
+
+	wkr2.EXPECT().Stop()
+	cli2.EXPECT().Close()
+}
+
+func (s *perNsWorkerManagerSuite) TestStaleSoftDeleteDoesNotStopWorker() {
+	nsSoftDeleted := testns("ns1", enumspb.NAMESPACE_STATE_SOFT_DELETED).Clone(namespace.WithNotificationVersion(1))
+	nsRestored := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED).Clone(namespace.WithNotificationVersion(2))
+	var started atomic.Bool
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: true,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: false,
+	}).AnyTimes()
+
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")}).AnyTimes()
+	cli1 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
+	wkr1 := mocksdk.NewMockWorker(s.controller)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
+	s.cmp1.EXPECT().Register(wkr1, nsRestored, workercommon.RegistrationDetails{TotalWorkers: 1, Multiplicity: 1})
+	wkr1.EXPECT().Start().Do(func() { started.Store(true) })
+
+	s.manager.namespaceCallback(nsRestored, false)
+	await.Require(s.T().Context(), s.T(), func(t *await.T) {
+		require.True(t, started.Load())
+	}, 5*time.Second, 10*time.Millisecond)
+	worker := s.manager.getWorkerByNamespace(nsRestored)
+
+	// Late soft-delete callback.
+	worker.update(nsSoftDeleted, false, nil, nil)
+	// Late refresh that read the soft-deleted namespace.
+	s.Require().ErrorIs(worker.refresh(refreshArgs{ns: nsSoftDeleted}), errNoWorkerNeeded)
+
+	worker.lock.Lock()
+	s.Same(nsRestored, worker.ns)
+	s.NotNil(worker.worker)
+	worker.lock.Unlock()
+
+	wkr1.EXPECT().Stop()
+	cli1.EXPECT().Close()
 }
 
 func (s *perNsWorkerManagerSuite) TestMembershipChanged() {

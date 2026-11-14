@@ -408,6 +408,27 @@ func (s *namespaceHandlerCommonSuite) TestDeprecateNamespaceEventUsesPersistedAf
 	s.Require().NotEqual(failoverEndTime.AsTime().Format(time.RFC3339), after["failover_end_time"])
 }
 
+func (s *namespaceHandlerCommonSuite) TestDeprecateNamespace_SoftDeleted_Rejected() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "namespace"}).Return(
+		&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    "namespace-id",
+				Name:  "namespace",
+				State: enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		}},
+		nil,
+	)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err := s.handler.DeprecateNamespace(context.Background(), &workflowservice.DeprecateNamespaceRequest{Namespace: "namespace"})
+	s.ErrorIs(err, errInvalidNamespaceStateUpdate)
+}
+
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
 	out := s.handler.mergeNamespaceData(
 		map[string]string{
@@ -2507,5 +2528,159 @@ func (s *namespaceHandlerCommonSuite) TestUpsertCustomSearchAttributesAliases() 
 				s.Equal(tc.expected, result)
 			}
 		})
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) softDeletedNamespaceResponse(nid string, name string) *persistence.GetNamespaceResponse {
+	return &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    nid,
+				Name:  name,
+				State: enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster1",
+				Clusters:          []string{"cluster1", "cluster2"},
+			},
+			ConfigVersion: 5,
+		},
+		IsGlobalNamespace: true,
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_SoftDeleted_StaysSoftDeleted() {
+	testCases := []struct {
+		name    string
+		request *workflowservice.UpdateNamespaceRequest
+		verify  func(*persistence.UpdateNamespaceRequest)
+	}{
+		{
+			name: "failover",
+			request: &workflowservice.UpdateNamespaceRequest{
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{ActiveClusterName: "cluster2"},
+			},
+			verify: func(request *persistence.UpdateNamespaceRequest) {
+				s.Equal("cluster2", request.Namespace.ReplicationConfig.ActiveClusterName)
+			},
+		},
+		{
+			name: "info",
+			request: &workflowservice.UpdateNamespaceRequest{
+				UpdateInfo: &namespacepb.UpdateNamespaceInfo{Description: "new"},
+			},
+			verify: func(request *persistence.UpdateNamespaceRequest) {
+				s.Equal("new", request.Namespace.Info.Description)
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		s.Run(testCase.name, func() {
+			name := "soft-deleted-ns"
+			s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+				NotificationVersion: 100,
+			}, nil)
+			s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+			s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+			s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+				"cluster1": {Enabled: true, InitialFailoverVersion: 1},
+				"cluster2": {Enabled: true, InitialFailoverVersion: 2},
+			}).AnyTimes()
+			s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("cluster1").AnyTimes()
+			s.mockClusterMetadata.EXPECT().GetNextFailoverVersion("cluster2", int64(0)).Return(int64(2)).AnyTimes()
+			s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(
+				s.softDeletedNamespaceResponse(uuid.NewString(), name), nil)
+			s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+					s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, request.Namespace.Info.State)
+					testCase.verify(request)
+					return nil
+				})
+			s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, task *replicationspb.ReplicationTask) error {
+					s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, task.GetNamespaceTaskAttributes().GetInfo().GetState())
+					return nil
+				})
+
+			testCase.request.Namespace = name
+			_, err := s.handler.UpdateNamespace(s.T().Context(), testCase.request)
+			s.NoError(err)
+		})
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_SoftDeleted_RejectsStateChange() {
+	name := "soft-deleted-ns"
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(
+		s.softDeletedNamespaceResponse(uuid.NewString(), name), nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err := s.handler.UpdateNamespace(s.T().Context(), &workflowservice.UpdateNamespaceRequest{
+		Namespace:  name,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: enumspb.NAMESPACE_STATE_REGISTERED},
+	})
+	s.ErrorIs(err, errInvalidNamespaceStateUpdate)
+}
+
+func (s *namespaceHandlerCommonSuite) TestValidateReplicationStateUpdate_NamespaceState() {
+	testCases := []struct {
+		nsState  enumspb.NamespaceState
+		oldState enumspb.ReplicationState
+		newState enumspb.ReplicationState
+		allowed  bool
+	}{
+		{nsState: enumspb.NAMESPACE_STATE_REGISTERED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_SOFT_DELETED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_SOFT_DELETED, oldState: enumspb.REPLICATION_STATE_HANDOVER, newState: enumspb.REPLICATION_STATE_NORMAL, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_DEPRECATED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: false},
+	}
+	for _, tc := range testCases {
+		err := validateReplicationStateUpdate(
+			&persistence.GetNamespaceResponse{
+				Namespace: &persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{State: tc.nsState},
+					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+						State:    tc.oldState,
+						Clusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+					},
+				},
+				IsGlobalNamespace: true,
+			},
+			&workflowservice.UpdateNamespaceRequest{
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{State: tc.newState},
+			},
+		)
+		if tc.allowed {
+			s.NoError(err, "%v: %v -> %v", tc.nsState, tc.oldState, tc.newState)
+		} else {
+			var invalidArg *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArg, "%v: %v -> %v", tc.nsState, tc.oldState, tc.newState)
+		}
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
+	testCases := []struct {
+		oldState enumspb.NamespaceState
+		newState enumspb.NamespaceState
+	}{
+		{oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		{oldState: enumspb.NAMESPACE_STATE_DEPRECATED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		{oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_REGISTERED},
+		{oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_DELETED},
+	}
+	for _, testCase := range testCases {
+		err := validateStateUpdate(
+			&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{State: testCase.oldState},
+			}},
+			&workflowservice.UpdateNamespaceRequest{
+				UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: testCase.newState},
+			},
+		)
+		s.ErrorIs(err, errInvalidNamespaceStateUpdate, "%v -> %v", testCase.oldState, testCase.newState)
 	}
 }

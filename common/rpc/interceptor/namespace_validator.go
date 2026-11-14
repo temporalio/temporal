@@ -47,13 +47,20 @@ var (
 	allowedNamespaceStatesPerAPI = map[string][]enumspb.NamespaceState{
 		api.WorkflowServicePrefix + "StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		api.OperatorServicePrefix + "DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
-		api.NexusServicePrefix + "DispatchNexusTask":                   {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.OperatorServicePrefix + "DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		// SOFT_DELETED makes retries idempotent.
+		api.OperatorServicePrefix + "SoftDeleteNamespace": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		// REGISTERED lets a partly applied restore be retried.
+		api.OperatorServicePrefix + "RestoreNamespace":         {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		api.OperatorServicePrefix + "DescribeNamespaceRestore": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		// SOFT_DELETED allows failover and migration; the handler rejects state changes.
+		api.WorkflowServicePrefix + "UpdateNamespace": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		api.NexusServicePrefix + "DispatchNexusTask":  {enumspb.NAMESPACE_STATE_REGISTERED},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs of specific service
 	// that have `namespace` or `task_token` field in the request object.
 	allowedNamespaceStatesPerService = map[string][]enumspb.NamespaceState{
-		api.AdminServicePrefix: {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		api.AdminServicePrefix: {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
 	}
 	// If service name is not in the map above, these are allowed states for all APIs
 	// that have `namespace` or `task_token` field in the request object.
@@ -346,9 +353,12 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
-	case *operatorservice.DeleteNamespaceRequest:
-		// special case for Operator.DeleteNamespace API which accept either Namespace ID or Namespace name as input
-		namespaceID := namespace.ID(request.GetNamespaceId())
+	case *operatorservice.DeleteNamespaceRequest,
+		*operatorservice.SoftDeleteNamespaceRequest,
+		*operatorservice.RestoreNamespaceRequest,
+		*operatorservice.DescribeNamespaceRestoreRequest:
+		// Namespace lifecycle APIs accept either Namespace ID or Namespace name as input.
+		namespaceID := namespace.ID(request.(interface{ GetNamespaceId() string }).GetNamespaceId())
 		if namespaceID.IsEmpty() && namespaceName.IsEmpty() {
 			return nil, errNamespaceNotSet
 		}

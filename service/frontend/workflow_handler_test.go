@@ -7047,3 +7047,53 @@ func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
 		},
 	}
 }
+
+func (s *WorkflowHandlerSuite) TestOnNamespaceStateChange_CancelsPollsOfSoftDeletedNamespace() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	info := func(state enumspb.NamespaceState) *persistencespb.NamespaceInfo {
+		return &persistencespb.NamespaceInfo{Id: s.testNamespaceID.String(), Name: s.testNamespace.String(), State: state}
+	}
+	activeHere := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: cluster.TestCurrentClusterName,
+		Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+	}
+
+	testCases := []struct {
+		name       string
+		ns         *namespace.Namespace
+		wantCancel bool
+	}{
+		{
+			name:       "local soft-deleted",
+			ns:         namespace.NewLocalNamespaceForTest(info(enumspb.NAMESPACE_STATE_SOFT_DELETED), nil, cluster.TestCurrentClusterName),
+			wantCancel: true,
+		},
+		{
+			name:       "global soft-deleted, active here",
+			ns:         namespace.NewGlobalNamespaceForTest(info(enumspb.NAMESPACE_STATE_SOFT_DELETED), nil, activeHere, 1),
+			wantCancel: true,
+		},
+		{
+			name:       "registered",
+			ns:         namespace.NewLocalNamespaceForTest(info(enumspb.NAMESPACE_STATE_REGISTERED), nil, cluster.TestCurrentClusterName),
+			wantCancel: false,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			pollCtx := wh.registerOutstandingPollContext(context.Background(), "poller", s.testNamespaceID.String())
+			otherPollCtx := wh.registerOutstandingPollContext(context.Background(), "poller", "other-namespace-id")
+			defer wh.unregisterOutstandingPollContext("poller", s.testNamespaceID.String())
+			defer wh.unregisterOutstandingPollContext("poller", "other-namespace-id")
+
+			wh.onNamespaceStateChange(tc.ns, false)
+
+			if tc.wantCancel {
+				s.ErrorIs(pollCtx.Err(), context.Canceled)
+			} else {
+				s.NoError(pollCtx.Err())
+			}
+			s.NoError(otherPollCtx.Err())
+		})
+	}
+}
