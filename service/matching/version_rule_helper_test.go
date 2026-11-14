@@ -76,6 +76,18 @@ func TestCalcRampThresholdUniform(t *testing.T) {
 	}
 }
 
+func TestCalcRampThresholdUniformEmptyId(t *testing.T) {
+	histogram := [100]int{}
+	for range 1000000 {
+		v := calcRampThreshold("")
+		histogram[int32(v)]++
+	}
+
+	for i := range 100 {
+		assert.InEpsilon(t, 10000, histogram[i], 0.1)
+	}
+}
+
 func TestCalcRampThresholdDeterministic(t *testing.T) {
 	// same input should always may to the same output
 	assert.Equal(t, calcRampThreshold("A"), calcRampThreshold("A"))
