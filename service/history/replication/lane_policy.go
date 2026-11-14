@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -136,6 +138,7 @@ type (
 
 	manualLaneStreamPolicyFactory struct {
 		entries dynamicconfig.TypedPropertyFn[[]dynamicconfig.ReplicationLaneIsolationEntry]
+		logger  log.Logger
 	}
 
 	// manualLaneStreamPolicy gives each namespace listed for its remote cluster in the
@@ -143,6 +146,7 @@ type (
 	manualLaneStreamPolicy struct {
 		remoteCluster string
 		entries       dynamicconfig.TypedPropertyFn[[]dynamicconfig.ReplicationLaneIsolationEntry]
+		logger        log.Logger
 		// ratesMu guards rates, which the lanes' limiters read.
 		ratesMu sync.Mutex
 		rates   map[string]float64
@@ -170,26 +174,33 @@ func namespaceLaneFilter(namespaceID namespace.ID) LaneFilter {
 
 // NewManualLaneStreamPolicyFactory returns a factory whose policies isolate the namespaces
 // listed in the ReplicationLaneIsolation dynamic config.
-func NewManualLaneStreamPolicyFactory(dc *dynamicconfig.Collection) LaneStreamPolicyFactory {
-	return manualLaneStreamPolicyFactory{entries: dynamicconfig.ReplicationLaneIsolation.Get(dc)}
+func NewManualLaneStreamPolicyFactory(dc *dynamicconfig.Collection, logger log.ThrottledLogger) LaneStreamPolicyFactory {
+	return manualLaneStreamPolicyFactory{entries: dynamicconfig.ReplicationLaneIsolation.Get(dc), logger: logger}
 }
 
 func (f manualLaneStreamPolicyFactory) NewStreamPolicy(stream LaneStream) (LaneStreamPolicy, error) {
-	return &manualLaneStreamPolicy{remoteCluster: stream.RemoteCluster, entries: f.entries}, nil
+	return &manualLaneStreamPolicy{remoteCluster: stream.RemoteCluster, entries: f.entries, logger: f.logger}, nil
 }
 
-// Evaluate returns a lane for each listed namespace, ordered by namespace ID. If the config is
-// invalid, it returns an error and no lanes.
+// Evaluate returns a lane for each namespace listed for this remote, ordered by namespace ID.
+// Invalid entries for this remote return an error and no lanes. Entries without a remote are
+// ignored with a diagnostic, without withdrawing this stream's lanes.
 func (p *manualLaneStreamPolicy) Evaluate(LaneSignals) ([]DesiredLane, error) {
 	entries := p.entries()
-	if err := validateLaneIsolationEntries(entries); err != nil {
+	for i, entry := range entries {
+		if entry.RemoteCluster == "" {
+			p.logger.Warn("Ignoring ReplicationLaneIsolation entry without RemoteCluster",
+				tag.Error(fmt.Errorf("entry %d: RemoteCluster is empty", i)))
+		}
+	}
+	if err := validateLaneIsolationEntries(entries, p.remoteCluster); err != nil {
 		p.setRates(nil)
 		return nil, fmt.Errorf("invalid ReplicationLaneIsolation: %w", err)
 	}
 	var lanes []DesiredLane
 	rates := make(map[string]float64)
 	for _, entry := range entries {
-		if entry.RemoteCluster != p.remoteCluster {
+		if entry.RemoteCluster == "" || entry.RemoteCluster != p.remoteCluster {
 			continue
 		}
 		namespaceID := namespace.ID(entry.NamespaceID)
@@ -222,15 +233,15 @@ func (*manualLaneStreamPolicy) LaneRetired(string) {}
 
 func (*manualLaneStreamPolicy) Close() {}
 
-func validateLaneIsolationEntries(entries []dynamicconfig.ReplicationLaneIsolationEntry) error {
+func validateLaneIsolationEntries(entries []dynamicconfig.ReplicationLaneIsolationEntry, remoteCluster string) error {
 	type entryKey struct {
 		remoteCluster string
 		namespaceID   string
 	}
 	seen := make(map[entryKey]struct{}, len(entries))
 	for i, entry := range entries {
-		if entry.RemoteCluster == "" {
-			return fmt.Errorf("entry %d: RemoteCluster is empty", i)
+		if entry.RemoteCluster == "" || entry.RemoteCluster != remoteCluster {
+			continue
 		}
 		if entry.NamespaceID == "" {
 			return fmt.Errorf("entry %d: NamespaceID is empty", i)
