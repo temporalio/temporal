@@ -1,6 +1,7 @@
 package authorization
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"encoding/json"
@@ -21,15 +22,24 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
+// keyFetchTimeout bounds a single request for a key set. Without it, an endpoint that accepts the
+// connection and never answers blocks server startup and the periodic refresh indefinitely.
+// It is a variable so that tests can shorten it.
+var keyFetchTimeout = 10 * time.Second
+
 // Default token key provider
 type defaultTokenKeyProvider struct {
-	config   config.JWTKeyProvider
-	rsaKeys  map[string]*rsa.PublicKey
-	ecKeys   map[string]*ecdsa.PublicKey
-	keysLock sync.RWMutex
-	ticker   *time.Ticker
-	logger   log.Logger
-	stop     chan bool
+	config     config.JWTKeyProvider
+	rsaKeys    map[string]*rsa.PublicKey
+	ecKeys     map[string]*ecdsa.PublicKey
+	keysLock   sync.RWMutex
+	ticker     *time.Ticker
+	logger     log.Logger
+	stop       chan bool
+	httpClient *http.Client
+	// fetchContext is canceled by Close so that an in-flight key request does not delay shutdown.
+	fetchContext context.Context
+	cancelFetch  context.CancelFunc
 }
 
 var _ TokenKeyProvider = (*defaultTokenKeyProvider)(nil)
@@ -43,6 +53,8 @@ func NewDefaultTokenKeyProvider(cfg *config.Authorization, logger log.Logger) *d
 func (a *defaultTokenKeyProvider) initialize() {
 	a.rsaKeys = make(map[string]*rsa.PublicKey)
 	a.ecKeys = make(map[string]*ecdsa.PublicKey)
+	a.httpClient = &http.Client{Timeout: keyFetchTimeout}
+	a.fetchContext, a.cancelFetch = context.WithCancel(context.Background())
 	if a.config.HasSourceURIsConfigured() {
 		err := a.updateKeys()
 		if err != nil {
@@ -57,6 +69,10 @@ func (a *defaultTokenKeyProvider) initialize() {
 }
 
 func (a *defaultTokenKeyProvider) Close() {
+	// Cancel first: the refresh goroutine may be inside a key request and could not receive on stop.
+	if a.cancelFetch != nil {
+		a.cancelFetch()
+	}
 	// ticker and stop are only set when RefreshInterval > 0, so both may be nil here. Guard them
 	// as localStoreCertProvider.Close and localStoreTlsProvider.Close already do.
 	if a.ticker != nil {
@@ -185,9 +201,19 @@ func (a *defaultTokenKeyProvider) openURI(uri string) (io.ReadCloser, error) {
 		}
 		return os.Open(u.Path)
 	}
-	resp, err := http.Get(uri)
+	request, err := http.NewRequestWithContext(a.fetchContext, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
+	}
+	resp, err := a.httpClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	// Reject error responses: a gateway may answer 5xx with a JSON body that decodes into an empty
+	// key set, which would replace the working keys and make every token fail validation.
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("unexpected HTTP status %d from %s", resp.StatusCode, u.Host)
 	}
 	return resp.Body, nil
 }
