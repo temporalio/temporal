@@ -430,3 +430,70 @@ func (s *clientSuite) TestNoGRPCUsage() {
 
 	s.True(checkedClientFile, "should have checked client.go for gRPC usage")
 }
+
+func TestQueryWithFiltersPagination(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		offset    int
+		pageSize  int
+		want      []string
+		completed bool
+		cursor    int
+	}{
+		{name: "first page", pageSize: 1, want: []string{"match-1"}, completed: false, cursor: 1},
+		{name: "second page", pageSize: 1, offset: 1, want: []string{"match-2"}, completed: false, cursor: 2},
+		{name: "last page", pageSize: 1, offset: 2, want: []string{"match-3"}, completed: true, cursor: 3},
+		{name: "larger page", pageSize: 2, want: []string{"match-1", "match-2"}, completed: false, cursor: 2},
+		{name: "unlimited", want: []string{"match-1", "match-2", "match-3"}, completed: true, cursor: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			client := connector.NewMockGcloudStorageClient(controller)
+			bucket := connector.NewMockBucketHandleWrapper(controller)
+			objects := connector.NewMockObjectIteratorWrapper(controller)
+			client.EXPECT().Bucket("bucket").Return(bucket)
+			bucket.EXPECT().Objects(t.Context(), &storage.Query{Prefix: "archive/prefix"}).Return(objects)
+			names := []string{"skip-1", "match-1", "skip-2", "match-2", "match-3"}
+			next := 0
+			objects.EXPECT().Next().DoAndReturn(func() (*storage.ObjectAttrs, error) {
+				if next == len(names) {
+					return nil, iterator.Done
+				}
+				name := names[next]
+				next++
+				return &storage.ObjectAttrs{Name: name}, nil
+			}).AnyTimes()
+			wrapper, err := connector.NewClientWithParams(client)
+			require.NoError(t, err)
+			uri, err := archiver.NewURI("gs://bucket/archive")
+			require.NoError(t, err)
+			got, completed, cursor, err := wrapper.QueryWithFilters(t.Context(), uri, "prefix", tc.pageSize, tc.offset, []connector.Precondition{
+				func(subject any) bool { return strings.HasPrefix(subject.(string), "match-") },
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+			require.Equal(t, tc.completed, completed)
+			require.Equal(t, tc.cursor, cursor)
+		})
+	}
+}
+
+func TestQueryWithFiltersIteratorError(t *testing.T) {
+	t.Parallel()
+	controller := gomock.NewController(t)
+	client := connector.NewMockGcloudStorageClient(controller)
+	bucket := connector.NewMockBucketHandleWrapper(controller)
+	objects := connector.NewMockObjectIteratorWrapper(controller)
+	client.EXPECT().Bucket("bucket").Return(bucket)
+	bucket.EXPECT().Objects(t.Context(), gomock.Any()).Return(objects)
+	iteratorErr := errors.New("storage unavailable")
+	objects.EXPECT().Next().Return(nil, iteratorErr)
+	wrapper, err := connector.NewClientWithParams(client)
+	require.NoError(t, err)
+	uri, err := archiver.NewURI("gs://bucket/archive")
+	require.NoError(t, err)
+	_, _, _, err = wrapper.QueryWithFilters(t.Context(), uri, "prefix", 1, 0, nil)
+	require.ErrorIs(t, err, iteratorErr)
+}
