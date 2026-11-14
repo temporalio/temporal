@@ -10,9 +10,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/common/backoff"
 )
 
-const artifactDownloadTimeout = 60 * time.Second
+const (
+	artifactDownloadAttempts             = 3
+	artifactDownloadRetryInitialInterval = 5 * time.Second
+	artifactDownloadTimeout              = 60 * time.Second
+)
 
 // Artifact represents a downloadable GitHub Actions artifact.
 type Artifact struct {
@@ -87,10 +93,34 @@ func ListRunArtifacts(ctx context.Context, repo string, githubActionsRunID int64
 
 // DownloadArtifact downloads a single GitHub Actions artifact zip file.
 func DownloadArtifact(ctx context.Context, repo string, artifactID int64, outputDir string) (string, error) {
-	path := fmt.Sprintf("/repos/%s/actions/artifacts/%d/zip", repo, artifactID)
+	return downloadArtifactWithRetry(ctx, repo, artifactID, outputDir, artifactDownloadRetryInitialInterval)
+}
+
+func downloadArtifactWithRetry(
+	ctx context.Context,
+	repo string,
+	artifactID int64,
+	outputDir string,
+	retryInterval time.Duration,
+) (string, error) {
+	var zipPath string
+	policy := backoff.NewExponentialRetryPolicy(retryInterval).WithMaximumAttempts(artifactDownloadAttempts)
+	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		var err error
+		zipPath, err = downloadArtifactOnce(ctx, repo, artifactID, outputDir)
+		return err
+	}, policy, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to download artifact %d after %d attempts: %w", artifactID, artifactDownloadAttempts, err)
+	}
+	return zipPath, nil
+}
+
+func downloadArtifactOnce(ctx context.Context, repo string, artifactID int64, outputDir string) (string, error) {
+	apiPath := fmt.Sprintf("/repos/%s/actions/artifacts/%d/zip", repo, artifactID)
 	downloadCtx, cancel := context.WithTimeout(ctx, artifactDownloadTimeout)
 	defer cancel()
-	response, err := get(downloadCtx, path)
+	response, err := get(downloadCtx, apiPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to download artifact %d: %w", artifactID, err)
 	}
