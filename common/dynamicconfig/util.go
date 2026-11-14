@@ -2,12 +2,32 @@ package dynamicconfig
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
 	"go.temporal.io/server/common/util"
 )
+
+func convertStrictStringList(in any) ([]string, error) {
+	switch value := in.(type) {
+	case []string:
+		return value, nil
+	case []any:
+		result := make([]string, len(value))
+		for i, item := range value {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("expected string at index %d, got %T", i, item)
+			}
+			result[i] = text
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("expected string list, got %T", in)
+	}
+}
 
 var (
 	MatchAnythingRE = regexp.MustCompile(".*")

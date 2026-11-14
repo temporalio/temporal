@@ -18,6 +18,7 @@ require (
 	github.com/aws/smithy-go v1.27.6
 	github.com/bits-and-blooms/bloom/v3 v3.7.1
 	github.com/blang/semver/v4 v4.0.0
+	github.com/bufbuild/prototransform v0.4.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
 	github.com/caio/go-tdigest/v5 v5.0.0
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
@@ -86,6 +87,7 @@ require (
 	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.43.0
 	golang.org/x/time v0.15.0
+	golang.org/x/tools v0.51.0
 	google.golang.org/api v0.276.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d
 	google.golang.org/grpc v1.83.2
@@ -97,6 +99,8 @@ require (
 )
 
 require (
+	buf.build/gen/go/bufbuild/reflect/connectrpc/go v1.11.1-20230822193137-310c9c4845dd.1 // indirect
+	buf.build/gen/go/bufbuild/reflect/protocolbuffers/go v1.31.0-20230822193137-310c9c4845dd.1 // indirect
 	cel.dev/expr v0.25.2 // indirect
 	cloud.google.com/go v0.123.0 // indirect; indirect e
 	cloud.google.com/go/auth v0.20.0 // indirect
@@ -106,6 +110,7 @@ require (
 	cloud.google.com/go/longrunning v0.11.0 // indirect
 	cloud.google.com/go/monitoring v1.27.0 // indirect
 	cloud.google.com/go/run v1.19.0 // indirect
+	connectrpc.com/connect v1.11.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.33.0 // indirect
@@ -235,3 +240,5 @@ tool (
 
 // Use the local testx; consumers of the server ignore this replace (see .github/workflows/testx-bump.yml).
 replace go.temporal.io/testx => ./common/testx
+
+replace go.temporal.io/api => ../api-go/api_next

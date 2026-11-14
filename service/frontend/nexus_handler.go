@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/draft"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -367,6 +368,29 @@ type nexusHandler struct {
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
+	enabledDraftFeatureAPIs       dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	omitDraftFields               func(any, *draft.Selection) (bool, error)
+}
+
+func omitNexusDraftFields(omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, roots ...any) error {
+	if omit == nil {
+		omit = draft.Omit
+	}
+	for _, root := range roots {
+		if _, err := omit(root, selection); err != nil {
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		}
+	}
+	return nil
+}
+
+func newNexusDraftSelection(get dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string], namespaceName string) *draft.Selection {
+	return draft.NewSelection(func() []string {
+		if get == nil {
+			return nil
+		}
+		return get(namespaceName)
+	})
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -479,6 +503,10 @@ func (h *nexusHandler) StartOperation(
 		oc.logger.Warn("payload size exceeds error limit")
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
+	selection := newNexusDraftSelection(h.enabledDraftFeatureAPIs, oc.namespace.Name().String())
+	if err := omitNexusDraftFields(h.omitDraftFields, selection, request.Request); err != nil {
+		return nil, err
+	}
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
@@ -490,12 +518,44 @@ func (h *nexusHandler) StartOperation(
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
+	if err := omitNexusDispatchDraftFields(h.omitDraftFields, selection, response, true); err != nil {
+		return nil, err
+	}
 	result, handlerLinks, err := oc.handleStartOperationResponse(response, operation)
 	if err != nil {
 		return nil, err
 	}
 	nexus.AddHandlerLinks(ctx, handlerLinks...)
 	return result, nil
+}
+
+func omitNexusDispatchDraftFields(
+	omit func(any, *draft.Selection) (bool, error),
+	selection *draft.Selection,
+	response *matchingservice.DispatchNexusTaskResponse,
+	start bool,
+) error {
+	switch outcome := response.GetOutcome().(type) {
+	case *matchingservice.DispatchNexusTaskResponse_Failure:
+		return omitNexusDraftFields(omit, selection, outcome.Failure)
+	case *matchingservice.DispatchNexusTaskResponse_HandlerError: //nolint:staticcheck // Deprecated worker outcomes still require omission for backward compatibility.
+		return omitNexusDraftFields(omit, selection, outcome.HandlerError.GetFailure())
+	case *matchingservice.DispatchNexusTaskResponse_Response:
+		if err := omitNexusDraftFields(omit, selection, outcome.Response); err != nil || !start {
+			return err
+		}
+		//nolint:staticcheck // Deprecated worker outcomes still require omission for backward compatibility.
+		switch result := outcome.Response.GetStartOperation().GetVariant().(type) {
+		case *nexuspb.StartOperationResponse_OperationError:
+			return omitNexusDraftFields(omit, selection, result.OperationError.GetFailure())
+		case *nexuspb.StartOperationResponse_Failure:
+			return omitNexusDraftFields(omit, selection, result.Failure)
+		default:
+			return nil
+		}
+	default:
+		return nil
+	}
 }
 
 func parseLinks(links []*nexuspb.Link, logger log.Logger) []nexus.Link {
@@ -556,6 +616,7 @@ func (h *nexusHandler) forwardStartOperation(
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
+	nexus.AddHandlerLinks(ctx, resp.Links...)
 
 	if resp.Successful != nil {
 		return &nexus.HandlerStartOperationResultSync[any]{Value: resp.Successful.Reader}, nil
@@ -597,6 +658,10 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		}
 		return err
 	}
+	selection := newNexusDraftSelection(h.enabledDraftFeatureAPIs, oc.namespace.Name().String())
+	if err := omitNexusDraftFields(h.omitDraftFields, selection, request.Request); err != nil {
+		return err
+	}
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
@@ -608,6 +673,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
+	if err := omitNexusDispatchDraftFields(h.omitDraftFields, selection, response, false); err != nil {
+		return err
+	}
 	return oc.handleCancelOperationResponse(response, operation)
 }
 

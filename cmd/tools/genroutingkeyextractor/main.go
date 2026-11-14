@@ -9,18 +9,16 @@ import (
 	"strings"
 
 	protometapb "go.temporal.io/api/protometa/v1"
-	_ "go.temporal.io/api/workflowservice/v1" // trigger proto file registration
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/cmd/tools/codegen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 //go:embed template.tmpl
 var templateStr string
 
 const (
-	workflowServiceFile = "temporal/api/workflowservice/v1/service.proto"
 	resourceIDHeader    = "temporal-resource-id"
 	pollerGroupIDField  = "poller_group_id"
 	pollerGroupStrategy = "namespace.RoutingStrategyPollerGroup"
@@ -47,13 +45,10 @@ func main() {
 }
 
 func buildTemplateData() templateData {
-	fd, err := protoregistry.GlobalFiles.FindFileByPath(workflowServiceFile)
-	if err != nil {
-		codegen.Fatalf("finding %s: %v", workflowServiceFile, err)
-	}
+	fd := workflowservice.File_temporal_api_next_workflowservice_v1_service_proto
 
 	if fd.Services().Len() == 0 {
-		codegen.Fatalf("no services found in %s", workflowServiceFile)
+		codegen.Fatalf("no services found in %s", fd.Path())
 	}
 	svc := fd.Services().Get(0)
 
