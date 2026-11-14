@@ -120,7 +120,7 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				require.Equal(t, metrics.NamespaceUnknownTag().Value, recordings[0].Tags[metrics.NamespaceUnknownTag().Key])
 				require.NotEmpty(t, recordings[0].Tags[metrics.TaskTypeTagName])
 				require.NotEmpty(t, recordings[0].Tags[metrics.OperationTagName])
-				require.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
+				require.Equal(t, chasm.WorkflowArchetype, recordings[0].Tags[metrics.ArchetypeTagName])
 			}
 		})
 	}
