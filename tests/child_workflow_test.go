@@ -3,6 +3,8 @@ package tests
 import (
 	"fmt"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -1252,4 +1256,178 @@ func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked
 		}
 	}
 	s.True(foundTaskFailed, "WorkflowTaskFailed event should be recorded")
+}
+
+// TestStartChildWorkflow_CrossRunRequestIDDedup: the parent starts a child
+// workflow. The start creates child run C1, but its response is lost. Before
+// the parent retries the start with the same request ID, another start of the
+// child workflow ID terminates C1 and starts C2. With EnableCrossRunRequestIDDedup,
+// the retry returns C1 and the parent records C1 as started and then terminated.
+// Without it, the retry fails with WorkflowExecutionAlreadyStarted and the parent
+// never learns that C1 ran.
+func (s *ChildWorkflowSuite) TestStartChildWorkflow_CrossRunRequestIDDedup() {
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		// Expected parent history; %[1]s is the child workflow ID, %[2]s is the run ID the first attempt created.
+		parentHistory string
+		// Expected error of RecordChildExecutionCompleted for the superseded run.
+		closeNotFound bool
+	}{
+		{
+			name:    "enabled: retry dedups to the run the first attempt created",
+			enabled: true,
+			parentHistory: `
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 StartChildWorkflowExecutionInitiated
+  6 ChildWorkflowExecutionStarted {"WorkflowExecution":{"WorkflowId":"%[1]s","RunId":"%[2]s"}}
+  7 WorkflowTaskScheduled
+  8 ChildWorkflowExecutionTerminated {"WorkflowExecution":{"WorkflowId":"%[1]s","RunId":"%[2]s"}}`,
+		},
+		{
+			name:    "disabled: retry fails and the created run is orphaned",
+			enabled: false,
+			parentHistory: `
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 StartChildWorkflowExecutionInitiated
+  6 StartChildWorkflowExecutionFailed {"WorkflowId":"%[1]s","Cause":1}
+  7 WorkflowTaskScheduled`,
+			closeNotFound: true,
+		},
+	} {
+		s.Run(tc.name, func(s *ChildWorkflowSuite) {
+			env := testcore.NewEnv(s.T(),
+				testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, tc.enabled),
+				testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+			tv := env.Tv()
+			childID := tv.WithWorkflowIDNumber(1).WorkflowID()
+
+			parent, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:    uuid.NewString(),
+				Namespace:    env.Namespace().String(),
+				WorkflowId:   tv.WorkflowID(),
+				WorkflowType: tv.WorkflowType(),
+				TaskQueue:    tv.TaskQueue(),
+			})
+			s.NoError(err)
+
+			// Terminating C1 makes its close task notify the parent. If that notification arrives first,
+			// the parent records C1 as started and terminated whatever the flag is, and the start-child
+			// retry finds no pending child and does nothing. Hold the notification until the parent has
+			// recorded the retry's outcome.
+			var releaseChildClose atomic.Bool
+			childCloseHeld := make(chan struct{})
+			var childCloseHeldOnce sync.Once
+			env.InjectRequestFault(func(req any) error {
+				if _, ok := req.(*historyservice.RecordChildExecutionCompletedRequest); ok && !releaseChildClose.Load() {
+					childCloseHeldOnce.Do(func() { close(childCloseHeld) })
+					return serviceerror.NewUnavailable("hold child close notification")
+				}
+				return nil
+			})
+
+			type supersede struct {
+				firstRunID, currentRunID string
+				err                      error
+			}
+			supersededCh := make(chan supersede, 1)
+			childCloseErrCh := make(chan error, 1)
+			var firstChildStart atomic.Bool
+			env.InjectResponseFault(func(req, resp any, handlerErr error) error {
+				switch r := req.(type) {
+				case *historyservice.StartWorkflowExecutionRequest:
+					if r.GetParentExecutionInfo() == nil || handlerErr != nil || !firstChildStart.CompareAndSwap(false, true) {
+						return nil
+					}
+					// The child run is created. Supersede it with another start of the same workflow ID, then
+					// fail the response so the start-child transfer task retries with the same request ID.
+					startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+						RequestId:                uuid.NewString(),
+						Namespace:                env.Namespace().String(),
+						WorkflowId:               childID,
+						WorkflowType:             tv.WorkflowType(),
+						TaskQueue:                tv.TaskQueue(),
+						WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+					})
+					supersededCh <- supersede{
+						firstRunID:   resp.(*historyservice.StartWorkflowExecutionResponse).GetRunId(),
+						currentRunID: startResp.GetRunId(),
+						err:          err,
+					}
+					// Keep the start-child retry behind the superseded run's close notification.
+					if err == nil {
+						select {
+						case <-childCloseHeld:
+						case <-s.Context().Done():
+						}
+					}
+					return serviceerror.NewUnavailable("lost start child response")
+				case *historyservice.RecordChildExecutionCompletedRequest:
+					select {
+					case childCloseErrCh <- handlerErr:
+					default:
+					}
+				default:
+				}
+				return nil
+			})
+
+			_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Commands: []*commandpb.Command{{
+							CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+							Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+								StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+									WorkflowId:   childID,
+									WorkflowType: tv.WorkflowType(),
+									TaskQueue:    tv.TaskQueue(),
+								},
+							},
+						}},
+					}, nil
+				})
+			s.NoError(err)
+
+			superseded := s.Rcv(supersededCh)
+			s.NoError(superseded.err)
+			s.NotEqual(superseded.firstRunID, superseded.currentRunID)
+
+			parentExecution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: parent.RunId}
+			s.Await(func(s *ChildWorkflowSuite) {
+				events := env.GetHistory(env.Namespace().String(), parentExecution)
+				s.GreaterOrEqual(len(events), 6)
+				s.Contains([]enumspb.EventType{
+					enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+					enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+				}, events[5].GetEventType())
+			}, 30*time.Second, 200*time.Millisecond)
+
+			releaseChildClose.Store(true)
+			childCloseErr := s.Rcv(childCloseErrCh)
+			if tc.closeNotFound {
+				var notFound *serviceerror.NotFound
+				s.ErrorAs(childCloseErr, &notFound)
+			} else {
+				s.NoError(childCloseErr)
+			}
+
+			env.EqualHistoryEvents(fmt.Sprintf(tc.parentHistory, childID, superseded.firstRunID),
+				env.GetHistory(env.Namespace().String(), parentExecution))
+
+			desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{WorkflowId: childID},
+			})
+			s.NoError(err)
+			s.Equal(superseded.currentRunID, desc.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.GetWorkflowExecutionInfo().GetStatus())
+		})
+	}
 }
