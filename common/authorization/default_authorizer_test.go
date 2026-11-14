@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
@@ -61,6 +62,14 @@ var (
 	}
 	targetGetSystemInfo = CallTarget{
 		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo",
+		Namespace: "",
+	}
+	targetListNamespaces = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/ListNamespaces",
+		Namespace: "",
+	}
+	targetListClusters = CallTarget{
+		APIName:   "/temporal.api.operatorservice.v1.OperatorService/ListClusters",
 		Namespace: "",
 	}
 	targetStartWorkflow = CallTarget{
@@ -146,6 +155,22 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 		{"NamespaceReaderOnGetSystemInfo", claimsNamespaceReader, targetGetSystemInfo, DecisionAllow},
 		{"RoleNoneOnHealthCheck", claimsNone, targetGrpcHealthCheck, DecisionAllow},
 		{"NamespaceReaderOnHealthCheck", claimsNamespaceReader, targetGrpcHealthCheck, DecisionAllow},
+
+		// A reader on any individual namespace can reach cluster-level readonly APIs
+		// (ListNamespaces, GetSearchAttributes, GetClusterInfo) - purely namespace-scoped
+		// claims otherwise could never satisfy these, breaking the Web UI (#11639).
+		{"RoleNoneOnListNamespaces", claimsNone, targetListNamespaces, DecisionDeny},
+		{"NamespaceReaderOnListNamespaces", claimsNamespaceReader, targetListNamespaces, DecisionAllow},
+		{"NamespaceWriterOnListNamespaces", claimsNamespaceWriter, targetListNamespaces, DecisionAllow},
+		{"NamespaceAdminOnListNamespaces", claimsNamespaceAdmin, targetListNamespaces, DecisionAllow},
+		{"SystemReaderOnListNamespaces", claimsSystemReader, targetListNamespaces, DecisionAllow},
+
+		// The relaxation is scoped to readonly cluster APIs only - an admin-level
+		// cluster API (ListClusters) still requires a System-level claim; holding
+		// even Admin on an individual namespace does not grant it.
+		{"NamespaceAdminOnListClusters", claimsNamespaceAdmin, targetListClusters, DecisionDeny},
+		{"SystemReaderOnListClusters", claimsSystemReader, targetListClusters, DecisionDeny},
+		{"SystemAdminOnListClusters", claimsSystemAdmin, targetListClusters, DecisionAllow},
 	}
 
 	for _, tt := range testCases {
@@ -153,6 +178,33 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 		s.NoError(err)
 		s.Equal(tt.Decision, result.Decision, "Failed case: %v", tt.Name)
 	}
+}
+
+// TestNamespaceScopedAdminTokenCanListNamespaces reproduces #11639 end to end: a real
+// signed JWT carrying only a namespace-scoped "admin" permission (the shape the
+// "namespace:role" claim format itself describes, and what ui-server's own backend calls
+// need) is parsed by the real DefaultJWTClaimMapper and the resulting Claims are handed to
+// the real defaultAuthorizer - not hand-built Claims structs, the same two components a
+// live server wires together. Before the fix this denied ListNamespaces even though the
+// token holds admin on every namespace that exists.
+func TestNamespaceScopedAdminTokenCanListNamespaces(t *testing.T) {
+	tg := newTokenGenerator()
+	claimMapper := NewDefaultJWTClaimMapper(tg, &config.Authorization{}, log.NewNoopLogger())
+	authorizer := NewDefaultAuthorizer()
+
+	tokenString, err := tg.generateToken(RSA, testSubject, []string{"my-namespace:admin"}, errorTestOptionNoError)
+	require.NoError(t, err)
+
+	claims, err := claimMapper.GetClaims(&AuthInfo{AuthToken: AddBearer(tokenString)})
+	require.NoError(t, err)
+	require.Equal(t, RoleUndefined, claims.System, "token grants no system-level permission")
+	require.Equal(t, RoleAdmin, claims.Namespaces["my-namespace"])
+
+	result, err := authorizer.Authorize(context.TODO(), claims, &targetListNamespaces)
+	require.NoError(t, err)
+	require.Equal(t, DecisionAllow, result.Decision,
+		"a namespace admin should be able to list namespaces (#11639) - the Web UI's own "+
+			"backend calls depend on this working for any purely namespace-scoped token")
 }
 
 func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigNoop() {
