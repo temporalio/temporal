@@ -97,6 +97,27 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	s.NoError(err)
 }
 
+func TestDispatchKeepsNewestNotificationForSubscriber(t *testing.T) {
+	t.Parallel()
+
+	notifier := NewNotifier(
+		clock.NewRealTimeSource(),
+		metrics.NoopMetricsHandler,
+		func(namespace.ID, string) int32 { return 1 },
+	)
+	workflowKey := definition.NewWorkflowKey("namespace ID", "workflow ID", "run ID")
+	_, channel, err := notifier.WatchHistoryEvent(workflowKey)
+	require.NoError(t, err)
+
+	running := &Notification{ID: workflowKey, NextEventID: 15, WorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	closed := &Notification{ID: workflowKey, NextEventID: 17, WorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED}
+	// The subscriber has not received the first notification when the second one is dispatched.
+	notifier.dispatchHistoryEventNotification(running)
+	notifier.dispatchHistoryEventNotification(closed)
+
+	require.Equal(t, closed, <-channel)
+}
+
 func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
 	execution := &commonpb.WorkflowExecution{

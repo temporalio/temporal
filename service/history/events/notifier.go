@@ -188,12 +188,16 @@ func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notificati
 		subscribers := value.(map[string]chan *Notification)
 
 		for _, channel := range subscribers {
+			// A notification carries the full execution state, so it supersedes one the subscriber
+			// has not received yet. Replace that one rather than drop this one: the dropped
+			// notification can be the last one for the execution (e.g. its close), and a long poll
+			// waiting for it would only return when it expires.
 			select {
-			case channel <- event:
+			case <-channel:
 			default:
-				// in case the channel is already filled with message
-				// this should NOT happen, unless there is a bug or high load
 			}
+			// Never blocks: the channel has capacity 1 and is only sent to here, under the map lock.
+			channel <- event
 		}
 		return nil
 	})
