@@ -282,6 +282,21 @@ func TestHandleNexusCompletion(t *testing.T) {
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
 		})
 
+		t.Run("RejectsStaleOperationToken", func(t *testing.T) {
+			ctx := newCtx()
+			op := newStartedOp(t, ctx)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId:      op.GetRequestId(),
+				OperationToken: "stale-tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+			var notFound *serviceerror.NotFound
+			require.ErrorAs(t, err, &notFound)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.GetStatus())
+		})
+
 		t.Run("CompletionBeforeStart", func(t *testing.T) {
 			ctx := newCtx()
 			op := newScheduledTestOperation(t, ctx)
