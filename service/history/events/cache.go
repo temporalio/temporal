@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -61,7 +62,11 @@ func NewHostLevelEventsCache(
 	logger log.Logger,
 	disabled bool,
 ) Cache {
-	return newEventsCache(executionManager, handler, logger, config.EventsHostLevelCacheMaxSizeBytes(), config.EventsCacheTTL(), disabled)
+	return newEventsCache(executionManager, handler, logger,
+		config.EventsHostLevelCacheMaxSizeBytes(),
+		config.EventsCacheTTL(),
+		config.EventsCacheBackgroundEvict,
+		disabled)
 }
 
 func NewShardLevelEventsCache(
@@ -71,7 +76,11 @@ func NewShardLevelEventsCache(
 	logger log.Logger,
 	disabled bool,
 ) Cache {
-	return newEventsCache(executionManager, handler, logger, config.EventsShardLevelCacheMaxSizeBytes(), config.EventsCacheTTL(), disabled)
+	return newEventsCache(executionManager, handler, logger,
+		config.EventsShardLevelCacheMaxSizeBytes(),
+		config.EventsCacheTTL(),
+		config.EventsCacheBackgroundEvict,
+		disabled)
 }
 
 func newEventsCache(
@@ -80,9 +89,12 @@ func newEventsCache(
 	logger log.Logger,
 	maxSize int,
 	ttl time.Duration,
+	backgroundEvict func() dynamicconfig.CacheBackgroundEvictSettings,
 	disabled bool,
 ) *CacheImpl {
-	opts := &cache.Options{}
+	opts := &cache.Options{
+		BackgroundEvict: backgroundEvict,
+	}
 	opts.TTL = ttl
 
 	taggedMetricHandler := metricsHandler.WithTags(metrics.CacheTypeTag(metrics.EventsCacheTypeTagValue))
