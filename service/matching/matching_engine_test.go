@@ -826,6 +826,8 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
 			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
+			// The task left the backlog once: as a drop, not also as a poll_success.
+			s.Empty(c.Snapshot()[metrics.PollSuccessPerTaskQueueCounter.Name()], "poll_success for dropped task (%s)", tc.name)
 		})
 	}
 }
@@ -886,6 +888,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
 			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
+			// The task left the backlog once: as a drop, not also as a poll_success.
+			s.Empty(c.Snapshot()[metrics.PollSuccessPerTaskQueueCounter.Name()], "poll_success for dropped task (%s)", tc.name)
 		})
 	}
 }
