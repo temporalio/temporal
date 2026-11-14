@@ -76,7 +76,6 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
 
   feature-tests-go:
     needs: build-docker-image
@@ -85,7 +84,6 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
 
   feature-tests-go-chasm-scheduler:
     needs: build-docker-image
@@ -94,7 +92,6 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
       dynamic-config-values: |
         history.enableTransitionHistory:
           - value: true
@@ -110,7 +107,6 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
 
   feature-tests-java:
     needs: build-docker-image
@@ -119,7 +115,6 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
 
   feature-tests-dotnet:
     needs: build-docker-image
@@ -128,7 +123,6 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
 
   feature-tests-ruby:
     needs: build-docker-image
@@ -137,7 +131,6 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
 
   feature-tests-status:
     name: Tests Status
