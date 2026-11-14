@@ -331,11 +331,11 @@ type (
 		GetExternalPayloadCount() int64
 		AddExternalPayloadCount(count int64)
 
-		// AddTasks adds tasks to the mutable state.
-		// For scheduled tasks (any CategoryTypeScheduled — e.g. timer, archival), if time has been
-		// skipped (i.e. the virtual time of this mutable state is ahead of wall-clock time), the
-		// scheduled time of the task is adjusted to wall-clock time, as the dispatch queues run
-		// against wall-clock time.
+		// AddTasks adds tasks to the mutable state. For CategoryTypeScheduled tasks,
+		// it automatically converts visibility times from logical time to physical time
+		// by subtracting this execution's AccumulatedSkippedDuration, since dispatch
+		// queues use physical time.
+		// Callers must supply logical visibility times for scheduled tasks.
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
 		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
