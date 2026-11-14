@@ -26,8 +26,8 @@ import (
 
 // watchRunningStart decides, per buffered start, whether a completion callback was attached to
 // a still-running action or whether the action had already finished. A target that is gone
-// entirely is recorded TERMINATED; a target that closes mid-attach is retried so its actual
-// terminal status can be observed.
+// entirely is recorded TERMINATED; a target that closes mid-attach is re-resolved so its actual
+// terminal status can be observed. Chain following is covered by TestSchedulerCallbacksTask_FollowsExecutionChain.
 func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 	closeTime := timestamppb.New(time.Now().UTC())
 
@@ -46,7 +46,8 @@ func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 				c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					&historyservice.DescribeWorkflowExecutionResponse{
 						WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-							Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+							FirstRunId: "run-id",
+							Status:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 						},
 					}, nil)
 			},
@@ -62,7 +63,8 @@ func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 				c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					&historyservice.DescribeWorkflowExecutionResponse{
 						WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-							Status: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+							FirstRunId: "run-id",
+							Status:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
 						},
 					}, nil)
 			},
@@ -76,7 +78,7 @@ func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 			name: "target gone entirely synthesizes TERMINATED",
 			setupHistory: func(c *historyservicemock.MockHistoryServiceClient) {
 				c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-					nil, serviceerror.NewNotFound("execution not found"))
+					nil, serviceerror.NewNotFound("execution not found")).Times(2)
 			},
 			setupFrontend: func(c *workflowservicemock.MockWorkflowServiceClient) {},
 			wantReason:    reasonReattachNotFound,
@@ -88,8 +90,9 @@ func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 				c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					&historyservice.DescribeWorkflowExecutionResponse{
 						WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-							Status:    enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-							CloseTime: closeTime,
+							FirstRunId: "run-id",
+							Status:     enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+							CloseTime:  closeTime,
 						},
 					}, nil)
 			},
@@ -98,20 +101,50 @@ func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 			wantStatus:    enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		},
 		{
-			name: "closed mid-attach is retried",
+			name: "attach that keeps losing the race is bounded",
 			setupHistory: func(c *historyservicemock.MockHistoryServiceClient) {
 				c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					&historyservice.DescribeWorkflowExecutionResponse{
 						WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-							Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+							FirstRunId: "run-id",
+							Status:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 						},
-					}, nil)
+					}, nil).Times(maxReattachAttempts)
+			},
+			setupFrontend: func(c *workflowservicemock.MockWorkflowServiceClient) {
+				c.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+					nil, serviceerror.NewWorkflowExecutionAlreadyStarted("already started", "req-id", "run-id")).
+					Times(maxReattachAttempts)
+			},
+			wantErr: true,
+		},
+		{
+			name: "closed mid-attach is re-resolved to its terminal status",
+			setupHistory: func(c *historyservicemock.MockHistoryServiceClient) {
+				gomock.InOrder(
+					c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+						&historyservice.DescribeWorkflowExecutionResponse{
+							WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+								FirstRunId: "run-id",
+								Status:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+							},
+						}, nil),
+					c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+						&historyservice.DescribeWorkflowExecutionResponse{
+							WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+								FirstRunId: "run-id",
+								Status:     enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+								CloseTime:  closeTime,
+							},
+						}, nil),
+				)
 			},
 			setupFrontend: func(c *workflowservicemock.MockWorkflowServiceClient) {
 				c.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					nil, serviceerror.NewWorkflowExecutionAlreadyStarted("already started", "req-id", "run-id"))
 			},
-			wantErr: true,
+			wantReason: reasonReattachAlreadyClosed,
+			wantStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		},
 		{
 			name: "unexpected describe error is surfaced, not classified",
@@ -128,7 +161,8 @@ func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 				c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					&historyservice.DescribeWorkflowExecutionResponse{
 						WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-							Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+							FirstRunId: "run-id",
+							Status:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 						},
 					}, nil)
 			},
