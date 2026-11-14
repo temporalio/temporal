@@ -628,6 +628,9 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 			namespaceRecord2},
 		NextPageToken: nil,
 	}, nil)
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: namespaceRecord1.Namespace.Info.Id,
+	}).Return(nil, serviceerror.NewNamespaceNotFound(namespaceRecord1.Namespace.Info.Id))
 
 	// load namespaces
 	s.registry.Start()
