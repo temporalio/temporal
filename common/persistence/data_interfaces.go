@@ -466,7 +466,11 @@ type (
 	// Either max TaskID or FireTime is required depending on the
 	// task category type. Min TaskID or FireTime is optional.
 	RangeCompleteHistoryTasksRequest struct {
-		ShardID             int32
+		ShardID int32
+		// RangeID is the shard ownership epoch captured when the deletion boundary was decided.
+		// Persistence deletes only if the shard's current range ID still equals it. There is no
+		// unfenced fallback: zero is compared like any other value, and an acquired shard has
+		// a range ID of at least 1.
 		RangeID             int64
 		TaskCategory        tasks.Category
 		InclusiveMinTaskKey tasks.Key
@@ -505,6 +509,8 @@ type (
 
 	// RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
 	RangeDeleteReplicationTaskFromDLQRequest struct {
+		// Embedded for source compatibility. DLQ deletion does not use the ownership
+		// contract of RangeCompleteHistoryTasksRequest; RangeID is ignored.
 		RangeCompleteHistoryTasksRequest
 
 		SourceClusterName string

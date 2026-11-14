@@ -173,7 +173,7 @@ func (s *contextSuite) TestRangeCompleteHistoryTasks_BlocksForegroundWriteWhileI
 	wg.Go(func() {
 		ctx, cancel := queueStyleContext()
 		defer cancel()
-		cleanupErr <- s.mockShard.RangeCompleteHistoryTasks(ctx, cleanupReq)
+		cleanupErr <- RangeCompleteHistoryTasks(ctx, s.mockShard, cleanupReq)
 	})
 	await.Rcv(s.T(), cleanupEntered)
 	wg.Go(func() { fgErr <- s.foregroundUpdate(updateReq) })
@@ -217,7 +217,7 @@ func (s *contextSuite) TestRangeCompleteHistoryTasks_NotIssuedWhenShardStopping(
 
 	ctx, cancel := queueStyleContext()
 	defer cancel()
-	err := s.mockShard.RangeCompleteHistoryTasks(ctx, s.newRangeCompletionRequest())
+	err := RangeCompleteHistoryTasks(ctx, s.mockShard, s.newRangeCompletionRequest())
 	var ownershipLost *persistence.ShardOwnershipLostError
 	s.ErrorAs(err, &ownershipLost)
 	// No RangeCompleteHistoryTasks expectation: gomock fails on any persistence call.
@@ -232,7 +232,7 @@ func (s *contextSuite) TestRangeCompleteHistoryTasks_NotIssuedWhileShardAcquirin
 
 	ctx, cancel := queueStyleContext()
 	defer cancel()
-	s.ErrorIs(s.mockShard.RangeCompleteHistoryTasks(ctx, s.newRangeCompletionRequest()), ErrShardStatusUnknown)
+	s.ErrorIs(RangeCompleteHistoryTasks(ctx, s.mockShard, s.newRangeCompletionRequest()), ErrShardStatusUnknown)
 }
 
 // Waiting for admission ends when the shard lifecycle ends, without a persistence call or a leaked token.
@@ -251,7 +251,7 @@ func (s *contextSuite) TestRangeCompleteHistoryTasks_LifecycleCancelWhileWaiting
 	go func() {
 		ctx, cancel := queueStyleContext()
 		defer cancel()
-		done <- s.mockShard.RangeCompleteHistoryTasks(ctx, s.newRangeCompletionRequest())
+		done <- RangeCompleteHistoryTasks(ctx, s.mockShard, s.newRangeCompletionRequest())
 	}()
 	await.Rcv(s.T(), semaphore.acquiring)
 	s.mockShard.lifecycleCancel()
@@ -276,7 +276,7 @@ func (s *contextSuite) TestRangeCompleteHistoryTasks_DeadlineWhileWaiting() {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	s.ErrorIs(s.mockShard.RangeCompleteHistoryTasks(ctx, s.newRangeCompletionRequest()), context.DeadlineExceeded)
+	s.ErrorIs(RangeCompleteHistoryTasks(ctx, s.mockShard, s.newRangeCompletionRequest()), context.DeadlineExceeded)
 	s.GreaterOrEqual(time.Since(start), minContextTimeout-100*time.Millisecond)
 	s.Less(time.Since(start), minContextTimeout+2*time.Second)
 	s.mockShard.ioSemaphore.Release(1)
@@ -302,7 +302,7 @@ func (s *contextSuite) TestRangeCompleteHistoryTasks_PersistenceErrorReturnedWit
 			s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), req).Return(tc.err)
 			ctx, cancel := queueStyleContext()
 			defer cancel()
-			s.Same(tc.err, s.mockShard.RangeCompleteHistoryTasks(ctx, req))
+			s.Same(tc.err, RangeCompleteHistoryTasks(ctx, s.mockShard, req))
 			s.NoError(s.mockShard.errorByState())
 			s.True(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1), "semaphore token leaked")
 			s.mockShard.ioSemaphore.Release(1)
