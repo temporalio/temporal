@@ -315,7 +315,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.PollNexusTaskQueueRequest:
 		return nil
 	case *workflowservice.PollNexusTaskQueueResponse:
-		return wt.fromTaskToken(r.GetTaskToken())
+		return nil
 	case *workflowservice.PollWorkflowExecutionTimeSkippingRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
