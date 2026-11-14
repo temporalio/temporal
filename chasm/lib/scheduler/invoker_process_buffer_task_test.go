@@ -58,13 +58,9 @@ func TestProcessBufferTask_Validate_MigrationPending(t *testing.T) {
 	require.False(t, valid)
 }
 
-// A buffer of only deferred starts (Attempt=-1) must NOT start a workflow or
-// emit a ProcessBufferTask. Deferred starts wait on completion events, not on a
-// wall-clock deadline, so emitting an immediate ProcessBufferTask would
-// spin-loop on a no-op processBuffer call. (A visibility-update task may fire
-// because the buffered count changed; the assertions below are scoped to
-// exclude it.)
-func TestInvoker_AddTasks_AllDeferredEmitsNothing(t *testing.T) {
+// Deferred starts waiting on a running workflow must not emit processing or
+// execution tasks until that workflow completes.
+func TestInvoker_AddTasks_DeferredBehindRunningStartEmitsNothing(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
 	invoker := env.Scheduler.Invoker.Get(ctx)
@@ -72,6 +68,14 @@ func TestInvoker_AddTasks_AllDeferredEmitsNothing(t *testing.T) {
 	now := env.TimeSource.Now()
 	invoker.LastProcessedTime = timestamppb.New(now)
 	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		RequestId:   "running",
+		WorkflowId:  "wf-running",
+		RunId:       "running-run",
+		Attempt:     1,
+		ActualTime:  timestamppb.New(now),
+		StartTime:   timestamppb.New(now),
+		HasCallback: true,
+	}, {
 		RequestId:  "deferred",
 		WorkflowId: "wf-deferred",
 		Attempt:    -1,
@@ -83,9 +87,9 @@ func TestInvoker_AddTasks_AllDeferredEmitsNothing(t *testing.T) {
 	require.NoError(t, env.CloseTransaction())
 
 	require.False(t, env.HasTaskInCategory(&tasks.ChasmTask{}, tasks.CategoryTransfer, chasm.TaskScheduledTimeImmediate),
-		"all-deferred buffer must not emit an immediate workflow-start (execute) task")
+		"deferred work behind a running workflow must not emit an immediate workflow-start (execute) task")
 	require.False(t, env.HasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate),
-		"all-deferred buffer must not emit an immediate ProcessBufferTask")
+		"deferred work behind a running workflow must not emit an immediate ProcessBufferTask")
 }
 
 // After ProcessBuffer fires for a backed-off start whose BackoffTime has just

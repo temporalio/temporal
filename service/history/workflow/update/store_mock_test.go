@@ -18,7 +18,7 @@ import (
 var (
 	emptyUpdateStore = mockUpdateStore{
 		VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {},
-		GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+		GetCompletedUpdateFunc: func(context.Context, string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
 			return nil, serviceerror.NewNotFound("not found")
 		},
 	}
@@ -28,8 +28,7 @@ var (
 type mockUpdateStore struct {
 	update.UpdateStore
 	VisitUpdatesFunc               func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-	GetUpdateOutcomeFunc           func(context.Context, string) (*updatepb.Outcome, error)
-	GetUpdateAcceptedEventIDFunc   func(context.Context, string) (int64, error)
+	GetCompletedUpdateFunc         func(context.Context, string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error)
 	GetUpdateNexusContextFunc      func(string) *nexuspb.PropagatedSerializationContext
 	GetCurrentVersionFunc          func() int64
 	IsWorkflowExecutionRunningFunc func() bool
@@ -43,21 +42,11 @@ func (m mockUpdateStore) VisitUpdates(
 	}
 }
 
-func (m mockUpdateStore) GetUpdateOutcome(
+func (m mockUpdateStore) GetCompletedUpdate(
 	ctx context.Context,
 	updateID string,
-) (*updatepb.Outcome, error) {
-	return m.GetUpdateOutcomeFunc(ctx, updateID)
-}
-
-func (m mockUpdateStore) GetUpdateAcceptedEventID(
-	ctx context.Context,
-	updateID string,
-) (int64, error) {
-	if m.GetUpdateAcceptedEventIDFunc == nil {
-		return testAcceptedEventID, nil
-	}
-	return m.GetUpdateAcceptedEventIDFunc(ctx, updateID)
+) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
+	return m.GetCompletedUpdateFunc(ctx, updateID)
 }
 
 func (m mockUpdateStore) GetUpdateNexusSerializationContext(

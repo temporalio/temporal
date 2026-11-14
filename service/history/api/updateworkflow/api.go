@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
@@ -50,12 +51,14 @@ type Updater struct {
 	// Variables referencing mutable state data.
 	// WARNING: any references to mutable state data *have to* be copied
 	// to avoid data races when used outside the workflow lease.
-	taskQueue              *taskqueuepb.TaskQueue
-	priority               *commonpb.Priority
-	normalTaskQueueName    string
-	scheduledEventID       int64
-	scheduleToStartTimeout time.Duration
-	workflowTaskStamp      int32
+	taskQueue                                     *taskqueuepb.TaskQueue
+	priority                                      *commonpb.Priority
+	normalTaskQueueName                           string
+	scheduledEventID                              int64
+	scheduleToStartTimeout                        time.Duration
+	workflowTaskStamp                             int32
+	bufferedForWorkflowHeartbeatNotification      bool
+	firstBufferedForWorkflowHeartbeatNotification bool
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -106,8 +109,25 @@ func (u *Updater) Invoke(
 	if err != nil {
 		return nil, err
 	}
-
 	return u.OnSuccess(ctx)
+}
+
+func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string) {
+
+	if !u.bufferedForWorkflowHeartbeatNotification {
+		return
+	}
+
+	handler := u.shardCtx.GetMetricsHandler().WithTags(
+		metrics.OperationTag(metrics.WorkflowContextScope),
+		metrics.NamespaceTag(namespaceName),
+		metrics.EventTypeTag(workflow.WorkflowHeartbeatNotificationUpdateAdmittedMetricTag),
+	)
+	metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
+
+	if u.firstBufferedForWorkflowHeartbeatNotification {
+		metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
+	}
 }
 
 func (u *Updater) ApplyRequest(
@@ -182,13 +202,18 @@ func (u *Updater) applyRequest(
 	if err := validateCallbacks(ctx, updateReg, ms, updateRequest); err != nil {
 		return nil, err
 	}
-
+	startedWorkflowTask := ms.HasStartedWorkflowTask()
 	var (
 		alreadyExisted bool
 		err            error
 	)
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
+	}
+	if startedWorkflowTask && !alreadyExisted {
+		u.bufferedForWorkflowHeartbeatNotification = true
+		// TODO(whn): Refine the mildly relaxed accuracy without scanning all buffered event types.
+		u.firstBufferedForWorkflowHeartbeatNotification = (ms.NumBufferedEvents() == 0 && !updateReg.HasOutgoingMessages(false))
 	}
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
@@ -262,37 +287,53 @@ func (u *Updater) applyRequest(
 //	        - Yes: return nil as a hint to OnSuccess to link to the accepted event.
 //	        - No: link to the projected event.
 func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link {
+	requestID, ok := u.requestIDWithCompletionCallbacks()
+	if !ok {
+		return nil
+	}
+
+	if link := u.existingRequestIDLink(ms, u.wfKey, requestID); link != nil {
+		return link
+	}
+
+	updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()]
+	if updateInfo.GetCompletion() != nil {
+		// If the update is already completed, the request's callbacks are not
+		// recorded so the requestIDRef is not captured as it will not resolve.
+		return nil
+	}
+	return u.requestIDEventLink(u.wfKey, requestID, u.upd.EventLinkType(requestID))
+}
+
+func (u *Updater) requestIDWithCompletionCallbacks() (string, bool) {
 	request := u.req.GetRequest().GetRequest()
 	requestID := request.GetRequestId()
-	if requestID == "" {
+	return requestID, requestID != "" && len(request.GetCompletionCallbacks()) != 0
+}
+
+func (u *Updater) existingRequestIDLink(
+	ms historyi.MutableState,
+	wfKey definition.WorkflowKey,
+	requestID string,
+) *commonpb.Link {
+	requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]
+	if requestIDInfo == nil {
 		return nil
 	}
+	return u.requestIDEventLink(wfKey, requestID, requestIDInfo.GetEventType())
+}
 
-	// If there are no completion callbacks, dont set the
-	// requestIDRef link as it is not guaranteed to resolve.
-	if len(request.CompletionCallbacks) == 0 {
-		return nil
-	}
-
-	var eventType enumspb.EventType
-	if requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]; requestIDInfo != nil {
-		eventType = requestIDInfo.GetEventType()
-	} else {
-		updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[request.GetMeta().GetUpdateId()]
-		if updateInfo.GetCompletion() != nil {
-			// If the update is already completed, the request's callbacks are not
-			// recorded so the requestIDRef is not captured as it will not resolve.
-			return nil
-		}
-		eventType = u.upd.EventLinkType(requestID)
-	}
-
+func (u *Updater) requestIDEventLink(
+	wfKey definition.WorkflowKey,
+	requestID string,
+	eventType enumspb.EventType,
+) *commonpb.Link {
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
 				Namespace:  u.req.Request.Namespace,
-				WorkflowId: u.wfKey.WorkflowID,
-				RunId:      u.wfKey.RunID,
+				WorkflowId: wfKey.WorkflowID,
+				RunId:      wfKey.RunID,
 				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
 					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 						RequestId: requestID,
@@ -378,7 +419,12 @@ func (u *Updater) OnSuccess(
 	if err != nil {
 		return nil, err
 	}
-	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
+	namespaceName := ns.Name().String()
+
+	// WHN should be before the long polling
+	u.emitWorkflowHeartbeatNotificationMetrics(namespaceName)
+
+	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(namespaceName)
 	waitStage := u.req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
 	status, err := u.upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
@@ -423,12 +469,16 @@ func (u *Updater) responseLink(status *update.Status) *commonpb.Link {
 	}
 	// If there isnt a requestIdRef link- due to empty callbacks/requestID- link
 	// to the Accepted event itself.
+	return u.acceptedEventLink(u.wfKey, acceptedEventID)
+}
+
+func (u *Updater) acceptedEventLink(wfKey definition.WorkflowKey, acceptedEventID int64) *commonpb.Link {
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
 				Namespace:  u.req.Request.Namespace,
-				WorkflowId: u.wfKey.WorkflowID,
-				RunId:      u.wfKey.RunID,
+				WorkflowId: wfKey.WorkflowID,
+				RunId:      wfKey.RunID,
 				Reference: &commonpb.Link_WorkflowEvent_EventRef{
 					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 						EventId:   acceptedEventID,
@@ -488,4 +538,27 @@ func (u *Updater) CreateResponse(
 			PropagatedNexusSerializationContext: nexusSerializationContext,
 		},
 	}
+}
+
+// CreateCompletedResponse creates a completed Update response linked to its callback attachment or acceptance event when available.
+func (u *Updater) CreateCompletedResponse(
+	ms historyi.MutableState,
+	wfKey definition.WorkflowKey,
+	outcome *updatepb.Outcome,
+	acceptedEventID int64,
+	nexusSerializationContext *nexuspb.PropagatedSerializationContext,
+) *historyservice.UpdateWorkflowExecutionResponse {
+	resp := u.CreateResponse(wfKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nexusSerializationContext)
+	if requestID, ok := u.requestIDWithCompletionCallbacks(); ok {
+		if link := u.existingRequestIDLink(ms, wfKey, requestID); link != nil {
+			resp.Response.Link = link
+			return resp
+		}
+	}
+	// Update completion events written before accepted_event_id was introduced may not carry
+	// the accepted event ID. Return the completed result without an invalid event reference.
+	if acceptedEventID != common.EmptyEventID {
+		resp.Response.Link = u.acceptedEventLink(wfKey, acceptedEventID)
+	}
+	return resp
 }

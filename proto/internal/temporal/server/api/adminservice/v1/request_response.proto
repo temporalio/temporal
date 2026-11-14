@@ -70,6 +70,9 @@ message DescribeMutableStateResponse {
   // DatabaseMutableState is always available,
   // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
   temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 4;
+  // Storage usage on this cluster as of the time of the request: the stored counters plus the
+  // interval since this cluster's last state transition. Equals the stored counters once closed.
+  temporal.server.api.persistence.v1.StorageUsage current_storage_usage = 5;
 }
 
 // At least one of the parameters needs to be provided.
@@ -231,6 +234,11 @@ message ApplyNamespaceMutationRequest {
   // Original legacy NamespaceTaskAttributes encoding prepared by frontend.
   // Shadow requests compare this reference with the decoded namespace_task_payload.
   bytes shadow_legacy_task_payload = 9;
+
+  // Authoritative UPDATE delivered to a peer removed from the cluster list.
+  // The default admission policy retains this snapshot even when the namespace
+  // is absent, so its config version fences delayed older additions.
+  bool removed_peer = 10;
 }
 
 message ApplyNamespaceMutationResponse {
@@ -421,6 +429,9 @@ message RefreshWorkflowTasksRequest {
   string archetype = 4;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 5;
+  // If non-zero, refresh only once the shard owner's registry has the namespace REGISTERED at this
+  // ConfigVersion or later.
+  int64 min_namespace_config_version = 6;
 }
 
 message RefreshWorkflowTasksResponse {}

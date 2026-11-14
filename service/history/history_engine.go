@@ -14,6 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -106,6 +107,7 @@ import (
 type (
 	engineOptions struct {
 		workflowResendScheduler workflowresend.Scheduler
+		destinationThrottled    chasmnexus.DestinationThrottledFn
 	}
 
 	// EngineOption adds optional history engine dependencies without adding required parameters.
@@ -159,6 +161,7 @@ type (
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		destinationThrottled       chasmnexus.DestinationThrottledFn
 		testHooks                  testhooks.TestHooks
 	}
 )
@@ -167,6 +170,13 @@ type (
 func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOption {
 	return func(options *engineOptions) {
 		options.workflowResendScheduler = scheduler
+	}
+}
+
+// WithDestinationThrottled reports caller RPS throttling in Describe responses.
+func WithDestinationThrottled(fn chasmnexus.DestinationThrottledFn) EngineOption {
+	return func(options *engineOptions) {
+		options.destinationThrottled = fn
 	}
 }
 
@@ -262,6 +272,7 @@ func NewEngineWithShardContext(
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
+		destinationThrottled:       engineOptions.destinationThrottled,
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
 		versionCache:               versionCache,
@@ -566,6 +577,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		e.workflowConsistencyChecker,
 		e.persistenceVisibilityMgr,
 		e.outboundQueueCBPool,
+		e.destinationThrottled,
 	)
 }
 

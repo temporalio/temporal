@@ -68,6 +68,7 @@ const (
 	queryTypeTag                                   = "query_type"
 	namespaceAllValue                              = "all"
 	clientName                                     = "client_name"
+	eventType                                      = "event_type"
 	isInternal                                     = "is_internal"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
@@ -229,6 +230,22 @@ func WorkerVersioningVersionTag(featureVersion string) Tag {
 	return Tag{Key: workerVersioningVersion, Value: featureVersion}
 }
 
+// WorkerDeploymentLimitType identifies the limit that rejected a worker deployment request.
+type WorkerDeploymentLimitType string
+
+const (
+	workerDeploymentLimitTypeTagName = "limit_type"
+
+	WorkerDeploymentLimitTaskQueuesPerVersion    WorkerDeploymentLimitType = "task_queues"
+	WorkerDeploymentLimitVersionsPerDeployment   WorkerDeploymentLimitType = "versions"
+	WorkerDeploymentLimitVersionsPerTaskQueue    WorkerDeploymentLimitType = "versions_per_task_queue"
+	WorkerDeploymentLimitDeploymentsPerNamespace WorkerDeploymentLimitType = "deployments"
+)
+
+func WorkerDeploymentLimitTypeTag(limitType WorkerDeploymentLimitType) Tag {
+	return Tag{Key: workerDeploymentLimitTypeTagName, Value: string(limitType)}
+}
+
 func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {
 	if !versionBreakdown {
 		deploymentName = ""
@@ -265,6 +282,14 @@ func CommandTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: commandType, Value: value}
+}
+
+// EventTypeTag returns a new event type tag.
+func EventTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: eventType, Value: value}
 }
 
 // Returns a new service role tag.

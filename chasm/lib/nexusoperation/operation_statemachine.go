@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -234,7 +235,16 @@ var TransitionFailed = chasm.NewTransition(
 		}
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated failures.
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
-		o.emitOnFailedMetrics(ctx, closeTime)
+
+		var reason metrics.ReasonString
+		if fromAttempt {
+			reason = OperationFailedReason(event.Failure)
+		} else {
+			// Use FailedReasonOperationError: the request was accepted, but the operation failed.
+			reason = FailedReasonOperationError
+		}
+		o.emitOnFailedMetrics(ctx, closeTime, reason)
+
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
 	},
 )

@@ -309,14 +309,15 @@ func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
 		}
 	}
 }
+
 func (m *StreamReceiverMonitorImpl) monitorStreamStatus() {
 	var panicErr error
 	defer func() {
-		log.CapturePanic(m.Logger, &panicErr)
 		if panicErr != nil {
 			metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
 		}
 	}()
+	defer log.CapturePanic(m.Logger, &panicErr) // must be deferred directly for recover() to work
 
 	if m.shutdownOnce.IsShutdown() {
 		return
