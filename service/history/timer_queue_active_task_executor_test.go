@@ -2351,11 +2351,12 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 func (s *timerQueueActiveTaskExecutorSuite) clearMutableStateFromCache(
 	workflowKey definition.WorkflowKey,
 ) {
-	wcache.ClearMutableState(s.workflowCache, wcache.Key{
+	err := wcache.ClearMutableState(s.workflowCache, wcache.Key{
 		WorkflowKey: workflowKey,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	})
+	s.NoError(err)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
