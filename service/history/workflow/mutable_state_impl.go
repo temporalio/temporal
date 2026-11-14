@@ -7954,25 +7954,6 @@ func (ms *MutableStateImpl) closeTransaction(
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
 	// events, and therefore change the dirty state.
 	isStateDirty := ms.isStateDirty()
-	var regenTimerTasksForWorkflowTimeSkipping bool
-	if isStateDirty {
-		regenTimerTasksForWorkflowTimeSkipping = ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
-	}
-
-	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
-	// the latter might fail the workflow task and buffered events must be flushed afterwards.
-	// We need to save the value of ms.isStateDirty() before calling closeTransactionPrepareEvents
-	// because flushing the buffered events might change the dirty state.
-	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
-	if err != nil {
-		return closeTransactionResult{}, err
-	}
-
-	// Only stamp on the active cluster. Standby (passive) replays events that
-	// were already stamped by the active side, and we must not overwrite those principals.
-	if transactionPolicy == historyi.TransactionPolicyActive {
-		ms.closeTransactionStampPrincipal(ctx, workflowEventsSeq, bufferEvents)
-	}
 
 	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
 		return closeTransactionResult{}, err
@@ -7992,6 +7973,26 @@ func (ms *MutableStateImpl) closeTransaction(
 		newSize := len(nodePath) + node.Size()
 		ms.approximateSize += newSize - ms.chasmNodeSizes[nodePath]
 		ms.chasmNodeSizes[nodePath] = newSize
+	}
+
+	var regenTimerTasksForWorkflowTimeSkipping bool
+	if isStateDirty {
+		regenTimerTasksForWorkflowTimeSkipping = ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
+	}
+
+	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
+	// the latter might fail the workflow task and buffered events must be flushed afterwards.
+	// We need to save the value of ms.isStateDirty() before calling closeTransactionPrepareEvents
+	// because flushing the buffered events might change the dirty state.
+	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	if err != nil {
+		return closeTransactionResult{}, err
+	}
+
+	// Only stamp on the active cluster. Standby (passive) replays events that
+	// were already stamped by the active side, and we must not overwrite those principals.
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		ms.closeTransactionStampPrincipal(ctx, workflowEventsSeq, bufferEvents)
 	}
 
 	// Enforce the CHASM request-ID limit before the executionState blob is captured into the
