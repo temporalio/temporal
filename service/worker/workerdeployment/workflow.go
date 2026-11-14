@@ -615,7 +615,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	computeConfig := args.GetComputeConfig()
 	var computeConfigSummary *computepb.ComputeConfigSummary
 	if computeConfig != nil {
-		updateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+		updateCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 		err = workflow.ExecuteActivity(updateCtx, d.a.UpdateWorkerControllerInstanceFromDeployment, &deploymentspb.UpdateWorkerControllerInstanceInput{
 			Version:             worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
 			Identity:            args.GetIdentity(),
@@ -630,7 +630,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	}
 
 	// Start the version workflow via activity.
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentVersionWorkflow, &deploymentspb.StartWorkerDeploymentVersionRequest{
 		DeploymentName: versionObj.DeploymentName,
 		BuildId:        versionObj.BuildId,
@@ -640,7 +640,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	}).Get(ctx, nil)
 	if err != nil {
 		if computeConfig != nil {
-			deleteCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+			deleteCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 			deleteErr := workflow.ExecuteActivity(deleteCtx, d.a.DeleteWorkerControllerInstanceFromDeployment, &deploymentspb.DeleteWorkerControllerInstanceInput{
 				Version:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
 				Identity: args.GetIdentity(),
@@ -745,7 +745,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	d.invalidateTaskQueueFamilySummaryBelowLimit(version, args.GetMaxTaskQueues())
 
 	// Register task-queue worker in version workflow.
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.RegisterWorkerInVersion, &deploymentspb.RegisterWorkerInVersionArgs{
 		TaskQueueName: args.TaskQueueName,
 		TaskQueueType: args.TaskQueueType,
@@ -1263,7 +1263,7 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 
 func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
 	// ask version to delete itself
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
 		Identity:         args.Identity,
@@ -1688,7 +1688,7 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 	} else {
 		reqID = d.newUUID(ctx)
 	}
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &deploymentspb.SyncVersionStateActivityArgs{
 		DeploymentName: d.DeploymentName,
@@ -1747,7 +1747,7 @@ func (d *WorkflowRunner) signalDemoteVersion(ctx workflow.Context, version strin
 
 // syncUnversionedRamp should not be called in async mode
 func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) error {
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 
 	// DescribeVersion activity to get all the task queues in the current version, or the ramping version if current is nil
 	version := d.State.RoutingConfig.CurrentVersion //nolint:staticcheck // SA1019: worker versioning v0.31
@@ -1837,7 +1837,7 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 }
 
 func (d *WorkflowRunner) isVersionMissingTaskQueues(ctx workflow.Context, prevCurrentVersion string, newCurrentVersion string) (bool, error) {
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	var res deploymentspb.IsVersionMissingTaskQueuesResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.IsVersionMissingTaskQueues, &deploymentspb.IsVersionMissingTaskQueuesArgs{
 		PrevCurrentVersion: prevCurrentVersion,
@@ -1847,7 +1847,7 @@ func (d *WorkflowRunner) isVersionMissingTaskQueues(ctx workflow.Context, prevCu
 }
 
 func (d *WorkflowRunner) startVersion(ctx workflow.Context, args *deploymentspb.StartWorkerDeploymentVersionRequest) error {
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	return workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentVersionWorkflow, args).Get(ctx, nil)
 }
 
