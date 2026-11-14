@@ -135,6 +135,13 @@ func (g *GeneratorTaskHandler) Execute(
 		metricsHandler.Counter(metrics.ScheduleGeneratorPausedTicks.Name()).Record(1)
 	}
 
+	if result.More {
+		// NextWakeupTime is the first unprocessed match, in the past, so rearmTasks
+		// schedules the follow-up task right after this one.
+		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
+			fmt.Sprintf("catch-up continues after %s", result.LastActionTime.Format(time.RFC3339)))
+	}
+
 	// Enqueue newly-generated buffered starts.
 	if len(result.BufferedStarts) > 0 {
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
