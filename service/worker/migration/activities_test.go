@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -719,8 +720,26 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 	}
 }
 
+func (s *activitiesSuite) captureForceReplicationMetrics() *metricstest.Capture {
+	handler := metricstest.NewCaptureHandler()
+	s.a.forceReplicationMetricsHandler = handler
+	capture := handler.StartCapture()
+	s.T().Cleanup(func() { handler.StopCapture(capture) })
+	return capture
+}
+
+func (s *activitiesSuite) requireMigrationNamespaceTag(capture *metricstest.Capture, metricName string) {
+	recordings := capture.SnapshotMetric(metricName)
+	s.Len(recordings, 1, metricName)
+	for _, r := range recordings {
+		s.Equal(mockedNamespace, r.Tags["migration_namespace"], metricName)
+		s.NotContains(r.Tags, "namespace", metricName)
+	}
+}
+
 func (s *activitiesSuite) TestGenerateReplicationTasks_Success() {
 	env, iceptor := s.initEnv()
+	capture := s.captureForceReplicationMetrics()
 
 	request := generateReplicationTasksRequest{
 		NamespaceID:      mockedNamespaceID,
@@ -748,10 +767,16 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Success() {
 	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	s.Equal(lastIdx, lastHeartBeat)
+
+	s.requireMigrationNamespaceTag(capture, metrics.GenerateReplicationTasksLatency.Name())
+	s.requireMigrationNamespaceTag(capture, metrics.MigrationActivityExecutionLatency.Name())
+	s.requireMigrationNamespaceTag(capture, metrics.MigrationActivitySucceedEndToEndLatency.Name())
+	s.Empty(capture.SnapshotMetric(metrics.MigrationActivityExecutionFailed.Name()))
 }
 
 func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	env, iceptor := s.initEnv()
+	capture := s.captureForceReplicationMetrics()
 
 	request := generateReplicationTasksRequest{
 		NamespaceID:      mockedNamespaceID,
@@ -786,6 +811,10 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	// Only the generation of 1st execution suceeded.
 	s.Equal(0, lastHeartBeat)
+
+	s.requireMigrationNamespaceTag(capture, metrics.MigrationActivityExecutionLatency.Name())
+	s.requireMigrationNamespaceTag(capture, metrics.MigrationActivityExecutionFailed.Name())
+	s.Empty(capture.SnapshotMetric(metrics.MigrationActivitySucceedEndToEndLatency.Name()))
 }
 
 func (s *activitiesSuite) TestGenerateReplicationTasks_Success_ViaFrontend() {
