@@ -2,9 +2,11 @@ package cassandra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -61,25 +63,13 @@ func (d *ShardStore) GetOrCreateShard(
 	ctx context.Context,
 	request *p.InternalGetOrCreateShardRequest,
 ) (*p.InternalGetOrCreateShardResponse, error) {
-	query := d.Session.Query(templateGetShardQuery,
-		request.ShardID,
-		rowTypeShard,
-		rowTypeShardNamespaceID,
-		rowTypeShardWorkflowID,
-		rowTypeShardRunID,
-		defaultVisibilityTimestamp,
-		rowTypeShardTaskID,
-	).WithContext(ctx)
-
-	var data []byte
-	var encoding string
-	err := query.Scan(&data, &encoding)
+	resp, err := d.GetShard(ctx, &p.GetShardRequest{ShardID: request.ShardID})
 	if err == nil {
 		return &p.InternalGetOrCreateShardResponse{
-			ShardInfo: p.NewDataBlob(data, encoding),
+			ShardInfo: resp.ShardInfo,
 		}, nil
-	} else if !gocql.IsNotFoundError(err) || request.CreateShardInfo == nil {
-		return nil, gocql.ConvertError("GetOrCreateShard", err)
+	} else if _, isNotFound := errors.AsType[*serviceerror.NotFound](err); !isNotFound {
+		return nil, err
 	}
 
 	// shard was not found and we should create it
@@ -88,7 +78,7 @@ func (d *ShardStore) GetOrCreateShard(
 		return nil, err
 	}
 
-	query = d.Session.Query(templateCreateShardQuery,
+	query := d.Session.Query(templateCreateShardQuery,
 		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
@@ -107,12 +97,41 @@ func (d *ShardStore) GetOrCreateShard(
 		return nil, gocql.ConvertError("GetOrCreateShard", err)
 	}
 	if !applied {
-		// conflict, try again
-		request.CreateShardInfo = nil // prevent loop
-		return d.GetOrCreateShard(ctx, request)
+		// conflict, return the shard created concurrently
+		resp, err := d.GetShard(ctx, &p.GetShardRequest{ShardID: request.ShardID})
+		if err != nil {
+			return nil, err
+		}
+		return &p.InternalGetOrCreateShardResponse{
+			ShardInfo: resp.ShardInfo,
+		}, nil
 	}
 	return &p.InternalGetOrCreateShardResponse{
 		ShardInfo: shardInfo,
+	}, nil
+}
+
+func (d *ShardStore) GetShard(
+	ctx context.Context,
+	request *p.GetShardRequest,
+) (*p.InternalGetShardResponse, error) {
+	query := d.Session.Query(templateGetShardQuery,
+		request.ShardID,
+		rowTypeShard,
+		rowTypeShardNamespaceID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+	).WithContext(ctx)
+
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, gocql.ConvertError("GetShard", err)
+	}
+	return &p.InternalGetShardResponse{
+		ShardInfo: p.NewDataBlob(data, encoding),
 	}, nil
 }
 
