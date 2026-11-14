@@ -1,0 +1,8 @@
+{
+    "CurrVersion": "1.9",
+    "MinCompatibleVersion": "1.0",
+    "Description": "add history tasks table",
+    "SchemaUpdateCqlFiles": [
+        "history_tasks_table.sql"
+    ]
+}

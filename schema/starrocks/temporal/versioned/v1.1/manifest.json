@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.1",
+  "MinCompatibleVersion": "1.0",
+  "Description": "schema update for cluster metadata",
+  "SchemaUpdateCqlFiles": [
+    "cluster_metadata.sql"
+  ]
+}
