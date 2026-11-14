@@ -30,7 +30,9 @@ const (
 
 type BufferedStart struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Nominal (pre-jitter) and Actual (post-jitter) time of action
+	// Nominal (pre-jitter) and Actual (post-jitter) time of action. NominalTime
+	// may be unset for a V1-migrated action after it leaves the V1 buffer,
+	// because V1 RecentActions and RunningWorkflows do not retain it.
 	NominalTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=nominal_time,json=nominalTime,proto3" json:"nominal_time,omitempty"`
 	ActualTime  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=actual_time,json=actualTime,proto3" json:"actual_time,omitempty"`
 	// Desired time is usually nil, which should be interpreted as == actual time, but for starts

@@ -13,6 +13,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -77,7 +78,10 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 		},
 	}
 	searchAttrs := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}}
-	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}}
+	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{
+		"Memo":                    {Data: []byte("memo")},
+		legacyScheduleInfoMemoKey: {Data: []byte("schedule-info")},
+	}}
 
 	req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
 
@@ -120,6 +124,9 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 			require.Equal(t, "wf-2", start.WorkflowId)
 			require.Equal(t, "run-2", start.RunId)
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.Completed.Status)
+			require.Nil(t, start.NominalTime)
+			require.Equal(t, now.Add(-time.Hour), start.ActualTime.AsTime())
+			require.Equal(t, now.Add(-time.Millisecond), start.StartTime.AsTime())
 		default:
 			t.Fatalf("unexpected buffered start state: RunId=%q, Completed=%v", start.RunId, start.Completed)
 		}
@@ -143,7 +150,8 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 
 	// Search attributes and memo: user-defined SAs are preserved as-is.
 	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
-	require.Equal(t, memo.GetFields(), migrationState.Memo)
+	require.Equal(t, map[string]*commonpb.Payload{"Memo": memo.GetFields()["Memo"]}, migrationState.Memo)
+	require.Contains(t, memo.GetFields(), legacyScheduleInfoMemoKey, "source memo must not be mutated")
 }
 
 func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {
@@ -468,6 +476,58 @@ func TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder(t *testing
 	require.True(t, args.State.BufferedStarts[1].GetActualTime().AsTime().Equal(now.Add(-time.Hour)))
 }
 
+func TestLastCompletionResultSelectsFirstPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		legacy *commonpb.Payloads
+	}{
+		{name: "nil"},
+		{name: "empty", legacy: &commonpb.Payloads{}},
+		{name: "one", legacy: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("one")}}}},
+		{name: "multiple", legacy: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("first")}, {Data: []byte("discarded")}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v2 := convertLastCompletionLegacyToCHASM(tc.legacy, nil)
+			v1, failure := convertLastCompletionCHASMToLegacy(v2)
+			require.Nil(t, failure)
+			if len(tc.legacy.GetPayloads()) == 0 {
+				require.Nil(t, v1)
+				return
+			}
+			first := tc.legacy.GetPayloads()[0]
+			protorequire.ProtoEqual(t, first, v2.Success)
+			protorequire.ProtoSliceEqual(t, []*commonpb.Payload{first}, v1.GetPayloads())
+			require.NotSame(t, first, v1.GetPayloads()[0])
+		})
+	}
+}
+
+func TestConvertRunningWorkflowsToBufferedStarts_UsesRecentActionTimes(t *testing.T) {
+	migrationTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	scheduleTime := timestamppb.New(migrationTime.Add(-time.Minute))
+	startTime := timestamppb.New(migrationTime.Add(-30 * time.Second))
+	starts := convertRunningWorkflowsToBufferedStarts(
+		[]*commonpb.WorkflowExecution{
+			{WorkflowId: "matched", RunId: "matched-run"},
+			{WorkflowId: "unmatched", RunId: "unmatched-run"},
+		},
+		[]*schedulepb.ScheduleActionResult{{
+			ScheduleTime:        scheduleTime,
+			ActualTime:          startTime,
+			StartWorkflowResult: &commonpb.WorkflowExecution{WorkflowId: "matched", RunId: "matched-run"},
+		}},
+		"namespace-id", "schedule-id", 1, migrationTime,
+	)
+
+	require.Len(t, starts, 2)
+	require.Nil(t, starts[0].NominalTime)
+	require.Equal(t, scheduleTime, starts[0].ActualTime)
+	require.Equal(t, startTime, starts[0].StartTime)
+	require.Nil(t, starts[1].NominalTime)
+	require.Equal(t, migrationTime, starts[1].ActualTime.AsTime())
+	require.Equal(t, migrationTime, starts[1].StartTime.AsTime())
+}
+
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
 	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
 	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1
@@ -628,7 +688,7 @@ func TestConvertRunningWorkflowsToBufferedStarts_UniqueRequestIDs(t *testing.T) 
 	}
 
 	starts := convertRunningWorkflowsToBufferedStarts(
-		running, "ns-id", "sched-id", 1, now,
+		running, nil, "ns-id", "sched-id", 1, now,
 	)
 	require.Len(t, starts, 3)
 
