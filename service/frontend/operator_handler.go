@@ -382,7 +382,12 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 	request *operatorservice.RemoveSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	indexName := h.visibilityMgr.GetIndexName()
+	// Must be the index of the manager we were handed, not the handler's. Under dual
+	// visibility RemoveSearchAttributes loops over primary and secondary, and reading
+	// the handler's index name resolves to the primary both times — so the secondary
+	// keeps the attribute, the call still reports success, and it reappears the moment
+	// the secondary is promoted. See AddSearchAttributes, which uses visManager.
+	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -418,7 +423,8 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 	request *operatorservice.RemoveSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	indexName := h.visibilityMgr.GetIndexName()
+	// See removeSearchAttributesElasticsearch: the index must come from visManager.
+	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
