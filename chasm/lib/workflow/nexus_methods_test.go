@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -101,4 +103,29 @@ func TestBuildPendingNexusOperationInfos_CircuitBreaker(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestBuildPendingNexusOperationInfosCallerRPSThrottled(t *testing.T) {
+	t.Parallel()
+	tcx := newTestContext(t, defaultConfig)
+	_, key := scheduleOperation(t, tcx)
+	op := tcx.wf.Operations[key].Get(tcx.chasmCtx)
+	op.Cancellation = chasm.NewComponentField(tcx.chasmCtx, &nexusoperation.Cancellation{
+		CancellationState: &nexusoperationpb.CancellationState{Status: nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
+	})
+	tcx.chasmCtx.GoCtx = context.WithValue(t.Context(), nexusoperation.OperationContextKey, &nexusoperation.OperationContext{
+		DestinationBlocked: func(string, string) bool { return false },
+		DestinationThrottled: func(ns namespace.Name, destination string) bool {
+			require.Equal(t, tests.GlobalNamespaceEntry.Name(), ns)
+			require.Equal(t, op.Endpoint, destination)
+			return true
+		},
+	})
+	infos, err := tcx.wf.BuildPendingNexusOperationInfos(tcx.chasmCtx)
+	require.NoError(t, err)
+	require.Len(t, infos, 1)
+	require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED, infos[0].State)
+	require.Equal(t, "Requests from this namespace to the endpoint are being rate limited.", infos[0].BlockedReason)
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED, infos[0].CancellationInfo.State)
+	require.Equal(t, "Requests from this namespace to the endpoint are being rate limited.", infos[0].CancellationInfo.BlockedReason)
 }
