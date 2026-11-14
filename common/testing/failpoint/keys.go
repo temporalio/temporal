@@ -14,6 +14,20 @@ type Key struct {
 	namespaceID namespace.ID
 }
 
+// Failpoints in server code. Each key documents where it fires and what tests use it for.
+var (
+	// MatchingForwardTask fires before matching forwards a workflow, activity, query or Nexus task
+	// to the parent partition. Tests use Pause to make forwarding latency observable.
+	MatchingForwardTask = NewKey("matching.forwardTask")
+	// UpdateWithStartBetweenLockAndStart fires after Update-with-Start released the workflow lock
+	// and before it starts the workflow. Tests use Call to start a conflicting workflow in this
+	// window.
+	UpdateWithStartBetweenLockAndStart = NewKey("history.updateWithStart.betweenLockAndStart")
+	// UpdateWithStartClosingWorkflowRetry fires before Update-with-Start retries after its update
+	// was aborted by a closing workflow. Tests use Call to start a new workflow before the retry.
+	UpdateWithStartClosingWorkflowRetry = NewKey("history.updateWithStart.closingWorkflowRetry")
+)
+
 var (
 	keyNamesMu sync.Mutex
 	keyNames   = map[string]struct{}{}
