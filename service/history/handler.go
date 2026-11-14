@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
 )
@@ -99,6 +100,7 @@ type (
 		archivalMetadata             archiver.ArchivalMetadata
 		hostInfoProvider             membership.HostInfoProvider
 		controller                   shard.Controller
+		workflowCache                wcache.Cache
 		tracer                       trace.Tracer
 		taskQueueManager             persistence.HistoryTaskQueueManager
 		taskCategoryRegistry         tasks.TaskCategoryRegistry
@@ -137,6 +139,7 @@ type (
 		ArchivalMetadata             archiver.ArchivalMetadata
 		HostInfoProvider             membership.HostInfoProvider
 		ShardController              shard.Controller
+		WorkflowCache                wcache.Cache
 		EventNotifier                events.Notifier
 		TracerProvider               trace.TracerProvider
 		TaskQueueManager             persistence.HistoryTaskQueueManager
@@ -2039,11 +2042,10 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	shardID := common.WorkflowIDToHistoryShard(
-		namespaceID.String(),
-		request.Request.Execution.WorkflowId,
-		h.config.NumberOfShards,
-	)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.Request.Execution.WorkflowId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
 
 	workflowExecution := request.GetRequest().GetExecution()
 	h.logger.Info("ForceDeleteWorkflowExecution requested",
@@ -2054,7 +2056,8 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	return forcedeleteworkflowexecution.Invoke(
 		ctx,
 		request,
-		shardID,
+		shardContext,
+		h.workflowCache,
 		h.chasmRegistry,
 		h.persistenceExecutionManager,
 		h.persistenceVisibilityManager,

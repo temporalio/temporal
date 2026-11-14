@@ -241,6 +241,7 @@ func HandlerProvider(args NewHandlerArgs, lc fx.Lifecycle) (*Handler, error) {
 		archivalMetadata:             args.ArchivalMetadata,
 		hostInfoProvider:             args.HostInfoProvider,
 		controller:                   args.ShardController,
+		workflowCache:                args.WorkflowCache,
 		eventNotifier:                args.EventNotifier,
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
 		taskQueueManager:             args.TaskQueueManager,

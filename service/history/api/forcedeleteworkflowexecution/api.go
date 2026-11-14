@@ -10,23 +10,28 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 func Invoke(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
-	shardID int32,
+	shardContext historyi.ShardContext,
+	workflowCache wcache.Cache,
 	chasmRegistry *chasm.Registry,
 	persistenceExecutionMgr persistence.ExecutionManager,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 ) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retError error) {
+	shardID := shardContext.GetShardID()
 	req := request.Request
 	execution := req.Execution
 
@@ -53,6 +58,25 @@ func Invoke(
 		}
 		execution.RunId = resp.RunID
 	}
+
+	// Readers such as replication and DescribeMutableState use the cached mutable state without
+	// reading the database, so a copy cached before the delete would make the deleted execution
+	// look present. Hold the lock so nothing caches it during the delete, then drop the cached copy.
+	wfContext, release, err := workflowCache.GetOrCreateChasmExecution(
+		ctx,
+		shardContext,
+		namespace.ID(request.NamespaceId),
+		execution,
+		archetypeID,
+		locks.PriorityHigh,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		wfContext.Clear()
+		release(retError)
+	}()
 
 	var warnings []string
 	var branchTokens [][]byte
