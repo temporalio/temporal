@@ -6754,7 +6754,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		// 0-4 (5 total). If it incorrectly uses DC, it would only fan out to 0-2 (3 total).
 		// We assert on the actual partition IDs in the remote RPC to distinguish the two.
 		t.Parallel()
-		scaleInfo := &taskqueuespb.PartitionScaleInfo{Read: 5} // Read=5 differs from DC=3
+		scaleInfo := &taskqueuespb.PartitionScaleInfo{Read: 5, Write: 5} // Read=5 differs from DC=3
 		routeFn := func(p tqid.Partition) (string, error) {
 			rpcName := p.RpcName()
 			if strings.Contains(rpcName, "/") {
