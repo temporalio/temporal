@@ -713,15 +713,16 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	if !tracksCompletionResult {
 		continuedFailure = nil
 	}
-	// Always attach callbacks so StartWorkflowExecution requests remain compatible
-	// across mixed server versions. ALLOW_ALL callbacks become harmless late deliveries
-	// after their starts move to start-only history.
-	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
-	if err != nil {
-		return err
+	var callbacks []*commonpb.Callback
+	if tracksCompletionResult {
+		callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
+		if err != nil {
+			return err
+		}
+		callbacks = []*commonpb.Callback{callback}
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		CompletionCallbacks:          []*commonpb.Callback{callback},
+		CompletionCallbacks:          callbacks,
 		Header:                       requestSpec.Header,
 		Identity:                     scheduler.identity(),
 		Input:                        requestSpec.Input,
@@ -763,7 +764,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	// BufferedStarts in recordExecuteResult.
 	start.RunId = result.RunId
 	start.StartTime = timestamppb.New(actualStartTime)
-	start.HasCallback = true
+	start.HasCallback = tracksCompletionResult
 
 	// Record time taken from action eligible to workflow started.
 	if !start.Manual && !timeSkippingConfig.GetEnabled() {
