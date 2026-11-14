@@ -111,3 +111,16 @@ func (*noopChasmTree) ValidateSideEffectTask(
 ) (isTaskInTree bool, isValidByComponent bool, err error) {
 	return false, false, nil
 }
+
+func (*noopChasmTree) IsSideEffectTaskInTree(context.Context, *tasks.ChasmTask) (bool, error) {
+	return false, nil
+}
+
+func (*noopChasmTree) ValidateStandbySideEffectTask(
+	context.Context,
+	chasm.ExecutionKey,
+	*tasks.ChasmTask,
+	func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+) (bool, error) {
+	return false, nil
+}

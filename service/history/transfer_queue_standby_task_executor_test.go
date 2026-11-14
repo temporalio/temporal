@@ -305,11 +305,21 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	expectValidate := func(isTaskInTree bool, isValidByComponent bool, err error) {
-		chasmTree.EXPECT().ValidateSideEffectTask(
-			gomock.Any(),
-			gomock.Any(),
-		).Times(1).Return(isTaskInTree, isValidByComponent, err)
+	released := false
+	expectValidate := func(inTree bool, valid bool, validationErr error) {
+		released = false
+		chasmTree.EXPECT().IsSideEffectTaskInTree(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(context.Context, *tasks.ChasmTask) (bool, error) {
+				s.False(released, "task identity must be checked under lock")
+				return inTree, nil
+			})
+		if inTree {
+			chasmTree.EXPECT().ValidateStandbySideEffectTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, chasm.ExecutionKey, *tasks.ChasmTask, func(chasm.NodeBackend, chasm.Context, chasm.Component) error) (bool, error) {
+					s.True(released, "standby validation must run outside the workflow lock")
+					return valid, validationErr
+				})
+		}
 	}
 
 	// Mock mutable state.
@@ -345,7 +355,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, gomock.Any(),
-	).Return(wfCtx, wcache.NoopReleaseFn, nil).AnyTimes()
+	).Return(wfCtx, func(error) { released = true }, nil).AnyTimes()
 
 	//nolint:revive // unchecked-type-assertion
 	transferQueueStandbyTaskExecutor := newTransferQueueStandbyTaskExecutor(
@@ -361,14 +371,21 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 		s.clientBean,
 	).(*transferQueueStandbyTaskExecutor)
 
-	// Task in tree and valid by component — retry.
+	// A valid task retries even after the former discard delay.
+	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.chasmDiscardDuration+time.Second))
 	expectValidate(true, true, nil)
 	resp := transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Task in tree but component says invalid (e.g. code-deployment) — drop the physical task.
+	// Invalid standby validation invokes Discard immediately.
+	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	expectValidate(true, false, nil)
+	chasmTree.EXPECT().ExecuteSideEffectDiscardTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, chasm.ExecutionKey, *tasks.ChasmTask, func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+			s.True(released, "discard must run outside the workflow lock")
+			return nil
+		})
 	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.NoError(resp.ExecutionErr)
@@ -381,7 +398,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 
 	// Validation error — propagate.
 	expectedErr := errors.New("validation error")
-	expectValidate(false, false, expectedErr)
+	expectValidate(true, false, expectedErr)
 	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.ErrorIs(expectedErr, resp.ExecutionErr)
@@ -1551,7 +1568,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
 		chasmTree := historyi.NewMockChasmTree(s.controller)
-		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
+		chasmTree.EXPECT().IsSideEffectTaskInTree(gomock.Any(), gomock.Any()).Return(true, nil)
+		chasmTree.EXPECT().ValidateStandbySideEffectTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil)
 		treeMockFn(chasmTree)
 
 		ms := historyi.NewMockMutableState(s.controller)
