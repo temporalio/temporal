@@ -192,7 +192,7 @@ func TestApplyRequest_RejectsUpdateOnPausedWorkflow(t *testing.T) {
 	require.Contains(t, err.Error(), "Workflow is paused")
 }
 
-func TestApplyRequest_CountsBufferedUpdates(t *testing.T) {
+func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
 	newMutableState := func(t *testing.T, numBufferedEvents int) *historyi.MockMutableState {
 		ms := historyi.NewMockMutableState(gomock.NewController(t))
 		ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
