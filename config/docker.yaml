@@ -56,6 +56,10 @@ persistence:
                 connectProtocol: "tcp"
                 user: {{ env "MYSQL_USER" | quote }}
                 password: {{ env "MYSQL_PWD" | quote }}
+                {{- if env "MYSQL_PASSWORD_COMMAND" }}
+                passwordCommand:
+                    command: {{ env "MYSQL_PASSWORD_COMMAND" | quote }}
+                {{- end }}
                 {{- if env "MYSQL_TX_ISOLATION_COMPAT" }}
                 connectAttributes:
                     tx_isolation: "'READ-COMMITTED'"
@@ -78,6 +82,10 @@ persistence:
                 connectProtocol: "tcp"
                 user: {{ env "POSTGRES_USER" | quote }}
                 password: {{ env "POSTGRES_PWD" | quote }}
+                {{- if env "POSTGRES_PASSWORD_COMMAND" }}
+                passwordCommand:
+                    command: {{ env "POSTGRES_PASSWORD_COMMAND" | quote }}
+                {{- end }}
                 maxConns: {{ default "20" (env "SQL_MAX_CONNS") }}
                 maxIdleConns: {{ default "20" (env "SQL_MAX_IDLE_CONNS") }}
                 maxConnLifetime: {{ default "1h" (env "SQL_MAX_CONN_TIME") }}
@@ -116,6 +124,10 @@ persistence:
                 connectProtocol: "tcp"
                 user: {{ $visibility_user | quote }}
                 password: {{ $visibility_pwd | quote }}
+                {{- if env "MYSQL_PASSWORD_COMMAND" }}
+                passwordCommand:
+                    command: {{ env "MYSQL_PASSWORD_COMMAND" | quote }}
+                {{- end }}
                 {{- if env "MYSQL_TX_ISOLATION_COMPAT" }}
                 connectAttributes:
                     tx_isolation: "'READ-COMMITTED'"
@@ -142,6 +154,10 @@ persistence:
                 connectProtocol: "tcp"
                 user: {{ $visibility_user | quote }}
                 password: {{ $visibility_pwd | quote }}
+                {{- if env "POSTGRES_PASSWORD_COMMAND" }}
+                passwordCommand:
+                    command: {{ env "POSTGRES_PASSWORD_COMMAND" | quote }}
+                {{- end }}
                 maxConns: {{ default "10" (env "SQL_VIS_MAX_CONNS") }}
                 maxIdleConns: {{ default "10" (env "SQL_VIS_MAX_IDLE_CONNS") }}
                 maxConnLifetime: {{ default "1h" (env "SQL_VIS_MAX_CONN_TIME") }}
