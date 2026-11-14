@@ -201,13 +201,18 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
-		if doContinue, resendErr := e.Resend(
+		doContinue, resendErr := e.Resend(
 			ctx,
 			e.SourceClusterName(),
 			retryErr,
 			ResendAttempt,
-		); resendErr != nil || !doContinue {
+		)
+		if resendErr != nil {
 			return err
+		}
+		if !doContinue {
+			// the source cluster no longer has the workflow and the local copy was cleaned up
+			return nil
 		}
 		return e.Execute()
 	default:

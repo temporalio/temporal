@@ -563,7 +563,16 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 	).AnyTimes()
 
 	err := s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.NoError(err)
+	s.Equal(serviceerrors.NewRetryReplication(
+		resendMissingWorkflowMessage,
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
+	), err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
@@ -601,7 +610,16 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 	).AnyTimes()
 
 	err := s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.NoError(err)
+	s.Equal(serviceerrors.NewRetryReplication(
+		resendMissingWorkflowMessage,
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
+	), err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
