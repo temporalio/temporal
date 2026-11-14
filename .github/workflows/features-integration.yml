@@ -74,6 +74,7 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
       # These jobs run temporalio/features@main, whose nexus/sync_success test
       # needs worker-target Nexus callbacks to use temporal://system. Server
       # main does that unconditionally; on 1.30.x it is off by default and the
@@ -90,6 +91,7 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
       # These jobs run temporalio/features@main, whose nexus/sync_success test
       # needs worker-target Nexus callbacks to use temporal://system. Server
       # main does that unconditionally; on 1.30.x it is off by default and the
@@ -106,6 +108,7 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
       # These jobs run temporalio/features@main, whose nexus/sync_success test
       # needs worker-target Nexus callbacks to use temporal://system. Server
       # main does that unconditionally; on 1.30.x it is off by default and the
@@ -122,6 +125,7 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
       # These jobs run temporalio/features@main, whose nexus/sync_success test
       # needs worker-target Nexus callbacks to use temporal://system. Server
       # main does that unconditionally; on 1.30.x it is off by default and the
@@ -138,6 +142,7 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: 126944d0e7aef39c9256d46f53202e632b164426
       # These jobs run temporalio/features@main, whose nexus/sync_success test
       # needs worker-target Nexus callbacks to use temporal://system. Server
       # main does that unconditionally; on 1.30.x it is off by default and the
