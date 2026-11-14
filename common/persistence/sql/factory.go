@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -214,4 +215,14 @@ func (c *DbConn) Close() error {
 		return c.DB.Close()
 	}
 	return nil
+}
+
+// BeginPipelinedTx begins a pipelined transaction when the plugin supports it,
+// and returns sqlplugin.ErrPipelineUnsupported otherwise.
+func (c *DbConn) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, error) {
+	pipeliner, ok := c.DB.(sqlplugin.TxPipeliner)
+	if !ok {
+		return nil, sqlplugin.ErrPipelineUnsupported
+	}
+	return pipeliner.BeginPipelinedTx(ctx)
 }

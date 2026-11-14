@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"context"
 	"math"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -59,6 +61,16 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() { _ = db.Close() }()
+	var beginTxCount func() int64
+	// Simple protocol runs every update sequentially.
+	if p.pluginName == "postgres12_pgx" && p.connectAttrs["default_query_exec_mode"] != "simple_protocol" {
+		counter := &beginTxCounter{DB: db}
+		executionStore, err = sql.NewSQLExecutionStore(&sql.DbConn{DB: counter}, testData.Logger, serialization.NewSerializer())
+		if err != nil {
+			p.T().Fatalf("unable to create PostgreSQL execution store: %v", err)
+		}
+		beginTxCount = counter.count.Load
+	}
 
 	s := NewExecutionMutableStateSuite(
 		p.T(),
@@ -68,7 +80,24 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 		testData.Logger,
 	)
 	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
+	s.BeginTxCount = beginTxCount
 	suite.Run(p.T(), s)
+}
+
+// beginTxCounter counts the sequential transactions begun on a DB and passes
+// pipelined ones through.
+type beginTxCounter struct {
+	sqlplugin.DB
+	count atomic.Int64
+}
+
+func (c *beginTxCounter) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
+	c.count.Add(1)
+	return c.DB.BeginTx(ctx)
+}
+
+func (c *beginTxCounter) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, error) {
+	return c.DB.(sqlplugin.TxPipeliner).BeginPipelinedTx(ctx)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateTaskStoreSuite() {
@@ -442,6 +471,36 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSuite() {
 	suite.Run(p.T(), s)
 }
 
+func (p *PostgreSQLSuite) TestPostgreSQLPipelineSuite() {
+	if p.pluginName != "postgres12_pgx" {
+		p.T().Skip("only pgx pipelines transactions")
+	}
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
+	SetupPostgreSQLDatabase(p.T(), cfg)
+	SetupPostgreSQLSchema(p.T(), cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	admin, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL admin DB: %v", err)
+	}
+	defer func() {
+		_ = admin.Close()
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(p.T(), cfg)
+	}()
+	if p.connectAttrs["default_query_exec_mode"] == "simple_protocol" {
+		_, err := store.(sqlplugin.TxPipeliner).BeginPipelinedTx(p.T().Context())
+		p.Require().ErrorIs(err, sqlplugin.ErrPipelineUnsupported)
+		return
+	}
+
+	s := sqltests.NewPipelineSuite(p.T(), store, admin)
+	suite.Run(p.T(), s)
+}
+
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryTransferTaskSuite() {
 	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
@@ -759,4 +818,22 @@ func TestPGXSP(t *testing.T) {
 		connectAttrs: map[string]string{"default_query_exec_mode": "simple_protocol"},
 	}
 	suite.Run(t, s)
+}
+
+// TestPGXExecModes runs the pipelined update in the other pgx exec modes that
+// pipeline, as pgx sends a batch through a different function in each mode.
+func TestPGXExecModes(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"cache_describe", "describe_exec", "exec"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			s := &PostgreSQLSuite{
+				pluginName:   "postgres12_pgx",
+				connectAttrs: map[string]string{"default_query_exec_mode": mode},
+			}
+			s.SetT(t)
+			s.TestPostgreSQLPipelineSuite()
+			s.TestPostgreSQLExecutionMutableStateStoreSuite()
+		})
+	}
 }
