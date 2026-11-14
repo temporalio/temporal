@@ -1610,10 +1610,10 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 
 func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.Context) error {
 	var emitted map[string]*taskqueuespb.TaskQueueVersionInfoInternal
-	// This goroutine is the only writer of the logical backlog gauges. Zeroing here, both for series that
+	// This goroutine is the only writer of the logical backlog gauges. Clearing here, both for series that
 	// drop out between emits and on exit, orders it after the last real emit, so an emit that was in
 	// flight when a queue unloaded can't leave a stale value behind.
-	defer func() { pm.emitZeroLogicalBacklog(emitted) }()
+	defer func() { pm.clearLogicalBacklog(emitted) }()
 	for {
 		interval := pm.config.BacklogMetricsEmitInterval()
 		if interval == 0 { // disabled
@@ -1635,12 +1635,12 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 				if !common.IsContextCanceledErr(err) && !errors.Is(err, errTaskQueueClosed) {
 					pm.logger.Error("failed to emit logical backlog metrics", tag.Error(err))
 				}
-				continue // keep the last snapshot so a failed describe doesn't zero live series
+				continue // keep the last snapshot so a failed describe doesn't clear live series
 			}
 			if versions == nil {
 				continue // disabled
 			}
-			pm.emitZeroLogicalBacklog(staleLogicalBacklog(emitted, versions))
+			pm.clearLogicalBacklog(staleLogicalBacklog(emitted, versions))
 			emitted = versions
 		}
 	}
@@ -1725,15 +1725,16 @@ func (pm *taskQueuePartitionManagerImpl) logicalBacklogHandler(versionKey string
 	)
 }
 
-// emitZeroLogicalBacklog zeroes out the logical backlog gauges that fetchAndEmitLogicalBacklogMetrics
-// recorded for versions, including priorities a version only has through attribution.
-func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklog(versions map[string]*taskqueuespb.TaskQueueVersionInfoInternal) {
+// clearLogicalBacklog clears the logical backlog gauges that fetchAndEmitLogicalBacklogMetrics
+// recorded for versions, including priorities a version only has through attribution. See clearGauge.
+func (pm *taskQueuePartitionManagerImpl) clearLogicalBacklog(versions map[string]*taskqueuespb.TaskQueueVersionInfoInternal) {
+	removeSeries := pm.config.RemoveGaugesOnUnload()
 	for versionKey, vInfo := range versions {
 		handler := pm.logicalBacklogHandler(versionKey)
 		for pri := range vInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey() {
 			priorityTag := metrics.MatchingTaskPriorityTag(pri)
-			metrics.ApproximateBacklogCount.With(handler).Record(0, priorityTag)
-			metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0, priorityTag)
+			clearGauge(removeSeries, metrics.ApproximateBacklogCount.With(handler), priorityTag)
+			clearGauge(removeSeries, metrics.ApproximateBacklogAgeSeconds.With(handler), priorityTag)
 		}
 	}
 }
