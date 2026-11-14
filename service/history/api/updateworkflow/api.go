@@ -59,6 +59,7 @@ type Updater struct {
 	workflowTaskStamp                             int32
 	bufferedForWorkflowHeartbeatNotification      bool
 	firstBufferedForWorkflowHeartbeatNotification bool
+	whnNotification                               *workflow.WorkflowHeartbeatNotification
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -112,7 +113,7 @@ func (u *Updater) Invoke(
 	return u.OnSuccess(ctx)
 }
 
-func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string) {
+func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(ctx context.Context, namespaceName string) {
 
 	if !u.bufferedForWorkflowHeartbeatNotification {
 		return
@@ -128,7 +129,7 @@ func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string)
 
 	if u.firstBufferedForWorkflowHeartbeatNotification {
 		metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
-		workflow.SendWorkflowHeartbeatNotification(u.shardCtx, namespaceName, workflow.WorkflowHeartbeatNotificationUpdateAdmittedMetricTag)
+		workflow.SendWorkflowHeartbeatNotification(ctx, u.shardCtx, u.whnNotification)
 	}
 }
 
@@ -140,6 +141,12 @@ func (u *Updater) ApplyRequest(
 	action, err := u.applyRequest(ctx, updateReg, ms)
 	if err != nil {
 		return nil, err
+	}
+	if u.firstBufferedForWorkflowHeartbeatNotification {
+		u.whnNotification, err = workflow.PrepareWorkflowHeartbeatNotification(ms, workflow.WorkflowHeartbeatNotificationUpdateAdmittedMetricTag)
+		if err != nil {
+			u.shardCtx.GetLogger().Warn("Unable to prepare workflow heartbeat notification", tag.Error(err))
+		}
 	}
 	u.nexusSerializationContext = common.CloneProto(u.upd.NexusSerializationContext())
 	// Capture the anticipated link for the response after the request has been applied.
@@ -424,7 +431,7 @@ func (u *Updater) OnSuccess(
 	namespaceName := ns.Name().String()
 
 	// WHN should be before the long polling
-	u.emitWorkflowHeartbeatNotificationMetrics(namespaceName)
+	u.emitWorkflowHeartbeatNotificationMetrics(ctx, namespaceName)
 
 	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(namespaceName)
 	waitStage := u.req.GetRequest().GetWaitPolicy().GetLifecycleStage()

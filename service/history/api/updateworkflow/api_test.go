@@ -201,6 +201,7 @@ func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
 		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 		ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
 		ms.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
+		ms.EXPECT().GetStartedWorkflowTask().Return(nil).AnyTimes()
 		ms.EXPECT().HasPendingWorkflowTask().Return(true).AnyTimes()
 		ms.EXPECT().NumBufferedEvents().Return(numBufferedEvents).AnyTimes()
 		ms.EXPECT().GetCurrentVersion().Return(int64(1))

@@ -18,6 +18,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -2424,6 +2425,10 @@ func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {
 
 func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.historyClient
+}
+
+func (s *ContextImpl) GetMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	return s.clientBean.GetMatchingClient(s.namespaceRegistry.GetNamespaceName)
 }
 
 func (s *ContextImpl) GetEventLogger() otellog.Logger {
