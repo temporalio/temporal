@@ -20,8 +20,10 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	esconfig "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
@@ -385,6 +387,59 @@ func TestUpdateIndexSearchAttributes(t *testing.T) {
 			out := updateIndexSearchAttributes(tc.initialISA, cm)
 			require.Equal(t, tc.out, out)
 			require.Equal(t, tc.expectedISA, cm.IndexSearchAttributes)
+		})
+	}
+}
+
+func TestBuildInitialIndexSearchAttributes(t *testing.T) {
+	defaultAttrs := sadefs.GetDBIndexSearchAttributes(nil)
+
+	testCases := []struct {
+		name          string
+		visDataStores []config.DataStore
+		expected      map[string]*persistencespb.IndexSearchAttributes
+	}{
+		{
+			name: "SQL store is seeded with default slots",
+			visDataStores: []config.DataStore{
+				{SQL: &config.SQL{DatabaseName: "sql-index"}},
+			},
+			expected: map[string]*persistencespb.IndexSearchAttributes{
+				"sql-index": defaultAttrs,
+			},
+		},
+		{
+			name: "custom store is seeded with default slots",
+			visDataStores: []config.DataStore{
+				{CustomDataStoreConfig: &config.CustomDatastoreConfig{IndexName: "custom-index"}},
+			},
+			expected: map[string]*persistencespb.IndexSearchAttributes{
+				"custom-index": defaultAttrs,
+			},
+		},
+		{
+			name: "elasticsearch store is skipped",
+			visDataStores: []config.DataStore{
+				{Elasticsearch: &esconfig.Config{}},
+			},
+			expected: map[string]*persistencespb.IndexSearchAttributes{},
+		},
+		{
+			name: "primary SQL and secondary elasticsearch: only SQL is seeded",
+			visDataStores: []config.DataStore{
+				{SQL: &config.SQL{DatabaseName: "sql-index"}},
+				{Elasticsearch: &esconfig.Config{}},
+			},
+			expected: map[string]*persistencespb.IndexSearchAttributes{
+				"sql-index": defaultAttrs,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := buildInitialIndexSearchAttributes(tc.visDataStores, nil)
+			require.Equal(t, tc.expected, out)
 		})
 	}
 }
