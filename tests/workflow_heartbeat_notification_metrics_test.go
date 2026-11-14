@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -28,7 +30,7 @@ import (
 
 func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 	t.Parallel()
-	for _, input := range []string{"signal", "timer"} {
+	for _, input := range []string{"signal", "update", "timer"} {
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 			env := testcore.NewEnv(t)
@@ -73,6 +75,30 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 					RequestId:         uuid.NewString(),
 				})
 				require.NoError(t, err)
+			case "update":
+				request := &workflowservice.UpdateWorkflowExecutionRequest{
+					Namespace:         env.Namespace().String(),
+					WorkflowExecution: tv.WorkflowExecution(),
+					WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+					Request: &updatepb.Request{
+						Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+						Input: &updatepb.Input{Name: tv.HandlerName()},
+					},
+				}
+				result := make(chan error, 1)
+				go func() {
+					_, updateErr := env.FrontendClient().UpdateWorkflowExecution(t.Context(), request)
+					result <- updateErr
+				}()
+				_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						require.Len(t, task.GetMessages(), 1)
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{
+							Messages: env.UpdateAcceptCompleteMessages(tv, task.GetMessages()[0]),
+						}, nil
+					})
+				require.NoError(t, err)
+				require.NoError(t, await.Rcv(t, result))
 			case "timer":
 				_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
 					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -91,6 +117,144 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 			}
 			require.Empty(t, capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name()))
 			require.Empty(t, capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name()))
+		})
+	}
+}
+
+func TestWorkflowHeartbeatNotificationMetricsUpdateDuringStartedTask(t *testing.T) {
+	t.Parallel()
+	for _, withStart := range []bool{false, true} {
+		name := "update"
+		if withStart {
+			name = "update-with-start"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			env := testcore.NewEnv(t)
+			tv := env.Tv()
+			start, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:                tv.RequestID(),
+				Namespace:                env.Namespace().String(),
+				WorkflowId:               tv.WorkflowID(),
+				WorkflowType:             tv.WorkflowType(),
+				TaskQueue:                tv.TaskQueue(),
+				Identity:                 tv.WorkerIdentity(),
+				WorkflowExecutionTimeout: durationpb.New(time.Minute),
+				WorkflowTaskTimeout:      durationpb.New(30 * time.Second),
+			})
+			require.NoError(t, err)
+			tv = tv.WithRunID(start.GetRunId())
+
+			pollCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			currentTask, err := env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace: env.Namespace().String(),
+				TaskQueue: tv.TaskQueue(),
+				Identity:  tv.WorkerIdentity(),
+			})
+			require.NoError(t, err)
+			require.NotEmpty(t, currentTask.GetTaskToken())
+
+			capture := env.StartNamespaceMetricCapture()
+			updateRequest := &workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace:         env.Namespace().String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+				WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+				Request: &updatepb.Request{
+					Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+					Input: &updatepb.Input{Name: tv.HandlerName()},
+				},
+			}
+			if withStart {
+				updateRequest.Namespace = ""
+			}
+			updateResult := make(chan error, 1)
+			go func() {
+				if !withStart {
+					response, callErr := env.FrontendClient().UpdateWorkflowExecution(t.Context(), updateRequest)
+					if callErr == nil && response.GetStage() < enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
+						callErr = errors.New("Update was not accepted")
+					}
+					updateResult <- callErr
+					return
+				}
+				response, callErr := env.FrontendClient().ExecuteMultiOperation(t.Context(), &workflowservice.ExecuteMultiOperationRequest{
+					Namespace: env.Namespace().String(),
+					Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+						{Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+								RequestId:                uuid.NewString(),
+								Namespace:                env.Namespace().String(),
+								WorkflowId:               tv.WorkflowID(),
+								WorkflowType:             tv.WorkflowType(),
+								TaskQueue:                tv.TaskQueue(),
+								Identity:                 tv.WorkerIdentity(),
+								WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+							},
+						}},
+						{Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+							UpdateWorkflow: updateRequest,
+						}},
+					},
+				})
+				if callErr == nil &&
+					(response.GetResponses()[0].GetStartWorkflow().GetStarted() ||
+						response.GetResponses()[1].GetUpdateWorkflow().GetStage() < enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED) {
+					callErr = errors.New("Update-with-Start started a workflow or the Update was not accepted")
+				}
+				updateResult <- callErr
+			}()
+
+			await.Require(t.Context(), t, func(t *await.T) {
+				for _, metric := range []string{
+					metrics.WorkflowHeartbeatNotificationBufferedInput.Name(),
+					metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name(),
+				} {
+					recordings := capture.Metric(metric)
+					require.Len(t, recordings, 1)
+					require.Equal(t, int64(1), recordings[0].Value)
+					require.Equal(t, "UpdateAdmitted", recordings[0].Tags["event_type"])
+					require.Equal(t, metrics.WorkflowContextScope, recordings[0].Tags["operation"])
+					require.Equal(t, env.Namespace().String(), recordings[0].Tags["namespace"])
+				}
+			}, 10*time.Second, 100*time.Millisecond)
+
+			_, err = env.FrontendClient().SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         env.Namespace().String(),
+				WorkflowExecution: tv.WorkflowExecution(),
+				SignalName:        "test-signal",
+				RequestId:         uuid.NewString(),
+			})
+			require.NoError(t, err)
+			await.Require(t.Context(), t, func(t *await.T) {
+				buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
+				counts := make(map[string]int64, len(buffered))
+				for _, recording := range buffered {
+					counts[recording.Tags["event_type"]] += recording.Value.(int64)
+				}
+				require.Equal(t, map[string]int64{
+					"UpdateAdmitted":            1,
+					"WorkflowExecutionSignaled": 1,
+				}, counts)
+				first := capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
+				require.Len(t, first, 1)
+				require.Equal(t, "UpdateAdmitted", first[0].Tags["event_type"])
+			}, 10*time.Second, 100*time.Millisecond)
+
+			_, err = env.TaskPoller().HandleWorkflowTask(tv, currentTask,
+				func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+				})
+			require.NoError(t, err)
+			_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					require.Len(t, task.GetMessages(), 1)
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Messages: env.UpdateAcceptCompleteMessages(tv, task.GetMessages()[0]),
+					}, nil
+				})
+			require.NoError(t, err)
+			require.NoError(t, await.Rcv(t, updateResult))
 		})
 	}
 }
@@ -197,6 +361,9 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		return nil
 	}
 	parent := func(ctx workflow.Context) error {
+		if err := workflow.SetUpdateHandler(ctx, "test-update", func(workflow.Context) error { return nil }); err != nil {
+			return err
+		}
 		activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: time.Minute,
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
@@ -259,6 +426,29 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: op.CallbackHeader.Get(commonnexus.CallbackTokenHeader)},
 	}))
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "test-signal", nil))
+	updateRequest := &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		Request: &updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: testcore.RandomizeStr(s.T().Name() + "-update")},
+			Input: &updatepb.Input{Name: "test-update"},
+		},
+	}
+	updateResult := make(chan error, 1)
+	go func() {
+		_, updateErr := env.FrontendClient().UpdateWorkflowExecution(ctx, updateRequest)
+		updateResult <- updateErr
+	}()
+	s.Await(func(s *NexusWorkflowTestSuite) {
+		for _, recording := range capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name()) {
+			if recording.Tags["event_type"] == "UpdateAdmitted" {
+				return
+			}
+		}
+		s.Fail("Update was not admitted behind the started Workflow Task")
+	}, 10*time.Second, 100*time.Millisecond)
+
 	_, err = env.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
@@ -271,6 +461,7 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		"NexusOperationCompleted":          1,
 		"WorkflowExecutionSignaled":        1,
 		"WorkflowExecutionCancelRequested": 1,
+		"UpdateAdmitted":                   1,
 	}
 	s.Await(func(s *NexusWorkflowTestSuite) {
 		recordings := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
