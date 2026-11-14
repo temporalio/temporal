@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -358,26 +359,25 @@ func ProcessOutgoingSearchAttributes(
 	if err != nil {
 		return serviceerror.NewUnavailablef(consts.ErrUnableToGetSearchAttributesMessage, err)
 	}
+	saMapper, err := saMapperProvider.GetMapper(ns)
+	if err != nil {
+		return serviceerror.NewUnavailablef(consts.ErrUnableToGetSearchAttributesMessage, err)
+	}
 	for _, event := range events {
-		var searchAttributes *commonpb.SearchAttributes
-		switch event.EventType {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
-			searchAttributes = event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-			searchAttributes = event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
-			searchAttributes = event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-			searchAttributes = event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes()
-		}
+		searchAttributes, _ := searchattribute.GetFromEvent(event)
 		if searchAttributes != nil {
-			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(saMapperProvider, searchAttributes, ns.String())
-			if err != nil {
-				return err
-			}
-			if aliasedSas != searchAttributes {
-				searchAttributes.IndexedFields = aliasedSas.IndexedFields
+			if _, ok := searchAttributes.GetIndexedFields()[sadefs.TemporalAliasedSearchAttributes]; ok {
+				delete(searchAttributes.GetIndexedFields(), sadefs.TemporalAliasedSearchAttributes)
+				searchattribute.ApplyTypeMapWithMapper(searchAttributes, saTypeMap, saMapper, ns.String())
+			} else {
+				searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
+				aliasedSas, err := searchattribute.AliasFields(saMapperProvider, searchAttributes, ns.String())
+				if err != nil {
+					return err
+				}
+				if aliasedSas != searchAttributes {
+					searchAttributes.IndexedFields = aliasedSas.IndexedFields
+				}
 			}
 		}
 	}

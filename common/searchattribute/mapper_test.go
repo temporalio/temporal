@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -140,6 +141,71 @@ func Test_UnaliasFields(t *testing.T) {
 	sb, err = UnaliasFields(mapperProvider, sa, "test-namespace")
 	require.NoError(t, err)
 	require.Equal(t, sa, sb, "when there is nothin to unalias should return received attributes")
+}
+
+func Test_UnaliasFields_AliasedSearchAttributesMarker(t *testing.T) {
+	mapperProvider := NewTestMapperProvider(&TestMapper{})
+
+	sa := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+			"AliasForField1":                       {Data: []byte("data1")},
+			sadefs.WorkflowID:                      {Data: []byte("wid")},
+		},
+	}
+	sb, err := UnaliasFields(mapperProvider, sa, "test-namespace")
+	require.NoError(t, err)
+	require.Len(t, sb.GetIndexedFields(), 2)
+	require.EqualValues(t, "data1", sb.GetIndexedFields()["Field1"].GetData())
+	require.EqualValues(t, "wid", sb.GetIndexedFields()[sadefs.WorkflowID].GetData())
+	require.Contains(t, sa.GetIndexedFields(), sadefs.TemporalAliasedSearchAttributes, "input must not be modified")
+
+	// Marker is removed even if no other field is mapped.
+	sa = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+			"pass-through":                         {Data: []byte("data1")},
+		},
+	}
+	sb, err = UnaliasFields(mapperProvider, sa, "test-namespace")
+	require.NoError(t, err)
+	require.NotSame(t, sa, sb)
+	require.Len(t, sb.GetIndexedFields(), 1)
+	require.EqualValues(t, "data1", sb.GetIndexedFields()["pass-through"].GetData())
+
+	sa = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+		},
+	}
+	sb, err = UnaliasFields(mapperProvider, sa, "test-namespace")
+	require.NoError(t, err)
+	require.Empty(t, sb.GetIndexedFields())
+
+	sa = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+			"wrong_alias":                          {Data: []byte("data1")},
+		},
+	}
+	_, err = UnaliasFields(mapperProvider, sa, "test-namespace")
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgumentErr)
+
+	// Marker is removed when there is no mapper.
+	nilMapperProvider := NewMockMapperProvider(gomock.NewController(t))
+	nilMapperProvider.EXPECT().GetMapper(namespace.Name("test-namespace")).Return(nil, nil)
+	sa = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+			"Field1":                               {Data: []byte("data1")},
+		},
+	}
+	sb, err = UnaliasFields(nilMapperProvider, sa, "test-namespace")
+	require.NoError(t, err)
+	require.Len(t, sb.GetIndexedFields(), 1)
+	require.EqualValues(t, "data1", sb.GetIndexedFields()["Field1"].GetData())
+	require.Contains(t, sa.GetIndexedFields(), sadefs.TemporalAliasedSearchAttributes, "input must not be modified")
 }
 
 type staticSearchAttributesProvider struct {
