@@ -4,6 +4,7 @@ package grpcfaultstest
 
 import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/testing/failpoint"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	commontesthooks "go.temporal.io/server/common/testing/testhooks"
 )
@@ -28,5 +29,6 @@ func newAdapter(testHooks commontesthooks.TestHooks) faultinjectiontest.Adapter[
 			ByNamespaceID:   commontesthooks.GRPCResponseFaultGeneratorByNamespaceID,
 			ByNamespaceName: commontesthooks.GRPCResponseFaultGeneratorByNamespaceName,
 		},
+		Failpoint: failpoint.GRPCKey,
 	})
 }
