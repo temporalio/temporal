@@ -7,9 +7,3 @@ Collection of general-purpose Go test helpers and analysis tools.
 - `lintconditions`: a Go analyzer that reports boolean chains with more than three terms.
 - `parallelsuite`: isolated parallel test suites with fail-fast assertions.
 - `testcontext`: shared test contexts with deadlines and decorators.
-
-Run `lintconditions` from the module to check:
-
-```sh
-go run go.temporal.io/testx/lintconditions/cmd/lintconditions ./...
-```
