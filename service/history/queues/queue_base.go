@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/quotas"
@@ -304,7 +305,20 @@ func (p *queueBase) checkpoint() {
 		// Run an action to proactively move task group with high pending task to non-default reader
 		// so that upon shard reload, those groups won't block other tasks in the default reader from
 		// being loaded.
-		checkpointAction = newMoveGroupAction(maxReaderCount, p.grouper, taskCountBase, p.options.MoveGroupTaskCountMultiplier(), p.logger)
+		var namespaceRegistry namespace.Registry
+		if p.shard != nil {
+			namespaceRegistry = p.shard.GetNamespaceRegistry()
+		}
+		checkpointAction = newMoveGroupAction(
+			maxReaderCount,
+			p.grouper,
+			taskCountBase,
+			p.options.MoveGroupTaskCountMultiplier(),
+			p.category.Name(),
+			namespaceRegistry,
+			p.metricsHandler,
+			p.logger,
+		)
 	} else {
 		// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
 		// so that upon shard reload, task loading for those slices won't block other slices in the default reader.
