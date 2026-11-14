@@ -1,6 +1,7 @@
 package versioninfo_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/versioninfo"
 )
 
@@ -81,5 +85,84 @@ func TestPostInfo(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Request failed: %s", err)
+	}
+}
+
+func TestCallerTimeout(t *testing.T) {
+	t.Parallel()
+	started := make(chan error, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, err := io.Copy(io.Discard, r.Body)
+		started <- err
+		if err != nil {
+			return
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(server.CloseClientConnections)
+	endpoint, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	caller := versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host, Timeout: 200 * time.Millisecond}
+	ctx := testcontext.For(t, testcontext.WithTimeout(5*time.Second))
+	_, err = caller.CallWithContext(ctx, validVersionCheckRequest())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NoError(t, ctx.Err(), "the HTTP client deadline must expire before the parent context")
+	require.NoError(t, await.Rcv(t, started))
+}
+
+func TestCallerCancellation(t *testing.T) {
+	t.Parallel()
+	for _, cancelBeforeRequest := range []bool{true, false} {
+		name := "in flight"
+		if cancelBeforeRequest {
+			name = "already canceled"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			started := make(chan error, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				_, err := io.Copy(io.Discard, r.Body)
+				started <- err
+				if err != nil {
+					return
+				}
+				<-r.Context().Done()
+			}))
+			t.Cleanup(server.Close)
+			t.Cleanup(server.CloseClientConnections)
+			endpoint, err := url.Parse(server.URL)
+			require.NoError(t, err)
+			caller := versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host, Timeout: 10 * time.Second}
+			ctx, cancel := context.WithCancel(testcontext.For(t, testcontext.WithTimeout(5*time.Second)))
+			t.Cleanup(cancel)
+			if cancelBeforeRequest {
+				cancel()
+			}
+			result := make(chan error, 1)
+			go func() {
+				_, err := caller.CallWithContext(ctx, validVersionCheckRequest())
+				result <- err
+			}()
+			if !cancelBeforeRequest {
+				require.NoError(t, await.Rcv(t, started))
+				cancel()
+			}
+			require.ErrorIs(t, await.Rcv(t, result), context.Canceled)
+			if cancelBeforeRequest {
+				select {
+				case <-started:
+					t.Fatal("an already canceled request reached the server")
+				default:
+				}
+			}
+		})
+	}
+}
+
+func validVersionCheckRequest() *versioninfo.VersionCheckRequest {
+	return &versioninfo.VersionCheckRequest{
+		Product: "server", Version: "0.1", ClusterID: "cluster", DB: "cassandra",
+		OS: "linux", Arch: "arm64", Timestamp: 1,
 	}
 }
