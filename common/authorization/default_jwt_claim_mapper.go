@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -113,21 +114,21 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []any, claims *Cl
 	for _, permission := range permissions {
 		p, ok := permission.(string)
 		if !ok {
-			a.logger.Warn(fmt.Sprintf("ignoring permission that is not a string: %v", permission))
+			a.logger.Debug("ignoring permission that is not a string", tag.Value(permission))
 			continue
 		}
 		var parts []string
 		if a.permissionsRegex != nil {
 			match := a.permissionsRegex.FindStringSubmatch(p)
 			if len(match) == 0 {
-				a.logger.Warn(fmt.Sprintf("ignoring permission not matching pattern: %v", permission))
+				a.logger.Debug("ignoring permission not matching pattern", tag.Value(permission))
 				continue
 			}
 			parts = []string{match[a.matchNamespaceIndex], match[a.matchRoleIndex]}
 		} else {
 			parts = strings.SplitN(p, ":", 2)
 			if len(parts) != 2 {
-				a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
+				a.logger.Debug("ignoring permission in unexpected format", tag.Value(permission))
 				continue
 			}
 		}
