@@ -105,6 +105,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.GetNamespaceReplicationMessagesResponse:
 		return nil
+	case *adminservice.GetRemoteClusterNamespaceRequest:
+		return nil
+	case *adminservice.GetRemoteClusterNamespaceResponse:
+		return nil
 	case *adminservice.GetReplicationMessagesRequest:
 		return nil
 	case *adminservice.GetReplicationMessagesResponse:

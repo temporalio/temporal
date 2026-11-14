@@ -507,6 +507,28 @@ message GetNamespaceResponse {
   bool is_global_namespace = 9;
 }
 
+message GetRemoteClusterNamespaceRequest {
+  // Name of the connected remote cluster to read from. It must not be the
+  // current cluster.
+  string cluster_name = 1;
+  // The selector fields are deliberately not named namespace or namespace_id:
+  // frontend interceptors treat requests with those getters as scoped to a
+  // local namespace (validation, rate limiting, handover, redirection), but
+  // this request reads a namespace on another cluster.
+  oneof selector {
+    string remote_namespace_name = 2;
+    string remote_namespace_id = 3;
+  }
+}
+
+message GetRemoteClusterNamespaceResponse {
+  // The remote cluster's own name, as reported by its DescribeCluster. It
+  // always equals the requested cluster name.
+  string cluster_name = 1;
+  // The remote cluster's GetNamespace response, unchanged.
+  GetNamespaceResponse namespace = 2;
+}
+
 message GetDLQTasksRequest {
   temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
   // page_size must be positive. Up to this many tasks will be returned.

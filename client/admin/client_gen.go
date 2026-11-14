@@ -219,6 +219,16 @@ func (c *clientImpl) GetNamespaceReplicationMessages(
 	return c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetRemoteClusterNamespace(
+	ctx context.Context,
+	request *adminservice.GetRemoteClusterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetRemoteClusterNamespaceResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetRemoteClusterNamespace(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
