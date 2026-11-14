@@ -24,5 +24,11 @@ type (
 		// Metrics recording:
 		// Timer id within DeadlockDetectorScope (or zero for no metrics)
 		MetricsName string
+		// Optional. Called once per timed-out check invocation, right after the deadlock
+		// detector has reported that Ping did not return within Timeout, so the component can
+		// try to recover on its own (for example by unloading itself). It runs on the timeout
+		// callback goroutine, may run concurrently with a Ping that is about to return, and
+		// must not block.
+		OnTimeout func()
 	}
 )
