@@ -289,9 +289,17 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 	), nil
 }
 
+// backfillerBufferCapacity returns how many starts one backfiller may enqueue.
+// Backfillers share a budget of maxBufferSize/2 - generatorReserve, and the
+// first retainedActionCount buffer entries are not charged against it. The
+// result is 0 only when that budget is exhausted, i.e. when
+// bufferedCount - retainedActionCount + generatorReserve >= maxBufferSize/2.
+// The backfiller then backs off and retries. The number of backfillers never
+// reduces a positive budget to 0.
 func backfillerBufferCapacity(bufferedCount, retainedActionCount, maxBufferSize, generatorReserve, backfillerCount int) int {
 	backfillerCount = max(1, backfillerCount)
 	pending := max(0, bufferedCount-retainedActionCount)
 	available := max(0, (maxBufferSize/2)-pending-generatorReserve)
-	return available / backfillerCount
+	// Pure tasks serialize on the tree and recompute the shared budget after each enqueue.
+	return min(available, max(1, available/backfillerCount))
 }
