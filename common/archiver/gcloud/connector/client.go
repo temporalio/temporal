@@ -119,7 +119,7 @@ func (s *storageWrapper) Exist(ctx context.Context, URI archiver.URI, fileName s
 		return true, nil
 	}
 
-	if _, err = bucket.Object(fileName).Attrs(ctx); err != nil {
+	if _, err = bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName).Attrs(ctx); err != nil {
 		return false, errObjectNotFound
 	}
 

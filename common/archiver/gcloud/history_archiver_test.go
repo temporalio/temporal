@@ -394,6 +394,67 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 	h.NoError(err)
 }
 
+// The history service calls Archive without any ArchiveOption, so no ProgressManager is set.
+// Each page of a multi-page history must still be written to its own part file.
+func (h *historyArchiverSuite) TestArchive_Success_MultiplePagesWithoutProgressManager() {
+	ctx := context.Background()
+	const numPages = 3
+
+	newPage := func(eventID int64, isLast bool) *archiverspb.HistoryBlob {
+		return &archiverspb.HistoryBlob{
+			Header: &archiverspb.HistoryBlobHeader{IsLast: isLast},
+			Body: []*historypb.History{
+				{
+					Events: []*historypb.HistoryEvent{
+						{
+							EventId:   eventID,
+							EventTime: timestamppb.New(time.Now().UTC()),
+							Version:   testCloseFailoverVersion,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	historyIterator := archiver.NewMockHistoryIterator(h.controller)
+	gomock.InOrder(
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(newPage(common.FirstEventID, false), nil),
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(newPage(common.FirstEventID+1, false), nil),
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(newPage(testNextEventID-1, true), nil),
+		historyIterator.EXPECT().HasNext().Return(false),
+	)
+
+	storageWrapper := connector.NewMockClient(h.controller)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
+	uploads := make([]any, 0, 2*numPages)
+	for part := range numPages {
+		filename := constructHistoryFilenameMultipart(testNamespaceID, testWorkflowID, testRunID, testCloseFailoverVersion, part)
+		uploads = append(uploads,
+			storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, filename).Return(false, nil),
+			storageWrapper.EXPECT().Upload(ctx, h.testArchivalURI, filename, gomock.Any()).Return(nil),
+		)
+	}
+	gomock.InOrder(uploads...)
+
+	historyArchiver := newHistoryArchiver(h.executionManager, h.logger, h.metricsHandler, historyIterator, storageWrapper)
+	request := &archiver.ArchiveHistoryRequest{
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
+		WorkflowID:           testWorkflowID,
+		RunID:                testRunID,
+		BranchToken:          testBranchToken,
+		NextEventID:          testNextEventID,
+		CloseFailoverVersion: testCloseFailoverVersion,
+	}
+
+	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
+	h.NoError(err)
+}
+
 func (h *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 	ctx := context.Background()
 	mockStorageClient := connector.NewMockGcloudStorageClient(h.controller)

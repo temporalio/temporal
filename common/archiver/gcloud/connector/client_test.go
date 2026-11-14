@@ -258,7 +258,8 @@ func (s *clientSuite) TestExist() {
 
 		mockStorageClient.EXPECT().Bucket(tc.bucketName).Return(mockBucketHandleClient).MaxTimes(1)
 		mockBucketHandleClient.EXPECT().Attrs(tc.callContext).Return(nil, tc.bucketExpectedError).MaxTimes(1)
-		mockBucketHandleClient.EXPECT().Object(tc.fileName).Return(mockObjectHandler).MaxTimes(1)
+		// Exist must look up the object under the URI path, the same key Upload writes to.
+		mockBucketHandleClient.EXPECT().Object("temporal_archival/development/" + tc.fileName).Return(mockObjectHandler).MaxTimes(1)
 		mockObjectHandler.EXPECT().Attrs(tc.callContext).Return(nil, tc.objectExpectedError).MaxTimes(1)
 		URI, _ := archiver.NewURI(tc.URI)
 		storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
