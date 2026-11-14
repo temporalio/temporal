@@ -12,9 +12,14 @@ permissions:
 jobs:
   testx:
     runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        module:
+          - common/testx
+          - common/testx/lintconditions
     defaults:
       run:
-        working-directory: common/testx
+        working-directory: ${{ matrix.module }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -28,13 +33,14 @@ jobs:
           cache-dependency-path: |
             go.sum
             common/testx/go.sum
+            common/testx/lintconditions/go.sum
 
       - name: Check testx does not depend on other go.temporal.io modules
         run: |
           mods=$(go list -m -f '{{if not .Main}}{{.Path}}{{end}}' all)
           deps=$(echo "$mods" | grep '^go.temporal.io/' || true)
           if [ -n "$deps" ]; then
-            echo "::error file=common/testx/go.mod::testx must not depend on go.temporal.io modules: $(echo "$deps" | tr "\n" " ")"
+            echo "::error file=${{ matrix.module }}/go.mod::testx must not depend on go.temporal.io modules: $(echo "$deps" | tr "\n" " ")"
             exit 1
           fi
 

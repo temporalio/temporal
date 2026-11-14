@@ -1,13 +1,16 @@
 package lintconditions
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 
 	"golang.org/x/tools/go/analysis"
 )
 
-const maxTerms = 3
+const defaultMaxTerms = 3
+
+var maxTerms int
 
 // Analyzer checks maximal unparenthesized chains of && and || in every expression
 // context, including function literals. Mixed operators count alike: each operand
@@ -21,7 +24,14 @@ var Analyzer = &analysis.Analyzer{
 	Run:  run,
 }
 
+func init() {
+	Analyzer.Flags.IntVar(&maxTerms, "max-terms", defaultMaxTerms, "maximum number of terms in a boolean chain")
+}
+
 func run(pass *analysis.Pass) (any, error) {
+	if maxTerms < 1 {
+		return nil, fmt.Errorf("max-terms must be at least 1 (got %d)", maxTerms)
+	}
 	for _, file := range pass.Files {
 		if ast.IsGenerated(file) {
 			continue
