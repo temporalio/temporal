@@ -247,6 +247,7 @@ type Config struct {
 
 	// Health check
 	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
+	PeerHealthCheck            peerHealthCheckConfig
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -452,7 +453,17 @@ func NewConfig(
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
-		HistoryHostErrorPercentage:              dynamicconfig.HistoryHostErrorPercentage.Get(dc),
+		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
+		PeerHealthCheck: peerHealthCheckConfig{
+			Enabled:          dynamicconfig.FrontendPeerHealthCheckEnabled.Get(dc),
+			Interval:         dynamicconfig.FrontendPeerHealthCheckInterval.Get(dc),
+			ProbeTimeout:     dynamicconfig.FrontendPeerHealthCheckProbeTimeout.Get(dc),
+			RoundTimeout:     dynamicconfig.FrontendPeerHealthCheckRoundTimeout.Get(dc),
+			SamplePercentage: dynamicconfig.FrontendPeerHealthCheckSamplePercentage.Get(dc),
+			FailureThreshold: dynamicconfig.FrontendPeerHealthCheckFailureThreshold.Get(dc),
+			MaxHostsPerRole:  dynamicconfig.FrontendPeerHealthCheckMaxHostsPerRole.Get(dc),
+			MinFailedHosts:   dynamicconfig.FrontendPeerHealthCheckMinFailedHosts.Get(dc),
+		},
 		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),

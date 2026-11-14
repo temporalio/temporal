@@ -788,6 +788,14 @@ var (
 		"nexus_request_errors",
 		WithDescription("The number of Nexus requests that resulted in errors."),
 	)
+	FrontendPeerHealthCheckRound = NewCounterDef(
+		"frontend_peer_health_check_round",
+		WithDescription("The number of frontend peer health check rounds, tagged by outcome (pass, fail, unknown)."),
+	)
+	FrontendPeerHealthCheckProbe = NewCounterDef(
+		"frontend_peer_health_check_probe",
+		WithDescription("The number of frontend peer health probes, tagged by target_service and outcome (response, refused, timeout, unresolved, unknown)."),
+	)
 	NexusLatency = NewTimerDef(
 		"nexus_latency",
 		WithDescription("Latency of Nexus requests."),
