@@ -48,25 +48,68 @@ func (h *handler) StartNexusOperation(
 
 	frontendReq := req.GetFrontendRequest()
 
-	result, err := chasm.StartExecution(
-		ctx,
-		chasm.ExecutionKey{
-			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  frontendReq.GetOperationId(),
-		},
-		func(mutableCtx chasm.MutableContext, req *nexusoperationpb.StartNexusOperationRequest) (*Operation, error) {
-			return newStandaloneOperation(mutableCtx, req, h.callbackValidator, h.linkValidator)
-		},
-		req,
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetOperationId(),
+	}
+	startFn := func(mutableCtx chasm.MutableContext, req *nexusoperationpb.StartNexusOperationRequest) (*Operation, error) {
+		return newStandaloneOperation(mutableCtx, req, h.callbackValidator, h.linkValidator)
+	}
+	startOpts := []chasm.TransitionOption{
 		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(
 			idReusePolicyFromProto(frontendReq.GetIdReusePolicy()),
 			idConflictPolicyFromProto(frontendReq.GetIdConflictPolicy()),
 		),
+	}
+
+	cbs := frontendReq.GetCompletionCallbacks()
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+
+	var (
+		resultKey chasm.ExecutionKey
+		created   bool
 	)
+	if attachCallbacks || attachLinks {
+		// Start the operation, or apply on_conflict_options to the existing one, in one transaction. A
+		// start usually creates a new operation, so try the create before looking up an existing one.
+		requestID := frontendReq.GetRequestId()
+		namespaceName := frontendReq.GetNamespace()
+		var result chasm.UpdateWithStartExecutionResult[any]
+		result, err = chasm.UpdateWithStartExecution(
+			ctx,
+			executionKey,
+			startFn,
+			// Runs on the new operation too, where startFn already attached the callbacks and links under
+			// this request ID, so both attach calls are no-ops there.
+			func(o *Operation, mutableCtx chasm.MutableContext, _ *nexusoperationpb.StartNexusOperationRequest) (any, error) {
+				if attachCallbacks {
+					regTime := timestamppb.New(mutableCtx.Now(o))
+					if err := callback.ValidateAndAttach(mutableCtx, o, requestID, regTime, cbs, namespaceName, h.callbackValidator); err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := o.attachLinks(mutableCtx, links, requestID, h.linkValidator, namespaceName); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
+			},
+			req,
+			append(startOpts, chasm.WithAssumeNew())...,
+		)
+		resultKey, created = result.ExecutionKey, result.Created
+	} else {
+		var result chasm.StartExecutionResult
+		result, err = chasm.StartExecution(ctx, executionKey, startFn, req, startOpts...)
+		resultKey, created = result.ExecutionKey, result.Created
+	}
+
 	if err != nil {
-		// ExecutionAlreadyStarted would only be returned if the IDConflictPolicy were FAIL.
-		// Otherwise, we'd return the existing SANO. (And apply the OnConflictOptions next.)
 		if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 			return nil, serviceerror.NewNexusOperationExecutionAlreadyStartedf(
 				alreadyStartedErr.CurrentRequestID,
@@ -79,59 +122,12 @@ func (h *handler) StartNexusOperation(
 		return nil, err
 	}
 
-	if !result.Created {
-		if err := h.applyOnConflictOptions(ctx, result.ExecutionKey, frontendReq); err != nil {
-			return nil, err
-		}
-	}
-
 	return &nexusoperationpb.StartNexusOperationResponse{
 		FrontendResponse: &workflowservice.StartNexusOperationExecutionResponse{
-			RunId:   result.ExecutionKey.RunID,
-			Started: result.Created,
+			RunId:   resultKey.RunID,
+			Started: created,
 		},
 	}, nil
-}
-
-// applyOnConflictOptions applies the request's on_conflict_options to a SANO.
-func (h *handler) applyOnConflictOptions(
-	ctx context.Context,
-	key chasm.ExecutionKey,
-	req *workflowservice.StartNexusOperationExecutionRequest,
-) error {
-	cbs := req.GetCompletionCallbacks()
-	links := req.GetLinks()
-	onConflict := req.GetOnConflictOptions()
-	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
-	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
-	if !attachCallbacks && !attachLinks {
-		return nil
-	}
-
-	requestID := req.GetRequestId()
-	namespaceName := req.GetNamespace()
-	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports
-	// BusinessIDConflictPolicyFail in the updateFn path. (Same for standalone Activities.)
-	_, _, err := chasm.UpdateComponent(
-		ctx,
-		chasm.NewComponentRef[*Operation](key),
-		func(o *Operation, ctx chasm.MutableContext, _ any) (any, error) {
-			if attachCallbacks {
-				regTime := timestamppb.New(ctx.Now(o))
-				if err := callback.ValidateAndAttach(ctx, o, requestID, regTime, cbs, namespaceName, h.callbackValidator); err != nil {
-					return nil, err
-				}
-			}
-			if attachLinks {
-				if err := o.attachLinks(ctx, links, requestID, h.linkValidator, namespaceName); err != nil {
-					return nil, err
-				}
-			}
-			return nil, nil
-		},
-		nil,
-	)
-	return err
 }
 
 // DescribeNexusOperation queries current operation state, optionally as a long-poll that waits
