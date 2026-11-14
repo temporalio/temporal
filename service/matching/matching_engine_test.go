@@ -246,7 +246,7 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
+		queryResults:        collection.NewSyncMap[string, pendingQuery](),
 		logger:              logger,
 		throttledLogger:     log.ThrottledLogger(logger),
 		metricsHandler:      metrics.NoopMetricsHandler,
@@ -1299,6 +1299,67 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.matchingEngine.partitionsLock.RLock()
 	defer s.matchingEngine.partitionsLock.RUnlock()
 	s.Empty(s.matchingEngine.partitions)
+}
+
+func (s *matchingEngineSuite) TestRespondQueryTaskCompleted_RejectsOtherNamespace() {
+	tqName := "query-tq"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	execution := &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: uuid.NewString()}
+
+	type queryOutcome struct {
+		resp *matchingservice.QueryWorkflowResponse
+		err  error
+	}
+	queryDone := make(chan queryOutcome, 1)
+	go func() {
+		resp, err := s.matchingEngine.QueryWorkflow(context.Background(), &matchingservice.QueryWorkflowRequest{
+			NamespaceId: namespaceID,
+			TaskQueue:   taskQueue,
+			QueryRequest: &workflowservice.QueryWorkflowRequest{
+				Namespace: "ns",
+				Execution: execution,
+				Query:     &querypb.WorkflowQuery{QueryType: "q"},
+			},
+		})
+		queryDone <- queryOutcome{resp: resp, err: err}
+	}()
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			StickyTaskQueue: &taskqueuepb.TaskQueue{Name: tqName},
+		}, nil).Times(1)
+	pollResp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.NotNil(pollResp.GetQuery())
+
+	queryToken, err := s.matchingEngine.tokenSerializer.DeserializeQueryTaskToken(pollResp.GetTaskToken())
+	s.NoError(err)
+
+	completed := &workflowservice.RespondQueryTaskCompletedRequest{
+		CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
+		QueryResult:   payloads.EncodeString("answer"),
+	}
+	respond := func(nsID string) error {
+		return s.matchingEngine.RespondQueryTaskCompleted(context.Background(), &matchingservice.RespondQueryTaskCompletedRequest{
+			NamespaceId:      nsID,
+			TaskQueue:        taskQueue,
+			TaskId:           queryToken.GetTaskId(),
+			CompletedRequest: completed,
+		}, metrics.NoopMetricsHandler)
+	}
+
+	s.ErrorAs(respond(uuid.NewString()), new(*serviceerror.NotFound))
+
+	s.NoError(respond(namespaceID))
+	outcome := <-queryDone
+	s.NoError(outcome.err)
+	protorequire.ProtoEqual(s.T(), completed.GetQueryResult(), outcome.resp.GetQueryResult())
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
