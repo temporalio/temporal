@@ -4,5 +4,5 @@
 //
 // -allow-standard-tests accepts comma-separated import paths, path/... for subtrees,
 // or ... for all packages. It disables only the test-adoption policy.
-// -runner-packages trusts additional packages that wrap the shared suite runner.
+// Forwarding wrappers around the shared suite runner are recognized automatically.
 package parallelsuitelint

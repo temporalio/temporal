@@ -13,7 +13,6 @@ func TestRequiredSuites(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		allow    string
-		runners  string
 		packages []string
 	}{
 		{
@@ -36,17 +35,15 @@ func TestRequiredSuites(t *testing.T) {
 			packages: []string{"policy/allowed", "policy/allowed/child"},
 		},
 		{
-			name:     "trusted adapter",
-			runners:  "other, adapter",
+			name:     "forwarding adapters",
 			packages: []string{"policy/adapted"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			analyzer := newAnalyzer()
+			analyzer := New()
 			require.NoError(t, analyzer.Flags.Set("allow-standard-tests", tc.allow))
-			require.NoError(t, analyzer.Flags.Set("runner-packages", tc.runners))
 			analysistest.Run(t, analysistest.TestData(), analyzer, tc.packages...)
 		})
 	}
