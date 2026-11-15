@@ -12,6 +12,7 @@
 package softassert
 
 import (
+	"go.temporal.io/server/common/internal/softassert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -28,7 +29,7 @@ import (
 func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
 	if !condition {
 		// By using the same prefix for all assertions, they can be reliably found in logs.
-		logger.Error("failed assertion: "+staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
+		softassert.Fail(logger, staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
 	}
 	return condition
 }
@@ -41,5 +42,5 @@ func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.T
 // Example:
 // softassert.Fail(logger, "unreachable code reached", tag.String("state", object.state))
 func Fail(logger log.Logger, staticMessage string, tags ...tag.Tag) {
-	logger.Error("failed assertion: "+staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
+	softassert.Fail(logger, staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
 }
