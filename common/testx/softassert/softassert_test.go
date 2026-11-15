@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/internal/softassert"
+	"go.temporal.io/testx/softassert"
 )
 
 type recordingLogger struct {
