@@ -109,11 +109,11 @@ type ActivityAPIUpdateSuite struct {
 
 func TestActivityAPIUpdateSuite(t *testing.T) { parallelsuite.Run(t, &ActivityAPIUpdateSuite{}) }
 
-func (s *ActivityAPIUpdateSuite) TestActivityApiUpdateClientTestSuite() {
+func (s *ActivityAPIUpdateSuite) TestClient() {
 	for _, api := range updateAPIs() {
 		s.Run(api.name, func(s *ActivityAPIUpdateSuite) {
 
-			s.RunSequential("TestActivityUpdateApi_ChangeRetryInterval", func(s *ActivityAPIUpdateSuite) {
+			s.RunSequential("ChangeRetryInterval", func(s *ActivityAPIUpdateSuite) {
 				env := testcore.NewEnv(s.T())
 
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -190,7 +190,7 @@ func (s *ActivityAPIUpdateSuite) TestActivityApiUpdateClientTestSuite() {
 				s.NoError(err)
 			})
 
-			s.RunSequential("TestActivityUpdateApi_ChangeScheduleToClose", func(s *ActivityAPIUpdateSuite) {
+			s.RunSequential("ChangeScheduleToClose", func(s *ActivityAPIUpdateSuite) {
 				env := testcore.NewEnv(s.T())
 
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -261,7 +261,7 @@ func (s *ActivityAPIUpdateSuite) TestActivityApiUpdateClientTestSuite() {
 				env.Equal(int32(1), startedActivityCount.Load())
 			})
 
-			s.RunSequential("TestActivityUpdateApi_ChangeScheduleToCloseAndRetry", func(s *ActivityAPIUpdateSuite) {
+			s.RunSequential("ChangeScheduleToCloseAndRetry", func(s *ActivityAPIUpdateSuite) {
 				// change both schedule to close and retry policy
 				// initial values are chosen in such a way that activity will fail due to schedule to close timeout
 				// we change schedule to close to a longer value and retry policy to a shorter value
@@ -337,7 +337,7 @@ func (s *ActivityAPIUpdateSuite) TestActivityApiUpdateClientTestSuite() {
 				s.NoError(err)
 			})
 
-			s.RunSequential("TestActivityUpdateApi_ResetDefaultOptions", func(s *ActivityAPIUpdateSuite) {
+			s.RunSequential("ResetDefaultOptions", func(s *ActivityAPIUpdateSuite) {
 				// plan:
 				// 1. start the workflow, wait for activity to start and fail,
 				// 2. update activity options to change retry policy maximum attempts
@@ -461,10 +461,10 @@ func (s *ActivityAPIUpdateSuite) TestActivityApiUpdateClientTestSuite() {
 	}
 }
 
-// TestActivityUpdateExecutionOptionsApi tests the new UpdateActivityExecutionOptions RPC
+// TestExecutionOptions tests the new UpdateActivityExecutionOptions RPC
 // on workflow activities (workflow_id != ""), verifying it behaves identically to the
 // existing UpdateActivityOptions RPC.
-func (s *ActivityAPIUpdateSuite) TestActivityUpdateExecutionOptionsApi() {
+func (s *ActivityAPIUpdateSuite) TestExecutionOptions() {
 	s.RunSequential("ChangeRetryInterval", func(s *ActivityAPIUpdateSuite) {
 		env := testcore.NewEnv(s.T())
 
