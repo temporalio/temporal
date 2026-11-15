@@ -343,7 +343,7 @@ lint-parallelsuite:
 	@mkdir -p "$(dir $(PARALLELSUITELINT))"
 	@GOWORK=off go -C common/testx/parallelsuitelint build -o "$(PARALLELSUITELINT)" ./cmd/parallelsuitelint
 	@GOWORK=off "$(PARALLELSUITELINT)" -tags "$(ALL_TEST_TAGS)" \
-		-allow-standard-tests "$(MODULE_ROOT)/tests/leakcheck/...,$(MODULE_ROOT)/tests/xdc/...,$(MODULE_ROOT)/tests/passivepath/...,$(MODULE_ROOT)/tests/ndc/..." \
+		-allow-standard-tests "$(MODULE_ROOT)/tests/leakcheck/...,$(MODULE_ROOT)/tests/xdc/...,$(MODULE_ROOT)/tests/passivepath/...,$(MODULE_ROOT)/tests/ndc/...,$(MODULE_ROOT)/tests/testcore/...,$(MODULE_ROOT)/tests/testutils/..." \
 		-runner-packages "$(MODULE_ROOT)/common/testing/parallelsuite" ./tests/...
 
 lint-yaml:
