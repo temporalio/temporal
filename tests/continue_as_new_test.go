@@ -618,6 +618,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewMinBackoffDoesNotAccumulate() 
 	s.NoError(err)
 
 	const continueAsNewCount = 3
+	updateErrors := make(chan error, continueAsNewCount)
 	var firstWorkflowTaskBackoffs []time.Duration
 	runIDs := []string{we.RunId}
 	for i := range continueAsNewCount + 1 {
@@ -702,14 +703,16 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewMinBackoffDoesNotAccumulate() 
 					testcore.NewContext(),
 					updateWorkflowRequest(env, updateTV, nil),
 				)
-				if updateErr != nil {
-					s.T().Errorf("Update failed: %v", updateErr)
-				}
+				updateErrors <- updateErr
 			}(updateTV)
 			waitUpdateAdmitted(env, updateTV)
 		} else {
 			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 		}
+	}
+
+	for range continueAsNewCount {
+		s.NoError(s.Rcv(updateErrors), "update failed")
 	}
 
 	// The first run has no inherited backoff. Every continued run should stay capped at

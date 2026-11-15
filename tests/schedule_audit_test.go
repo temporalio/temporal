@@ -10,13 +10,24 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tools/tdbg/scheduleaudit"
 )
 
-func TestScheduleV1AuditVisibility(t *testing.T) { testScheduleAuditVisibility(t, v1ContextFactory) }
+type ScheduleAuditSuite struct {
+	parallelsuite.Suite[*ScheduleAuditSuite]
+}
+
+func TestScheduleV1AuditVisibility(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleAuditSuite{}, v1ContextFactory)
+}
 func TestScheduleCHASMAuditVisibility(t *testing.T) {
-	testScheduleAuditVisibility(t, chasmContextFactory)
+	parallelsuite.Run(t, &ScheduleAuditSuite{}, chasmContextFactory)
+}
+
+func (s *ScheduleAuditSuite) TestVisibility(newContext contextFactory) {
+	testScheduleAuditVisibility(s.T(), newContext)
 }
 
 func testScheduleAuditVisibility(t *testing.T, newContext contextFactory) {
