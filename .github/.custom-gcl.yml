@@ -1,7 +1,0 @@
-version: v2.14.0
-name: golangci-lint
-destination: ../.bin
-plugins:
-  - module: go.temporal.io/testx/parallelsuitelint
-    import: go.temporal.io/testx/parallelsuitelint/golangci
-    path: ../common/testx/parallelsuitelint
