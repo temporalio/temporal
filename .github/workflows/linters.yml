@@ -168,11 +168,6 @@ jobs:
         run: |
           make GOLANGCI_LINT_FIX=false GOLANGCI_LINT_BASE_REV=HEAD~ lint-code
 
-      - name: lint parallel suites
-        env:
-          PARALLELSUITELINT_BASE_REV: ${{ github.event.pull_request.base.sha }}
-        run: make lint-parallelsuite
-
       - name: check-is-dirty
         run: |
           if [[ -n $(git status --porcelain) ]]; then
