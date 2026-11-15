@@ -12,9 +12,9 @@
 package softassert
 
 import (
-	"go.temporal.io/server/common/internal/softassert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/testx/softassert"
 )
 
 // That performs a soft assertion by logging an error if the given condition is false.
