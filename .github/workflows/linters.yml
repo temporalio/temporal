@@ -150,6 +150,28 @@ jobs:
             exit 1
           fi
 
+  parallelsuitelint:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
+
+      - name: test changed-line filtering
+        run: mise exec go go:github.com/golangci/revgrep/cmd/revgrep -- bash .github/scripts/lint-parallelsuite-new_test.sh revgrep
+
+      - name: lint parallel suites
+        env:
+          PARALLELSUITELINT_BASE_REV: ${{ github.event.pull_request.base.sha }}
+        run: make lint-parallelsuite
+
   golangci:
     runs-on: ubuntu-24.04-arm
     steps:
@@ -185,6 +207,7 @@ jobs:
       - lint-protos
       - lint-actions
       - golangci
+      - parallelsuitelint
       - parallelize-tests
       - nilaway
     runs-on: ubuntu-24.04-arm
