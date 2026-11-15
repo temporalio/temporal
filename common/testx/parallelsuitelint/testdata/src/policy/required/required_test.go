@@ -17,7 +17,7 @@ func (s *validSuite) TestWorks() { s.Equal(1, 1) }
 func TestSuite(t *testing.T) { ps.Run(t, &validSuite{}) }
 func TestGeneric(t *testing.T) { ps.Run[*validSuite](t, &validSuite{}) }
 func TestSequential(t *testing.T) { ps.RunLegacySequential(t, &validSuite{}) }
-func TestAdapter(t *testing.T) { adapter.Run(t, &validSuite{}) } // want "use parallelsuite.Run for tests"
+func TestAdapter(t *testing.T) { adapter.Run(t, &validSuite{}) }
 
 type legacySuite struct{ legacy.Suite } // want "use parallelsuite.Suite instead of testify/suite.Suite"
 
