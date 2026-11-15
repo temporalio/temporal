@@ -6,6 +6,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/internal/softassert"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/zap"
@@ -571,7 +572,9 @@ func WorkerComponent(v any) ZapTag {
 }
 
 // FailedAssertion is a tag for marking a message as a failed assertion.
-var FailedAssertion = NewBoolTag("failed-assertion", true)
+//
+//nolint:forbidigo // This adapts a structured log field, not a test assertion.
+var FailedAssertion = NewZapTag(zap.Any(softassert.FailedAssertion.Key(), softassert.FailedAssertion.Value()))
 
 // history engine shard
 
