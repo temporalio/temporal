@@ -643,14 +643,14 @@ func (s *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 	return commands, nil
 }
 
-func (s *resetTest) reset(eventId int64) string {
+func (s *resetTest) reset(eventID int64) string {
 	resp, err := s.env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.env.Namespace().String(),
 		WorkflowExecution:         s.tv.WorkflowExecution(),
 		Reason:                    "reset execution from test",
-		WorkflowTaskFinishEventId: eventId,
+		WorkflowTaskFinishEventId: eventID,
 		RequestId:                 uuid.NewString(),
-		ResetReapplyType:          s.reapplyType,
+		ResetReapplyType:          s.reapplyType, //nolint:staticcheck // SA1019: exercises the legacy reset reapply option.
 		ResetReapplyExcludeTypes:  s.reapplyExcludeTypes,
 	})
 	s.NoError(err)
@@ -740,9 +740,9 @@ func (s *resetTest) run() {
 	}
 	s.NotEmpty(attachedRequestID)
 
-	resetToEventId := int64(4)
-	newRunId := s.reset(resetToEventId)
-	s.tv = s.tv.WithRunID(newRunId)
+	resetToEventID := int64(4)
+	newRunID := s.reset(resetToEventID)
+	s.tv = s.tv.WithRunID(newRunID)
 	events = s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
 
 	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(s.reapplyExcludeTypes, s.reapplyType)
@@ -796,9 +796,9 @@ func (s *resetTest) run() {
 	s.EqualHistoryEvents(expectedHistory, events)
 
 	if signals && updates {
-		resetToEventId := int64(4)
-		newRunId = s.reset(resetToEventId)
-		s.tv = s.tv.WithRunID(newRunId)
+		resetToEventID := int64(4)
+		newRunID = s.reset(resetToEventID)
+		s.tv = s.tv.WithRunID(newRunID)
 		events = s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
 		expectedHistory = `
   1 WorkflowExecutionStarted
@@ -823,7 +823,7 @@ func (s *resetTest) run() {
 			request.OnConflictOptions = onConflictOptions
 		},
 	)
-	s.Equal(newRunId, resp.RunId)
+	s.Equal(newRunID, resp.RunId)
 	requireNotStartedButRunning(s.T(), resp)
 
 	// History events must be the same.
