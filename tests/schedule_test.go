@@ -879,7 +879,7 @@ func (s *ScheduleCHASMSuite) TestDescribeCatchupWindowAfterCreateAndUpdate() {
 		{name: "above minimum", window: durationpb.New(time.Hour), expected: time.Hour},
 	}
 	for _, tc := range updates {
-		s.RunSequential(tc.name, func(s *ScheduleCHASMSuite) {
+		s.T().Run(tc.name, func(t *testing.T) {
 			schedule.Policies.CatchupWindow = tc.window
 			_, err := env.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
 				Namespace:  env.Namespace().String(),
@@ -888,8 +888,8 @@ func (s *ScheduleCHASMSuite) TestDescribeCatchupWindowAfterCreateAndUpdate() {
 				Identity:   "test",
 				RequestId:  uuid.NewString(),
 			})
-			s.NoError(err)
-			s.Equal(tc.expected, describe(s.T()))
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, describe(t))
 		})
 	}
 }
@@ -2856,7 +2856,7 @@ func (s *ScheduleSuite) TestListScheduleMatchingTimes(chasmEnabled bool) {
 			errorMessage: "start time is not a valid timestamp",
 		},
 	} {
-		s.RunSequential(tc.name, func(s *ScheduleSuite) {
+		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := env.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sid,
@@ -2865,13 +2865,13 @@ func (s *ScheduleSuite) TestListScheduleMatchingTimes(chasmEnabled bool) {
 			})
 			if tc.errorMessage != "" {
 				var invalidArgument *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidArgument)
-				s.ErrorContains(err, tc.errorMessage)
+				require.ErrorAs(t, err, &invalidArgument)
+				require.ErrorContains(t, err, tc.errorMessage)
 				return
 			}
 
-			s.NoError(err)
-			s.Len(resp.GetStartTime(), tc.expectedTimes)
+			require.NoError(t, err)
+			require.Len(t, resp.GetStartTime(), tc.expectedTimes)
 		})
 	}
 }
@@ -3309,8 +3309,8 @@ func (s *ScheduleSuite) TestListSchedulesFilterByScheduleId(chasmEnabled bool) {
 	}
 
 	for _, tc := range tests {
-		s.RunSequential(tc.name, func(s *ScheduleSuite) {
-			await.Require(newContext(testcontext.For(s.T())), s.T(), func(c *await.T) {
+		s.T().Run(tc.name, func(t *testing.T) {
+			await.Require(newContext(testcontext.For(t)), t, func(c *await.T) {
 				ids := listScheduleIDs(c, tc.query)
 				require.Len(c, ids, len(tc.wantIDs))
 				for _, want := range tc.wantIDs {
@@ -3327,7 +3327,7 @@ func (s *ScheduleSuite) TestSchedule_InternalTaskQueue(chasmEnabled bool) {
 	errorMessageKeyword := "internal per-namespace task queue"
 
 	// Test CreateSchedule with internal task queue
-	s.RunSequential("CreateSchedule_PerNSWorkerTaskQueue", func(s *ScheduleSuite) {
+	s.T().Run("CreateSchedule_PerNSWorkerTaskQueue", func(t *testing.T) {
 		sid := "sched-test-internal-tq-create"
 		schedule := &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -3355,14 +3355,14 @@ func (s *ScheduleSuite) TestSchedule_InternalTaskQueue(chasmEnabled bool) {
 
 		ctx := newContext(s.Context())
 		_, err := env.FrontendClient().CreateSchedule(ctx, req)
-		s.Error(err)
+		require.Error(t, err)
 		var invalidArgument *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgument)
-		s.Contains(err.Error(), errorMessageKeyword)
+		require.ErrorAs(t, err, &invalidArgument)
+		require.Contains(t, err.Error(), errorMessageKeyword)
 	})
 
 	// Test UpdateSchedule with internal task queue
-	s.RunSequential("UpdateSchedule_PerNSWorkerTaskQueue", func(s *ScheduleSuite) {
+	s.T().Run("UpdateSchedule_PerNSWorkerTaskQueue", func(t *testing.T) {
 		// First create a schedule with a valid task queue
 		sid := "sched-test-internal-tq-update"
 		schedule := &schedulepb.Schedule{
@@ -3391,7 +3391,7 @@ func (s *ScheduleSuite) TestSchedule_InternalTaskQueue(chasmEnabled bool) {
 
 		ctx := newContext(s.Context())
 		_, err := env.FrontendClient().CreateSchedule(ctx, req)
-		s.NoError(err)
+		require.NoError(t, err)
 
 		// Now try to update with internal task queue
 		schedule.Action.GetStartWorkflow().TaskQueue = &taskqueuepb.TaskQueue{
@@ -3407,10 +3407,10 @@ func (s *ScheduleSuite) TestSchedule_InternalTaskQueue(chasmEnabled bool) {
 		}
 
 		_, err = env.FrontendClient().UpdateSchedule(ctx, updateReq)
-		s.Error(err)
+		require.Error(t, err)
 		var invalidArgument *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgument)
-		s.Contains(err.Error(), errorMessageKeyword)
+		require.ErrorAs(t, err, &invalidArgument)
+		require.Contains(t, err.Error(), errorMessageKeyword)
 	})
 }
 
@@ -4664,36 +4664,37 @@ func (s *ScheduleCHASMSuite) TestMigrationCallbackReattachSynthesized() {
 	}
 
 	for _, tc := range cases {
-		s.Run(tc.name, func(s *ScheduleCHASMSuite) {
-			env := newScheduleEnv(s.T(), scheduleCommonOpts(s.T())...)
+		s.T().Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 			sid := testcore.RandomizeStr("sched-reattach")
 			wid := testcore.RandomizeStr("sched-reattach-wf")
 			wt := testcore.RandomizeStr("sched-reattach-wt")
 
-			ctx := newContext(testcontext.For(s.T()))
-			metricCapture := env.StartNamespaceMetricCapture()
+			ctx := newContext(testcontext.For(t))
+			metricCapture := s.StartNamespaceMetricCapture()
 
 			runID := uuid.NewString()
 			if !tc.targetMissing {
 				var runs atomic.Int32
-				registerCountingWorkflow(env, wt, &runs)
-				startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-					Namespace:    env.Namespace().String(),
+				registerCountingWorkflow(s, wt, &runs)
+				startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+					Namespace:    s.Namespace().String(),
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Identity:     testcore.RandomizeStr("identity"),
 					RequestId:    testcore.RandomizeStr("request-id"),
 				})
-				s.NoError(err)
+				require.NoError(t, err)
 				runID = startResp.RunId
 
 				// Close it before migrating, so the re-attach describes a workflow that is
 				// already finished rather than racing one that is still running.
-				await.RequireTruef(s.T(), func() bool {
-					desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-						Namespace: env.Namespace().String(),
+				await.RequireTruef(t, func() bool {
+					desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+						Namespace: s.Namespace().String(),
 						Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: runID},
 					})
 					return err == nil &&
@@ -4701,25 +4702,25 @@ func (s *ScheduleCHASMSuite) TestMigrationCallbackReattachSynthesized() {
 				}, awaitTimeout, pollInterval, "target workflow should close before migration")
 			}
 
-			createSchedulerFromMigrationState(ctx, s.T(), env, sid, wid, wt, runID)
+			createSchedulerFromMigrationState(ctx, t, s, sid, wid, wt, runID)
 
-			awaitReattachMetric(s.T(), metricCapture, "completed", tc.wantReason)
+			awaitReattachMetric(t, metricCapture, "completed", tc.wantReason)
 
 			// The synthesized result must also reach the schedule's own view, not just
 			// the counter.
-			desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-				Namespace:  env.Namespace().String(),
+			desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
 				ScheduleId: sid,
 			})
-			s.NoError(err)
-			s.Empty(desc.GetInfo().GetRunningWorkflows())
+			require.NoError(t, err)
+			require.Empty(t, desc.GetInfo().GetRunningWorkflows())
 			actions := desc.GetInfo().GetRecentActions()
-			s.Len(actions, 1)
-			s.Equal(wid, actions[0].GetStartWorkflowResult().GetWorkflowId())
-			s.Equal(tc.wantStatus, actions[0].GetStartWorkflowStatus())
+			require.Len(t, actions, 1)
+			require.Equal(t, wid, actions[0].GetStartWorkflowResult().GetWorkflowId())
+			require.Equal(t, tc.wantStatus, actions[0].GetStartWorkflowStatus())
 
 			// Nothing was actually attached, so no delivery should have been attempted.
-			s.Empty(metricCapture.Metric(callback.InternalRequestCounter.Name()))
+			require.Empty(t, metricCapture.Metric(callback.InternalRequestCounter.Name()))
 		})
 	}
 }
@@ -6927,28 +6928,28 @@ func (s *ScheduleCHASMSuite) TestScheduleRejectsInvalidRequests() {
 	}
 
 	for _, tc := range testCases {
-		s.RunSequential(tc.name, func(s *ScheduleCHASMSuite) {
+		s.T().Run(tc.name, func(t *testing.T) {
 			scheduleID := testcore.RandomizeStr("sched-invalid-request")
 			if tc.requiresExisting {
-				createSchedule(ctx, s.T(), env, scheduleID, validSchedule(scheduleID))
+				createSchedule(ctx, t, env, scheduleID, validSchedule(scheduleID))
 			}
 
 			var invalidArgument *serviceerror.InvalidArgument
 			err := tc.request(scheduleID)
-			s.ErrorAs(err, &invalidArgument)
-			s.ErrorContains(err, tc.errorMessage)
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, tc.errorMessage)
 
 			describeResponse, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: scheduleID,
 			})
 			if tc.requiresExisting {
-				s.NoError(err)
-				s.NotNil(describeResponse)
+				require.NoError(t, err)
+				require.NotNil(t, describeResponse)
 				return
 			}
 			var notFound *serviceerror.NotFound
-			s.ErrorAs(err, &notFound)
+			require.ErrorAs(t, err, &notFound)
 		})
 	}
 }
