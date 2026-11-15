@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	testlogger "go.temporal.io/server/common/testing/testlogger/internal/engine"
+	"go.temporal.io/testx/testlogger"
 )
 
 // mockT wraps a testing.T such that we can know if a test is failed.

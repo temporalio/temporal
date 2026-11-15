@@ -3,7 +3,7 @@ package testlogger
 
 import (
 	"go.temporal.io/server/common/log/tag"
-	testlogger "go.temporal.io/server/common/testing/testlogger/internal/engine"
+	"go.temporal.io/testx/testlogger"
 )
 
 type CapturedLog = testlogger.CapturedLog[tag.Tag]
