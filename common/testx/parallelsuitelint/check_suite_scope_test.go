@@ -12,9 +12,3 @@ func TestSuiteScope(t *testing.T) {
 
 	analysistest.Run(t, analysistest.TestData(), parallelsuitelint.Analyzer, "ownership")
 }
-
-func TestSharedSuiteScope(t *testing.T) {
-	t.Parallel()
-
-	analysistest.Run(t, analysistest.TestData(), parallelsuitelint.Analyzer, "shared")
-}

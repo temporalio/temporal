@@ -1,11 +1,9 @@
-package dotassertions
+package conventions
 
 import (
 	. "github.com/stretchr/testify/require"
 	ps "go.temporal.io/testx/parallelsuite"
 )
-
-type testSuite struct{ ps.Suite[*testSuite] }
 
 func requireAssertions(s *testSuite) {
 	Equal(s.T(), 1, 2) // want "use suite assertion methods directly"

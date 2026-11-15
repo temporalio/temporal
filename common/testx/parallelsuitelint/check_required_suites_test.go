@@ -18,7 +18,7 @@ func TestRequiredSuites(t *testing.T) {
 	}{
 		{
 			name:     "default",
-			packages: []string{"policy/required", "policy/testmain"},
+			packages: []string{"policy/required"},
 		},
 		{
 			name:     "exact packages",
@@ -27,8 +27,8 @@ func TestRequiredSuites(t *testing.T) {
 		},
 		{
 			name:     "recursive packages",
-			allow:    "policy/allowed/...",
-			packages: []string{"policy/allowed", "policy/allowed/child", "policy/allowedmore"},
+			allow:    "policy/allowed/..., policy/neighbor/...",
+			packages: []string{"policy/allowed", "policy/allowed/child", "policy/neighbor_test"},
 		},
 		{
 			name:     "all packages",

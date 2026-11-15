@@ -1,4 +1,4 @@
-package testmain
+package required_test
 
 import "testing"
 
