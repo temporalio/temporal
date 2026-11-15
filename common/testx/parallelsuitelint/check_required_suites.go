@@ -16,7 +16,8 @@ const testifySuitePath = "github.com/stretchr/testify/suite"
 
 // checkRequiredSuites requires suite entrypoints unless the package allows ordinary tests.
 // Benchmarks, fuzz tests, examples and TestMain retain their standard entrypoints.
-func checkRequiredSuites(pass *analysis.Pass, allowedPackages, runnerPackages string) {
+func checkRequiredSuites(pass *analysis.Pass, allowedPackages string) {
+	recordSuiteRunners(pass)
 	if standardTestsAllowed(packageImportPath(pass), allowedPackages) {
 		return
 	}
@@ -26,7 +27,7 @@ func checkRequiredSuites(pass *analysis.Pass, allowedPackages, runnerPackages st
 			switch node := node.(type) {
 			case *ast.FuncDecl:
 				if isTestFile {
-					checkTestEntrypoint(pass, node, runnerPackages)
+					checkTestEntrypoint(pass, node)
 				}
 			case *ast.Ident:
 				checkTestifySuiteType(pass, node)
@@ -40,8 +41,8 @@ func checkRequiredSuites(pass *analysis.Pass, allowedPackages, runnerPackages st
 }
 
 // checkTestEntrypoint requires ordinary tests to delegate directly to a suite runner.
-func checkTestEntrypoint(pass *analysis.Pass, fn *ast.FuncDecl, runnerPackages string) {
-	if ordinaryTest(pass, fn) && !suiteEntrypoint(pass, fn, runnerPackages) {
+func checkTestEntrypoint(pass *analysis.Pass, fn *ast.FuncDecl) {
+	if ordinaryTest(pass, fn) && !suiteEntrypoint(pass, fn) {
 		pass.Reportf(fn.Pos(), "use parallelsuite.Run for tests; allow ordinary tests with -allow-standard-tests")
 	}
 }
@@ -127,7 +128,7 @@ func ordinaryTest(pass *analysis.Pass, fn *ast.FuncDecl) bool {
 	return ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "testing" && named.Obj().Name() == "T"
 }
 
-func suiteEntrypoint(pass *analysis.Pass, fn *ast.FuncDecl, runnerPackages string) bool {
+func suiteEntrypoint(pass *analysis.Pass, fn *ast.FuncDecl) bool {
 	if len(fn.Body.List) != 1 {
 		return false
 	}
@@ -146,7 +147,7 @@ func suiteEntrypoint(pass *analysis.Pass, fn *ast.FuncDecl, runnerPackages strin
 	if runner.Pkg().Path() == testifySuitePath && runner.Name() == "Run" {
 		return true // The call receives the more specific policy diagnostic.
 	}
-	if !suiteRunnerPackage(runner.Pkg().Path(), runnerPackages) || (runner.Name() != "Run" && runner.Name() != "RunLegacySequential") {
+	if !suiteRunner(pass, runner) {
 		return false
 	}
 	if len(call.Args) < 2 || len(fn.Type.Params.List[0].Names) != 1 {
@@ -158,16 +159,4 @@ func suiteEntrypoint(pass *analysis.Pass, fn *ast.FuncDecl, runnerPackages strin
 	}
 	parameter := fn.Type.Params.List[0].Names[0]
 	return pass.TypesInfo.ObjectOf(argument) == pass.TypesInfo.ObjectOf(parameter) && suiteExpression(pass, call.Args[1])
-}
-
-func suiteRunnerPackage(pkg, additional string) bool {
-	if pkg == suitePath {
-		return true
-	}
-	for entry := range strings.SplitSeq(additional, ",") {
-		if strings.TrimSpace(entry) == pkg {
-			return true
-		}
-	}
-	return false
 }

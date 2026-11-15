@@ -1,0 +1,27 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - parallelsuitelint
+  settings:
+    custom:
+      parallelsuitelint:
+        type: module
+        description: Check parallel suite scope, conventions, and adoption.
+        settings:
+          allow-standard-tests:
+            - go.temporal.io/server/tests/leakcheck/...
+            - go.temporal.io/server/tests/xdc/...
+            - go.temporal.io/server/tests/passivepath/...
+            - go.temporal.io/server/tests/ndc/...
+            - go.temporal.io/server/tests/testcore/...
+            - go.temporal.io/server/tests/testutils/...
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 10m
+  modules-download-mode: readonly

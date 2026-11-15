@@ -194,8 +194,7 @@ YAMLFMT = $(call mise-tool,yamlfmt,go:github.com/google/yamlfmt/cmd/yamlfmt)
 GOIMPORTS = $(call mise-tool,goimports,go:golang.org/x/tools/cmd/goimports)
 GOMAJOR = $(call mise-tool,gomajor,go:github.com/icholy/gomajor)
 ERRORTYPE = $(call mise-tool,errortype,go:fillmore-labs.com/errortype)
-PARALLELSUITELINT := $(ROOT)/.bin/parallelsuitelint
-REVGREP = $(call mise-tool,revgrep,go:github.com/golangci/revgrep/cmd/revgrep)
+PARALLELSUITE_GOLANGCI_LINT := $(ROOT)/.bin/golangci-lint-parallelsuite
 MOCKGEN = $(call mise-tool,mockgen,go:go.uber.org/mock/mockgen)
 PROTOC = $(call mise-tool,protoc,protoc)
 PROTOC_GEN_GO = $(call mise-tool,protoc-gen-go,go:google.golang.org/protobuf/cmd/protoc-gen-go)
@@ -339,15 +338,16 @@ lint-code:
 	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_VARIANT_DIRS))
 
 .PHONY: lint-parallelsuite
-lint-parallelsuite:
+lint-parallelsuite: $(PARALLELSUITE_GOLANGCI_LINT)
 	@printf $(COLOR) "Linting parallel suites in tests/..."
-	@mkdir -p "$(dir $(PARALLELSUITELINT))"
-	@GOWORK=off go -C common/testx/parallelsuitelint build -o "$(PARALLELSUITELINT)" ./cmd/parallelsuitelint
-	@GOWORK=off GOFLAGS="$(GOFLAGS) -tags=$(ALL_TEST_TAGS)" \
-		$(if $(PARALLELSUITELINT_BASE_REV),bash .github/scripts/lint-parallelsuite-new.sh "$(REVGREP)" "$(PARALLELSUITELINT_BASE_REV)") \
-		"$(PARALLELSUITELINT)" \
-		-allow-standard-tests "$(MODULE_ROOT)/tests/leakcheck/...,$(MODULE_ROOT)/tests/xdc/...,$(MODULE_ROOT)/tests/passivepath/...,$(MODULE_ROOT)/tests/ndc/...,$(MODULE_ROOT)/tests/testcore/...,$(MODULE_ROOT)/tests/testutils/..." \
-		-runner-packages "$(MODULE_ROOT)/common/testing/parallelsuite" ./tests/...
+	@GOWORK=off "$(PARALLELSUITE_GOLANGCI_LINT)" run \
+		--config=.github/.golangci-parallelsuite.yml --build-tags "$(ALL_TEST_TAGS)" \
+		$(if $(PARALLELSUITELINT_BASE_REV),--new-from-rev="$(PARALLELSUITELINT_BASE_REV)") ./tests/...
+
+$(PARALLELSUITE_GOLANGCI_LINT): .custom-gcl.yml \
+		$(filter-out %_test.go,$(wildcard common/testx/parallelsuitelint/*.go common/testx/parallelsuitelint/golangci/*.go)) \
+		common/testx/parallelsuitelint/go.mod common/testx/parallelsuitelint/go.sum
+	@GOWORK=off $(GOLANGCI_LINT) custom
 
 lint-yaml:
 	@printf $(COLOR) "Checking YAML formatting..."
