@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -609,8 +610,8 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnContinueAsNew() {
 // for eagerly dispatched activities. Eager activities are started inline during
 // RespondWorkflowTaskCompleted (bypassing matching/RecordActivityTaskStarted), so the
 // server must set StartedClock in the eager path for worker commands to be dispatched.
-func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() {
-	env := testcore.NewEnv(s.T(),
+func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
+	env := testcore.NewEnv(t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 	)
@@ -633,7 +634,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 		WorkflowExecutionTimeout: durationpb.New(60 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Poll and complete first workflow task - schedule an eager activity.
 	// WorkerControlTaskQueue is set on the WFT completion request (not the activity poll)
@@ -660,11 +661,11 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 			}, nil
 		},
 	)
-	s.NoError(err)
+	require.NoError(t, err)
 	env.NotEmpty(wftResp.GetActivityTasks(), "Expected eager activity task in WFT completion response")
 	eagerActivityTaskToken := wftResp.GetActivityTasks()[0].TaskToken
 	env.NotEmpty(eagerActivityTaskToken, "Expected task token from eager activity")
-	s.T().Log("Activity eagerly dispatched")
+	t.Log("Activity eagerly dispatched")
 
 	// Request workflow cancellation
 	_, err = env.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -674,7 +675,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 			RunId:      startResp.RunId,
 		},
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Poll and complete the workflow task with RequestCancelActivityTask command.
 	_, err = poller.PollAndHandleWorkflowTask(tv,
@@ -699,13 +700,13 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 				},
 			}, nil
 		})
-	s.NoError(err)
-	s.T().Log("Workflow task completed with RequestCancelActivityTask command")
+	require.NoError(t, err)
+	t.Log("Workflow task completed with RequestCancelActivityTask command")
 
 	// Poll Nexus control queue - cancel command should be dispatched because
 	// StartedClock is set for the eager activity.
 	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
-	await.RequireTruef(s.T(), func() bool {
+	await.RequireTruef(t, func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer pollCancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
@@ -728,13 +729,13 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 
 	var executeReq workerservicepb.ExecuteCommandsRequest
 	err = payload.Decode(startOp.Payload, &executeReq)
-	s.NoError(err)
+	require.NoError(t, err)
 	env.Len(executeReq.Commands, 1)
 	cancelCmd := executeReq.Commands[0].GetCancelActivity()
 	env.NotNil(cancelCmd, "Expected CancelActivity command")
 	env.Equal(eagerActivityTaskToken, cancelCmd.TaskToken,
 		"Cancel command task token must match the eager activity's task token")
-	s.T().Log("SUCCESS: Received cancel command on control queue for eagerly dispatched activity")
+	t.Log("SUCCESS: Received cancel command on control queue for eagerly dispatched activity")
 }
 
 // TestPollWorkerCommandsWithDeploymentOptions verifies that cancel commands are delivered

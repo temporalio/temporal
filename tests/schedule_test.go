@@ -907,7 +907,6 @@ func TestScheduleV1Suite(t *testing.T) {
 	parallelsuite.Run(t, &ScheduleV1Suite{})
 }
 
-//nolint:parallelsuitelint // Overrides package-global scheduler state and must remain nonparallel.
 func TestScheduleV1ActionDelayMetrics(t *testing.T) {
 	newContext := v1ContextFactory
 	// The short-refresh DesiredTime path this test exercises is gated behind
@@ -2153,25 +2152,17 @@ func (s *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmEnabl
 	}
 }
 
-type ScheduleCompatibilitySuite struct {
-	parallelsuite.Suite[*ScheduleCompatibilitySuite]
-}
-
-func TestScheduleCompatibilitySuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleCompatibilitySuite{})
-}
-
 // TestScheduleLastCompletionResultMatchesV1 drives a V1 and a V2 schedule
 // through the same outcomes and requires every started event to be identical,
 // presence-aware (nil != empty Payloads), except where a no-result run intentionally
 // diverges: V1 keeps the previous result and failure, V2 clears both. An explicit nil
 // (binary/null) is a result for both.
-func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1() {
-	env := newScheduleEnv(s.T(), append(scheduleCommonOpts(s.T()),
+func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
+	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithTestTimeout(3*time.Minute),
 	)...)
-	ctx := testcontext.For(s.T())
+	ctx := testcontext.For(t)
 
 	type sched struct {
 		name, scheduleID, workflowID string
@@ -2197,7 +2188,7 @@ func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1()
 		Outcome string
 	}
 	var current sync.Map // workflow ID prefix -> step
-	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) (any, error) {
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) (any, error) {
 		var st step
 		_ = workflow.SideEffect(ctx, func(workflow.Context) any {
 			id := workflow.GetInfo(ctx).WorkflowExecution.ID
@@ -2225,56 +2216,56 @@ func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1()
 	}, workflow.RegisterOptions{Name: wt})
 
 	for _, sc := range scheds {
-		_, err := env.FrontendClient().CreateSchedule(sc.newContext(ctx), &workflowservice.CreateScheduleRequest{
-			Namespace:  env.Namespace().String(),
+		_, err := s.FrontendClient().CreateSchedule(sc.newContext(ctx), &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
 			ScheduleId: sc.scheduleID,
 			Schedule: &schedulepb.Schedule{
 				Spec:     &schedulepb.ScheduleSpec{},
-				Action:   startWorkflowAction(env, sc.workflowID, wt),
+				Action:   startWorkflowAction(s, sc.workflowID, wt),
 				Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
 				State:    &schedulepb.ScheduleState{Paused: true},
 			},
 			Identity:  "test",
 			RequestId: uuid.NewString(),
 		})
-		s.NoError(err, sc.name)
+		require.NoError(t, err, sc.name)
 	}
 
 	runEvents := func(sc sched, i int) (*historypb.WorkflowExecutionStartedEventAttributes, enumspb.EventType) {
 		// Generated workflow IDs have second resolution; nothing to await, so sleep to the next boundary.
 		time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second))) //nolint:forbidigo
-		_, err := env.FrontendClient().PatchSchedule(sc.newContext(ctx), &workflowservice.PatchScheduleRequest{
-			Namespace:  env.Namespace().String(),
+		_, err := s.FrontendClient().PatchSchedule(sc.newContext(ctx), &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
 			ScheduleId: sc.scheduleID,
 			Patch:      triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP),
 			Identity:   "test",
 			RequestId:  uuid.NewString(),
 		})
-		s.NoError(err, sc.name)
+		require.NoError(t, err, sc.name)
 
 		var execution *commonpb.WorkflowExecution
-		await.Requiref(ctx, s.T(), func(at *await.T) {
-			desc, err := env.FrontendClient().DescribeSchedule(sc.newContext(ctx), &workflowservice.DescribeScheduleRequest{
-				Namespace:  env.Namespace().String(),
+		await.Requiref(ctx, t, func(at *await.T) {
+			desc, err := s.FrontendClient().DescribeSchedule(sc.newContext(ctx), &workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
 				ScheduleId: sc.scheduleID,
 			})
 			require.NoError(at, err)
 			actions := desc.GetInfo().GetRecentActions()
 			require.Len(at, actions, i+1)
 			execution = actions[i].GetStartWorkflowResult()
-			wf, err := env.SdkClient().DescribeWorkflowExecution(at.Context(), execution.GetWorkflowId(), execution.GetRunId())
+			wf, err := s.SdkClient().DescribeWorkflowExecution(at.Context(), execution.GetWorkflowId(), execution.GetRunId())
 			require.NoError(at, err)
 			require.NotEqual(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, wf.GetWorkflowExecutionInfo().GetStatus())
 		}, 20*time.Second, 100*time.Millisecond, "%s: action %d never started and closed", sc.name, i)
 
 		var events []*historypb.HistoryEvent
-		iter := env.SdkClient().GetWorkflowHistory(ctx, execution.GetWorkflowId(), execution.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		iter := s.SdkClient().GetWorkflowHistory(ctx, execution.GetWorkflowId(), execution.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for iter.HasNext() {
 			event, err := iter.Next()
-			s.NoError(err)
+			require.NoError(t, err)
 			events = append(events, event)
 		}
-		s.NotEmpty(events)
+		require.NotEmpty(t, events)
 
 		started := proto.CloneOf(events[0].GetWorkflowExecutionStartedEventAttributes())
 		// Per-execution identity and wall-clock fields.
@@ -2316,8 +2307,8 @@ func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1()
 		default: // fail
 			v2FailureCleared = false
 		}
-		s.Empty(protodiff.Diff(started[0], started[1]), "step %d (%s): started event differs (-v1 +v2)", i, outcome)
-		s.Equal(closed[0], closed[1], "step %d (%s): close event differs (v1, v2)", i, outcome)
+		require.Empty(t, protodiff.Diff(started[0], started[1]), "step %d (%s): started event differs (-v1 +v2)", i, outcome)
+		require.Equal(t, closed[0], closed[1], "step %d (%s): close event differs (v1, v2)", i, outcome)
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testcontext"
 )
 
@@ -55,15 +54,11 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 	})
 }
 
-type ActivityDriverSuite struct {
-	parallelsuite.Suite[*ActivityDriverSuite]
-}
-
-func TestActivityDriverSuite(t *testing.T) { parallelsuite.Run(t, &ActivityDriverSuite{}) }
-
 // The model refuses two sorts of trace event: one whose clock is not running, and a Poll that
 // finds no task. Driving either waits for something that never happens.
-func (s *ActivityDriverSuite) TestModelRefusesUnrealizableEvents() {
+func TestModelRefusesUnrealizableEvents(t *testing.T) {
+	t.Parallel()
+
 	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
 	for name, tc := range map[string]struct {
 		accepted []model.Event
@@ -91,13 +86,14 @@ func (s *ActivityDriverSuite) TestModelRefusesUnrealizableEvents() {
 			failure:  "event that cannot occur",
 		},
 	} {
-		s.Run(name, func(s *ActivityDriverSuite) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
 			m := newActivityModel(cfg)
 			for _, e := range tc.accepted {
-				s.Emptyf(tryAdvance(m, e), "the model must accept %s", e)
+				require.Emptyf(t, tryAdvance(m, e), "the model must accept %s", e)
 			}
-			s.Contains(tryAdvance(m, tc.refused), tc.failure)
+			require.Contains(t, tryAdvance(m, tc.refused), tc.failure)
 		})
 	}
 }
@@ -130,13 +126,17 @@ type contextualDriver interface{ testContext() context.Context }
 // Runs inside a synctest bubble so it doesn't need to wait out real minutes of test-context timeout,
 // and so `go test -timeout` (a real-clock deadline, meaningless in a fake-clock bubble) can't cap the
 // context and mask the very extension this test is checking for.
-func (s *ActivityDriverSuite) TestDriverContextReflectsExtension() {
+func TestDriverContextReflectsExtension(t *testing.T) {
+	t.Parallel()
+
 	for name, newDriver := range map[string]func(*testing.T) contextualDriver{
 		"SAA": func(t *testing.T) contextualDriver { return newSAADriver(t, nil, activityConfig{}) },
 		"WFA": func(t *testing.T) contextualDriver { return newWFADriver(t, nil, activityConfig{}) },
 	} {
-		s.Run(name, func(s *ActivityDriverSuite) {
-			synctest.Test(s.T(), func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
 				d := newDriver(t)
 				before, ok := d.testContext().Deadline()
 				require.True(t, ok)
