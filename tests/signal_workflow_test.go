@@ -1749,7 +1749,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_DedupOnClosedExecu
 	}
 
 	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), sRequest)
-	s.Require().NoError(err)
+	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
 	s.True(resp.Started)
 	runID1 := resp.GetRunId()
@@ -1768,18 +1768,18 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_DedupOnClosedExecu
 
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 	_, err = poller.PollAndHandleWorkflowTask(env.Tv().WithTaskQueue(tl), wtHandler)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: runID1},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 
 	// Started remains true because the request ID created the returned run.
 	resp, err = env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), sRequest)
-	s.Require().NoError(err)
+	s.NoError(err)
 	s.Equal(runID1, resp.GetRunId())
 	s.True(resp.Started)
 
@@ -1787,7 +1787,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_DedupOnClosedExecu
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	s.Equal(runID1, descResp.WorkflowExecutionInfo.Execution.RunId)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 
@@ -1805,7 +1805,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_DedupOnClosedExecu
 
 	sRequest.RequestId = uuid.NewString()
 	resp, err = env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), sRequest)
-	s.Require().NoError(err)
+	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
 	s.NotEqual(runID1, resp.GetRunId())
 	s.True(resp.Started)
