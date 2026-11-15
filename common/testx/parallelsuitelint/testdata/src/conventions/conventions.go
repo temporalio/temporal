@@ -13,13 +13,13 @@ type testSuite struct{ ps.Suite[*testSuite] }
 type alias = testSuite
 type wrapperSuite struct{ *testSuite }
 
-func (other *testSuite) wrongReceiver() {} // want "suite receiver must be named s"
-func (*testSuite) unnamedReceiver() {} // want "suite receiver must be named s"
+func (other *testSuite) wrongReceiver()      {} // want "suite receiver must be named s"
+func (*testSuite) unnamedReceiver()          {} // want "suite receiver must be named s"
 func (other *wrapperSuite) wrapperReceiver() {} // want "suite receiver must be named s"
-func (s *alias) correctReceiver() { s.Equal(1, 1) }
+func (s *alias) correctReceiver()            { s.Equal(1, 1) }
 
 func callbacks(s *testSuite) {
-	s.Run("child", func(child *testSuite) { child.Equal(1, 1) }) // want "suite callback parameter must be named s"
+	s.Run("child", func(child *testSuite) { child.Equal(1, 1) })           // want "suite callback parameter must be named s"
 	s.RunSequential("child", func(child *testSuite) { child.Equal(1, 1) }) // want "suite callback parameter must be named s"
 	s.Run("nested", func(s *testSuite) {
 		s.Run("child", func(s *testSuite) { s.Equal(1, 1) })
@@ -27,19 +27,19 @@ func callbacks(s *testSuite) {
 }
 
 func attempts(s *testSuite) {
-	s.Await(func(child *testSuite) { child.Equal(1, 1) }, time.Second, time.Millisecond) // want "suite callback parameter must be named s"
+	s.Await(func(child *testSuite) { child.Equal(1, 1) }, time.Second, time.Millisecond)             // want "suite callback parameter must be named s"
 	s.Awaitf(func(child *testSuite) { child.Equal(1, 1) }, time.Second, time.Millisecond, "waiting") // want "suite callback parameter must be named s"
 	s.Await(func(s *testSuite) { s.Equal(1, 1) }, time.Second, time.Millisecond)
 	s.Equal(1, 1)
 }
 
 func assertions(s *testSuite) {
-	require.Equal(s.T(), 1, 1) // want "use suite assertion methods directly"
-	assert.Equal(s.T(), 1, 1) // want "use suite assertion methods directly"
-	require.NoError(s.TB(), nil) // want "use suite assertion methods directly"
+	require.Equal(s.T(), 1, 1)          // want "use suite assertion methods directly"
+	assert.Equal(s.T(), 1, 1)           // want "use suite assertion methods directly"
+	require.NoError(s.TB(), nil)        // want "use suite assertion methods directly"
 	require.Equal(s.AssertionT(), 1, 1) // want "use suite assertion methods directly"
-	s.Require().Equal(1, 1) // want "use suite assertion methods directly"
-	s.Assertions.Equal(1, 1) // want "use suite assertion methods directly"
+	s.Require().Equal(1, 1)             // want "use suite assertion methods directly"
+	s.Assertions.Equal(1, 1)            // want "use suite assertion methods directly"
 	s.Equal(1, 1)
 	s.NoError(nil)
 	s.Equal(s.T(), s.T())
@@ -50,20 +50,20 @@ func assertions(s *testSuite) {
 
 func bypasses(s *testSuite) {
 	s.T().Run("child", func(t *testing.T) {}) // want "use suite Run or RunSequential"
-	s.T().Parallel() // want "do not call Parallel on a suite test handle"
+	s.T().Parallel()                          // want "do not call Parallel on a suite test handle"
 }
 
 func rawAssertions(s *testSuite) {
-	s.T().Error("failure") // want "use suite assertion methods directly"
-	s.TB().Fatal("failure") // want "use suite assertion methods directly"
+	s.T().Error("failure")           // want "use suite assertion methods directly"
+	s.TB().Fatal("failure")          // want "use suite assertion methods directly"
 	s.AssertionT().Errorf("failure") // want "use suite assertion methods directly"
-	s.AssertionT().FailNow() // want "use suite assertion methods directly"
+	s.AssertionT().FailNow()         // want "use suite assertion methods directly"
 }
 
 func disabledMethods(s *testSuite) {
-	s.Assert() // want "Assert is unsupported by parallelsuite"
+	s.Assert()    // want "Assert is unsupported by parallelsuite"
 	s.SetT(s.T()) // want "SetT is unsupported by parallelsuite"
-	s.SetS(s) // want "SetS is unsupported by parallelsuite"
+	s.SetS(s)     // want "SetS is unsupported by parallelsuite"
 }
 
 func scopeHelpers(s ps.Scope) {
@@ -74,7 +74,8 @@ func scopeHelpers(s ps.Scope) {
 }
 
 type unrelated struct{}
-func (other *unrelated) method() {}
+
+func (other *unrelated) method()                {}
 func (*unrelated) Run(string, func(*testSuite)) {}
 
 func unrelatedCalls(other *unrelated, t *testing.T) {

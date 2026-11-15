@@ -6,7 +6,7 @@ import (
 )
 
 func requireAssertions(s *testSuite) {
-	Equal(s.T(), 1, 2) // want "use suite assertion methods directly"
+	Equal(s.T(), 1, 2)           // want "use suite assertion methods directly"
 	NoError(s.AssertionT(), nil) // want "use suite assertion methods directly"
 }
 
