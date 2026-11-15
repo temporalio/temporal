@@ -74,17 +74,17 @@ func expectScheduleProgressesWhilePaused(policy enumspb.ScheduleOverlapPolicy) b
 }
 
 func (s *ScheduleV1Suite) TestWorkflowPauseInteraction() {
-	s.T().Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, v1ContextFactory) })
-	s.T().Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, v1ContextFactory) })
-	s.T().Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, v1ContextFactory) })
-	s.T().Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, v1ContextFactory) })
+	s.RunSequential("Overlap", func(s *ScheduleV1Suite) { runSchedulePauseOverlapMatrix(s.T(), v1ContextFactory) })
+	s.RunSequential("UnpauseRecovery", func(s *ScheduleV1Suite) { runSchedulePauseRecoveryMatrix(s.T(), v1ContextFactory) })
+	s.RunSequential("ContinueAsNew", func(s *ScheduleV1Suite) { testSchedulePauseContinueAsNew(s.T(), v1ContextFactory) })
+	s.RunSequential("Reset", func(s *ScheduleV1Suite) { testSchedulePauseReset(s.T(), v1ContextFactory) })
 }
 
 func (s *ScheduleCHASMSuite) TestWorkflowPauseInteraction() {
-	s.T().Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, chasmContextFactory) })
-	s.T().Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, chasmContextFactory) })
-	s.T().Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, chasmContextFactory) })
-	s.T().Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, chasmContextFactory) })
+	s.RunSequential("Overlap", func(s *ScheduleCHASMSuite) { runSchedulePauseOverlapMatrix(s.T(), chasmContextFactory) })
+	s.RunSequential("UnpauseRecovery", func(s *ScheduleCHASMSuite) { runSchedulePauseRecoveryMatrix(s.T(), chasmContextFactory) })
+	s.RunSequential("ContinueAsNew", func(s *ScheduleCHASMSuite) { testSchedulePauseContinueAsNew(s.T(), chasmContextFactory) })
+	s.RunSequential("Reset", func(s *ScheduleCHASMSuite) { testSchedulePauseReset(s.T(), chasmContextFactory) })
 }
 
 func runSchedulePauseOverlapMatrix(t *testing.T, newContext contextFactory) {
