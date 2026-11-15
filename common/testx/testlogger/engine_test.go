@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	testlogger "go.temporal.io/server/common/testing/testlogger/internal/engine"
+	"go.temporal.io/testx/testlogger"
 )
 
 type field struct {
