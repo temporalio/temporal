@@ -185,6 +185,11 @@ linters:
       - ^proto
       - ^.git
     rules:
+      # This test overrides package-global scheduler state and must remain nonparallel.
+      - path: ^tests/schedule_test\.go$
+        source: "^func TestScheduleV1ActionDelayMetrics\\("
+        linters:
+          - parallelsuitelint
       - path-except: ^tests/
         linters:
           - parallelsuitelint

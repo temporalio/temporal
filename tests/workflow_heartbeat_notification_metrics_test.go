@@ -23,16 +23,25 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
-	t.Parallel()
+type WorkflowHeartbeatNotificationMetricsSuite struct {
+	parallelsuite.Suite[*WorkflowHeartbeatNotificationMetricsSuite]
+}
+
+func TestWorkflowHeartbeatNotificationMetricsSuite(t *testing.T) {
+	parallelsuite.Run(t, &WorkflowHeartbeatNotificationMetricsSuite{})
+}
+
+func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask() {
 	for _, input := range []string{"signal", "update", "timer"} {
-		t.Run(input, func(t *testing.T) {
-			t.Parallel()
+		s.Run(input, func(s *WorkflowHeartbeatNotificationMetricsSuite) {
+			t := s.T()
+
 			env := testcore.NewEnv(t)
 			tv := env.Tv()
 			start, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
@@ -45,7 +54,7 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 				WorkflowExecutionTimeout: durationpb.New(time.Minute),
 				WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
 			})
-			require.NoError(t, err)
+			s.NoError(err)
 			tv = tv.WithRunID(start.GetRunId())
 			capture := env.StartNamespaceMetricCapture()
 			_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
@@ -64,7 +73,7 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 					}
 					return response, nil
 				})
-			require.NoError(t, err)
+			s.NoError(err)
 
 			switch input {
 			case "signal":
@@ -74,7 +83,7 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 					SignalName:        "test-signal",
 					RequestId:         uuid.NewString(),
 				})
-				require.NoError(t, err)
+				s.NoError(err)
 			case "update":
 				request := &workflowservice.UpdateWorkflowExecutionRequest{
 					Namespace:         env.Namespace().String(),
@@ -97,8 +106,8 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 							Messages: env.UpdateAcceptCompleteMessages(tv, task.GetMessages()[0]),
 						}, nil
 					})
-				require.NoError(t, err)
-				require.NoError(t, await.Rcv(t, result))
+				s.NoError(err)
+				s.NoError(await.Rcv(t, result))
 			case "timer":
 				_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
 					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -111,25 +120,25 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 					},
 					taskpoller.WithTimeout(5*time.Second),
 				)
-				require.NoError(t, err)
+				s.NoError(err)
 			default:
 				t.Fatalf("unexpected input type %q", input)
 			}
-			require.Empty(t, capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name()))
-			require.Empty(t, capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name()))
+			s.Empty(capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name()))
+			s.Empty(capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name()))
 		})
 	}
 }
 
-func TestWorkflowHeartbeatNotificationMetricsUpdateDuringStartedTask(t *testing.T) {
-	t.Parallel()
+func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotificationMetricsUpdateDuringStartedTask() {
 	for _, withStart := range []bool{false, true} {
 		name := "update"
 		if withStart {
 			name = "update-with-start"
 		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+		s.Run(name, func(s *WorkflowHeartbeatNotificationMetricsSuite) {
+			t := s.T()
+
 			env := testcore.NewEnv(t)
 			tv := env.Tv()
 			start, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
@@ -142,7 +151,7 @@ func TestWorkflowHeartbeatNotificationMetricsUpdateDuringStartedTask(t *testing.
 				WorkflowExecutionTimeout: durationpb.New(time.Minute),
 				WorkflowTaskTimeout:      durationpb.New(30 * time.Second),
 			})
-			require.NoError(t, err)
+			s.NoError(err)
 			tv = tv.WithRunID(start.GetRunId())
 
 			pollCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -152,8 +161,8 @@ func TestWorkflowHeartbeatNotificationMetricsUpdateDuringStartedTask(t *testing.
 				TaskQueue: tv.TaskQueue(),
 				Identity:  tv.WorkerIdentity(),
 			})
-			require.NoError(t, err)
-			require.NotEmpty(t, currentTask.GetTaskToken())
+			s.NoError(err)
+			s.NotEmpty(currentTask.GetTaskToken())
 
 			capture := env.StartNamespaceMetricCapture()
 			updateRequest := &workflowservice.UpdateWorkflowExecutionRequest{
@@ -225,7 +234,7 @@ func TestWorkflowHeartbeatNotificationMetricsUpdateDuringStartedTask(t *testing.
 				SignalName:        "test-signal",
 				RequestId:         uuid.NewString(),
 			})
-			require.NoError(t, err)
+			s.NoError(err)
 			await.Require(t.Context(), t, func(t *await.T) {
 				buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 				counts := make(map[string]int64, len(buffered))
@@ -245,7 +254,7 @@ func TestWorkflowHeartbeatNotificationMetricsUpdateDuringStartedTask(t *testing.
 				func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 				})
-			require.NoError(t, err)
+			s.NoError(err)
 			_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
 				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 					require.Len(t, task.GetMessages(), 1)
@@ -253,14 +262,15 @@ func TestWorkflowHeartbeatNotificationMetricsUpdateDuringStartedTask(t *testing.
 						Messages: env.UpdateAcceptCompleteMessages(tv, task.GetMessages()[0]),
 					}, nil
 				})
-			require.NoError(t, err)
-			require.NoError(t, await.Rcv(t, updateResult))
+			s.NoError(err)
+			s.NoError(await.Rcv(t, updateResult))
 		})
 	}
 }
 
-func TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask(t *testing.T) {
-	t.Parallel()
+func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask() {
+	t := s.T()
+
 	env := testcore.NewEnv(t)
 	tv := env.Tv()
 	start, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
@@ -273,7 +283,7 @@ func TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask(t *test
 		WorkflowExecutionTimeout: durationpb.New(time.Minute),
 		WorkflowTaskTimeout:      durationpb.New(30 * time.Second),
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 	tv = tv.WithRunID(start.GetRunId())
 	capture := env.StartNamespaceMetricCapture()
 
@@ -293,8 +303,8 @@ func TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask(t *test
 				ReturnNewWorkflowTask:      true,
 			}, nil
 		})
-	require.NoError(t, err)
-	require.NotNil(t, resp.GetWorkflowTask())
+	s.NoError(err)
+	s.NotNil(resp.GetWorkflowTask())
 
 	await.Require(t.Context(), t, func(t *await.T) {
 		buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
@@ -309,7 +319,7 @@ func TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask(t *test
 		func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 		})
-	require.NoError(t, err)
+	s.NoError(err)
 }
 
 func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasmEnabled bool) {

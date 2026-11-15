@@ -1744,11 +1744,21 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	s.NoError(err)
 }
 
+type ScheduleMigrationIsolatedSuite struct {
+	parallelsuite.Suite[*ScheduleMigrationIsolatedSuite]
+}
+
+func TestScheduleMigrationIsolatedSuite(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleMigrationIsolatedSuite{})
+}
+
 // TestScheduleMigrationV1ToV2NoDuplicateRecentActions verifies that migrating
 // a V1 schedule with a running workflow to V2 does not produce duplicate entries
 // in RecentActions. In V1, recordAction puts the same workflow in both
 // RunningWorkflows and RecentActions. The migration must deduplicate these.
-func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
+func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateRecentActions() {
+	t := s.T()
+
 	// Create the env without EnableChasm so that CreateSchedule does not write
 	// a CHASM sentinel (which would block the migration activity).
 	env := newScheduleEnv(
@@ -1805,7 +1815,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 
 	// Wait for the V1 scheduler to start the workflow and record it as running.
 	var runningWfID string
@@ -1834,7 +1844,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 
 	// Wait for the V1 scheduler workflow to complete (migration done).
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
@@ -1861,7 +1871,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 
 	recentActions := v2Desc.GetFrontendResponse().GetInfo().GetRecentActions()
 	assertRecentActionsNoDuplicateRunIDs(t, recentActions)
@@ -1873,7 +1883,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 			count++
 		}
 	}
-	require.Equal(t, 1, count, "running workflow should appear exactly once in RecentActions, got %d", count)
+	s.Equal(1, count, "running workflow should appear exactly once in RecentActions, got %d", count)
 
 	// Clean up: signal the running workflow to complete.
 	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -1881,7 +1891,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: runningWfID},
 		SignalName:        resumeSignal,
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 }
 
 // TestScheduleMigrationDeferredWithRunningWorkflow verifies that
@@ -1890,7 +1900,9 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 // auto-migration is deferred while a workflow is running (the scheduler keeps
 // running rather than migrating and completing); when the gate is turned on,
 // auto-migration proceeds even with a running workflow.
-func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
+func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationDeferredWithRunningWorkflow() {
+	t := s.T()
+
 	// Create the env without EnableChasm so that CreateSchedule produces a V1
 	// (workflow-backed) schedule rather than a CHASM sentinel.
 	env := newScheduleEnv(
@@ -1948,7 +1960,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 
 	// Wait for the V1 scheduler to start the workflow and record it as running.
 	var runningWfID string
@@ -1988,7 +2000,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 
 	// With the gate off, auto-migration is deferred: the scheduler re-evaluates the
 	// decision every interval but keeps running rather than migrating.
-	require.Never(t, func() bool { return v1Migrated(ctx) }, 5*time.Second, 500*time.Millisecond,
+	s.Never(func() bool { return v1Migrated(ctx) }, 5*time.Second, 500*time.Millisecond,
 		"migration must be deferred while the schedule has a running workflow and the gate is off")
 
 	// Turn the gate on; auto-migration now proceeds even with the workflow running.
@@ -2004,7 +2016,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 
 	// Clean up: signal the running workflow to complete.
 	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -2012,7 +2024,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: runningWfID},
 		SignalName:        resumeSignal,
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 }
 
 // TestDeleteScheduleContextMetadata verifies that DeleteSchedule propagates the
@@ -2389,7 +2401,9 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 // SchedulerCallbacksTask must run first, observe the workflow as completed,
 // stamp Completed, and only then fire ProcessBuffer (which then sees
 // isRunning=false and does not apply SKIP).
-func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
+func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesNotSkipPending() {
+	t := s.T()
+
 	env := newScheduleEnv(
 		t,
 		testcore.WithWorkerService("scheduler operations"),
@@ -2418,7 +2432,7 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 		Identity:     "test",
 		RequestId:    uuid.NewString(),
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 	runningRunID := startResp.GetRunId()
 	await.Require(ctx, t, func(at *await.T) {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -2503,7 +2517,7 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 			State:       state,
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 
 	// Wait for both actions to surface in RecentActions:
 	//   - The original running workflow, refreshed to Completed by
@@ -2526,7 +2540,7 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 
 	// Load-bearing assertion: the pending start must NOT have been dropped
 	// under SKIP overlap policy.
-	require.Equal(t, int64(0), lastDesc.GetFrontendResponse().GetInfo().GetOverlapSkipped(),
+	s.Equal(int64(0), lastDesc.GetFrontendResponse().GetInfo().GetOverlapSkipped(),
 		"stale running entry must not cause the pending start to be dropped under SKIP overlap policy")
 }
 
@@ -2535,7 +2549,9 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 // completion state when the execution has already failed. In particular, the
 // PauseOnFailure policy must apply even though Describe supplies no failure
 // payload.
-func TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion(t *testing.T) {
+func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion() {
+	t := s.T()
+
 	env := newScheduleEnv(
 		t,
 		testcore.WithWorkerService("scheduler operations"),
@@ -2561,7 +2577,7 @@ func TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion(t *testing.T) {
 		Identity:     "test",
 		RequestId:    uuid.NewString(),
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 
 	await.Require(ctx, t, func(at *await.T) {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -2617,7 +2633,7 @@ func TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion(t *testing.T) {
 			},
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 
 	await.Requiref(ctx, t, func(at *await.T) {
 		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
@@ -2765,7 +2781,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 	}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for V1 schedule %q", stayV1SID)
 }
 
-func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
+func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_NoRunningWorkflows_GeneratorStarts() {
+	t := s.T()
+
 	// Use a very short idle time so the schedule closes quickly once the generator
 	// determines there's nothing to do (empty spec → no next wakeup time → idle).
 	shortIdleTime := 500 * time.Millisecond
@@ -2822,7 +2840,7 @@ func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
 			},
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 
 	descReq := &schedulerpb.DescribeScheduleRequest{
 		NamespaceId:     nsID,
@@ -2844,7 +2862,8 @@ func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
 	}, 6*time.Second, 100*time.Millisecond)
 }
 
-func TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory(t *testing.T) {
+func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory() {
+	t := s.T()
 
 	// TODO: This is the admin-API directly poking a migration to v2:
 	t.Skip("admin MigrateSchedule path still injects EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED " +
@@ -2897,7 +2916,7 @@ func TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory(t *
 		Identity:   "test",
 		RequestId:  testcore.RandomizeStr("request-id"),
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 
 	// Migration is fully applied once the V1 scheduler workflow completes, so its
 	// side effects (including any retroactive callback attach) are already
