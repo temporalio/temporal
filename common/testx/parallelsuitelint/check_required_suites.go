@@ -129,10 +129,24 @@ func ordinaryTest(pass *analysis.Pass, fn *ast.FuncDecl) bool {
 }
 
 func suiteEntrypoint(pass *analysis.Pass, fn *ast.FuncDecl) bool {
-	if len(fn.Body.List) != 1 {
+	if len(fn.Body.List) == 0 {
 		return false
 	}
-	statement, ok := fn.Body.List[0].(*ast.ExprStmt)
+	for _, setup := range fn.Body.List[:len(fn.Body.List)-1] {
+		statement, ok := setup.(*ast.ExprStmt)
+		if !ok {
+			return false
+		}
+		call, ok := statement.X.(*ast.CallExpr)
+		if !ok {
+			return false
+		}
+		callee := calledFunction(pass, call.Fun)
+		if callee == nil || !packageFunction(callee) || suiteRunner(pass, callee) {
+			return false
+		}
+	}
+	statement, ok := fn.Body.List[len(fn.Body.List)-1].(*ast.ExprStmt)
 	if !ok {
 		return false
 	}
