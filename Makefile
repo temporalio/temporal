@@ -180,7 +180,8 @@ mise-tool = $(or \
 		mise exec go $(2) -c 'command -v $(1)'), \
 	$(error Cannot resolve $(1); check mise.toml and run mise install))
 
-GOLANGCI_LINT = $(call mise-tool,golangci-lint,go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
+GOLANGCI_LINT_BOOTSTRAP = $(call mise-tool,golangci-lint,go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
+GOLANGCI_LINT := $(ROOT)/.bin/golangci-lint
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI = $(call mise-tool,gci,go:github.com/daixiang0/gci)
 GOTESTSUM = $(call mise-tool,gotestsum,go:gotest.tools/gotestsum)
@@ -194,7 +195,6 @@ YAMLFMT = $(call mise-tool,yamlfmt,go:github.com/google/yamlfmt/cmd/yamlfmt)
 GOIMPORTS = $(call mise-tool,goimports,go:golang.org/x/tools/cmd/goimports)
 GOMAJOR = $(call mise-tool,gomajor,go:github.com/icholy/gomajor)
 ERRORTYPE = $(call mise-tool,errortype,go:fillmore-labs.com/errortype)
-PARALLELSUITE_GOLANGCI_LINT := $(ROOT)/.bin/golangci-lint-parallelsuite
 MOCKGEN = $(call mise-tool,mockgen,go:go.uber.org/mock/mockgen)
 PROTOC = $(call mise-tool,protoc,protoc)
 PROTOC_GEN_GO = $(call mise-tool,protoc-gen-go,go:google.golang.org/protobuf/cmd/protoc-gen-go)
@@ -331,23 +331,23 @@ define lint-go
 	@go vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
 endef
 
-lint-code:
+lint-code: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting code..."
 	$(call lint-go,$(ALL_TEST_TAGS),$(LINT_CODE_TARGETS))
 	@printf $(COLOR) "Linting code with temporal_minimal..."
 	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_VARIANT_DIRS))
 
 .PHONY: lint-parallelsuite
-lint-parallelsuite: $(PARALLELSUITE_GOLANGCI_LINT)
+lint-parallelsuite: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting parallel suites in tests/..."
-	@GOWORK=off "$(PARALLELSUITE_GOLANGCI_LINT)" run \
-		--config=.github/.golangci-parallelsuite.yml --build-tags "$(ALL_TEST_TAGS)" \
+	@GOWORK=off "$(GOLANGCI_LINT)" run --enable-only=parallelsuitelint \
+		--config=.github/.golangci.yml --build-tags "$(ALL_TEST_TAGS)" \
 		$(if $(PARALLELSUITELINT_BASE_REV),--new-from-rev="$(PARALLELSUITELINT_BASE_REV)") ./tests/...
 
-$(PARALLELSUITE_GOLANGCI_LINT): .custom-gcl.yml \
+$(GOLANGCI_LINT): .github/.custom-gcl.yml \
 		$(filter-out %_test.go,$(wildcard common/testx/parallelsuitelint/*.go common/testx/parallelsuitelint/golangci/*.go)) \
 		common/testx/parallelsuitelint/go.mod common/testx/parallelsuitelint/go.sum
-	@GOWORK=off $(GOLANGCI_LINT) custom
+	@cd .github && GOWORK=off $(GOLANGCI_LINT_BOOTSTRAP) custom
 
 lint-yaml:
 	@printf $(COLOR) "Checking YAML formatting..."
