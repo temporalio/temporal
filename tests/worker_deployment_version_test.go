@@ -849,12 +849,11 @@ func requireWorkerDeploymentMetricTags(
 ) {
 	for _, metricName := range metricNames {
 		await.Require(s.Context(), s.TB(), func(t *await.T) {
-			r := t.Require()
 			recordings := capture.CollectMetric(metricName, func(recording *metricstest.CapturedRecording) bool {
 				taskQueue, hasTaskQueue := recording.Tags["taskqueue"]
 				return !hasTaskQueue || taskQueue == tv.TaskQueue().GetName()
 			})
-			r.NotEmpty(recordings, "expected %s in namespace %s", metricName, tv.NamespaceName())
+			t.NotEmpty(recordings, "expected %s in namespace %s", metricName, tv.NamespaceName())
 			hasExpectedTags := false
 			for _, recording := range recordings {
 				if recording.Tags["worker_deployment_name"] == tv.DeploymentSeries() &&
@@ -863,7 +862,7 @@ func requireWorkerDeploymentMetricTags(
 					break
 				}
 			}
-			r.True(hasExpectedTags, "expected %s with deployment %q and build ID %q", metricName, tv.DeploymentSeries(), tv.BuildID())
+			t.True(hasExpectedTags, "expected %s with deployment %q and build ID %q", metricName, tv.DeploymentSeries(), tv.BuildID())
 		}, 5*time.Second, 50*time.Millisecond)
 	}
 }
