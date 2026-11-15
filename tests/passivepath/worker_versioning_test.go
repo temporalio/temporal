@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -17,7 +16,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -27,7 +26,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T) {
+type WorkerVersioningSuite struct {
+	parallelsuite.Suite[*WorkerVersioningSuite]
+}
+
+func TestWorkerVersioningSuite(t *testing.T) { parallelsuite.Run(t, &WorkerVersioningSuite{}) }
+
+func (s *WorkerVersioningSuite) TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply() {
+	t := s.T()
 	logger := log.NewNoopLogger()
 	harness := NewHarness(logger)
 	// Active execution can return the next workflow task inline without persisting
@@ -48,10 +54,10 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 
 	tv1 := testvars.New(t).WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
-	setCurrentDeployment(t, tc, namespaceID.String(), tv1, 1)
+	s.setCurrentDeployment(tc, namespaceID.String(), tv1, 1)
 
 	startResponse, err := tc.FrontendClient().StartWorkflowExecution(
-		testcore.NewContext(t.Context()),
+		testcore.NewContext(s.Context()),
 		&workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    tv1.RequestID(),
 			Namespace:    namespaceName,
@@ -61,7 +67,7 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 			Identity:     tv1.WorkerIdentity(),
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: tv1.WorkflowID(),
 		RunId:      startResponse.GetRunId(),
@@ -74,7 +80,7 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 	}).HandleTask(tv1, func(
 		task *workflowservice.PollWorkflowTaskQueueResponse,
 	) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		protorequire.ProtoEqual(t, execution, task.GetWorkflowExecution())
+		s.ProtoEqual(execution, task.GetWorkflowExecution())
 		return versionedWorkflowTaskCompletion(tv1, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
@@ -88,13 +94,13 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 			},
 		}), nil
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 
 	// The signal creates an unstarted WFT before the activity initiates the transition.
 	// Without it, StartDeploymentTransition would create a new WFT instead of exercising
 	// the rescheduling path fixed by #8680.
 	_, err = tc.FrontendClient().SignalWorkflowExecution(
-		testcore.NewContext(t.Context()),
+		testcore.NewContext(s.Context()),
 		&workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         namespaceName,
 			WorkflowExecution: execution,
@@ -102,9 +108,9 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 			Identity:          tv1.WorkerIdentity(),
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 
-	setCurrentDeployment(t, tc, namespaceID.String(), tv2, 2)
+	s.setCurrentDeployment(tc, namespaceID.String(), tv2, 2)
 
 	type activityPollResult struct {
 		task *workflowservice.PollActivityTaskQueueResponse
@@ -134,17 +140,16 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 
 	// The transition is started asynchronously by the v2 activity poll, so wait
 	// until the version transition is recorded on the mutable state.
-	await.Require(t.Context(), t, func(t *await.T) {
+	s.Await(func(s *WorkerVersioningSuite) {
 		describeResponse, err := tc.FrontendClient().DescribeWorkflowExecution(
-			testcore.NewContext(t.Context()),
+			testcore.NewContext(s.Context()),
 			&workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: namespaceName,
 				Execution: execution,
 			},
 		)
-		t.Require().NoError(err)
-		protorequire.ProtoEqual(
-			t,
+		s.NoError(err)
+		s.ProtoEqual(
 			tv2.DeploymentVersionTransition(),
 			describeResponse.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersionTransition(),
 		)
@@ -156,15 +161,15 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 	}).HandleTask(tv2, func(
 		task *workflowservice.PollWorkflowTaskQueueResponse,
 	) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		protorequire.ProtoEqual(t, execution, task.GetWorkflowExecution())
+		s.ProtoEqual(execution, task.GetWorkflowExecution())
 		return versionedWorkflowTaskCompletion(tv2), nil
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 
 	activityResult := await.Rcv(t, activityResultCh)
-	require.NoError(t, activityResult.err)
-	protorequire.ProtoEqual(t, execution, activityResult.task.GetWorkflowExecution())
-	protorequire.ProtoEqual(t, tv1.ActivityType(), activityResult.task.GetActivityType())
+	s.NoError(activityResult.err)
+	s.ProtoEqual(execution, activityResult.task.GetWorkflowExecution())
+	s.ProtoEqual(tv1.ActivityType(), activityResult.task.GetActivityType())
 
 	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue:         tv2.TaskQueue(),
@@ -172,7 +177,7 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 	}).HandleTask(tv2, func(
 		task *workflowservice.PollWorkflowTaskQueueResponse,
 	) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		protorequire.ProtoEqual(t, execution, task.GetWorkflowExecution())
+		s.ProtoEqual(execution, task.GetWorkflowExecution())
 		return versionedWorkflowTaskCompletion(tv2, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
@@ -180,39 +185,38 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 			},
 		}), nil
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 
 	describeResponse, err := tc.FrontendClient().DescribeWorkflowExecution(
-		testcore.NewContext(t.Context()),
+		testcore.NewContext(s.Context()),
 		&workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: namespaceName,
 			Execution: execution,
 		},
 	)
-	require.NoError(t, err)
-	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, describeResponse.GetWorkflowExecutionInfo().GetStatus())
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, describeResponse.GetWorkflowExecutionInfo().GetStatus())
 	versioningInfo := describeResponse.GetWorkflowExecutionInfo().GetVersioningInfo()
-	require.Equal(t, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, versioningInfo.GetBehavior())
-	require.Equal(t, tv2.DeploymentSeries(), versioningInfo.GetDeploymentVersion().GetDeploymentName())
-	require.Equal(t, tv2.BuildID(), versioningInfo.GetDeploymentVersion().GetBuildId())
+	s.Equal(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, versioningInfo.GetBehavior())
+	s.Equal(tv2.DeploymentSeries(), versioningInfo.GetDeploymentVersion().GetDeploymentName())
+	s.Equal(tv2.BuildID(), versioningInfo.GetDeploymentVersion().GetBuildId())
 
-	require.Empty(t, harness.Bailouts())
-	require.Empty(t, harness.ApplyErrors())
-	require.Positive(t, harness.Diverted())
-	require.Equal(t, harness.Diverted(), harness.Applied())
-	require.Positive(t, harness.StandbyExecutions())
+	s.Empty(harness.Bailouts())
+	s.Empty(harness.ApplyErrors())
+	s.Positive(harness.Diverted())
+	s.Equal(harness.Diverted(), harness.Applied())
+	s.Positive(harness.StandbyExecutions())
 }
 
-func setCurrentDeployment(
-	t *testing.T,
+func (s *WorkerVersioningSuite) setCurrentDeployment(
 	tc *testcore.TestCluster,
 	namespaceID string,
 	tv *testvars.TestVars,
 	revision int64,
 ) {
-	t.Helper()
+	s.T().Helper()
 	_, err := tc.MatchingClient().SyncDeploymentUserData(
-		testcore.NewContext(t.Context()),
+		testcore.NewContext(s.Context()),
 		&matchingservice.SyncDeploymentUserDataRequest{
 			NamespaceId:    namespaceID,
 			TaskQueue:      tv.TaskQueue().GetName(),
@@ -228,7 +232,7 @@ func setCurrentDeployment(
 			},
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 }
 
 func versionedWorkflowTaskCompletion(

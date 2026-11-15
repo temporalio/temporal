@@ -5,31 +5,37 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
-func TestMissingTaskFingerprints(t *testing.T) {
-	require.Empty(t, missingTaskFingerprints(
+type HarnessSuite struct {
+	parallelsuite.Suite[*HarnessSuite]
+}
+
+func TestHarnessSuite(t *testing.T) { parallelsuite.Run(t, &HarnessSuite{}) }
+
+func (s *HarnessSuite) TestMissingTaskFingerprints() {
+	s.Empty(missingTaskFingerprints(
 		[]string{"activity", "activity"},
 		[]string{"activity", "activity", "passive-only"},
 	))
-	require.Equal(t, []string{"activity"}, missingTaskFingerprints(
+	s.Equal([]string{"activity"}, missingTaskFingerprints(
 		[]string{"activity", "activity"},
 		[]string{"activity"},
 	))
-	require.Equal(t, []string{"passive-only"}, missingTaskFingerprints(
+	s.Equal([]string{"passive-only"}, missingTaskFingerprints(
 		[]string{"activity", "activity", "passive-only"},
 		[]string{"activity", "activity"},
 	))
 }
 
-func TestTaskFingerprintsNormalizeOnlyPersistenceAndJitterFields(t *testing.T) {
+func (s *HarnessSuite) TestTaskFingerprintsNormalizeOnlyPersistenceAndJitterFields() {
 	workflowKey := definition.NewWorkflowKey("namespace", "workflow", "run")
 	activity := func(taskID int64) map[historytasks.Category][]historytasks.Task {
 		return map[historytasks.Category][]historytasks.Task{
@@ -42,10 +48,10 @@ func TestTaskFingerprintsNormalizeOnlyPersistenceAndJitterFields(t *testing.T) {
 		}
 	}
 	first, err := taskFingerprints(activity(1))
-	require.NoError(t, err)
+	s.NoError(err)
 	second, err := taskFingerprints(activity(2))
-	require.NoError(t, err)
-	require.Equal(t, first, second)
+	s.NoError(err)
+	s.Equal(first, second)
 
 	deleteTask := func(visibilityTime time.Time) map[historytasks.Category][]historytasks.Task {
 		return map[historytasks.Category][]historytasks.Task{
@@ -56,10 +62,10 @@ func TestTaskFingerprintsNormalizeOnlyPersistenceAndJitterFields(t *testing.T) {
 		}
 	}
 	first, err = taskFingerprints(deleteTask(time.Unix(1, 0)))
-	require.NoError(t, err)
+	s.NoError(err)
 	second, err = taskFingerprints(deleteTask(time.Unix(2, 0)))
-	require.NoError(t, err)
-	require.Equal(t, first, second)
+	s.NoError(err)
+	s.Equal(first, second)
 
 	userTimer := func(visibilityTime time.Time) map[historytasks.Category][]historytasks.Task {
 		return map[historytasks.Category][]historytasks.Task{
@@ -70,13 +76,13 @@ func TestTaskFingerprintsNormalizeOnlyPersistenceAndJitterFields(t *testing.T) {
 		}
 	}
 	first, err = taskFingerprints(userTimer(time.Unix(1, 0)))
-	require.NoError(t, err)
+	s.NoError(err)
 	second, err = taskFingerprints(userTimer(time.Unix(2, 0)))
-	require.NoError(t, err)
-	require.NotEqual(t, first, second)
+	s.NoError(err)
+	s.NotEqual(first, second)
 }
 
-func TestTaskFingerprintsNormalizeStickyWorkflowTaskForPassive(t *testing.T) {
+func (s *HarnessSuite) TestTaskFingerprintsNormalizeStickyWorkflowTaskForPassive() {
 	workflowKey := definition.NewWorkflowKey("namespace", "workflow", "run")
 	eventID := int64(7)
 	active := map[historytasks.Category][]historytasks.Task{
@@ -104,15 +110,15 @@ func TestTaskFingerprintsNormalizeStickyWorkflowTaskForPassive(t *testing.T) {
 		stickyWorkflowTaskEvents: stickyEvents,
 		ignoreStickyTimeouts:     true,
 	})
-	require.NoError(t, err)
+	s.NoError(err)
 	passiveFingerprints, err := taskFingerprintsForComparison(passive, taskFingerprintOptions{
 		stickyWorkflowTaskEvents: stickyEvents,
 	})
-	require.NoError(t, err)
-	require.Equal(t, activeFingerprints, passiveFingerprints)
+	s.NoError(err)
+	s.Equal(activeFingerprints, passiveFingerprints)
 }
 
-func TestPassiveUpdateRunsClosedTransaction(t *testing.T) {
+func (s *HarnessSuite) TestPassiveUpdateRunsClosedTransaction() {
 	harness := NewHarness(log.NewNoopLogger())
 	prepared := false
 	closed := false
@@ -132,23 +138,23 @@ func TestPassiveUpdateRunsClosedTransaction(t *testing.T) {
 			},
 			ExecuteExecutionTransaction: func(actual *workflow.ExecutionTransactionPayload) error {
 				executed = true
-				require.Same(t, payload, actual)
+				s.Same(payload, actual)
 				return nil
 			},
 		},
 		func() error { return nil },
 	)
-	require.NoError(t, err)
-	require.True(t, prepared)
-	require.True(t, closed)
-	require.True(t, executed)
-	require.Equal(t, map[BailReason]int{BailPassivePolicy: 1}, harness.AllBailouts())
+	s.NoError(err)
+	s.True(prepared)
+	s.True(closed)
+	s.True(executed)
+	s.Equal(map[BailReason]int{BailPassivePolicy: 1}, harness.AllBailouts())
 }
 
-func TestTransientWorkflowContextForReplicationIsScopedToMarkedContext(t *testing.T) {
+func (s *HarnessSuite) TestTransientWorkflowContextForReplicationIsScopedToMarkedContext() {
 	harness := NewHarness(log.NewNoopLogger())
-	require.False(t, harness.UseTransientWorkflowContextForReplication(context.Background()))
+	s.False(harness.UseTransientWorkflowContextForReplication(context.Background()))
 
 	ctx := context.WithValue(context.Background(), replicationApplyContextKey{}, replicationApplyContext{})
-	require.True(t, harness.UseTransientWorkflowContextForReplication(ctx))
+	s.True(harness.UseTransientWorkflowContextForReplication(ctx))
 }

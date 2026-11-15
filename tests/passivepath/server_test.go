@@ -6,10 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
 )
+
+type ServerSuite struct {
+	parallelsuite.Suite[*ServerSuite]
+}
 
 // TestPassivePathServer runs a long-lived single-cluster server with the passive-path
 // diversion installed, so external load generators (bench-go, omes, the temporal CLI)
@@ -33,7 +37,10 @@ import (
 // ReplicateVersionedTransition -- only exists on a cluster with global namespaces
 // enabled. bench-go's own RegisterNamespace call tolerates AlreadyExists, so it will
 // simply reuse this one.
-func TestPassivePathServer(t *testing.T) {
+func TestPassivePathServer(t *testing.T) { parallelsuite.Run(t, &ServerSuite{}) }
+
+func (s *ServerSuite) TestServer() {
+	t := s.T()
 	if os.Getenv("PASSIVEPATH_SERVER") != "1" {
 		t.Skip("set PASSIVEPATH_SERVER=1 to run the passive-path server")
 	}
@@ -41,7 +48,7 @@ func TestPassivePathServer(t *testing.T) {
 	duration := 10 * time.Minute
 	if v := os.Getenv("PASSIVEPATH_DURATION"); v != "" {
 		d, err := time.ParseDuration(v)
-		require.NoError(t, err)
+		s.NoError(err)
 		duration = d
 	}
 	ns := os.Getenv("PASSIVEPATH_NAMESPACE")
@@ -66,7 +73,7 @@ func TestPassivePathServer(t *testing.T) {
 	), namespaceID))
 
 	addr := tc.Host().FrontendGRPCAddress()
-	require.NoError(t, os.WriteFile(addrFile, []byte(addr), 0o644))
+	s.NoError(os.WriteFile(addrFile, []byte(addr), 0o644))
 	t.Cleanup(func() { _ = os.Remove(addrFile) })
 
 	fmt.Printf("PASSIVEPATH_READY addr=%s namespace=%s duration=%s\n", addr, ns, duration)
@@ -94,7 +101,7 @@ func TestPassivePathServer(t *testing.T) {
 			harness.StandbyExecutions(),
 			harness.Bailouts(), len(harness.ApplyErrors()))
 		if applyErrs := harness.ApplyErrors(); len(applyErrs) != 0 {
-			t.Fatalf("passivepath: passive apply failed: %v", applyErrs[0])
+			s.FailNowf("passivepath: passive apply failed", "%v", applyErrs[0])
 		}
 
 		if now.After(deadline) {
