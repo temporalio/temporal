@@ -610,9 +610,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnContinueAsNew() {
 // RespondWorkflowTaskCompleted (bypassing matching/RecordActivityTaskStarted), so the
 // server must set StartedClock in the eager path for worker commands to be dispatched.
 func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() {
-	t := s.T()
-
-	env := testcore.NewEnv(t,
+	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 	)
@@ -666,7 +664,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 	env.NotEmpty(wftResp.GetActivityTasks(), "Expected eager activity task in WFT completion response")
 	eagerActivityTaskToken := wftResp.GetActivityTasks()[0].TaskToken
 	env.NotEmpty(eagerActivityTaskToken, "Expected task token from eager activity")
-	t.Log("Activity eagerly dispatched")
+	s.T().Log("Activity eagerly dispatched")
 
 	// Request workflow cancellation
 	_, err = env.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -702,12 +700,12 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 			}, nil
 		})
 	s.NoError(err)
-	t.Log("Workflow task completed with RequestCancelActivityTask command")
+	s.T().Log("Workflow task completed with RequestCancelActivityTask command")
 
 	// Poll Nexus control queue - cancel command should be dispatched because
 	// StartedClock is set for the eager activity.
 	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
-	await.RequireTruef(t, func() bool {
+	await.RequireTruef(s.T(), func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer pollCancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
@@ -736,7 +734,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 	env.NotNil(cancelCmd, "Expected CancelActivity command")
 	env.Equal(eagerActivityTaskToken, cancelCmd.TaskToken,
 		"Cancel command task token must match the eager activity's task token")
-	t.Log("SUCCESS: Received cancel command on control queue for eagerly dispatched activity")
+	s.T().Log("SUCCESS: Received cancel command on control queue for eagerly dispatched activity")
 }
 
 // TestPollWorkerCommandsWithDeploymentOptions verifies that cancel commands are delivered

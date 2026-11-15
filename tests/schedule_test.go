@@ -907,6 +907,7 @@ func TestScheduleV1Suite(t *testing.T) {
 	parallelsuite.Run(t, &ScheduleV1Suite{})
 }
 
+//nolint:parallelsuitelint // Overrides package-global scheduler state and must remain nonparallel.
 func TestScheduleV1ActionDelayMetrics(t *testing.T) {
 	newContext := v1ContextFactory
 	// The short-refresh DesiredTime path this test exercises is gated behind
@@ -2166,13 +2167,11 @@ func TestScheduleCompatibilitySuite(t *testing.T) {
 // diverges: V1 keeps the previous result and failure, V2 clears both. An explicit nil
 // (binary/null) is a result for both.
 func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1() {
-	t := s.T()
-
-	env := newScheduleEnv(t, append(scheduleCommonOpts(t),
+	env := newScheduleEnv(s.T(), append(scheduleCommonOpts(s.T()),
 		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithTestTimeout(3*time.Minute),
 	)...)
-	ctx := testcontext.For(t)
+	ctx := testcontext.For(s.T())
 
 	type sched struct {
 		name, scheduleID, workflowID string
@@ -2251,10 +2250,10 @@ func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1()
 			Identity:   "test",
 			RequestId:  uuid.NewString(),
 		})
-		require.NoError(t, err, sc.name)
+		s.NoError(err, sc.name)
 
 		var execution *commonpb.WorkflowExecution
-		await.Requiref(ctx, t, func(at *await.T) {
+		await.Requiref(ctx, s.T(), func(at *await.T) {
 			desc, err := env.FrontendClient().DescribeSchedule(sc.newContext(ctx), &workflowservice.DescribeScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sc.scheduleID,
@@ -2272,10 +2271,10 @@ func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1()
 		iter := env.SdkClient().GetWorkflowHistory(ctx, execution.GetWorkflowId(), execution.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for iter.HasNext() {
 			event, err := iter.Next()
-			require.NoError(t, err)
+			s.NoError(err)
 			events = append(events, event)
 		}
-		require.NotEmpty(t, events)
+		s.NotEmpty(events)
 
 		started := proto.CloneOf(events[0].GetWorkflowExecutionStartedEventAttributes())
 		// Per-execution identity and wall-clock fields.

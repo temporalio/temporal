@@ -29,9 +29,7 @@ func TestEagerActivityDispatchSuite(t *testing.T) {
 }
 
 func (s *EagerActivityDispatchSuite) TestEagerActivityWithMatchingGrant_Unversioned() {
-	t := s.T()
-
-	env := testcore.NewEnv(t,
+	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4),
@@ -41,12 +39,12 @@ func (s *EagerActivityDispatchSuite) TestEagerActivityWithMatchingGrant_Unversio
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
 
 	tv := env.Tv()
-	startEagerActivityTestWorkflow(t, env, tv)
+	startEagerActivityTestWorkflow(s.T(), env, tv)
 
 	poller := env.TaskPoller()
 	response, err := poller.PollAndHandleWorkflowTask(
 		tv,
-		scheduleActivityForEagerDispatchTest(t, tv, true),
+		scheduleActivityForEagerDispatchTest(s.T(), tv, true),
 	)
 	s.NoError(err)
 	s.Len(response.GetActivityTasks(), 1)
@@ -65,9 +63,7 @@ func (s *EagerActivityDispatchSuite) TestEagerActivityWithMatchingGrant_Unversio
 }
 
 func (s *EagerActivityDispatchSuite) TestEagerActivityBatchWithRateLimit() {
-	t := s.T()
-
-	env := testcore.NewEnv(t,
+	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1),
@@ -78,7 +74,7 @@ func (s *EagerActivityDispatchSuite) TestEagerActivityBatchWithRateLimit() {
 	lowPriority := tv.WithActivityIDNumber(1)
 	mediumPriority := tv.WithActivityIDNumber(2)
 	highPriority := tv.WithActivityIDNumber(3)
-	startEagerActivityTestWorkflow(t, env, tv)
+	startEagerActivityTestWorkflow(s.T(), env, tv)
 	capture := env.StartNamespaceMetricCapture()
 	poller := env.TaskPoller()
 	response, err := poller.PollAndHandleWorkflowTask(tv,
@@ -108,7 +104,7 @@ func (s *EagerActivityDispatchSuite) TestEagerActivityBatchWithRateLimit() {
 	}
 	_, err = poller.PollAndHandleActivityTask(lowPriority,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			require.Equal(t, lowPriority.ActivityID(), task.GetActivityId())
+			s.Equal(lowPriority.ActivityID(), task.GetActivityId())
 			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
 		},
 		taskpoller.WithTimeout(20*time.Second),
@@ -119,9 +115,7 @@ func (s *EagerActivityDispatchSuite) TestEagerActivityBatchWithRateLimit() {
 }
 
 func (s *EagerActivityDispatchSuite) TestEagerActivityFallsBackWhenBacklogExists() {
-	t := s.T()
-
-	env := testcore.NewEnv(t,
+	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
@@ -134,16 +128,16 @@ func (s *EagerActivityDispatchSuite) TestEagerActivityFallsBackWhenBacklogExists
 	tvHighPriority := tvEager.WithActivityIDNumber(3)
 	poller := env.TaskPoller()
 
-	startEagerActivityTestWorkflow(t, env, tvBacklogged)
+	startEagerActivityTestWorkflow(s.T(), env, tvBacklogged)
 	response, err := poller.PollAndHandleWorkflowTask(
 		tvBacklogged,
-		scheduleActivityForEagerDispatchTest(t, tvBacklogged, false),
+		scheduleActivityForEagerDispatchTest(s.T(), tvBacklogged, false),
 	)
 	s.NoError(err)
 	s.Empty(response.GetActivityTasks())
 
-	await.RequireTruef(t, func() bool {
-		response, err := env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
+	await.RequireTruef(s.T(), func() bool {
+		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tvBacklogged.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -152,11 +146,11 @@ func (s *EagerActivityDispatchSuite) TestEagerActivityFallsBackWhenBacklogExists
 		return err == nil && response.GetStats().GetApproximateBacklogCount() >= 1
 	}, 10*time.Second, 100*time.Millisecond, "first activity never reached the matching backlog")
 
-	startEagerActivityTestWorkflow(t, env, tvEager)
+	startEagerActivityTestWorkflow(s.T(), env, tvEager)
 	response, err = poller.PollAndHandleWorkflowTask(
 		tvEager,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			require.Equal(t, tvEager.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+			s.Equal(tvEager.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{
 					eagerActivityDispatchTestCommand(tvEager, true, 5),

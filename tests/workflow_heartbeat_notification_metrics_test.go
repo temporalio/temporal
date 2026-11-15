@@ -40,11 +40,9 @@ func TestWorkflowHeartbeatNotificationMetricsSuite(t *testing.T) {
 func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask() {
 	for _, input := range []string{"signal", "update", "timer"} {
 		s.Run(input, func(s *WorkflowHeartbeatNotificationMetricsSuite) {
-			t := s.T()
-
-			env := testcore.NewEnv(t)
+			env := testcore.NewEnv(s.T())
 			tv := env.Tv()
-			start, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+			start, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:                tv.RequestID(),
 				Namespace:                env.Namespace().String(),
 				WorkflowId:               tv.WorkflowID(),
@@ -77,7 +75,7 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 
 			switch input {
 			case "signal":
-				_, err = env.FrontendClient().SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+				_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 					Namespace:         env.Namespace().String(),
 					WorkflowExecution: tv.WorkflowExecution(),
 					SignalName:        "test-signal",
@@ -96,18 +94,18 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 				}
 				result := make(chan error, 1)
 				go func() {
-					_, updateErr := env.FrontendClient().UpdateWorkflowExecution(t.Context(), request)
+					_, updateErr := env.FrontendClient().UpdateWorkflowExecution(s.Context(), request)
 					result <- updateErr
 				}()
 				_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
 					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-						require.Len(t, task.GetMessages(), 1)
+						s.Len(task.GetMessages(), 1)
 						return &workflowservice.RespondWorkflowTaskCompletedRequest{
 							Messages: env.UpdateAcceptCompleteMessages(tv, task.GetMessages()[0]),
 						}, nil
 					})
 				s.NoError(err)
-				s.NoError(await.Rcv(t, result))
+				s.NoError(await.Rcv(s.T(), result))
 			case "timer":
 				_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
 					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -115,14 +113,14 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 						for _, event := range task.GetHistory().GetEvents() {
 							found = found || event.GetEventType() == enumspb.EVENT_TYPE_TIMER_FIRED
 						}
-						require.True(t, found)
+						s.True(found)
 						return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 					},
 					taskpoller.WithTimeout(5*time.Second),
 				)
 				s.NoError(err)
 			default:
-				t.Fatalf("unexpected input type %q", input)
+				s.FailNowf("unexpected input type", "%q", input)
 			}
 			s.Empty(capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name()))
 			s.Empty(capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name()))
@@ -137,11 +135,9 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 			name = "update-with-start"
 		}
 		s.Run(name, func(s *WorkflowHeartbeatNotificationMetricsSuite) {
-			t := s.T()
-
-			env := testcore.NewEnv(t)
+			env := testcore.NewEnv(s.T())
 			tv := env.Tv()
-			start, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+			start, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:                tv.RequestID(),
 				Namespace:                env.Namespace().String(),
 				WorkflowId:               tv.WorkflowID(),
@@ -154,7 +150,7 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 			s.NoError(err)
 			tv = tv.WithRunID(start.GetRunId())
 
-			pollCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			pollCtx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
 			defer cancel()
 			currentTask, err := env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
 				Namespace: env.Namespace().String(),
@@ -180,14 +176,14 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 			updateResult := make(chan error, 1)
 			go func() {
 				if !withStart {
-					response, callErr := env.FrontendClient().UpdateWorkflowExecution(t.Context(), updateRequest)
+					response, callErr := env.FrontendClient().UpdateWorkflowExecution(s.Context(), updateRequest)
 					if callErr == nil && response.GetStage() < enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
 						callErr = errors.New("Update was not accepted")
 					}
 					updateResult <- callErr
 					return
 				}
-				response, callErr := env.FrontendClient().ExecuteMultiOperation(t.Context(), &workflowservice.ExecuteMultiOperationRequest{
+				response, callErr := env.FrontendClient().ExecuteMultiOperation(s.Context(), &workflowservice.ExecuteMultiOperationRequest{
 					Namespace: env.Namespace().String(),
 					Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 						{Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
@@ -214,7 +210,7 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 				updateResult <- callErr
 			}()
 
-			await.Require(t.Context(), t, func(t *await.T) {
+			await.Require(s.Context(), s.T(), func(t *await.T) {
 				for _, metric := range []string{
 					metrics.WorkflowHeartbeatNotificationBufferedInput.Name(),
 					metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name(),
@@ -228,14 +224,14 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 				}
 			}, 10*time.Second, 100*time.Millisecond)
 
-			_, err = env.FrontendClient().SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+			_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace:         env.Namespace().String(),
 				WorkflowExecution: tv.WorkflowExecution(),
 				SignalName:        "test-signal",
 				RequestId:         uuid.NewString(),
 			})
 			s.NoError(err)
-			await.Require(t.Context(), t, func(t *await.T) {
+			await.Require(s.Context(), s.T(), func(t *await.T) {
 				buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 				counts := make(map[string]int64, len(buffered))
 				for _, recording := range buffered {
@@ -257,23 +253,21 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 			s.NoError(err)
 			_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
 				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-					require.Len(t, task.GetMessages(), 1)
+					s.Len(task.GetMessages(), 1)
 					return &workflowservice.RespondWorkflowTaskCompletedRequest{
 						Messages: env.UpdateAcceptCompleteMessages(tv, task.GetMessages()[0]),
 					}, nil
 				})
 			s.NoError(err)
-			s.NoError(await.Rcv(t, updateResult))
+			s.NoError(await.Rcv(s.T(), updateResult))
 		})
 	}
 }
 
 func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask() {
-	t := s.T()
-
-	env := testcore.NewEnv(t)
+	env := testcore.NewEnv(s.T())
 	tv := env.Tv()
-	start, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	start, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                tv.RequestID(),
 		Namespace:                env.Namespace().String(),
 		WorkflowId:               tv.WorkflowID(),
@@ -306,7 +300,7 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 	s.NoError(err)
 	s.NotNil(resp.GetWorkflowTask())
 
-	await.Require(t.Context(), t, func(t *await.T) {
+	await.Require(s.Context(), s.T(), func(t *await.T) {
 		buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 		require.Len(t, buffered, 1)
 		require.Equal(t, "TimerFired", buffered[0].Tags["event_type"])

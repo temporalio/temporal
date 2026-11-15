@@ -136,9 +136,7 @@ func (s *ActivityDriverSuite) TestDriverContextReflectsExtension() {
 		"WFA": func(t *testing.T) contextualDriver { return newWFADriver(t, nil, activityConfig{}) },
 	} {
 		s.Run(name, func(s *ActivityDriverSuite) {
-			t := s.T()
-
-			synctest.Test(t, func(t *testing.T) {
+			synctest.Test(s.T(), func(t *testing.T) {
 				d := newDriver(t)
 				before, ok := d.testContext().Deadline()
 				require.True(t, ok)

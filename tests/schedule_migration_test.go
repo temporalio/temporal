@@ -1757,12 +1757,10 @@ func TestScheduleMigrationIsolatedSuite(t *testing.T) {
 // in RecentActions. In V1, recordAction puts the same workflow in both
 // RunningWorkflows and RecentActions. The migration must deduplicate these.
 func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateRecentActions() {
-	t := s.T()
-
 	// Create the env without EnableChasm so that CreateSchedule does not write
 	// a CHASM sentinel (which would block the migration activity).
 	env := newScheduleEnv(
-		t,
+		s.T(),
 		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithSdkWorker(),
 	)
@@ -1819,7 +1817,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateR
 
 	// Wait for the V1 scheduler to start the workflow and record it as running.
 	var runningWfID string
-	await.Require(ctx, t, func(at *await.T) {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		descResp, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
@@ -1848,7 +1846,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateR
 
 	// Wait for the V1 scheduler workflow to complete (migration done).
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
-	await.Require(ctx, t, func(at *await.T) {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
 			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
@@ -1874,7 +1872,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateR
 	s.NoError(err)
 
 	recentActions := v2Desc.GetFrontendResponse().GetInfo().GetRecentActions()
-	assertRecentActionsNoDuplicateRunIDs(t, recentActions)
+	assertRecentActionsNoDuplicateRunIDs(s.T(), recentActions)
 
 	// The running workflow should appear exactly once.
 	var count int
@@ -1901,12 +1899,10 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateR
 // running rather than migrating and completing); when the gate is turned on,
 // auto-migration proceeds even with a running workflow.
 func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationDeferredWithRunningWorkflow() {
-	t := s.T()
-
 	// Create the env without EnableChasm so that CreateSchedule produces a V1
 	// (workflow-backed) schedule rather than a CHASM sentinel.
 	env := newScheduleEnv(
-		t,
+		s.T(),
 		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, false),
 	)
@@ -1964,7 +1960,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationDeferredWithRunnin
 
 	// Wait for the V1 scheduler to start the workflow and record it as running.
 	var runningWfID string
-	await.Require(ctx, t, func(at *await.T) {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		descResp, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
@@ -2005,7 +2001,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationDeferredWithRunnin
 
 	// Turn the gate on; auto-migration now proceeds even with the workflow running.
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
-	await.Requiref(ctx, t, func(at *await.T) { require.True(at, v1Migrated(at.Context())) }, 15*time.Second, 500*time.Millisecond,
+	await.Requiref(ctx, s.T(), func(at *await.T) { require.True(at, v1Migrated(at.Context())) }, 15*time.Second, 500*time.Millisecond,
 		"migration should proceed once the gate allows running workflows")
 
 	// The V2 schedule should now exist.
@@ -2402,10 +2398,8 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 // stamp Completed, and only then fire ProcessBuffer (which then sees
 // isRunning=false and does not apply SKIP).
 func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesNotSkipPending() {
-	t := s.T()
-
 	env := newScheduleEnv(
-		t,
+		s.T(),
 		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
@@ -2434,7 +2428,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesN
 	})
 	s.NoError(err)
 	runningRunID := startResp.GetRunId()
-	await.Require(ctx, t, func(at *await.T) {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: runningWid, RunId: runningRunID},
@@ -2525,7 +2519,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesN
 	//   - The pending start, kicked off by ProcessBuffer once isRunning
 	//     resolves to false, then run to completion by the SDK worker.
 	var lastDesc *schedulerpb.DescribeScheduleResponse
-	await.Requiref(ctx, t, func(at *await.T) {
+	await.Requiref(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
 			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
@@ -2550,10 +2544,8 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesN
 // PauseOnFailure policy must apply even though Describe supplies no failure
 // payload.
 func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion() {
-	t := s.T()
-
 	env := newScheduleEnv(
-		t,
+		s.T(),
 		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
@@ -2579,7 +2571,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_ClosedFailedWorkf
 	})
 	s.NoError(err)
 
-	await.Require(ctx, t, func(at *await.T) {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: startResp.GetRunId()},
@@ -2635,7 +2627,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_ClosedFailedWorkf
 	)
 	s.NoError(err)
 
-	await.Requiref(ctx, t, func(at *await.T) {
+	await.Requiref(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
 			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
@@ -2782,8 +2774,6 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 }
 
 func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_NoRunningWorkflows_GeneratorStarts() {
-	t := s.T()
-
 	// Use a very short idle time so the schedule closes quickly once the generator
 	// determines there's nothing to do (empty spec → no next wakeup time → idle).
 	shortIdleTime := 500 * time.Millisecond
@@ -2791,13 +2781,13 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_NoRunningWorkflow
 	tweakables.IdleTime = shortIdleTime
 
 	env := newScheduleEnv(
-		t,
+		s.T(),
 		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 	env.OverrideDynamicConfig(chasmscheduler.CurrentTweakables, tweakables)
 
-	ctx := testcontext.For(t)
+	ctx := testcontext.For(s.T())
 	sid := testcore.RandomizeStr("sched-migrate-no-running")
 	wid := testcore.RandomizeStr("sched-migrate-no-running-wf")
 	wt := testcore.RandomizeStr("sched-migrate-no-running-wt")
@@ -2848,7 +2838,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_NoRunningWorkflow
 	}
 
 	// Confirm the schedule is live on the CHASM stack before polling for closure.
-	await.Require(ctx, t, func(t *await.T) {
+	await.Require(ctx, s.T(), func(t *await.T) {
 		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(t.Context(), descReq)
 		require.NoError(t, err)
 	}, 6*time.Second, 100*time.Millisecond)
@@ -2856,20 +2846,18 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_NoRunningWorkflow
 	// If generator.Generate() was never called, the idle task is never scheduled
 	// and the schedule stays open indefinitely. Closing proves the generator ran.
 	var closedErr *serviceerror.FailedPrecondition
-	await.Require(ctx, t, func(t *await.T) {
+	await.Require(ctx, s.T(), func(t *await.T) {
 		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(t.Context(), descReq)
 		require.ErrorAs(t, err, &closedErr)
 	}, 6*time.Second, 100*time.Millisecond)
 }
 
 func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory() {
-	t := s.T()
-
 	// TODO: This is the admin-API directly poking a migration to v2:
-	t.Skip("admin MigrateSchedule path still injects EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED " +
+	s.T().Skip("admin MigrateSchedule path still injects EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED " +
 		"into a running workflow's history; remove this skip when the retroactive callback-attach is fixed")
 
-	env := newScheduleEnv(t, testcore.WithWorkerService("V1 scheduler"))
+	env := newScheduleEnv(s.T(), testcore.WithWorkerService("V1 scheduler"))
 	ctx := testcore.NewContext()
 
 	sid := testcore.RandomizeStr("sched-admin-migrate")
@@ -2888,11 +2876,11 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2_AdminMigrat
 		Spec:   &schedulepb.ScheduleSpec{Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}}},
 		Action: startWorkflowAction(env, wid, wt),
 	}
-	createV1Schedule(ctx, t, env, sid, sched, &schedulepb.SchedulePatch{
+	createV1Schedule(ctx, s.T(), env, sid, sched, &schedulepb.SchedulePatch{
 		TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
 	})
 
-	runningWfID := awaitRunningAction(ctx, t, env, sid)
+	runningWfID := awaitRunningAction(ctx, s.T(), env, sid)
 
 	// Ensure the workflow gets unblocked at the end regardless of outcome, so a
 	// failing assertion doesn't leak a permanently-running execution.
@@ -2905,7 +2893,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2_AdminMigrat
 	}()
 
 	// Sanity: V1 never emits this event type before migration.
-	requireNoOptionsUpdatedEvent(ctx, t, env, runningWfID)
+	requireNoOptionsUpdatedEvent(ctx, s.T(), env, runningWfID)
 
 	// Migrate via the admin RPC while the fired workflow is still running.
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
@@ -2921,9 +2909,9 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2_AdminMigrat
 	// Migration is fully applied once the V1 scheduler workflow completes, so its
 	// side effects (including any retroactive callback attach) are already
 	// reflected in the fired workflow's history by this point.
-	awaitV1SchedulerCompleted(ctx, t, env, sid)
+	awaitV1SchedulerCompleted(ctx, s.T(), env, sid)
 
-	requireNoOptionsUpdatedEvent(ctx, t, env, runningWfID)
+	requireNoOptionsUpdatedEvent(ctx, s.T(), env, runningWfID)
 }
 
 // requireNoChasmSentinel asserts that no CHASM entity -- sentinel or otherwise
