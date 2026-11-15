@@ -2,6 +2,7 @@ package child
 
 import (
 	"testing"
+
 	legacy "github.com/stretchr/testify/suite"
 )
 
