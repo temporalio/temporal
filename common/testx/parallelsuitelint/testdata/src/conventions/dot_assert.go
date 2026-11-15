@@ -1,4 +1,4 @@
-package dotassertions
+package conventions
 
 import . "github.com/stretchr/testify/assert"
 
