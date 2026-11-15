@@ -28,6 +28,15 @@ func TestSuiteAndMore(t *testing.T) { // want "use parallelsuite.Run for tests"
 	ps.Run(t, &validSuite{})
 }
 
+func TestSuiteWithSetup(t *testing.T) { setup(t); ps.Run(t, &validSuite{}) }
+func setup(t *testing.T) { t.Helper() }
+func TestMultipleSuites(t *testing.T) { ps.Run(t, &validSuite{}); ps.Run(t, &validSuite{}) } // want "use parallelsuite.Run for tests"
+
+func TestConditionalSuite(t *testing.T) { // want "use parallelsuite.Run for tests"
+	if t == nil { return }
+	ps.Run(t, &validSuite{})
+}
+
 func TestMain(m *testing.M) {}
 func BenchmarkOrdinary(b *testing.B) {}
 func FuzzOrdinary(f *testing.F) {}
