@@ -256,7 +256,7 @@ func (o *Operation) HandleNexusCompletion(
 	completion *persistencespb.ChasmNexusCompletion,
 ) error {
 	// Request ID lets us reject a stale or misrouted completion.
-	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
+	if completion.GetRequestId() == "" || o.GetRequestId() != completion.GetRequestId() {
 		return serviceerror.NewNotFound("operation not found")
 	}
 
