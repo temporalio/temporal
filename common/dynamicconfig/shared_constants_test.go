@@ -1,7 +1,10 @@
 package dynamicconfig
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
@@ -51,4 +54,194 @@ func TestHistoryReplicationRateLimiterFailsClosed(t *testing.T) {
 			require.False(t, HistoryReplicationRateLimiter.Get(collection)("test-namespace").Enabled)
 		})
 	}
+}
+
+func TestConvertReplicationStreamImplementationSettings(t *testing.T) {
+	t.Parallel()
+	good := map[string]any{"RemoteCluster": "good", "Implementation": "lane", "ShardPercent": 100}
+	goodRule := ReplicationStreamImplementationRule{RemoteCluster: "good", Implementation: "lane", ShardPercent: 100}
+	bad := func(kv ...any) map[string]any {
+		rule := map[string]any{"RemoteCluster": "bad", "Implementation": "lane"}
+		for i := 0; i < len(kv); i += 2 {
+			rule[kv[i].(string)] = kv[i+1]
+		}
+		return rule
+	}
+	for _, tc := range []struct {
+		name          string
+		bad           any
+		remoteCluster string
+	}{
+		{"QuotedShardPercent", bad("ShardPercent", "10"), "bad"},
+		{"ScalarShardIDs", bad("ShardIDs", 7), "bad"},
+		{"StringShardID", bad("ShardIDs", []any{7, "8"}), "bad"},
+		{"IntImplementation", bad("Implementation", 1, "ShardPercent", 10), "bad"},
+		{"IntRemoteCluster", map[string]any{"RemoteCluster": 5, "Implementation": "lane", "ShardPercent": 10}, ""},
+		{"NotAMap", "lane", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			value := map[string]any{"Sender": []any{good, tc.bad}, "Receiver": []any{good}}
+			settings, err := convertReplicationStreamImplementationSettings(value)
+			require.NoError(t, err)
+			require.Len(t, settings.Sender, 2)
+			require.Equal(t, goodRule, settings.Sender[0])
+			require.Equal(t, tc.remoteCluster, settings.Sender[1].RemoteCluster)
+			require.Error(t, settings.Sender[1].DecodeError)
+			require.Equal(t, ReplicationStreamImplementationRule{RemoteCluster: tc.remoteCluster, DecodeError: settings.Sender[1].DecodeError}, settings.Sender[1])
+			require.Equal(t, []ReplicationStreamImplementationRule{goodRule}, settings.Receiver)
+
+			// The collection keeps the rules that decode instead of falling back to the default.
+			collection := NewCollection(StaticClient{ReplicationStreamImplementation.Key(): value}, log.NewNoopLogger())
+			require.Equal(t, goodRule, ReplicationStreamImplementation.Get(collection)().Sender[0])
+		})
+	}
+
+	t.Run("DirectionNotAList", func(t *testing.T) {
+		t.Parallel()
+		settings, err := convertReplicationStreamImplementationSettings(map[string]any{"Sender": bad("ShardPercent", 10), "Receiver": []any{good}})
+		require.NoError(t, err)
+		require.Len(t, settings.Sender, 1)
+		require.Equal(t, "bad", settings.Sender[0].RemoteCluster)
+		require.ErrorContains(t, settings.Sender[0].DecodeError, "not a list")
+		require.Equal(t, []ReplicationStreamImplementationRule{goodRule}, settings.Receiver)
+	})
+	t.Run("FieldNamesIgnoreCase", func(t *testing.T) {
+		t.Parallel()
+		settings, err := convertReplicationStreamImplementationSettings(map[string]any{
+			"sender": []any{map[string]any{"remotecluster": "good", "implementation": "lane", "shardpercent": 100}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []ReplicationStreamImplementationRule{goodRule}, settings.Sender)
+	})
+	t.Run("DecodeErrorIsNotConfigurable", func(t *testing.T) {
+		t.Parallel()
+		settings, err := convertReplicationStreamImplementationSettings(map[string]any{
+			"Sender": []any{map[string]any{"RemoteCluster": "good", "Implementation": "lane", "ShardPercent": 100, "DecodeError": "x"}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []ReplicationStreamImplementationRule{goodRule}, settings.Sender)
+	})
+	t.Run("TypedValue", func(t *testing.T) {
+		t.Parallel()
+		typed := ReplicationStreamImplementationSettings{Sender: []ReplicationStreamImplementationRule{goodRule}}
+		settings, err := convertReplicationStreamImplementationSettings(typed)
+		require.NoError(t, err)
+		require.Equal(t, typed, settings)
+	})
+	t.Run("Empty", func(t *testing.T) {
+		t.Parallel()
+		settings, err := convertReplicationStreamImplementationSettings(map[string]any{})
+		require.NoError(t, err)
+		require.Equal(t, ReplicationStreamImplementationSettings{}, settings)
+	})
+	t.Run("ValueNotAMap", func(t *testing.T) {
+		t.Parallel()
+		_, err := convertReplicationStreamImplementationSettings([]any{good})
+		require.Error(t, err)
+	})
+}
+
+// loadYAMLFile reads dynamic config the way a server does: from a file, through the file-based
+// client and a collection.
+func loadYAMLFile(t *testing.T, contents string) *Collection {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "dynamicconfig.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(contents), 0o600))
+	doneCh := make(chan any)
+	t.Cleanup(func() { close(doneCh) })
+	client, err := NewFileBasedClient(&FileBasedClientConfig{Filepath: path, PollInterval: time.Minute}, log.NewNoopLogger(), doneCh)
+	require.NoError(t, err)
+	return NewCollection(client, log.NewNoopLogger())
+}
+
+func TestReplicationStreamImplementationFromYAMLFile(t *testing.T) {
+	t.Parallel()
+	laneB := ReplicationStreamImplementationRule{RemoteCluster: "cluster-b", Implementation: "lane", ShardPercent: 100}
+
+	t.Run("Valid", func(t *testing.T) {
+		t.Parallel()
+		contents := `
+history.ReplicationStreamImplementation:
+  - value:
+      Sender:
+        - RemoteCluster: cluster-b
+          Implementation: lane
+          ShardPercent: 25
+        - RemoteCluster: cluster-c
+          Implementation: legacy
+          ShardIDs: [1, 2, 3]
+      Receiver:
+        - remoteCluster: cluster-b
+          implementation: lane
+          shardPercent: 100
+`
+		expected := ReplicationStreamImplementationSettings{
+			Sender: []ReplicationStreamImplementationRule{
+				{RemoteCluster: "cluster-b", Implementation: "lane", ShardPercent: 25},
+				{RemoteCluster: "cluster-c", Implementation: "legacy", ShardIDs: []int32{1, 2, 3}},
+			},
+			Receiver: []ReplicationStreamImplementationRule{laneB},
+		}
+		require.Equal(t, expected, ReplicationStreamImplementation.Get(loadYAMLFile(t, contents))())
+
+		// A valid value decodes exactly as it did with ConvertStructure.
+		loaded := LoadYamlFile([]byte(contents))
+		require.NoError(t, loaded.Err())
+		raw := loaded.Map[ReplicationStreamImplementation.Key()][0].Value
+		previous, err := ConvertStructure(ReplicationStreamImplementationSettings{})(raw)
+		require.NoError(t, err)
+		require.Equal(t, expected, previous)
+	})
+
+	t.Run("BadlyTypedRules", func(t *testing.T) {
+		t.Parallel()
+		settings := ReplicationStreamImplementation.Get(loadYAMLFile(t, `
+history.ReplicationStreamImplementation:
+  - value:
+      Sender:
+        - RemoteCluster: cluster-b
+          Implementation: lane
+          ShardPercent: 100
+        - RemoteCluster: cluster-c
+          Implementation: lane
+          ShardPercent: "10"
+        - RemoteCluster: cluster-d
+          Implementation: lane
+          ShardIDs: 7
+      Receiver:
+        - RemoteCluster: cluster-b
+          Implementation: lane
+          ShardPercent: 100
+`))()
+		require.Len(t, settings.Sender, 3)
+		require.Equal(t, laneB, settings.Sender[0])
+		for i, remote := range []string{"cluster-c", "cluster-d"} {
+			rule := settings.Sender[i+1]
+			require.Equal(t, remote, rule.RemoteCluster)
+			require.Error(t, rule.DecodeError)
+			require.Empty(t, rule.Implementation)
+		}
+		require.Equal(t, []ReplicationStreamImplementationRule{laneB}, settings.Receiver)
+	})
+
+	t.Run("DirectionNotAList", func(t *testing.T) {
+		t.Parallel()
+		settings := ReplicationStreamImplementation.Get(loadYAMLFile(t, `
+history.ReplicationStreamImplementation:
+  - value:
+      Sender:
+        RemoteCluster: cluster-b
+        Implementation: lane
+        ShardPercent: 100
+      Receiver:
+        - RemoteCluster: cluster-b
+          Implementation: lane
+          ShardPercent: 100
+`))()
+		require.Len(t, settings.Sender, 1)
+		require.Equal(t, "cluster-b", settings.Sender[0].RemoteCluster)
+		require.ErrorContains(t, settings.Sender[0].DecodeError, "not a list")
+		require.Equal(t, []ReplicationStreamImplementationRule{laneB}, settings.Receiver)
+	})
 }
