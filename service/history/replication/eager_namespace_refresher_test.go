@@ -128,8 +128,13 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Update
 		Info: &namespacepb.NamespaceInfo{
 			Id:    namespaceId.String(),
 			Name:  nsName,
-			State: enumspb.NAMESPACE_STATE_DELETED,
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
 			Data:  make(map[string]string)},
+		RestoreInfo: &persistencespb.NamespaceRestoreInfo{
+			RestoreId:   "restore-id",
+			HostCluster: cluster.TestAlternativeClusterName,
+			State:       enumspb.NAMESPACE_RESTORE_STATE_RUNNING,
+		},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
@@ -153,6 +158,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Update
 		ConfigVersion:      nsResponse.GetConfigVersion(),
 		FailoverVersion:    nsResponse.GetFailoverVersion(),
 		FailoverHistory:    nsResponse.GetFailoverHistory(),
+		RestoreInfo:        nsResponse.GetRestoreInfo(),
 	}
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, nil).Times(1)
