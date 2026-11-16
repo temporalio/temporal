@@ -144,6 +144,41 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 	require.ErrorAs(t, err, &unavailableErr)
 }
 
+func TestHandlerCreateFromMigrationStateNormalizesNamespaceName(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "stale name", value: "previous-name"},
+		{name: "missing name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t, withMockEngine())
+			namespaceRegistry := namespacelib.NewMockRegistry(gomock.NewController(t))
+			namespaceRegistry.EXPECT().GetNamespaceByID(namespacelib.ID(namespaceID)).Return(
+				namespacelib.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace}, nil, "active"), nil,
+			)
+			h := scheduler.NewTestHandler(env.Logger, namespaceRegistry)
+			env.MockEngine.EXPECT().StartExecution(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(chasm.StartExecutionResult{}, nil)
+
+			req := &schedulerpb.CreateFromMigrationStateRequest{
+				NamespaceId: namespaceID,
+				State: &schedulerpb.SchedulerMigrationState{
+					SchedulerState: &schedulerpb.SchedulerState{
+						Namespace:   tc.value,
+						NamespaceId: namespaceID,
+						ScheduleId:  scheduleID,
+					},
+				},
+			}
+			_, err := h.TestCreateFromMigrationState(env.EngineContext(), req)
+			require.NoError(t, err)
+			require.Equal(t, namespace, req.State.SchedulerState.Namespace)
+		})
+	}
+}
+
 func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 	env := newTestEnv(t, withMockEngine())
 	sentinel, ctx, _ := setupSentinelForTest(t)

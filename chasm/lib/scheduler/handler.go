@@ -90,9 +90,12 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb
 		return nil, err
 	}
 	state := req.GetState().GetSchedulerState()
-	if state.GetNamespaceId() != ns.ID().String() || state.GetNamespace() != ns.Name().String() {
-		return nil, serviceerror.NewInvalidArgument("migration namespace does not match execution namespace")
+	if state.GetNamespaceId() != ns.ID().String() {
+		return nil, serviceerror.NewInvalidArgument("migration namespace ID does not match execution namespace ID")
 	}
+	// The name in V1 state may be stale after a namespace rename. Use the
+	// current name after verifying the stable namespace ID.
+	state.Namespace = ns.Name().String()
 
 	scheduleID := state.GetScheduleId()
 	_, err = chasm.StartExecution(
