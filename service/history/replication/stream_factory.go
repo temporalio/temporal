@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/configs"
@@ -76,8 +78,8 @@ type (
 	// selected implementation.
 	selectedStreamSender struct {
 		ManagedStreamSender
-		implementation       string
-		selectImplementation func() (string, error)
+		implementation string
+		selector       *streamImplementationSelector
 	}
 
 	// selectedStreamReceiver is invalid once the implementation selected for its stream
@@ -85,8 +87,21 @@ type (
 	// implementation.
 	selectedStreamReceiver struct {
 		ManagedStreamReceiver
-		implementation       string
+		implementation string
+		selector       *streamImplementationSelector
+	}
+
+	// streamImplementationSelector reads a stream's implementation from live config, both at
+	// construction and when IsValid checks for a mode change. It logs each new config error,
+	// so an edit made after the stream was created is reported even when it leaves the
+	// selection unchanged.
+	streamImplementationSelector struct {
 		selectImplementation func() (string, error)
+		logger               log.Logger
+		remoteCluster        string
+
+		mu      sync.Mutex
+		lastErr string
 	}
 )
 
@@ -115,20 +130,19 @@ func (streamSenderFactory) NewStreamSender(
 	serverShardKey ClusterShardKey,
 	config *configs.Config,
 ) ManagedStreamSender {
-	// Read live config both at construction and when IsValid checks for a mode change.
-	selectImplementation := func() (string, error) {
-		return selectStreamImplementation(
-			config.ReplicationStreamImplementation().Sender,
-			clientClusterName,
-			serverShardKey.ShardID,
-			config.NumberOfShards,
-		)
+	selector := &streamImplementationSelector{
+		selectImplementation: func() (string, error) {
+			return selectStreamImplementation(
+				config.ReplicationStreamImplementation().Sender,
+				clientClusterName,
+				serverShardKey.ShardID,
+				config.NumberOfShards,
+			)
+		},
+		logger:        shardContext.GetThrottledLogger(),
+		remoteCluster: clientClusterName,
 	}
-	implementation, err := selectImplementation()
-	if err != nil {
-		shardContext.GetThrottledLogger().Error("Invalid ReplicationStreamImplementation rule",
-			tag.ClusterName(clientClusterName), tag.NewStringTag("implementation", implementation), tag.Error(err))
-	}
+	implementation := selector.selected()
 	metrics.ReplicationStreamImplementationSelected.With(shardContext.GetMetricsHandler()).Record(
 		1,
 		metrics.OperationTag(streamSenderOperation),
@@ -164,9 +178,9 @@ func (streamSenderFactory) NewStreamSender(
 		)
 	}
 	return &selectedStreamSender{
-		ManagedStreamSender:  sender,
-		implementation:       implementation,
-		selectImplementation: selectImplementation,
+		ManagedStreamSender: sender,
+		implementation:      implementation,
+		selector:            selector,
 	}
 }
 
@@ -177,20 +191,19 @@ func (f streamReceiverFactory) NewStreamReceiver(
 	serverShardKey ClusterShardKey,
 ) ManagedStreamReceiver {
 	remoteClusterName := processToolBox.ClusterMetadata.ClusterNameForFailoverVersion(true, int64(serverShardKey.ClusterID))
-	// Read live config both at construction and when IsValid checks for a mode change.
-	selectImplementation := func() (string, error) {
-		return selectStreamImplementation(
-			processToolBox.Config.ReplicationStreamImplementation().Receiver,
-			remoteClusterName,
-			clientShardKey.ShardID,
-			processToolBox.Config.NumberOfShards,
-		)
+	selector := &streamImplementationSelector{
+		selectImplementation: func() (string, error) {
+			return selectStreamImplementation(
+				processToolBox.Config.ReplicationStreamImplementation().Receiver,
+				remoteClusterName,
+				clientShardKey.ShardID,
+				processToolBox.Config.NumberOfShards,
+			)
+		},
+		logger:        processToolBox.ThrottledLogger,
+		remoteCluster: remoteClusterName,
 	}
-	implementation, err := selectImplementation()
-	if err != nil {
-		processToolBox.ThrottledLogger.Error("Invalid ReplicationStreamImplementation rule",
-			tag.ClusterName(remoteClusterName), tag.NewStringTag("implementation", implementation), tag.Error(err))
-	}
+	implementation := selector.selected()
 	metrics.ReplicationStreamImplementationSelected.With(processToolBox.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(streamReceiverOperation),
@@ -206,27 +219,52 @@ func (f streamReceiverFactory) NewStreamReceiver(
 	return &selectedStreamReceiver{
 		ManagedStreamReceiver: receiver,
 		implementation:        implementation,
-		selectImplementation:  selectImplementation,
+		selector:              selector,
 	}
 }
 
 func (s *selectedStreamSender) IsValid() bool {
-	// The selector returns a usable implementation even on error: invalid matching rules
-	// select legacy, and entries without a remote cluster are ignored. Construction logs errors.
-	implementation, _ := s.selectImplementation()
-	return implementation == s.implementation && s.ManagedStreamSender.IsValid()
+	// For an invalid rule the selector returns the default, legacy, so a lane stream restarts
+	// as legacy and a legacy stream is unchanged. An ignored entry leaves the selection
+	// unchanged. Either way the selector logs the error.
+	return s.selector.selected() == s.implementation && s.ManagedStreamSender.IsValid()
 }
 
 func (r *selectedStreamReceiver) IsValid() bool {
-	// Apply the selector's fallback result, as selectedStreamSender.IsValid does.
-	implementation, _ := r.selectImplementation()
-	return implementation == r.implementation && r.ManagedStreamReceiver.IsValid()
+	// As in selectedStreamSender.IsValid: for an invalid rule the selector returns the
+	// default, legacy, and logs the error.
+	return r.selector.selected() == r.implementation && r.ManagedStreamReceiver.IsValid()
+}
+
+// selected returns the stream's implementation from live config. It is usable even when the
+// config has an error: an invalid rule selects the default, legacy. It logs an error only when
+// it differs from the last one it logged, so an invalid config is reported once per stream,
+// not on every IsValid check.
+func (s *streamImplementationSelector) selected() string {
+	implementation, err := s.selectImplementation()
+	var errMessage string
+	if err != nil {
+		errMessage = err.Error()
+	}
+	s.mu.Lock()
+	isNewErr := errMessage != s.lastErr
+	s.lastErr = errMessage
+	s.mu.Unlock()
+	if err != nil && isNewErr {
+		s.logger.Error("Invalid ReplicationStreamImplementation rule",
+			tag.ClusterName(s.remoteCluster), tag.NewStringTag("implementation", implementation), tag.Error(err))
+	}
+	return implementation
 }
 
 // selectStreamImplementation returns the implementation of the stream with remoteCluster on the
-// local shard shardID. Invalid or duplicate rules for this remote select legacy. Rules for other
-// remotes do not affect this stream. Entries without a remote are ignored and reported as errors,
-// without changing the selected implementation.
+// local shard shardID. It always returns an implementation the caller can use, even with an error:
+//   - No rule for this remote, or a rule that does not include the shard: the default, legacy.
+//   - An invalid or duplicate rule for this remote, including one that failed to decode: the
+//     default, legacy, and an error.
+//   - An entry without a remote: ignored. The selection is unchanged, and the error reports it.
+//
+// Rules for other remotes do not affect this stream.
 func selectStreamImplementation(
 	rules []dynamicconfig.ReplicationStreamImplementationRule,
 	remoteCluster string,
@@ -237,7 +275,11 @@ func selectStreamImplementation(
 	var configErr error
 	for i, rule := range rules {
 		if rule.RemoteCluster == "" {
-			configErr = errors.Join(configErr, fmt.Errorf("rule %d: RemoteCluster is empty", i))
+			err := fmt.Errorf("rule %d: RemoteCluster is empty", i)
+			if rule.DecodeError != nil {
+				err = fmt.Errorf("rule %d: cannot decode a RemoteCluster: %w", i, rule.DecodeError)
+			}
+			configErr = errors.Join(configErr, err)
 			continue
 		}
 		if rule.RemoteCluster != remoteCluster {
@@ -263,6 +305,9 @@ func selectStreamImplementation(
 }
 
 func validateStreamImplementationRule(rule dynamicconfig.ReplicationStreamImplementationRule) error {
+	if rule.DecodeError != nil {
+		return fmt.Errorf("cannot decode rule: %w", rule.DecodeError)
+	}
 	if rule.Implementation != streamImplementationLegacy && rule.Implementation != streamImplementationLane {
 		return fmt.Errorf("unknown Implementation %q", rule.Implementation)
 	}

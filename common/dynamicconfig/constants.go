@@ -3215,16 +3215,18 @@ replicationReaderGroup abstraction, a refactor of the per-priority cursor arithm
 stream sender. Behavior is unchanged; this flag exists to allow a safe rollout of the
 refactored path. Changing it restarts replication streams.`,
 	)
-	ReplicationStreamImplementation = NewGlobalTypedSetting(
+	ReplicationStreamImplementation = NewGlobalTypedSettingWithConverter(
 		"history.ReplicationStreamImplementation",
+		convertReplicationStreamImplementationSettings,
 		ReplicationStreamImplementationSettings{},
 		`ReplicationStreamImplementation selects the replication stream implementation for each stream.
 Fields: Sender and Receiver, each a list of rules. A rule has RemoteCluster, Implementation
 ("legacy" or "lane"), and either ShardIDs or ShardPercent (1-100) to select local shards.
 ShardPercent selects the lowest shard IDs, rounding up to a whole shard.
 Streams that match no rule use legacy. Invalid or duplicate rules for a remote cluster select
-legacy only for that cluster in that direction. Entries without RemoteCluster are ignored with
-a diagnostic. Whole-setting conversion failures use the default, selecting legacy everywhere.
+legacy only for that cluster in that direction, including rules with a value of the wrong type.
+Rules without RemoteCluster are ignored with a diagnostic. If Sender or Receiver is not a list,
+that direction uses legacy. A value that is not a map uses the default, legacy everywhere.
 Changing the implementation selected for a stream restarts that stream.`,
 	)
 	ReplicationStreamReceiverLanesEnabled = NewGlobalBoolSetting(

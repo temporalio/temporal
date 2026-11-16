@@ -104,6 +104,32 @@ func TestSelectStreamImplementation(t *testing.T) {
 			expected:      streamImplementationLane,
 			expectInvalid: true,
 		},
+		{
+			name:          "DecodeErrorSelectsLegacy",
+			rules:         []dynamicconfig.ReplicationStreamImplementationRule{{RemoteCluster: "remote", DecodeError: errors.New("bad type")}},
+			shardID:       7,
+			expected:      streamImplementationLegacy,
+			expectInvalid: true,
+		},
+		{
+			name: "DecodeErrorForOtherClusterDoesNotChangeSelection",
+			rules: []dynamicconfig.ReplicationStreamImplementationRule{
+				laneRule("remote", []int32{7}, 0),
+				{RemoteCluster: "other", DecodeError: errors.New("bad type")},
+			},
+			shardID:  7,
+			expected: streamImplementationLane,
+		},
+		{
+			name: "DecodeErrorWithoutRemoteClusterIsReportedWithoutChangingSelection",
+			rules: []dynamicconfig.ReplicationStreamImplementationRule{
+				{DecodeError: errors.New("bad type")},
+				laneRule("remote", []int32{7}, 0),
+			},
+			shardID:       7,
+			expected:      streamImplementationLane,
+			expectInvalid: true,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,17 +169,22 @@ func TestSelectedStreamIsValid(t *testing.T) {
 			sender.EXPECT().IsValid().Return(tc.streamValid).AnyTimes()
 			receiver := NewMockManagedStreamReceiver(ctrl)
 			receiver.EXPECT().IsValid().Return(tc.streamValid).AnyTimes()
-			selectImplementation := func() (string, error) { return tc.selected, tc.selectionErr }
+			newSelector := func() *streamImplementationSelector {
+				return &streamImplementationSelector{
+					selectImplementation: func() (string, error) { return tc.selected, tc.selectionErr },
+					logger:               log.NewNoopLogger(),
+				}
+			}
 
 			selectedSender := &selectedStreamSender{
-				ManagedStreamSender:  sender,
-				implementation:       tc.implementation,
-				selectImplementation: selectImplementation,
+				ManagedStreamSender: sender,
+				implementation:      tc.implementation,
+				selector:            newSelector(),
 			}
 			selectedReceiver := &selectedStreamReceiver{
 				ManagedStreamReceiver: receiver,
 				implementation:        tc.implementation,
-				selectImplementation:  selectImplementation,
+				selector:              newSelector(),
 			}
 			require.Equal(t, tc.expected, selectedSender.IsValid())
 			require.Equal(t, tc.expected, selectedReceiver.IsValid())
@@ -165,6 +196,7 @@ func TestStreamSenderFactory(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	shardContext := historyi.NewMockShardContext(ctrl)
 	shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+	shardContext.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
 	shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	dc := dynamicconfig.NewMemoryClient()
 	config := configs.NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()), 1)
@@ -193,7 +225,7 @@ func TestStreamSenderFactory(t *testing.T) {
 			{RemoteCluster: "remote", Implementation: streamImplementationLane, ShardIDs: []int32{7}},
 		},
 	})
-	implementation, err := legacySender.selectImplementation()
+	implementation, err := legacySender.selector.selectImplementation()
 	require.NoError(t, err)
 	require.Equal(t, streamImplementationLane, implementation)
 
@@ -212,6 +244,7 @@ func TestStreamReceiverFactory(t *testing.T) {
 		ClusterMetadata: clusterMetadata,
 		MetricsHandler:  metrics.NoopMetricsHandler,
 		Logger:          log.NewNoopLogger(),
+		ThrottledLogger: log.NewNoopLogger(),
 	}
 	factory := NewStreamReceiverFactory(NewNoopLaneFeedbackProvider())
 	newReceiver := func() *selectedStreamReceiver {
@@ -227,7 +260,7 @@ func TestStreamReceiverFactory(t *testing.T) {
 			{RemoteCluster: "remote", Implementation: streamImplementationLane, ShardIDs: []int32{7}},
 		},
 	})
-	implementation, err := legacyReceiver.selectImplementation()
+	implementation, err := legacyReceiver.selector.selectImplementation()
 	require.NoError(t, err)
 	require.Equal(t, streamImplementationLane, implementation)
 
@@ -248,6 +281,7 @@ func TestStreamFactoriesRecordSameImplementationTags(t *testing.T) {
 
 	shardContext := historyi.NewMockShardContext(ctrl)
 	shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+	shardContext.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
 	shardContext.EXPECT().GetMetricsHandler().Return(captureHandler).AnyTimes()
 	NewStreamSenderFactory().NewStreamSender(nil, shardContext, nil, nil, nil, "remote", 1, NewClusterShardKey(2, 1), NewClusterShardKey(1, 7), config)
 
@@ -258,6 +292,7 @@ func TestStreamFactoriesRecordSameImplementationTags(t *testing.T) {
 		ClusterMetadata: clusterMetadata,
 		MetricsHandler:  captureHandler,
 		Logger:          log.NewNoopLogger(),
+		ThrottledLogger: log.NewNoopLogger(),
 	}, nil, NewClusterShardKey(1, 7), NewClusterShardKey(2, 1))
 
 	recordings := capture.Snapshot()[metrics.ReplicationStreamImplementationSelected.Name()]
@@ -350,11 +385,9 @@ func TestStreamFactoriesScopeInvalidRules(t *testing.T) {
 						shard := historyi.NewMockShardContext(ctrl)
 						shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
 						shard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
-						if tc.diagnostic {
-							shard.EXPECT().GetThrottledLogger().Return(throttled)
-						}
+						shard.EXPECT().GetThrottledLogger().Return(throttled)
 						sender := NewStreamSenderFactory().NewStreamSender(nil, shard, nil, nil, nil, "remote", 1, NewClusterShardKey(2, 1), NewClusterShardKey(1, 7), config).(*selectedStreamSender)
-						selected, selectImplementation = sender.implementation, sender.selectImplementation
+						selected, selectImplementation = sender.implementation, sender.selector.selectImplementation
 						if tc.implementation == "lane" {
 							require.IsType(t, &laneStreamSender{}, sender.ManagedStreamSender)
 						} else {
@@ -365,7 +398,7 @@ func TestStreamFactoriesScopeInvalidRules(t *testing.T) {
 						metadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("remote").AnyTimes()
 						toolbox := ProcessToolBox{Config: config, ClusterMetadata: metadata, MetricsHandler: metrics.NoopMetricsHandler, Logger: log.NewNoopLogger(), ThrottledLogger: throttled}
 						receiver := NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()).NewStreamReceiver(toolbox, nil, NewClusterShardKey(1, 7), NewClusterShardKey(2, 1)).(*selectedStreamReceiver)
-						selected, selectImplementation = receiver.implementation, receiver.selectImplementation
+						selected, selectImplementation = receiver.implementation, receiver.selector.selectImplementation
 						if tc.implementation == "lane" {
 							require.IsType(t, &laneStreamReceiver{}, receiver.ManagedStreamReceiver)
 						} else {
@@ -385,4 +418,84 @@ func TestStreamFactoriesScopeInvalidRules(t *testing.T) {
 			}
 		})
 	}
+}
+
+// An edit made after a stream was created must be logged even when it leaves the selection
+// unchanged: IsValid then keeps the stream, so the factory does not run again.
+func TestSelectedStreamLogsLiveConfigErrors(t *testing.T) {
+	t.Parallel()
+	// A quoted ShardPercent fails to decode, which selects the default, legacy, for this remote.
+	badlyTypedRule := map[string]any{"RemoteCluster": "remote", "Implementation": "lane", "ShardPercent": "10"}
+	for _, role := range []string{"sender", "receiver"} {
+		t.Run(role, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			throttled := log.NewMockLogger(ctrl)
+			dc := dynamicconfig.NewMemoryClient()
+			setRules := func(rules ...any) {
+				dc.OverrideSetting(dynamicconfig.ReplicationStreamImplementation, map[string]any{"Sender": rules, "Receiver": rules})
+			}
+			config := configs.NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()), 32)
+			var isValid func() bool
+			if role == "sender" {
+				shard := historyi.NewMockShardContext(ctrl)
+				shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+				shard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
+				shard.EXPECT().GetThrottledLogger().Return(throttled)
+				sender := NewStreamSenderFactory().NewStreamSender(nil, shard, nil, nil, nil, "remote", 1, NewClusterShardKey(2, 1), NewClusterShardKey(1, 7), config).(*selectedStreamSender)
+				require.Equal(t, streamImplementationLegacy, sender.implementation)
+				// Stand in for a started stream.
+				started := NewMockManagedStreamSender(ctrl)
+				started.EXPECT().IsValid().Return(true).AnyTimes()
+				sender.ManagedStreamSender = started
+				isValid = sender.IsValid
+			} else {
+				metadata := cluster.NewMockMetadata(ctrl)
+				metadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("remote").AnyTimes()
+				toolbox := ProcessToolBox{Config: config, ClusterMetadata: metadata, MetricsHandler: metrics.NoopMetricsHandler, Logger: log.NewNoopLogger(), ThrottledLogger: throttled}
+				receiver := NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()).NewStreamReceiver(toolbox, nil, NewClusterShardKey(1, 7), NewClusterShardKey(2, 1)).(*selectedStreamReceiver)
+				require.Equal(t, streamImplementationLegacy, receiver.implementation)
+				started := NewMockManagedStreamReceiver(ctrl)
+				started.EXPECT().IsValid().Return(true).AnyTimes()
+				receiver.ManagedStreamReceiver = started
+				isValid = receiver.IsValid
+			}
+
+			throttled.EXPECT().Error("Invalid ReplicationStreamImplementation rule", gomock.Any(), gomock.Any(), gomock.Any())
+			setRules(badlyTypedRule)
+			require.True(t, isValid(), "a legacy stream stays legacy")
+			// The mock fails if the unchanged error is logged again.
+			require.True(t, isValid())
+
+			setRules()
+			require.True(t, isValid())
+
+			// The same error after a fix is a new edit, so it is logged again.
+			throttled.EXPECT().Error("Invalid ReplicationStreamImplementation rule", gomock.Any(), gomock.Any(), gomock.Any())
+			setRules(badlyTypedRule)
+			require.True(t, isValid())
+		})
+	}
+}
+
+func TestSelectStreamImplementationWithBadlyTypedRule(t *testing.T) {
+	t.Parallel()
+	dc := dynamicconfig.NewMemoryClient()
+	// Raw values, as a dynamic config file provides them, go through the setting's converter.
+	dc.OverrideSetting(dynamicconfig.ReplicationStreamImplementation, map[string]any{
+		"Sender": []any{
+			map[string]any{"RemoteCluster": "remote", "Implementation": "lane", "ShardPercent": 100},
+			map[string]any{"RemoteCluster": "other", "Implementation": "lane", "ShardPercent": "10"},
+		},
+	})
+	config := configs.NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()), 4)
+	rules := config.ReplicationStreamImplementation().Sender
+
+	implementation, err := selectStreamImplementation(rules, "remote", 1, config.NumberOfShards)
+	require.NoError(t, err)
+	require.Equal(t, streamImplementationLane, implementation)
+
+	implementation, err = selectStreamImplementation(rules, "other", 1, config.NumberOfShards)
+	require.ErrorContains(t, err, "cannot decode rule")
+	require.Equal(t, streamImplementationLegacy, implementation)
 }
