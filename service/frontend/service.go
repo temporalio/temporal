@@ -66,7 +66,7 @@ type Config struct {
 	GlobalRPS          dynamicconfig.IntPropertyFn
 	OperatorRPSRatio   dynamicconfig.FloatPropertyFn
 
-	EnableDescribeMutableStateRateLimit                               dynamicconfig.BoolPropertyFn
+	EnableAdminPodLevelRateLimit                                      dynamicconfig.BoolPropertyFn
 	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -333,7 +333,7 @@ func NewConfig(
 		RPS:                                 dynamicconfig.FrontendRPS.Get(dc),
 		GlobalRPS:                           dynamicconfig.FrontendGlobalRPS.Get(dc),
 		OperatorRPSRatio:                    dynamicconfig.OperatorRPSRatio.Get(dc),
-		EnableDescribeMutableStateRateLimit: dynamicconfig.AdminEnableDescribeMutableStateRateLimit.Get(dc),
+		EnableAdminPodLevelRateLimit:        dynamicconfig.AdminEnablePodLevelRateLimit.Get(dc),
 		NamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Get(dc),
 
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
