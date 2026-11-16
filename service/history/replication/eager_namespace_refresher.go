@@ -105,6 +105,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		ConfigVersion:      resp.GetConfigVersion(),
 		FailoverVersion:    resp.GetFailoverVersion(),
 		FailoverHistory:    resp.GetFailoverHistory(),
+		RestoreInfo:        resp.GetRestoreInfo(),
 	}
 	err = e.replicationTaskExecutor.Execute(ctx, task)
 	if err != nil {
