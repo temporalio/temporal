@@ -247,6 +247,12 @@ func withEngineMetricsHandler(handler metrics.Handler) engineTestOption {
 	}
 }
 
+func withEngineNamespaceName(name string) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithNamespaceName(namespaceID, name))
+	}
+}
+
 func newEngineTestConfig(opts ...engineTestOption) *engineTestConfig {
 	config := &engineTestConfig{}
 	for _, opt := range opts {

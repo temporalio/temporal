@@ -2373,29 +2373,30 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 	})
 }
 
-func TestScheduleMigration_RejectsInconsistentNamespaceState(t *testing.T) {
+func TestScheduleMigration_ValidatesNamespaceState(t *testing.T) {
 	env := newScheduleEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true))
 	nsID := env.NamespaceID().String()
 	nsName := env.Namespace().String()
 
 	tests := []struct {
 		name   string
+		reject bool
 		mutate func(*schedulerpb.SchedulerState)
 	}{
-		{"namespace ID", func(state *schedulerpb.SchedulerState) {
+		{"namespace ID", true, func(state *schedulerpb.SchedulerState) {
 			state.NamespaceId = "other-namespace-id"
 		}},
-		{"namespace name", func(state *schedulerpb.SchedulerState) {
+		{"stale namespace name", false, func(state *schedulerpb.SchedulerState) {
 			state.Namespace = "other-namespace"
 		}},
-		{"namespace name and ID", func(state *schedulerpb.SchedulerState) {
+		{"namespace name and ID", true, func(state *schedulerpb.SchedulerState) {
 			state.Namespace = "other-namespace"
 			state.NamespaceId = "other-namespace-id"
 		}},
-		{"missing namespace ID", func(state *schedulerpb.SchedulerState) {
+		{"missing namespace ID", true, func(state *schedulerpb.SchedulerState) {
 			state.NamespaceId = ""
 		}},
-		{"missing namespace name", func(state *schedulerpb.SchedulerState) {
+		{"missing namespace name", false, func(state *schedulerpb.SchedulerState) {
 			state.Namespace = ""
 		}},
 	}
@@ -2417,6 +2418,10 @@ func TestScheduleMigration_RejectsInconsistentNamespaceState(t *testing.T) {
 				Info: &schedulepb.ScheduleInfo{},
 			}
 			tt.mutate(state)
+			invokerState := &schedulerpb.InvokerState{}
+			if tt.reject {
+				invokerState.TerminateWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "test-workflow"}}
+			}
 
 			_, err := env.GetTestCluster().SchedulerClient().CreateFromMigrationState(ctx,
 				&schedulerpb.CreateFromMigrationStateRequest{
@@ -2424,13 +2429,15 @@ func TestScheduleMigration_RejectsInconsistentNamespaceState(t *testing.T) {
 					State: &schedulerpb.SchedulerMigrationState{
 						SchedulerState: state,
 						GeneratorState: &schedulerpb.GeneratorState{},
-						InvokerState: &schedulerpb.InvokerState{
-							TerminateWorkflows: []*commonpb.WorkflowExecution{{WorkflowId: "test-workflow"}},
-						},
+						InvokerState:   invokerState,
 					},
 				})
-			var invalidArgument *serviceerror.InvalidArgument
-			require.ErrorAs(t, err, &invalidArgument)
+			if tt.reject {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+			} else {
+				require.NoError(t, err)
+			}
 
 			_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx,
 				&schedulerpb.DescribeScheduleRequest{
@@ -2440,8 +2447,12 @@ func TestScheduleMigration_RejectsInconsistentNamespaceState(t *testing.T) {
 						ScheduleId: sid,
 					},
 				})
-			var notFound *serviceerror.NotFound
-			require.ErrorAs(t, err, &notFound)
+			if tt.reject {
+				var notFound *serviceerror.NotFound
+				require.ErrorAs(t, err, &notFound)
+			} else {
+				require.NoError(t, err)
+			}
 		})
 	}
 }
