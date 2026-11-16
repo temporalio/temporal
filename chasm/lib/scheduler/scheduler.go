@@ -300,12 +300,13 @@ func CreateSchedulerFromMigration(
 	ns := ctx.NamespaceEntry()
 	// Migration state can originate from workflow commands, so namespace ownership
 	// must be checked against the execution context before adopting that state.
-	if req.GetNamespaceId() != ns.ID().String() || state.GetSchedulerState().GetNamespaceId() != ns.ID().String() {
+	schedulerState := state.GetSchedulerState()
+	if req.GetNamespaceId() != ns.ID().String() || schedulerState.GetNamespaceId() != ns.ID().String() {
 		return nil, serviceerror.NewInvalidArgument("migration namespace ID does not match execution namespace ID")
 	}
-	if state.GetSchedulerState().GetNamespace() != ns.Name().String() {
-		return nil, serviceerror.NewInvalidArgument("migration namespace does not match execution namespace")
-	}
+	// The name in V1 state may be stale after a namespace rename. Use the
+	// current name after verifying the stable namespace ID.
+	schedulerState.Namespace = ns.Name().String()
 
 	// Default to a non-nil empty result, matching NewScheduler. Migrated state
 	// may carry no completion result (e.g. a schedule migrated before its first
