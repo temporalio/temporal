@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"errors"
 	"math"
 	"testing"
 	"time"
@@ -61,6 +62,23 @@ func TestManualLaneStreamPolicy(t *testing.T) {
 				entry("remote", "ns-a", 10),
 				entry("other", "ns-b", 0),
 			},
+			expected:      []DesiredLane{lane("ns-a")},
+			expectedRates: map[string]float64{namespaceLaneKey("ns-a"): 10},
+		},
+		{
+			name:          "DecodeError",
+			entries:       []dynamicconfig.ReplicationLaneIsolationEntry{entry("remote", "ns-a", 10), {RemoteCluster: "remote", DecodeError: errors.New("bad type")}},
+			expectInvalid: true,
+		},
+		{
+			name:          "DecodeErrorForOtherClusterDoesNotWithdrawLanes",
+			entries:       []dynamicconfig.ReplicationLaneIsolationEntry{entry("remote", "ns-a", 10), {RemoteCluster: "other", DecodeError: errors.New("bad type")}},
+			expected:      []DesiredLane{lane("ns-a")},
+			expectedRates: map[string]float64{namespaceLaneKey("ns-a"): 10},
+		},
+		{
+			name:          "DecodeErrorWithoutRemoteClusterDoesNotWithdrawLanes",
+			entries:       []dynamicconfig.ReplicationLaneIsolationEntry{entry("remote", "ns-a", 10), {DecodeError: errors.New("bad type")}},
 			expected:      []DesiredLane{lane("ns-a")},
 			expectedRates: map[string]float64{namespaceLaneKey("ns-a"): 10},
 		},
@@ -264,4 +282,27 @@ func TestManualLaneStreamPolicyIgnoresUnaddressedEntries(t *testing.T) {
 	allowed, retry := limiter.Reserve(now)
 	require.False(t, allowed)
 	require.Equal(t, time.Second, retry)
+}
+
+func TestManualLaneStreamPolicyBadlyTypedEntry(t *testing.T) {
+	t.Parallel()
+	dc := dynamicconfig.NewMemoryClient()
+	// Raw values, as a dynamic config file provides them, go through the setting's converter.
+	dc.OverrideSetting(dynamicconfig.ReplicationLaneIsolation, []any{
+		map[string]any{"RemoteCluster": "remote", "NamespaceID": "ns-a", "TasksPerSecond": 10},
+		map[string]any{"RemoteCluster": "other", "NamespaceID": "ns-b", "TasksPerSecond": "10"},
+	})
+	factory := NewManualLaneStreamPolicyFactory(dynamicconfig.NewCollection(dc, log.NewNoopLogger()), log.NewNoopLogger())
+
+	remote, err := factory.NewStreamPolicy(LaneStream{RemoteCluster: "remote", ShardID: 1})
+	require.NoError(t, err)
+	lanes, err := remote.Evaluate(LaneSignals{})
+	require.NoError(t, err)
+	require.Equal(t, []DesiredLane{{Key: namespaceLaneKey("ns-a"), Filter: namespaceLaneFilter("ns-a")}}, lanes)
+
+	other, err := factory.NewStreamPolicy(LaneStream{RemoteCluster: "other", ShardID: 1})
+	require.NoError(t, err)
+	lanes, err = other.Evaluate(LaneSignals{})
+	require.ErrorContains(t, err, "cannot decode entry")
+	require.Empty(t, lanes)
 }

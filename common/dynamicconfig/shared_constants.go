@@ -349,6 +349,64 @@ type ReplicationStreamImplementationRule struct {
 	// ShardPercent applies the rule to this percentage of local shards, from 1 to 100,
 	// rounded up to a whole shard. It selects the lowest shard IDs; increasing it only adds shards.
 	ShardPercent int
+	// DecodeError is set by the setting's converter when the rule cannot be decoded, for example
+	// when ShardPercent is quoted. The converter then keeps only RemoteCluster, so the rule is
+	// invalid for that remote cluster alone. It is not meant to be set in dynamic config.
+	DecodeError error `mapstructure:"-"`
+}
+
+// convertReplicationStreamImplementationSettings decodes each rule on its own. With
+// ConvertStructure, one rule that fails to decode would make the whole value fall back to the
+// default and select legacy for every remote cluster. Here the rule keeps its RemoteCluster and
+// gets a DecodeError instead.
+func convertReplicationStreamImplementationSettings(v any) (ReplicationStreamImplementationSettings, error) {
+	if settings, ok := v.(ReplicationStreamImplementationSettings); ok {
+		return settings, nil
+	}
+	raw, err := ConvertStructure(struct{ Sender, Receiver any }{})(v)
+	if err != nil {
+		return ReplicationStreamImplementationSettings{}, err
+	}
+	return ReplicationStreamImplementationSettings{
+		Sender:   convertEachElement(raw.Sender, invalidStreamImplementationRule),
+		Receiver: convertEachElement(raw.Receiver, invalidStreamImplementationRule),
+	}, nil
+}
+
+func invalidStreamImplementationRule(raw any, err error) ReplicationStreamImplementationRule {
+	return ReplicationStreamImplementationRule{RemoteCluster: decodedRemoteCluster(raw), DecodeError: err}
+}
+
+// convertEachElement decodes a list one element at a time. An element that fails to decode is
+// replaced by invalid(raw, err). A value that is not a list becomes a single invalid element.
+func convertEachElement[T any](v any, invalid func(raw any, err error) T) []T {
+	if typed, ok := v.([]T); ok {
+		return typed
+	}
+	list, err := ConvertStructure[[]any](nil)(v)
+	if err != nil {
+		return []T{invalid(v, fmt.Errorf("not a list: %w", err))}
+	}
+	var zero T
+	var elements []T
+	for _, raw := range list {
+		element, err := ConvertStructure(zero)(raw)
+		if err != nil {
+			element = invalid(raw, err)
+		}
+		elements = append(elements, element)
+	}
+	return elements
+}
+
+// decodedRemoteCluster returns the RemoteCluster of a value that failed to decode, or "" if its
+// RemoteCluster is missing or does not decode either.
+func decodedRemoteCluster(raw any) string {
+	named, err := ConvertStructure(struct{ RemoteCluster string }{})(raw)
+	if err != nil {
+		return ""
+	}
+	return named.RemoteCluster
 }
 
 // ReplicationLaneIsolationEntry moves one namespace's HIGH priority replication traffic to one
@@ -360,6 +418,18 @@ type ReplicationLaneIsolationEntry struct {
 	NamespaceID string
 	// TasksPerSecond limits the lane's send rate on each source shard. It must be positive.
 	TasksPerSecond float64
+	// DecodeError is set by the setting's converter when the entry cannot be decoded, for example
+	// when TasksPerSecond is quoted. The converter then keeps only RemoteCluster, so the entry is
+	// invalid for that remote cluster alone. It is not meant to be set in dynamic config.
+	DecodeError error `mapstructure:"-"`
+}
+
+// convertReplicationLaneIsolationEntries decodes each entry on its own, so an entry that fails to
+// decode is invalid only for its RemoteCluster, as in convertReplicationStreamImplementationSettings.
+func convertReplicationLaneIsolationEntries(v any) ([]ReplicationLaneIsolationEntry, error) {
+	return convertEachElement(v, func(raw any, err error) ReplicationLaneIsolationEntry {
+		return ReplicationLaneIsolationEntry{RemoteCluster: decodedRemoteCluster(raw), DecodeError: err}
+	}), nil
 }
 
 const (
