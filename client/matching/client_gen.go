@@ -840,7 +840,6 @@ func (c *clientImpl) doPollWorkflowTaskQueue(
 				Identity:                  request.PollRequest.Identity,
 				WorkerInstanceKey:         request.PollRequest.WorkerInstanceKey,
 				WorkerControlTaskQueue:    request.PollRequest.WorkerControlTaskQueue,
-				Capabilities:              request.PollRequest.Capabilities,
 				BinaryChecksum:            request.PollRequest.BinaryChecksum,
 				WorkerVersionCapabilities: request.PollRequest.WorkerVersionCapabilities,
 				DeploymentOptions:         request.PollRequest.DeploymentOptions,

@@ -1,11 +1,9 @@
 package workflow
 
 import (
-	"slices"
-	"strings"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -14,89 +12,63 @@ import (
 // event (WorkflowExecutionUpdateAdmitted is only written when reapplying on reset).
 const WorkflowHeartbeatNotificationUpdateAdmittedMetricTag = "UpdateAdmitted"
 
-const (
-	workflowHeartbeatNotificationSignal              = "signal"
-	workflowHeartbeatNotificationCancellation        = "cancellation"
-	workflowHeartbeatNotificationTimer               = "timer"
-	workflowHeartbeatNotificationActivityResult      = "activity_result"
-	workflowHeartbeatNotificationChildWorkflowResult = "child_workflow_result"
-	workflowHeartbeatNotificationNexusResult         = "nexus_result"
-	workflowHeartbeatNotificationUpdate              = "update"
-)
+// isWorkflowHeartbeatNotificationInputEnabled checks rollout.
+func isWorkflowHeartbeatNotificationInputEnabled(
+	shardCtx historyi.ShardContext, namespaceName, workflowID string) bool {
+	config := shardCtx.GetConfig()
+	rolloutPercent := config.WorkflowHeartbeatNotificationRolloutPercent(namespaceName)
+	return dynamicconfig.RolloutAccepts(
+		[]byte(namespaceName+"\x00"+workflowID),
+		rolloutPercent,
+	)
+}
 
-// workflowHeartbeatNotificationInputTypeForEvent maps an eligible event to its configuration category.
-func workflowHeartbeatNotificationInputTypeForEvent(eventType enumspb.EventType) string {
+// IsWorkflowHeartbeatNotificationInputType reports whether an event type is eligible for a Workflow Task heartbeat notification.
+// An event type that is never buffered does not need WHN. Buffering alone does not make an event eligible;
+// for example, ActivityTaskStarted records progress but does not normally require a new Workflow Task.
+func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool {
 	switch eventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+	case
+		// signal
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
-		return workflowHeartbeatNotificationSignal
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		// cancel
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
 		enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED:
-		return workflowHeartbeatNotificationCancellation
-	case enumspb.EVENT_TYPE_TIMER_FIRED:
-		return workflowHeartbeatNotificationTimer
-	case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
-		enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
-		enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
-		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
-		return workflowHeartbeatNotificationActivityResult
-	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		// timer
+		enumspb.EVENT_TYPE_TIMER_FIRED,
+		// child workflow
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
-		return workflowHeartbeatNotificationChildWorkflowResult
-	case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+		// nexus operation
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED,
-		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED:
-		return workflowHeartbeatNotificationNexusResult
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED,
+		// todo: activity results may need a different handling mechanism for potential high unnecessary traffic it may trigger
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
+		return true
 	default:
-		return ""
-	}
-}
-
-func workflowHeartbeatNotificationInputTypeForName(eventType string) string {
-	if eventType == WorkflowHeartbeatNotificationUpdateAdmittedMetricTag {
-		return workflowHeartbeatNotificationUpdate
-	}
-	value, err := enumspb.EventTypeFromString(eventType)
-	if err != nil {
-		return ""
-	}
-	return workflowHeartbeatNotificationInputTypeForEvent(value)
-}
-
-// isWorkflowHeartbeatNotificationInputEnabled checks the namespace rollout and input type filter.
-func isWorkflowHeartbeatNotificationInputEnabled(shardCtx historyi.ShardContext, namespaceName, eventType string) bool {
-	config := shardCtx.GetConfig()
-	if !config.EnableWorkflowHeartbeatNotification(namespaceName) {
 		return false
 	}
-	category := workflowHeartbeatNotificationInputTypeForName(eventType)
-	if category == "" {
-		return false
-	}
-	allowed := config.WorkflowHeartbeatNotificationInputTypes(namespaceName)
-	return slices.ContainsFunc(allowed, func(value string) bool {
-		return strings.EqualFold(value, category)
-	})
 }
 
-// IsWorkflowHeartbeatNotificationInputType reports whether an event type is eligible for a Workflow Task heartbeat notification.
-// Buffering alone does not make an event eligible; for example, ActivityTaskStarted records progress but does not normally require a new Workflow Task.
-func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool {
-	return workflowHeartbeatNotificationInputTypeForEvent(eventType) != ""
-}
-
-func (c *ContextImpl) handleBufferedInputsForWorkflowHeartbeatNotification(
+// handleWorkflowHeartbeatNotification handles buffered events waiting for the next Workflow Task to reach the worker.
+// Admitted Updates can also trigger WHN while waiting for that task, through the Update path.
+func (c *ContextImpl) handleWorkflowHeartbeatNotification(
 	shardCtx historyi.ShardContext,
 	newBufferedEvents []*historypb.HistoryEvent,
 ) {
@@ -114,8 +86,8 @@ func (c *ContextImpl) handleBufferedInputsForWorkflowHeartbeatNotification(
 		return
 	}
 
-	// TODO: Relaxed accuracy for the estimate to avoid iterating and comparing buffered events:
-	// any prior buffered event counts, not only workflow-heartbeat-notification-eligible ones.
+	// TODO(whn): Distinguish prior WHN-eligible events from other buffered events. Counting all buffered
+	// events avoids a scan but can miss the first-input metric and suppress WHN for a later eligible event.
 	hadBufferedInput := c.MutableState.NumBufferedEvents() > len(newBufferedEvents)
 	firstBufferedInput := !hadBufferedInput && !c.hasPendingUpdateForWorkflowHeartbeatNotification()
 	namespaceEntry := c.MutableState.GetNamespaceEntry()
@@ -125,7 +97,7 @@ func (c *ContextImpl) handleBufferedInputsForWorkflowHeartbeatNotification(
 	namespaceName := namespaceEntry.Name().String()
 	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
 
-	// Rollout settings control WHN dispatch, while these metrics count all eligible buffered inputs.
+	// The rollout setting controls WHN dispatch, while these metrics count all eligible buffered inputs.
 	for i, eventType := range filteredNewBufferedEventTypes {
 		inputHandler := handler.WithTags(metrics.EventTypeTag(eventType))
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(inputHandler).Record(1)
@@ -134,12 +106,14 @@ func (c *ContextImpl) handleBufferedInputsForWorkflowHeartbeatNotification(
 		}
 	}
 	if firstBufferedInput {
-		SendWorkflowHeartbeatNotification(shardCtx, namespaceName, filteredNewBufferedEventTypes[0])
+		SendWorkflowHeartbeatNotification(shardCtx, namespaceName, c.workflowKey.WorkflowID)
 	}
 }
 
-func SendWorkflowHeartbeatNotification(shardCtx historyi.ShardContext, namespaceName, eventType string) {
-	if !isWorkflowHeartbeatNotificationInputEnabled(shardCtx, namespaceName, eventType) {
+// SendWorkflowHeartbeatNotification applies the workflow-sticky rollout before notifying the worker.
+// Callers must first verify that an eligible input is waiting behind the started Workflow Task.
+func SendWorkflowHeartbeatNotification(shardCtx historyi.ShardContext, namespaceName, workflowID string) {
+	if !isWorkflowHeartbeatNotificationInputEnabled(shardCtx, namespaceName, workflowID) {
 		return
 	}
 	// TODO(whn): Dispatch to the worker holding the started Workflow Task.
