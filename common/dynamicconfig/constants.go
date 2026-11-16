@@ -3244,16 +3244,17 @@ A lane stream sender sends a lane only when this is true, the stream's lane poli
 lane, and the receiver advertises lane support. It has no effect on legacy stream senders.
 Changing it restarts lane stream senders.`,
 	)
-	ReplicationLaneIsolation = NewGlobalTypedSetting(
+	ReplicationLaneIsolation = NewGlobalTypedSettingWithConverter(
 		"history.ReplicationLaneIsolation",
+		convertReplicationLaneIsolationEntries,
 		([]ReplicationLaneIsolationEntry)(nil),
 		`ReplicationLaneIsolation lists the namespaces whose HIGH priority replication traffic lane
 stream senders move onto their own lanes, when the open-source lane policy is in use. Each entry
 has RemoteCluster, NamespaceID, and TasksPerSecond. TasksPerSecond is the lane's send rate limit
 on each source shard's stream, not a total for the namespace: a namespace whose traffic
-concentrates on one shard sends at most this rate there. Invalid entries withdraw isolation only
-for their RemoteCluster. Entries without RemoteCluster are ignored with a diagnostic.
-Whole-setting conversion failures use the default, withdrawing isolation for every remote.`,
+concentrates on one shard sends at most this rate there. Invalid entries, including entries with
+a value of the wrong type, withdraw isolation only for their RemoteCluster. Entries without
+RemoteCluster are ignored with a diagnostic.`,
 	)
 	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderMaxLanes",

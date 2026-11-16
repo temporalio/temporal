@@ -189,8 +189,11 @@ func (p *manualLaneStreamPolicy) Evaluate(LaneSignals) ([]DesiredLane, error) {
 	entries := p.entries()
 	for i, entry := range entries {
 		if entry.RemoteCluster == "" {
-			p.logger.Warn("Ignoring ReplicationLaneIsolation entry without RemoteCluster",
-				tag.Error(fmt.Errorf("entry %d: RemoteCluster is empty", i)))
+			err := fmt.Errorf("entry %d: RemoteCluster is empty", i)
+			if entry.DecodeError != nil {
+				err = fmt.Errorf("entry %d: cannot decode a RemoteCluster: %w", i, entry.DecodeError)
+			}
+			p.logger.Warn("Ignoring ReplicationLaneIsolation entry without RemoteCluster", tag.Error(err))
 		}
 	}
 	if err := validateLaneIsolationEntries(entries, p.remoteCluster); err != nil {
@@ -242,6 +245,9 @@ func validateLaneIsolationEntries(entries []dynamicconfig.ReplicationLaneIsolati
 	for i, entry := range entries {
 		if entry.RemoteCluster == "" || entry.RemoteCluster != remoteCluster {
 			continue
+		}
+		if entry.DecodeError != nil {
+			return fmt.Errorf("entry %d: cannot decode entry: %w", i, entry.DecodeError)
 		}
 		if entry.NamespaceID == "" {
 			return fmt.Errorf("entry %d: NamespaceID is empty", i)

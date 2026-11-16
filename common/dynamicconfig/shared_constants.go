@@ -418,6 +418,18 @@ type ReplicationLaneIsolationEntry struct {
 	NamespaceID string
 	// TasksPerSecond limits the lane's send rate on each source shard. It must be positive.
 	TasksPerSecond float64
+	// DecodeError is set by the setting's converter when the entry cannot be decoded, for example
+	// when TasksPerSecond is quoted. The converter then keeps only RemoteCluster, so the entry is
+	// invalid for that remote cluster alone. It is not meant to be set in dynamic config.
+	DecodeError error `mapstructure:"-"`
+}
+
+// convertReplicationLaneIsolationEntries decodes each entry on its own, so an entry that fails to
+// decode is invalid only for its RemoteCluster, as in convertReplicationStreamImplementationSettings.
+func convertReplicationLaneIsolationEntries(v any) ([]ReplicationLaneIsolationEntry, error) {
+	return convertEachElement(v, func(raw any, err error) ReplicationLaneIsolationEntry {
+		return ReplicationLaneIsolationEntry{RemoteCluster: decodedRemoteCluster(raw), DecodeError: err}
+	}), nil
 }
 
 const (
