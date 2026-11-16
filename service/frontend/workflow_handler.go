@@ -2433,8 +2433,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if len(request.GetSearchAttributes().GetIndexedFields()) > 0 {
 		request = common.CloneProto(request)
 	}
-
-	// Also validates the request's links.
 	if err := wh.validator.ValidateSignalWithStartRequest(request); err != nil {
 		return nil, err
 	}

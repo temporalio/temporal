@@ -13,9 +13,8 @@
 // are part of its size, so they are already charged to the callback budget enforced by
 // [go.temporal.io/server/common/callbacks.Validator.ValidateAdditions].
 //
-// Only CHASM components that store caller-attached links (standalone activities and standalone Nexus
-// operations) enforce execution aggregates. Workflow links are persisted in history events, so their
-// total is bounded by history size limits instead.
+// Only CHASM components that store caller-attached links enforce execution aggregates. Workflow links
+// are persisted in history events, so their total is bounded by history size limits instead.
 package links
 
 import (
