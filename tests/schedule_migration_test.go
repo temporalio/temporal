@@ -1944,6 +1944,79 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 	})
 }
 
+func TestScheduleMigration_RejectsInconsistentNamespaceState(t *testing.T) {
+	env := newScheduleEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true))
+	nsID := env.NamespaceID().String()
+	nsName := env.Namespace().String()
+
+	tests := []struct {
+		name   string
+		mutate func(*schedulerpb.SchedulerState)
+	}{
+		{"namespace ID", func(state *schedulerpb.SchedulerState) {
+			state.NamespaceId = "other-namespace-id"
+		}},
+		{"namespace name", func(state *schedulerpb.SchedulerState) {
+			state.Namespace = "other-namespace"
+		}},
+		{"namespace name and ID", func(state *schedulerpb.SchedulerState) {
+			state.Namespace = "other-namespace"
+			state.NamespaceId = "other-namespace-id"
+		}},
+		{"missing namespace ID", func(state *schedulerpb.SchedulerState) {
+			state.NamespaceId = ""
+		}},
+		{"missing namespace name", func(state *schedulerpb.SchedulerState) {
+			state.Namespace = ""
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := testcore.NewContext()
+			sid := testcore.RandomizeStr("sched-migration-validation")
+			state := &schedulerpb.SchedulerState{
+				Namespace:   nsName,
+				NamespaceId: nsID,
+				ScheduleId:  sid,
+				Schedule: &schedulepb.Schedule{
+					Spec: &schedulepb.ScheduleSpec{
+						Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+					},
+					State: &schedulepb.ScheduleState{Paused: true},
+				},
+				Info: &schedulepb.ScheduleInfo{},
+			}
+			tt.mutate(state)
+
+			_, err := env.GetTestCluster().SchedulerClient().CreateFromMigrationState(ctx,
+				&schedulerpb.CreateFromMigrationStateRequest{
+					NamespaceId: nsID,
+					State: &schedulerpb.SchedulerMigrationState{
+						SchedulerState: state,
+						GeneratorState: &schedulerpb.GeneratorState{},
+						InvokerState: &schedulerpb.InvokerState{
+							TerminateWorkflows: []*commonpb.WorkflowExecution{{WorkflowId: "test-workflow"}},
+						},
+					},
+				})
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+
+			_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx,
+				&schedulerpb.DescribeScheduleRequest{
+					NamespaceId: nsID,
+					FrontendRequest: &workflowservice.DescribeScheduleRequest{
+						Namespace:  nsName,
+						ScheduleId: sid,
+					},
+				})
+			var notFound *serviceerror.NotFound
+			require.ErrorAs(t, err, &notFound)
+		})
+	}
+}
+
 // TestScheduleMigration_StaleRunningDoesNotSkipPending guards the race fix in
 // CreateSchedulerFromMigration. Without the fix, a "running" BufferedStart
 // migrated from V1 (RunId set, Completed=nil, HasCallback=false) is treated as
