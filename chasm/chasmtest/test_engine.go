@@ -37,11 +37,12 @@ type (
 	// well as blocking [PollComponent] with [NotifyExecution], matching the behavior
 	// of the production engine as closely as possible without persistence or shard logic.
 	Engine struct {
-		t          *testing.T
-		registry   *chasm.Registry
-		logger     log.Logger
-		metrics    metrics.Handler
-		timeSource clock.TimeSource
+		t              *testing.T
+		registry       *chasm.Registry
+		logger         log.Logger
+		metrics        metrics.Handler
+		timeSource     clock.TimeSource
+		namespaceNames map[string]string
 		// currentExecutions maps (namespaceID, businessID) to the latest run (running or closed).
 		currentExecutions map[businessKey]*execution
 		// allExecutions maps (namespaceID, businessID, runID) to any run, for lookups by specific RunID.
@@ -88,6 +89,16 @@ func WithTimeSource(ts clock.TimeSource) EngineOption {
 func WithMetricsHandler(handler metrics.Handler) EngineOption {
 	return func(e *Engine) {
 		e.metrics = handler
+	}
+}
+
+// WithNamespaceName supplies a name for the given namespace ID in test contexts.
+func WithNamespaceName(id, name string) EngineOption {
+	return func(e *Engine) {
+		if e.namespaceNames == nil {
+			e.namespaceNames = make(map[string]string)
+		}
+		e.namespaceNames[id] = name
 	}
 }
 
@@ -623,8 +634,12 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		},
 		HandleIsWorkflow: func() bool { return false },
 		HandleGetNamespaceEntry: func() *namespace.Namespace {
+			name := e.namespaceNames[key.NamespaceID]
+			if name == "" {
+				name = key.NamespaceID
+			}
 			return namespace.NewLocalNamespaceForTest(
-				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: key.NamespaceID},
+				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: name},
 				&persistencespb.NamespaceConfig{},
 				cluster.TestCurrentClusterName,
 			)
