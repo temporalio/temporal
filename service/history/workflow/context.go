@@ -457,6 +457,15 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		return nil, err
 	}
 
+	if c.MutableState != nil {
+		// Speculative CHASM changes from an earlier failover version were never replicated. Reload from
+		// the DB so they are not mixed with state written by another cluster.
+		version, pending := c.MutableState.ChasmSpeculativeTransitionFailoverVersion()
+		if pending && version != namespaceEntry.FailoverVersion(c.workflowKey.WorkflowID) {
+			c.Clear()
+		}
+	}
+
 	if c.MutableState == nil {
 		response, err := getWorkflowExecution(ctx, shardContext, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardContext.GetShardID(),

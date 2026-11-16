@@ -8569,6 +8569,17 @@ func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_GuardsPass(
 	s.NoError(err)
 }
 
+func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_RecordsFailoverVersion() {
+	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
+	_, pending := mutableState.ChasmSpeculativeTransitionFailoverVersion()
+	s.False(pending)
+
+	s.NoError(mutableState.SetChasmSpeculativeTransitionPending())
+	version, pending := mutableState.ChasmSpeculativeTransitionFailoverVersion()
+	s.True(pending)
+	s.Equal(tests.GlobalNamespaceEntry.FailoverVersion(tests.WorkflowID), version)
+}
+
 func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_RejectsNonChasmChanges() {
 	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
 	mutableState.AddTasks(&tasks.ChasmTask{WorkflowKey: mutableState.GetWorkflowKey()})
@@ -8596,6 +8607,8 @@ func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_FlushedOnCl
 
 	// The flag is cleared by the close, so a dirty tree counts as dirty again.
 	s.True(mutableState.IsDirty())
+	_, pending := mutableState.ChasmSpeculativeTransitionFailoverVersion()
+	s.False(pending)
 }
 
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {

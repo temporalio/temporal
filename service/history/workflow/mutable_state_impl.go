@@ -225,7 +225,10 @@ type (
 		// CHASM tree without persisting them. It lets IsDirty ignore those changes. It doesn't trigger a
 		// write: the changes are persisted only when a later non-speculative transaction closes.
 		chasmSpeculativeTransitionPending bool
-		updateInfoUpdated                 map[string]struct{}
+		// chasmSpeculativeTransitionFailoverVersion is the namespace failover version when the pending
+		// speculative CHASM transition was applied.
+		chasmSpeculativeTransitionFailoverVersion int64
+		updateInfoUpdated                         map[string]struct{}
 		// following xxxUserDataUpdated fields are for tracking if activity/timer user data updated.
 		// This help to determine if we need to update transition history: For
 		// user data change, we need to update transition history. No update for
@@ -7714,11 +7717,18 @@ func (ms *MutableStateImpl) SetChasmSpeculativeTransitionPending() error {
 		return serviceerror.NewInternal("speculative CHASM transition changed state outside the CHASM tree")
 	}
 	ms.chasmSpeculativeTransitionPending = true
+	ms.chasmSpeculativeTransitionFailoverVersion = ms.namespaceEntry.FailoverVersion(ms.executionInfo.WorkflowId)
 	return nil
 }
 
 func (ms *MutableStateImpl) HasPendingChasmSpeculativeTransition() bool {
 	return ms.chasmSpeculativeTransitionPending
+}
+
+// ChasmSpeculativeTransitionFailoverVersion returns the namespace failover version when the pending
+// speculative CHASM transition was applied. The bool is false when none is pending.
+func (ms *MutableStateImpl) ChasmSpeculativeTransitionFailoverVersion() (int64, bool) {
+	return ms.chasmSpeculativeTransitionFailoverVersion, ms.chasmSpeculativeTransitionPending
 }
 
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and

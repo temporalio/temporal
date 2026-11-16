@@ -1749,6 +1749,21 @@ func (mr *MockMutableStateMockRecorder) ChasmSignalBacklinksEnabled() *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmSignalBacklinksEnabled", reflect.TypeOf((*MockMutableState)(nil).ChasmSignalBacklinksEnabled))
 }
 
+// ChasmSpeculativeTransitionFailoverVersion mocks base method.
+func (m *MockMutableState) ChasmSpeculativeTransitionFailoverVersion() (int64, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmSpeculativeTransitionFailoverVersion")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ChasmSpeculativeTransitionFailoverVersion indicates an expected call of ChasmSpeculativeTransitionFailoverVersion.
+func (mr *MockMutableStateMockRecorder) ChasmSpeculativeTransitionFailoverVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmSpeculativeTransitionFailoverVersion", reflect.TypeOf((*MockMutableState)(nil).ChasmSpeculativeTransitionFailoverVersion))
+}
+
 // ChasmTree mocks base method.
 func (m *MockMutableState) ChasmTree() ChasmTree {
 	m.ctrl.T.Helper()
