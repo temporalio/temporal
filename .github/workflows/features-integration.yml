@@ -97,8 +97,6 @@ jobs:
           - value: true
         history.enableChasm:
           - value: true
-        history.enableCHASMSchedulerCreation:
-          - value: true
 
   feature-tests-python:
     needs: build-docker-image

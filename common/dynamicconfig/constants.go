@@ -3520,14 +3520,14 @@ e.g. "callback.invoke".`,
 
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerCreation",
-		false,
+		true,
 		`EnableCHASMSchedulerCreation controls whether new schedules are created using the CHASM (V2) implementation
 instead of the existing (V1) implementation.`,
 	)
 
 	CHASMSchedulerCreationRolloutPercent = NewNamespaceIntSetting(
 		"history.chasmSchedulerCreationRolloutPercent",
-		0,
+		100,
 		`CHASMSchedulerCreationRolloutPercent is the per-namespace percentage of new schedules that will be
 created on the CHASM (V2) implementation. This setting is only consulted when EnableCHASMSchedulerCreation is true and
 is re-evaluated on every CreateSchedule RPC.`,

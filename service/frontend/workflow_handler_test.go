@@ -5865,6 +5865,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime() {
 	config := s.newConfig()
 	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableCHASMSchedulerCreation = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	config.EnableCHASMSchedulerRouting = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()

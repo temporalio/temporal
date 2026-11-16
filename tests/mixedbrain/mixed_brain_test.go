@@ -164,6 +164,9 @@ func TestMixedBrain(t *testing.T) {
 				"activity.enableStandalone": true,
 				// TODO: remove this override once the release server defaults to standalone nexus operations on. Currently the downgrade version of 1.32 has SANO defaulted to off.
 				"nexusoperation.enableStandalone": true,
+				// TODO: remove these overrides once the release server defaults to CHASM scheduler creation on. Currently the downgrade version of 1.32 has it defaulted to off.
+				"history.enableCHASMSchedulerCreation":         true,
+				"history.chasmSchedulerCreationRolloutPercent": 100,
 			},
 		})
 	})
