@@ -162,7 +162,7 @@ type (
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
 		// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
 		// query task to workflow worker.
-		queryResults collection.SyncMap[string, chan *queryResult]
+		queryResults collection.SyncMap[string, pendingQuery]
 		// nexusResults maps nexus TaskID (which is a UUID generated in the DispatchNexusTask() call) to
 		// a channel that DispatchNexusTask() blocks on. The channel is unblocked either by worker responding
 		// via RespondNexusTaskCompleted() or RespondNexusTaskFailed(), or through an internal service error.
@@ -228,7 +228,8 @@ var (
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 
-	errNoTasks = errors.New("no tasks")
+	errNoTasks       = errors.New("no tasks")
+	errQueryNotFound = serviceerror.NewNotFound("query task not found, or already expired")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -306,7 +307,7 @@ func NewEngine(
 		config:                    config,
 		versionChecker:            headers.NewDefaultVersionChecker(),
 		testHooks:                 testHooks,
-		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
+		queryResults:              collection.NewSyncMap[string, pendingQuery](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
@@ -714,7 +715,7 @@ pollLoop:
 			})
 			if err != nil {
 				// will notify query client that the query task failed
-				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
+				_ = e.deliverQueryResult(namespaceID, task.query.taskID, &queryResult{internalError: err})
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
@@ -727,7 +728,7 @@ pollLoop:
 
 			if err != nil {
 				// will notify query client that the query task failed
-				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
+				_ = e.deliverQueryResult(namespaceID, task.query.taskID, &queryResult{internalError: err})
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
@@ -1079,6 +1080,11 @@ type queryResult struct {
 	internalError  error
 }
 
+type pendingQuery struct {
+	namespaceID namespace.ID
+	resultCh    chan *queryResult
+}
+
 // QueryWorkflow creates a WorkflowTask with query data, send it through sync match channel, wait for that WorkflowTask
 // to be processed by worker, and then return the query result.
 func (e *matchingEngineImpl) QueryWorkflow(
@@ -1100,7 +1106,10 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 	taskID := uuid.NewString()
 	queryResultCh := make(chan *queryResult, 1)
-	e.queryResults.Set(taskID, queryResultCh)
+	e.queryResults.Set(taskID, pendingQuery{
+		namespaceID: namespace.ID(queryRequest.GetNamespaceId()),
+		resultCh:    queryResultCh,
+	})
 	defer e.queryResults.Delete(taskID)
 
 	resp, err := pm.DispatchQueryTask(ctx, taskID, queryRequest)
@@ -1156,19 +1165,28 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 	opMetrics metrics.Handler,
 ) error {
-	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
+	nsID := namespace.ID(request.GetNamespaceId())
+	if err := e.deliverQueryResult(nsID, request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
 		metrics.RespondQueryTaskFailedPerTaskQueueCounter.With(opMetrics).Record(1)
 		return err
 	}
 	return nil
 }
 
-func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *queryResult) error {
-	queryResultCh, ok := e.queryResults.Pop(taskID)
-	if !ok {
-		return serviceerror.NewNotFound("query task not found, or already expired")
+func (e *matchingEngineImpl) deliverQueryResult(
+	namespaceID namespace.ID,
+	taskID string,
+	queryResult *queryResult,
+) error {
+	// A task from another namespace is reported as not found so its existence isn't leaked.
+	if pending, ok := e.queryResults.Get(taskID); !ok || pending.namespaceID != namespaceID {
+		return errQueryNotFound
 	}
-	queryResultCh <- queryResult
+	pending, ok := e.queryResults.Pop(taskID)
+	if !ok {
+		return errQueryNotFound
+	}
+	pending.resultCh <- queryResult
 	return nil
 }
 
