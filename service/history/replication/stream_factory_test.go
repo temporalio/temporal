@@ -104,6 +104,32 @@ func TestSelectStreamImplementation(t *testing.T) {
 			expected:      streamImplementationLane,
 			expectInvalid: true,
 		},
+		{
+			name:          "DecodeErrorSelectsLegacy",
+			rules:         []dynamicconfig.ReplicationStreamImplementationRule{{RemoteCluster: "remote", DecodeError: errors.New("bad type")}},
+			shardID:       7,
+			expected:      streamImplementationLegacy,
+			expectInvalid: true,
+		},
+		{
+			name: "DecodeErrorForOtherClusterDoesNotChangeSelection",
+			rules: []dynamicconfig.ReplicationStreamImplementationRule{
+				laneRule("remote", []int32{7}, 0),
+				{RemoteCluster: "other", DecodeError: errors.New("bad type")},
+			},
+			shardID:  7,
+			expected: streamImplementationLane,
+		},
+		{
+			name: "DecodeErrorWithoutRemoteClusterIsReportedWithoutChangingSelection",
+			rules: []dynamicconfig.ReplicationStreamImplementationRule{
+				{DecodeError: errors.New("bad type")},
+				laneRule("remote", []int32{7}, 0),
+			},
+			shardID:       7,
+			expected:      streamImplementationLane,
+			expectInvalid: true,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -385,4 +411,26 @@ func TestStreamFactoriesScopeInvalidRules(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSelectStreamImplementationWithBadlyTypedRule(t *testing.T) {
+	t.Parallel()
+	dc := dynamicconfig.NewMemoryClient()
+	// Raw values, as a dynamic config file provides them, go through the setting's converter.
+	dc.OverrideSetting(dynamicconfig.ReplicationStreamImplementation, map[string]any{
+		"Sender": []any{
+			map[string]any{"RemoteCluster": "remote", "Implementation": "lane", "ShardPercent": 100},
+			map[string]any{"RemoteCluster": "other", "Implementation": "lane", "ShardPercent": "10"},
+		},
+	})
+	config := configs.NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()), 4)
+	rules := config.ReplicationStreamImplementation().Sender
+
+	implementation, err := selectStreamImplementation(rules, "remote", 1, config.NumberOfShards)
+	require.NoError(t, err)
+	require.Equal(t, streamImplementationLane, implementation)
+
+	implementation, err = selectStreamImplementation(rules, "other", 1, config.NumberOfShards)
+	require.ErrorContains(t, err, "cannot decode rule")
+	require.Equal(t, streamImplementationLegacy, implementation)
 }

@@ -121,6 +121,7 @@ func (streamSenderFactory) NewStreamSender(
 			config.NumberOfShards,
 		)
 	}
+	// On error, implementation is still usable: an invalid rule selects the default, legacy.
 	implementation, err := selectImplementation()
 	if err != nil {
 		shardContext.GetThrottledLogger().Error("Invalid ReplicationStreamImplementation rule",
@@ -183,6 +184,7 @@ func (streamReceiverFactory) NewStreamReceiver(
 			processToolBox.Config.NumberOfShards,
 		)
 	}
+	// On error, implementation is still usable: an invalid rule selects the default, legacy.
 	implementation, err := selectImplementation()
 	if err != nil {
 		processToolBox.ThrottledLogger.Error("Invalid ReplicationStreamImplementation rule",
@@ -208,22 +210,28 @@ func (streamReceiverFactory) NewStreamReceiver(
 }
 
 func (s *selectedStreamSender) IsValid() bool {
-	// The selector returns a usable implementation even on error: invalid matching rules
-	// select legacy, and entries without a remote cluster are ignored. Construction logs errors.
+	// Ignoring the error is safe. For an invalid rule the selector returns the default, legacy,
+	// so a lane stream restarts as legacy and a legacy stream is unchanged. An ignored entry
+	// leaves the selection unchanged. The factory logged the error when it created the stream.
 	implementation, _ := s.selectImplementation()
 	return implementation == s.implementation && s.ManagedStreamSender.IsValid()
 }
 
 func (r *selectedStreamReceiver) IsValid() bool {
-	// Apply the selector's fallback result, as selectedStreamSender.IsValid does.
+	// Ignoring the error is safe, as in selectedStreamSender.IsValid: for an invalid rule the
+	// selector returns the default, legacy.
 	implementation, _ := r.selectImplementation()
 	return implementation == r.implementation && r.ManagedStreamReceiver.IsValid()
 }
 
 // selectStreamImplementation returns the implementation of the stream with remoteCluster on the
-// local shard shardID. Invalid or duplicate rules for this remote select legacy. Rules for other
-// remotes do not affect this stream. Entries without a remote are ignored and reported as errors,
-// without changing the selected implementation.
+// local shard shardID. It always returns an implementation the caller can use, even with an error:
+//   - No rule for this remote, or a rule that does not include the shard: the default, legacy.
+//   - An invalid or duplicate rule for this remote, including one that failed to decode: the
+//     default, legacy, and an error.
+//   - An entry without a remote: ignored. The selection is unchanged, and the error reports it.
+//
+// Rules for other remotes do not affect this stream.
 func selectStreamImplementation(
 	rules []dynamicconfig.ReplicationStreamImplementationRule,
 	remoteCluster string,
@@ -234,7 +242,11 @@ func selectStreamImplementation(
 	var configErr error
 	for i, rule := range rules {
 		if rule.RemoteCluster == "" {
-			configErr = errors.Join(configErr, fmt.Errorf("rule %d: RemoteCluster is empty", i))
+			err := fmt.Errorf("rule %d: RemoteCluster is empty", i)
+			if rule.DecodeError != nil {
+				err = fmt.Errorf("rule %d: cannot decode a RemoteCluster: %w", i, rule.DecodeError)
+			}
+			configErr = errors.Join(configErr, err)
 			continue
 		}
 		if rule.RemoteCluster != remoteCluster {
@@ -260,6 +272,9 @@ func selectStreamImplementation(
 }
 
 func validateStreamImplementationRule(rule dynamicconfig.ReplicationStreamImplementationRule) error {
+	if rule.DecodeError != nil {
+		return fmt.Errorf("cannot decode rule: %w", rule.DecodeError)
+	}
 	if rule.Implementation != streamImplementationLegacy && rule.Implementation != streamImplementationLane {
 		return fmt.Errorf("unknown Implementation %q", rule.Implementation)
 	}
