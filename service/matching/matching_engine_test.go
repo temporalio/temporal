@@ -1361,7 +1361,7 @@ func (s *matchingEngineSuite) TestRespondQueryTaskCompleted_RejectsOtherNamespac
 	s.ErrorAs(respond(uuid.NewString()), new(*serviceerror.NotFound))
 
 	s.NoError(respond(namespaceID))
-	outcome := <-queryDone
+	outcome := await.Rcv(s.T(), queryDone)
 	s.NoError(outcome.err)
 	protorequire.ProtoEqual(s.T(), completed.GetQueryResult(), outcome.resp.GetQueryResult())
 }

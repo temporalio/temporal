@@ -266,7 +266,8 @@ var (
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 
-	errNoTasks = errors.New("no tasks")
+	errNoTasks       = errors.New("no tasks")
+	errQueryNotFound = serviceerror.NewNotFound("query task not found, or already expired")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -1474,14 +1475,13 @@ func (e *matchingEngineImpl) deliverQueryResult(
 	taskID string,
 	queryResult *queryResult,
 ) error {
-	errNotFound := serviceerror.NewNotFound("query task not found, or already expired")
 	// A task from another namespace is reported as not found so its existence isn't leaked.
 	if pending, ok := e.queryResults.Get(taskID); !ok || pending.namespaceID != namespaceID {
-		return errNotFound
+		return errQueryNotFound
 	}
 	pending, ok := e.queryResults.Pop(taskID)
 	if !ok {
-		return errNotFound
+		return errQueryNotFound
 	}
 	pending.resultCh <- queryResult
 	return nil
