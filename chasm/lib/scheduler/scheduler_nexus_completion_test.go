@@ -274,7 +274,7 @@ func TestHandleNexusCompletion_MigratedRunningWorkflowKeepsCompletionState(t *te
 		RunningWorkflows: []*commonpb.WorkflowExecution{{WorkflowId: "wf-tracked", RunId: "run-tracked"}},
 	}
 	v1State := &schedulespb.InternalState{
-		Namespace:         namespace,
+		Namespace:         namespaceID,
 		NamespaceId:       namespaceID,
 		ScheduleId:        scheduleID,
 		ConflictToken:     42,
