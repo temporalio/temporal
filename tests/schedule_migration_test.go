@@ -40,6 +40,86 @@ func TestScheduleMigrationTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &ScheduleMigrationTestSuite{})
 }
 
+func TestScheduleMigrationValidatesNamespaceState(t *testing.T) {
+	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true))
+	nsID := env.NamespaceID().String()
+	nsName := env.Namespace().String()
+
+	tests := []struct {
+		name   string
+		reject bool
+		mutate func(*schedulerpb.SchedulerState)
+	}{
+		{"namespace ID", true, func(state *schedulerpb.SchedulerState) {
+			state.NamespaceId = "other-namespace-id"
+		}},
+		{"stale namespace name", false, func(state *schedulerpb.SchedulerState) {
+			state.Namespace = "other-namespace"
+		}},
+		{"namespace name and ID", true, func(state *schedulerpb.SchedulerState) {
+			state.Namespace = "other-namespace"
+			state.NamespaceId = "other-namespace-id"
+		}},
+		{"missing namespace ID", true, func(state *schedulerpb.SchedulerState) {
+			state.NamespaceId = ""
+		}},
+		{"missing namespace name", false, func(state *schedulerpb.SchedulerState) {
+			state.Namespace = ""
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := testcore.NewContext()
+			sid := testcore.RandomizeStr("sched-migration-validation")
+			state := &schedulerpb.SchedulerState{
+				Namespace:   nsName,
+				NamespaceId: nsID,
+				ScheduleId:  sid,
+				Schedule: &schedulepb.Schedule{
+					Spec: &schedulepb.ScheduleSpec{
+						Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+					},
+					State: &schedulepb.ScheduleState{Paused: true},
+				},
+				Info: &schedulepb.ScheduleInfo{},
+			}
+			tt.mutate(state)
+
+			_, err := env.GetTestCluster().SchedulerClient().CreateFromMigrationState(ctx,
+				&schedulerpb.CreateFromMigrationStateRequest{
+					NamespaceId: nsID,
+					State: &schedulerpb.SchedulerMigrationState{
+						SchedulerState: state,
+						GeneratorState: &schedulerpb.GeneratorState{},
+						InvokerState:   &schedulerpb.InvokerState{},
+					},
+				})
+			if tt.reject {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+			} else {
+				require.NoError(t, err)
+			}
+
+			_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx,
+				&schedulerpb.DescribeScheduleRequest{
+					NamespaceId: nsID,
+					FrontendRequest: &workflowservice.DescribeScheduleRequest{
+						Namespace:  nsName,
+						ScheduleId: sid,
+					},
+				})
+			if tt.reject {
+				var notFound *serviceerror.NotFound
+				require.ErrorAs(t, err, &notFound)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	env := testcore.NewEnv(
 		s.T(),

@@ -6,9 +6,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	namespacelib "go.temporal.io/server/common/namespace"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -111,7 +113,11 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 	env := newTestEnv(t, withMockEngine())
 	sentinel, ctx, _ := setupSentinelForTest(t)
 
-	h := scheduler.NewTestHandler(env.Logger)
+	namespaceRegistry := namespacelib.NewMockRegistry(gomock.NewController(t))
+	namespaceRegistry.EXPECT().GetNamespaceByID(namespacelib.ID(namespaceID)).Return(
+		namespacelib.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace}, nil, "active"), nil,
+	)
+	h := scheduler.NewTestHandler(env.Logger, namespaceRegistry)
 
 	// StartExecution returns already-started because the sentinel occupies the key.
 	env.MockEngine.EXPECT().StartExecution(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -125,7 +131,9 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
 			SchedulerState: &schedulerpb.SchedulerState{
-				ScheduleId: scheduleID,
+				Namespace:   namespace,
+				NamespaceId: namespaceID,
+				ScheduleId:  scheduleID,
 			},
 		},
 	})
@@ -136,11 +144,46 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 	require.ErrorAs(t, err, &unavailableErr)
 }
 
+func TestHandlerCreateFromMigrationStateNormalizesNamespaceName(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "stale name", value: "previous-name"},
+		{name: "missing name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t, withMockEngine())
+			namespaceRegistry := namespacelib.NewMockRegistry(gomock.NewController(t))
+			namespaceRegistry.EXPECT().GetNamespaceByID(namespacelib.ID(namespaceID)).Return(
+				namespacelib.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace}, nil, "active"), nil,
+			)
+			h := scheduler.NewTestHandler(env.Logger, namespaceRegistry)
+			env.MockEngine.EXPECT().StartExecution(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(chasm.StartExecutionResult{}, nil)
+
+			req := &schedulerpb.CreateFromMigrationStateRequest{
+				NamespaceId: namespaceID,
+				State: &schedulerpb.SchedulerMigrationState{
+					SchedulerState: &schedulerpb.SchedulerState{
+						Namespace:   tc.value,
+						NamespaceId: namespaceID,
+						ScheduleId:  scheduleID,
+					},
+				},
+			}
+			_, err := h.TestCreateFromMigrationState(env.EngineContext(), req)
+			require.NoError(t, err)
+			require.Equal(t, namespace, req.State.SchedulerState.Namespace)
+		})
+	}
+}
+
 func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 	env := newTestEnv(t, withMockEngine())
 	sentinel, ctx, _ := setupSentinelForTest(t)
 
-	h := scheduler.NewTestHandler(env.Logger)
+	h := scheduler.NewTestHandler(env.Logger, nil)
 
 	// UpdateComponent invokes the update function with the sentinel.
 	env.ExpectUpdateComponent(ctx, sentinel)

@@ -11,20 +11,23 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
 
 type handler struct {
 	schedulerpb.UnimplementedSchedulerServiceServer
 
-	logger      log.Logger
-	specBuilder *legacyscheduler.SpecBuilder
+	logger            log.Logger
+	specBuilder       *legacyscheduler.SpecBuilder
+	namespaceRegistry namespace.Registry
 }
 
-func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *handler {
+func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder, namespaceRegistry namespace.Registry) *handler {
 	return &handler{
-		logger:      logger,
-		specBuilder: specBuilder,
+		logger:            logger,
+		specBuilder:       specBuilder,
+		namespaceRegistry: namespaceRegistry,
 	}
 }
 
@@ -82,7 +85,19 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (resp *schedulerpb.CreateFromMigrationStateResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	scheduleID := req.GetState().GetSchedulerState().GetScheduleId()
+	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(req.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	state := req.GetState().GetSchedulerState()
+	if state.GetNamespaceId() != ns.ID().String() {
+		return nil, serviceerror.NewInvalidArgument("migration namespace ID does not match execution namespace ID")
+	}
+	// The name in V1 state may be stale after a namespace rename. Use the
+	// current name after verifying the stable namespace ID.
+	state.Namespace = ns.Name().String()
+
+	scheduleID := state.GetScheduleId()
 	_, err = chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
