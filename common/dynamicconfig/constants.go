@@ -2825,7 +2825,7 @@ kept in the CHASM request IDs data node and capped by history.maximumRequestIDsI
 	)
 	EnableChasmRequestIDDataNode = NewNamespaceBoolSetting(
 		"history.enableChasmRequestIDDataNode",
-		false,
+		true,
 		`EnableChasmRequestIDDataNode enables recording request IDs in CHASM updates in the request IDs data node.`,
 	)
 	MaximumRequestIDsInChasmDataNode = NewNamespaceIntSetting(

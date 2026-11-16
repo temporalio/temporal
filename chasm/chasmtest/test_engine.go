@@ -691,6 +691,39 @@ func (x *execution) recordRequestID(requestID string) {
 	x.requestIDs[requestID] = struct{}{}
 }
 
+// NodeForRef returns the CHASM tree node backing the execution identified by ref.
+// It is intended for test drivers that dispatch tasks at the node level
+// ([chasm.Node.ExecuteSideEffectTask]), which the [Engine] API does not expose.
+func (e *Engine) NodeForRef(ref chasm.ComponentRef) (*chasm.Node, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.node, nil
+}
+
+// BackendForRef returns the [chasm.MockNodeBackend] backing the execution
+// identified by ref, e.g. to read the earliest pending pure task time via
+// [chasm.MockNodeBackend.LastDeletePureTaskCall].
+func (e *Engine) BackendForRef(ref chasm.ComponentRef) (*chasm.MockNodeBackend, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.backend, nil
+}
+
+// CloseTransaction closes any open transaction on the execution identified by
+// ref, commits its transition count, and runs registered invariant checks.
+// Pair it with node-level dispatch done through [Engine.NodeForRef].
+func (e *Engine) CloseTransaction(ctx context.Context, ref chasm.ComponentRef) error {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return err
+	}
+	return e.closeTransaction(ctx, exec)
+}
+
 // executionForRef looks up an execution by the ref's RunID when present, or falls back
 // to the current run for the business ID when RunID is empty.
 func (e *Engine) executionForRef(ref chasm.ComponentRef) (*execution, error) {
