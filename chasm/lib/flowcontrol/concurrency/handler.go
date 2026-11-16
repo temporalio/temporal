@@ -281,15 +281,16 @@ func (h *Handler) Wait(ctx context.Context, req *fcpb.ConcurrencyServiceWaitRequ
 			},
 			req,
 		)
+		if res == nil && err == nil {
+			// shouldn't happen but treat as timeout
+			err = context.DeadlineExceeded
+		}
 		if err != nil {
 			if common.IsContextDeadlineExceededErr(err) {
 				// timed out without becoming ready
 				return &fcpb.ConcurrencyServiceWaitResponse{Generation: req.Generation}, nil
 			}
 			return nil, err
-		} else if res == nil {
-			// chasm-imposed timeout
-			return &fcpb.ConcurrencyServiceWaitResponse{Generation: req.Generation}, nil
 		} else if res.Generation != req.Generation {
 			// try again on server with new generation
 			req.Generation = res.Generation
