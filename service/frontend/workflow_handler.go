@@ -434,23 +434,26 @@ func (wh *WorkflowHandler) Start() {
 			wh.logger.Info("Frontend is now healthy")
 		}()
 
-		wh.namespaceRegistry.RegisterStateChangeCallback(wh, func(ns *namespace.Namespace, deletedFromDb bool) {
-			if deletedFromDb {
-				return
-			}
+		wh.namespaceRegistry.RegisterStateChangeCallback(wh, wh.onNamespaceStateChange)
+	}
+}
 
-			if ns.IsGlobalNamespace() &&
-				ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
-				//nolint:forbidigo // namespace state-change callback; cancels all pollers on ns deactivation
-				!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName()) {
-				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
-				if ok {
-					for _, cancelFn := range pollers.PopAll() {
-						cancelFn()
-					}
-				}
+func (wh *WorkflowHandler) onNamespaceStateChange(ns *namespace.Namespace, deletedFromDB bool) {
+	if deletedFromDB {
+		return
+	}
+
+	deactivated := ns.IsGlobalNamespace() &&
+		ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+		//nolint:forbidigo // namespace state-change callback; cancels all pollers on ns deactivation
+		!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName())
+	if deactivated || ns.State() == enumspb.NAMESPACE_STATE_SOFT_DELETED {
+		pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
+		if ok {
+			for _, cancelFn := range pollers.PopAll() {
+				cancelFn()
 			}
-		})
+		}
 	}
 }
 
