@@ -1328,15 +1328,19 @@ func (s *matchingEngineSuite) TestRespondQueryTaskCompleted_RejectsOtherNamespac
 		Return(&historyservice.GetMutableStateResponse{
 			StickyTaskQueue: &taskqueuepb.TaskQueue{Name: tqName},
 		}, nil).Times(1)
-	pollResp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
-		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: taskQueue,
-			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
-	s.NoError(err)
-	s.NotNil(pollResp.GetQuery())
+	var pollResp *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		var err error
+		pollResp, err = s.matchingEngine.PollWorkflowTaskQueue(t.Context(), &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: namespaceID,
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: taskQueue,
+				Identity:  "identity",
+			},
+		}, metrics.NoopMetricsHandler)
+		require.NoError(t, err)
+		require.NotNil(t, pollResp.GetQuery())
+	}, 5*time.Second, 10*time.Millisecond)
 
 	queryToken, err := s.matchingEngine.tokenSerializer.DeserializeQueryTaskToken(pollResp.GetTaskToken())
 	s.NoError(err)
