@@ -8,13 +8,14 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
 
 // Export unexported methods for testing.
 
-func NewTestHandler(logger log.Logger) *handler {
-	return newHandler(logger, legacyscheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }))
+func NewTestHandler(logger log.Logger, namespaceRegistry namespace.Registry) *handler {
+	return newHandler(logger, legacyscheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }), namespaceRegistry)
 }
 
 func (h *handler) TestCreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (*schedulerpb.CreateFromMigrationStateResponse, error) {
