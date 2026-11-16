@@ -437,9 +437,9 @@ func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 }
 
 // PollComponent waits until the predicate is true when evaluated against the component identified
-// by the supplied component reference. If this times out due to a server-imposed long-poll timeout
-// then it returns (nil, nil, nil), as an indication that the caller should continue long-polling.
-// Otherwise it returns (output, ref, err), where output is the output of the predicate function,
+// by the supplied component reference. If ctx is done before the predicate is satisfied, it returns
+// ctx.Err(); handlers that implement long-poll semantics should check ctx.Err() and tell the caller to
+// continue long-polling. Otherwise it returns (output, ref, err), where output is the output of the predicate function,
 // and ref is a component reference identifying the state at which the predicate was satisfied. The
 // predicate must be monotonic: if it returns true at execution state transition s then it must
 // return true at all transitions t > s. If the predicate is true at the outset then PollComponent

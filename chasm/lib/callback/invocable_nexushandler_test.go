@@ -682,7 +682,7 @@ func TestExecuteInvocationTaskNexusHandler_DispatchedRequest(t *testing.T) {
 			require.Equal(t, "temporal.api.common.v1.Link.Callback", gotLink.GetType())
 			require.Equal(
 				t,
-				"temporal:///namespaces/namespace-id/workflows/workflow-id/run-id/callbacks/request-id",
+				"temporal:///namespaces/namespace-id/workflows/workflow-id/"+callbackRef.RunID+"/callbacks/request-id",
 				gotLink.GetUrl(),
 			)
 

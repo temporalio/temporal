@@ -109,10 +109,9 @@ func newInvocationTaskTest(
 	executionKey := chasm.ExecutionKey{
 		NamespaceID: "namespace-id",
 		BusinessID:  "workflow-id",
-		RunID:       "run-id",
 	}
 	engineCtx := chasm.NewEngineContext(context.Background(), chasmtest.NewEngine(t, chasmRegistry))
-	_, err := chasm.StartExecution(
+	result, err := chasm.StartExecution(
 		engineCtx,
 		executionKey,
 		func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
@@ -125,7 +124,7 @@ func newInvocationTaskTest(
 	)
 	require.NoError(t, err)
 
-	rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](executionKey)
+	rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](result.ExecutionKey)
 	callbackRef, err := chasm.ReadComponent(
 		engineCtx,
 		rootRef,
@@ -353,7 +352,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						"wf-namespace":            ns.Name().String(),
 						"destination":             "http://localhost",
 						"wf-id":                   "workflow-id",
-						"wf-run-id":               "run-id",
+						"wf-run-id":               callbackRef.RunID,
 						"nexus-completion-source": testCompletionSourceFqn,
 						"attempt":                 int32(0),
 						"request-id":              "request-id",

@@ -14,12 +14,14 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -33,9 +35,10 @@ type (
 	InvariantCheck func(*testing.T, *chasm.Node, chasm.RootComponent)
 
 	// Engine is a lightweight in memory CHASM engine for unit tests. It implements
-	// [chasm.Engine] and supports the full set of conflict and reuse policies, as
-	// well as blocking [PollComponent] with [NotifyExecution], matching the behavior
-	// of the production engine as closely as possible without persistence or shard logic.
+	// [chasm.Engine] and supports the same conflict and reuse policies as the production
+	// engine, as well as blocking [PollComponent], which is woken by every transition that
+	// changes the tree and by [NotifyExecution]. It matches the behavior of the production
+	// engine as closely as possible without persistence or shard logic.
 	Engine struct {
 		t          *testing.T
 		registry   *chasm.Registry
@@ -59,6 +62,11 @@ type (
 		requestIDs      map[string]struct{}
 		// commitTransition advances the backend's committed transition count.
 		commitTransition func()
+		// committedNodes is the tree as of the last committed transition, the in memory
+		// equivalent of what the production engine would have persisted. A failed transition
+		// rebuilds node from it, discarding uncommitted changes the way the production engine
+		// does when it reloads mutable state.
+		committedNodes map[string]*persistencespb.ChasmNode
 	}
 
 	businessKey struct {
@@ -173,7 +181,7 @@ func (e *Engine) StartExecution(
 
 		switch current.backend.GetExecutionState().State {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			return e.handleConflictPolicy(ctx, ref, current, startFn, options)
+			return e.handleConflictPolicy(ref, current, options.ConflictPolicy)
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 			return e.handleReusePolicy(ctx, ref, current, startFn, options)
 		default:
@@ -308,21 +316,26 @@ func (e *Engine) ReadComponent(
 // PollComponent waits until the supplied predicate is satisfied when evaluated against the
 // component identified by ref. If the predicate is true immediately it returns without blocking.
 // Otherwise it subscribes to [NotifyExecution] signals and re evaluates after each one, just
-// like the production engine. Returns (nil, nil) if ctx is cancelled, matching the long poll
-// timeout semantics of the production engine where the caller is expected to re-poll.
+// like the production engine. Returns ctx.Err() if ctx is done before the predicate is
+// satisfied, matching the production engine. Handlers that treat a long-poll timeout as an
+// invitation to re-poll are expected to check ctx.Err() themselves.
 func (e *Engine) PollComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	predicate func(chasm.Context, chasm.Component) (bool, error),
 	_ ...chasm.TransitionOption,
 ) ([]byte, error) {
-	executionKey := ref.ExecutionKey
+	// executionKey is the key of the run the predicate was last evaluated against. Like the
+	// production engine, PollComponent subscribes to that run's key, which has a RunID even when
+	// ref does not.
+	var executionKey chasm.ExecutionKey
 
 	checkPredicate := func() ([]byte, bool, error) {
 		exec, err := e.executionForRef(ref)
 		if err != nil {
 			return nil, false, err
 		}
+		executionKey = exec.key
 		chasmCtx := chasm.NewContext(ctx, exec.node)
 		component, err := exec.node.Component(chasmCtx, ref)
 		if err != nil {
@@ -361,12 +374,14 @@ func (e *Engine) PollComponent(
 			}
 		case <-ctx.Done():
 			unsubscribe()
-			return nil, nil //nolint:nilerr // nil, nil = long-poll timeout; caller should re-poll
+			return nil, ctx.Err()
 		}
 	}
 }
 
-// NotifyExecution wakes up any [PollComponent] callers waiting on the execution.
+// NotifyExecution wakes up any [PollComponent] callers waiting on the execution. The engine calls it
+// after every transition that changes the tree, as the production engine does, so tests only need
+// to call it directly to wake pollers without changing state.
 func (e *Engine) NotifyExecution(key chasm.ExecutionKey) {
 	e.notifier.notify(key)
 }
@@ -429,21 +444,17 @@ func conflictPolicyAllowsUpdate(
 // handleConflictPolicy is called when a StartExecution arrives for a business ID whose
 // current run is still running.
 func (e *Engine) handleConflictPolicy(
-	ctx context.Context,
 	ref chasm.ComponentRef,
 	current *execution,
-	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
-	options chasm.TransitionOptions,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
 ) (chasm.StartExecutionResult, error) {
-	switch options.ConflictPolicy {
+	switch conflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.StartExecutionResult{}, newConflictPolicyFailErr(ref, current, options.ConflictPolicy)
+		return chasm.StartExecutionResult{}, newConflictPolicyFailErr(ref, current, conflictPolicy)
 	case chasm.BusinessIDConflictPolicyTerminateExisting:
-		_, _ = current.backend.UpdateWorkflowStateStatus(
-			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-			enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		)
-		return e.startNew(ctx, ref.ExecutionKey, startFn, options.RequestID)
+		// Matches the production engine, which can't yet replicate terminating the current run and
+		// starting a new one in a single transaction.
+		return chasm.StartExecutionResult{}, serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not yet supported")
 	case chasm.BusinessIDConflictPolicyUseExisting:
 		serializedRef, err := current.node.Ref(current.root)
 		if err != nil {
@@ -456,7 +467,7 @@ func (e *Engine) handleConflictPolicy(
 		}, nil
 	default:
 		return chasm.StartExecutionResult{}, serviceerror.NewInternal(
-			fmt.Sprintf("unknown business ID conflict policy: %v", options.ConflictPolicy),
+			fmt.Sprintf("unknown business ID conflict policy: %v", conflictPolicy),
 		)
 	}
 }
@@ -507,6 +518,8 @@ func (e *Engine) startNew(
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	requestID string,
 ) (chasm.StartExecutionResult, error) {
+	// Like the production engine, every new run gets a fresh RunID.
+	key.RunID = primitives.NewUUID().String()
 	exec := e.newExecution(key)
 	exec.createRequestID = requestID
 	exec.recordRequestID(requestID)
@@ -520,7 +533,7 @@ func (e *Engine) startNew(
 		return chasm.StartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(ctx, exec); err != nil {
+	if _, err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
@@ -548,6 +561,8 @@ func (e *Engine) startAndUpdateNew(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	requestID string,
 ) (chasm.EngineUpdateWithStartExecutionResult, error) {
+	// Like the production engine, every new run gets a fresh RunID.
+	key.RunID = primitives.NewUUID().String()
 	exec := e.newExecution(key)
 	exec.createRequestID = requestID
 	exec.recordRequestID(requestID)
@@ -564,7 +579,7 @@ func (e *Engine) startAndUpdateNew(
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(ctx, exec); err != nil {
+	if _, err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
@@ -669,16 +684,48 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 }
 
 // closeTransaction closes the execution's transaction, commits its transition
-// count, and validates the resulting clean tree.
-func (e *Engine) closeTransaction(ctx context.Context, x *execution) error {
-	if _, err := x.node.CloseTransaction(ctx, true); err != nil {
-		return err
+// count, records the committed tree, and validates it. It reports whether the
+// transition changed the tree, which is when the production engine notifies pollers.
+func (e *Engine) closeTransaction(ctx context.Context, x *execution) (bool, error) {
+	mutation, err := x.node.CloseTransaction(ctx, true)
+	if err != nil {
+		return false, err
 	}
 	x.commitTransition()
+	x.committedNodes = common.CloneProtoMap(x.node.Snapshot(nil).Nodes)
 	for _, check := range e.invariantChecks {
 		check(e.t, x.node, x.root)
 	}
-	return nil
+	return len(mutation.UpdatedNodes) > 0 || len(mutation.DeletedNodes) > 0, nil
+}
+
+// rollback discards the execution's uncommitted changes by rebuilding its tree from the last
+// committed transition, as the production engine does by reloading mutable state after a failed
+// transition. err is the error that failed the transition; rollback returns it, joined with any
+// error from rebuilding the tree. Components obtained from the discarded tree are stale afterwards.
+func (e *Engine) rollback(x *execution, err error) error {
+	node, rebuildErr := chasm.NewTreeFromDB(
+		common.CloneProtoMap(x.committedNodes),
+		e.registry,
+		x.backend,
+		chasm.DefaultPathEncoder,
+		e.logger,
+		e.metrics,
+	)
+	if rebuildErr != nil {
+		return errors.Join(err, fmt.Errorf("chasmtest: rolling back failed transition: %w", rebuildErr))
+	}
+	component, rebuildErr := node.Component(chasm.NewContext(context.Background(), node), chasm.ComponentRef{})
+	if rebuildErr != nil {
+		return errors.Join(err, fmt.Errorf("chasmtest: rolling back failed transition: %w", rebuildErr))
+	}
+	root, ok := component.(chasm.RootComponent)
+	if !ok {
+		return errors.Join(err, fmt.Errorf("chasmtest: rolling back failed transition: root %T is not a RootComponent", component))
+	}
+	x.node = node
+	x.root = root
+	return err
 }
 
 func (x *execution) recordRequestID(requestID string) {
@@ -714,14 +761,22 @@ func (e *Engine) BackendForRef(ref chasm.ComponentRef) (*chasm.MockNodeBackend, 
 }
 
 // CloseTransaction closes any open transaction on the execution identified by
-// ref, commits its transition count, and runs registered invariant checks.
-// Pair it with node-level dispatch done through [Engine.NodeForRef].
+// ref, commits its transition count, runs registered invariant checks, and wakes
+// [PollComponent] callers if the tree changed. If closing fails, the uncommitted
+// changes are discarded. Pair it with node-level dispatch done through [Engine.NodeForRef].
 func (e *Engine) CloseTransaction(ctx context.Context, ref chasm.ComponentRef) error {
 	exec, err := e.executionForRef(ref)
 	if err != nil {
 		return err
 	}
-	return e.closeTransaction(ctx, exec)
+	changed, err := e.closeTransaction(ctx, exec)
+	if err != nil {
+		return e.rollback(exec, err)
+	}
+	if changed {
+		e.NotifyExecution(exec.key)
+	}
+	return nil
 }
 
 // executionForRef looks up an execution by the ref's RunID when present, or falls back
@@ -755,19 +810,25 @@ func (e *Engine) updateComponentInExecution(
 	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	component, err := execution.node.Component(mutableCtx, ref)
 	if err != nil {
-		return nil, err
+		return nil, e.rollback(execution, err)
 	}
 
 	if err := updateFn(mutableCtx, component); err != nil {
-		return nil, err
+		return nil, e.rollback(execution, err)
 	}
 
-	if err = e.closeTransaction(ctx, execution); err != nil {
-		return nil, err
+	changed, err := e.closeTransaction(ctx, execution)
+	if err != nil {
+		return nil, e.rollback(execution, err)
 	}
 	execution.recordRequestID(requestID)
 
 	serializedRef, err := mutableCtx.Ref(component)
+	// Wake pollers only after the last access to the tree, since they evaluate their predicates
+	// against it from other goroutines.
+	if changed {
+		e.NotifyExecution(execution.key)
+	}
 	if errors.As(err, new(*serviceerror.NotFound)) {
 		return nil, nil
 	}
