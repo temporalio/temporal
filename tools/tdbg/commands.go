@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.temporal.io/server/tools/tdbg/scheduleaudit"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -970,7 +971,7 @@ func v1ScheduleVisibilityQuery() string {
 // The explicit TemporalNamespaceDivision filter is required, otherwise the visibility query
 // converter appends "TemporalNamespaceDivision IS NULL" and excludes CHASM executions.
 func v2ScheduleVisibilityQuery() string {
-	return fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
+	return scheduleaudit.ChasmScheduleVisibilityQuery()
 }
 
 // AdminScheduleStatus reports how many schedules in --namespace are currently V1
@@ -1112,34 +1113,40 @@ func describeScheduleMigrationStatus(c *cli.Context, clientFactory ClientFactory
 
 	adminClient := clientFactory.AdminClient(c)
 
-	v2, err := describeSchedulerChasmState(c, adminClient, ns, rawID)
+	ctx, cancel := newContext(c)
+	v2, err := describeSchedulerChasmState(ctx, adminClient, ns, rawID)
+	cancel()
 	if err != nil {
 		return fmt.Errorf("unable to describe schedule %q: %w", scheduleID, err)
 	}
-	v1, err := describeWorkflowTypeName(c, adminClient, ns, v1ID)
+	ctx, cancel = newContext(c)
+	v1, err := describeWorkflowTypeName(ctx, adminClient, ns, v1ID)
+	cancel()
 	if err != nil {
 		return fmt.Errorf("unable to describe schedule %q: %w", scheduleID, err)
 	}
 
 	w := c.App.Writer
-	switch {
-	case v1.isGenuine() && !v2.holdsID():
+	switch classifyScheduleBackend(v1, v2) {
+	case scheduleaudit.BackendWorkflow:
 		_, _ = fmt.Fprintf(w, "Schedule %q is a V1 (workflow-backed) schedule.\n", scheduleID)
-	case !v1.holdsID() && v2.isGenuine():
-		_, _ = fmt.Fprintf(w, "Schedule %q is a V2 (CHASM) schedule.\n", scheduleID)
-	case v1.isGenuine() && v2.isSentinel():
-		_, _ = fmt.Fprintf(w, "Schedule %q is a V1 (workflow-backed) schedule.\n", scheduleID)
+		if !v2.isSentinel() {
+			break
+		}
 		_, _ = fmt.Fprintf(w, "Additionally, a placeholder (\"sentinel\") V2 entity exists at business ID %q, "+
 			"reserving that ID for a short window after the V1 schedule was created, or while a V1→V2 "+
 			"migration is in progress. This is expected and requires no action — it expires on its own, and "+
 			"the V1 schedule above remains authoritative.\n",
 			rawID)
-	case v1.isSentinel() && v2.isGenuine():
+	case scheduleaudit.BackendChasm:
 		_, _ = fmt.Fprintf(w, "Schedule %q is a V2 (CHASM) schedule.\n", scheduleID)
+		if !v1.isSentinel() {
+			break
+		}
 		_, _ = fmt.Fprintf(w, "Additionally, a placeholder (\"sentinel\") V1 workflow exists at workflow ID %q, "+
 			"reserving that ID for a short window after the V2 schedule was created, or while a V2→V1 "+
 			"rollback is in progress. This is expected and requires no action — it expires on its own.\n", v1ID)
-	case !v1.holdsID() && !v2.holdsID():
+	case scheduleaudit.BackendNotFound:
 		_, _ = fmt.Fprintf(w, "Schedule %q was not found as either a V1 (workflow-backed) or V2 (CHASM) schedule. "+
 			"It may not exist, may have been deleted, or the ID may be mistyped.\n", scheduleID)
 	default:
@@ -1158,11 +1165,55 @@ func describeScheduleMigrationStatus(c *cli.Context, clientFactory ClientFactory
 	return nil
 }
 
+// classifyScheduleBackend reports which side currently holds a schedule ID, as a scheduleaudit Backend value. A live
+// sentinel on the other side does not change the answer; both sides genuinely holding the ID is unexpected.
+func classifyScheduleBackend(workflowStatus v1ScheduleStatus, chasmStatus v2ScheduleStatus) string {
+	switch {
+	case workflowStatus.isGenuine() && (!chasmStatus.holdsID() || chasmStatus.isSentinel()):
+		return scheduleaudit.BackendWorkflow
+	case chasmStatus.isGenuine() && (!workflowStatus.holdsID() || workflowStatus.isSentinel()):
+		return scheduleaudit.BackendChasm
+	case !workflowStatus.holdsID() && !chasmStatus.holdsID():
+		return scheduleaudit.BackendNotFound
+	default:
+		return scheduleaudit.BackendUnexpected
+	}
+}
+
+// describeScheduleBackends looks up both the workflow-backed scheduler's workflow ID and the CHASM scheduler's business ID.
+func describeScheduleBackends(
+	ctx context.Context,
+	adminClient adminservice.AdminServiceClient,
+	ns, scheduleID, workflowID string,
+) (v1ScheduleStatus, v2ScheduleStatus, error) {
+	chasmStatus, err := describeSchedulerChasmState(ctx, adminClient, ns, scheduleID)
+	if err != nil {
+		return v1ScheduleStatus{}, v2ScheduleStatus{}, err
+	}
+	workflowStatus, err := describeWorkflowTypeName(ctx, adminClient, ns, workflowID)
+	if err != nil {
+		return v1ScheduleStatus{}, v2ScheduleStatus{}, err
+	}
+	return workflowStatus, chasmStatus, nil
+}
+
+// scheduleBackendResolver resolves an audited schedule's current backend with the same lookups as
+// `schedule migrate status --schedule-id`.
+type scheduleBackendResolver struct {
+	adminClient adminservice.AdminServiceClient
+}
+
+func (r scheduleBackendResolver) ResolveBackend(ctx context.Context, ns, scheduleID string) (string, error) {
+	workflowStatus, chasmStatus, err := describeScheduleBackends(ctx, r.adminClient, ns, scheduleID, primitives.ScheduleWorkflowIDPrefix+scheduleID)
+	if err != nil {
+		return "", err
+	}
+	return classifyScheduleBackend(workflowStatus, chasmStatus), nil
+}
+
 // describeSchedulerChasmState looks up the CHASM (V2) side of scheduleID and reports whether a
 // genuine schedule, a migration sentinel, or nothing exists there.
-func describeSchedulerChasmState(c *cli.Context, adminClient adminservice.AdminServiceClient, ns, scheduleID string) (v2ScheduleStatus, error) {
-	ctx, cancel := newContext(c)
-	defer cancel()
+func describeSchedulerChasmState(ctx context.Context, adminClient adminservice.AdminServiceClient, ns, scheduleID string) (v2ScheduleStatus, error) {
 	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{WorkflowId: scheduleID},
@@ -1194,9 +1245,7 @@ func describeSchedulerChasmState(c *cli.Context, adminClient adminservice.AdminS
 
 // describeWorkflowTypeName looks up the workflow (V1) side of workflowID and reports its
 // workflow type, if it exists.
-func describeWorkflowTypeName(c *cli.Context, adminClient adminservice.AdminServiceClient, ns, workflowID string) (v1ScheduleStatus, error) {
-	ctx, cancel := newContext(c)
-	defer cancel()
+func describeWorkflowTypeName(ctx context.Context, adminClient adminservice.AdminServiceClient, ns, workflowID string) (v1ScheduleStatus, error) {
 	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},

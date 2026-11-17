@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/tools/tdbg/scheduleaudit"
 	"golang.org/x/sync/errgroup"
 )
@@ -27,6 +29,7 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	}
 
 	wfClient := factory.WorkflowClient(c)
+	in.Namespaces = grpcNamespaceDirectory{client: wfClient}
 	progress := c.App.ErrWriter
 	if in.Quiet {
 		progress = io.Discard
@@ -41,10 +44,16 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 		Concurrency:    in.Concurrency,
 		IncludePaused:  in.IncludePaused,
 		DelayThreshold: in.DelayThreshold,
+		ChasmOnly:      in.ChasmOnly,
 		Progress:       progress,
 		Schedules:      scheduleaudit.NewGRPCScheduleLoader(wfClient, progress, limiter, listLimiter),
 		Executions:     scheduleaudit.NewGRPCExecutionLoader(wfClient, progress, listLimiter),
 		Stats:          stats,
+		Backends: scheduleaudit.NewRetryingBackendResolver(
+			scheduleBackendResolver{adminClient: factory.AdminClient(c)}, progress, limiter),
+	}
+	if in.VerifyMisses {
+		auditor.Verifier = scheduleaudit.NewGRPCMissVerifier(wfClient, progress, limiter)
 	}
 
 	auditStart := time.Now()
@@ -93,6 +102,60 @@ type auditInputs struct {
 	DelayThreshold time.Duration
 	IncludePaused  bool
 	Quiet          bool
+
+	AllNamespaces     bool
+	ExcludeNamespaces []string
+	ChasmOnly         bool
+	VerifyMisses      bool
+	// Namespaces lists namespaces for --all-namespaces and resolves namespace_id targets.
+	Namespaces namespaceDirectory
+}
+
+// namespaceDirectory is the namespace lookup the target producer needs.
+type namespaceDirectory interface {
+	// ListNamespaces calls yield with the name and ID of every registered namespace.
+	ListNamespaces(ctx context.Context, yield func(name, id string) error) error
+	// NamespaceName returns the name of the namespace with this ID.
+	NamespaceName(ctx context.Context, id string) (string, error)
+}
+
+type grpcNamespaceDirectory struct {
+	client workflowservice.WorkflowServiceClient
+}
+
+func (d grpcNamespaceDirectory) ListNamespaces(ctx context.Context, yield func(name, id string) error) error {
+	var pageToken []byte
+	for {
+		resp, err := d.client.ListNamespaces(ctx, &workflowservice.ListNamespacesRequest{
+			PageSize:      100,
+			NextPageToken: pageToken,
+		})
+		if err != nil {
+			return fmt.Errorf("list namespaces: %w", err)
+		}
+		for _, ns := range resp.GetNamespaces() {
+			info := ns.GetNamespaceInfo()
+			// Deprecated and deleted namespaces have nothing worth auditing.
+			if info.GetState() != enumspb.NAMESPACE_STATE_REGISTERED {
+				continue
+			}
+			if err := yield(info.GetName(), info.GetId()); err != nil {
+				return err
+			}
+		}
+		if len(resp.GetNextPageToken()) == 0 {
+			return nil
+		}
+		pageToken = resp.GetNextPageToken()
+	}
+}
+
+func (d grpcNamespaceDirectory) NamespaceName(ctx context.Context, id string) (string, error) {
+	resp, err := d.client.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Id: id})
+	if err != nil {
+		return "", fmt.Errorf("describe namespace ID %s: %w", id, err)
+	}
+	return resp.GetNamespaceInfo().GetName(), nil
 }
 
 func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
@@ -107,6 +170,11 @@ func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 		DelayThreshold: c.Duration(FlagDelayThreshold),
 		IncludePaused:  c.Bool(FlagIncludePaused),
 		Quiet:          c.Bool(FlagQuiet),
+
+		AllNamespaces:     c.Bool(FlagAllNamespaces),
+		ExcludeNamespaces: c.StringSlice(FlagExcludeNamespace),
+		ChasmOnly:         c.Bool(FlagChasmOnly),
+		VerifyMisses:      c.Bool(FlagVerifyMisses),
 	}
 	if in.Concurrency <= 0 {
 		in.Concurrency = 1
@@ -185,6 +253,12 @@ func (in *auditInputs) validate(now time.Time) error {
 	if in.ScheduleID != "" && in.Namespace == "" {
 		return errors.New("--schedule-id is only valid with --namespace")
 	}
+	if in.AllNamespaces && (in.Namespace != "" || in.File != "") {
+		return errors.New("--all-namespaces cannot be combined with --namespace or --file")
+	}
+	if len(in.ExcludeNamespaces) > 0 && !in.AllNamespaces {
+		return errors.New("--exclude-namespace is only valid with --all-namespaces")
+	}
 	if !in.WindowEnd.After(in.WindowStart) {
 		return fmt.Errorf("--lookback-end (%s) must be after --lookback-start (%s)",
 			in.WindowEnd.UTC().Format(time.RFC3339),
@@ -215,6 +289,22 @@ func (in *auditInputs) produceTargets(ctx context.Context, out chan<- scheduleau
 		}
 	}
 
+	// --all-namespaces ignores stdin: a non-interactive caller can attach an empty stdin that isn't a terminal.
+	if in.AllNamespaces {
+		excluded := make(map[string]struct{}, len(in.ExcludeNamespaces))
+		for _, ns := range in.ExcludeNamespaces {
+			excluded[ns] = struct{}{}
+		}
+		return in.Namespaces.ListNamespaces(ctx, func(name, id string) error {
+			_, byName := excluded[name]
+			_, byID := excluded[id]
+			if byName || byID {
+				return nil
+			}
+			return send(scheduleaudit.Target{Namespace: name})
+		})
+	}
+
 	r, closeFn, hasStream, err := in.openStream()
 	if err != nil {
 		return err
@@ -224,13 +314,25 @@ func (in *auditInputs) produceTargets(ctx context.Context, out chan<- scheduleau
 	// No stream: the flags define the single target. --schedule-id requires --namespace (enforced by validate).
 	if !hasStream {
 		if in.Namespace == "" {
-			return errors.New("no targets: pass --namespace, or provide a JSONL stream via --file or stdin")
+			return errors.New("no targets: pass --namespace or --all-namespaces, or provide a JSONL stream via --file or stdin")
 		}
 		return send(scheduleaudit.Target{Namespace: in.Namespace, ScheduleID: in.ScheduleID})
 	}
 
 	// Stream present: the flags, when set, must match every streamed target.
-	return streamJSONLTargets(r, func(t scheduleaudit.Target) error {
+	names := map[string]string{}
+	resolve := func(id string) (string, error) {
+		if name, ok := names[id]; ok {
+			return name, nil
+		}
+		name, err := in.Namespaces.NamespaceName(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		names[id] = name
+		return name, nil
+	}
+	return streamJSONLTargets(r, resolve, func(t scheduleaudit.Target) error {
 		if in.Namespace != "" && t.Namespace != in.Namespace {
 			return fmt.Errorf("stream target namespace %q does not match --namespace %q", t.Namespace, in.Namespace)
 		}
@@ -270,15 +372,17 @@ func isTerminal(f *os.File) bool {
 	return info.Mode()&os.ModeCharDevice != 0
 }
 
-// targetLine is the JSON shape of one input stream entry.
+// targetLine is the JSON shape of one input stream entry. Exactly one of namespace and namespace_id is set.
 type targetLine struct {
-	Namespace  string `json:"namespace"`
-	ScheduleID string `json:"schedule_id"`
+	Namespace   string `json:"namespace"`
+	NamespaceID string `json:"namespace_id"`
+	ScheduleID  string `json:"schedule_id"`
 }
 
 // streamJSONLTargets decodes a stream of JSON objects (one per line) and calls emit for each, so targets flow to the
-// auditor as they are read rather than being buffered. A missing namespace is a hard error.
-func streamJSONLTargets(r io.Reader, emit func(scheduleaudit.Target) error) error {
+// auditor as they are read rather than being buffered. resolve maps a namespace_id to its name. A target must name
+// exactly one of namespace and namespace_id.
+func streamJSONLTargets(r io.Reader, resolve func(id string) (string, error), emit func(scheduleaudit.Target) error) error {
 	dec := json.NewDecoder(r)
 	dec.DisallowUnknownFields()
 	for dec.More() {
@@ -286,10 +390,17 @@ func streamJSONLTargets(r io.Reader, emit func(scheduleaudit.Target) error) erro
 		if err := dec.Decode(&tl); err != nil {
 			return fmt.Errorf("decode target: %w", err)
 		}
-		if tl.Namespace == "" {
-			return fmt.Errorf("target %+v: namespace is empty", tl)
+		if (tl.Namespace == "") == (tl.NamespaceID == "") {
+			return fmt.Errorf("target %+v: exactly one of namespace and namespace_id is required", tl)
 		}
-		if err := emit(scheduleaudit.Target{Namespace: tl.Namespace, ScheduleID: tl.ScheduleID}); err != nil {
+		namespace := tl.Namespace
+		if namespace == "" {
+			var err error
+			if namespace, err = resolve(tl.NamespaceID); err != nil {
+				return fmt.Errorf("target %+v: %w", tl, err)
+			}
+		}
+		if err := emit(scheduleaudit.Target{Namespace: namespace, ScheduleID: tl.ScheduleID}); err != nil {
 			return err
 		}
 	}

@@ -3,6 +3,7 @@ package tdbg
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,11 +13,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/service/worker/dummy"
+	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tools/tdbg/scheduleaudit"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestAuditInputs_Validate(t *testing.T) {
@@ -38,6 +45,23 @@ func TestAuditInputs_Validate(t *testing.T) {
 		in.Namespace = ""
 		in.ScheduleID = "sched1"
 		require.ErrorContains(t, in.validate(now), "--schedule-id is only valid with --namespace")
+	})
+
+	t.Run("all-namespaces with namespace or file is rejected", func(t *testing.T) {
+		in := base()
+		in.AllNamespaces = true
+		require.ErrorContains(t, in.validate(now), "--all-namespaces cannot be combined")
+		in.Namespace = ""
+		in.File = "targets.jsonl"
+		require.ErrorContains(t, in.validate(now), "--all-namespaces cannot be combined")
+		in.File = ""
+		require.NoError(t, in.validate(now))
+	})
+
+	t.Run("exclude-namespace requires all-namespaces", func(t *testing.T) {
+		in := base()
+		in.ExcludeNamespaces = []string{"temporal-system"}
+		require.ErrorContains(t, in.validate(now), "--exclude-namespace is only valid with --all-namespaces")
 	})
 
 	t.Run("end must be after start", func(t *testing.T) {
@@ -133,7 +157,13 @@ func TestResolveBound(t *testing.T) {
 func TestStreamJSONLTargets(t *testing.T) {
 	collect := func(input string) ([]scheduleaudit.Target, error) {
 		var got []scheduleaudit.Target
-		err := streamJSONLTargets(strings.NewReader(input), func(t scheduleaudit.Target) error {
+		resolve := func(id string) (string, error) {
+			if id == "unknown-id" {
+				return "", errors.New("namespace ID not found")
+			}
+			return "name-of-" + id, nil
+		}
+		err := streamJSONLTargets(strings.NewReader(input), resolve, func(t scheduleaudit.Target) error {
 			got = append(got, t)
 			return nil
 		})
@@ -163,7 +193,23 @@ func TestStreamJSONLTargets(t *testing.T) {
 
 	t.Run("missing namespace is rejected", func(t *testing.T) {
 		_, err := collect(`{"schedule_id":"s1"}` + "\n")
-		require.ErrorContains(t, err, "namespace is empty")
+		require.ErrorContains(t, err, "exactly one of namespace and namespace_id")
+	})
+
+	t.Run("namespace_id is resolved to a name", func(t *testing.T) {
+		got, err := collect(`{"namespace_id":"id1","schedule_id":"s1"}`)
+		require.NoError(t, err)
+		require.Equal(t, []scheduleaudit.Target{{Namespace: "name-of-id1", ScheduleID: "s1"}}, got)
+	})
+
+	t.Run("namespace and namespace_id together are rejected", func(t *testing.T) {
+		_, err := collect(`{"namespace":"ns1","namespace_id":"id1"}`)
+		require.ErrorContains(t, err, "exactly one of namespace and namespace_id")
+	})
+
+	t.Run("unresolvable namespace_id is rejected", func(t *testing.T) {
+		_, err := collect(`{"namespace_id":"unknown-id"}`)
+		require.ErrorContains(t, err, "namespace ID not found")
 	})
 
 	t.Run("unknown field cannot expand scope", func(t *testing.T) {
@@ -272,6 +318,31 @@ func TestProduceTargets(t *testing.T) {
 		require.ErrorContains(t, err, "no such file or directory")
 	})
 
+	t.Run("--all-namespaces lists namespaces, skips exclusions by name or ID, and ignores stdin", func(t *testing.T) {
+		got, err := produce(&auditInputs{
+			AllNamespaces:     true,
+			ExcludeNamespaces: []string{"temporal-system", "id-c"},
+			Stdin:             strings.NewReader(`{"namespace":"from-stdin"}`),
+			Namespaces: &fakeNamespaceDirectory{namespaces: [][2]string{
+				{"temporal-system", "id-sys"}, {"a", "id-a"}, {"b", "id-b"}, {"c", "id-c"},
+			}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []scheduleaudit.Target{{Namespace: "a"}, {Namespace: "b"}}, got)
+	})
+
+	t.Run("stream namespace_id is resolved once and checked against --namespace", func(t *testing.T) {
+		dir := &fakeNamespaceDirectory{namespaces: [][2]string{{"ns1", "id1"}}}
+		got, err := produce(&auditInputs{
+			Namespace:  "ns1",
+			Namespaces: dir,
+			Stdin:      strings.NewReader(`{"namespace_id":"id1"}` + "\n" + `{"namespace_id":"id1","schedule_id":"s1"}` + "\n"),
+		})
+		require.NoError(t, err)
+		require.Equal(t, []scheduleaudit.Target{{Namespace: "ns1"}, {Namespace: "ns1", ScheduleID: "s1"}}, got)
+		require.Equal(t, 1, dir.lookups)
+	})
+
 }
 
 func TestOpenStreamExplicitDashReadsInteractiveStdin(t *testing.T) {
@@ -310,6 +381,95 @@ func mustParseTime(s string) time.Time {
 	return t
 }
 
+type fakeNamespaceDirectory struct {
+	namespaces [][2]string // name, ID
+	lookups    int
+}
+
+func (d *fakeNamespaceDirectory) ListNamespaces(_ context.Context, yield func(name, id string) error) error {
+	for _, ns := range d.namespaces {
+		if err := yield(ns[0], ns[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *fakeNamespaceDirectory) NamespaceName(_ context.Context, id string) (string, error) {
+	d.lookups++
+	for _, ns := range d.namespaces {
+		if ns[1] == id {
+			return ns[0], nil
+		}
+	}
+	return "", status.Error(codes.NotFound, "namespace not found")
+}
+
+type namespaceListClient struct {
+	workflowservice.WorkflowServiceClient
+	requests []*workflowservice.ListNamespacesRequest
+}
+
+func (c *namespaceListClient) ListNamespaces(
+	_ context.Context,
+	req *workflowservice.ListNamespacesRequest,
+	_ ...grpc.CallOption,
+) (*workflowservice.ListNamespacesResponse, error) {
+	c.requests = append(c.requests, req)
+	ns := func(name string, state enumspb.NamespaceState) *workflowservice.DescribeNamespaceResponse {
+		return &workflowservice.DescribeNamespaceResponse{NamespaceInfo: &namespacepb.NamespaceInfo{Name: name, Id: name + "-id", State: state}}
+	}
+	if len(req.GetNextPageToken()) == 0 {
+		return &workflowservice.ListNamespacesResponse{
+			Namespaces:    []*workflowservice.DescribeNamespaceResponse{ns("a", enumspb.NAMESPACE_STATE_REGISTERED), ns("gone", enumspb.NAMESPACE_STATE_DELETED)},
+			NextPageToken: []byte("page2"),
+		}, nil
+	}
+	return &workflowservice.ListNamespacesResponse{
+		Namespaces: []*workflowservice.DescribeNamespaceResponse{ns("old", enumspb.NAMESPACE_STATE_DEPRECATED), ns("b", enumspb.NAMESPACE_STATE_REGISTERED)},
+	}, nil
+}
+
+func TestGRPCNamespaceDirectoryListsRegisteredNamespaces(t *testing.T) {
+	client := &namespaceListClient{}
+	var got [][2]string
+	require.NoError(t, grpcNamespaceDirectory{client: client}.ListNamespaces(t.Context(), func(name, id string) error {
+		got = append(got, [2]string{name, id})
+		return nil
+	}))
+	require.Equal(t, [][2]string{{"a", "a-id"}, {"b", "b-id"}}, got)
+	require.Len(t, client.requests, 2)
+}
+
+func TestClassifyScheduleBackend(t *testing.T) {
+	genuineWorkflow := v1ScheduleStatus{found: true, running: true, workflowType: scheduler.WorkflowType}
+	sentinelWorkflow := v1ScheduleStatus{found: true, running: true, workflowType: dummy.DummyWFTypeName}
+	closedWorkflow := v1ScheduleStatus{found: true, workflowType: scheduler.WorkflowType}
+	genuineChasm := v2ScheduleStatus{found: true, running: true}
+	sentinelChasm := v2ScheduleStatus{found: true, running: true, sentinel: true}
+	closedChasm := v2ScheduleStatus{found: true}
+	for _, tc := range []struct {
+		name     string
+		workflow v1ScheduleStatus
+		chasm    v2ScheduleStatus
+		want     string
+	}{
+		{"genuine workflow", genuineWorkflow, v2ScheduleStatus{}, scheduleaudit.BackendWorkflow},
+		{"genuine workflow with chasm sentinel", genuineWorkflow, sentinelChasm, scheduleaudit.BackendWorkflow},
+		{"genuine workflow with closed chasm", genuineWorkflow, closedChasm, scheduleaudit.BackendWorkflow},
+		{"genuine chasm", v1ScheduleStatus{}, genuineChasm, scheduleaudit.BackendChasm},
+		{"genuine chasm with workflow sentinel", sentinelWorkflow, genuineChasm, scheduleaudit.BackendChasm},
+		{"genuine chasm with closed workflow", closedWorkflow, genuineChasm, scheduleaudit.BackendChasm},
+		{"nothing", v1ScheduleStatus{}, v2ScheduleStatus{}, scheduleaudit.BackendNotFound},
+		{"only a chasm sentinel", v1ScheduleStatus{}, sentinelChasm, scheduleaudit.BackendUnexpected},
+		{"both genuine", genuineWorkflow, genuineChasm, scheduleaudit.BackendUnexpected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, classifyScheduleBackend(tc.workflow, tc.chasm))
+		})
+	}
+}
+
 type auditWorkflowClient struct {
 	workflowservice.WorkflowServiceClient
 }
@@ -324,10 +484,23 @@ func (c *auditWorkflowClient) ListWorkflowExecutions(context.Context, *workflows
 	return &workflowservice.ListWorkflowExecutionsResponse{}, nil
 }
 
+// auditAdminClient reports every schedule as absent on both sides, the way a real server answers a lookup.
+type auditAdminClient struct {
+	adminservice.AdminServiceClient
+}
+
+func (c *auditAdminClient) DescribeMutableState(context.Context, *adminservice.DescribeMutableStateRequest, ...grpc.CallOption) (*adminservice.DescribeMutableStateResponse, error) {
+	return nil, status.Error(codes.NotFound, "not found")
+}
+
 type auditClientFactory struct{ ClientFactory }
 
 func (f *auditClientFactory) WorkflowClient(*cli.Context) workflowservice.WorkflowServiceClient {
 	return &auditWorkflowClient{}
+}
+
+func (f *auditClientFactory) AdminClient(*cli.Context) adminservice.AdminServiceClient {
+	return &auditAdminClient{}
 }
 
 func TestAuditCommandWriters(t *testing.T) {
@@ -348,6 +521,7 @@ func TestAuditCommandWriters(t *testing.T) {
 			}
 			require.NoError(t, app.Run(args))
 			require.Contains(t, output.String(), `"schedule_id":"s"`)
+			require.Contains(t, output.String(), `"backend":"not_found"`)
 			if quiet {
 				require.Empty(t, diagnostics.String())
 			} else {

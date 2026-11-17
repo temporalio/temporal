@@ -391,6 +391,56 @@ type fakeScheduleLoader struct {
 	retention        time.Duration
 	namespaceID      string
 	contextAfterList error
+	// chasmIDs is what ListChasmScheduleIDs yields; it may include IDs that are not CHASM schedules (e.g. sentinels).
+	chasmIDs []string
+}
+
+func (f *fakeScheduleLoader) ListChasmScheduleIDs(_ context.Context, _ string, yield func(id string) error) error {
+	for _, id := range f.chasmIDs {
+		if err := yield(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type fakeBackendResolver struct {
+	mu       sync.Mutex
+	backends map[string]string
+	err      error
+	calls    []string
+}
+
+func (f *fakeBackendResolver) ResolveBackend(_ context.Context, _, scheduleID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, scheduleID)
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.backends[scheduleID], nil
+}
+
+// fakeMissVerifier returns the configured run per workflow ID, and a raw gRPC NotFound (as tdbg's client does) for
+// any other ID.
+type fakeMissVerifier struct {
+	mu    sync.Mutex
+	runs  map[string]Execution
+	err   error
+	calls []string
+}
+
+func (f *fakeMissVerifier) DescribeAction(_ context.Context, _, workflowID string) (Execution, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, workflowID)
+	if f.err != nil {
+		return Execution{}, f.err
+	}
+	if exec, ok := f.runs[workflowID]; ok {
+		return exec, nil
+	}
+	return Execution{}, status.Error(codes.NotFound, "workflow not found")
 }
 
 func (f *fakeScheduleLoader) ListScheduleIDs(ctx context.Context, _ string, yield func(id string) error) error {
@@ -1148,4 +1198,145 @@ func mustParseTime(s string) time.Time {
 		panic(err)
 	}
 	return t
+}
+
+func TestActionWorkflowID(t *testing.T) {
+	nominal := time.Date(2026, 5, 19, 14, 0, 0, 900000000, time.FixedZone("EST", -5*3600))
+	require.Equal(t, "wf-2026-05-19T19:00:00Z", ActionWorkflowID("wf", nominal))
+}
+
+func TestAuditorEnrichment(t *testing.T) {
+	// Window (17:00, 20:00] of an hourly spec: 18:00 ran, 19:00 and 20:00 are real_miss.
+	newAuditor := func(entries ...ScheduleEntry) *Auditor {
+		closed := mustParseTime("2026-05-19T18:05:00Z")
+		ran := []Execution{{
+			WorkflowID:  "wf-2026-05-19T18:00:00Z",
+			StartTime:   mustParseTime("2026-05-19T18:00:00Z"),
+			CloseTime:   &closed,
+			Status:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			NominalTime: mustParseTime("2026-05-19T18:00:00Z"),
+		}}
+		exec := &fakeExecutionLoader{byScheduleID: map[string][]Execution{"missing": ran}}
+		return &Auditor{
+			WindowStart: mustParseTime("2026-05-19T17:00:00Z"),
+			WindowEnd:   mustParseTime("2026-05-19T20:00:00Z"),
+			Schedules:   &fakeScheduleLoader{entries: entries},
+			Executions:  exec,
+			Progress:    io.Discard,
+		}
+	}
+	missing := ScheduleEntry{ID: "missing", Spec: hourlyAllHoursSpec(), WorkflowType: "W", ActionWorkflowID: "wf",
+		Info: ScheduleInfo{ActionCount: 7, OverlapSkipped: 1}}
+	byID := func(results []Result) map[string]Result {
+		out := make(map[string]Result, len(results))
+		for _, r := range results {
+			out[r.ScheduleID] = r
+		}
+		return out
+	}
+
+	t.Run("backend is resolved only for flagged schedules", func(t *testing.T) {
+		// A schedule created after the last fire has no scheduled times, so it is skipped; one created before the
+		// window with every fire matched would be clean. Use a clean schedule with all fires observed.
+		clean := ScheduleEntry{ID: "clean", Spec: hourlyAllHoursSpec(), WorkflowType: "W"}
+		a := newAuditor(missing, clean)
+		exec := a.Executions.(*fakeExecutionLoader)
+		for _, h := range []string{"18", "19", "20"} {
+			nominal := mustParseTime("2026-05-19T" + h + ":00:00Z")
+			closed := nominal.Add(time.Minute)
+			exec.byScheduleID["clean"] = append(exec.byScheduleID["clean"], Execution{
+				WorkflowID: "c-" + h, StartTime: nominal, CloseTime: &closed, NominalTime: nominal,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			})
+		}
+		resolver := &fakeBackendResolver{backends: map[string]string{"missing": BackendWorkflow, "clean": BackendWorkflow}}
+		a.Backends = resolver
+		results, err := runAudit(a, Target{Namespace: "ns"})
+		require.NoError(t, err)
+		got := byID(results)
+		require.Equal(t, BackendWorkflow, got["missing"].Backend)
+		require.Empty(t, got["clean"].Backend)
+		require.Equal(t, []string{"missing"}, resolver.calls)
+		require.Equal(t, missing.Info, got["missing"].Info)
+	})
+
+	t.Run("backend lookup failure is recorded, not fatal", func(t *testing.T) {
+		a := newAuditor(missing)
+		a.Backends = &fakeBackendResolver{err: status.Error(codes.PermissionDenied, "denied")}
+		results, err := runAudit(a, Target{Namespace: "ns"})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		require.Equal(t, backendError, results[0].Backend)
+	})
+
+	t.Run("verify misses looks up each real_miss without changing its category", func(t *testing.T) {
+		a := newAuditor(missing)
+		started := Execution{
+			WorkflowID: "wf-2026-05-19T19:00:00Z", RunID: "late-run",
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: mustParseTime("2026-05-19T19:00:04Z"),
+		}
+		verifier := &fakeMissVerifier{runs: map[string]Execution{started.WorkflowID: started}}
+		a.Verifier = verifier
+		results, err := runAudit(a, Target{Namespace: "ns"})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		r := results[0]
+		require.Equal(t, 2, r.Count(categoryRealMiss))
+		require.ElementsMatch(t, []string{"wf-2026-05-19T19:00:00Z", "wf-2026-05-19T20:00:00Z"}, verifier.calls)
+		require.Equal(t, MissVerification{
+			Result: verificationStarted, WorkflowID: started.WorkflowID, RunID: "late-run",
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, StartTime: started.StartTime,
+		}, r.Verifications[mustParseTime("2026-05-19T19:00:00Z")])
+		require.Equal(t, MissVerification{Result: verificationNotFound, WorkflowID: "wf-2026-05-19T20:00:00Z"},
+			r.Verifications[mustParseTime("2026-05-19T20:00:00Z")])
+	})
+
+	t.Run("verify lookup failure is recorded, not fatal", func(t *testing.T) {
+		a := newAuditor(missing)
+		a.Verifier = &fakeMissVerifier{err: status.Error(codes.PermissionDenied, "denied")}
+		results, err := runAudit(a, Target{Namespace: "ns"})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		v := results[0].Verifications[mustParseTime("2026-05-19T19:00:00Z")]
+		require.Equal(t, verificationError, v.Result)
+		require.Contains(t, v.Error, "denied")
+	})
+
+	t.Run("chasm only lists from visibility and skips workflow-backed schedules", func(t *testing.T) {
+		onWorkflow := missing
+		onWorkflow.ID = "on-workflow"
+		a := newAuditor(missing, onWorkflow)
+		a.Schedules.(*fakeScheduleLoader).chasmIDs = []string{"missing", "on-workflow"}
+		resolver := &fakeBackendResolver{backends: map[string]string{"missing": BackendChasm, "on-workflow": BackendWorkflow}}
+		a.Backends = resolver
+		a.ChasmOnly = true
+		stats := NewStats()
+		a.Stats = stats
+		results, err := runAudit(a, Target{Namespace: "ns"})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		require.Equal(t, "missing", results[0].ScheduleID)
+		require.Equal(t, BackendChasm, results[0].Backend)
+		// The flagged CHASM schedule reuses the backend resolved while filtering.
+		require.ElementsMatch(t, []string{"missing", "on-workflow"}, resolver.calls)
+		require.Equal(t, StatsSnapshot{Listed: 2, Audited: 1, Skipped: 1}, stats.Snapshot())
+	})
+
+	t.Run("chasm only skips explicit targets not on chasm", func(t *testing.T) {
+		a := newAuditor(missing)
+		a.Backends = &fakeBackendResolver{backends: map[string]string{"missing": BackendNotFound}}
+		a.ChasmOnly = true
+		results, err := runAudit(a, Target{Namespace: "ns", ScheduleID: "missing"})
+		require.NoError(t, err)
+		require.Empty(t, results)
+	})
+
+	t.Run("chasm only fails when the backend cannot be resolved", func(t *testing.T) {
+		a := newAuditor(missing)
+		a.Backends = &fakeBackendResolver{err: status.Error(codes.PermissionDenied, "denied")}
+		a.ChasmOnly = true
+		_, err := runAudit(a, Target{Namespace: "ns", ScheduleID: "missing"})
+		require.ErrorContains(t, err, "resolve backend")
+	})
 }

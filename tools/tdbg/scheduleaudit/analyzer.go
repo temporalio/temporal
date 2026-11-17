@@ -12,6 +12,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -477,6 +478,51 @@ type ScheduleLoader interface {
 	// DescribeNamespace returns the namespace's UUID and workflow execution retention TTL. The UUID feeds the jitter
 	// seed; the retention TTL gates the audit window.
 	DescribeNamespace(ctx context.Context, namespace string) (NamespaceInfo, error)
+	// ListChasmScheduleIDs is ListScheduleIDs restricted to running CHASM schedulers, for --chasm-only.
+	ListChasmScheduleIDs(ctx context.Context, namespace string, yield func(id string) error) error
+}
+
+// Backend values reported for a schedule. They describe the backend at audit time, not during the window.
+const (
+	BackendWorkflow   = "workflow"
+	BackendChasm      = "chasm"
+	BackendNotFound   = "not_found"
+	BackendUnexpected = "unexpected"
+	backendError      = "error"
+)
+
+// BackendResolver reports which scheduler implementation currently holds a schedule ID: one of the Backend values.
+type BackendResolver interface {
+	ResolveBackend(ctx context.Context, namespace, scheduleID string) (string, error)
+}
+
+// MissVerifier looks up the workflow a missed action would have started, bypassing visibility.
+type MissVerifier interface {
+	// DescribeAction returns the latest run of workflowID. It returns a NotFound status error when no run exists.
+	DescribeAction(ctx context.Context, namespace, workflowID string) (Execution, error)
+}
+
+// Miss verification results.
+const (
+	verificationStarted  = "started"
+	verificationNotFound = "not_found"
+	verificationError    = "error"
+)
+
+// MissVerification records a direct lookup of the workflow a real_miss would have started.
+type MissVerification struct {
+	Result     string // started, not_found, or error
+	WorkflowID string
+	RunID      string
+	Status     enumspb.WorkflowExecutionStatus
+	StartTime  time.Time
+	Error      string
+}
+
+// ActionWorkflowID returns the workflow ID a scheduled action with this nominal time is started under. Workflow-backed
+// (with the default AlwaysAppendTimestamp) and CHASM schedulers both append the nominal time, truncated to seconds, in RFC3339.
+func ActionWorkflowID(baseWorkflowID string, nominal time.Time) string {
+	return baseWorkflowID + "-" + nominal.UTC().Truncate(time.Second).Format(time.RFC3339)
 }
 
 // NamespaceInfo is the subset of DescribeNamespace the audit needs: the namespace's UUID (part of the scheduler's
@@ -499,6 +545,18 @@ type ScheduleEntry struct {
 	// Exhausted: limited_actions schedule with remaining_actions == 0; dropped at load time.
 	Exhausted     bool
 	CatchupWindow time.Duration
+	// ActionWorkflowID is the start-workflow action's base workflow ID, before the nominal time is appended.
+	ActionWorkflowID string
+	Info             ScheduleInfo
+}
+
+// ScheduleInfo holds DescribeSchedule's action counters. They cover the schedule's lifetime, not the audit window.
+type ScheduleInfo struct {
+	ActionCount         int64
+	MissedCatchupWindow int64
+	OverlapSkipped      int64
+	BufferDropped       int64
+	BufferSize          int64
 }
 
 // ExecutionLoader fetches workflows for a batch of schedules, grouped by schedule ID.
@@ -536,6 +594,9 @@ type Auditor struct {
 	// DelayThreshold separates operationally late starts from on-time starts in per-action classifications. Values <= 0
 	// use the default threshold.
 	DelayThreshold time.Duration
+	// ChasmOnly audits only schedules whose current backend is CHASM. Namespaces are listed from visibility, and each
+	// candidate is confirmed through Backends before it is described. Requires Backends.
+	ChasmOnly bool
 
 	// Progress receives one-line progress updates. Required -- callers that don't want logs should pass io.Discard.
 	Progress io.Writer
@@ -543,6 +604,10 @@ type Auditor struct {
 	Schedules  ScheduleLoader
 	Executions ExecutionLoader
 	Stats      *Stats
+	// Backends, when set, records the current backend of each flagged schedule.
+	Backends BackendResolver
+	// Verifier, when set, looks up the expected workflow of every real_miss on flagged schedules.
+	Verifier MissVerifier
 }
 
 // Stats summarizes schedules discovered and processed during an audit. Its methods are safe for concurrent namespace
@@ -639,6 +704,12 @@ type Result struct {
 	Paused bool
 	// DelayThreshold is the effective threshold used to classify started actions as late.
 	DelayThreshold time.Duration
+	// Info holds the schedule's lifetime action counters from DescribeSchedule.
+	Info ScheduleInfo
+	// Backend is the schedule's current backend, set only for flagged schedules when a BackendResolver is configured.
+	Backend string
+	// Verifications maps each verified real_miss nominal time to the direct lookup of its expected workflow.
+	Verifications map[time.Time]MissVerification
 
 	// Scheduled is every nominal/jittered fire in the window under the current scheduler seed.
 	Scheduled []ScheduledTime
@@ -794,6 +865,7 @@ type preparedJob struct {
 	entry       ScheduleEntry
 	scheduled   []ScheduledTime
 	auditStatus string
+	backend     string // set when ChasmOnly already resolved it
 }
 
 func (p preparedJob) scheduleChangedInWindow() bool {
@@ -1046,6 +1118,10 @@ func (a *Auditor) fanOutNamespace(ctx context.Context, namespace, namespaceID st
 	var g errgroup.Group
 	g.SetLimit(batchesPerNamespace)
 
+	list := a.Schedules.ListScheduleIDs
+	if a.ChasmOnly {
+		list = a.Schedules.ListChasmScheduleIDs
+	}
 	_, _ = fmt.Fprintf(a.Progress, "  listing schedules in %s...\n", namespace)
 	batch := make([]scheduleJob, 0, executionBatchSize)
 	flush := func() {
@@ -1055,7 +1131,7 @@ func (a *Auditor) fanOutNamespace(ctx context.Context, namespace, namespaceID st
 			return a.runBatch(ctx, jobs, results)
 		})
 	}
-	listErr := a.Schedules.ListScheduleIDs(ctx, namespace, func(id string) error {
+	listErr := list(ctx, namespace, func(id string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -1115,6 +1191,11 @@ func (a *Auditor) runBatch(ctx context.Context, jobs []scheduleJob, results chan
 	for _, p := range prepared {
 		res := a.analyzeSchedule(p, entries[p.scheduleID])
 		a.Stats.addAudited()
+		if Flagged(*res, a.DelayThreshold) {
+			if err := a.enrich(ctx, p, res); err != nil {
+				return err
+			}
+		}
 		select {
 		case results <- *res:
 		case <-ctx.Done():
@@ -1188,8 +1269,76 @@ func (a *Auditor) clampToRetention(namespace string, retention time.Duration) ti
 	return boundary
 }
 
+// enrich adds the follow-up lookups that only flagged schedules warrant: the current backend and, for each real_miss,
+// a direct lookup of the workflow it would have started. Lookup failures are recorded on the result rather than
+// failing the audit; only context cancellation is returned.
+func (a *Auditor) enrich(ctx context.Context, p preparedJob, r *Result) error {
+	if r.Backend == "" && a.Backends != nil {
+		backend, err := a.Backends.ResolveBackend(ctx, p.namespace, p.scheduleID)
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			_, _ = fmt.Fprintf(a.Progress, "    %s: WARNING - backend lookup failed: %v\n", p.scheduleID, err)
+			backend = backendError
+		}
+		r.Backend = backend
+	}
+	if a.Verifier == nil || p.entry.ActionWorkflowID == "" {
+		return nil
+	}
+	for nominal, category := range r.Missed {
+		if category != categoryRealMiss {
+			continue
+		}
+		v := MissVerification{WorkflowID: ActionWorkflowID(p.entry.ActionWorkflowID, nominal)}
+		exec, err := a.Verifier.DescribeAction(ctx, p.namespace, v.WorkflowID)
+		switch {
+		case err == nil:
+			v.Result = verificationStarted
+			v.RunID = exec.RunID
+			v.Status = exec.Status
+			v.StartTime = exec.StartTime
+		case isNotFound(err):
+			v.Result = verificationNotFound
+		default:
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			v.Result = verificationError
+			v.Error = err.Error()
+		}
+		if r.Verifications == nil {
+			r.Verifications = make(map[time.Time]MissVerification)
+		}
+		r.Verifications[nominal] = v
+	}
+	return nil
+}
+
+// isNotFound matches both serviceerror.NotFound and the raw gRPC status errors tdbg's client returns.
+func isNotFound(err error) bool {
+	return common.IsNotFoundError(err) || status.Code(err) == codes.NotFound
+}
+
 // prepareJob describes and filters one schedule, then computes its expected fires before any visibility query.
 func (a *Auditor) prepareJob(ctx context.Context, job scheduleJob) (*preparedJob, error) {
+	var backend string
+	if a.ChasmOnly {
+		var err error
+		backend, err = a.Backends.ResolveBackend(ctx, job.namespace, job.scheduleID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve backend of %s/%s: %w", job.namespace, job.scheduleID, err)
+		}
+		// Listing CHASM schedulers from visibility also returns migration sentinels, which resolve to workflow or
+		// not_found.
+		if backend != BackendChasm {
+			if job.explicit {
+				_, _ = fmt.Fprintf(a.Progress, "    %s: skipping; current backend is %s, not chasm\n", job.scheduleID, backend)
+			}
+			return nil, nil
+		}
+	}
 	entry, err := a.Schedules.LookupSchedule(ctx, job.namespace, job.scheduleID)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -1216,6 +1365,7 @@ func (a *Auditor) prepareJob(ctx context.Context, job scheduleJob) (*preparedJob
 			scheduleJob: job,
 			entry:       entry,
 			auditStatus: auditStatusInconclusiveScheduleChanged,
+			backend:     backend,
 		}, nil
 	}
 	scheduledStart := job.windowStart
@@ -1233,7 +1383,7 @@ func (a *Auditor) prepareJob(ctx context.Context, job scheduleJob) (*preparedJob
 	if len(scheduled) == 0 {
 		return nil, nil
 	}
-	return &preparedJob{scheduleJob: job, entry: entry, scheduled: scheduled, auditStatus: auditStatusComplete}, nil
+	return &preparedJob{scheduleJob: job, entry: entry, scheduled: scheduled, auditStatus: auditStatusComplete, backend: backend}, nil
 }
 
 // analyzeSchedule classifies one prepared schedule against its visibility rows.
@@ -1318,6 +1468,8 @@ func (a *Auditor) baseResult(p preparedJob, observed []Execution) *Result {
 		UpdateTime:     s.UpdateTime,
 		Paused:         s.Paused,
 		DelayThreshold: effectiveLateThreshold(a.DelayThreshold),
+		Info:           s.Info,
+		Backend:        p.backend,
 		Scheduled:      p.scheduled,
 		Observed:       observed,
 	}
