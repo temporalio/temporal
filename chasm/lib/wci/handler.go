@@ -264,6 +264,8 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 			return apply(w, mctx)
 		},
 		nil,
+		// Update a running instance in place; start over a closed one.
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),
 	)
 	if err != nil {
 		return nil, err
