@@ -907,8 +907,12 @@ func (s *contextSuite) TestTaskCompletionBuffer_MemoryLimitReason() {
 // newContextWithSpeculativeMutableState returns the suite's context holding a cached mutable state with a
 // pending speculative CHASM transition applied at speculativeVersion.
 func (s *contextSuite) newContextWithSpeculativeMutableState(speculativeVersion int64) *historyi.MockMutableState {
-	mockMutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
-	mockMutableState.EXPECT().ChasmSpeculativeTransitionFailoverVersion().Return(speculativeVersion, true)
+	controller := gomock.NewController(s.T())
+	mockChasmTree := historyi.NewMockChasmTree(controller)
+	mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(speculativeVersion, true)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	mockMutableState := historyi.NewMockMutableState(controller)
+	mockMutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
 	s.workflowContext.MutableState = mockMutableState
 	return mockMutableState
 }
@@ -916,9 +920,6 @@ func (s *contextSuite) newContextWithSpeculativeMutableState(speculativeVersion 
 func (s *contextSuite) TestLoadMutableState_SpeculativeChasmTransitionSameFailoverVersion() {
 	failoverVersion := tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID)
 	mockMutableState := s.newContextWithSpeculativeMutableState(failoverVersion)
-	mockChasmTree := historyi.NewMockChasmTree(gomock.NewController(s.T()))
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID)
-	mockMutableState.EXPECT().ChasmTree().Return(mockChasmTree)
 	mockMutableState.EXPECT().StartTransaction(tests.LocalNamespaceEntry).Return(false, nil)
 
 	ms, err := s.workflowContext.LoadMutableState(context.Background(), s.mockShard)

@@ -4330,6 +4330,37 @@ func (s *nodeSuite) TestApplySpeculativeTransition_KeepsMutation() {
 	s.Positive(*transitionCountCalls)
 }
 
+func (s *nodeSuite) TestApplySpeculativeTransition_PendingUntilActiveClose() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 5 }
+	_, pending := root.SpeculativeTransitionFailoverVersion()
+	s.False(pending)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: "speculative"}
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	version, pending := root.SpeculativeTransitionFailoverVersion()
+	s.True(pending)
+	s.Equal(int64(5), version)
+
+	// A passive close is rejected and leaves the speculative changes in place.
+	_, err = root.CloseTransaction(context.Background(), false)
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+	_, pending = root.SpeculativeTransitionFailoverVersion()
+	s.True(pending)
+	s.True(root.IsDirty())
+
+	mutations, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "")
+	_, pending = root.SpeculativeTransitionFailoverVersion()
+	s.False(pending)
+}
+
 func (s *nodeSuite) TestApplySpeculativeTransition_RunsImmediatePureTasks() {
 	root, _ := s.cleanTestComponentTree()
 

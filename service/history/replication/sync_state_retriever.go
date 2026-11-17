@@ -390,8 +390,7 @@ func (s *SyncStateRetrieverImpl) loadMSFromDBIfSpeculative(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 ) (historyi.MutableState, error) {
-	// Outside a transaction, the CHASM tree is dirty only while a speculative transition is pending.
-	if !mutableState.ChasmTree().IsDirty() {
+	if _, speculative := mutableState.ChasmTree().SpeculativeTransitionFailoverVersion(); !speculative {
 		return mutableState, nil
 	}
 

@@ -221,14 +221,7 @@ type (
 		// (via AttachChasmRequestID). It gates the lazy request-ID sweep at transaction close so only
 		// transactions that added an ID pay for the scan.
 		chasmRequestIDsAdded bool
-		// chasmSpeculativeTransitionPending is set when a speculative CHASM transition left changes in the
-		// CHASM tree without persisting them. It lets IsDirty ignore those changes. It doesn't trigger a
-		// write: the changes are persisted only when a later non-speculative transaction closes.
-		chasmSpeculativeTransitionPending bool
-		// chasmSpeculativeTransitionFailoverVersion is the namespace failover version when the pending
-		// speculative CHASM transition was applied.
-		chasmSpeculativeTransitionFailoverVersion int64
-		updateInfoUpdated                         map[string]struct{}
+		updateInfoUpdated    map[string]struct{}
 		// following xxxUserDataUpdated fields are for tracking if activity/timer user data updated.
 		// This help to determine if we need to update transition history: For
 		// user data change, we need to update transition history. No update for
@@ -7699,8 +7692,14 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 // However, certain in-memory changes (e.g. speculative workflow task) won't be cleared before releasing
 // the lock and have to be excluded from the check.
 func (ms *MutableStateImpl) IsDirty() bool {
-	return ms.isNonChasmDirty() ||
-		(ms.chasmTree.IsDirty() && !ms.chasmSpeculativeTransitionPending)
+	if ms.isNonChasmDirty() {
+		return true
+	}
+	if !ms.chasmTree.IsDirty() {
+		return false
+	}
+	_, speculative := ms.chasmTree.SpeculativeTransitionFailoverVersion()
+	return !speculative
 }
 
 func (ms *MutableStateImpl) isNonChasmDirty() bool {
@@ -7709,26 +7708,14 @@ func (ms *MutableStateImpl) isNonChasmDirty() bool {
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
-// SetChasmSpeculativeTransitionPending marks the CHASM tree changes of the current transaction as
-// speculative: they stay in memory and IsDirty ignores them.
-func (ms *MutableStateImpl) SetChasmSpeculativeTransitionPending() error {
+// ValidateChasmSpeculativeTransition returns an error if the current transaction changed state outside the
+// CHASM tree. Only CHASM tree changes can stay in memory.
+func (ms *MutableStateImpl) ValidateChasmSpeculativeTransition() error {
 	if ms.isNonChasmDirty() {
 		// This line means there is a Dev error.
 		return serviceerror.NewInternal("speculative CHASM transition changed state outside the CHASM tree")
 	}
-	ms.chasmSpeculativeTransitionPending = true
-	ms.chasmSpeculativeTransitionFailoverVersion = ms.namespaceEntry.FailoverVersion(ms.executionInfo.WorkflowId)
 	return nil
-}
-
-func (ms *MutableStateImpl) HasPendingChasmSpeculativeTransition() bool {
-	return ms.chasmSpeculativeTransitionPending
-}
-
-// ChasmSpeculativeTransitionFailoverVersion returns the namespace failover version when the pending
-// speculative CHASM transition was applied. The bool is false when none is pending.
-func (ms *MutableStateImpl) ChasmSpeculativeTransitionFailoverVersion() (int64, bool) {
-	return ms.chasmSpeculativeTransitionFailoverVersion, ms.chasmSpeculativeTransitionPending
 }
 
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and
@@ -8799,7 +8786,6 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
 	ms.chasmRequestIDsAdded = false
-	ms.chasmSpeculativeTransitionPending = false
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})

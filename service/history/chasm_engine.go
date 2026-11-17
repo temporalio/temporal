@@ -541,7 +541,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		}
 	} else {
 		// The transition stays in the cached mutable state until the next normal transaction closes.
-		if err := mutableState.SetChasmSpeculativeTransitionPending(); err != nil {
+		if err := mutableState.ValidateChasmSpeculativeTransition(); err != nil {
 			return nil, err
 		}
 		if decision.NotifyPollers {

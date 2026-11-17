@@ -1749,21 +1749,6 @@ func (mr *MockMutableStateMockRecorder) ChasmSignalBacklinksEnabled() *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmSignalBacklinksEnabled", reflect.TypeOf((*MockMutableState)(nil).ChasmSignalBacklinksEnabled))
 }
 
-// ChasmSpeculativeTransitionFailoverVersion mocks base method.
-func (m *MockMutableState) ChasmSpeculativeTransitionFailoverVersion() (int64, bool) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ChasmSpeculativeTransitionFailoverVersion")
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
-}
-
-// ChasmSpeculativeTransitionFailoverVersion indicates an expected call of ChasmSpeculativeTransitionFailoverVersion.
-func (mr *MockMutableStateMockRecorder) ChasmSpeculativeTransitionFailoverVersion() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmSpeculativeTransitionFailoverVersion", reflect.TypeOf((*MockMutableState)(nil).ChasmSpeculativeTransitionFailoverVersion))
-}
-
 // ChasmTree mocks base method.
 func (m *MockMutableState) ChasmTree() ChasmTree {
 	m.ctrl.T.Helper()
@@ -3126,20 +3111,6 @@ func (mr *MockMutableStateMockRecorder) HasParentExecution() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasParentExecution", reflect.TypeOf((*MockMutableState)(nil).HasParentExecution))
 }
 
-// HasPendingChasmSpeculativeTransition mocks base method.
-func (m *MockMutableState) HasPendingChasmSpeculativeTransition() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasPendingChasmSpeculativeTransition")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// HasPendingChasmSpeculativeTransition indicates an expected call of HasPendingChasmSpeculativeTransition.
-func (mr *MockMutableStateMockRecorder) HasPendingChasmSpeculativeTransition() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingChasmSpeculativeTransition", reflect.TypeOf((*MockMutableState)(nil).HasPendingChasmSpeculativeTransition))
-}
-
 // HasPendingWorkflowTask mocks base method.
 func (m *MockMutableState) HasPendingWorkflowTask() bool {
 	m.ctrl.T.Helper()
@@ -3595,20 +3566,6 @@ func (mr *MockMutableStateMockRecorder) SetBaseWorkflow(baseRunID, baseRunLowest
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBaseWorkflow", reflect.TypeOf((*MockMutableState)(nil).SetBaseWorkflow), baseRunID, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion)
 }
 
-// SetChasmSpeculativeTransitionPending mocks base method.
-func (m *MockMutableState) SetChasmSpeculativeTransitionPending() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetChasmSpeculativeTransitionPending")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetChasmSpeculativeTransitionPending indicates an expected call of SetChasmSpeculativeTransitionPending.
-func (mr *MockMutableStateMockRecorder) SetChasmSpeculativeTransitionPending() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetChasmSpeculativeTransitionPending", reflect.TypeOf((*MockMutableState)(nil).SetChasmSpeculativeTransitionPending))
-}
-
 // SetChildrenInitializedPostResetPoint mocks base method.
 func (m *MockMutableState) SetChildrenInitializedPostResetPoint(children map[string]*persistence.ResetChildInfo) {
 	m.ctrl.T.Helper()
@@ -4034,6 +3991,20 @@ func (m *MockMutableState) ValidateCallbackAddition(inFlight []workflow1.Callbac
 func (mr *MockMutableStateMockRecorder) ValidateCallbackAddition(inFlight, addition any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCallbackAddition", reflect.TypeOf((*MockMutableState)(nil).ValidateCallbackAddition), inFlight, addition)
+}
+
+// ValidateChasmSpeculativeTransition mocks base method.
+func (m *MockMutableState) ValidateChasmSpeculativeTransition() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateChasmSpeculativeTransition")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateChasmSpeculativeTransition indicates an expected call of ValidateChasmSpeculativeTransition.
+func (mr *MockMutableStateMockRecorder) ValidateChasmSpeculativeTransition() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateChasmSpeculativeTransition", reflect.TypeOf((*MockMutableState)(nil).ValidateChasmSpeculativeTransition))
 }
 
 // VisitUpdates mocks base method.

@@ -8559,56 +8559,35 @@ func (s *mutableStateSuite) newMutableStateWithDirtyChasmTree() (*MutableStateIm
 	return mutableState, mockChasmTree
 }
 
-func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_GuardsPass() {
-	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
-	s.True(mutableState.IsDirty())
-
-	s.NoError(mutableState.SetChasmSpeculativeTransitionPending())
-	s.False(mutableState.IsDirty())
-	_, err := mutableState.StartTransaction(tests.GlobalNamespaceEntry)
-	s.NoError(err)
+func (s *mutableStateSuite) TestIsDirty_SpeculativeChasmTransition() {
+	for _, tc := range []struct {
+		name        string
+		speculative bool
+		expected    bool
+	}{
+		{name: "speculative changes are ignored", speculative: true, expected: false},
+		{name: "regular changes are dirty", speculative: false, expected: true},
+	} {
+		s.Run(tc.name, func() {
+			mutableState, mockChasmTree := s.newMutableStateWithDirtyChasmTree()
+			mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(0), tc.speculative).AnyTimes()
+			s.Require().Equal(tc.expected, mutableState.IsDirty())
+		})
+	}
 }
 
-func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_RecordsFailoverVersion() {
+func (s *mutableStateSuite) TestValidateChasmSpeculativeTransition() {
 	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
-	_, pending := mutableState.ChasmSpeculativeTransitionFailoverVersion()
-	s.False(pending)
-
-	s.NoError(mutableState.SetChasmSpeculativeTransitionPending())
-	version, pending := mutableState.ChasmSpeculativeTransitionFailoverVersion()
-	s.True(pending)
-	s.Equal(tests.GlobalNamespaceEntry.FailoverVersion(tests.WorkflowID), version)
+	s.NoError(mutableState.ValidateChasmSpeculativeTransition())
 }
 
-func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_RejectsNonChasmChanges() {
+func (s *mutableStateSuite) TestValidateChasmSpeculativeTransition_RejectsNonChasmChanges() {
 	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
 	mutableState.AddTasks(&tasks.ChasmTask{WorkflowKey: mutableState.GetWorkflowKey()})
 
-	err := mutableState.SetChasmSpeculativeTransitionPending()
+	err := mutableState.ValidateChasmSpeculativeTransition()
 	var internalErr *serviceerror.Internal
 	s.ErrorAs(err, &internalErr)
-	s.True(mutableState.IsDirty())
-}
-
-func (s *mutableStateSuite) TestSetChasmSpeculativeTransitionPending_FlushedOnClose() {
-	mutableState, mockChasmTree := s.newMutableStateWithDirtyChasmTree()
-	s.NoError(mutableState.SetChasmSpeculativeTransitionPending())
-
-	rootNode := &persistencespb.ChasmNode{Metadata: &persistencespb.ChasmNodeMetadata{}}
-	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), true).Return(chasm.NodesMutation{
-		UpdatedNodes: map[string]*persistencespb.ChasmNode{"": rootNode},
-	}, nil).Times(1)
-
-	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-	s.Contains(mutation.UpsertChasmNodes, "")
-
-	// The flag is cleared by the close, so a dirty tree counts as dirty again.
-	s.True(mutableState.IsDirty())
-	_, pending := mutableState.ChasmSpeculativeTransitionFailoverVersion()
-	s.False(pending)
 }
 
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {

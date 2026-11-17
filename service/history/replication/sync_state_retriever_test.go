@@ -272,7 +272,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 				},
 			},
 		})
-	mockChasmTree.EXPECT().IsDirty().Return(false)
+	mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(0), false)
 	mu.EXPECT().ChasmTree().Return(mockChasmTree).Times(2)
 
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
@@ -376,7 +376,7 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_WithEve
 				},
 			},
 		})
-	mockChasmTree.EXPECT().IsDirty().Return(false)
+	mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(0), false)
 	mu.EXPECT().ChasmTree().Return(mockChasmTree).Times(2)
 
 	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -464,7 +464,7 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_NoEvent
 			},
 		},
 	})
-	mockChasmTree.EXPECT().IsDirty().Return(false)
+	mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(0), false)
 	mu.EXPECT().ChasmTree().Return(mockChasmTree).Times(2)
 
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
@@ -677,7 +677,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_SpeculativeTransitionPend
 
 	// The cached mutable state holds a speculative request ID that isn't persisted.
 	cachedChasmTree := historyi.NewMockChasmTree(s.controller)
-	cachedChasmTree.EXPECT().IsDirty().Return(true).AnyTimes()
+	cachedChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(2), true).AnyTimes()
 	cachedChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
 	mu.EXPECT().ChasmTree().Return(cachedChasmTree).AnyTimes()
 	mu.EXPECT().HasBufferedEvents().Return(false)
@@ -1104,6 +1104,6 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents_RangeSpansFailover() {
 
 func (s *syncWorkflowStateSuite) expectNoSpeculativeTransition(mu *historyi.MockMutableState) {
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	chasmTree.EXPECT().IsDirty().Return(false)
+	chasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(0), false)
 	mu.EXPECT().ChasmTree().Return(chasmTree)
 }

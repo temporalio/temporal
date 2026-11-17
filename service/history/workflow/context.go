@@ -460,7 +460,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 	if c.MutableState != nil {
 		// Speculative CHASM changes from an earlier failover version were never replicated. Reload from
 		// the DB so they are not mixed with state written by another cluster.
-		version, pending := c.MutableState.ChasmSpeculativeTransitionFailoverVersion()
+		version, pending := c.MutableState.ChasmTree().SpeculativeTransitionFailoverVersion()
 		if pending && version != namespaceEntry.FailoverVersion(c.workflowKey.WorkflowID) {
 			c.Clear()
 		}

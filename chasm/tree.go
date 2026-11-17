@@ -179,6 +179,13 @@ type (
 		needsPointerResolution bool
 
 		totalTimeSkippedUpdatedInPassive bool
+
+		// speculativeTransitionPending is set when a speculative transition left changes in the tree that
+		// aren't persisted. The next active CloseTransaction persists them.
+		speculativeTransitionPending bool
+		// speculativeTransitionFailoverVersion is the namespace failover version of the pending
+		// speculative transition.
+		speculativeTransitionFailoverVersion int64
 	}
 
 	taskWithAttributes struct {
@@ -1806,6 +1813,12 @@ func (n *Node) AddTask(
 // active transaction creates or closes the execution; standby clusters receive it
 // through replication.
 func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutation, error) {
+	// Speculative changes are never replicated, so a passive transaction must not persist them.
+	// The tree is left unchanged.
+	if !isActive && n.speculativeTransitionPending {
+		return NodesMutation{}, serviceerror.NewUnavailable("passive transaction cannot persist a pending speculative CHASM transition")
+	}
+
 	defer n.cleanupTransaction()
 
 	if err := n.executeImmediatePureTasks(); err != nil {
@@ -1882,9 +1895,20 @@ func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
 
 	// Resolved pointers become regular pointers, so resolving again at CloseTransaction is a no-op.
 	if n.needsPointerResolution {
-		return n.resolveDeferredPointers()
+		if err := n.resolveDeferredPointers(); err != nil {
+			return err
+		}
 	}
+
+	n.speculativeTransitionPending = true
+	n.speculativeTransitionFailoverVersion = n.backend.GetCurrentVersion()
 	return nil
+}
+
+// SpeculativeTransitionFailoverVersion returns the namespace failover version of the pending speculative
+// transition. The bool is false when none is pending.
+func (n *Node) SpeculativeTransitionFailoverVersion() (int64, bool) {
+	return n.speculativeTransitionFailoverVersion, n.speculativeTransitionPending
 }
 
 // TransitionDecision describes the engine's actions for a transition.
@@ -2781,6 +2805,7 @@ func (n *Node) cleanupTransaction() {
 
 	n.needsPointerResolution = false
 	n.totalTimeSkippedUpdatedInPassive = false
+	n.speculativeTransitionPending = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {
