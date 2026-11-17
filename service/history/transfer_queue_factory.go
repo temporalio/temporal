@@ -110,7 +110,6 @@ func (f *transferQueueFactory) CreateQueue(
 	shardScheduler = queues.NewNamespaceStateGateScheduler(
 		shardScheduler,
 		f.NamespaceRegistry,
-		f.Config.DiscardTasksOfDeletedNamespaces,
 		queues.IsExemptFromNamespaceStateGate,
 		metricsHandler,
 	)

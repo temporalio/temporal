@@ -2,7 +2,6 @@ package queues
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/tasks"
@@ -11,28 +10,24 @@ import (
 type namespaceStateGateScheduler struct {
 	Scheduler
 
-	namespaceRegistry     namespace.Registry
-	gateDeletedNamespaces dynamicconfig.BoolPropertyFn
-	isExempt              func(tasks.Task) bool
-	metricsHandler        metrics.Handler
+	namespaceRegistry namespace.Registry
+	isExempt          func(tasks.Task) bool
+	metricsHandler    metrics.Handler
 }
 
-// NewNamespaceStateGateScheduler wraps a scheduler so tasks of soft-deleted namespaces are acked
-// without running, except those isExempt allows. gateDeletedNamespaces extends this to deleted
-// namespaces.
+// NewNamespaceStateGateScheduler wraps a scheduler so tasks of soft-deleted and deleted namespaces
+// are acked without running, except those isExempt allows.
 func NewNamespaceStateGateScheduler(
 	base Scheduler,
 	namespaceRegistry namespace.Registry,
-	gateDeletedNamespaces dynamicconfig.BoolPropertyFn,
 	isExempt func(tasks.Task) bool,
 	metricsHandler metrics.Handler,
 ) Scheduler {
 	return &namespaceStateGateScheduler{
-		Scheduler:             base,
-		namespaceRegistry:     namespaceRegistry,
-		gateDeletedNamespaces: gateDeletedNamespaces,
-		isExempt:              isExempt,
-		metricsHandler:        metricsHandler,
+		Scheduler:         base,
+		namespaceRegistry: namespaceRegistry,
+		isExempt:          isExempt,
+		metricsHandler:    metricsHandler,
 	}
 }
 
@@ -76,13 +71,7 @@ func (s *namespaceStateGateScheduler) discard(e Executable) bool {
 	if err != nil {
 		return false
 	}
-	switch ns.State() {
-	case enumspb.NAMESPACE_STATE_SOFT_DELETED:
-	case enumspb.NAMESPACE_STATE_DELETED:
-		if !s.gateDeletedNamespaces() {
-			return false
-		}
-	default:
+	if state := ns.State(); state != enumspb.NAMESPACE_STATE_SOFT_DELETED && state != enumspb.NAMESPACE_STATE_DELETED {
 		return false
 	}
 	if s.isExempt(e.GetTask()) {

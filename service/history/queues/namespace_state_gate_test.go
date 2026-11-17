@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -24,7 +23,6 @@ func TestNamespaceStateGateScheduler(t *testing.T) {
 		name        string
 		state       enumspb.NamespaceState
 		notFound    bool
-		gateDeleted bool
 		task        tasks.Task
 		wantDiscard bool
 	}{
@@ -35,8 +33,8 @@ func TestNamespaceStateGateScheduler(t *testing.T) {
 		{name: "soft-deleted retention", state: enumspb.NAMESPACE_STATE_SOFT_DELETED, task: &tasks.DeleteHistoryEventTask{}},
 		{name: "soft-deleted delete execution", state: enumspb.NAMESPACE_STATE_SOFT_DELETED, task: &tasks.DeleteExecutionTask{}},
 		{name: "soft-deleted close and delete", state: enumspb.NAMESPACE_STATE_SOFT_DELETED, task: &tasks.CloseExecutionTask{DeleteAfterClose: true}},
-		{name: "deleted, flag off", state: enumspb.NAMESPACE_STATE_DELETED, task: &tasks.UserTimerTask{}},
-		{name: "deleted, flag on", state: enumspb.NAMESPACE_STATE_DELETED, gateDeleted: true, task: &tasks.UserTimerTask{}, wantDiscard: true},
+		{name: "deleted", state: enumspb.NAMESPACE_STATE_DELETED, task: &tasks.UserTimerTask{}, wantDiscard: true},
+		{name: "deleted retention", state: enumspb.NAMESPACE_STATE_DELETED, task: &tasks.DeleteHistoryEventTask{}},
 	}
 	for _, tc := range testCases {
 		for _, trySubmit := range []bool{false, true} {
@@ -73,7 +71,6 @@ func TestNamespaceStateGateScheduler(t *testing.T) {
 				gate := NewNamespaceStateGateScheduler(
 					base,
 					registry,
-					dynamicconfig.GetBoolPropertyFn(tc.gateDeleted),
 					IsExemptFromNamespaceStateGate,
 					metricsHandler,
 				)

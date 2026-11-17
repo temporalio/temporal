@@ -2281,12 +2281,6 @@ through the shared TaskThrottleController. Both this flag and TaskThrottleContro
 		`TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
 i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling`,
 	)
-	DiscardTasksOfDeletedNamespaces = NewGlobalBoolSetting(
-		"history.discardTasksOfDeletedNamespaces",
-		false,
-		`DiscardTasksOfDeletedNamespaces makes history ack tasks of DELETED namespaces without running them,
-except retention and deletion tasks, as it always does for SOFT_DELETED namespaces.`,
-	)
 	TaskSchedulerRateLimiterStartupDelay = NewGlobalDurationSetting(
 		"history.taskSchedulerRateLimiterStartupDelay",
 		5*time.Second,

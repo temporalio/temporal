@@ -222,7 +222,6 @@ func (f *outboundQueueFactory) CreateQueue(
 	scheduler = queues.NewNamespaceStateGateScheduler(
 		scheduler,
 		f.NamespaceRegistry,
-		f.Config.DiscardTasksOfDeletedNamespaces,
 		queues.IsExemptFromNamespaceStateGate,
 		metricsHandler,
 	)
