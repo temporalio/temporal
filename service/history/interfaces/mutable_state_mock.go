@@ -3993,6 +3993,20 @@ func (mr *MockMutableStateMockRecorder) ValidateCallbackAddition(inFlight, addit
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCallbackAddition", reflect.TypeOf((*MockMutableState)(nil).ValidateCallbackAddition), inFlight, addition)
 }
 
+// ValidateChasmSpeculativeTransition mocks base method.
+func (m *MockMutableState) ValidateChasmSpeculativeTransition() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateChasmSpeculativeTransition")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateChasmSpeculativeTransition indicates an expected call of ValidateChasmSpeculativeTransition.
+func (mr *MockMutableStateMockRecorder) ValidateChasmSpeculativeTransition() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateChasmSpeculativeTransition", reflect.TypeOf((*MockMutableState)(nil).ValidateChasmSpeculativeTransition))
+}
+
 // VisitUpdates mocks base method.
 func (m *MockMutableState) VisitUpdates(visitor func(string, *persistence.UpdateInfo)) {
 	m.ctrl.T.Helper()
