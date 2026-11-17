@@ -380,6 +380,7 @@ func queryDirectlyThroughMatching(
 			TaskQueue:        msResp.GetStickyTaskQueue(),
 			VersionDirective: directive,
 			Priority:         priority,
+			SessionDirective: workflow.TaskSessionDirective(exclusiveWorker, msResp.GetStickyTaskQueue()),
 		}
 
 		// using a clean new context in case customer provide a context which has

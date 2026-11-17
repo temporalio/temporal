@@ -1,11 +1,13 @@
 package tests
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
@@ -14,13 +16,17 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 /*
@@ -530,4 +536,199 @@ func TestSingleSessionAcquisitionUsesNormalPolling(t *testing.T) {
 			require.Equal(t, tv.WorkflowID(), await.Rcv(t, acquired).GetWorkflowExecution().GetWorkflowId())
 		})
 	}
+}
+
+type singleSessionTaskHookEvent struct {
+	kind     enumspb.TaskQueueKind
+	taskType enumspb.TaskQueueType
+	details  hooks.TaskAddHookDetails
+}
+
+type singleSessionTaskHookFactory struct {
+	taskQueue string
+	events    chan<- singleSessionTaskHookEvent
+}
+
+func (f *singleSessionTaskHookFactory) Create(details *hooks.TaskHookFactoryCreateDetails) hooks.TaskHook {
+	// Ignore internal queues created by the test cluster so only this workflow contributes events.
+	if details.Partition.TaskQueue().Name() != f.taskQueue {
+		return nil
+	}
+	return &singleSessionTaskHook{
+		kind:     details.Partition.Kind(),
+		taskType: details.Partition.TaskType(),
+		events:   f.events,
+	}
+}
+
+type singleSessionTaskHook struct {
+	kind     enumspb.TaskQueueKind
+	taskType enumspb.TaskQueueType
+	events   chan<- singleSessionTaskHookEvent
+}
+
+func (h *singleSessionTaskHook) Start() {}
+func (h *singleSessionTaskHook) Stop()  {}
+
+func (h *singleSessionTaskHook) ProcessTaskAdd(ctx context.Context, event *hooks.TaskAddHookDetails) {
+	// Keep a snapshot because callbacks and assertions run on different goroutines.
+	details := *event
+	details.DeploymentVersion = common.CloneProto(event.DeploymentVersion)
+	select {
+	case h.events <- singleSessionTaskHookEvent{kind: h.kind, taskType: h.taskType, details: details}:
+	case <-ctx.Done():
+	}
+}
+
+// TestSingleSessionTaskAddHooks verifies session context reaches task-add hooks.
+// The first workflow task is unbound; acquiring it binds the workflow to sticky queue S. An opted-in activity,
+// a query sent while S has no poller, and the workflow task following the activity must then carry S in their hook callbacks.
+// The workflow is pinned to v1 while the queue's current version is v2, so every callback must report v1.
+func TestSingleSessionTaskAddHooks(t *testing.T) {
+	t.Parallel()
+	env := newVersioning3TestEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+	tv := env.Tv().WithBuildIDNumber(1)
+	current := tv.WithBuildIDNumber(2)
+
+	// Install the observer before this test's queue partitions load, and force spooling for a deterministic backlog outcome.
+	events := make(chan singleSessionTaskHookEvent, 16)
+	var factory hooks.TaskHookFactory = &singleSessionTaskHookFactory{taskQueue: tv.TaskQueue().GetName(), events: events}
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingTaskHookFactory, factory))
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, true))
+	client := env.FrontendClient()
+
+	// A different current version catches hooks that report the routing target instead of the task's pinned version.
+	_, err := env.GetTestCluster().MatchingClient().SyncDeploymentUserData(t.Context(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId: env.NamespaceID().String(), TaskQueue: tv.TaskQueue().GetName(),
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		DeploymentName: tv.DeploymentSeries(),
+		UpdateRoutingConfig: &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  current.ExternalDeploymentVersion(),
+			CurrentVersionChangedTime: timestamppb.Now(), RevisionNumber: 1,
+		},
+		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+			tv.BuildID():      {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+			current.BuildID(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+		},
+	})
+	require.NoError(t, err)
+
+	// This initial task is added before session acquisition, so its hook must have no session options.
+	_, err = client.StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+		WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(), VersioningOverride: tv.VersioningOverridePinned(),
+		WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(30 * time.Second),
+	})
+	require.NoError(t, err)
+
+	// Polling S forwards acquisition to the normal queue; accepting the first task establishes the binding to S.
+	session := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+	}}
+	poller := taskpoller.New(t, client, env.Namespace().String())
+	workflowPoller := poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+
+	// The activity opts into the workflow session, letting History resolve its logical queue to S.
+	_, err = workflowPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED, DeploymentOptions: tv.WorkerDeploymentOptions(true),
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId: tv.ActivityID(), ActivityType: tv.ActivityType(), TaskQueue: tv.TaskQueue(),
+					StartToCloseTimeout: durationpb.New(10 * time.Second),
+					SessionOptions:      &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
+				}},
+			}},
+		}, nil
+	}, taskpoller.WithContext(t.Context()))
+	require.NoError(t, err)
+
+	// Unloading S makes its worker look absent, so the query reaches the no-poller hook, which must carry S to wake it.
+	_, err = env.GetTestCluster().MatchingClient().ForceUnloadTaskQueuePartition(t.Context(), &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: env.NamespaceID().String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: tv.StickyTaskQueue().GetName()},
+		},
+	})
+	require.NoError(t, err)
+	queryErr := make(chan error, 1)
+	go func() {
+		_, err := client.QueryWorkflow(t.Context(), &workflowservice.QueryWorkflowRequest{
+			Namespace: env.Namespace().String(), Execution: tv.WorkflowExecution(), Query: tv.Query(),
+		})
+		queryErr <- err
+	}()
+	// Poll S only after the query's hook fires; an earlier poller would suppress the no-poller hook.
+	// No workflow task is pending, so the first sticky workflow callback belongs to the query.
+	var received []singleSessionTaskHookEvent
+	for {
+		event := await.Rcv(t, events)
+		received = append(received, event)
+		if event.kind == enumspb.TASK_QUEUE_KIND_STICKY && event.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+			break
+		}
+	}
+	_, err = workflowPoller.HandleLegacyQuery(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
+		return &workflowservice.RespondQueryTaskCompletedRequest{CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED}, nil
+	}, taskpoller.WithContext(t.Context()))
+	require.NoError(t, err)
+	require.NoError(t, await.Rcv(t, queryErr))
+
+	// Completing the activity on S schedules another workflow task on the same bound sticky queue.
+	_, err = poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	}).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		require.Equal(t, tv.ActivityID(), task.GetActivityId())
+		return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
+	}, taskpoller.WithContext(t.Context()))
+	require.NoError(t, err)
+	_, err = workflowPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED, DeploymentOptions: tv.WorkerDeploymentOptions(true),
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+			}},
+		}, nil
+	}, taskpoller.WithContext(t.Context()))
+	require.NoError(t, err)
+
+	// Match the four callbacks (first WFT, activity, query, next WFT) as a multiset because independent partitions
+	// may deliver them in any order. Only the unbound first workflow task, on the normal queue, lacks S.
+	for len(received) < 4 {
+		received = append(received, await.Rcv(t, events))
+	}
+	type hookKey struct {
+		kind     enumspb.TaskQueueKind
+		taskType enumspb.TaskQueueType
+	}
+	var keys []hookKey
+	for _, event := range received {
+		expectedOptions := hooks.SingleSessionOptions{WorkerStableIdentity: tv.StickyTaskQueue().GetName()}
+		if event.kind == enumspb.TASK_QUEUE_KIND_NORMAL {
+			expectedOptions = hooks.SingleSessionOptions{}
+		}
+		require.Equal(t, expectedOptions, event.details.SingleSessionOptions)
+		protorequire.ProtoEqual(t, tv.ExternalDeploymentVersion(), event.details.DeploymentVersion)
+		require.Equal(t, hooks.SyncMatchOutcomeNotMatched, event.details.SyncMatchOutcome)
+		require.False(t, event.details.IsSyncMatch)
+		keys = append(keys, hookKey{kind: event.kind, taskType: event.taskType})
+	}
+	require.ElementsMatch(t, []hookKey{
+		{kind: enumspb.TASK_QUEUE_KIND_NORMAL, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		{kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		{kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		{kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+	}, keys)
 }

@@ -902,6 +902,7 @@ func (c *clientImpl) doQueryWorkflow(
 			VersionDirective: request.VersionDirective,
 			ForwardInfo:      request.ForwardInfo,
 			Priority:         request.Priority,
+			SessionDirective: request.SessionDirective,
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)

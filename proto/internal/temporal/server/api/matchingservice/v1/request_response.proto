@@ -254,6 +254,10 @@ message QueryWorkflowRequest {
   temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
   temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
   temporal.api.common.v1.Priority priority = 7;
+  // Session placement associated with this query, if any. History sets it only for queries to a bound
+  // single-session sticky queue, so Matching can report the session and its pinned version to task-add hooks.
+  // Unset means no session (or an older History), and hooks see no session.
+  temporal.server.api.taskqueue.v1.TaskSessionDirective session_directive = 8;
 }
 
 message QueryWorkflowResponse {

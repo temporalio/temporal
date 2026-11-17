@@ -5,7 +5,6 @@ import (
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	sessionpb "go.temporal.io/api/session/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 )
@@ -42,8 +41,14 @@ type (
 		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 		IsSyncMatch       bool // Deprecated: use SyncMatchOutcome instead.
 		SyncMatchOutcome  SyncMatchOutcome
-		// Non-nil only when the task belongs to an already-bound single session.
-		SingleSessionOptions *sessionpb.SingleSessionOptions
+		// SingleSessionOptions.WorkerStableIdentity is only set when the task belongs to an already-bound single session.
+		SingleSessionOptions SingleSessionOptions
+	}
+
+	// SingleSessionOptions describes the single session a task is bound to, as seen from the task.
+	SingleSessionOptions struct {
+		// Stable identity of the session's worker, so hooks can wake that same worker.
+		WorkerStableIdentity string
 	}
 
 	TaskHookFactory interface {
