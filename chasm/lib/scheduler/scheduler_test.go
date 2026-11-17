@@ -200,6 +200,16 @@ func TestIsExecutionSkippable(t *testing.T) {
 		require.False(t, sched.IsExecutionSkippable(ctx))
 	})
 
+	t.Run("generator processed update with pending jittered action", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		now := ctx.Now(sched)
+		generator := sched.Generator.Get(ctx)
+		generator.LastProcessedTime = timestamppb.New(now.Add(-time.Minute))
+		generator.LastProcessedTaskTime = timestamppb.New(now)
+		sched.Info.UpdateTime = timestamppb.New(now)
+		require.True(t, sched.IsExecutionSkippable(ctx))
+	})
+
 	t.Run("idle", func(t *testing.T) {
 		sched, ctx, _ := setupSchedulerForTest(t)
 		markGeneratorReady(sched, ctx)

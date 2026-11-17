@@ -9,7 +9,10 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -169,4 +172,101 @@ func TestGeneratorClockRollbackAndUpdatePreservePendingAction(t *testing.T) {
 	expectedFire := base.Add(30 * time.Second)
 	require.Equal(t, expectedFire, invoker.BufferedStarts[0].NominalTime.AsTime())
 	require.Equal(t, expectedFire, invoker.BufferedStarts[0].ActualTime.AsTime())
+}
+
+func TestGeneratorMutationDuringJitterPreservesPendingAction(t *testing.T) {
+	t.Parallel()
+	created := time.Date(2026, 10, 26, 21, 59, 59, 0, time.UTC)
+	mutateAt := time.Date(2026, 10, 26, 22, 4, 0, 0, time.UTC)
+	// Nominal 22:00:00 is jittered to 22:08:00.459, after the mutation.
+	fire := time.Date(2026, 10, 26, 22, 8, 0, 459000000, time.UTC)
+
+	update := func(edit func(*schedulepb.Schedule)) func(*scheduler.Scheduler, chasm.MutableContext) error {
+		return func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
+			schedule := common.CloneProto(s.Schedule)
+			edit(schedule)
+			_, err := s.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+				FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: schedule},
+			})
+			return err
+		}
+	}
+	patch := func(p *schedulepb.SchedulePatch) func(*scheduler.Scheduler, chasm.MutableContext) error {
+		return func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
+			_, err := s.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+				FrontendRequest: &workflowservice.PatchScheduleRequest{Patch: p},
+			})
+			return err
+		}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*scheduler.Scheduler, chasm.MutableContext) error
+		// Automatic actual times expected after firing through checkUntil.
+		expected   []time.Time
+		checkUntil time.Time
+	}{
+		{
+			name:       "unchanged update",
+			mutate:     update(func(*schedulepb.Schedule) {}),
+			expected:   []time.Time{fire},
+			checkUntil: fire,
+		},
+		{
+			name:       "empty patch",
+			mutate:     patch(&schedulepb.SchedulePatch{}),
+			expected:   []time.Time{fire},
+			checkUntil: fire,
+		},
+		{
+			name:       "trigger patch",
+			mutate:     patch(&schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{}}),
+			expected:   []time.Time{fire},
+			checkUntil: fire,
+		},
+		{
+			// The new spec's 22:01 action fires before the update and must be excluded.
+			name: "changed spec excludes pre-update fire",
+			mutate: update(func(s *schedulepb.Schedule) {
+				s.Spec.Interval[0].Phase = durationpb.New(time.Minute)
+				s.Spec.Jitter = nil
+			}),
+			expected:   []time.Time{time.Date(2026, 10, 26, 22, 16, 0, 0, time.UTC)},
+			checkUntil: time.Date(2026, 10, 26, 22, 16, 0, 0, time.UTC),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ts := clock.NewEventTimeSource()
+			ts.Update(created)
+			schedule := defaultSchedule()
+			schedule.Spec.Interval[0].Interval = durationpb.New(15 * time.Minute)
+			schedule.Spec.Jitter = durationpb.New(10 * time.Minute)
+			env := newSchedulerTestEngine(t, schedule, withEngineTimeSource(ts))
+
+			ts.Update(mutateAt)
+			require.NoError(t, env.updateScheduler(tc.mutate))
+			_, err := env.engine.FirePureTasks(env.rootRef, mutateAt)
+			require.NoError(t, err)
+
+			// Deliver every due timer twice to cover duplicate delivery.
+			for _, now := range []time.Time{fire, tc.checkUntil, tc.checkUntil} {
+				ts.Update(now)
+				_, err := env.engine.FirePureTasks(env.rootRef, now)
+				require.NoError(t, err)
+			}
+
+			require.NoError(t, env.readScheduler(func(s *scheduler.Scheduler, ctx chasm.Context) error {
+				var automatic []time.Time
+				for _, start := range s.Invoker.Get(ctx).BufferedStarts {
+					if !start.Manual {
+						automatic = append(automatic, start.ActualTime.AsTime())
+					}
+				}
+				require.Equal(t, tc.expected, automatic)
+				return nil
+			}))
+		})
+	}
 }
