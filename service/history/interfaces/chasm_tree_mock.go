@@ -300,6 +300,21 @@ func (mr *MockChasmTreeMockRecorder) Snapshot(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Snapshot", reflect.TypeOf((*MockChasmTree)(nil).Snapshot), arg0)
 }
 
+// SpeculativeTransitionFailoverVersion mocks base method.
+func (m *MockChasmTree) SpeculativeTransitionFailoverVersion() (int64, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SpeculativeTransitionFailoverVersion")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// SpeculativeTransitionFailoverVersion indicates an expected call of SpeculativeTransitionFailoverVersion.
+func (mr *MockChasmTreeMockRecorder) SpeculativeTransitionFailoverVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SpeculativeTransitionFailoverVersion", reflect.TypeOf((*MockChasmTree)(nil).SpeculativeTransitionFailoverVersion))
+}
+
 // Terminate mocks base method.
 func (m *MockChasmTree) Terminate(arg0 chasm.TerminateComponentRequest, arg1 metrics.ReasonString) error {
 	m.ctrl.T.Helper()
