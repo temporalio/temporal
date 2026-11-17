@@ -195,7 +195,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 	mutableState := historyi.NewMockMutableState(s.controller)
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
-	workflowEvents := &persistence.WorkflowEvents{}
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}},
+	}
 
 	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
 	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
@@ -278,7 +280,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	mutableState := historyi.NewMockMutableState(s.controller)
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
-	workflowEvents := &persistence.WorkflowEvents{}
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}},
+	}
 	historySize := rand.Int63()
 
 	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
@@ -363,7 +367,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetE
 	mutableState := historyi.NewMockMutableState(s.controller)
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
-	workflowEvents := &persistence.WorkflowEvents{}
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}},
+	}
 	historySize := rand.Int63()
 
 	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
@@ -448,7 +454,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_NoWork
 	mutableState := historyi.NewMockMutableState(s.controller)
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
-	workflowEvents := &persistence.WorkflowEvents{}
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}},
+	}
 
 	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
 	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
@@ -489,6 +497,63 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_NoWork
 	s.True(releaseCalled)
 }
 
+func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_NothingToReapply() {
+	// Both clusters close out the in-flight workflow task on failover, so the losing branch can
+	// hold only workflow task events. Resetting would reopen the closed workflow for nothing.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	historySize := rand.Int63()
+
+	releaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
+	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
+
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventId: 5, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}},
+	}
+
+	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion(workflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: runID,
+	}).AnyTimes()
+	mutableState.EXPECT().AddHistorySize(historySize)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
+
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, historyi.TransactionPolicyPassive, (*historyi.TransactionPolicy)(nil),
+	).Return(nil)
+
+	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
+	s.NoError(err)
+	s.True(releaseCalled)
+}
+
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_PendingWorkflowTask() {
 	// A closed current workflow that never completed a workflow task but still has a real,
 	// pending (scheduled, never started) workflow task is anchored at that scheduled task, so
@@ -514,7 +579,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Pendin
 	mutableState := historyi.NewMockMutableState(s.controller)
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
-	workflowEvents := &persistence.WorkflowEvents{}
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}},
+	}
 
 	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
 	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
@@ -610,7 +677,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Starte
 	mutableState := historyi.NewMockMutableState(s.controller)
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
-	workflowEvents := &persistence.WorkflowEvents{}
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}},
+	}
 
 	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
 	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
@@ -703,7 +772,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Transi
 	mutableState := historyi.NewMockMutableState(s.controller)
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
-	workflowEvents := &persistence.WorkflowEvents{}
+	workflowEvents := &persistence.WorkflowEvents{
+		Events: []*historypb.HistoryEvent{{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}},
+	}
 
 	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
 	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()

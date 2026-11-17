@@ -1,6 +1,7 @@
 package callbacks
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"reflect"
@@ -53,6 +54,7 @@ func newValidatorConfig() ValidatorConfig {
 	}
 	return ValidatorConfig{
 		MaxCallbacksPerExecution:         func(string) int { return 10 },
+		TotalCallbacksMaxSize:            func(string) int { return 2 * 1024 * 1024 },
 		MaxIDLengthLimit:                 func() int { return 10 },
 		URLMaxLength:                     func(string) int { return 1000 },
 		HeaderMaxSize:                    func(string) int { return 4096 },
@@ -452,4 +454,109 @@ func TestValidateInternalCallbacks(t *testing.T) {
 		cb.GetNexus().Url = nexus.SystemCallbackURL
 		require.NoError(t, v.Validate(context.Background(), namespaceName, []*commonpb.Callback{cb}, opts))
 	})
+}
+
+func TestValidateAdditions(t *testing.T) {
+	// A single nexus callback, used as the unit for the size cases below.
+	cbSize := newNexusCallback().Size()
+
+	testCases := []struct {
+		name     string
+		maxCount int
+		maxSize  int
+		existing CurrentCallbacksInfo
+		adding   int
+		wantErr  string
+	}{
+		// Tests for the max number of callbacks.
+		{
+			name:     "under count",
+			maxCount: 10,
+			existing: CurrentCallbacksInfo{Count: 3},
+			adding:   2,
+		},
+		{
+			name:     "exactly at count",
+			maxCount: 5,
+			existing: CurrentCallbacksInfo{Count: 3},
+			adding:   2,
+		},
+		{
+			name:     "over count",
+			maxCount: 4,
+			existing: CurrentCallbacksInfo{Count: 3},
+			adding:   2,
+			wantErr:  "cannot attach more than 4 callbacks to an execution (3 callbacks already attached)",
+		},
+		{
+			name:     "already over count, adding none",
+			maxCount: 2,
+			existing: CurrentCallbacksInfo{Count: 5},
+			adding:   0,
+			wantErr:  "cannot attach more than 2 callbacks to an execution (5 callbacks already attached)",
+		},
+
+		// Tests for the aggregate size of all attached callbacks.
+		{
+			name:     "under size",
+			maxCount: 10,
+			maxSize:  cbSize * 10,
+			existing: CurrentCallbacksInfo{Count: 1, TotalSize: cbSize},
+			adding:   2,
+		},
+		{
+			name:     "exactly at size",
+			maxCount: 10,
+			maxSize:  cbSize * 3,
+			existing: CurrentCallbacksInfo{Count: 1, TotalSize: cbSize},
+			adding:   2,
+		},
+		{
+			name:     "over size",
+			maxCount: 10,
+			maxSize:  3 * cbSize,
+			existing: CurrentCallbacksInfo{Count: 2, TotalSize: 2 * cbSize},
+			adding:   2,
+			wantErr: fmt.Sprintf(
+				"cannot attach more than %d bytes of callbacks to an execution "+
+					"(%d bytes already attached, %d more requested)",
+				3*cbSize, 2*cbSize, 2*cbSize),
+		},
+		{
+			// Count is checked before size, so a request breaching both reports the count.
+			name:     "count takes precedence over size",
+			maxCount: 1,
+			maxSize:  1,
+			existing: CurrentCallbacksInfo{Count: 1, TotalSize: 100},
+			adding:   1,
+			wantErr:  "cannot attach more than 1 callbacks to an execution (1 callbacks already attached)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := newValidatorConfig()
+			cfg.MaxCallbacksPerExecution = func(string) int { return tc.maxCount }
+			cfg.TotalCallbacksMaxSize = func(string) int {
+				return cmp.Or(tc.maxSize, 1024) // Default to 1KiB if not specified
+			}
+			v := mustNewValidator(t, cfg)
+
+			newCBs := make([]*commonpb.Callback, tc.adding)
+			for i := range newCBs {
+				newCBs[i] = newNexusCallback()
+			}
+
+			err := v.ValidateAdditions("ns", newCBs, tc.existing)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			// FailedPrecondition, not InvalidArgument: the request may be well-formed and
+			// fail only because of what the execution already holds.
+			var failedPreconditionErr *serviceerror.FailedPrecondition
+			require.ErrorAs(t, err, &failedPreconditionErr)
+			require.EqualError(t, err, tc.wantErr)
+		})
+	}
 }

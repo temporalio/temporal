@@ -37,7 +37,6 @@ func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus
 type (
 	eagerStartEvent struct {
 		requestID string
-		identity  string
 	}
 
 	rescheduleEvent struct {
@@ -421,7 +420,6 @@ func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartE
 		a.FirstAttemptStartedTime = attempt.GetStartedTime()
 	}
 	attempt.StartRequestId = event.requestID
-	attempt.LastWorkerIdentity = event.identity
 	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
 	// TODO: Populate LastDeploymentVersion when standalone eager start supports worker versioning.
@@ -472,6 +470,13 @@ func (a *Activity) applyRescheduled(ctx chasm.MutableContext, event rescheduleEv
 
 func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 	attempt := a.LastAttempt.Get(ctx)
+
+	// Store the ComponentRef that matching used to build the poll token. This is
+	// the ref from the dispatch task data, which matching also embeds in the task
+	// token sent to the worker. Using this ref (rather than ctx.Ref) guarantees
+	// the cancel command token matches the poll token.
+	attempt.ComponentRef = request.GetComponentRef()
+
 	attempt.StartedTime = timestamppb.New(ctx.Now(a))
 	attempt.StartedStamp = request.GetStamp()
 	// Record the first-ever worker pickup time once and never update on retries or resets.
@@ -479,9 +484,9 @@ func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservic
 		a.FirstAttemptStartedTime = attempt.GetStartedTime()
 	}
 	attempt.StartRequestId = request.GetRequestId()
-	attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
 	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
+	attempt.WorkerControlTaskQueue = request.GetPollRequest().GetWorkerControlTaskQueue()
 	if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
 		attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
 			BuildId:        versionDirective.GetBuildId(),
@@ -527,7 +532,6 @@ func (a *Activity) applyCompleted(ctx chasm.MutableContext, event completeEvent)
 			}
 		}
 		attempt.CompleteTime = timestamppb.New(ctx.Now(a))
-		attempt.LastWorkerIdentity = req.GetIdentity()
 		outcome := a.Outcome.Get(ctx)
 		outcome.Variant = &activitypb.ActivityOutcome_Successful_{
 			Successful: &activitypb.ActivityOutcome_Successful{
@@ -548,9 +552,6 @@ func (a *Activity) applyFailed(ctx chasm.MutableContext, event failedEvent) erro
 	return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 		req := event.req.GetFailedRequest()
 		a.Outcome.Get(ctx).RetryState = event.retryState
-
-		attempt := a.LastAttempt.Get(ctx)
-		attempt.LastWorkerIdentity = req.GetIdentity()
 
 		// A worker may respond failed without a Failure. Synthesize a generic terminal failure so
 		// the closed activity still exposes a consumable outcome; otherwise PollActivityExecution

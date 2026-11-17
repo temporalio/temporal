@@ -49,6 +49,13 @@ func (c *retryableClient) Route(p tqid.Partition) (string, error) {
 	return rc.Route(p)
 }
 
+func (c *retryableClient) NextRouteChange(p tqid.Partition) time.Time {
+	if rc, ok := c.client.(RouteChangeClient); ok {
+		return rc.NextRouteChange(p)
+	}
+	return time.Time{}
+}
+
 func (c *retryableClient) GrantEagerDispatch(
 	ctx context.Context,
 	request *matchingservice.GrantEagerDispatchRequest,

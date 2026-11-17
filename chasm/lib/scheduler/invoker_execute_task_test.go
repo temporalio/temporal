@@ -480,6 +480,51 @@ func TestExecuteTask_UsesBufferedOverlapPolicy(t *testing.T) {
 	})
 }
 
+// Schedules that persisted an empty success payload before the completion fix
+// must not forward it; codecs reject payloads without encoding metadata.
+func TestExecuteTask_LastCompletionResultSkipsEmptyPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		success      *commonpb.Payload
+		wantPayloads int
+	}{
+		{name: "empty payload", success: &commonpb.Payload{}, wantPayloads: 0},
+		{name: "nil payload", success: nil, wantPayloads: 0},
+		{name: "real payload", success: &commonpb.Payload{Data: []byte("previous-result")}, wantPayloads: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newInvokerExecuteTestEnv(t)
+			env.Scheduler.LastCompletionResult = chasm.NewDataField(env.MutableContext(), &schedulerpb.LastCompletionResult{
+				Success: tc.success,
+				Failure: &failurepb.Failure{Message: "previous-failure"},
+			})
+			startTime := timestamppb.New(env.TimeSource.Now())
+
+			env.mockFrontendClient.EXPECT().
+				StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+					if tc.wantPayloads == 0 {
+						require.Nil(t, req.GetLastCompletionResult())
+					}
+					require.Len(t, req.GetLastCompletionResult().GetPayloads(), tc.wantPayloads)
+					require.Equal(t, "previous-failure", req.GetContinuedFailure().GetMessage())
+					return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+				})
+
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+					RequestId: "request-id", WorkflowId: "workflow-id", Attempt: 1,
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+				}},
+				ExpectedBufferedStarts:   1,
+				ExpectedRunningWorkflows: 1,
+				ExpectedActionCount:      1,
+			})
+		})
+	}
+}
+
 func TestExecuteTask_PropagatesScheduleTimeSkipping(t *testing.T) {
 	tests := []struct {
 		name         string

@@ -209,6 +209,7 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 		}
 
 		attemptCount := 0
+		sourceTaskID := task.GetSourceTaskId()
 		policy := p.retryPolicyForTask(task)
 		err := backoff.ThrottleRetry(func() error {
 			attemptCount++
@@ -217,7 +218,7 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 				attemptCtx = wideevents.SetNamespaceReplicationTaskContext(attemptCtx, wideevents.NamespaceReplicationTaskContext{
 					SourceCluster: p.sourceCluster,
 					TargetCluster: p.currentCluster,
-					SourceTaskID:  task.GetSourceTaskId(),
+					SourceTaskID:  &sourceTaskID,
 					AttemptCount:  attemptCount,
 					EventData:     eventData,
 				})
@@ -376,7 +377,7 @@ func (p *replicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
 			p.logger.Warn(
 				"Task queue user data replication task skipped because namespace is local",
 				tag.WorkflowNamespaceID(attrs.GetNamespaceId()),
-				tag.WorkflowTaskQueueName(attrs.GetTaskQueueName()),
+				tag.TaskQueueName(attrs.GetTaskQueueName()),
 				tag.SourceCluster(p.sourceCluster),
 			)
 			recordTaskQueueUserDataOutcome(

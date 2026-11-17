@@ -17,6 +17,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -28,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -35,8 +37,6 @@ import (
 )
 
 const (
-	PersistenceName = "elasticsearch"
-
 	delimiter = "~"
 
 	// paginationDatetimeFormat is a copy from time.RFC3339Nano, but always writes
@@ -63,6 +63,9 @@ type (
 
 	visibilityPageToken struct {
 		SearchAfter []any
+		// QueryTime is the reference time used to resolve NOW() in the query. It is set on the
+		// first page so that all pages of the same query use the same time.
+		QueryTime *time.Time
 	}
 
 	esQueryParams struct {
@@ -128,8 +131,8 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	cfg *client.Config,
-	processorConfig *ProcessorConfig,
+	cfg *esconfig.Config,
+	processorConfig *esconfig.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	namespaceRegistry namespace.Registry,
@@ -176,7 +179,7 @@ func (s *VisibilityStore) Close() {
 }
 
 func (s *VisibilityStore) GetName() string {
-	return PersistenceName
+	return esconfig.PersistenceName
 }
 
 func (s *VisibilityStore) GetIndexName() string {
@@ -404,7 +407,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil, p.QueryTime)
 }
 
 func (s *VisibilityStore) ListChasmExecutions(
@@ -449,7 +452,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.PageSize), chasmMapper)
+	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.PageSize), chasmMapper, p.QueryTime)
 }
 
 func (s *VisibilityStore) CountChasmExecutions(
@@ -638,15 +641,26 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	params *searchParametersInternal,
 	queryConverter *query.QueryConverter[elastic.Query],
 ) (*client.SearchParameters, error) {
+	pageToken, err := s.deserializePageToken(params.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	queryTime := time.Now().UTC()
+	if pageToken != nil && pageToken.QueryTime != nil {
+		queryTime = pageToken.QueryTime.UTC()
+	}
+	queryConverter.WithQueryTime(queryTime)
+
 	queryParams, err := s.convertQuery(params.NamespaceID, queryConverter, params.Query)
 	if err != nil {
 		return nil, err
 	}
 
 	searchParams := &client.SearchParameters{
-		Index:    s.index,
-		PageSize: params.PageSize,
-		Query:    queryParams.Query,
+		Index:     s.index,
+		PageSize:  params.PageSize,
+		Query:     queryParams.Query,
+		QueryTime: queryTime,
 	}
 
 	if len(queryParams.GroupBy) > 0 {
@@ -673,10 +687,6 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 		return nil, err
 	}
 
-	pageToken, err := s.deserializePageToken(params.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
 	err = s.processPageToken(searchParams, pageToken, params.NamespaceName)
 	if err != nil {
 		return nil, err
@@ -854,6 +864,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	searchResult *elastic.SearchResult,
 	pageSize int,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	queryTime time.Time,
 ) (*store.InternalListExecutionsResponse, error) {
 	if searchResult.Hits == nil || len(searchResult.Hits.Hits) == 0 {
 		return &store.InternalListExecutionsResponse{}, nil
@@ -880,6 +891,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter: lastHitSort,
+			QueryTime:   &queryTime,
 		})
 		if err != nil {
 			return nil, err
@@ -1535,19 +1547,20 @@ func (s *VisibilityStore) AddSearchAttributes(
 // AdminListExecutions implements [store.AdminVisibilityStore].
 func (s *VisibilityStore) AdminListExecutions(
 	ctx context.Context,
-	request *manager.AdminListExecutionsRequest,
+	request *adminservice.ListExecutionsRequest,
 ) (*store.InternalListExecutionsResponse, error) {
+	nsName := namespace.Name(request.GetNamespace())
 	namespaceID := namespace.EmptyID
-	if request.Namespace != namespace.EmptyName {
+	if nsName != namespace.EmptyName {
 		var err error
-		namespaceID, err = s.namespaceRegistry.GetNamespaceID(request.Namespace)
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(nsName)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	queryConverter, err := s.newQueryConverter(
-		request.Namespace,
+		nsName,
 		nil, // chasmMapper
 		chasm.UnspecifiedArchetypeID,
 	)
@@ -1558,11 +1571,11 @@ func (s *VisibilityStore) AdminListExecutions(
 
 	p, err := s.buildSearchParametersInternal(
 		&searchParametersInternal{
-			NamespaceName: request.Namespace,
+			NamespaceName: nsName,
 			NamespaceID:   namespaceID,
-			Query:         request.Query,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
+			Query:         request.GetQuery(),
+			PageSize:      int(request.GetPageSize()),
+			NextPageToken: request.GetNextPageToken(),
 		},
 		queryConverter,
 	)
@@ -1579,25 +1592,26 @@ func (s *VisibilityStore) AdminListExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.GetPageSize()), nil, p.QueryTime)
 }
 
 // AdminCountExecutions implements [store.AdminVisibilityStore].
 func (s *VisibilityStore) AdminCountExecutions(
 	ctx context.Context,
-	request *manager.AdminCountExecutionsRequest,
+	request *adminservice.CountExecutionsRequest,
 ) (*store.InternalCountExecutionsResponse, error) {
+	nsName := namespace.Name(request.GetNamespace())
 	namespaceID := namespace.EmptyID
-	if request.Namespace != namespace.EmptyName {
+	if nsName != namespace.EmptyName {
 		var err error
-		namespaceID, err = s.namespaceRegistry.GetNamespaceID(request.Namespace)
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(nsName)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	queryConverter, err := s.newQueryConverter(
-		request.Namespace,
+		nsName,
 		nil, // chasmMapper
 		chasm.UnspecifiedArchetypeID,
 	)
@@ -1606,7 +1620,7 @@ func (s *VisibilityStore) AdminCountExecutions(
 	}
 	queryConverter.WithDisableDefaultNamespaceDivision()
 
-	queryParams, err := s.convertQuery(namespaceID, queryConverter, request.Query)
+	queryParams, err := s.convertQuery(namespaceID, queryConverter, request.GetQuery())
 	if err != nil {
 		return nil, err
 	}

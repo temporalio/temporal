@@ -584,7 +584,7 @@ func convertLastCompletionCHASMToLegacy(
 	}
 
 	var payloads *commonpb.Payloads
-	if result.Success != nil {
+	if !schedulerinternal.IsEmptyPayload(result.Success) {
 		payloads = &commonpb.Payloads{
 			Payloads: []*commonpb.Payload{common.CloneProto(result.Success)},
 		}

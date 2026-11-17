@@ -4,9 +4,12 @@ package temporal.server.chasm.lib.namespacereplication.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpb";
 
-// ApplyLocalTask is dispatched once per component, gates peer fan-out.
-// Validate checks the component is still in the expected state.
-message ApplyLocalTask {}
+// ApplyLocalTask applies or reconciles the local mutation and gates peer fan-out.
+// Validate rejects stale or duplicate retries using attempt.
+message ApplyLocalTask {
+  // The current retry generation. It must match LocalApplyStatus.attempt_count.
+  int32 attempt = 1;
+}
 
 // ApplyPeerTask is dispatched once per peer cell after ApplyLocalTask completes.
 // One task instance per peer; Validate uses TargetCell to match the right
