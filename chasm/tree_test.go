@@ -5725,7 +5725,7 @@ func (s *nodeSuite) TestCloseTransaction_EphemeralComponent() {
 	s.assertNoSubComponentsPaths(root.Snapshot(nil).Nodes)
 	childNode, ok := root.findNode([]string{"SubComponents", "ephemeral", "SubComponent11"})
 	s.True(ok)
-	s.True(childNode.isEphemeral())
+	s.True(childNode.ephemeral)
 
 	// Mutating the ephemeral item and setting request links on it doesn't persist it either. Adding a durable item
 	// persists the map along with the durable item.
@@ -5848,7 +5848,7 @@ func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_ReplacesDurable() {
 	s.NotContains(root.Snapshot(nil).Nodes, "SubComponents/k")
 	node, ok := root.findNode([]string{"SubComponents", "k"})
 	s.True(ok)
-	s.True(node.isEphemeral())
+	s.True(node.ephemeral)
 	s.Empty(node.children)
 }
 
@@ -5914,6 +5914,58 @@ func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RejectsTasks() {
 	_, err = root.CloseTransaction(context.Background(), true)
 	var internalErr *serviceerror.Internal
 	s.ErrorAs(err, &internalErr)
+}
+
+func (s *nodeSuite) TestApplyMutation_ReplacesEphemeralNode() {
+	target := s.testComponentTree()
+	mutation, err := target.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	persistedNodes := common.CloneProtoMap(mutation.UpdatedNodes)
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), target)
+	c, err := target.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"k": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "ephemeral"},
+			SubComponent11:    NewComponentField(ctx, &TestSubComponent11{SubComponent11Data: &protoMessageType{}}),
+		}, ComponentFieldEphemeral()),
+		"other": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "ephemeral-other"},
+		}, ComponentFieldEphemeral()),
+	}
+	_, err = target.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	// The source cluster doesn't have the ephemeral items and creates a durable item at the same path.
+	source, err := s.newTestTree(persistedNodes)
+	s.NoError(err)
+	ctx = NewMutableContext(context.Background(), source)
+	c, err = source.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"k": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "durable"},
+		}),
+	}
+	mutation, err = source.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "SubComponents/k")
+
+	// The durable item replaces the ephemeral one and its subtree, while other ephemeral items are kept.
+	s.NoError(target.ApplyMutation(mutation))
+	node, ok := target.findNode([]string{"SubComponents", "k"})
+	s.True(ok)
+	s.False(node.ephemeral)
+	s.Empty(node.children)
+
+	readCtx := NewContext(context.Background(), target)
+	c, err = target.Component(readCtx, ComponentRef{})
+	s.NoError(err)
+	subComponents := c.(*TestComponent).SubComponents
+	s.Equal("durable", subComponents["k"].Get(readCtx).SubComponent1Data.GetRunId())
+	s.Equal("ephemeral-other", subComponents["other"].Get(readCtx).SubComponent1Data.GetRunId())
 }
 
 func (s *nodeSuite) assertNoSubComponentsPaths(nodes any) {

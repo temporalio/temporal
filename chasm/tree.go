@@ -128,9 +128,9 @@ type (
 		// and only needed for the current transaction. Set via SetDeleteAfterClose.
 		deleteAfterClose bool
 
-		// ephemeral is true for nodes created from a field with the ComponentFieldEphemeral option, and for their
-		// descendants. Ephemeral nodes are never persisted or replicated, so they are lost when the mutable state is
-		// reloaded. Use isEphemeral() to also account for collections that only hold ephemeral items.
+		// ephemeral is true for nodes created from a field with the ComponentFieldEphemeral option, and for all of
+		// their descendants. Ephemeral nodes are never persisted or replicated, so they are lost when the mutable state
+		// is reloaded.
 		ephemeral bool
 
 		// subtreeIsDirty is true if this node, any ancestor, or any descendant was mutated
@@ -722,21 +722,22 @@ func (n *Node) isDetached() bool {
 	return componentAttr.GetDetached()
 }
 
-// isEphemeral reports whether the node only lives in memory. A collection that was never persisted and only holds
-// ephemeral items is ephemeral too, so that adding an ephemeral item to an empty map doesn't persist the collection.
-func (n *Node) isEphemeral() bool {
+// shouldPersist reports whether the node is persisted and replicated. Ephemeral nodes never are. A map that was never
+// persisted is only persisted once it holds a durable item, so that adding an ephemeral item to an empty map doesn't
+// persist the map.
+func (n *Node) shouldPersist() bool {
 	if n.ephemeral {
-		return true
-	}
-	if !n.isMap() || len(n.children) == 0 || n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() != nil {
 		return false
 	}
+	if !n.isMap() || len(n.children) == 0 || n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() != nil {
+		return true
+	}
 	for _, child := range n.children {
-		if !child.isEphemeral() {
-			return false
+		if !child.ephemeral {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func (n *Node) fieldType() fieldType {
@@ -1650,7 +1651,7 @@ func (n *Node) closeTransactionApplyPendingComponentMetadata() error {
 		return nil
 	}
 	for _, node := range n.andAllChildren() {
-		if !node.applyPendingComponentMetadata() || node.isEphemeral() {
+		if !node.applyPendingComponentMetadata() || node.ephemeral {
 			continue
 		}
 		if err := n.markMetadataUpdated(node); err != nil {
@@ -1940,7 +1941,7 @@ func (n *Node) executeImmediatePureTasks() error {
 				if !ok {
 					break
 				}
-				if taskNode.isEphemeral() {
+				if taskNode.ephemeral {
 					return softassert.UnexpectedInternalErr(
 						n.logger,
 						"tasks can't be added to ephemeral components",
@@ -2131,8 +2132,8 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
-		if node.isEphemeral() {
-			// The in-memory value is the only copy of an ephemeral node.
+		if !node.shouldPersist() {
+			// The in-memory value is the only copy of the node.
 			node.setValueState(valueStateSynced)
 			continue
 		}
@@ -2221,7 +2222,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			continue
 		}
 
-		if node.isEphemeral() {
+		if node.ephemeral {
 			if len(n.newTasks[node.value]) > 0 {
 				return softassert.UnexpectedInternalErr(
 					n.logger,
@@ -2709,7 +2710,7 @@ func (n *Node) resolveDeferredPointers() error {
 				case proto.Message:
 					resolvedPath, err = n.dataNodePath(value)
 					// Component pointers target ancestors, so only data pointers can outlive an ephemeral target.
-					if err == nil && n.valueToNode[value].isEphemeral() && !internal.node.isEphemeral() {
+					if err == nil && n.valueToNode[value].ephemeral && !internal.node.ephemeral {
 						err = fmt.Errorf(
 							"pointer at path %v targets ephemeral data at path %v",
 							internal.node.path(),
@@ -2828,7 +2829,7 @@ func (n *Node) snapshotInternal(
 	exclusiveMinVT *persistencespb.VersionedTransition,
 	nodes map[string]*persistencespb.ChasmNode,
 ) {
-	if n == nil || n.isEphemeral() {
+	if n == nil || !n.shouldPersist() {
 		return
 	}
 
@@ -3126,6 +3127,10 @@ func (n *Node) applyUpdates(
 			return err
 		}
 
+		if err := n.deleteEphemeralNodeOnPath(path, isSystemUpdates); err != nil {
+			return err
+		}
+
 		node, ok := n.findNode(path)
 		if !ok {
 			// Node doesn't exist, we need to create it.
@@ -3177,6 +3182,31 @@ func (n *Node) applyUpdates(
 		}
 	}
 
+	return nil
+}
+
+// deleteEphemeralNodeOnPath deletes the first ephemeral node on the path, along with its subtree, so that a replicated
+// node at the path replaces it rather than ending up under it. This can happen when the source cluster created a node
+// at the same path after a failover, while the mutable state that holds the ephemeral node stayed loaded.
+func (n *Node) deleteEphemeralNodeOnPath(
+	path []string,
+	isSystemUpdates bool,
+) error {
+	node := n
+	for _, childName := range path {
+		childNode, ok := node.children[childName]
+		if !ok {
+			return nil
+		}
+		if childNode.ephemeral {
+			if err := childNode.delete(isSystemUpdates); err != nil {
+				return err
+			}
+			n.clearAncestorNodeValues(node)
+			return nil
+		}
+		node = childNode
+	}
 	return nil
 }
 
