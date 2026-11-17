@@ -852,13 +852,14 @@ pollLoop:
 			return nil, err
 		}
 		pollMetadata := &pollMetadata{
-			workerVersionCapabilities:          request.WorkerVersionCapabilities,
-			deploymentOptions:                  request.DeploymentOptions,
-			forwardedFrom:                      req.ForwardedSource,
-			conditions:                         req.Conditions,
-			workerInstanceKey:                  request.WorkerInstanceKey,
-			workerControlTaskQueue:             request.WorkerControlTaskQueue,
-			sessionOptions:                     request.GetSessionOptions(),
+			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			deploymentOptions:         request.DeploymentOptions,
+			forwardedFrom:             req.ForwardedSource,
+			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
+			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			sessionOptions:            request.GetSessionOptions(),
+
 			singleSessionAcquisitionInProgress: partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && request.GetSessionOptions().GetSingleSession() != nil,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
