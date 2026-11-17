@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	vismanager "go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/wideevents"
@@ -2769,5 +2770,77 @@ func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
 			},
 		)
 		s.ErrorIs(err, errInvalidNamespaceStateUpdate, "%v -> %v", testCase.oldState, testCase.newState)
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) registeredNamespaceResponse(nid string, name string) *persistence.GetNamespaceResponse {
+	response := s.softDeletedNamespaceResponse(nid, name)
+	response.Namespace.Info.State = enumspb.NAMESPACE_STATE_REGISTERED
+	return response
+}
+
+func (s *namespaceHandlerCommonSuite) TestSoftDeleteNamespace_Registered() {
+	nid := uuid.NewString()
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: nid}).Return(
+		s.registeredNamespaceResponse(nid, "ns"), nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, request.Namespace.Info.State)
+			s.Equal(int64(6), request.Namespace.ConfigVersion)
+			s.Equal(int64(7), request.NotificationVersion)
+			s.True(request.IsGlobalNamespace)
+			return nil
+		})
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			attributes := task.GetNamespaceTaskAttributes()
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, attributes.GetInfo().GetState())
+			s.Equal(int64(6), attributes.GetConfigVersion())
+			return nil
+		})
+
+	s.NoError(s.handler.SoftDeleteNamespace(s.T().Context(), "", namespace.ID(nid)))
+}
+
+func (s *namespaceHandlerCommonSuite) TestSoftDeleteNamespace_AlreadySoftDeleted() {
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "ns"}).Return(
+		s.softDeletedNamespaceResponse(uuid.NewString(), "ns"), nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			attributes := task.GetNamespaceTaskAttributes()
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, attributes.GetInfo().GetState())
+			s.Equal(int64(5), attributes.GetConfigVersion())
+			return nil
+		})
+
+	s.NoError(s.handler.SoftDeleteNamespace(s.T().Context(), "ns", ""))
+}
+
+func (s *namespaceHandlerCommonSuite) TestSoftDeleteNamespace_Rejected() {
+	testCases := []struct {
+		name  string
+		id    string
+		state enumspb.NamespaceState
+	}{
+		{name: "deprecated", id: uuid.NewString(), state: enumspb.NAMESPACE_STATE_DEPRECATED},
+		{name: "deleted", id: uuid.NewString(), state: enumspb.NAMESPACE_STATE_DELETED},
+		{name: "system namespace", id: primitives.SystemNamespaceID, state: enumspb.NAMESPACE_STATE_REGISTERED},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			response := s.registeredNamespaceResponse(tc.id, "ns")
+			response.Namespace.Info.State = tc.state
+			s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
+			s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(response, nil)
+			s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+			s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Times(0)
+
+			err := s.handler.SoftDeleteNamespace(s.T().Context(), "ns", "")
+			var failedPrecondition *serviceerror.FailedPrecondition
+			s.ErrorAs(err, &failedPrecondition)
+		})
 	}
 }
