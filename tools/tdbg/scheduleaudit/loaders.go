@@ -10,6 +10,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
@@ -38,7 +39,7 @@ const (
 
 func (t *grpcRetrier) do(ctx context.Context, opName string, f func() error) error {
 	isRetryable := func(err error) bool {
-		return !isOversizedResponse(err) && common.IsServiceTransientError(err)
+		return !isOversizedResponse(err) && common.IsServiceTransientError(asServiceError(err))
 	}
 	attempt := 0
 	policy := t.policy
@@ -56,6 +57,15 @@ func (t *grpcRetrier) do(ctx context.Context, opName string, f func() error) err
 		}
 		return struct{}{}, err
 	}, policy, isRetryable)
+	return err
+}
+
+// asServiceError converts a raw gRPC status error, which tdbg's client returns, to its serviceerror type so that
+// IsServiceTransientError recognizes permanent codes such as NotFound. Other errors are returned unchanged.
+func asServiceError(err error) error {
+	if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
+		return serviceerror.FromStatus(st)
+	}
 	return err
 }
 

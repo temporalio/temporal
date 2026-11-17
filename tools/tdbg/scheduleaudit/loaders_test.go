@@ -65,6 +65,22 @@ func TestGRPCRetrierRetriesTransientErrors(t *testing.T) {
 	require.Equal(t, 2, attempts)
 }
 
+func TestGRPCRetrierDoesNotRetryPermanentRawStatusErrors(t *testing.T) {
+	for _, code := range []codes.Code{codes.NotFound, codes.InvalidArgument} {
+		t.Run(code.String(), func(t *testing.T) {
+			attempts := 0
+			retrier := &grpcRetrier{policy: backoff.NewExponentialRetryPolicy(time.Nanosecond).WithMaximumAttempts(3)}
+			failure := status.Error(code, "permanent")
+			err := retrier.do(t.Context(), "test", func() error {
+				attempts++
+				return failure
+			})
+			require.Equal(t, code, status.Code(err))
+			require.Equal(t, 1, attempts)
+		})
+	}
+}
+
 func TestGRPCScheduleLoaderIncludesEntryWithoutInfo(t *testing.T) {
 	client := &scheduleWorkflowClient{response: &workflowservice.ListSchedulesResponse{
 		Schedules: []*schedulepb.ScheduleListEntry{{ScheduleId: "missing-info"}},
