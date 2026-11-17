@@ -76,7 +76,7 @@ func (t *transferQueueStandbyTaskExecutor) verifyPendingExternalTaskOnSource(
 		}
 		if common.IsNotFoundError(err) {
 			retry = false
-			return nil
+			return standbyTransferTaskPostActionTaskDiscarded(ctx, task, postActionInfo, logger, nil)
 		}
 		if err != nil {
 			logger.Warn("Unable to verify overdue standby transfer task on source.", tag.Task(task), tag.Error(err))
@@ -92,7 +92,7 @@ func (t *transferQueueStandbyTaskExecutor) verifyPendingExternalTaskOnSource(
 			return consts.ErrTaskRetry
 		}
 		retry = false
-		return nil
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, task, postActionInfo, logger, nil)
 	}
 }
 

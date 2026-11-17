@@ -118,7 +118,7 @@ func TestVerifyPendingExternalTaskOnSource(t *testing.T) {
 					verify := f.executor.verifyPendingExternalTaskOnSource(f.executable)
 					err := verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger())
 					if !tc.retry {
-						require.NoError(t, err)
+						require.ErrorIs(t, err, consts.ErrTaskDiscarded)
 						require.Equal(t, queues.RemoteVerificationState{}, f.executable.RemoteVerificationState())
 						return
 					}
@@ -162,7 +162,7 @@ func TestRemoteVerificationFailureBackoffAndRecovery(t *testing.T) {
 	require.Less(t, state.NextAttemptTime.Sub(f.clock.Now()), time.Minute+12*time.Second)
 	f.clock.Update(state.NextAttemptTime)
 	f.remote.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("execution deleted"))
-	require.NoError(t, verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger()))
+	require.ErrorIs(t, verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger()), consts.ErrTaskDiscarded)
 }
 
 func TestRemoteVerificationOwnershipChange(t *testing.T) {
