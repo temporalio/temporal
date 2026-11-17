@@ -53,10 +53,10 @@ func TestVisibilityManagerImpl_AdminAPIs_StoreNotAdmin(t *testing.T) {
 		namespace.NewMockRegistry(ctrl),
 	)
 
-	_, err := visManager.AdminListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
+	_, err := visManager.AdminListExecutions(context.Background(), &adminservice.ListExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityStore)
 
-	_, err = visManager.AdminCountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
+	_, err = visManager.AdminCountExecutions(context.Background(), &adminservice.CountExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityStore)
 }
 
@@ -88,7 +88,7 @@ func TestVisibilityManagerImpl_ListExecutions(t *testing.T) {
 		},
 	}
 
-	request := &manager.AdminListExecutionsRequest{
+	request := &adminservice.ListExecutionsRequest{
 		Query:    "ExecutionStatus = 'Completed'",
 		PageSize: 10,
 	}
@@ -221,7 +221,7 @@ func TestVisibilityManagerImpl_ListExecutions_StoreError(t *testing.T) {
 
 	_, err := visManager.AdminListExecutions(
 		context.Background(),
-		&manager.AdminListExecutionsRequest{PageSize: 10},
+		&adminservice.ListExecutionsRequest{PageSize: 10},
 	)
 	require.ErrorIs(t, err, storeErr)
 }
@@ -235,12 +235,12 @@ func TestVisibilityManagerImpl_CountExecutions(t *testing.T) {
 	testCases := []struct {
 		name      string
 		storeResp *store.InternalCountExecutionsResponse
-		want      *manager.AdminCountExecutionsResponse
+		want      *adminservice.CountExecutionsResponse
 	}{
 		{
 			name:      "no group by",
 			storeResp: &store.InternalCountExecutionsResponse{Count: 110},
-			want:      &manager.AdminCountExecutionsResponse{Count: 110},
+			want:      &adminservice.CountExecutionsResponse{Count: 110},
 		},
 		{
 			name: "group by",
@@ -251,7 +251,7 @@ func TestVisibilityManagerImpl_CountExecutions(t *testing.T) {
 					{GroupValues: []*commonpb.Payload{runningPayload}, Count: 10},
 				},
 			},
-			want: &manager.AdminCountExecutionsResponse{
+			want: &adminservice.CountExecutionsResponse{
 				Count: 110,
 				Groups: []*adminservice.CountExecutionsResponse_AggregationGroup{
 					{GroupValues: []*commonpb.Payload{completedPayload}, Count: 100},
@@ -267,7 +267,7 @@ func TestVisibilityManagerImpl_CountExecutions(t *testing.T) {
 			visStore := store.NewMockAdminVisibilityStore(ctrl)
 			visManager := newTestAdminVisibilityManager(visStore, namespace.NewMockRegistry(ctrl))
 
-			request := &manager.AdminCountExecutionsRequest{Query: "GROUP BY ExecutionStatus"}
+			request := &adminservice.CountExecutionsRequest{Query: "GROUP BY ExecutionStatus"}
 			visStore.EXPECT().AdminCountExecutions(gomock.Any(), request).Return(tc.storeResp, nil)
 
 			resp, err := visManager.AdminCountExecutions(context.Background(), request)
@@ -289,7 +289,7 @@ func TestVisibilityManagerImpl_CountExecutions_StoreError(t *testing.T) {
 
 	_, err := visManager.AdminCountExecutions(
 		context.Background(),
-		&manager.AdminCountExecutionsRequest{},
+		&adminservice.CountExecutionsRequest{},
 	)
 	require.ErrorIs(t, err, storeErr)
 }
@@ -308,16 +308,16 @@ func TestVisibilityManagerDual_AdminAPIs(t *testing.T) {
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
-	listRequest := &manager.AdminListExecutionsRequest{Namespace: testNamespace}
-	listResponse := &manager.AdminListExecutionsResponse{NextPageToken: []byte("token")}
+	listRequest := &adminservice.ListExecutionsRequest{Namespace: testNamespace.String()}
+	listResponse := &adminservice.ListExecutionsResponse{NextPageToken: []byte("token")}
 	selector.EXPECT().readManager(testNamespace).Return(adminManager)
 	adminManager.EXPECT().AdminListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
 	gotList, err := visManager.AdminListExecutions(context.Background(), listRequest)
 	require.NoError(t, err)
 	require.Equal(t, listResponse, gotList)
 
-	countRequest := &manager.AdminCountExecutionsRequest{Namespace: testNamespace}
-	countResponse := &manager.AdminCountExecutionsResponse{Count: 10}
+	countRequest := &adminservice.CountExecutionsRequest{Namespace: testNamespace.String()}
+	countResponse := &adminservice.CountExecutionsResponse{Count: 10}
 	selector.EXPECT().readManager(testNamespace).Return(adminManager)
 	adminManager.EXPECT().AdminCountExecutions(gomock.Any(), countRequest).Return(countResponse, nil)
 	gotCount, err := visManager.AdminCountExecutions(context.Background(), countRequest)
@@ -345,8 +345,8 @@ func TestVisibilityManagerRateLimited_AdminAPIs(t *testing.T) {
 		dynamicconfig.GetFloatPropertyFn(0.2),
 	)
 
-	listRequest := &manager.AdminListExecutionsRequest{Namespace: testNamespace}
-	listResponse := &manager.AdminListExecutionsResponse{NextPageToken: []byte("token")}
+	listRequest := &adminservice.ListExecutionsRequest{Namespace: testNamespace.String()}
+	listResponse := &adminservice.ListExecutionsResponse{NextPageToken: []byte("token")}
 	delegate.EXPECT().AdminListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
 	gotList, err := visManager.AdminListExecutions(context.Background(), listRequest)
 	require.NoError(t, err)
@@ -356,7 +356,7 @@ func TestVisibilityManagerRateLimited_AdminAPIs(t *testing.T) {
 	_, err = visManager.AdminListExecutions(context.Background(), listRequest)
 	require.ErrorIs(t, err, persistence.ErrPersistenceSystemLimitExceeded)
 
-	countRequest := &manager.AdminCountExecutionsRequest{Namespace: testNamespace}
+	countRequest := &adminservice.CountExecutionsRequest{Namespace: testNamespace.String()}
 	_, err = visManager.AdminCountExecutions(context.Background(), countRequest)
 	require.ErrorIs(t, err, persistence.ErrPersistenceSystemLimitExceeded)
 }
@@ -371,10 +371,10 @@ func TestVisibilityManagerRateLimited_AdminAPIs_DelegateNotAdmin(t *testing.T) {
 		dynamicconfig.GetFloatPropertyFn(0.2),
 	)
 
-	_, err := visManager.AdminListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
+	_, err := visManager.AdminListExecutions(context.Background(), &adminservice.ListExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 
-	_, err = visManager.AdminCountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
+	_, err = visManager.AdminCountExecutions(context.Background(), &adminservice.CountExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 }
 
@@ -384,15 +384,15 @@ func TestVisibilityManagerMetrics_AdminAPIs(t *testing.T) {
 	delegate := manager.NewMockAdminVisibilityManager(ctrl)
 	visManager := newTestVisibilityManagerMetrics(delegate)
 
-	listRequest := &manager.AdminListExecutionsRequest{Namespace: testNamespace}
-	listResponse := &manager.AdminListExecutionsResponse{NextPageToken: []byte("token")}
+	listRequest := &adminservice.ListExecutionsRequest{Namespace: testNamespace.String()}
+	listResponse := &adminservice.ListExecutionsResponse{NextPageToken: []byte("token")}
 	delegate.EXPECT().AdminListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
 	gotList, err := visManager.AdminListExecutions(context.Background(), listRequest)
 	require.NoError(t, err)
 	require.Equal(t, listResponse, gotList)
 
-	countRequest := &manager.AdminCountExecutionsRequest{Namespace: testNamespace}
-	countResponse := &manager.AdminCountExecutionsResponse{Count: 10}
+	countRequest := &adminservice.CountExecutionsRequest{Namespace: testNamespace.String()}
+	countResponse := &adminservice.CountExecutionsResponse{Count: 10}
 	delegate.EXPECT().AdminCountExecutions(gomock.Any(), countRequest).Return(countResponse, nil)
 	gotCount, err := visManager.AdminCountExecutions(context.Background(), countRequest)
 	require.NoError(t, err)
@@ -404,10 +404,10 @@ func TestVisibilityManagerMetrics_AdminAPIs_DelegateNotAdmin(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	visManager := newTestVisibilityManagerMetrics(manager.NewMockVisibilityManager(ctrl))
 
-	_, err := visManager.AdminListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
+	_, err := visManager.AdminListExecutions(context.Background(), &adminservice.ListExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 
-	_, err = visManager.AdminCountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
+	_, err = visManager.AdminCountExecutions(context.Background(), &adminservice.CountExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 }
 

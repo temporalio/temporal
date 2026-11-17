@@ -179,6 +179,13 @@ type (
 		needsPointerResolution bool
 
 		totalTimeSkippedUpdatedInPassive bool
+
+		// speculativeTransitionPending is set when a speculative transition left changes in the tree that
+		// aren't persisted. The next active CloseTransaction persists them.
+		speculativeTransitionPending bool
+		// speculativeTransitionFailoverVersion is the namespace failover version of the pending
+		// speculative transition.
+		speculativeTransitionFailoverVersion int64
 	}
 
 	taskWithAttributes struct {
@@ -225,7 +232,7 @@ type (
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
-		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
@@ -396,7 +403,11 @@ func (n *Node) SetRootComponent(
 	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
 		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
 	}
-	return root.syncSubComponents()
+	if err := root.syncSubComponents(); err != nil {
+		return err
+	}
+	root.setValueState(valueStateNeedSyncStructure)
+	return nil
 }
 
 // setValue sets the value field of the node.
@@ -1026,6 +1037,13 @@ func (n *Node) syncSubComponents() error {
 		}
 	}
 
+	// Framework-owned children of the root are not backed by a component field, keep them explicitly.
+	if n.parent == nil {
+		for _, name := range reservedRootChildren {
+			childrenToKeep[name] = struct{}{}
+		}
+	}
+
 	err := n.deleteChildren(childrenToKeep)
 	n.setValueState(valueStateNeedSerialize)
 
@@ -1445,6 +1463,14 @@ func (n *Node) Ref(
 	if err != nil {
 		return nil, err
 	}
+	// A component created by a pending speculative transition has a creation version that isn't
+	// persisted. A later transition can give another component at the same path the same version.
+	if n.speculativeTransitionPending && ref.componentInitialVT != nil {
+		if savedVT := n.backend.CurrentVersionedTransition(); savedVT != nil &&
+			transitionhistory.Compare(ref.componentInitialVT, savedVT) > 0 {
+			return nil, ErrSpeculativeComponentRef
+		}
+	}
 	return ref.Serialize(n.registry)
 }
 
@@ -1795,6 +1821,12 @@ func (n *Node) AddTask(
 // active transaction creates or closes the execution; standby clusters receive it
 // through replication.
 func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutation, error) {
+	// Speculative changes are never replicated, so a passive transaction must not persist them.
+	// The tree is left unchanged.
+	if !isActive && n.speculativeTransitionPending {
+		return NodesMutation{}, serviceerror.NewUnavailable("passive transaction cannot persist a pending speculative CHASM transition")
+	}
+
 	defer n.cleanupTransaction()
 
 	if err := n.executeImmediatePureTasks(); err != nil {
@@ -1857,6 +1889,70 @@ func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutati
 	maps.Copy(n.mutation.DeletedNodes, n.systemMutation.DeletedNodes)
 
 	return n.mutation, nil
+}
+
+// ApplySpeculativeTransition runs the in-memory part of CloseTransaction for a transition.
+func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
+	if err := n.executeImmediatePureTasks(); err != nil {
+		return err
+	}
+
+	if err := n.syncSubComponents(); err != nil {
+		return err
+	}
+
+	// Resolved pointers become regular pointers, so resolving again at CloseTransaction is a no-op.
+	if n.needsPointerResolution {
+		if err := n.resolveDeferredPointers(); err != nil {
+			return err
+		}
+	}
+
+	n.speculativeTransitionPending = true
+	n.speculativeTransitionFailoverVersion = n.backend.GetCurrentVersion()
+	return nil
+}
+
+// SpeculativeTransitionFailoverVersion returns the namespace failover version of the pending speculative
+// transition. The bool is false when none is pending.
+func (n *Node) SpeculativeTransitionFailoverVersion() (int64, bool) {
+	return n.speculativeTransitionFailoverVersion, n.speculativeTransitionPending
+}
+
+// TransitionDecision describes the engine's actions for a transition.
+type TransitionDecision struct {
+	// PersistNow requires saving the transition before the update returns.
+	PersistNow bool
+	// NotifyPollers wakes PollComponent waiters when the transition stays in memory.
+	NotifyPollers bool
+}
+
+// SpeculativeTransitionDecision returns how the engine handles the current speculative transition.
+// Call it after ApplySpeculativeTransition.
+func (n *Node) SpeculativeTransitionDecision(ctx context.Context) (TransitionDecision, error) {
+	closes, err := n.speculativeTransitionClosesExecution(ctx)
+	if err != nil {
+		return TransitionDecision{}, err
+	}
+	return TransitionDecision{PersistNow: closes, NotifyPollers: true}, nil
+}
+
+// speculativeTransitionClosesExecution reports whether the root is closed in memory while the
+// persisted execution is still open.
+func (n *Node) speculativeTransitionClosesExecution(ctx context.Context) (bool, error) {
+	if n.backend.IsWorkflow() ||
+		n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return false, nil
+	}
+	if n.terminated {
+		return true, nil
+	}
+	immutableContext := NewContext(ctx, n)
+	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return false, err
+	}
+	return rootComponent.LifecycleState(immutableContext).IsClosed(), nil
 }
 
 func (n *Node) executeImmediatePureTasks() error {
@@ -2566,12 +2662,12 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	archetypeID ArchetypeID,
 ) error {
 	if firstPureTask == nil {
-		n.backend.DeleteCHASMPureTasks(tasks.MaximumKey.FireTime)
+		n.backend.DeletePhysicalCHASMPureTasks(tasks.MaximumKey.FireTime)
 		return nil
 	}
 
 	firstPureTaskScheduledTime := firstPureTask.ScheduledTime.AsTime()
-	n.backend.DeleteCHASMPureTasks(firstPureTaskScheduledTime)
+	n.backend.DeletePhysicalCHASMPureTasks(firstPureTaskScheduledTime)
 
 	if firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 		return nil
@@ -2717,6 +2813,7 @@ func (n *Node) cleanupTransaction() {
 
 	n.needsPointerResolution = false
 	n.totalTimeSkippedUpdatedInPassive = false
+	n.speculativeTransitionPending = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {

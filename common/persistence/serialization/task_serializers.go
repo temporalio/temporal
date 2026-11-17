@@ -10,6 +10,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -632,6 +633,7 @@ func transferCloseTaskToProto(
 				// We set this to true even though it's no longer checked in case someone downgrades to a version that
 				// still checks this field.
 				CanSkipVisibilityArchival: true,
+				SkipParentVerification:    closeTask.SkipParentVerification,
 			},
 		},
 	}
@@ -646,10 +648,11 @@ func transferCloseTaskFromProto(
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: closeTask.VisibilityTime.AsTime(),
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp:    closeTask.VisibilityTime.AsTime(),
+		TaskID:                 closeTask.TaskId,
+		Version:                closeTask.Version,
+		DeleteAfterClose:       closeTask.DeleteAfterClose,
+		SkipParentVerification: closeTask.GetCloseExecutionTaskDetails().GetSkipParentVerification(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		DeleteProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -1135,6 +1138,7 @@ func visibilityDeleteTaskToProto(
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
 		StartTime:             timestamppb.New(deleteVisibilityTask.StartTime),
+		CreateTime:            timestamppb.New(deleteVisibilityTask.CreateTime),
 		IsRetentionDelete:     deleteVisibilityTask.IsRetentionDelete,
 		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
 			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
@@ -1159,6 +1163,7 @@ func visibilityDeleteTaskFromProto(
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
 		StartTime:                      deleteVisibilityTask.StartTime.AsTime(),
+		CreateTime:                     timestamp.TimeValue(deleteVisibilityTask.CreateTime),
 		IsRetentionDelete:              deleteVisibilityTask.IsRetentionDelete,
 	}
 }

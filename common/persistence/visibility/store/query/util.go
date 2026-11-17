@@ -134,7 +134,7 @@ func GetUnsafeStringTupleValues(valTuple sqlparser.ValTuple) ([]string, error) {
 	return values, nil
 }
 
-func ParseExecutionDurationStr(durationStr string) (time.Duration, error) {
+func ParseDurationStr(durationStr string) (time.Duration, error) {
 	if durationNanos, err := strconv.ParseInt(durationStr, 10, 64); err == nil {
 		return time.Duration(durationNanos), nil
 	}

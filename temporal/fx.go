@@ -35,12 +35,9 @@ import (
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/visibility"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
@@ -127,7 +124,6 @@ type (
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		DynamicConfigClient        dynamicconfig.Client
 		TLSConfigProvider          encryption.TLSConfigProvider
-		EsClient                   esclient.Client
 		MetricsHandler             metrics.Handler
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
@@ -187,7 +183,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	persistenceConfig := so.config.Persistence
-	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
+	err = persistenceClient.VerifyCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
 	if err != nil {
 		return serverOptionsProvider{}, err
 	}
@@ -252,26 +248,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
-	// EsConfig / EsClient
-	var esConfig *esclient.Config
-	var esClient esclient.Client
-
-	if persistenceConfig.SecondaryVisibilityConfigExist() &&
-		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
-		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
-		esConfig.SetHttpClient(so.elasticsearchHttpClient)
-	}
-	if persistenceConfig.VisibilityConfigExist() &&
-		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
-		esConfig = persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch
-		esConfig.SetHttpClient(so.elasticsearchHttpClient)
-	}
-
-	if esConfig != nil {
-		esClient, err = esclient.NewClient(esConfig, nil, logger)
-		if err != nil {
-			return serverOptionsProvider{}, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
-				esConfig.URL.Redacted(), esConfig.Username, err)
+	// Set Elasticsearch client in the config
+	for _, dsName := range []string{persistenceConfig.VisibilityStore, persistenceConfig.SecondaryVisibilityStore} {
+		if esConfig := persistenceConfig.DataStores[dsName].Elasticsearch; esConfig != nil {
+			esConfig.SetHttpClient(so.elasticsearchHttpClient)
 		}
 	}
 
@@ -328,7 +308,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		PersistenceFactoryProvider: persistenceFactoryProvider,
 		DynamicConfigClient:        dcClient,
 		TLSConfigProvider:          tlsConfigProvider,
-		EsClient:                   esClient,
 		MetricsHandler:             metricHandler,
 		TestHooks:                  testHooks,
 		EventLoggerProvider:        eventLoggerProvider,
@@ -378,7 +357,6 @@ type (
 		DynamicConfigClient             dynamicconfig.Client
 		MetricsHandler                  metrics.Handler
 		EventLoggerProvider             otellog.LoggerProvider
-		EsClient                        esclient.Client
 		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
 		PersistenceConfig               config.Persistence
 		ClusterMetadata                 *cluster.Config
@@ -475,9 +453,6 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() otellog.Logger {
 				return wideevents.NewLogger(params.EventLoggerProvider, string(serviceName))
-			},
-			func() esclient.Client {
-				return params.EsClient
 			},
 			func() resource.NamespaceLogger {
 				return params.NamespaceLogger
@@ -936,22 +911,6 @@ func ServerLifetimeHooks(
 	lc.Append(fx.StartStopHook(svr.Start, svr.Stop))
 }
 
-func verifyPersistenceCompatibleVersion(
-	cfg config.Persistence,
-	persistenceServiceResolver resolver.ServiceResolver,
-	logger log.Logger,
-) error {
-	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
-		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
-	}
-	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
-		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
-	}
-	return nil
-}
-
 type SpanExporterInputs struct {
 	fx.In
 	Lifecycyle fx.Lifecycle
@@ -1031,7 +990,10 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(
 		fx.Annotate(
-			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
+			func(rsn primitives.ServiceName, rsi resource.InstanceID, sps []otelsdktrace.SpanProcessor) (*otelresource.Resource, error) {
+				if len(sps) == 0 {
+					return otelresource.Empty(), nil
+				}
 				attrs := []attribute.KeyValue{
 					semconv.ServiceNameKey.String(telemetry.ResourceServiceName(rsn, os.LookupEnv)),
 					semconv.ServiceVersionKey.String(headers.ServerVersion),
@@ -1048,7 +1010,7 @@ var ServiceTracingModule = fx.Options(
 					otelresource.WithAttributes(attrs...),
 				)
 			},
-			fx.ParamTags(``, `optional:"true"`),
+			fx.ParamTags("", `optional:"true"`, ""),
 		),
 	),
 	fx.Provide(func(lc fx.Lifecycle, r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) trace.TracerProvider {

@@ -11,6 +11,7 @@ import (
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 )
 
 const (
@@ -61,10 +62,11 @@ type (
 		PageSize    int
 		Sorter      []elastic.Sorter
 		SearchAfter []any
+		QueryTime   time.Time
 	}
 )
 
-func NewEsHTTPClient(cfg *Config) (*http.Client, error) {
+func NewEsHTTPClient(cfg *esconfig.Config) (*http.Client, error) {
 	if httpClient := cfg.GetHttpClient(); httpClient != nil {
 		return httpClient, nil
 	}

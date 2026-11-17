@@ -8,6 +8,7 @@ import (
 	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/namespacereplication"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -48,6 +50,7 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	chasmscheduler.Module,
 	callback.Module,
+	namespacereplication.Module,
 	scheduler.Module,
 	batcher.Module,
 	workerdeployment.Module,
@@ -55,6 +58,7 @@ var Module = fx.Options(
 	dlq.Module,
 	dummy.Module,
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c

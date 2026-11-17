@@ -1,6 +1,8 @@
 package tasks
 
 import (
+	"maps"
+	"slices"
 	"strconv"
 
 	"go.temporal.io/server/common/headers"
@@ -56,6 +58,9 @@ var (
 		PriorityLow:         headers.CallerTypeBackgroundLow,
 		PriorityPreemptable: headers.CallerTypePreemptable,
 	}
+
+	// Sorted priority order, most urgent first.
+	PriorityOrder = slices.Sorted(maps.Keys(PriorityName))
 )
 
 func (p Priority) String() string {

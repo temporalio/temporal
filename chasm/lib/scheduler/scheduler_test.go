@@ -515,6 +515,37 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCreateSchedulerFromMigrationNormalizesNamespaceName(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "stale name", value: "previous-name"},
+		{name: "missing name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, node := setupSchedulerForTest(t)
+			ctx := chasm.NewMutableContext(context.Background(), node)
+			sched, err := scheduler.CreateSchedulerFromMigration(ctx, &schedulerpb.CreateFromMigrationStateRequest{
+				NamespaceId: namespaceID,
+				State: &schedulerpb.SchedulerMigrationState{
+					SchedulerState: &schedulerpb.SchedulerState{
+						Schedule:    defaultSchedule(),
+						Info:        &schedulepb.ScheduleInfo{},
+						Namespace:   tc.value,
+						NamespaceId: namespaceID,
+						ScheduleId:  scheduleID,
+					},
+					GeneratorState: &schedulerpb.GeneratorState{},
+					InvokerState:   &schedulerpb.InvokerState{},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, namespace, sched.Namespace)
+		})
+	}
+}
+
 func TestUpdate_WithMemo(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 	memoValue := &commonpb.Payload{Data: []byte("test-value")}

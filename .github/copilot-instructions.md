@@ -82,6 +82,8 @@ Before writing, reviewing, or running tests, read and follow the [testing guide]
 - CLI documentation follows the codebase's conventions, including capitalization of proper nouns.
 - Metric tags match existing formats, including `CONSTANT_CASE` for enum values.
 - Error messages match the surrounding code's style, including omission of punctuation for single sentences.
+- Nexus-related logs use the `tag.NexusStage*` value matching the local phase, as defined in `common/log/tag/values.go`.
+- Nexus-related logs include `tag.RequestID` when available; propagate it through helpers, retries, and completion handling to correlate logs across caller and handler services.
 
 ## 8. Code comments
 
@@ -150,3 +152,16 @@ Report concrete findings at all four severity levels: `nit`, `small`, `med`, and
 Prefer a small number of high-confidence findings.
 Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
 Report concrete `nit` and `small` findings selectively, and consolidate related symptoms into a single comment that addresses the root issue.
+
+## Additional Review Instructions
+
+### Time Skipping
+
+- Verify that workflow or mutable-state logic uses `ms.Now()` instead of
+  `shard.Now()` when it needs the execution's current time.
+- Check comparisons between execution timestamps and history-task
+  timestamps. Verify that both use the same clock, with conversion
+  between virtual time and wall-clock time when needed.
+- For CHASM components, `chasmCtx.Now()` already handles virtual time.
+  Check paths that interact directly with mutable state or history tasks
+  for missing or duplicate time conversions.

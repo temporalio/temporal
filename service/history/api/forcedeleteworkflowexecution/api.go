@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -56,6 +57,7 @@ func Invoke(
 	var warnings []string
 	var branchTokens [][]byte
 	var startTime time.Time
+	var createTime time.Time
 	var closeTime *time.Time
 
 	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
@@ -86,6 +88,7 @@ func Invoke(
 			}
 		}
 		startTime = resp.State.GetExecutionState().GetStartTime().AsTime()
+		createTime = workflow.NewTimeSkippingInfoUtil(executionInfo.GetTimeSkippingInfo()).CreateTime(startTime)
 		closeTime = new(executionInfo.GetCloseTime().AsTime())
 		if !closeTime.After(time.Unix(0, 0)) {
 			closeTime = nil
@@ -133,6 +136,7 @@ func Invoke(
 		RunID:             execution.GetRunId(),
 		TaskID:            math.MaxInt64,
 		StartTime:         startTime,
+		CreateTime:        createTime,
 		CloseTime:         closeTime,
 		IsRetentionDelete: false,
 	}); err != nil {
