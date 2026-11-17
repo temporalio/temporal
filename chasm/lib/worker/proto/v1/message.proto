@@ -8,14 +8,11 @@ option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerp
 
 // WorkerGroupState owns the shared lease for workers heartbeating together.
 message WorkerGroupState {
-  // Lifecycle of the group run. Individual workers may stop while the group stays active.
+  // Lifecycle of the group.
   WorkerGroupStatus status = 2;
   // Lease deadline computed using CHASM's clock and the supplied lease duration.
   google.protobuf.Timestamp lease_expiration_time = 3;
 }
-
-// WorkerState belongs to a worker identified by its key in WorkerGroup.Workers.
-message WorkerState {}
 
 // WorkerGroupStatus describes the lifecycle of a worker group run.
 enum WorkerGroupStatus {

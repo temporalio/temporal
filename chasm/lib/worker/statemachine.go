@@ -3,14 +3,12 @@ package worker
 import (
 	"time"
 
-	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type eventHeartbeatReceived struct {
-	heartbeats    []*workerpb.WorkerHeartbeat
 	leaseDuration time.Duration
 }
 
@@ -19,7 +17,6 @@ var transitionActiveHeartbeat = chasm.NewTransition(
 	[]workerstatepb.WorkerGroupStatus{workerstatepb.WORKER_GROUP_STATUS_ACTIVE},
 	workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 	func(g *WorkerGroup, ctx chasm.MutableContext, event eventHeartbeatReceived) error {
-		g.updateWorkers(ctx, event.heartbeats)
 		deadline := ctx.Now(g).Add(event.leaseDuration)
 		g.LeaseExpirationTime = timestamppb.New(deadline)
 		// Replace the previous expiry task so the group closes at the renewed deadline.
@@ -35,8 +32,8 @@ var transitionLeaseExpired = chasm.NewTransition(
 	[]workerstatepb.WorkerGroupStatus{workerstatepb.WORKER_GROUP_STATUS_ACTIVE},
 	workerstatepb.WORKER_GROUP_STATUS_INACTIVE,
 	func(_ *WorkerGroup, _ chasm.MutableContext, _ eventLeaseExpired) error {
-		// TODO: When the lease expires, schedule a task for each worker to
-		// reschedule its activities. These tasks can continue after the group closes.
+		// TODO: When activity tracking is added, schedule tasks on the group to
+		// reschedule activities. These tasks can continue after the group closes, within retention.
 		return nil
 	},
 )
