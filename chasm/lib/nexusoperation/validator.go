@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/callbacks"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -44,7 +45,7 @@ type validator struct {
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
 	callbackValidator callbacks.Validator
-	linkValidator     *linkValidator
+	linkValidator     commonlinks.Validator
 }
 
 func newValidator(
@@ -55,7 +56,7 @@ func newValidator(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 	callbackValidator callbacks.Validator,
-	linkValidator *linkValidator,
+	linkValidator commonlinks.Validator,
 ) *validator {
 	return &validator{
 		config:            config,
@@ -125,7 +126,7 @@ func (v *validator) validateAndNormalizeStartRequest(
 	}
 	// Links
 	links := req.GetLinks()
-	if err := v.linkValidator.ValidateRequestWithCallbacks(ns, links, cbs); err != nil {
+	if err := v.linkValidator.Validate(ns, links, cbs); err != nil {
 		return err
 	}
 
