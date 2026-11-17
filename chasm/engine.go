@@ -179,6 +179,7 @@ type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struc
 //   - Reads and PollComponent waiters see the transition while the execution is cached, so a
 //     waiter can see state that is later lost.
 //   - Immediate pure tasks run. Other tasks added by the transition are created when it is persisted.
+//   - Ref returns ErrSpeculativeComponentRef for a component the transition created until it is persisted.
 //   - Replication ignores states
 //
 // TODO: Add option to support all task.

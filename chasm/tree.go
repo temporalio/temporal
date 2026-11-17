@@ -1463,6 +1463,14 @@ func (n *Node) Ref(
 	if err != nil {
 		return nil, err
 	}
+	// A component created by a pending speculative transition has a creation version that isn't
+	// persisted. A later transition can give another component at the same path the same version.
+	if n.speculativeTransitionPending && ref.componentInitialVT != nil {
+		if savedVT := n.backend.CurrentVersionedTransition(); savedVT != nil &&
+			transitionhistory.Compare(ref.componentInitialVT, savedVT) > 0 {
+			return nil, ErrSpeculativeComponentRef
+		}
+	}
 	return ref.Serialize(n.registry)
 }
 

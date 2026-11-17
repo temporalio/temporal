@@ -4330,6 +4330,39 @@ func (s *nodeSuite) TestApplySpeculativeTransition_KeepsMutation() {
 	s.Positive(*transitionCountCalls)
 }
 
+func (s *nodeSuite) TestRef_SpeculativeComponent() {
+	root, _ := s.cleanTestComponentTree()
+	savedTransitionCount := int64(1)
+	s.nodeBackend.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
+		return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: savedTransitionCount}
+	}
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+	testComponent.SubComponent2 = NewComponentField(mutableContext, &TestSubComponent2{
+		SubComponent2Data: &protoMessageType{CreateRequestId: "speculative"},
+	})
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	// Components persisted before the speculative transition keep their refs.
+	_, err = root.Ref(testComponent)
+	s.NoError(err)
+	_, err = root.Ref(testComponent.SubComponent1.Get(mutableContext))
+	s.NoError(err)
+
+	speculativeChild := testComponent.SubComponent2.Get(mutableContext)
+	_, err = root.Ref(speculativeChild)
+	s.ErrorIs(err, ErrSpeculativeComponentRef)
+
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	savedTransitionCount = 2
+	_, err = root.Ref(speculativeChild)
+	s.NoError(err)
+}
+
 func (s *nodeSuite) TestApplySpeculativeTransition_PendingUntilActiveClose() {
 	root, _ := s.cleanTestComponentTree()
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 5 }
