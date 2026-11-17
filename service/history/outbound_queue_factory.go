@@ -219,6 +219,14 @@ func (f *outboundQueueFactory) CreateQueue(
 		metricsHandler,
 	)
 
+	scheduler = queues.NewNamespaceStateGateScheduler(
+		scheduler,
+		f.NamespaceRegistry,
+		f.Config.DiscardTasksOfDeletedNamespaces,
+		queues.IsExemptFromNamespaceStateGate,
+		metricsHandler,
+	)
+
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shardContext.GetTimeSource(),

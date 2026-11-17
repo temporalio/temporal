@@ -139,6 +139,7 @@ type Config struct {
 	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay      dynamicconfig.DurationPropertyFn
+	DiscardTasksOfDeletedNamespaces           dynamicconfig.BoolPropertyFn
 	TaskSchedulerGlobalMaxQPS                 dynamicconfig.IntPropertyFn
 	TaskSchedulerMaxQPS                       dynamicconfig.IntPropertyFn
 	TaskSchedulerGlobalNamespaceMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -618,6 +619,7 @@ func NewConfig(
 		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
 		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
 		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
+		DiscardTasksOfDeletedNamespaces:                      dynamicconfig.DiscardTasksOfDeletedNamespaces.Get(dc),
 		TaskSchedulerGlobalMaxQPS:                            dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
 		TaskSchedulerMaxQPS:                                  dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
 		TaskSchedulerNamespaceMaxQPS:                         dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),

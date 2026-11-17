@@ -951,6 +951,10 @@ var (
 	)
 	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
 	TaskSkipped                     = NewCounterDef("task_skipped")
+	TaskDiscardedByNamespaceState   = NewCounterDef(
+		"task_discarded_namespace_state",
+		WithDescription("The number of history tasks acked without running because their namespace is soft-deleted or deleted."),
+	)
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
 	TasksDependencyTaskNotCompleted = NewCounterDef("task_dependency_task_not_completed")
 	TaskStandbyRetryCounter         = NewCounterDef("task_errors_standby_retry_counter")
