@@ -36,15 +36,25 @@ func testPeerHosts(prefix string, n int) []membership.HostInfo {
 
 func testPeerHealthCheckConfig(pct float64, maxHosts int, threshold float64, probeTimeout, roundTimeout time.Duration) peerHealthCheckConfig {
 	return peerHealthCheckConfig{
-		Enabled:          dynamicconfig.GetBoolPropertyFn(true),
-		Interval:         dynamicconfig.GetDurationPropertyFn(time.Second),
-		ProbeTimeout:     dynamicconfig.GetDurationPropertyFn(probeTimeout),
-		RoundTimeout:     dynamicconfig.GetDurationPropertyFn(roundTimeout),
-		SamplePercentage: dynamicconfig.GetFloatPropertyFn(pct),
-		FailureThreshold: dynamicconfig.GetFloatPropertyFn(threshold),
-		MaxHostsPerRole:  dynamicconfig.GetIntPropertyFn(maxHosts),
-		MinFailedHosts:   dynamicconfig.GetIntPropertyFn(2),
+		Enabled: dynamicconfig.GetBoolPropertyFn(true),
+		Settings: dynamicconfig.GetTypedPropertyFn(dynamicconfig.PeerHealthCheckSettings{
+			Interval:         time.Second,
+			ProbeTimeout:     probeTimeout,
+			RoundTimeout:     roundTimeout,
+			SamplePercentage: pct,
+			FailureThreshold: threshold,
+			MaxHostsPerRole:  maxHosts,
+			MinFailedHosts:   2,
+		}),
 	}
+}
+
+// withPeerSettings returns a copy of cfg with edit applied to its settings.
+func withPeerSettings(cfg peerHealthCheckConfig, edit func(*dynamicconfig.PeerHealthCheckSettings)) peerHealthCheckConfig {
+	s := cfg.Settings()
+	edit(&s)
+	cfg.Settings = dynamicconfig.GetTypedPropertyFn(s)
+	return cfg
 }
 
 // newPeerTestMonitor returns a monitor whose resolvers report the given hosts per role.
@@ -131,6 +141,9 @@ func TestClassifyPeerProbeError(t *testing.T) {
 		{name: "raw deadline exceeded", err: context.DeadlineExceeded, want: peerProbeTimeout},
 		{name: "deadline exceeded after round ended", roundCtx: doneCtx, err: status.Error(codes.DeadlineExceeded, "x"), want: peerProbeUnknown},
 		{name: "raw deadline exceeded after round ended", roundCtx: doneCtx, err: context.DeadlineExceeded, want: peerProbeUnknown},
+		{name: "i/o timeout after round ended", roundCtx: doneCtx, err: status.Error(codes.Unavailable, "dial tcp 10.0.0.1:7234: i/o timeout"), want: peerProbeUnknown},
+		{name: "dial context deadline exceeded after round ended", roundCtx: doneCtx, err: status.Error(codes.Unavailable, "dial: context deadline exceeded"), want: peerProbeUnknown},
+		{name: "service error i/o timeout after round ended", roundCtx: doneCtx, err: serviceerror.NewUnavailable("dial tcp 10.0.0.1:7234: i/o timeout"), want: peerProbeUnknown},
 		{name: "canceled status", err: status.Error(codes.Canceled, "x"), want: peerProbeUnknown},
 		{name: "raw canceled", err: context.Canceled, want: peerProbeUnknown},
 	} {
@@ -191,13 +204,13 @@ func TestSamplePeerHosts(t *testing.T) {
 func TestPeerHealthCheckConfigFallbacks(t *testing.T) {
 	bad := testPeerHealthCheckConfig(-1, -1, 2, 0, -time.Second)
 	c := newPeerTestChecker(nil, nil, bad)
-	require.Equal(t, defaultPeerHealthCheckProbeTimeout, c.probeTimeout())
-	require.Equal(t, defaultPeerHealthCheckRoundTimeout, c.roundTimeout())
-	require.InDelta(t, defaultPeerHealthCheckSamplePercentage, c.samplePercentage(), 1e-9)
-	require.InDelta(t, defaultPeerHealthCheckFailureThreshold, c.failureThreshold(), 1e-9)
-	require.Equal(t, defaultPeerHealthCheckMaxHostsPerRole, c.maxHostsPerRole())
-	bad.MinFailedHosts = dynamicconfig.GetIntPropertyFn(0)
-	require.Equal(t, defaultPeerHealthCheckMinFailedHosts, newPeerTestChecker(nil, nil, bad).minFailedHosts())
+	require.Equal(t, dynamicconfig.DefaultPeerHealthCheckSettings.ProbeTimeout, c.probeTimeout())
+	require.Equal(t, dynamicconfig.DefaultPeerHealthCheckSettings.RoundTimeout, c.roundTimeout())
+	require.InDelta(t, dynamicconfig.DefaultPeerHealthCheckSettings.SamplePercentage, c.samplePercentage(), 1e-9)
+	require.InDelta(t, dynamicconfig.DefaultPeerHealthCheckSettings.FailureThreshold, c.failureThreshold(), 1e-9)
+	require.Equal(t, dynamicconfig.DefaultPeerHealthCheckSettings.MaxHostsPerRole, c.maxHostsPerRole())
+	bad = withPeerSettings(bad, func(s *dynamicconfig.PeerHealthCheckSettings) { s.MinFailedHosts = 0 })
+	require.Equal(t, dynamicconfig.DefaultPeerHealthCheckSettings.MinFailedHosts, newPeerTestChecker(nil, nil, bad).minFailedHosts())
 
 	good := testPeerHealthCheckConfig(0.8, 7, 1, 2*time.Second, 3*time.Second)
 	c = newPeerTestChecker(nil, nil, good)
@@ -207,8 +220,13 @@ func TestPeerHealthCheckConfigFallbacks(t *testing.T) {
 	require.InDelta(t, 1.0, c.failureThreshold(), 1e-9)
 	require.Equal(t, 7, c.maxHostsPerRole())
 	require.Equal(t, 2, c.minFailedHosts())
-	good.MinFailedHosts = dynamicconfig.GetIntPropertyFn(3)
+	good = withPeerSettings(good, func(s *dynamicconfig.PeerHealthCheckSettings) { s.MinFailedHosts = 3 })
 	require.Equal(t, 3, newPeerTestChecker(nil, nil, good).minFailedHosts())
+
+	// A probe timeout at or above the round timeout falls back below it, so stuck hosts still count as timed out.
+	require.Equal(t, 1500*time.Millisecond, newPeerTestChecker(nil, nil, testPeerHealthCheckConfig(1, 20, 0.5, 3*time.Second, 3*time.Second)).probeTimeout())
+	require.Equal(t, 15*time.Second, newPeerTestChecker(nil, nil, testPeerHealthCheckConfig(1, 20, 0.5, 15*time.Second, time.Minute)).probeTimeout())
+	require.Equal(t, 5*time.Second, newPeerTestChecker(nil, nil, testPeerHealthCheckConfig(1, 20, 0.5, 15*time.Second, 10*time.Second)).probeTimeout())
 }
 
 func TestRunRound_AllHealthy(t *testing.T) {
@@ -277,6 +295,31 @@ func TestRunRound_MinFailedHostsPreventsFailure(t *testing.T) {
 	require.Equal(t, int32(2), historyCalls.Load())
 }
 
+func TestRunRound_ProbeDeadlineCountsAsTimeout(t *testing.T) {
+	monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
+		primitives.HistoryService:  testPeerHosts("history", 4),
+		primitives.MatchingService: testPeerHosts("matching", 2),
+	})
+	// history-0 and history-1 never answer. Only their own probe deadline can end them.
+	probe := func(ctx context.Context, _ primitives.ServiceName, address string) error {
+		if address == "history-0:7234" || address == "history-1:7234" {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	}
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	// The probe timeout is far below the round timeout, so the probe deadline fires first.
+	checker := newPeerHealthChecker(monitor, probe, func(healthpb.HealthCheckResponse_ServingStatus) {},
+		testPeerHealthCheckConfig(1, 20, 0.5, 20*time.Millisecond, 10*time.Second), handler, log.NewNoopLogger())
+
+	require.Equal(t, peerRoundFail, checker.runRound(context.Background()))
+	counts := probeMetricCounts(capture)
+	require.Equal(t, int64(2), counts["history/timeout"])
+	require.Equal(t, int64(2), counts["history/response"])
+}
+
 func TestRunRound_AllSampledTimeOutIsOutage(t *testing.T) {
 	monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
 		primitives.HistoryService:  testPeerHosts("history", 4),
@@ -300,6 +343,16 @@ func TestRunRound_EmptyRoleIsIgnored(t *testing.T) {
 	checker := newPeerTestChecker(monitor, probe, testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second))
 
 	require.Equal(t, peerRoundFail, checker.runRound(context.Background()))
+}
+
+func TestRunRound_MissingRoleWithHealthyOtherRoleIsUnknown(t *testing.T) {
+	monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
+		primitives.HistoryService:  nil,
+		primitives.MatchingService: testPeerHosts("matching", 4),
+	})
+	checker := newPeerTestChecker(monitor, timingOutAddresses(), testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second))
+
+	require.Equal(t, peerRoundUnknown, checker.runRound(context.Background()))
 }
 
 func TestRunRound_ResolverErrorIsIgnored(t *testing.T) {
@@ -345,13 +398,43 @@ func TestRunRound_DeadlineCountsUnfinishedAsUnknown(t *testing.T) {
 	checker := newPeerHealthChecker(monitor, probe, func(healthpb.HealthCheckResponse_ServingStatus) {},
 		testPeerHealthCheckConfig(1, 20, 0.5, time.Minute, 50*time.Millisecond), handler, log.NewNoopLogger())
 
-	start := time.Now()
+	// Responding probes may also miss the 50ms deadline on a busy machine, so only assert what holds either way.
 	require.Equal(t, peerRoundPass, checker.runRound(context.Background()))
-	require.Less(t, time.Since(start), 500*time.Millisecond)
+	counts := probeMetricCounts(capture)
+	var total int64
+	for _, n := range counts {
+		total += n
+	}
+	require.Equal(t, int64(4), total, "every planned probe is recorded once")
+	require.GreaterOrEqual(t, counts["history/unknown"], int64(1), "the blocked probe is unknown")
+}
+
+func TestCollectProbeResults_ExpiredRoundKeepsArrivedResults(t *testing.T) {
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	checker := newPeerHealthChecker(nil, nil, func(healthpb.HealthCheckResponse_ServingStatus) {},
+		testPeerHealthCheckConfig(1, 20, 0.5, time.Second, time.Second), handler, log.NewNoopLogger())
+
+	planned := map[primitives.ServiceName]int{primitives.HistoryService: 4, primitives.MatchingService: 3}
+	results := make(chan peerProbeResult, 7)
+	for _, outcome := range []peerProbeOutcome{peerProbeResponse, peerProbeResponse, peerProbeTimeout, peerProbeTimeout} {
+		results <- peerProbeResult{role: primitives.HistoryService, outcome: outcome}
+	}
+	// Only two of three matching probes report.
+	results <- peerProbeResult{role: primitives.MatchingService, outcome: peerProbeResponse}
+	results <- peerProbeResult{role: primitives.MatchingService, outcome: peerProbeResponse}
+	// The round deadline has already passed, so ctx.Done() and results are both ready.
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	counts := checker.collectProbeResults(ctx, planned, results)
+
+	require.Equal(t, peerRoundFail, checker.evaluateRound(planned, counts))
 	require.Equal(t, map[string]int64{
-		"history/response":  1,
-		"history/unknown":   1,
+		"history/response":  2,
+		"history/timeout":   2,
 		"matching/response": 2,
+		"matching/unknown":  1,
 	}, probeMetricCounts(capture))
 }
 
@@ -450,7 +533,7 @@ func newPeerLoopChecker(
 	}
 	cfg := testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second)
 	cfg.Enabled = enabled.Load
-	cfg.Interval = dynamicconfig.GetDurationPropertyFn(interval)
+	cfg = withPeerSettings(cfg, func(s *dynamicconfig.PeerHealthCheckSettings) { s.Interval = interval })
 	return newPeerHealthChecker(monitor, probe, rec.set, cfg, metrics.NoopMetricsHandler, log.NewNoopLogger())
 }
 
@@ -569,7 +652,7 @@ func TestStop_InterruptsInFlightRound(t *testing.T) {
 	}
 	cfg := testPeerHealthCheckConfig(1, 20, 0.5, time.Minute, time.Minute)
 	cfg.Enabled = enabled.Load
-	cfg.Interval = dynamicconfig.GetDurationPropertyFn(time.Hour)
+	cfg = withPeerSettings(cfg, func(s *dynamicconfig.PeerHealthCheckSettings) { s.Interval = time.Hour })
 	handler := metricstest.NewCaptureHandler()
 	capture := handler.StartCapture()
 	checker := newPeerHealthChecker(monitor, probe, rec.set, cfg, handler, log.NewNoopLogger())

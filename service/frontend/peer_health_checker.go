@@ -29,16 +29,6 @@ const peerHealthCheckMaxConcurrentProbes = 50
 // minPeerHealthCheckInterval guards against a non-positive dynamic config value, which would panic time.NewTicker or spin time.NewTimer.
 const minPeerHealthCheckInterval = time.Second
 
-// Fallbacks for out-of-range dynamic config values; they mirror the defaults in common/dynamicconfig/constants.go.
-const (
-	defaultPeerHealthCheckProbeTimeout     = 5 * time.Second
-	defaultPeerHealthCheckRoundTimeout     = 10 * time.Second
-	defaultPeerHealthCheckSamplePercentage = 0.5
-	defaultPeerHealthCheckFailureThreshold = 0.5
-	defaultPeerHealthCheckMaxHostsPerRole  = 20
-	defaultPeerHealthCheckMinFailedHosts   = 2
-)
-
 // peerProbeOutcome classifies one probe. Only timeouts count as failures.
 type peerProbeOutcome string
 
@@ -64,16 +54,16 @@ type (
 	peerProbeFn func(ctx context.Context, role primitives.ServiceName, address string) error
 
 	peerHealthCheckConfig struct {
-		Enabled          dynamicconfig.BoolPropertyFn
-		Interval         dynamicconfig.DurationPropertyFn
-		ProbeTimeout     dynamicconfig.DurationPropertyFn
-		RoundTimeout     dynamicconfig.DurationPropertyFn
-		SamplePercentage dynamicconfig.FloatPropertyFn
-		FailureThreshold dynamicconfig.FloatPropertyFn
-		MaxHostsPerRole  dynamicconfig.IntPropertyFn
-		MinFailedHosts   dynamicconfig.IntPropertyFn
+		Enabled  dynamicconfig.BoolPropertyFn
+		Settings dynamicconfig.TypedPropertyFn[dynamicconfig.PeerHealthCheckSettings]
 	}
 
+	// peerHealthChecker detects a frontend that cannot reach History or Matching hosts that its own membership view still lists as available.
+	// Limits:
+	//   - It only probes hosts in the local AvailableMembers view. If membership has already dropped the unreachable hosts,
+	//     for example in a partition where frontends on the same side confirm the far side is down, it sees nothing wrong.
+	//   - When no sampled host of a role answers, it assumes that role is down for everyone and does not fail,
+	//     so a frontend cut off from every host of a role is not detected either.
 	peerHealthChecker struct {
 		monitor        membership.Monitor
 		probe          peerProbeFn
@@ -132,7 +122,7 @@ func samplePeerHosts(hosts []membership.HostInfo, pct float64, maxHosts int) []m
 }
 
 // runRound probes a random sample of hosts for each role and returns the round verdict: pass, fail or unknown.
-// Probes the round deadline cuts off, or that never start, count as unknown. A role without members or a resolver is left out.
+// Probes the round deadline cuts off, or that never start, count as unknown. A role without members or a resolver makes the verdict unknown, unless another role fails.
 // The verdict is unknown when no role could be probed.
 func (c *peerHealthChecker) runRound(ctx context.Context) string {
 	ctx, cancel := context.WithTimeout(ctx, c.roundTimeout())
@@ -228,6 +218,10 @@ func classifyPeerProbeError(roundCtx context.Context, err error) peerProbeOutcom
 	case strings.Contains(msg, "connection refused"):
 		return peerProbeRefused
 	case strings.Contains(msg, "i/o timeout"), strings.Contains(msg, "context deadline exceeded"):
+		// Same rule as the DeadlineExceeded case above: a probe cut short by the round says nothing about the host.
+		if roundCtx.Err() != nil {
+			return peerProbeUnknown
+		}
 		return peerProbeTimeout
 	case strings.Contains(msg, "no such host"), strings.Contains(msg, "no route to host"), strings.Contains(msg, "network is unreachable"):
 		return peerProbeUnresolved
@@ -255,6 +249,11 @@ collect:
 		case r := <-results:
 			counts[r.role][r.outcome]++
 		case <-ctx.Done():
+			// Results already in the channel are real answers, so count them before giving up on the rest.
+			for len(results) > 0 {
+				r := <-results
+				counts[r.role][r.outcome]++
+			}
 			// Only a round deadline is worth a warning; a cancelled parent means shutdown.
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				c.logger.Warn("peer health check round timed out", tag.Error(ctx.Err()))
@@ -295,6 +294,10 @@ func (c *peerHealthChecker) evaluateRound(
 	for _, role := range peerHealthCheckRoles {
 		planned := plannedPerRole[role]
 		if planned == 0 {
+			// No evidence for this role, so the round cannot report SERVING. A failure in another role still wins.
+			if verdict == peerRoundPass {
+				verdict = peerRoundUnknown
+			}
 			continue
 		}
 		roleCounts := counts[role]
@@ -349,7 +352,7 @@ func (c *peerHealthChecker) Stop() {
 
 // interval returns the live check interval, floored so a bad dynamic config value cannot crash or spin the loop.
 func (c *peerHealthChecker) interval() time.Duration {
-	if d := c.config.Interval(); d > 0 {
+	if d := c.config.Settings().Interval; d > 0 {
 		return d
 	}
 	return minPeerHealthCheckInterval
@@ -357,46 +360,48 @@ func (c *peerHealthChecker) interval() time.Duration {
 
 // The accessors below fall back to defaults for out-of-range dynamic config values, so a bad value cannot fail every frontend closed at once.
 
+// probeTimeout stays below the round timeout: the round cuts off a longer probe as unknown, so a stuck host could never count as timed out.
 func (c *peerHealthChecker) probeTimeout() time.Duration {
-	if d := c.config.ProbeTimeout(); d > 0 {
+	round := c.roundTimeout()
+	if d := c.config.Settings().ProbeTimeout; d > 0 && d < round {
 		return d
 	}
-	return defaultPeerHealthCheckProbeTimeout
+	return min(dynamicconfig.DefaultPeerHealthCheckSettings.ProbeTimeout, round/2)
 }
 
 func (c *peerHealthChecker) roundTimeout() time.Duration {
-	if d := c.config.RoundTimeout(); d > 0 {
+	if d := c.config.Settings().RoundTimeout; d > 0 {
 		return d
 	}
-	return defaultPeerHealthCheckRoundTimeout
+	return dynamicconfig.DefaultPeerHealthCheckSettings.RoundTimeout
 }
 
 func (c *peerHealthChecker) samplePercentage() float64 {
-	if p := c.config.SamplePercentage(); p > 0 && p <= 1 {
+	if p := c.config.Settings().SamplePercentage; p > 0 && p <= 1 {
 		return p
 	}
-	return defaultPeerHealthCheckSamplePercentage
+	return dynamicconfig.DefaultPeerHealthCheckSettings.SamplePercentage
 }
 
 func (c *peerHealthChecker) failureThreshold() float64 {
-	if t := c.config.FailureThreshold(); t > 0 && t <= 1 {
+	if t := c.config.Settings().FailureThreshold; t > 0 && t <= 1 {
 		return t
 	}
-	return defaultPeerHealthCheckFailureThreshold
+	return dynamicconfig.DefaultPeerHealthCheckSettings.FailureThreshold
 }
 
 func (c *peerHealthChecker) minFailedHosts() int {
-	if n := c.config.MinFailedHosts(); n >= 1 {
+	if n := c.config.Settings().MinFailedHosts; n >= 1 {
 		return n
 	}
-	return defaultPeerHealthCheckMinFailedHosts
+	return dynamicconfig.DefaultPeerHealthCheckSettings.MinFailedHosts
 }
 
 func (c *peerHealthChecker) maxHostsPerRole() int {
-	if n := c.config.MaxHostsPerRole(); n > 0 {
+	if n := c.config.Settings().MaxHostsPerRole; n > 0 {
 		return n
 	}
-	return defaultPeerHealthCheckMaxHostsPerRole
+	return dynamicconfig.DefaultPeerHealthCheckSettings.MaxHostsPerRole
 }
 
 func (c *peerHealthChecker) loop(ctx context.Context) {
