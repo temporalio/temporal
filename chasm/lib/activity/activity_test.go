@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -1288,6 +1289,78 @@ func TestAttachLinks_RejectsWhenComponentCapExceeded(t *testing.T) {
 
 	err := activity.attachLinks(ctx, []*commonpb.Link{newLink}, "req-new", validator, "ns")
 	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+}
+
+// TestAttachLinks_TotalSizeCap verifies that attachLinks enforces the per-execution cap on the total
+// size of caller-attached links, both when an activity is created and when links are attached to an
+// existing one (e.g. via on_conflict_options.attach_links).
+func TestAttachLinks_TotalSizeCap(t *testing.T) {
+	newLink := func(workflowID string) *commonpb.Link {
+		return &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: workflowID, RunId: "run"},
+		}}
+	}
+	newContext := func(stored map[string][]*commonpb.Link) *chasm.MockMutableContext {
+		return &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleLinks: func(chasm.Component) []*commonpb.Link {
+					var all []*commonpb.Link
+					for _, ls := range stored {
+						all = append(all, ls...)
+					}
+					return all
+				},
+				HandleRequestLinks: func(_ chasm.Component, reqID string) ([]*commonpb.Link, error) {
+					return stored[reqID], nil
+				},
+			},
+		}
+	}
+	newValidator := func(t *testing.T, totalMaxSize int) commonlinks.Validator {
+		t.Helper()
+		cfg := test.NewLinksValidatorConfig()
+		cfg.TotalLinksMaxSize = func(string) int { return totalMaxSize }
+		return test.NewLinksValidator(t, cfg)
+	}
+	newActivity := func() *Activity {
+		return &Activity{
+			ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
+		}
+	}
+
+	t.Run("RejectsOnCreate", func(t *testing.T) {
+		// Each link fits on its own; together they are one byte over the cap.
+		linkA, linkB := newLink("a"), newLink("b")
+		ctx := newContext(map[string][]*commonpb.Link{})
+		activity := newActivity()
+
+		err := activity.attachLinks(ctx, []*commonpb.Link{linkA, linkB}, "req-1", newValidator(t, linkA.Size()+linkB.Size()-1), "ns")
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "bytes of links to an execution")
+		require.Empty(t, ctx.LinksByRequest[activity])
+	})
+
+	t.Run("AcceptsAttachWithinCap", func(t *testing.T) {
+		existing, added := newLink("existing"), newLink("added")
+		ctx := newContext(map[string][]*commonpb.Link{"req-existing": {existing}})
+		activity := newActivity()
+
+		// The cap leaves exactly enough room for the added link.
+		err := activity.attachLinks(ctx, []*commonpb.Link{added}, "req-new", newValidator(t, existing.Size()+added.Size()), "ns")
+		require.NoError(t, err)
+		require.Equal(t, []*commonpb.Link{added}, ctx.LinksByRequest[activity]["req-new"])
+	})
+
+	t.Run("RejectsAttachExceedingCap", func(t *testing.T) {
+		existing, added := newLink("existing"), newLink("added")
+		ctx := newContext(map[string][]*commonpb.Link{"req-existing": {existing}})
+		activity := newActivity()
+
+		err := activity.attachLinks(ctx, []*commonpb.Link{added}, "req-new", newValidator(t, existing.Size()+added.Size()-1), "ns")
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "bytes of links to an execution")
+		require.Empty(t, ctx.LinksByRequest[activity])
+	})
 }
 
 // TestAttachLinks_OnlyEnforcesAggregateLimits verifies that attachLinks skips the

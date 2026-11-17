@@ -20,6 +20,7 @@ func limit(n int) func(string) int {
 
 func newValidator(t *testing.T, maxPerRequest, maxSize, maxPerExecution int) links.Validator {
 	cfg := test.NewLinksValidatorConfig()
+	cfg.TotalLinksMaxSize = limit(1 << 20)
 	cfg.MaxLinksPerRequest = limit(maxPerRequest)
 	cfg.LinkMaxSize = limit(maxSize)
 	cfg.MaxLinksPerExecution = limit(maxPerExecution)
@@ -328,6 +329,29 @@ func TestValidateAdditions(t *testing.T) {
 		)
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.EqualError(t, err, "cannot attach more than 3 links to an execution (1 links already attached)")
+	})
+
+	t.Run("ExceedsTotalSizeLimit", func(t *testing.T) {
+		existingLinks := []*commonpb.Link{batchJobLink("a")}
+		newLinks := []*commonpb.Link{batchJobLink("b")}
+		existing := links.UsageOf(existingLinks)
+		linkSize := newLinks[0].Size()
+
+		cfg := test.NewLinksValidatorConfig()
+		cfg.TotalLinksMaxSize = limit(existing.TotalSize + linkSize)
+		require.NoError(t, test.NewLinksValidator(t, cfg).ValidateAdditions("ns", newLinks, existing))
+
+		cfg.TotalLinksMaxSize = limit(existing.TotalSize + linkSize - 1)
+		err := test.NewLinksValidator(t, cfg).ValidateAdditions("ns", newLinks, existing)
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "bytes of links to an execution")
+	})
+
+	t.Run("UsageOfSumsSizes", func(t *testing.T) {
+		a, b := batchJobLink("a"), batchJobLink("bb")
+		require.Equal(t,
+			links.Usage{Count: 2, TotalSize: a.Size() + b.Size()},
+			links.UsageOf([]*commonpb.Link{a, b}))
 	})
 
 	t.Run("NoAdditionsAlwaysPasses", func(t *testing.T) {
