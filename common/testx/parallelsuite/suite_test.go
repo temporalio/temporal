@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/testx/testcontext"
 )
 
 type validSuite struct{ Suite[*validSuite] }

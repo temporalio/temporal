@@ -911,6 +911,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 					shardContext,
 					updateMode,
 					newMutableState,
+					updateWorkflowTransactionPolicy,
 					payload,
 				)
 			},
@@ -986,6 +987,7 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 		shardContext,
 		updateMode,
 		newMutableState,
+		updateWorkflowTransactionPolicy,
 		payload,
 	)
 }
@@ -1061,6 +1063,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	shardContext historyi.ShardContext,
 	updateMode persistence.UpdateWorkflowMode,
 	newMutableState historyi.MutableState,
+	transactionPolicy historyi.TransactionPolicy,
 	payload *ExecutionTransactionPayload,
 ) error {
 	if err := c.mergeUpdateWithNewReplicationTasks(
@@ -1111,6 +1114,9 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	); err != nil {
 		return err
 	}
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		c.emitWorkflowHeartbeatNotificationBufferedInputMetrics(payload.ExecutionMutation.NewBufferedEvents)
+	}
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
@@ -1120,6 +1126,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		c.metricsHandler,
 		c.GetNamespace(shardContext),
 		c.MutableState.GetExecutionState().State,
+		wroteEvents(payload.ExecutionEvents),
 		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
 		int(c.MutableState.GetNextEventID()-1),
 	)

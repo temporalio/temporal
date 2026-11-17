@@ -3433,6 +3433,20 @@ func (mr *MockMutableStateMockRecorder) Now() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockMutableState)(nil).Now))
 }
 
+// NumBufferedEvents mocks base method.
+func (m *MockMutableState) NumBufferedEvents() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumBufferedEvents")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumBufferedEvents indicates an expected call of NumBufferedEvents.
+func (mr *MockMutableStateMockRecorder) NumBufferedEvents() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).NumBufferedEvents))
+}
+
 // PopTasks mocks base method.
 func (m *MockMutableState) PopTasks() map[tasks.Category][]tasks.Task {
 	m.ctrl.T.Helper()
@@ -3772,18 +3786,32 @@ func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueueScheduleToStartTimeout", reflect.TypeOf((*MockMutableState)(nil).TaskQueueScheduleToStartTimeout), name)
 }
 
-// ToRealTimeWithCurrentOffset mocks base method.
-func (m *MockMutableState) ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time {
+// ToLogicalTimeWithCurrentTimeSkippingOffset mocks base method.
+func (m *MockMutableState) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ToRealTimeWithCurrentOffset", virtualTime)
+	ret := m.ctrl.Call(m, "ToLogicalTimeWithCurrentTimeSkippingOffset", physicalTime)
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
-// ToRealTimeWithCurrentOffset indicates an expected call of ToRealTimeWithCurrentOffset.
-func (mr *MockMutableStateMockRecorder) ToRealTimeWithCurrentOffset(virtualTime any) *gomock.Call {
+// ToLogicalTimeWithCurrentTimeSkippingOffset indicates an expected call of ToLogicalTimeWithCurrentTimeSkippingOffset.
+func (mr *MockMutableStateMockRecorder) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToRealTimeWithCurrentOffset", reflect.TypeOf((*MockMutableState)(nil).ToRealTimeWithCurrentOffset), virtualTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToLogicalTimeWithCurrentTimeSkippingOffset", reflect.TypeOf((*MockMutableState)(nil).ToLogicalTimeWithCurrentTimeSkippingOffset), physicalTime)
+}
+
+// ToPhysicalTimeWithCurrentTimeSkippingOffset mocks base method.
+func (m *MockMutableState) ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ToPhysicalTimeWithCurrentTimeSkippingOffset", logicalTime)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// ToPhysicalTimeWithCurrentTimeSkippingOffset indicates an expected call of ToPhysicalTimeWithCurrentTimeSkippingOffset.
+func (mr *MockMutableStateMockRecorder) ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToPhysicalTimeWithCurrentTimeSkippingOffset", reflect.TypeOf((*MockMutableState)(nil).ToPhysicalTimeWithCurrentTimeSkippingOffset), logicalTime)
 }
 
 // UpdateActivity mocks base method.

@@ -9,12 +9,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/testx/await"
+	"go.temporal.io/testx/testcontext"
 )
 
 func TestRequire_ImmediateSuccess(t *testing.T) {
@@ -185,10 +185,9 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	})
 
 	t.Run("retries after attempt timeout until await timeout", func(t *testing.T) {
-		attemptTimeoutEnv := 50 * time.Millisecond
-		attemptTimeout := attemptTimeoutEnv * debug.TimeoutMultiplier
+		attemptTimeout := 50 * time.Millisecond
 		pollInterval := 100 * time.Millisecond
-		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeoutEnv.String())
+		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeout.String())
 
 		ctx := testcontext.For(t)
 		var attempts atomic.Int32
@@ -394,28 +393,28 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	})
 }
 
-func TestRequire_SoftDeadlockLogsAndCancels(t *testing.T) {
+func TestRequire_RetriesAfterSoftCancellation(t *testing.T) {
 	// not using T.Parallel() so it can use t.Setenv to override the deadlock timeouts
-	t.Setenv("TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT", "50ms")
-	t.Setenv("TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT", "5s")
+	t.Setenv("TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT", "1ms")
 
-	const awaitTimeout = 10 * time.Second
+	synctest.Test(t, func(t *testing.T) {
+		tb := newRecordingTB()
+		attempts := 0
 
-	ctx := testcontext.For(t)
-	tb := newRecordingTB()
-	start := time.Now()
-	tb.run(func() {
-		// Await timeout is long so parent-cancel doesn't beat the soft timer.
-		await.Require(ctx, tb, func(t *await.T) {
-			<-t.Context().Done() // exits as soon as soft cancel fires
-		}, awaitTimeout, 100*time.Millisecond)
+		tb.run(func() {
+			// Await timeout is long so parent-cancel doesn't beat the soft timer.
+			await.Require(t.Context(), tb, func(t *await.T) {
+				attempts++
+				if attempts == 1 {
+					<-t.Context().Done() // exits as soon as soft cancel fires
+				}
+			}, 5*time.Millisecond, time.Millisecond)
+		})
+
+		require.Equal(t, 2, attempts)
+		require.False(t, tb.Failed())
+		require.Contains(t, tb.logs(), "soft deadlock")
 	})
-	elapsed := time.Since(start)
-	require.False(t, tb.Failed(), "soft deadlock + clean exit should succeed")
-	require.Contains(t, tb.logs(), "soft deadlock")
-	require.NotContains(t, tb.fatals(), "still running")
-	require.Less(t, elapsed, awaitTimeout,
-		"should return shortly after soft cancel, not wait the full await timeout (elapsed=%v)", elapsed)
 }
 
 func TestRequire_DeadlockDetected(t *testing.T) {

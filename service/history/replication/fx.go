@@ -328,7 +328,7 @@ func streamReceiverMonitorProvider(
 	return NewStreamReceiverMonitor(
 		processToolBox,
 		taskConverter,
-		processToolBox.Config.EnableReplicationStream(),
+		processToolBox.Config.EnableReplicationStream() && processToolBox.ClusterMetadata.IsGlobalNamespaceEnabled(), // No global namespace = no ack manager
 	)
 }
 
