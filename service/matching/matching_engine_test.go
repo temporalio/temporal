@@ -1434,9 +1434,9 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			return resp, nil
 		}).AnyTimes()
 
-	// Backlog dispatch is not strictly FIFO: the matcher's task validator temporarily takes a
-	// batch of tasks from the head of the backlog, so pollers can see later tasks first.
-	// Check that every task is delivered exactly once instead of checking the order.
+	// Backlog dispatch order is not guaranteed (for example, the task validator can briefly
+	// hold tasks from the head of the backlog), so check that every task is delivered exactly
+	// once instead of checking the order.
 	delivered := make(map[int64]bool, taskCount)
 	for i := int64(0); i < taskCount; {
 		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
