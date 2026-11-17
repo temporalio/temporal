@@ -124,7 +124,9 @@ func TestChunkedCatchupRecoveryMatchesPreV15(t *testing.T) {
 		gap           time.Duration
 		catchupWindow time.Duration
 	}{
-		{"12h-stall", 12 * time.Hour, 0}, // 43200 matches
+		// Several chunks of each size, and well past the buffer (1000). Not longer: the
+		// unchunked walk enumerates every match, which is slow under -race.
+		{"3h-stall", 3 * time.Hour, 0}, // 10800 matches
 		// 1800 misses, then 1h of matches in the window: a 2000-match chunk reaches only
 		// 200 of them.
 		{"miss-heavy", time.Hour + 1801*time.Second, time.Hour},
@@ -134,33 +136,44 @@ func TestChunkedCatchupRecoveryMatchesPreV15(t *testing.T) {
 		c    recoveryCase
 	}
 	var cases []named
+	// Every policy once; jitter and still-running actions only for the shortcut (Skip) and
+	// buffer-filling (BufferAll) policies, to keep the unchunked walks affordable under -race.
+	type variant struct {
+		jitter  time.Duration
+		running bool
+	}
+	variants := func(p enumspb.ScheduleOverlapPolicy) []variant {
+		vs := []variant{{}}
+		if p == enumspb.SCHEDULE_OVERLAP_POLICY_SKIP || p == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL {
+			vs = append(vs, variant{jitter: 500 * time.Millisecond}, variant{running: true})
+		}
+		return vs
+	}
 	for _, stall := range stalls {
-		// Below, at and above the buffer size (1000).
-		for _, chunk := range []int{50, 500, 2000} {
-			for _, jitter := range []time.Duration{0, 500 * time.Millisecond} {
-				for _, p := range policies {
-					for _, running := range []bool{false, true} {
-						actions := "actions-complete"
-						if running {
-							actions = "actions-keep-running"
-						}
-						cases = append(cases, named{
-							name: fmt.Sprintf("%s/chunk-%d/jitter-%s/%s/%s", stall.name, chunk, jitter, p, actions),
-							c: recoveryCase{
-								gap: stall.gap, catchupWindow: stall.catchupWindow, chunk: chunk,
-								jitter: jitter, overlap: p, startedRunning: running,
-							},
-						})
+		// Below and above the buffer size (1000).
+		for _, chunk := range []int{500, 2000} {
+			for _, p := range policies {
+				for _, v := range variants(p) {
+					actions := "actions-complete"
+					if v.running {
+						actions = "actions-keep-running"
 					}
+					cases = append(cases, named{
+						name: fmt.Sprintf("%s/chunk-%d/jitter-%s/%s/%s", stall.name, chunk, v.jitter, p, actions),
+						c: recoveryCase{
+							gap: stall.gap, catchupWindow: stall.catchupWindow, chunk: chunk,
+							jitter: v.jitter, overlap: p, startedRunning: v.running,
+						},
+					})
 				}
 			}
 		}
 	}
 	// Jitter longer than the interval: every match is jittered by up to 1s, but the
 	// shortcuts can only skip to now-10s.
-	cases = append(cases, named{"jitter-10s", recoveryCase{gap: 12 * time.Hour, chunk: 2000, overlap: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, jitter: 10 * time.Second}})
+	cases = append(cases, named{"jitter-10s", recoveryCase{gap: 3 * time.Hour, chunk: 2000, overlap: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, jitter: 10 * time.Second}})
 	// Mostly catchup-window misses, which are walked in chunks before the first start.
-	cases = append(cases, named{"1h-catchup-window", recoveryCase{gap: 12 * time.Hour, chunk: 2000, catchupWindow: time.Hour}})
+	cases = append(cases, named{"1h-catchup-window", recoveryCase{gap: 3 * time.Hour, chunk: 2000, catchupWindow: time.Hour}})
 
 	// The unchunked walk doesn't depend on the chunk size: run it once per scenario.
 	preV15 := map[recoveryCase]catchupResult{}

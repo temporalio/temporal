@@ -192,6 +192,7 @@ func runCatchupRepro(t *testing.T, c catchupCase) catchupResult {
 	ts.SetLogger(logger)
 	mh := metricstest.NewCaptureHandler()
 	capture := mh.StartCapture()
+	defer mh.StopCapture(capture)
 	ts.SetMetricsHandler(sdk.NewMetricsHandler(mh))
 	env := ts.NewTestWorkflowEnvironment()
 	if c.now.IsZero() {
