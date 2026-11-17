@@ -122,14 +122,9 @@ func (s *RpoSuite) TestSnapshotRefreshHealsPartition() {
 	}
 	cluster := &snapshotRefreshTestCluster{}
 
-	// Make the cached seed list expire before the partition healer next requests it.
-	// We can test that the partition persists without snapshot refresh by changing the
-	// following to something absurd, like time.Hour*24*30*12*10 (~10 years).
-	snapshotExpiry := time.Millisecond
-
 	// 1. Start the original two nodes and let the mock record their heartbeats.
 	for range 2 {
-		cluster.addMonitor(t, store, "snapshot-refresh", snapshotExpiry)
+		cluster.addMonitor(t, store, "snapshot-refresh")
 	}
 	await.RequireTrue(t, func() bool {
 		return cluster.allHaveMembers(2)
@@ -144,7 +139,7 @@ func (s *RpoSuite) TestSnapshotRefreshHealsPartition() {
 
 	// 3. Start the third node. Its initial database query should return only its own fresh record,
 	// so it bootstraps alone.
-	cluster.addMonitor(t, store, "snapshot-refresh", snapshotExpiry)
+	cluster.addMonitor(t, store, "snapshot-refresh")
 
 	// 4. Check that a partition exists between the original two nodes and the third node.
 	await.RequireTrue(t, func() bool {

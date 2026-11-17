@@ -3,29 +3,12 @@ package snapshothosts
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 )
 
-func TestHostsReturnsInitialSnapshotBeforeExpiry(t *testing.T) {
-	t.Parallel()
-
-	refreshCalls := 0
-	provider := New(log.NewNoopLogger(), func() ([]string, error) {
-		refreshCalls++
-		return []string{"refreshed"}, nil
-	}, time.Hour, "initial")
-
-	hosts, err := provider.Hosts()
-
-	require.NoError(t, err)
-	require.Equal(t, []string{"initial"}, hosts)
-	require.Equal(t, 0, refreshCalls)
-}
-
-func TestHostsReplacesExpiredSnapshot(t *testing.T) {
+func TestHostsReplacesSnapshot(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -49,21 +32,19 @@ func TestHostsReplacesExpiredSnapshot(t *testing.T) {
 			provider := New(log.NewNoopLogger(), func() ([]string, error) {
 				refreshCalls++
 				return test.refreshedHost, nil
-			}, time.Hour, "initial")
-			provider.expiresAt = time.Time{}
+			}, "initial")
 
 			hosts, err := provider.Hosts()
 
 			require.NoError(t, err)
 			require.Equal(t, test.refreshedHost, hosts)
 			require.Equal(t, 1, refreshCalls)
-			require.True(t, provider.expiresAt.After(time.Now()))
 
 			hosts, err = provider.Hosts()
 
 			require.NoError(t, err)
 			require.Equal(t, test.refreshedHost, hosts)
-			require.Equal(t, 1, refreshCalls)
+			require.Equal(t, 2, refreshCalls)
 		})
 	}
 }
@@ -78,20 +59,17 @@ func TestHostsRetainsSnapshotAndRetriesAfterRefreshError(t *testing.T) {
 			return nil, errors.New("database unavailable")
 		}
 		return []string{"refreshed"}, nil
-	}, time.Hour, "initial")
-	provider.expiresAt = time.Time{}
+	}, "initial")
 
 	hosts, err := provider.Hosts()
 
 	require.NoError(t, err)
 	require.Equal(t, []string{"initial"}, hosts)
 	require.Equal(t, 1, refreshCalls)
-	require.True(t, provider.expiresAt.Before(time.Now()))
 
 	hosts, err = provider.Hosts()
 
 	require.NoError(t, err)
 	require.Equal(t, []string{"refreshed"}, hosts)
 	require.Equal(t, 2, refreshCalls)
-	require.True(t, provider.expiresAt.After(time.Now()))
 }

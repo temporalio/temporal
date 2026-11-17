@@ -360,7 +360,7 @@ type snapshotRefreshTestCluster struct {
 }
 
 // addMonitor creates and starts a monitor backed by the shared snapshot refresh store
-func (c *snapshotRefreshTestCluster) addMonitor(t *testing.T, store *snapshotRefreshStore, app string, snapshotExpiry time.Duration) {
+func (c *snapshotRefreshTestCluster) addMonitor(t *testing.T, store *snapshotRefreshStore, app string) {
 	t.Helper()
 
 	channel, err := tchannel.NewChannel(app, nil)
@@ -390,7 +390,6 @@ func (c *snapshotRefreshTestCluster) addMonitor(t *testing.T, store *snapshotRef
 		manager,
 		resolver,
 		2*time.Second,
-		snapshotExpiry,
 		3*time.Second,
 		time.Time{},
 		100,
