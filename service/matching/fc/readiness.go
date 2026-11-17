@@ -135,10 +135,12 @@ func (rs *readinessShard) cancelAllCallbacks(cb ReadinessCallback) {
 	// callbacks when we sync it. e.g. a rate limit due to the wall clock time advancing. The
 	// timer would usually get there first but we may need to call some here.
 	var toNotify deferedNotify
-	defer toNotify.notify(notifyAsync) // outside lock
 
 	rs.lock.Lock()
-	defer rs.lock.Unlock()
+	defer func() {
+		rs.lock.Unlock()
+		toNotify.notify(notifyAsync) // outside lock
+	}()
 
 	rEnts := rs.rev[cb]
 	// note: clone slice before iterating over it, removeEdgeLocked may modify slices
@@ -226,14 +228,16 @@ func (rs *readinessShard) removeEdgeLocked(limiter limiterState, cb ReadinessCal
 // asynchronous resources (timers, rpcs, etc.) based on the remaining waiters.
 func (rs *readinessShard) update(limiter limiterState, mode notifyMode, f func() error) error {
 	var toNotify deferedNotify
-	defer toNotify.notify(mode) // outside lock
 
 	rs.lock.Lock()
-	defer rs.lock.Unlock()
+	defer func() {
+		rs.lock.Unlock()
+		toNotify.notify(mode) // outside lock
+	}()
 
-	defer rs.syncLimiterLocked(limiter, &toNotify)
-
-	return f()
+	err := f()
+	rs.syncLimiterLocked(limiter, &toNotify)
+	return err
 }
 
 // syncLocked may call this. wake should remove up to n items from the front of rsu.waiters and
