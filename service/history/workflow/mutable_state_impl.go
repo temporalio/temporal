@@ -7951,6 +7951,21 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
+		return closeTransactionResult{}, err
+	}
+	// Materialize CHASM logical tasks before selecting the workflow's skip target.
+	// Preparation may execute immediate pure tasks that add workflow history events.
+	if err := ms.chasmTree.PrepareCloseTransaction(ctx); err != nil {
+		return closeTransactionResult{}, err
+	}
+	chasmPrepared := true
+	defer func() {
+		if chasmPrepared {
+			ms.chasmTree.AbortCloseTransaction()
+		}
+	}()
+
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
 	// events, and therefore change the dirty state.
 	isStateDirty := ms.isStateDirty()
@@ -7974,13 +7989,9 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.closeTransactionStampPrincipal(ctx, workflowEventsSeq, bufferEvents)
 	}
 
-	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
-		return closeTransactionResult{}, err
-	}
-
-	// CloseTransaction() on chasmTree may update execution state & status,
-	// so must be called before closeTransactionUpdateTransitionHistory().
-	chasmNodesMutation, err := ms.chasmTree.CloseTransaction(ctx, transactionPolicy == historyi.TransactionPolicyActive)
+	// Finish CHASM tasks before updating transition history and building the mutation.
+	chasmNodesMutation, err := ms.chasmTree.FinishCloseTransaction(ctx, transactionPolicy == historyi.TransactionPolicyActive)
+	chasmPrepared = false
 	if err != nil {
 		return closeTransactionResult{}, err
 	}

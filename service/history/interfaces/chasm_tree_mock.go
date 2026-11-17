@@ -45,6 +45,18 @@ func (m *MockChasmTree) EXPECT() *MockChasmTreeMockRecorder {
 	return m.recorder
 }
 
+// AbortCloseTransaction mocks base method.
+func (m *MockChasmTree) AbortCloseTransaction() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AbortCloseTransaction")
+}
+
+// AbortCloseTransaction indicates an expected call of AbortCloseTransaction.
+func (mr *MockChasmTreeMockRecorder) AbortCloseTransaction() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AbortCloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).AbortCloseTransaction))
+}
+
 // ApplyMutation mocks base method.
 func (m *MockChasmTree) ApplyMutation(arg0 chasm.NodesMutation) error {
 	m.ctrl.T.Helper()
@@ -203,6 +215,35 @@ func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectTask(ctx, executionKey, ta
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSideEffectTask), ctx, executionKey, task, validate)
 }
 
+// FindTimeSkippingTarget mocks base method.
+func (m *MockChasmTree) FindTimeSkippingTarget(arg0 chasm.Context) *chasm.TimeSkippingTransition {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindTimeSkippingTarget", arg0)
+	ret0, _ := ret[0].(*chasm.TimeSkippingTransition)
+	return ret0
+}
+
+// FindTimeSkippingTarget indicates an expected call of FindTimeSkippingTarget.
+func (mr *MockChasmTreeMockRecorder) FindTimeSkippingTarget(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindTimeSkippingTarget", reflect.TypeOf((*MockChasmTree)(nil).FindTimeSkippingTarget), arg0)
+}
+
+// FinishCloseTransaction mocks base method.
+func (m *MockChasmTree) FinishCloseTransaction(ctx context.Context, isActive bool) (chasm.NodesMutation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FinishCloseTransaction", ctx, isActive)
+	ret0, _ := ret[0].(chasm.NodesMutation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FinishCloseTransaction indicates an expected call of FinishCloseTransaction.
+func (mr *MockChasmTreeMockRecorder) FinishCloseTransaction(ctx, isActive any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishCloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).FinishCloseTransaction), ctx, isActive)
+}
+
 // IsDirty mocks base method.
 func (m *MockChasmTree) IsDirty() bool {
 	m.ctrl.T.Helper()
@@ -245,6 +286,18 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
 }
 
+// MarkNeedsTimeSkippingTaskRegenForWorkflows mocks base method.
+func (m *MockChasmTree) MarkNeedsTimeSkippingTaskRegenForWorkflows() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkNeedsTimeSkippingTaskRegenForWorkflows")
+}
+
+// MarkNeedsTimeSkippingTaskRegenForWorkflows indicates an expected call of MarkNeedsTimeSkippingTaskRegenForWorkflows.
+func (mr *MockChasmTreeMockRecorder) MarkNeedsTimeSkippingTaskRegenForWorkflows() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkNeedsTimeSkippingTaskRegenForWorkflows", reflect.TypeOf((*MockChasmTree)(nil).MarkNeedsTimeSkippingTaskRegenForWorkflows))
+}
+
 // MarkTotalTimeSkippedUpdatedInPassive mocks base method.
 func (m *MockChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {
 	m.ctrl.T.Helper()
@@ -270,6 +323,20 @@ func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransitio
 func (mr *MockChasmTreeMockRecorder) PartitionedSnapshot(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionedSnapshot", reflect.TypeOf((*MockChasmTree)(nil).PartitionedSnapshot), arg0)
+}
+
+// PrepareCloseTransaction mocks base method.
+func (m *MockChasmTree) PrepareCloseTransaction(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PrepareCloseTransaction", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PrepareCloseTransaction indicates an expected call of PrepareCloseTransaction.
+func (mr *MockChasmTreeMockRecorder) PrepareCloseTransaction(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareCloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).PrepareCloseTransaction), ctx)
 }
 
 // RefreshTasks mocks base method.

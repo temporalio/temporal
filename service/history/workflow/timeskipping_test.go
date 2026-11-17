@@ -1302,6 +1302,93 @@ func (s *mutableStateSuite) TestTrackFutureOrReportDueTaskForWorkflow() {
 	}
 }
 
+type timeSkippingTestLibrary struct {
+	chasm.Library
+	timerHandler      chasm.PureTaskHandler[*chasmworkflow.Workflow, *commonpb.Payload]
+	sideEffectHandler chasm.SideEffectTaskHandler[*chasmworkflow.Workflow, *commonpb.Header]
+}
+
+func (l *timeSkippingTestLibrary) Tasks() []*chasm.RegistrableTask {
+	registrations := []*chasm.RegistrableTask{chasm.NewRegistrablePureTask("timer", l.timerHandler)}
+	if l.sideEffectHandler != nil {
+		registrations = append(registrations, chasm.NewRegistrableSideEffectTask("sideEffect", l.sideEffectHandler))
+	}
+	return registrations
+}
+
+func (s *mutableStateSuite) TestFindNextSkipTargetWithChasmTimers() {
+	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name             string
+		chasmTimers      []time.Duration
+		workflowTimer    time.Duration
+		fastForward      *time.Time
+		expectedTarget   time.Time
+		expectedDisabled bool
+	}{
+		{name: "NoChasmTimers", workflowTimer: 2 * time.Hour, expectedTarget: baseTime.Add(2 * time.Hour)},
+		{name: "EarlierChasmTimer", chasmTimers: []time.Duration{time.Hour, 3 * time.Hour}, workflowTimer: 2 * time.Hour, expectedTarget: baseTime.Add(time.Hour)},
+		{name: "EarlierWorkflowTimer", chasmTimers: []time.Duration{3 * time.Hour}, workflowTimer: 2 * time.Hour, expectedTarget: baseTime.Add(2 * time.Hour)},
+		{name: "OnlyChasmTimer", chasmTimers: []time.Duration{time.Hour}, expectedTarget: baseTime.Add(time.Hour)},
+		{name: "DueChasmTimerBlocksSkipping", chasmTimers: []time.Duration{0}, workflowTimer: 2 * time.Hour},
+		{name: "OverdueChasmTimerBlocksSkipping", chasmTimers: []time.Duration{-time.Minute}, workflowTimer: 2 * time.Hour},
+		{name: "FastForwardCapsChasmTimer", chasmTimers: []time.Duration{time.Hour}, fastForward: new(baseTime.Add(30 * time.Minute)), expectedTarget: baseTime.Add(30 * time.Minute), expectedDisabled: true},
+		{name: "ReachedFastForwardDisablesSkipping", fastForward: &baseTime, expectedDisabled: true},
+	} {
+		s.Run(tc.name, func() {
+			s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
+			s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			}
+			if tc.fastForward != nil {
+				s.mutableState.executionInfo.TimeSkippingInfo.FastForwardInfo = &persistencespb.FastForwardInfo{
+					TargetTime: timestamppb.New(*tc.fastForward),
+				}
+			}
+			if tc.workflowTimer != 0 {
+				s.mutableState.pendingTimerInfoIDs["timer"] = &persistencespb.TimerInfo{
+					TimerId: "timer", ExpiryTime: timestamppb.New(baseTime.Add(tc.workflowTimer)),
+				}
+			}
+			registry := chasm.NewRegistry(s.logger)
+			s.NoError(registry.Register(&timeSkippingTestLibrary{
+				Library: chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()),
+			}))
+			timerTypeID, ok := registry.TaskIDFor(&commonpb.Payload{})
+			s.True(ok)
+			var pureTasks []*persistencespb.ChasmComponentAttributes_Task
+			for _, offset := range tc.chasmTimers {
+				pureTasks = append(pureTasks, &persistencespb.ChasmComponentAttributes_Task{
+					TypeId: timerTypeID, ScheduledTime: timestamppb.New(baseTime.Add(offset)),
+				})
+			}
+			tree, err := chasm.NewTreeFromDB(map[string]*persistencespb.ChasmNode{
+				"": {Metadata: &persistencespb.ChasmNodeMetadata{
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: chasm.WorkflowArchetypeID, PureTasks: pureTasks,
+						},
+					},
+				}},
+			}, registry, s.mutableState, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+			s.NoError(err)
+			s.mutableState.chasmTree = tree
+			s.True(s.mutableState.ChasmEnabled())
+
+			transition := s.mutableState.findNextSkipTarget()
+			if tc.expectedTarget.IsZero() && !tc.expectedDisabled {
+				s.Nil(transition)
+				return
+			}
+			s.Require().NotNil(transition)
+			expected := chasm.NewTimeSkippingTransition(baseTime)
+			expected.TrackEarliestFutureTime(tc.expectedTarget)
+			expected.DisabledAfterFastForward = tc.expectedDisabled
+			s.Equal(expected, transition)
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestFindNextSkipTarget() {
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	fixedTimeSource := clock.NewEventTimeSource()
