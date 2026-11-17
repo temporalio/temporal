@@ -3,13 +3,14 @@ package activity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
-	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
+	"go.temporal.io/server/service/history/queues"
 )
 
 type releaseLimiterTaskHandler struct {
@@ -53,7 +54,7 @@ func (h *releaseLimiterTaskHandler) Execute(
 					ReleaseSlots: []string{limiter.GetSlotId()},
 				})
 			default:
-				errs[i] = serviceerror.NewInternalf("unknown limiter type %v", limiter.GetLimiterType())
+				errs[i] = queues.NewTerminalTaskError(fmt.Sprintf("unknown limiter type %v", limiter.GetLimiterType()))
 			}
 		}
 		if i == len(limiters)-1 {
