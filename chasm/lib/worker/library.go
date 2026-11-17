@@ -39,9 +39,6 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 	}
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*WorkerGroup](groupComponentName, groupOptions...),
-		// Detached workers can run recovery tasks after the group closes,
-		// while the execution is retained.
-		chasm.NewRegistrableComponent[*Worker](workerComponentName, chasm.WithDetached()),
 	}
 }
 
