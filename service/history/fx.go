@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -76,6 +77,7 @@ var Module = fx.Options(
 	chasmtests.Module,
 	fx.Provide(CallbackDestinationBlockedProvider),
 	fx.Provide(CallbackValidatorProvider),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(NexusOperationDestinationBlockedProvider),
 	fx.Provide(NexusOperationDestinationThrottledProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly

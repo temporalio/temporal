@@ -1510,6 +1510,16 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	if err != nil {
 		return nil, err
 	}
+	if request.WorkerInstanceKey != "" {
+		// Mark the worker as shut down before the fan-out. Matching skips that fan-out
+		// when the root partition isn't loaded, and this host still needs to refuse
+		// late polls on their way. Shutdown state is local to each matching host.
+		// Without the fan-out, other hosts don't learn about the shutdown and still
+		// accept late polls on their partitions.
+		// This also runs before active poll cancellation. Poll registration uses the
+		// opposite order, so a concurrent poll can't miss both.
+		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
+	}
 	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
 		// TODO: Remove the IsRoot/Sticky guard after EnableMatchingFanOutForPollCancellation is
 		// fully rolled out. This check is only needed during the transition since the legacy
@@ -1519,10 +1529,6 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		}
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
-	if request.WorkerInstanceKey != "" {
-		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
-		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
-	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
 	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
