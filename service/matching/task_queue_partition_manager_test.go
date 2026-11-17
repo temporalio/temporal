@@ -144,6 +144,73 @@ func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
 	s.Equal(errRemoteSyncMatchFailed, err)
 }
 
+func (s *PartitionManagerTestSuite) TestAddTask_ForwardedBusyWorkflowReturnsStartError() {
+	// A child requeues a canceled forward immediately, which keeps this task at the head of
+	// its priority. Workflow-busy must be returned unchanged so the child respools it at the tail.
+	startErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow is busy")
+	_, syncMatched, err := s.addTaskWhilePollerFinishes(
+		&taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"},
+		startErr,
+	)
+	s.Require().ErrorIs(err, startErr)
+	s.Require().False(syncMatched)
+}
+
+func (s *PartitionManagerTestSuite) TestAddTask_LocalBusyWorkflowSpools() {
+	startErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow is busy")
+	_, syncMatched, err := s.addTaskWhilePollerFinishes(nil, startErr)
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+}
+
+func (s *PartitionManagerTestSuite) TestAddTask_ForwardedOtherStartErrorReturned() {
+	// A non-busy start failure is already returned to the caller. Forwarding must not
+	// replace it with errRemoteSyncMatchFailed.
+	startErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "aps limit")
+	_, syncMatched, err := s.addTaskWhilePollerFinishes(
+		&taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"},
+		startErr,
+	)
+	s.Require().ErrorIs(err, startErr)
+	s.Require().True(syncMatched)
+}
+
+// addTaskWhilePollerFinishes waits until a poller is blocked in the matcher, then adds a task.
+// The poller finishes that task with startErr, which is what RecordTaskStarted would return.
+func (s *PartitionManagerTestSuite) addTaskWhilePollerFinishes(
+	forwardInfo *taskqueuespb.TaskForwardInfo,
+	startErr error,
+) (string, bool, error) {
+	pollDone := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		task, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{},
+		})
+		if err != nil {
+			pollDone <- err
+			return
+		}
+		task.finish(startErr)
+		pollDone <- nil
+	}()
+
+	pq := s.partitionMgr.defaultQueue().(*physicalTaskQueueManagerImpl)
+	await.RequireTrue(s.T(), pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	buildID, syncMatched, err := s.partitionMgr.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+		forwardInfo: forwardInfo,
+	})
+	s.Require().NoError(<-pollDone)
+	return buildID, syncMatched, err
+}
+
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatch() {
 	items, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{

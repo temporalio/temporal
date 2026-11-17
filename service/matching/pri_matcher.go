@@ -186,8 +186,9 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 
 		skipLimiter, err = tm.forwardTask(res.task)
 
-		// backoff on resource exhausted errors
-		if common.IsResourceExhausted(err) {
+		// Back off when the parent is overloaded. Workflow-busy is one workflow,
+		// so it does not pause forwarding for the rest of the backlog.
+		if common.IsResourceExhausted(err) && !isWorkflowBusy(err) {
 			util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(err))
 		} else {
 			retrier.Reset()
@@ -426,7 +427,12 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 				tm.emitDispatchLatency(task, true)
 				return syncMatchSuccess, nil
 			}
-			return syncMatchNoPoller, nil // forward error, give up here
+			// A missed forward is still a miss. Workflow-busy is a start error:
+			// return it so the caller can respool instead of treating it as a cancel.
+			if isWorkflowBusy(res.forwardErr) {
+				return syncMatchNoPoller, res.forwardErr
+			}
+			return syncMatchNoPoller, nil
 		}
 		// TODO(pri): can we just always do this on the parent and simplify this to:
 		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
