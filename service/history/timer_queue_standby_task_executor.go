@@ -297,7 +297,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
-				mutableState.ToRealTimeWithCurrentOffset(timerSequenceID.Timestamp),
+				mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(timerSequenceID.Timestamp),
 			) {
 				return &struct{}{}, nil
 			}
@@ -360,7 +360,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
-				mutableState.ToRealTimeWithCurrentOffset(timerSequenceID.Timestamp),
+				mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(timerSequenceID.Timestamp),
 			) {
 				return &struct{}{}, nil
 			}
@@ -380,7 +380,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
 
-		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), mutableState.ToRealTimeWithCurrentOffset(heartbeatTimeoutVis)) {
+		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(heartbeatTimeoutVis)) {
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 				return nil, err
 			}

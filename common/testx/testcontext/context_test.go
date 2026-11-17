@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/metadata"
 )
 
 func TestWithTimeout(t *testing.T) {
@@ -43,13 +42,54 @@ func TestWithTimeout(t *testing.T) {
 	})
 }
 
-func TestNameMetadata(t *testing.T) {
+func TestName(t *testing.T) {
 	t.Parallel()
 
-	ctx := For(t)
-	md, ok := metadata.FromOutgoingContext(ctx)
-	require.True(t, ok)
-	require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
+	for _, tc := range []struct {
+		name     string
+		context  func(*testing.T) context.Context
+		wantName string
+	}{
+		{
+			name:     "foreign",
+			context:  func(t *testing.T) context.Context { return t.Context() },
+			wantName: "",
+		},
+		{
+			name:     "test",
+			context:  func(t *testing.T) context.Context { return For(t) },
+			wantName: t.Name() + "/test",
+		},
+		{
+			name:     "derived",
+			context:  func(t *testing.T) context.Context { return context.WithoutCancel(For(t)) },
+			wantName: t.Name() + "/derived",
+		},
+		{
+			name: "extended",
+			context: func(t *testing.T) context.Context {
+				return EnsureRemaining(For(t), t, DefaultTimeout()+time.Second)
+			},
+			wantName: t.Name() + "/extended",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := tc.context(t)
+			require.Equal(t, tc.wantName, Name(ctx))
+		})
+	}
+
+	t.Run("parent context in child test", func(t *testing.T) {
+		t.Parallel()
+		ctx := For(t)
+		name := t.Name()
+		t.Run("child", func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, name, Name(ctx))
+			require.Equal(t, t.Name(), Name(For(t)))
+		})
+	})
 }
 
 func TestContextDecorators(t *testing.T) {
@@ -304,18 +344,6 @@ func TestEnsureRemaining(t *testing.T) {
 
 		require.NotSame(t, ctx, refreshed, "context should have been replaced")
 		require.Equal(t, "decorated", refreshed.Value(key{}))
-	})
-
-	t.Run("preserves test name metadata", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := For(t)
-		refreshed := EnsureRemaining(ctx, t, DefaultTimeout()+10*time.Second)
-
-		require.NotSame(t, ctx, refreshed, "context should have been replaced")
-		md, ok := metadata.FromOutgoingContext(refreshed)
-		require.True(t, ok)
-		require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
 	})
 
 	t.Run("recognizes older context after repeated extensions", func(t *testing.T) {

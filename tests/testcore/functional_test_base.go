@@ -352,6 +352,7 @@ func (s *functionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.
+	testtelemetry.AttachTestName(s.T())
 	ctx := testcontext.For(s.T())
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
 	s.namespaceID, err = s.RegisterNamespace(ctx, s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
@@ -383,12 +384,14 @@ func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persist
 // in each partition.
 func (s *functionalTestBase) SetupTest() {
 	s.checkTestShard()
+	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 }
 
 func (s *functionalTestBase) SetupSubTest() {
+	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 }
 

@@ -15,12 +15,14 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
+	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const testMaxIDLen = 1000
 
-func newTestValidator() *RequestValidator {
+func newTestValidator(t *testing.T) *RequestValidator {
+	linkValidator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 	saValidator := searchattribute.NewValidator(
 		searchattribute.NewTestProvider(),
 		searchattribute.NewTestMapperProvider(nil),
@@ -41,11 +43,10 @@ func newTestValidator() *RequestValidator {
 			defaultWorkflowRetrySettings: func(ns string) retrypolicy.DefaultRetrySettings {
 				return retrypolicy.DefaultDefaultRetrySettings
 			},
-			maxLinksPerRequest: func(ns string) int { return 10 },
-			linkMaxSize:        func(ns string) int { return 1024 },
 		},
 		searchattribute.NewTestMapperProvider(nil),
 		saValidator,
+		linkValidator,
 	)
 }
 
@@ -59,7 +60,7 @@ func validSWSRequest() *workflowservice.SignalWithStartWorkflowExecutionRequest 
 }
 
 func TestValidateSignalWithStartRequest(t *testing.T) {
-	v := newTestValidator()
+	v := newTestValidator(t)
 
 	t.Run("HappyPath", func(t *testing.T) {
 		req := validSWSRequest()
@@ -177,7 +178,7 @@ func TestValidateSignalWithStartRequestTimeSkippingConfig(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			validator := newTestValidator()
+			validator := newTestValidator(t)
 			validator.config.workflowTimeSkippingEnabled = func(namespace string) bool { return namespace == "ns1" }
 			request := validSWSRequest()
 			request.Namespace = tc.namespace
