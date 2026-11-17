@@ -71,9 +71,11 @@ const reasonNone metrics.ReasonString = "none"
 const (
 	outcomeReattachAttached  = "attached"
 	outcomeReattachCompleted = "completed"
+	outcomeReattachFailed    = "failed"
 
-	reasonReattachNotFound      metrics.ReasonString = "not_found"
-	reasonReattachAlreadyClosed metrics.ReasonString = "already_closed"
+	reasonReattachNotFound        metrics.ReasonString = "not_found"
+	reasonReattachAlreadyClosed   metrics.ReasonString = "already_closed"
+	reasonReattachChainUnresolved metrics.ReasonString = "chain_unresolved"
 )
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a

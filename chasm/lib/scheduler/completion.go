@@ -69,10 +69,7 @@ func completedResultFromWorkflowInfo(
 	switch status {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
-		// CONSIDER(scheduler): Callback reattachment does not yet follow a
-		// continued-as-new chain. If its successor closes before callback attachment,
-		// the buffered start remains incomplete and the callbacks task retries until
-		// its retry limit.
+		// Callers resolve the chain's tail; a CAN'd run is never its final status.
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		return nil, nil
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
