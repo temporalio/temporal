@@ -356,6 +356,7 @@ type (
 		GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask
 
 		IsDirty() bool
+		ValidateChasmSpeculativeTransition() error
 		IsTransitionHistoryEnabled() bool
 		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)
