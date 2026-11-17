@@ -683,6 +683,14 @@ func emitBufferedEventsSkipped(
 		"buffered_events_count": mutableState.NumBufferedEvents(),
 		"source_next_event_id":  mutableState.GetNextEventID(),
 	}
+	// The started workflow task is what events buffer behind; its start time bounds how long the
+	// buffer has been open.
+	if wft := mutableState.GetStartedWorkflowTask(); wft != nil {
+		details["started_wft_scheduled_event_id"] = wft.ScheduledEventID
+		details["started_wft_started_event_id"] = wft.StartedEventID
+		details["started_wft_started_time"] = wft.StartedTime
+		details["started_wft_attempt"] = wft.Attempt
+	}
 	if name := clusterNameForID(clusterMetadata.GetAllClusterInfo(), targetClusterID); name != "" {
 		details["target_cluster"] = name
 	}

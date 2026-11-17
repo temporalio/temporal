@@ -3,6 +3,7 @@ package replication
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	otellog "go.opentelemetry.io/otel/log"
@@ -30,7 +31,7 @@ func TestEmitBufferedEventsSkipped(t *testing.T) {
 		},
 	}
 
-	setup := func(t *testing.T, state enumspb.ReplicationState, emitEnabled bool) *eventCaptureLogger {
+	setup := func(t *testing.T, state enumspb.ReplicationState, emitEnabled bool, startedWFT *historyi.WorkflowTaskInfo) *eventCaptureLogger {
 		ctrl := gomock.NewController(t)
 		capture := &eventCaptureLogger{}
 
@@ -67,13 +68,20 @@ func TestEmitBufferedEventsSkipped(t *testing.T) {
 		mutableState := historyi.NewMockMutableState(ctrl)
 		mutableState.EXPECT().GetNextEventID().Return(int64(40)).AnyTimes()
 		mutableState.EXPECT().NumBufferedEvents().Return(3).AnyTimes()
+		mutableState.EXPECT().GetStartedWorkflowTask().Return(startedWFT).AnyTimes()
 
 		emitBufferedEventsSkipped(shardContext, task, targetClusterID, mutableState)
 		return capture
 	}
 
 	t.Run("handover records the handover state", func(t *testing.T) {
-		capture := setup(t, enumspb.REPLICATION_STATE_HANDOVER, true)
+		wftStarted := time.Date(2026, 11, 17, 6, 17, 33, 195000000, time.UTC)
+		capture := setup(t, enumspb.REPLICATION_STATE_HANDOVER, true, &historyi.WorkflowTaskInfo{
+			ScheduledEventID: 11,
+			StartedEventID:   12,
+			StartedTime:      wftStarted,
+			Attempt:          1,
+		})
 		require.Len(t, capture.records, 1)
 		rec := capture.records[0]
 		require.Equal(t, wideevents.ReplicationLifecycleEventName, rec.EventName())
@@ -101,10 +109,14 @@ func TestEmitBufferedEventsSkipped(t *testing.T) {
 		require.EqualValues(t, 3, details["buffered_events_count"])
 		require.EqualValues(t, 40, details["source_next_event_id"])
 		require.EqualValues(t, 13, details["task_first_event_id"])
+		require.EqualValues(t, 11, details["started_wft_scheduled_event_id"])
+		require.EqualValues(t, 12, details["started_wft_started_event_id"])
+		require.Equal(t, wftStarted.Format(time.RFC3339Nano), details["started_wft_started_time"])
+		require.EqualValues(t, 1, details["started_wft_attempt"])
 	})
 
 	t.Run("normal replication state also emits and records the state", func(t *testing.T) {
-		capture := setup(t, enumspb.REPLICATION_STATE_NORMAL, true)
+		capture := setup(t, enumspb.REPLICATION_STATE_NORMAL, true, nil)
 		require.Len(t, capture.records, 1)
 		var details map[string]any
 		capture.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
@@ -114,10 +126,11 @@ func TestEmitBufferedEventsSkipped(t *testing.T) {
 			return true
 		})
 		require.Equal(t, enumspb.REPLICATION_STATE_NORMAL.String(), details["replication_state"])
+		require.NotContains(t, details, "started_wft_started_event_id")
 	})
 
 	t.Run("lifecycle events disabled emits nothing", func(t *testing.T) {
-		capture := setup(t, enumspb.REPLICATION_STATE_HANDOVER, false)
+		capture := setup(t, enumspb.REPLICATION_STATE_HANDOVER, false, nil)
 		require.Empty(t, capture.records)
 	})
 }
