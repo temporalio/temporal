@@ -1511,9 +1511,13 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		return nil, err
 	}
 	if request.WorkerInstanceKey != "" {
-		// Put before the fan-out, which returns early when the root partition is not loaded.
-		// A poll that is still on its way then arrives after the shutdown and must be refused.
-		// Keep Put before CancelAll. Poll registration uses the inverse order to avoid missed polls.
+		// Mark the worker as shut down before the fan-out. Matching skips that fan-out
+		// when the root partition isn't loaded, and this host still needs to refuse
+		// late polls on their way. Shutdown state is local to each matching host.
+		// Without the fan-out, other hosts don't learn about the shutdown and still
+		// accept late polls on their partitions.
+		// This also runs before active poll cancellation. Poll registration uses the
+		// opposite order, so a concurrent poll can't miss both.
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
