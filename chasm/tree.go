@@ -1241,8 +1241,10 @@ func (n *Node) syncSubField(
 			return
 		}
 
-		if oldChildNode, ok := n.children[fieldN]; ok && childNode.ephemeral {
-			// An ephemeral node doesn't overwrite the persisted copy of the node it replaces, so delete it explicitly.
+		if oldChildNode, ok := n.children[fieldN]; ok {
+			// The field's value was replaced. The new node may not overwrite the replaced node's whole subtree, or any
+			// of it if the new node is ephemeral, so delete the subtree. Paths that the new node writes are removed
+			// from DeletedNodes when it's serialized.
 			if err = oldChildNode.delete(false); err != nil {
 				return
 			}

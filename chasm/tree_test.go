@@ -5672,6 +5672,31 @@ func (s *nodeSuite) TestCloseTransaction_PersistsAcrossTransactions() {
 	s.ProtoEqual(md, ctx2.UserMetadata(c2))
 }
 
+func (s *nodeSuite) TestCloseTransaction_ReplacedComponentDeletesSubtree() {
+	root := s.testComponentTree()
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "SubComponent1/SubComponent11")
+	s.Contains(mutation.UpdatedNodes, "SubComponent1/SubData11")
+
+	// The replacement doesn't have SubComponent11, so it must be deleted. SubData11 is rewritten, not deleted.
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponent1 = NewComponentField(ctx, &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{RunId: "replacement"},
+		SubData11:         NewDataField(ctx, &protoMessageType{RunId: "replacement-data"}),
+	})
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Equal(map[string]struct{}{"SubComponent1/SubComponent11": {}}, mutation.DeletedNodes)
+	s.Contains(mutation.UpdatedNodes, "SubComponent1")
+	s.Contains(mutation.UpdatedNodes, "SubComponent1/SubData11")
+	_, ok := root.findNode([]string{"SubComponent1", "SubComponent11"})
+	s.False(ok)
+}
+
 func (s *nodeSuite) TestCloseTransaction_EphemeralComponent() {
 	root := s.testComponentTree()
 	_, err := root.CloseTransaction(context.Background(), true)
