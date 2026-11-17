@@ -355,8 +355,10 @@ func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFast
 // Time Skipping Runtime Methods for Workflow-based Executions
 // =============================================================================
 
-// isWorkflowSkippable checks whether current workflow state has any in-flight work that must
-// complete before workflow time can advance. Timer deadlines are inspected by findNextSkipTarget.
+// isWorkflowSkippable checks if current workflow can skip time,
+// if checks if time skipping is enabled, if the workflow has in-flight work,
+// and if the workflow is at the correct state and status to skip time.
+// And if there is a time point to skip to is not the scope of this method.
 func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	// (1) gate by time skipping configuration; runs for every workflow, so it is not logged
 	if !NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).IsEnabled() {
@@ -445,7 +447,7 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 
 // findNextSkipTarget finds the earliest future target time among pending timers, activity retries,
 // workflow backoff, and execution timeouts, then applies the fast-forward bound. A pending task due
-// now or earlier blocks time skipping until it is processed. Call only after eligibility succeeds.
+// now or earlier blocks time skipping until it is processed. Call only after isWorkflowSkippable returns true.
 //
 //nolint:revive // Keep target classes in one ordered scan so due work short-circuits consistently.
 func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
@@ -756,6 +758,7 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 	prevTimeSkippingVT *persistencespb.VersionedTransition,
 	preAccumulatedSkipDuration time.Duration,
 ) {
+	isWorkflow := ms.IsWorkflow()
 	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
 	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) <= 0 {
 		return
@@ -763,7 +766,7 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 	if ms.accumulatedSkippedDuration() == preAccumulatedSkipDuration {
 		return
 	}
-	if ms.IsWorkflow() {
+	if isWorkflow {
 		// TaskRefresher runs after this hook. Reset the persisted status first so its normal
 		// state-machine timer path emits the earliest surviving group with the replicated offset.
 		refreshStateMachineTimerTasksForTimeSkipping(ms)

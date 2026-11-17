@@ -10293,6 +10293,7 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("NilSafeForExecutionsWithoutTimeSkipping", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
 		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
@@ -10307,6 +10308,7 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("NilSafeForNewlyInitializedTimeSkippingWithNoSkip", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
 		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 
@@ -10324,6 +10326,7 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("UnchangedVersionedTransitionDoesNotFlag", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
 		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
