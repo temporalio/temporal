@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/searchattribute"
@@ -129,9 +130,10 @@ func NewWorkflowServiceNexusServiceProcessor(
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	linkValidator commonlinks.Validator,
 ) *chasm.NexusServiceProcessor {
 	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
-	op := SignalWithStartOperationProcessor{validator: NewValidator(config, saMapperProvider, saValidator)}
+	op := SignalWithStartOperationProcessor{validator: NewValidator(config, saMapperProvider, saValidator, linkValidator)}
 	sp.MustRegisterOperation(
 		workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 		chasm.NewRegisterableNexusOperationProcessor(op),
