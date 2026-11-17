@@ -11,7 +11,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -691,7 +690,7 @@ func emitBufferedEventsSkipped(
 		details["started_wft_started_time"] = wft.StartedTime
 		details["started_wft_attempt"] = wft.Attempt
 	}
-	if name := clusterNameForID(clusterMetadata.GetAllClusterInfo(), targetClusterID); name != "" {
+	if name, _, err := ClusterIDToClusterNameShardCount(clusterMetadata.GetAllClusterInfo(), targetClusterID); err == nil {
 		details["target_cluster"] = name
 	}
 	if svt, ok := taskInfo.(*tasks.SyncVersionedTransitionTask); ok {
@@ -710,14 +709,4 @@ func emitBufferedEventsSkipped(
 		nil,
 		details,
 	)
-}
-
-// clusterNameForID maps a stream cluster ID (the cluster's initial failover version) to its name.
-func clusterNameForID(clusters map[string]cluster.ClusterInformation, clusterID int32) string {
-	for name, info := range clusters {
-		if int32(info.InitialFailoverVersion) == clusterID {
-			return name
-		}
-	}
-	return ""
 }
