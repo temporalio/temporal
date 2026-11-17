@@ -1480,7 +1480,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			ActivityId:       activityID,
 			ActivityType:     activityTypeName,
 		}
-		protoassert.ProtoEqual(s.T(), taskToken, resultToken)
+		protorequire.ProtoEqual(s.T(), taskToken, resultToken)
 		i++
 	}
 	s.Len(delivered, taskCount)
