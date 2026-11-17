@@ -401,7 +401,7 @@ func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
 				if tc.expectRateLimit {
 					require.Error(t, err)
 				} else {
-					assert.NoError(t, err)
+					require.NoError(t, err)
 				}
 			})
 		}
