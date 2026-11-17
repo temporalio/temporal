@@ -17,8 +17,10 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
@@ -30,6 +32,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.uber.org/mock/gomock"
@@ -90,6 +93,21 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClientFactory(),
 		s.mockResource.NamespaceCache,
 		endpointClient,
+		newNamespaceHandler(
+			s.mockResource.Logger,
+			wideevents.NoopLogger(),
+			s.mockResource.MetadataMgr,
+			s.mockResource.NamespaceCache,
+			s.mockResource.GetClusterMetadata(),
+			nil,
+			nil,
+			nil,
+			clock.NewRealTimeSource(),
+			NewConfig(dynamicconfig.NewNoopCollection(), 4),
+			nil,
+			metrics.NoopMetricsHandler,
+			namespace.NewDefaultReplicationResolverFactory(),
+		),
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()
@@ -1855,4 +1873,19 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
 	s.Equal(remoteClusterMutationCreated, details["mutation"])
 	s.NotNil(details["persistence_request"])
+}
+
+func (s *operatorHandlerSuite) TestSoftDeleteNamespace_NilRequest() {
+	_, err := s.handler.SoftDeleteNamespace(context.Background(), nil)
+	s.ErrorIs(err, errRequestNotSet)
+}
+
+func (s *operatorHandlerSuite) TestSoftDeleteNamespace_ReturnsHandlerError() {
+	s.mockResource.MetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
+	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "ns"}).
+		Return(nil, serviceerror.NewNamespaceNotFound("ns"))
+
+	_, err := s.handler.SoftDeleteNamespace(context.Background(), &operatorservice.SoftDeleteNamespaceRequest{Namespace: "ns"})
+	var notFound *serviceerror.NamespaceNotFound
+	s.ErrorAs(err, &notFound)
 }

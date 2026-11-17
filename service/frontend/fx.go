@@ -990,6 +990,13 @@ func OperatorHandlerProvider(
 	clientFactory client.Factory,
 	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
+	persistenceMetadataManager persistence.MetadataManager,
+	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
+	archivalMetadata archiver.ArchivalMetadata,
+	archiverProvider provider.ArchiverProvider,
+	timeSource clock.TimeSource,
+	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -1006,6 +1013,27 @@ func OperatorHandlerProvider(
 		clientFactory,
 		namespaceRegistry,
 		nexusEndpointClient,
+		newNamespaceHandler(
+			logger,
+			eventLogger,
+			persistenceMetadataManager,
+			namespaceRegistry,
+			clusterMetadata,
+			nsreplication.NewReplicator(
+				namespaceReplicationQueue,
+				logger,
+				eventLogger,
+				configuration.EmitNamespaceLifecycleEvents,
+				clusterMetadata.GetCurrentClusterName(),
+			),
+			archivalMetadata,
+			archiverProvider,
+			timeSource,
+			configuration,
+			chasmNsReplClient,
+			metricsHandler,
+			replicationResolverFactory,
+		),
 	}
 	return NewOperatorHandlerImpl(args)
 }
