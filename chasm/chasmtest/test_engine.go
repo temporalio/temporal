@@ -37,11 +37,12 @@ type (
 	// well as blocking [PollComponent] with [NotifyExecution], matching the behavior
 	// of the production engine as closely as possible without persistence or shard logic.
 	Engine struct {
-		t          *testing.T
-		registry   *chasm.Registry
-		logger     log.Logger
-		metrics    metrics.Handler
-		timeSource clock.TimeSource
+		t              *testing.T
+		registry       *chasm.Registry
+		logger         log.Logger
+		metrics        metrics.Handler
+		timeSource     clock.TimeSource
+		namespaceNames map[string]string
 		// currentExecutions maps (namespaceID, businessID) to the latest run (running or closed).
 		currentExecutions map[businessKey]*execution
 		// allExecutions maps (namespaceID, businessID, runID) to any run, for lookups by specific RunID.
@@ -88,6 +89,16 @@ func WithTimeSource(ts clock.TimeSource) EngineOption {
 func WithMetricsHandler(handler metrics.Handler) EngineOption {
 	return func(e *Engine) {
 		e.metrics = handler
+	}
+}
+
+// WithNamespaceName supplies a name for the given namespace ID in test contexts.
+func WithNamespaceName(id, name string) EngineOption {
+	return func(e *Engine) {
+		if e.namespaceNames == nil {
+			e.namespaceNames = make(map[string]string)
+		}
+		e.namespaceNames[id] = name
 	}
 }
 
@@ -623,8 +634,12 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		},
 		HandleIsWorkflow: func() bool { return false },
 		HandleGetNamespaceEntry: func() *namespace.Namespace {
+			name := e.namespaceNames[key.NamespaceID]
+			if name == "" {
+				name = key.NamespaceID
+			}
 			return namespace.NewLocalNamespaceForTest(
-				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: key.NamespaceID},
+				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: name},
 				&persistencespb.NamespaceConfig{},
 				cluster.TestCurrentClusterName,
 			)
@@ -689,6 +704,39 @@ func (x *execution) recordRequestID(requestID string) {
 		x.requestIDs = make(map[string]struct{})
 	}
 	x.requestIDs[requestID] = struct{}{}
+}
+
+// NodeForRef returns the CHASM tree node backing the execution identified by ref.
+// It is intended for test drivers that dispatch tasks at the node level
+// ([chasm.Node.ExecuteSideEffectTask]), which the [Engine] API does not expose.
+func (e *Engine) NodeForRef(ref chasm.ComponentRef) (*chasm.Node, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.node, nil
+}
+
+// BackendForRef returns the [chasm.MockNodeBackend] backing the execution
+// identified by ref, e.g. to read the earliest pending pure task time via
+// [chasm.MockNodeBackend.LastDeletePureTaskCall].
+func (e *Engine) BackendForRef(ref chasm.ComponentRef) (*chasm.MockNodeBackend, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.backend, nil
+}
+
+// CloseTransaction closes any open transaction on the execution identified by
+// ref, commits its transition count, and runs registered invariant checks.
+// Pair it with node-level dispatch done through [Engine.NodeForRef].
+func (e *Engine) CloseTransaction(ctx context.Context, ref chasm.ComponentRef) error {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return err
+	}
+	return e.closeTransaction(ctx, exec)
 }
 
 // executionForRef looks up an execution by the ref's RunID when present, or falls back

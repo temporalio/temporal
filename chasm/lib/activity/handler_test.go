@@ -153,11 +153,12 @@ func newStartTestHandler(t *testing.T) (*handler, context.Context, *metricstest.
 	capture := metricsHandler.StartCapture()
 	t.Cleanup(func() { metricsHandler.StopCapture(capture) })
 
-	maxLinks := func(string) int { return 10 }
+	linksConfig := test.NewLinksValidatorConfig()
+	linksConfig.MaxLinksPerExecution = func(string) int { return 10 }
 	h := &handler{
 		config:            config,
 		callbackValidator: test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig()),
-		linkValidator:     newLinkValidator(maxLinks, maxLinks, func(string) int { return 4000 }),
+		linkValidator:     test.NewLinksValidator(t, linksConfig),
 		logger:            log.NewTestLogger(),
 		metricsHandler:    metricsHandler,
 	}
