@@ -143,6 +143,7 @@ type (
 		status int32
 
 		callbackValidator               callbacks.Validator
+		linkValidator                   commonlinks.Validator
 		tokenSerializer                 *tasktoken.Serializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
@@ -322,6 +323,7 @@ func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	callbackValidator callbacks.Validator,
+	linkValidator commonlinks.Validator,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
@@ -362,6 +364,7 @@ func NewWorkflowHandler(
 		NexusOperationHandler: nexusOperationHandler,
 		status:                common.DaemonStatusInitialized,
 		callbackValidator:     callbackValidator,
+		linkValidator:         linkValidator,
 		config:                config,
 		tokenSerializer:       tasktoken.NewSerializer(),
 		versionChecker:        headers.NewDefaultVersionChecker(),
@@ -434,23 +437,26 @@ func (wh *WorkflowHandler) Start() {
 			wh.logger.Info("Frontend is now healthy")
 		}()
 
-		wh.namespaceRegistry.RegisterStateChangeCallback(wh, func(ns *namespace.Namespace, deletedFromDb bool) {
-			if deletedFromDb {
-				return
-			}
+		wh.namespaceRegistry.RegisterStateChangeCallback(wh, wh.onNamespaceStateChange)
+	}
+}
 
-			if ns.IsGlobalNamespace() &&
-				ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
-				//nolint:forbidigo // namespace state-change callback; cancels all pollers on ns deactivation
-				!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName()) {
-				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
-				if ok {
-					for _, cancelFn := range pollers.PopAll() {
-						cancelFn()
-					}
-				}
+func (wh *WorkflowHandler) onNamespaceStateChange(ns *namespace.Namespace, deletedFromDB bool) {
+	if deletedFromDB {
+		return
+	}
+
+	deactivated := ns.IsGlobalNamespace() &&
+		ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+		//nolint:forbidigo // namespace state-change callback; cancels all pollers on ns deactivation
+		!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName())
+	if deactivated || ns.State() == enumspb.NAMESPACE_STATE_SOFT_DELETED {
+		pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
+		if ok {
+			for _, cancelFn := range pollers.PopAll() {
+				cancelFn()
 			}
-		})
+		}
 	}
 }
 
@@ -719,12 +725,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
-	if err := commonlinks.ValidateWithCallbacks(
-		request.GetLinks(),
-		request.GetCompletionCallbacks(),
-		wh.config.MaxLinksPerRequest(namespaceName.String()),
-		wh.config.LinkMaxSize(namespaceName.String()),
-	); err != nil {
+	if err := wh.linkValidator.Validate(namespaceName.String(), request.GetLinks(), request.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
 
@@ -1205,6 +1206,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
+			tag.WorkflowNamespace(namespaceEntry.Name().String()),
 			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
@@ -1459,6 +1461,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
+			tag.WorkflowNamespace(namespaceName.String()),
 			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
@@ -2326,7 +2329,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, err
 	}
 
-	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
+	if err := wh.linkValidator.Validate(request.GetNamespace(), request.GetLinks(), nil); err != nil {
 		return nil, err
 	}
 
@@ -2371,7 +2374,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, errRequestIDTooLong
 	}
 
-	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
+	if err := wh.linkValidator.Validate(request.GetNamespace(), request.GetLinks(), nil); err != nil {
 		return nil, err
 	}
 
@@ -2430,12 +2433,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if len(request.GetSearchAttributes().GetIndexedFields()) > 0 {
 		request = common.CloneProto(request)
 	}
-
 	if err := wh.validator.ValidateSignalWithStartRequest(request); err != nil {
-		return nil, err
-	}
-
-	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -2526,7 +2524,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, err
 	}
 
-	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
+	if err := wh.linkValidator.Validate(request.GetNamespace(), request.GetLinks(), nil); err != nil {
 		return nil, err
 	}
 
@@ -5638,11 +5636,10 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		request.GetRequest().GetCompletionCallbacks(),
 	)
 
-	return commonlinks.ValidateWithCallbacks(
+	return wh.linkValidator.Validate(
+		namespaceName.String(),
 		request.GetRequest().GetLinks(),
 		request.GetRequest().GetCompletionCallbacks(),
-		wh.config.MaxLinksPerRequest(namespaceName.String()),
-		wh.config.LinkMaxSize(namespaceName.String()),
 	)
 }
 
@@ -6570,6 +6567,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
+			tag.WorkflowNamespace(namespaceName.String()),
 			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
@@ -7994,6 +7992,9 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context, request *workflowservice.PollWorkflowExecutionTimeSkippingRequest) (*workflowservice.PollWorkflowExecutionTimeSkippingResponse, error) {
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowExecution().GetRunId() != "" {
+		return nil, serviceerror.NewInvalidArgument("polling workflow execution time skipping for a specific run ID is not supported")
 	}
 	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
 		return nil, err

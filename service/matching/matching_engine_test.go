@@ -246,7 +246,7 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
+		queryResults:        collection.NewSyncMap[string, pendingQuery](),
 		logger:              logger,
 		throttledLogger:     log.ThrottledLogger(logger),
 		metricsHandler:      metrics.NoopMetricsHandler,
@@ -257,6 +257,7 @@ func newMatchingEngine(
 		hostInfoProvider:    mockHostInfoProvider,
 		serviceResolver:     mockServiceResolver,
 		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
+		routeChecksCh:       make(chan struct{}, 1),
 		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:          clock.NewRealTimeSource(),
 		visibilityManager:   mockVisibilityManager,
@@ -1298,6 +1299,71 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.matchingEngine.partitionsLock.RLock()
 	defer s.matchingEngine.partitionsLock.RUnlock()
 	s.Empty(s.matchingEngine.partitions)
+}
+
+func (s *matchingEngineSuite) TestRespondQueryTaskCompleted_RejectsOtherNamespace() {
+	tqName := "query-tq"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	execution := &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: uuid.NewString()}
+
+	type queryOutcome struct {
+		resp *matchingservice.QueryWorkflowResponse
+		err  error
+	}
+	queryDone := make(chan queryOutcome, 1)
+	go func() {
+		resp, err := s.matchingEngine.QueryWorkflow(context.Background(), &matchingservice.QueryWorkflowRequest{
+			NamespaceId: namespaceID,
+			TaskQueue:   taskQueue,
+			QueryRequest: &workflowservice.QueryWorkflowRequest{
+				Namespace: "ns",
+				Execution: execution,
+				Query:     &querypb.WorkflowQuery{QueryType: "q"},
+			},
+		})
+		queryDone <- queryOutcome{resp: resp, err: err}
+	}()
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			StickyTaskQueue: &taskqueuepb.TaskQueue{Name: tqName},
+		}, nil).Times(1)
+	var pollResp *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		var err error
+		pollResp, err = s.matchingEngine.PollWorkflowTaskQueue(t.Context(), &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: namespaceID,
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: taskQueue,
+				Identity:  "identity",
+			},
+		}, metrics.NoopMetricsHandler)
+		require.NoError(t, err)
+		require.NotNil(t, pollResp.GetQuery())
+	}, 5*time.Second, 10*time.Millisecond)
+
+	queryToken, err := s.matchingEngine.tokenSerializer.DeserializeQueryTaskToken(pollResp.GetTaskToken())
+	s.NoError(err)
+
+	completed := &workflowservice.RespondQueryTaskCompletedRequest{
+		CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
+		QueryResult:   payloads.EncodeString("answer"),
+	}
+	respond := func(nsID string) error {
+		return s.matchingEngine.RespondQueryTaskCompleted(context.Background(), &matchingservice.RespondQueryTaskCompletedRequest{
+			NamespaceId:      nsID,
+			TaskQueue:        taskQueue,
+			TaskId:           queryToken.GetTaskId(),
+			CompletedRequest: completed,
+		}, metrics.NoopMetricsHandler)
+	}
+
+	s.ErrorAs(respond(uuid.NewString()), new(*serviceerror.NotFound))
+
+	s.NoError(respond(namespaceID))
+	outcome := await.Rcv(s.T(), queryDone)
+	s.NoError(outcome.err)
+	protorequire.ProtoEqual(s.T(), completed.GetQueryResult(), outcome.resp.GetQueryResult())
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
@@ -3229,11 +3295,17 @@ func (m mockRoutingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return hosts[n%len(hosts)].GetAddress(), nil
 }
 
+func (m mockRoutingMatchingClient) NextRouteChange(p tqid.Partition) time.Time {
+	key, n := p.RoutingKey(0)
+	return m.sr.NextLookupChange(key, n+1)
+}
+
 func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	// need to create a new engine for this test to customize mockServiceResolver
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(gomock.Any(), gomock.Any()).Return(time.Time{}).AnyTimes()
 
 	// add Route to MockMatchingServiceClient
 	routingClient := mockRoutingMatchingClient{
@@ -3291,6 +3363,143 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	}
 	s.True(isLoaded(p1))
 	s.False(isLoaded(p2))
+}
+
+func (s *matchingEngineSuite) TestUnloadDuringGradualMembershipChange() {
+	// need to create a new engine for this test to customize mockServiceResolver
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+
+	routingClient := mockRoutingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		sr:                        s.mockServiceResolver,
+	}
+
+	self := s.mockHostInfoProvider.HostInfo()
+	other := membership.NewHostInfoFromAddress("other")
+
+	config := s.newConfig()
+	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+
+	e := newMatchingEngine(config, s.v1TaskManager, s.fairTaskManager, s.mockHistoryClient,
+		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
+	e.Start()
+	defer e.Stop()
+
+	newPartition := func() tqid.Partition {
+		p, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.NewString(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		s.NoError(err)
+		return p
+	}
+	load := func(p tqid.Partition) {
+		_, _, err := e.getTaskQueuePartitionManager(context.Background(), p, true, loadCauseUnspecified)
+		s.NoError(err)
+	}
+
+	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1).Return(time.Time{}).AnyTimes()
+
+	// p2 and p3 move away partway through a gradual change, without a membership changed
+	// event. p1 doesn't move.
+	var gradual atomic.Bool
+	now := time.Now()
+	expectPartition := func(p tqid.Partition, switchAt time.Time, lookups *atomic.Int32) {
+		moved := func() bool { return !switchAt.IsZero() && !time.Now().Before(switchAt) }
+		key, n := p.RoutingKey(0)
+		s.mockServiceResolver.EXPECT().NextLookupChange(key, n+1).DoAndReturn(func(string, int) time.Time {
+			if !gradual.Load() || switchAt.IsZero() || moved() {
+				return time.Time{}
+			}
+			return switchAt
+		}).AnyTimes()
+		s.mockServiceResolver.EXPECT().LookupN(key, n+1).DoAndReturn(func(string, int) []membership.HostInfo {
+			lookups.Add(1)
+			if moved() {
+				return []membership.HostInfo{other}
+			}
+			return []membership.HostInfo{self}
+		}).AnyTimes()
+	}
+	p1, p2, p3 := newPartition(), newPartition(), newPartition()
+	var p1Lookups, p2Lookups, p3Lookups atomic.Int32
+	expectPartition(p1, time.Time{}, &p1Lookups)
+	expectPartition(p2, now.Add(time.Second), &p2Lookups)
+	expectPartition(p3, now.Add(1500*time.Millisecond), &p3Lookups)
+
+	load(p1)
+	load(p2)
+
+	// one event for the start of the gradual change, which finds p2's switch time
+	gradual.Store(true)
+	e.membershipChangedCh <- nil
+	await.RequireTrue(s.T(), func() bool { return p1Lookups.Load() > 0 }, time.Second, 10*time.Millisecond)
+
+	// p3 is loaded after that, so it's found by the load path
+	load(p3)
+
+	s.Len(e.getTaskQueuePartitions(1000), 3, "nothing should be unloaded yet")
+	s.Zero(p3Lookups.Load())
+
+	await.RequireTruef(s.T(), func() bool {
+		return len(e.getTaskQueuePartitions(1000)) == 1
+	}, 5*time.Second, 10*time.Millisecond, "p2 and p3 should have been unloaded at their switch times")
+
+	tqm, _, err := e.getTaskQueuePartitionManager(context.Background(), p1, false, loadCauseUnspecified)
+	s.NoError(err)
+	s.NotNil(tqm)
+	s.Equal(int32(1), p1Lookups.Load(), "p1 should only have been checked on the membership event")
+}
+
+func (s *matchingEngineSuite) TestNexusEndpointsOwnershipDuringGradualMembershipChange() {
+	// need to create a new engine for this test to customize mockServiceResolver
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+
+	routingClient := mockRoutingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		sr:                        s.mockServiceResolver,
+	}
+
+	self := s.mockHostInfoProvider.HostInfo()
+	other := membership.NewHostInfoFromAddress("other")
+
+	config := s.newConfig()
+	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+
+	e := newMatchingEngine(config, s.v1TaskManager, s.fairTaskManager, s.mockHistoryClient,
+		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
+	e.Start()
+	defer e.Stop()
+
+	// The endpoints table moves away partway through a gradual change, without a membership
+	// changed event.
+	switchAt := time.Now().Add(500 * time.Millisecond)
+	moved := func() bool { return !time.Now().Before(switchAt) }
+	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).DoAndReturn(func(string) (membership.HostInfo, error) {
+		if moved() {
+			return other, nil
+		}
+		return self, nil
+	}).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1).DoAndReturn(func(string, int) time.Time {
+		if moved() {
+			return time.Time{}
+		}
+		return switchAt
+	}).AnyTimes()
+
+	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
+	s.NoError(err)
+	s.True(isOwner)
+
+	// one event for the start of the gradual change, which finds the switch time
+	e.membershipChangedCh <- nil
+
+	await.Rcv(s.T(), ownershipLostCh)
 }
 
 func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {
@@ -6033,6 +6242,10 @@ func defaultTestConfig() *Config {
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
 	// Always update metadata on append in tests so backlog count assertions are exact.
 	config.MetadataUpdateOnAppendInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
+	config.UseSignalsV2ForPollerScaling = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
+	config.PollerScalingTaskAddToDispatchRatio = dynamicconfig.GetFloatPropertyFnFilteredByTaskQueue(1.2)
+	config.PollerScalingWaitTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(time.Second)
+	config.EnablePollerScalingDecisionMetrics = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	return config
 }
 

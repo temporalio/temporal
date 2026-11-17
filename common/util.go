@@ -569,6 +569,9 @@ func CreateHistoryStartWorkflowRequest(
 	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
 		startRequest = CloneProto(startRequest)
 	}
+	// TODO: derive deadlines in history from the virtual start time instead. Until then, callers that
+	// pre-shift now (child workflows) must not also set TimeSkippingStatePropagation on startRequest.
+	now = now.Add(startRequest.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration())
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:                  namespaceID,
 		StartRequest:                 startRequest,

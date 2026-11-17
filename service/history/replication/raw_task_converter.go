@@ -475,13 +475,14 @@ func getVersionHistoryAndEvents(
 	logger log.Logger,
 ) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
 	if eventBlobCache != nil {
-		if versionHistory, eventBatches, baseWorkflowInfo, ok := getEventsFromCache(
+		versionHistory, eventBatches, baseWorkflowInfo, _, ok := getEventsFromCache(
 			eventBlobCache,
 			workflowKey,
 			eventVersion,
 			firstEventID,
 			nextEventID,
-		); ok {
+		)
+		if ok {
 			return versionHistory, eventBatches, baseWorkflowInfo, nil
 		}
 	}
@@ -509,25 +510,26 @@ func getVersionHistoryAndEvents(
 // getEventsFromCache returns the event batches in the range [firstEventID, nextEventID) from eventBlobCache. A
 // transaction can be split across several batches (history.maximumEventBatchSizeInBytes), while a cache
 // entry holds a single batch, so it follows each entry's NextEventID to the next batch. It returns false
-// unless every batch in the range is cached.
+// unless every batch in the range is cached. The returned exclusive end covers all cached batches,
+// which may extend beyond nextEventID.
 func getEventsFromCache(
 	eventBlobCache persistence.XDCCache,
 	workflowKey definition.WorkflowKey,
 	eventVersion int64,
 	firstEventID int64,
 	nextEventID int64,
-) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *workflowspb.BaseExecutionInfo, bool) {
+) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *workflowspb.BaseExecutionInfo, int64, bool) {
 	var eventBatches []*commonpb.DataBlob
 	startEventID := firstEventID
 	startEventVersion := eventVersion
 	for {
 		xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(workflowKey, startEventID, startEventVersion))
 		if !ok {
-			return nil, nil, nil, false
+			return nil, nil, nil, 0, false
 		}
 		eventBatches = append(eventBatches, xdcCacheValue.EventBlobs...)
 		if xdcCacheValue.NextEventID >= nextEventID {
-			return xdcCacheValue.VersionHistoryItems, eventBatches, xdcCacheValue.BaseWorkflowInfo, true
+			return xdcCacheValue.VersionHistoryItems, eventBatches, xdcCacheValue.BaseWorkflowInfo, xdcCacheValue.NextEventID, true
 		}
 		startEventID = xdcCacheValue.NextEventID
 		var err error
@@ -536,7 +538,7 @@ func getEventsFromCache(
 			startEventID,
 		)
 		if err != nil {
-			return nil, nil, nil, false
+			return nil, nil, nil, 0, false
 		}
 	}
 }
@@ -827,6 +829,46 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	// releaseFunc that is being passed into this function is what is used to release the lock we are holding on mutable state. If
 	// you use mutable state after the releaseFunc has been called, you will be accessing mutable state without holding the lock.
 	// Deep copy what you need.
+
+	// A cold progress cache must not suppress the events produced by this task.
+	// The receiver can fetch any gaps if the serialized state has advanced further.
+	if !taskInfo.IsFirstTask && len(syncStateResult.VersionedTransitionArtifact.EventBatches) == 0 &&
+		taskInfo.FirstEventID >= common.FirstEventID && taskInfo.NextEventID > taskInfo.FirstEventID {
+		var eventBatches []*commonpb.DataBlob
+		var cached bool
+		if c.eventBlobCache != nil {
+			var cachedVersionHistory []*historyspb.VersionHistoryItem
+			var cachedNextEventID int64
+			cachedVersionHistory, eventBatches, _, cachedNextEventID, cached = getEventsFromCache(
+				c.eventBlobCache,
+				taskInfo.WorkflowKey,
+				taskInfo.FirstEventVersion,
+				taskInfo.FirstEventID,
+				taskInfo.NextEventID,
+			)
+			if cached {
+				// Cache entries may outlive an event-based rebuild or extend beyond the task's range.
+				lca, err := versionhistory.FindLCAVersionHistoryItemFromItemSlice(currentHistoryCopy.Items, cachedVersionHistory)
+				if err != nil || lca.EventId < cachedNextEventID-1 {
+					eventBatches = nil
+				}
+			}
+		}
+		if !cached {
+			eventBatches, err = getEventsBlob(
+				ctx,
+				c.shardID,
+				currentHistoryCopy.BranchToken,
+				taskInfo.FirstEventID,
+				taskInfo.NextEventID,
+				c.executionManager,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+		syncStateResult.VersionedTransitionArtifact.EventBatches = eventBatches
+	}
 
 	syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(closeTransferTask)
 	syncStateResult.VersionedTransitionArtifact.IsForceReplication = taskInfo.IsForceReplication

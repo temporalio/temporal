@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -84,8 +85,10 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 					})
 				})
 				if tc.stageAtResponse == completed {
-					ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(outcome, nil)
-					ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(acceptedEventID, nil)
+					ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{
+						Outcome:         outcome,
+						AcceptedEventId: acceptedEventID,
+					}, nil)
 					ms.EXPECT().GetUpdateNexusSerializationContext(updateID).Return(nil)
 				} else {
 					ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
@@ -189,6 +192,47 @@ func TestApplyRequest_RejectsUpdateOnPausedWorkflow(t *testing.T) {
 	require.Contains(t, err.Error(), "Workflow is paused")
 }
 
+func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
+	newMutableState := func(t *testing.T, numBufferedEvents int) *historyi.MockMutableState {
+		ms := historyi.NewMockMutableState(gomock.NewController(t))
+		ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+		ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+		ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+		ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+		ms.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
+		ms.EXPECT().HasPendingWorkflowTask().Return(true).AnyTimes()
+		ms.EXPECT().NumBufferedEvents().Return(numBufferedEvents).AnyTimes()
+		ms.EXPECT().GetCurrentVersion().Return(int64(1))
+		ms.EXPECT().VisitUpdates(gomock.Any())
+		ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+		return ms
+	}
+	applyUpdate := func(t *testing.T, registry update.Registry, ms historyi.MutableState, id string) *Updater {
+		req := createUpdateRequest(id)
+		req.Request.Request.Input = &updatepb.Input{Name: "update"}
+		updater := &Updater{req: req}
+		action, err := updater.ApplyRequest(context.Background(), registry, ms)
+		require.NoError(t, err)
+		require.True(t, action.Noop)
+		require.True(t, updater.bufferedForWorkflowHeartbeatNotification)
+		return updater
+	}
+
+	t.Run("earlier unsent Update", func(t *testing.T) {
+		ms := newMutableState(t, 0)
+		registry := update.NewRegistry(ms)
+		require.True(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+		require.False(t, applyUpdate(t, registry, ms, "second").firstBufferedForWorkflowHeartbeatNotification)
+	})
+
+	t.Run("buffered events", func(t *testing.T) {
+		ms := newMutableState(t, 1)
+		registry := update.NewRegistry(ms)
+		require.False(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+	})
+}
+
 // An Update whose callbacks would breach the execution's limits must be rejected before it is
 // admitted and dispatched to a worker: once accepted there, its callbacks are attached without
 // further checks.
@@ -202,7 +246,7 @@ func TestApplyRequest_RejectsUpdateOverCallbackLimits(t *testing.T) {
 	limitErr := serviceerror.NewFailedPrecondition("cannot attach more than 1 callbacks to an execution")
 
 	ms := newRunningMutableStateForCallbacks(ctrl)
-	ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound("not found"))
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound("not found"))
 	ms.EXPECT().ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		UpdateID:  updateID,
 		RequestID: "test-request-id",
@@ -229,7 +273,7 @@ func TestApplyRequest_ReservesInFlightCallbacks(t *testing.T) {
 	ctx := context.Background()
 
 	ms := newRunningMutableStateForCallbacks(ctrl)
-	ms.EXPECT().GetUpdateOutcome(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
 
 	updateReg := update.NewRegistry(ms)
 	inFlightReq := createUpdateRequestWithCallbacks("in-flight-update-id", "in-flight-request-id")
@@ -274,11 +318,12 @@ func TestApplyRequest_SkipsCallbackValidationForCompletedUpdate(t *testing.T) {
 		updateID        = "test-update-id"
 	)
 	ms := newRunningMutableStateForCallbacks(ctrl)
-	ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(acceptedEventID, nil).AnyTimes()
 	ms.EXPECT().GetExecutionState().AnyTimes()
-	ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).
-		Return(&updatepb.Outcome{Value: &updatepb.Outcome_Success{}}, nil).AnyTimes()
-	ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(int64(5), nil).AnyTimes()
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{
+			Outcome:         &updatepb.Outcome{Value: &updatepb.Outcome_Success{}},
+			AcceptedEventId: acceptedEventID,
+		}, nil).AnyTimes()
 	ms.EXPECT().GetUpdateNexusSerializationContext(updateID).Return(nil).AnyTimes()
 	ms.EXPECT().ValidateCallbackAddition(gomock.Any(), gomock.Any()).Times(0)
 
@@ -303,6 +348,7 @@ func newRunningMutableStateForCallbacks(ctrl *gomock.Controller) *historyi.MockM
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{}).AnyTimes()
 	ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+	ms.EXPECT().HasStartedWorkflowTask().Return(false).AnyTimes()
 	// Required by update.NewRegistry
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()

@@ -248,6 +248,38 @@ func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
 	s.NotEqual(WorkflowArchetypeID, rootNode.ArchetypeID())
 }
 
+func (s *nodeSuite) TestSetRootComponent_SyncsStructureChangedBeforeClose() {
+	rootNode, err := s.newTestTree(nil)
+	s.NoError(err)
+	ctx := NewMutableContext(context.Background(), rootNode)
+
+	rootComponent := &TestComponent{
+		SubComponent1: NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "sub-component-1"},
+		}),
+	}
+	s.NoError(rootNode.SetRootComponent(rootComponent))
+	// Sub-components created with the root are nodes before the transaction closes.
+	s.Contains(rootNode.children, "SubComponent1")
+
+	// Change the root's structure after SetRootComponent through the component held by the caller,
+	// as the updateFn of UpdateWithStartExecution does.
+	rootComponent.SubComponents = Map[string, *TestSubComponent1]{
+		"added": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "added"},
+		}),
+	}
+
+	mutations, err := rootNode.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "SubComponent1")
+	addedNode, ok := rootNode.findNode([]string{"SubComponents", "added"})
+	s.Require().True(ok, "sub-component added after SetRootComponent must be a node")
+	addedPath, err := s.nodePathEncoder.Encode(addedNode, nil)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, addedPath, "sub-component added after SetRootComponent must be persisted")
+}
+
 func (s *nodeSuite) TestInitSerializedNode_TypeData() {
 	node := newNode(s.nodeBase(), nil, "")
 	node.initSerializedNode(fieldTypeData)

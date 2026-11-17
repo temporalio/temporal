@@ -153,9 +153,9 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	s.NoError(err)
 
 	start = time.Now()
-	_, err = testService.rings[1].EvictSelfAt(start.Add(2 * time.Second))
+	_, err = testService.rings[1].EvictSelfAt(start.Add(2*time.Second), 0)
 	s.NoError(err)
-	_, err = testService.rings[0].EvictSelfAt(start.Add(4 * time.Second))
+	_, err = testService.rings[0].EvictSelfAt(start.Add(4*time.Second), 0)
 	s.NoError(err)
 
 	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[2]})
@@ -165,6 +165,54 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	s.Greater(time.Since(start), 3*time.Second)
 
 	testService.Stop()
+}
+
+func (s *RpoSuite) TestGradualLeave() {
+	serviceName := primitives.MatchingService
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	r, err := testService.rings[1].GetResolver(serviceName)
+	s.NoError(err)
+	await.RequireTrue(s.T(), func() bool { return len(r.Members()) == 3 }, 15*time.Second, 100*time.Millisecond)
+
+	leaver := testService.hostAddrs[0]
+	keysOnLeaver := func(keys []string) []string {
+		return util.FilterSlice(keys, func(key string) bool {
+			h, err := r.Lookup(key)
+			return err == nil && h.GetAddress() == leaver
+		})
+	}
+	keys := make([]string, 1000)
+	for i := range keys {
+		keys[i] = fmt.Sprintf("key-%d", i)
+	}
+	keys = keysOnLeaver(keys)
+	s.NotEmpty(keys)
+
+	// Times are whole seconds, so round up to make sure the window starts after the labels
+	// have propagated.
+	const window = 4 * time.Second
+	stopAt := time.Now().Add(3 * time.Second).Truncate(time.Second).Add(time.Second)
+	_, err = testService.rings[0].EvictSelfAt(stopAt, window)
+	s.NoError(err)
+
+	// Once the labels have propagated, the observer knows when keys will move.
+	await.RequireTrue(s.T(), func() bool {
+		return !r.NextLookupChange(keys[0], 1).IsZero()
+	}, 5*time.Second, 50*time.Millisecond)
+	s.Len(keysOnLeaver(keys), len(keys), "nothing moves before the window")
+
+	// Partway through the window, some keys have moved and some haven't.
+	time.Sleep(time.Until(stopAt.Add(window / 2))) //nolint:forbidigo
+	remaining := len(keysOnLeaver(keys))
+	s.Positive(remaining)
+	s.Less(remaining, len(keys))
+
+	// After the window, the leaver is gone.
+	await.RequireTrue(s.T(), func() bool { return len(r.Members()) == 2 }, window+5*time.Second, 100*time.Millisecond)
+	s.Empty(keysOnLeaver(keys))
 }
 
 func (s *RpoSuite) TestEvictBeforeStart() {
@@ -194,7 +242,7 @@ func (s *RpoSuite) TestEvictBeforeStart() {
 
 	// Evicting again is still a no-op success.
 	s.NoError(testService.rings[2].EvictSelf())
-	waitTime, err := testService.rings[2].EvictSelfAt(time.Now().Add(5 * time.Second))
+	waitTime, err := testService.rings[2].EvictSelfAt(time.Now().Add(5*time.Second), 0)
 	s.NoError(err)
 	s.Zero(waitTime)
 }

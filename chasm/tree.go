@@ -225,7 +225,7 @@ type (
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
-		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
@@ -396,7 +396,11 @@ func (n *Node) SetRootComponent(
 	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
 		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
 	}
-	return root.syncSubComponents()
+	if err := root.syncSubComponents(); err != nil {
+		return err
+	}
+	root.setValueState(valueStateNeedSyncStructure)
+	return nil
 }
 
 // setValue sets the value field of the node.
@@ -2573,12 +2577,12 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	archetypeID ArchetypeID,
 ) error {
 	if firstPureTask == nil {
-		n.backend.DeleteCHASMPureTasks(tasks.MaximumKey.FireTime)
+		n.backend.DeletePhysicalCHASMPureTasks(tasks.MaximumKey.FireTime)
 		return nil
 	}
 
 	firstPureTaskScheduledTime := firstPureTask.ScheduledTime.AsTime()
-	n.backend.DeleteCHASMPureTasks(firstPureTaskScheduledTime)
+	n.backend.DeletePhysicalCHASMPureTasks(firstPureTaskScheduledTime)
 
 	if firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 		return nil

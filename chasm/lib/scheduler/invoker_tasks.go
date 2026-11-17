@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -44,6 +45,9 @@ type (
 		// the request makes it through metering's interceptor. Because we don't change for
 		// terminate/cancels, we can go directly to history for other service calls.
 		FrontendClient workflowservice.WorkflowServiceClient
+
+		// TimeSource stamps StartTime on started workflows. Defaults to real time.
+		TimeSource clock.TimeSource `optional:"true"`
 	}
 
 	InvokerExecuteTaskHandler struct {
@@ -53,6 +57,7 @@ type (
 		baseLogger     log.Logger
 		historyClient  resource.HistoryClient
 		frontendClient workflowservice.WorkflowServiceClient
+		timeSource     clock.TimeSource
 	}
 
 	InvokerProcessBufferTaskHandler struct {
@@ -108,12 +113,17 @@ const (
 )
 
 func NewInvokerExecuteTaskHandler(opts InvokerTaskHandlerOptions) *InvokerExecuteTaskHandler {
+	timeSource := opts.TimeSource
+	if timeSource == nil {
+		timeSource = clock.NewRealTimeSource()
+	}
 	return &InvokerExecuteTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
+		timeSource:     timeSource,
 	}
 }
 
@@ -527,7 +537,6 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	scheduler *Scheduler,
 ) (result processBufferResult) {
 	runningWorkflows := invoker.runningWorkflowExecutions()
-	isRunning := len(runningWorkflows) > 0
 	result.missedCatchupByActionRunning = make(map[bool]int64)
 
 	// Processing ignores starts that are already executing or backing off. An existing
@@ -538,7 +547,9 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
-	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, isRunning, scheduler.resolveOverlapPolicy)
+	// A selected start blocks overlapping work even before its RPC records a
+	// RunId. Its eventual result will release or reconsider deferred starts.
+	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, invoker.hasPendingOrRunningStart(), scheduler.resolveOverlapPolicy)
 
 	// ProcessBuffer will drop starts by omitting them from NewBuffer. Start with the
 	// diff between the input and NewBuffer, and add any executing starts.
@@ -575,7 +586,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 				// was already past this start's deadline.
 				// Note: if no prior action completed, DesiredTime is zero-valued,
 				// so After(deadline) is false, correctly yielding actionRunning=false.
-				actionRunning := isRunning ||
+				actionRunning := len(runningWorkflows) > 0 ||
 					start.GetDesiredTime().AsTime().After(deadline)
 				result.missedCatchupByActionRunning[actionRunning]++
 			}
@@ -741,7 +752,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	if err != nil {
 		return err
 	}
-	actualStartTime := time.Now()
+	actualStartTime := h.timeSource.Now()
 	// Reconstruct virtual time from wall time.
 	actualStartTime = actualStartTime.Add(
 		timeSkippingStatePropagation.GetInitialSkippedDuration().AsDuration(),
