@@ -28,76 +28,72 @@ func TestIsDupEntryError(t *testing.T) {
 	_, err = conn.Exec(`INSERT INTO t (id, uniq, nn) VALUES (1, 'a', 'x')`)
 	require.NoError(t, err)
 
-	_, dupPKErr := conn.Exec(`INSERT INTO t (id, uniq, nn) VALUES (1, 'b', 'y')`)
-	require.Error(t, dupPKErr)
-	_, dupUniqueErr := conn.Exec(`INSERT INTO t (id, uniq, nn) VALUES (2, 'a', 'y')`)
-	require.Error(t, dupUniqueErr)
-	_, notNullErr := conn.Exec(`INSERT INTO t (id, uniq) VALUES (3, 'c')`)
-	require.Error(t, notNullErr)
-	_, noTableErr := conn.Exec(`SELECT * FROM missing`)
-	require.Error(t, noTableErr)
-
 	ctx := t.Context()
-	other, err := sqlx.Connect(goSQLDriverName, dsn)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = other.Close() })
-
-	lock, err := other.Conn(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = lock.Close() })
-
-	_, err = lock.ExecContext(ctx, "BEGIN IMMEDIATE")
-	require.NoError(t, err)
-
-	_, busyErr := conn.ExecContext(ctx, `INSERT INTO t (id, uniq, nn) VALUES (4, 'd', 'z')`)
-	require.Error(t, busyErr)
-
-	_, err = lock.ExecContext(ctx, "ROLLBACK")
-	require.NoError(t, err)
-
 	d := &db{}
 	for _, tc := range []struct {
-		name string
-		err  error
-		code int
-		dup  bool
+		name     string
+		sql      string
+		wantCode int
+		wantDup  bool
+		holdLock bool
 	}{
 		{
-			name: "primary key",
-			err:  dupPKErr,
-			code: sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
-			dup:  true,
+			name:     "primary key",
+			sql:      `INSERT INTO t (id, uniq, nn) VALUES (1, 'b', 'y')`,
+			wantCode: sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
+			wantDup:  true,
 		},
 		{
-			name: "unique",
-			err:  dupUniqueErr,
-			code: sqlite3.SQLITE_CONSTRAINT_UNIQUE,
-			dup:  true,
+			name:     "unique",
+			sql:      `INSERT INTO t (id, uniq, nn) VALUES (2, 'a', 'y')`,
+			wantCode: sqlite3.SQLITE_CONSTRAINT_UNIQUE,
+			wantDup:  true,
 		},
 		{
-			name: "not null",
-			err:  notNullErr,
-			code: sqlite3.SQLITE_CONSTRAINT_NOTNULL,
-			dup:  false,
+			name:     "not null",
+			sql:      `INSERT INTO t (id, uniq) VALUES (3, 'c')`,
+			wantCode: sqlite3.SQLITE_CONSTRAINT_NOTNULL,
+			wantDup:  false,
 		},
 		{
-			name: "missing table",
-			err:  noTableErr,
-			code: sqlite3.SQLITE_ERROR,
-			dup:  false,
+			name:     "missing table",
+			sql:      `SELECT * FROM missing`,
+			wantCode: sqlite3.SQLITE_ERROR,
+			wantDup:  false,
 		},
 		{
-			name: "busy",
-			err:  busyErr,
-			code: sqlite3.SQLITE_BUSY,
-			dup:  false,
+			name:     "busy",
+			sql:      `INSERT INTO t (id, uniq, nn) VALUES (4, 'd', 'z')`,
+			wantCode: sqlite3.SQLITE_BUSY,
+			wantDup:  false,
+			holdLock: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sqlErr, ok := errors.AsType[*sqlite.Error](tc.err)
+			var execErr error
+			if tc.holdLock {
+				conn2, err := sqlx.Connect(goSQLDriverName, dsn)
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = conn2.Close() })
+
+				lock, err := conn2.Conn(ctx)
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = lock.Close() })
+
+				_, err = lock.ExecContext(ctx, "BEGIN IMMEDIATE")
+				require.NoError(t, err)
+				t.Cleanup(func() { _, _ = lock.ExecContext(ctx, "ROLLBACK") })
+
+				_, execErr = conn.ExecContext(ctx, tc.sql)
+			} else {
+				_, execErr = conn.Exec(tc.sql)
+			}
+			require.Error(t, execErr)
+
+			sqlErr, ok := errors.AsType[*sqlite.Error](execErr)
 			require.True(t, ok)
-			require.Equal(t, tc.code, sqlErr.Code())
-			require.Equal(t, tc.dup, d.IsDupEntryError(tc.err))
+			require.Equal(t, tc.wantCode, sqlErr.Code())
+			require.Equal(t, tc.wantDup, d.IsDupEntryError(execErr))
 		})
 	}
 }
