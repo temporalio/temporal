@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -22,10 +23,34 @@ import (
 // maxResetRedirectCount prevents us from following long chain of resets (or some circular loop in redirects).
 const maxResetRedirectCount = 100
 
+// errRecordedParentRunMissing marks the persistence error for the parent run named by the request.
+// Fallback matches this marker. Other NotFound errors returned while recording the completion do not.
+var errRecordedParentRunMissing = errors.New("recorded parent run is missing")
+
+// errFallbackChildNotLinked means the current run is not the parent still waiting on this child.
+// Invoke restores the recorded run ID and returns the original missing-run error.
+var errFallbackChildNotLinked = errors.New("current run is not linked to the completing child")
+
+type recordedParentRunMissingError struct {
+	err error
+}
+
+func (e *recordedParentRunMissingError) Error() string {
+	return e.err.Error()
+}
+
+func (e *recordedParentRunMissingError) Unwrap() error {
+	return e.err
+}
+
+func (e *recordedParentRunMissingError) Is(target error) bool {
+	return target == errRecordedParentRunMissing
+}
+
 // This API records the child completion event in the parent's history. It does the following.
 // - Rejects the request if the parent was closed for any reason other than reset.
 // - If the parent was closed due to reset, it forwards the request to the new parent following the resetRunID link.
-// - If the recorded parent run no longer exists, it delivers the completion to the current run of the same workflow ID when that run still has this child.
+// - If loading the recorded parent run reports that this run is missing, it delivers the completion to the current run of the same workflow ID when that run has a pending child with the same initiated event, child workflow ID, and non-empty first run ID.
 // - It ensures that the child sending the completion request was initialized by this parent before accepting the request.
 func Invoke(
 	ctx context.Context,
@@ -39,12 +64,23 @@ func Invoke(
 	}
 
 	// If the parent is reset, we need to follow a possible chain of resets to deliver the completion event to the correct parent.
-	// A recorded run that retention has deleted has no ResetRunId to follow, so the current run is tried once.
+	// A recorded run that retention has deleted has no ResetRunId to follow. The current run is tried once when that
+	// load reports this run is missing and the current run's pending child has the same non-empty first run ID.
 	recordedRunID := request.GetParentExecution().GetRunId()
 	redirectCount := 0
 	resolvedCurrent := false
+	fallbackDelivery := false
+	var missingParent error
 	for {
-		resetRunID, recordErr := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker)
+		resetRunID, recordErr := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker, fallbackDelivery)
+		fallbackDelivery = false
+		if errors.Is(recordErr, errFallbackChildNotLinked) {
+			request.ParentExecution.RunId = recordedRunID
+			if missingParent == nil {
+				return nil, consts.ErrChildExecutionNotFound
+			}
+			return nil, recordedParentRunMissingCause(missingParent)
+		}
 		if errors.Is(recordErr, consts.ErrWorkflowCompleted) {
 			// if the parent was reset, forward the request to the new run pointed by resetRunID
 			// Note: An alternative solution is to load the current run here ane compare the originalRunIDs of the current run and the closed parent.
@@ -58,7 +94,12 @@ func Invoke(
 				continue
 			}
 		}
-		if recordErr != nil && !resolvedCurrent && recordedRunID != "" && recordedParentRunMissing(recordErr) {
+		if recordErr != nil && !resolvedCurrent && recordedRunID != "" && errors.Is(recordErr, errRecordedParentRunMissing) {
+			// An empty first run ID cannot distinguish a reset successor from a later execution that reused the workflow ID.
+			if request.GetChildFirstExecutionRunId() == "" {
+				return nil, recordedParentRunMissingCause(recordErr)
+			}
+			missingParent = recordErr
 			currentRunID, currentErr := workflowConsistencyChecker.GetCurrentWorkflowRunID(
 				ctx,
 				request.GetNamespaceId(),
@@ -71,23 +112,24 @@ func Invoke(
 			if currentRunID != "" && currentRunID != request.GetParentExecution().GetRunId() {
 				resolvedCurrent = true
 				request.ParentExecution.RunId = currentRunID
+				fallbackDelivery = true
 				continue
 			}
 		}
 		if recordErr != nil {
-			return nil, recordErr
+			return nil, recordedParentRunMissingCause(recordErr)
 		}
 		return &historyservice.RecordChildExecutionCompletedResponse{}, nil
 	}
 }
 
-// recordedParentRunMissing reports that the parent run named by the request does not exist.
-// A closed parent and a pending-child mismatch are also NotFound, and those stay on their existing paths.
-func recordedParentRunMissing(err error) bool {
-	if err == nil || errors.Is(err, consts.ErrWorkflowCompleted) || errors.Is(err, consts.ErrChildExecutionNotFound) {
-		return false
+// recordedParentRunMissingCause returns the persistence error wrapped at the parent load boundary.
+func recordedParentRunMissingCause(err error) error {
+	missing, ok := errors.AsType[*recordedParentRunMissingError](err)
+	if !ok {
+		return err
 	}
-	return common.IsNotFoundError(err)
+	return missing.err
 }
 
 // recordChildWorkflowCompleted records the child completed event in the parent history if the parent is still running.
@@ -97,11 +139,16 @@ func recordChildWorkflowCompleted(
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-) (string, error) {
-	resetRunID := ""
+	fallbackDelivery bool,
+) (resetRunID string, retError error) {
 	parentInitiatedID := request.ParentInitiatedId
 	parentInitiatedVersion := request.ParentInitiatedVersion
-	err := api.GetAndUpdateWorkflowWithConsistencyCheck(
+	workflowKey := definition.NewWorkflowKey(
+		request.NamespaceId,
+		request.GetParentExecution().WorkflowId,
+		request.GetParentExecution().RunId,
+	)
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		request.Clock,
 		func(mutableState historyi.MutableState) bool {
@@ -123,27 +170,55 @@ func recordChildWorkflowCompleted(
 			_, childInitEventFound := mutableState.GetChildExecutionInfo(parentInitiatedID)
 			return childInitEventFound
 		},
-		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.GetParentExecution().WorkflowId,
-			request.GetParentExecution().RunId,
-		),
+		workflowKey,
+		locks.PriorityHigh,
+	)
+	if err != nil {
+		// Mark only the missing-execution error from this load. NotFound from the update below stays unmarked.
+		if persistence.IsWorkflowExecutionNotFound(err, workflowKey.WorkflowID, workflowKey.RunID) {
+			return "", &recordedParentRunMissingError{err: err}
+		}
+		return "", err
+	}
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
+
+	retError = api.UpdateWorkflowWithNew(
+		shardContext,
+		ctx,
+		workflowLease,
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
+				// A closed current run was selected by workflow ID. Do not follow its reset link.
+				if fallbackDelivery {
+					return nil, errFallbackChildNotLinked
+				}
 				resetRunID = mutableState.GetExecutionInfo().ResetRunId
 				return nil, consts.ErrWorkflowCompleted
 			}
 
 			onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
 			if err != nil || !onCurrentBranch {
+				if fallbackDelivery {
+					return nil, errFallbackChildNotLinked
+				}
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
 			if !isRunning {
+				if fallbackDelivery {
+					return nil, errFallbackChildNotLinked
+				}
 				return nil, consts.ErrChildExecutionNotFound
+			}
+
+			// StartedRunId is written by the child-started event and is the child's first run ID.
+			// Recording a missing started event would copy the request's first run ID onto this child
+			// before that comparison, so the fallback check happens first.
+			if fallbackDelivery && !childFirstRunLinked(ci, request) {
+				return nil, errFallbackChildNotLinked
 			}
 
 			// note we already checked if startedEventID is empty (in consistency predicate)
@@ -190,10 +265,20 @@ func recordChildWorkflowCompleted(
 			}, nil
 		},
 		nil,
-		shardContext,
-		workflowConsistencyChecker,
 	)
-	return resetRunID, err
+	return resetRunID, retError
+}
+
+// childFirstRunLinked reports that this pending child is the one the completion is for.
+// The initiated event ID already selected ci. StartedRunId is empty until the child starts,
+// and an empty request first-run ID is not a match.
+func childFirstRunLinked(ci *persistencespb.ChildExecutionInfo, request *historyservice.RecordChildExecutionCompletedRequest) bool {
+	firstRunID := request.GetChildFirstExecutionRunId()
+	startedRunID := ci.GetStartedRunId()
+	return firstRunID != "" &&
+		startedRunID != "" &&
+		startedRunID == firstRunID &&
+		ci.GetStartedWorkflowId() == request.GetChildExecution().GetWorkflowId()
 }
 
 func recordStartedEventIfMissing(
