@@ -47,6 +47,7 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 			noop       bool
 			removePeer bool
 			promote    bool
+			softDelete bool
 			writeErr   error
 			publishErr error
 		}{
@@ -59,6 +60,8 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 			{name: "update write failure", writeErr: serviceerror.NewUnavailable("write failed")},
 			{name: "create publish failure", create: true, publishErr: serviceerror.NewUnavailable("publish failed")},
 			{name: "update publish failure", publishErr: serviceerror.NewUnavailable("publish failed")},
+			{name: "soft delete", softDelete: true},
+			{name: "soft delete retry", softDelete: true, noop: true},
 		} {
 			authoritative := mode == dynamicconfig.NamespaceReplicationTransportModeCHASM
 			if authoritative && (tc.writeErr != nil || tc.publishErr != nil) {
@@ -98,10 +101,14 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 					if tc.promote {
 						existingClusters = []string{"cell-a"}
 					}
+					existingState := enumspb.NAMESPACE_STATE_REGISTERED
+					if tc.softDelete && tc.noop {
+						existingState = enumspb.NAMESPACE_STATE_SOFT_DELETED
+					}
 					metadata.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
 					metadata.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
 						Namespace: &persistencespb.NamespaceDetail{
-							Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "ns", State: enumspb.NAMESPACE_STATE_REGISTERED},
+							Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "ns", State: existingState},
 							Config:            &persistencespb.NamespaceConfig{BadBinaries: &namespacepb.BadBinaries{}},
 							ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "cell-a", Clusters: existingClusters},
 						}, IsGlobalNamespace: !tc.promote,
@@ -127,6 +134,8 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 						WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
 						Clusters:                         []*replicationpb.ClusterReplicationConfig{{ClusterName: "cell-a"}, {ClusterName: "cell-b"}},
 					})
+				} else if tc.softDelete {
+					err = handler.SoftDeleteNamespace(t.Context(), "ns", "")
 				} else {
 					request := &workflowservice.UpdateNamespaceRequest{Namespace: "ns"}
 					if tc.removePeer {
@@ -151,10 +160,16 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 					require.Empty(t, mutation.GetShadowLegacyTaskPayload())
 					require.Equal(t, []string{"cell-b"}, mutation.GetPeerCells())
 					require.True(t, mutation.GetIsGlobalNamespace())
+					if tc.softDelete {
+						require.Equal(t, enumspb.NAMESPACE_STATE_SOFT_DELETED, mutation.GetNamespaceDetail().GetInfo().GetState())
+					}
 					if tc.removePeer {
 						require.Equal(t, []string{"cell-a"}, mutation.GetNamespaceDetail().GetReplicationConfig().GetClusters())
 					}
-				} else if mode == dynamicconfig.NamespaceReplicationTransportModeShadow && err == nil {
+				} else if tc.softDelete {
+					require.Equal(t, enumspb.NAMESPACE_STATE_SOFT_DELETED, legacyTask.GetInfo().GetState())
+				}
+				if !authoritative && mode == dynamicconfig.NamespaceReplicationTransportModeShadow && err == nil {
 					mutation := await.Rcv(t, client.requests).GetMutation()
 					require.Equal(t, []string{"cell-b"}, mutation.GetPeerCells())
 					if tc.removePeer {
