@@ -43,7 +43,7 @@ func Invoke(
 	request := resetRequest.ResetRequest
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 
-	if rl := shardContext.BusinessIDReuseRateLimiter(namespaceID, workflowID, chasm.WorkflowArchetypeID); rl != nil && !rl.Allow() {
+	if rl := shardContext.BusinessIDReuseRateLimiter(namespace.Name(request.GetNamespace()), workflowID, chasm.WorkflowArchetypeID); rl != nil && !rl.Allow() {
 		archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(chasm.WorkflowArchetypeID)
 		metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
 			1,

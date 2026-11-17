@@ -101,7 +101,7 @@ func getBuildIdTaskReachability(
 		tag.BuildIdTaskReachabilityTag(reachability.String()),
 		tag.ReachabilityExitPointTag(reachabilityExitPoint2TagValue[exitPoint]),
 		tag.WorkflowNamespace(rc.nsName.String()),
-		tag.WorkflowTaskQueueName(rc.taskQueue.Name()),
+		tag.TaskQueueName(rc.taskQueue.Name()),
 	)
 	return reachability, err
 }

@@ -1,8 +1,10 @@
 package tests
 
 import (
+	"cmp"
 	"math"
 	"math/rand"
+	"slices"
 	"sort"
 	"testing"
 
@@ -212,6 +214,72 @@ func (s *historyNodeSuite) TestInsertSelect_Multiple() {
 		rows[index].BranchID = branchID
 	}
 	s.Equal(nodes, rows)
+}
+
+func (s *historyNodeSuite) TestInsertSelectReverse_Multiple() {
+	numNodeIDs := 20
+	nodePerNodeID := 3
+	// Not a multiple of nodePerNodeID, so page boundaries fall inside a node ID.
+	pageSize := 2
+
+	shardID := rand.Int31()
+	treeID := primitives.NewUUID()
+	branchID := primitives.NewUUID()
+
+	minNodeID := int64(1)
+	maxNodeID := minNodeID + int64(numNodeIDs)
+
+	var nodes []sqlplugin.HistoryNodeRow
+	// maxNodeID is exclusive, so its rows are inserted but must not be returned.
+	for nodeID := minNodeID; nodeID <= maxNodeID; nodeID++ {
+		for txnID := int64(1); txnID <= int64(nodePerNodeID); txnID++ {
+			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, txnID-1, txnID)
+			_, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
+			s.NoError(err)
+			if nodeID == maxNodeID {
+				continue
+			}
+			// NOTE: TxnID is *= -1 within InsertIntoHistoryNode
+			node.TxnID = -node.TxnID
+			nodes = append(nodes, node)
+		}
+	}
+	// Reverse order sorts the stored (negated) transaction ID descending, so the read-back one ascends.
+	slices.SortFunc(nodes, func(a, b sqlplugin.HistoryNodeRow) int {
+		return cmp.Or(cmp.Compare(b.NodeID, a.NodeID), cmp.Compare(a.TxnID, b.TxnID))
+	})
+
+	selectFilter := sqlplugin.HistoryNodeSelectFilter{
+		ShardID:      shardID,
+		TreeID:       treeID,
+		BranchID:     branchID,
+		MinNodeID:    minNodeID,
+		MaxNodeID:    maxNodeID - 1,
+		MaxTxnID:     sql.MaxTxnID,
+		PageSize:     pageSize,
+		ReverseOrder: true,
+	}
+	var rows []sqlplugin.HistoryNodeRow
+	for {
+		rowsPerPage, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
+		s.NoError(err)
+		rows = append(rows, rowsPerPage...)
+		if len(rowsPerPage) < pageSize {
+			break
+		}
+		lastNode := rowsPerPage[len(rowsPerPage)-1]
+		selectFilter.MaxNodeID = lastNode.NodeID
+		selectFilter.MaxTxnID = lastNode.TxnID
+	}
+
+	nodeAndTxnIDs := func(rows []sqlplugin.HistoryNodeRow) [][2]int64 {
+		ids := make([][2]int64, len(rows))
+		for index, row := range rows {
+			ids[index] = [2]int64{row.NodeID, row.TxnID}
+		}
+		return ids
+	}
+	s.Equal(nodeAndTxnIDs(nodes), nodeAndTxnIDs(rows))
 }
 
 func (s *historyNodeSuite) TestDeleteSelect() {

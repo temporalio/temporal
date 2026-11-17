@@ -10,6 +10,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -260,8 +261,8 @@ func TestListExecutions(t *testing.T) {
 
 			resp, err := visStore.AdminListExecutions(
 				context.Background(),
-				&manager.AdminListExecutionsRequest{
-					Namespace: tc.nsName,
+				&adminservice.ListExecutionsRequest{
+					Namespace: tc.nsName.String(),
 					Query:     "ExecutionStatus = 'Completed'",
 					PageSize:  10,
 				},
@@ -306,9 +307,104 @@ func TestListExecutions_NamespaceNotFound(t *testing.T) {
 
 	_, err := visStore.AdminListExecutions(
 		context.Background(),
-		&manager.AdminListExecutionsRequest{Namespace: testNamespaceName, PageSize: 10},
+		&adminservice.ListExecutionsRequest{Namespace: testNamespaceName.String(), PageSize: 10},
 	)
 	r.ErrorIs(err, nsNotFoundErr)
+}
+
+// TestListExecutions_QueryTimeInPageToken verifies that NOW() is resolved against the query time
+// stored in the page token, so that all pages of the same query use the same reference time.
+func TestListExecutions_QueryTimeInPageToken(t *testing.T) {
+	t.Parallel()
+
+	const nowQuery = "StartTime > NOW() - '1h'"
+	literalQuery := func(queryTime time.Time) string {
+		return fmt.Sprintf("StartTime > '%s'", queryTime.Add(-time.Hour).Format(time.RFC3339Nano))
+	}
+	row := sqlplugin.VisibilityRow{
+		NamespaceID: testNamespaceID.String(),
+		WorkflowID:  "test-workflow-id",
+		RunID:       "test-run-id",
+		StartTime:   time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC),
+	}
+
+	// listPage runs a single-row page and returns the select filter sent to the DB and the
+	// next page token.
+	listPage := func(
+		t *testing.T,
+		queryString string,
+		pageToken *sqlplugin.VisibilityPageToken,
+	) (sqlplugin.VisibilitySelectFilter, *sqlplugin.VisibilityPageToken) {
+		r := require.New(t)
+		ctrl := gomock.NewController(t)
+		visStore := newTestVisibilityStore(t, ctrl, mysql.PluginName)
+
+		var nextPageToken []byte
+		if pageToken != nil {
+			var err error
+			nextPageToken, err = sqlplugin.SerializeVisibilityPageToken(pageToken)
+			r.NoError(err)
+		}
+
+		var filter sqlplugin.VisibilitySelectFilter
+		visStore.sqlStore.DB.(*sqlplugin.MockDB).EXPECT().
+			SelectFromVisibility(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(
+				_ context.Context,
+				f sqlplugin.VisibilitySelectFilter,
+			) ([]sqlplugin.VisibilityRow, error) {
+				filter = f
+				return []sqlplugin.VisibilityRow{row}, nil
+			})
+
+		resp, err := visStore.ListWorkflowExecutions(
+			context.Background(),
+			&manager.ListWorkflowExecutionsRequestV2{
+				NamespaceID:   testNamespaceID,
+				Namespace:     testNamespaceName,
+				PageSize:      1,
+				NextPageToken: nextPageToken,
+				Query:         queryString,
+			},
+		)
+		r.NoError(err)
+		token, err := sqlplugin.DeserializeVisibilityPageToken(resp.NextPageToken)
+		r.NoError(err)
+		r.NotNil(token)
+		return filter, token
+	}
+
+	t.Run("first page sets query time", func(t *testing.T) {
+		r := require.New(t)
+		before := time.Now().UTC()
+		filter, token := listPage(t, nowQuery, nil)
+		after := time.Now().UTC()
+
+		r.NotNil(token.QueryTime)
+		r.False(token.QueryTime.Before(before))
+		r.False(token.QueryTime.After(after))
+
+		expectedFilter, _ := listPage(t, literalQuery(*token.QueryTime), nil)
+		r.Equal(expectedFilter, filter)
+	})
+
+	t.Run("next page reuses query time", func(t *testing.T) {
+		r := require.New(t)
+		queryTime := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+		pageToken := &sqlplugin.VisibilityPageToken{
+			CloseTime: maxDatetime,
+			StartTime: row.StartTime,
+			RunID:     row.RunID,
+			QueryTime: &queryTime,
+		}
+		filter, token := listPage(t, nowQuery, pageToken)
+
+		r.NotNil(token.QueryTime)
+		r.Equal(queryTime, *token.QueryTime)
+
+		expectedFilter, _ := listPage(t, literalQuery(queryTime), pageToken)
+		r.Equal(expectedFilter, filter)
+	})
 }
 
 func TestCountExecutions(t *testing.T) {
@@ -360,8 +456,8 @@ func TestCountExecutions(t *testing.T) {
 
 			resp, err := visStore.AdminCountExecutions(
 				context.Background(),
-				&manager.AdminCountExecutionsRequest{
-					Namespace: tc.nsName,
+				&adminservice.CountExecutionsRequest{
+					Namespace: tc.nsName.String(),
 					Query:     "ExecutionStatus = 'Completed'",
 				},
 			)
@@ -385,7 +481,7 @@ func TestCountExecutions_NamespaceNotFound(t *testing.T) {
 
 	_, err := visStore.AdminCountExecutions(
 		context.Background(),
-		&manager.AdminCountExecutionsRequest{Namespace: testNamespaceName},
+		&adminservice.CountExecutionsRequest{Namespace: testNamespaceName.String()},
 	)
 	r.ErrorIs(err, nsNotFoundErr)
 }

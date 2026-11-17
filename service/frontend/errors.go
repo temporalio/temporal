@@ -114,6 +114,7 @@ var (
 	errWorkerVersioningV1_0NotAllowed         = serviceerror.NewPermissionDenied("Worker versioning v0.1 (Version Set-based, deprecated) is disabled on this namespace.", "")
 	errWorkerVersioningV2_0NotAllowed         = serviceerror.NewPermissionDenied("Worker versioning v0.2 (Rules-based, deprecated) is disabled on this namespace.", "")
 	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
+	errOldWorkerVersioningPollerNotAllowed    = serviceerror.NewPermissionDenied("Deprecated worker versioning pollers are disabled on this namespace.", "")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 

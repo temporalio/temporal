@@ -50,6 +50,8 @@ func FromStatus(st *status.Status) error {
 			return newObsoleteMatchingTask(st)
 		case *errordetailsspb.ActivityStartDuringTransitionFailure:
 			return newActivityStartDuringTransition(st)
+		case *errordetailsspb.FlowControlBlockedFailure:
+			return newFlowControlBlocked(st)
 		}
 	}
 

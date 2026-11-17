@@ -339,7 +339,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	// - ackLevel gets set to maxReadLevel
 	// - backlog counts reset to 0
 	for _, t := range s.capturedTasks() {
-		t.finish(taskFinishResult{consumedToken: true})
+		t.finish(nil)
 	}
 
 	_, ackLevel = blm.subqueues[subqueueZero].getLevels()
@@ -534,7 +534,7 @@ func (s *BacklogManagerTestSuite) testSetReadLevelAfterGapExpiredTail(maxReadLev
 	// Complete the valid task before the reader scans the expired tail.
 	tasks := s.capturedTasks()
 	s.Require().Len(tasks, 1)
-	tasks[0].finish(taskFinishResult{consumedToken: true})
+	tasks[0].finish(nil)
 	s.Require().Equal(start+1, s.dbAckLevel(blm))
 
 	batch, err := tr.getTaskBatch(blm.tqCtx)
@@ -577,7 +577,7 @@ func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks(
 	tasks := s.capturedTasks()
 	s.Require().Len(tasks, 2)
 	for _, t := range tasks {
-		t.finish(taskFinishResult{consumedToken: true})
+		t.finish(nil)
 	}
 	_, ackLevel := tr.getLevels()
 	s.Require().Equal(start+2, ackLevel)
@@ -687,13 +687,13 @@ func (s *BacklogManagerTestSuite) TestCompleteTask_OutOfOrder() {
 	s.Require().EqualValues(3, blm.db.getTotalApproximateBacklogCount())
 
 	for _, id := range []int64{start + 2, start + 3} {
-		tasks[id].finish(taskFinishResult{consumedToken: true})
+		tasks[id].finish(nil)
 		_, ackLevel := tr.getLevels()
 		s.Equal(start, ackLevel, "ack level should not move past an outstanding task")
 		s.EqualValues(3, blm.db.getTotalApproximateBacklogCount(), "count should not change until ack level moves")
 	}
 
-	tasks[start+1].finish(taskFinishResult{consumedToken: true})
+	tasks[start+1].finish(nil)
 	_, ackLevel := tr.getLevels()
 	s.Equal(start+3, ackLevel)
 	s.Equal(start+3, s.dbAckLevel(blm))
@@ -718,7 +718,7 @@ func (s *BacklogManagerTestSuite) TestRespoolTaskAfterStartError() {
 	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == 1 }, 5*time.Second, 10*time.Millisecond)
 	task1 := s.capturedTasks()[0]
 
-	task1.finish(taskFinishResult{err: errors.New("failed to start"), consumedToken: true})
+	task1.finish(errors.New("failed to start"))
 
 	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == 2 }, 5*time.Second, 10*time.Millisecond)
 	task2 := s.capturedTasks()[1]
@@ -730,7 +730,7 @@ func (s *BacklogManagerTestSuite) TestRespoolTaskAfterStartError() {
 	queue := s.blm.getDB().queue
 	await.RequireTrue(s.T(), func() bool { return s.taskMgr.getTaskCount(queue) == 1 }, 5*time.Second, 10*time.Millisecond)
 
-	task2.finish(taskFinishResult{consumedToken: true})
+	task2.finish(nil)
 	s.Zero(totalApproximateBacklogCount(s.blm))
 }
 
@@ -766,13 +766,13 @@ func (s *BacklogManagerTestSuite) TestTaskGC_BatchSize() {
 
 	for batch := range 2 {
 		// The first two completions in a batch are below the batch size, so they stay.
-		tasks[3*batch].finish(taskFinishResult{consumedToken: true})
-		tasks[3*batch+1].finish(taskFinishResult{consumedToken: true})
+		tasks[3*batch].finish(nil)
+		tasks[3*batch+1].finish(nil)
 		time.Sleep(50 * time.Millisecond) //nolint:forbidigo // checking that something doesn't happen
 		s.Equal(taskCount-3*batch, dbTaskCount())
 
 		// The third one reaches the batch size.
-		tasks[3*batch+2].finish(taskFinishResult{consumedToken: true})
+		tasks[3*batch+2].finish(nil)
 		await.RequireTrue(s.T(), func() bool { return dbTaskCount() == taskCount-3*(batch+1) }, 5*time.Second, 10*time.Millisecond)
 	}
 }
@@ -866,7 +866,7 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 
 	// Complete the delivered tasks.
 	for _, t := range s.capturedTasks() {
-		t.finish(taskFinishResult{consumedToken: true})
+		t.finish(nil)
 	}
 
 	// Verify the ack level advances past all tasks (expired + valid).
@@ -1243,7 +1243,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		for sleepUntil(func() bool { return delta() >= -p.gap }) {
 			if t := getTask(); t != nil {
 				// TODO: error sometimes?
-				t.finish(taskFinishResult{consumedToken: true})
+				t.finish(nil)
 
 				tindex := t.event.Data.ScheduledEventId
 				if _, loaded := tracker.LoadAndDelete(tindex); loaded {
@@ -1336,7 +1336,7 @@ func (s *BacklogManagerTestSuite) TestFairReaderReMergeOfCompletedWriteKeepsRead
 	finish := func(id int64) {
 		for _, t := range s.capturedTasks() {
 			if t.fairLevel() == lvl(id) {
-				t.finish(taskFinishResult{consumedToken: true})
+				t.finish(nil)
 				return
 			}
 		}

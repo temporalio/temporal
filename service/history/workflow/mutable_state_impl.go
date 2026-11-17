@@ -174,8 +174,13 @@ type (
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
 		// Running total of RetryLastFailure.Size() over pendingActivityInfoIDs.
-		activityFailureSize int
-		chasmNodeSizes      map[string]int // chasm node path -> key + node size in bytes
+		activityFailureSize   int
+		chasmNodeSizes        map[string]int // chasm node path -> key + node size in bytes
+		sizeAtLastTransaction int64
+		// Kept in memory, not derived from LastUpdateTime: on a passive cluster syncExecutionInfo overwrites
+		// LastUpdateTime with the source cluster's value, and LastUpdateTime includes skipped time, which a
+		// fast-forward can change within a transaction.
+		lastTransactionTime time.Time
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -605,6 +610,12 @@ func NewMutableStateFromDB(
 	if mutableState.executionInfo.GetTimeSkippingInfo() != nil {
 		mutableState.wrapTimeSourceWithTimeSkipping()
 	}
+
+	// The persisted LastUpdateTime was written by this cluster's last closeTransaction, so it is a local baseline.
+	mutableState.sizeAtLastTransaction = int64(mutableState.GetApproximatePersistedSize())
+	if lastUpdateTime := mutableState.executionInfo.GetLastUpdateTime(); lastUpdateTime != nil {
+		mutableState.lastTransactionTime = mutableState.withoutSkippedDuration(lastUpdateTime.AsTime())
+	}
 	return mutableState, nil
 }
 
@@ -630,6 +641,9 @@ func NewSanitizedMutableState(
 	}
 
 	mutableState.currentVersion = lastWriteVersion
+	// LastUpdateTime came from the source cluster's clock. Start storage usage accounting on this
+	// cluster from the next transaction instead.
+	mutableState.lastTransactionTime = time.Time{}
 	return mutableState, nil
 }
 
@@ -723,6 +737,17 @@ func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 
 	// Check the callback library's EnableCallbacks config via history config
 	return ms.shard.GetConfig().EnableCHASMCallbacks(ms.GetNamespaceEntry().Name().String())
+}
+
+// attachesCallbacksToChasm reports whether the completion callbacks for updateID, or the
+// workflow's own when updateID is empty, are attached to the CHASM tree. Update callbacks that
+// are not attached to CHASM are dropped. Attaching and ValidateCallbackAddition both route on
+// this, so that validation covers exactly the callbacks that get attached.
+func (ms *MutableStateImpl) attachesCallbacksToChasm(updateID string) bool {
+	if !ms.chasmCallbacksEnabled() {
+		return false
+	}
+	return updateID == "" || ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String())
 }
 
 // ChasmSignalBacklinksEnabled returns true if CHASM-based signal requestID backlink tracking is enabled.
@@ -1555,29 +1580,15 @@ func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *per
 	}
 }
 
-func (ms *MutableStateImpl) GetUpdateOutcome(
+func (ms *MutableStateImpl) GetCompletedUpdate(
 	ctx context.Context,
 	updateID string,
-) (*updatepb.Outcome, error) {
+) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
 	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
 	if err != nil {
 		return nil, err
 	}
-	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), nil
-}
-
-func (ms *MutableStateImpl) GetUpdateAcceptedEventID(
-	ctx context.Context,
-	updateID string,
-) (int64, error) {
-	if acceptance := ms.executionInfo.GetUpdateInfos()[updateID].GetAcceptance(); acceptance != nil {
-		return acceptance.GetEventId(), nil
-	}
-	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
-	if err != nil {
-		return 0, err
-	}
-	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetAcceptedEventId(), nil
+	return event.GetWorkflowExecutionUpdateCompletedEventAttributes(), nil
 }
 
 func (ms *MutableStateImpl) GetUpdateNexusSerializationContext(
@@ -2462,6 +2473,10 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
 func (ms *MutableStateImpl) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
+}
+
+func (ms *MutableStateImpl) NumBufferedEvents() int {
+	return ms.hBuilder.NumBufferedEvents()
 }
 
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
@@ -3520,10 +3535,9 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 	if len(updateCallbacks) == 0 {
 		return nil
 	}
-	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
+	if ms.attachesCallbacksToChasm(updateID) {
 		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
-
 	return nil
 }
 
@@ -3538,10 +3552,7 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 		return err
 	}
 
-	nsName := ms.GetNamespaceEntry().Name().String()
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(nsName)
-	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
-	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
+	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks)
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -3552,7 +3563,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	if len(completionCallbacks) == 0 {
 		return nil
 	}
-	if ms.chasmCallbacksEnabled() {
+	if ms.attachesCallbacksToChasm("") {
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -3567,6 +3578,14 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	// BUG: This limit is checked from an Apply* function, which MutableStateRebuilder also
+	// drives during NDC replication, history import, and reset. If the check fails there (say
+	// MaxCallbacksPerWorkflow was lowered after the callbacks were attached) it rejects an
+	// event another cluster already committed, stalling the replication task or failing the
+	// reapply rather than protecting anything.
+	//
+	// The newer CHASM path only validates in request handlers instead; see [ValidateCallbackAddition].
+	// This HSM path is kept as-is to avoid churn as we work on removing it.
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
@@ -3618,8 +3637,48 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
-	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks)
+}
+
+// ValidateCallbackAddition checks that addition can be attached to this execution without
+// breaching its aggregate callback limits; see chasmworkflow.Workflow.ValidateCallbackAddition
+// for why this is left to request handlers rather than done where callbacks are attached.
+//
+// inFlight holds the callbacks of Updates admitted but not yet accepted, which are reserved
+// against the limits. (So a Workflow cannot exceed callback limits if multiple updates are
+// accepted at the same time.)
+//
+// It is a no-op unless the callbacks would be attached to the CHASM tree (see
+// attachesCallbacksToChasm): the HSM path enforces its own limit while attaching. It only reads
+// the CHASM tree, so it is safe to call before deciding whether to write anything at all.
+func (ms *MutableStateImpl) ValidateCallbackAddition(
+	inFlight []chasmworkflow.CallbackAddition,
+	addition chasmworkflow.CallbackAddition,
+) error {
+	if !ms.attachesCallbacksToChasm(addition.UpdateID) {
+		return nil
+	}
+	// In-flight callbacks that will be dropped rather than attached take up none of the limits.
+	attachedInFlight := make([]chasmworkflow.CallbackAddition, 0, len(inFlight))
+	for _, held := range inFlight {
+		if ms.attachesCallbacksToChasm(held.UpdateID) {
+			attachedInFlight = append(attachedInFlight, held)
+		}
+	}
+
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+	// The aggregate callback validation is ultimately checked within the CHASM component,
+	// which also keeps track of denormalizing callback-related state.
+	// (Since we are intentionally trying to not churn any HSM-code for now.)
+	return wf.ValidateCallbackAddition(
+		ctx,
+		attachedInFlight,
+		addition,
+		ms.shard.CallbackValidator(),
+	)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
@@ -5010,7 +5069,7 @@ func (ms *MutableStateImpl) AddCompletedWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5054,7 +5113,7 @@ func (ms *MutableStateImpl) AddFailWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5103,7 +5162,7 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5188,7 +5247,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5720,7 +5779,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		deleteAfterTerminate,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5880,7 +5939,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	// present in the normal flow. The exception is the reset/reapply case where
 	// callbacks are registered at admission time instead (because the
 	// UpdateAccepted event has a nil AcceptedRequest after reset). In that case,
-	// addCallbacksToMap is a no-op since the requestID-indexed keys already
+	// attaching is a no-op since the requestID-indexed keys already
 	// exist from the admitted event.
 	if attrs.GetAcceptedRequest() != nil {
 		requestID := attrs.GetAcceptedRequest().GetRequestId()
@@ -6466,7 +6525,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		continueAsNewEvent.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, nil, err
 	}
@@ -6969,7 +7028,7 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	// check workflow rules
 	if !ai.Paused {
-		ActivityMatchWorkflowRules(ms, ms.timeSource, ms.logger, ai)
+		ActivityMatchWorkflowRules(ms, ms.shard.GetTimeSource(), ms.logger, ai)
 	}
 
 	// if activity is paused
@@ -7495,7 +7554,7 @@ func (ms *MutableStateImpl) AddTasks(
 		// vs. real distinction. The CategoryTypeScheduled drop-check above runs first so it
 		// compares virtual-vs-virtual (now is also virtual).
 		if category.Type() == tasks.CategoryTypeScheduled {
-			task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
+			task.SetVisibilityTime(ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(task.GetVisibilityTime()))
 		}
 
 		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
@@ -7521,10 +7580,18 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 	return insertTasks
 }
 
-func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
-	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
+// DeletePhysicalCHASMPureTasks records cached physical CHASM pure tasks strictly before
+// maxLogicalScheduledTime for best-effort deletion. The threshold uses logical time and is
+// converted to the physical time used by the History task queue before comparing task timestamps.
+// The delete-all sentinel, tasks.MaximumKey.FireTime, is not converted.
+func (ms *MutableStateImpl) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time) {
+	maxPhysicalScheduledTime := maxLogicalScheduledTime
+	if !maxLogicalScheduledTime.Equal(tasks.MaximumKey.FireTime) {
+		maxPhysicalScheduledTime = ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(maxLogicalScheduledTime)
+	}
 
-		if !task.GetVisibilityTime().Before(maxScheduledTime) {
+	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
+		if !task.GetVisibilityTime().Before(maxPhysicalScheduledTime) {
 			ms.chasmPureTasks = ms.chasmPureTasks[:lastTaskIdx+1]
 			return
 		}
@@ -7535,8 +7602,7 @@ func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
 		)
 	}
 
-	// If we reach here, all tasks have visibility time before maxScheduledTime
-	// and need to be deleted.
+	// All cached tasks have visibility times before maxPhysicalScheduledTime and are marked for deletion.
 	ms.chasmPureTasks = ms.chasmPureTasks[:0]
 }
 
@@ -7564,7 +7630,7 @@ func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 	// workflowTask.ScheduledTime / StartedTime, which come from the time-skipping wrapper).
 	// The in-memory scheduled queue dispatches against real wall-clock, so convert here —
 	// same boundary contract as AddTasks for persisted scheduled tasks.
-	task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
+	task.SetVisibilityTime(ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(task.GetVisibilityTime()))
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
@@ -7960,8 +8026,11 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	now := ms.Now()
+	ms.closeTransactionAccrueStorageUsage(ms.withoutSkippedDuration(now))
+
 	ms.executionInfo.StateTransitionCount += 1
-	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.timeSource.Now())
+	ms.executionInfo.LastUpdateTime = timestamppb.New(now)
 
 	// We generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -7983,6 +8052,54 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
+}
+
+func (ms *MutableStateImpl) closeTransactionAccrueStorageUsage(
+	now time.Time,
+) {
+	var delta storageUsageDelta
+	// stateInDB is updated in cleanupTransaction, so here it is still the state at the start of this interval.
+	if ms.stateInDB != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		delta = computeStorageUsageDelta(
+			ms.sizeAtLastTransaction,
+			ms.executionInfo.GetExecutionStats().GetHistorySize(),
+			ms.lastTransactionTime,
+			now,
+		)
+	}
+	if !delta.isZero() {
+		SetStorageUsage(ms.executionInfo, addStorageUsage(ms.executionInfo.GetExecutionStats().GetStorageUsage(), delta))
+	}
+	ms.sizeAtLastTransaction = int64(ms.GetApproximatePersistedSize())
+	ms.lastTransactionTime = now
+}
+
+// CurrentStorageUsage returns this cluster's storage usage as of now (wall clock): the stored counters plus the
+// interval held since this cluster's last closed transaction, which is not accrued yet. A closed
+// execution, or one with no local baseline yet, returns the stored counters. It does not modify the
+// mutable state.
+func (ms *MutableStateImpl) CurrentStorageUsage() *persistencespb.StorageUsage {
+	usage := common.CloneProto(ms.executionInfo.GetExecutionStats().GetStorageUsage())
+	if ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return usage
+	}
+	delta := computeStorageUsageDelta(
+		ms.sizeAtLastTransaction,
+		ms.executionInfo.GetExecutionStats().GetHistorySize(),
+		ms.lastTransactionTime,
+		ms.withoutSkippedDuration(ms.timeSource.Now()),
+	)
+	if delta.isZero() {
+		return usage
+	}
+	return addStorageUsage(usage, delta)
+}
+
+// withoutSkippedDuration converts a reading of ms.timeSource back to wall-clock time. With time
+// skipping, ms.timeSource adds the execution's skipped duration, and skipped time is not storage
+// usage.
+func (ms *MutableStateImpl) withoutSkippedDuration(t time.Time) time.Time {
+	return t.Add(-ms.accumulatedSkippedDuration())
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
@@ -9787,6 +9904,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.StateMachineTimers,
 			&info.TaskGenerationShardClockTimestamp,
 			&info.UpdateInfos,
+			&info.PersistenceMetadata,
 		}
 		if !isSnapshot {
 			ignoreFields = append(ignoreFields, &info.SubStateMachineTombstoneBatches)
@@ -10160,7 +10278,7 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask() error {
 }
 
 func (ms *MutableStateImpl) AddReapplyCandidateEvent(event *historypb.HistoryEvent) {
-	if shouldReapplyEvent(ms.shard.StateMachineRegistry(), event) {
+	if ShouldReapplyEvent(ms.shard.StateMachineRegistry(), event) {
 		ms.reapplyEventsCandidate = append(ms.reapplyEventsCandidate, event)
 	}
 }
@@ -10245,9 +10363,10 @@ func logError(
 	logger.Error(msg, tags...)
 }
 
-func (ms *MutableStateImpl) ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time {
-	if virtualTime.IsZero() {
-		return virtualTime
-	}
-	return virtualTime.Add(-ms.accumulatedSkippedDuration())
+func (ms *MutableStateImpl) ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time {
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime)
+}
+
+func (ms *MutableStateImpl) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time {
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime)
 }

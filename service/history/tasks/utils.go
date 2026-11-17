@@ -1,6 +1,8 @@
 package tasks
 
 import (
+	"strings"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -28,7 +30,7 @@ func Tags(
 		taskEventID = common.EmptyEventID
 	}
 
-	return []tag.Tag{
+	tags := []tag.Tag{
 		tag.WorkflowNamespaceID(task.GetNamespaceID()),
 		tag.WorkflowID(task.GetWorkflowID()),
 		tag.WorkflowRunID(task.GetRunID()),
@@ -36,6 +38,37 @@ func Tags(
 		tag.TaskType(task.GetType()),
 		tag.Task(task),
 		tag.WorkflowEventID(taskEventID),
+	}
+	if stage, ok := nexusStageTag(task); ok {
+		tags = append(tags, stage)
+	}
+	return tags
+}
+
+// nexusStageTag returns the Nexus lifecycle stage of an outbound task. It keys on the outbound task
+// group, which names all of a library's outbound tasks at once and matches how the outbound queue and
+// circuit breaker group them.
+func nexusStageTag(task Task) (tag.Tag, bool) {
+	if task.GetCategory().ID() != CategoryIDOutbound {
+		return nil, false
+	}
+	grouped, ok := task.(HasOutboundTaskGroup)
+	if !ok {
+		return nil, false
+	}
+	// The group names are defined by the HSM and CHASM Nexus and callback libraries, which this package
+	// cannot import.
+	switch group := grouped.OutboundTaskGroup(); {
+	case group == "nexus", // CHASM
+		strings.HasPrefix(group, "nexusoperations."): // HSM
+		return tag.NexusStageCallerOutbound, true
+	// Every callback kind today delivers a Nexus operation completion (see common/callbacks.Kind);
+	// revisit if a non-Nexus kind is added.
+	case group == "callback.invoke", // CHASM
+		strings.HasPrefix(group, "callbacks."): // HSM
+		return tag.NexusStageHandlerOutbound, true
+	default:
+		return nil, false
 	}
 }
 

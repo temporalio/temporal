@@ -43,15 +43,18 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
@@ -1935,7 +1938,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("OperationTokenTooLong", func(s *NexusWorkflowTestSuite) {
-		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster(), testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
+		logCapture := env.StartNamespaceLogCapture()
 		ctx := s.Context()
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
 
@@ -1959,10 +1963,16 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 		s.Empty(capture.Metric("nexus_completion_request_preprocess_errors"))
 		s.Len(completionRequests, 1)
 		s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_bad_request"})
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "service failures",
+			Tags:    map[string]any{"nexus-stage": "caller-inbound"},
+		})
 	})
 
 	s.Run("OperationTokenTooLongNoIdentifier", func(s *NexusWorkflowTestSuite) {
-		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster(), testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
+		logCapture := env.StartNamespaceLogCapture()
 		ctx := s.Context()
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		// Generate a valid callback token to get past initial validation
@@ -1986,6 +1996,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 		s.Empty(capture.Metric("nexus_completion_request_preprocess_errors"))
 		s.Len(completionRequests, 1)
 		s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_bad_request"})
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "service failures",
+			Tags:    map[string]any{"nexus-stage": "caller-inbound"},
+		})
 	})
 
 	s.Run("InvalidCallbackToken", func(s *NexusWorkflowTestSuite) {
@@ -2002,6 +2017,31 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 		s.Contains(handlerErr.Error(), "invalid callback token", "Response should indicate invalid callback token")
+	})
+
+	s.Run("CallbackTokenWithoutRequestID", func(s *NexusWorkflowTestSuite) {
+		env := s.newTestEnv(chasmEnabled)
+		gen := &commonnexus.CallbackTokenGenerator{}
+		validToken, err := s.generateValidCallbackToken(env.NamespaceID().String(), testcore.RandomizeStr("workflow"), uuid.NewString())
+		s.NoError(err)
+		decodedToken, err := commonnexus.DecodeCallbackToken(validToken)
+		s.NoError(err)
+		completionToken, err := gen.DecodeCompletion(decodedToken)
+		s.NoError(err)
+		completionToken.RequestId = ""
+		invalidToken, err := gen.Tokenize(completionToken)
+		s.NoError(err)
+
+		completion := nexusrpc.CompleteOperationOptions{
+			Result: testcore.MustToPayload(s.T(), "result"),
+			Header: nexus.Header{commonnexus.CallbackTokenHeader: invalidToken},
+		}
+		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
+		err = s.sendNexusCompletionRequest(s.Context(), publicCallbackURL, completion)
+		var handlerErr *nexus.HandlerError
+		s.ErrorAs(err, &handlerErr)
+		s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+		s.Contains(handlerErr.Error(), "invalid callback token")
 	})
 
 	s.Run("InvalidCallbackTokenNoIdentifier", func(s *NexusWorkflowTestSuite) {
@@ -3258,8 +3298,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 
 	for _, tc := range testCases {
 		s.Run(tc.input, func(s *NexusWorkflowTestSuite) {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-			defer cancel()
+			ctx := s.Context()
 			env, callerWf := buildNexusEnvFn(ctx, s)
 			run, err := env.SdkClient().ExecuteWorkflow(
 				ctx,
@@ -3275,6 +3314,374 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 			tc.checkOutput(s, env, res, err)
 		})
 	}
+}
+
+func (s *NexusWorkflowTestSuite) TestTimeoutCleanupWithBufferedCancellation(chasmEnabled bool) {
+	if chasmEnabled {
+		s.T().Skip("legacy HSM cleanup")
+	}
+	env := s.newTestEnv(false, testcore.WithDynamicConfig(nexusoperations.MaxConcurrentOperations, 1))
+	ctx := s.Context()
+	tq := testcore.RandomizeStr(s.T().Name())
+	endpoint := env.createRandomNexusEndpoint(ctx, s.T()).GetSpec().GetName()
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: tq, WorkflowTaskTimeout: 20 * time.Second}, "workflow")
+	s.NoError(err)
+	exec := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	poll := func() *workflowservice.PollWorkflowTaskQueueResponse {
+		r, e := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{Namespace: env.Namespace().String(), TaskQueue: &taskqueuepb.TaskQueue{Name: tq}, Identity: "test"})
+		s.NoError(e)
+		return r
+	}
+	schedule := func(timeout time.Duration) *commandpb.Command {
+		return &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{Endpoint: endpoint, Service: "service", Operation: "operation", ScheduleToStartTimeout: durationpb.New(timeout)}}}
+	}
+	first := poll()
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: first.TaskToken, Identity: "test", Commands: []*commandpb.Command{schedule(3 * time.Second)}})
+	s.NoError(err)
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "hold", nil))
+	held := poll()
+	var id int64
+	for _, event := range held.History.Events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
+			id = event.GetEventId()
+		}
+	}
+	s.Positive(id)
+	s.Await(func(s *NexusWorkflowTestSuite) {
+		desc, e := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{Namespace: env.Namespace().String(), Execution: exec, Archetype: chasm.WorkflowArchetype})
+		s.NoError(e)
+		found := false
+		for _, event := range desc.GetDatabaseMutableState().GetBufferedEvents() {
+			if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT {
+				found = true
+			}
+		}
+		s.True(found)
+	}, 10*time.Second, 100*time.Millisecond)
+	cancel := &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION, Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{ScheduledEventId: id}}}
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: held.TaskToken, Identity: "test", Commands: []*commandpb.Command{schedule(time.Minute), cancel}})
+	s.NoError(err)
+	events := env.GetHistory(env.Namespace().String(), exec)
+	s.ContainsHistoryEvents(`
+NexusOperationScheduled
+NexusOperationCancelRequested
+NexusOperationTimedOut
+`, events)
+	s.RequireNoHistoryEvent(events, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+}
+
+func (s *NexusWorkflowTestSuite) TestTimeoutCleanupWithLateCallbackAndCancellation(chasmEnabled bool) {
+	if chasmEnabled {
+		s.T().Skip("legacy HSM cleanup")
+	}
+	env := s.newTestEnv(false, testcore.WithDynamicConfig(nexusoperations.MaxConcurrentOperations, 1))
+	ctx := s.Context()
+	tq := testcore.RandomizeStr(s.T().Name())
+	type callback struct{ url, token string }
+	callbacks := make(chan callback, 2)
+	responseHeld := make(chan int, 1)
+	releaseCancel := make(chan struct{})
+	responseReleased := make(chan struct{}, 1)
+	defer func() {
+		select {
+		case <-releaseCancel:
+		default:
+			close(releaseCancel)
+		}
+	}()
+	handler := nexustest.Handler{
+		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, opts nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			callbacks <- callback{opts.CallbackURL, opts.CallbackHeader.Get(commonnexus.CallbackTokenHeader)}
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "token"}, nil
+		},
+		OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error {
+			return nil
+		},
+	}
+	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, resp *http.Response, callErr error) *httpfaults.Outcome {
+		if !strings.HasSuffix(req.URL.Path, "/cancel") || resp == nil || callErr != nil {
+			return nil
+		}
+		responseHeld <- resp.StatusCode
+		<-releaseCancel
+		responseReleased <- struct{}{}
+		return &httpfaults.Outcome{Response: resp}
+	})
+	endpoint := env.createRandomExternalNexusServer(ctx, s.T(), handler)
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: tq}, "workflow")
+	s.NoError(err)
+	exec := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	poll := func() *workflowservice.PollWorkflowTaskQueueResponse {
+		r, e := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{Namespace: env.Namespace().String(), TaskQueue: &taskqueuepb.TaskQueue{Name: tq}, Identity: "test"})
+		s.NoError(e)
+		return r
+	}
+	schedule := func(timeout time.Duration) *commandpb.Command {
+		return &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{Endpoint: endpoint, Service: "service", Operation: "operation", StartToCloseTimeout: durationpb.New(timeout)}}}
+	}
+	first := poll()
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: first.TaskToken, Identity: "test", Commands: []*commandpb.Command{schedule(4 * time.Second)}})
+	s.NoError(err)
+	cb := await.Rcv(s.T(), callbacks)
+	started := poll()
+	var id int64
+	for _, event := range started.History.Events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
+			id = event.GetEventId()
+		}
+	}
+	s.Positive(id)
+	cancel := &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION, Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{ScheduledEventId: id}}}
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: started.TaskToken, Identity: "test", Commands: []*commandpb.Command{cancel}})
+	s.NoError(err)
+	s.Equal(http.StatusAccepted, await.Rcv(s.T(), responseHeld))
+	timedout := poll()
+	s.RequireHistoryEvent(timedout.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: timedout.TaskToken, Identity: "test", Commands: []*commandpb.Command{schedule(time.Minute)}})
+	s.NoError(err)
+	capture := env.StartNamespaceMetricCapture()
+	close(releaseCancel)
+	await.Rcv(s.T(), responseReleased)
+	s.Await(func(s *NexusWorkflowTestSuite) {
+		found := false
+		for _, recording := range capture.Metric(metrics.TaskSkipped.Name()) {
+			if recording.Tags[metrics.TaskTypeTagName] == "OutboundActive."+nexusoperations.TaskTypeCancelation {
+				found = true
+			}
+		}
+		s.True(found, "the cancellation task must be discarded after its operation is deleted")
+	}, 10*time.Second, 100*time.Millisecond)
+	err = s.sendNexusCompletionRequest(ctx, cb.url, nexusrpc.CompleteOperationOptions{Result: testcore.MustToPayload(s.T(), "late"), Header: nexus.Header{commonnexus.CallbackTokenHeader: cb.token}})
+	var handlerErr *nexus.HandlerError
+	s.ErrorAs(err, &handlerErr)
+	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
+	events := env.GetHistory(env.Namespace().String(), exec)
+	s.RequireHistoryEvent(events, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
+	s.RequireHistoryEvent(events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
+	s.RequireNoHistoryEvent(events, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
+	s.RequireNoHistoryEvent(events, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED)
+	s.RequireNoHistoryEvent(events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	s.RequireNoHistoryEvent(events, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+}
+
+// TestTimeoutCleanupResetReappliesTimeout verifies recovery when reset reapplies the timeout.
+func (s *NexusWorkflowTestSuite) TestTimeoutCleanupResetReappliesTimeout(chasmEnabled bool) {
+	if chasmEnabled {
+		s.T().Skip("legacy HSM cleanup")
+	}
+	env := s.newTestEnv(false, testcore.WithDynamicConfig(nexusoperations.MaxConcurrentOperations, 1))
+	restoreTimeoutCleanup := env.GetTestCluster().InjectHook(s.T(), testhooks.NewHook(testhooks.NexusRetainTimedOutOperation, true), env.Namespace())
+	ctx := s.Context()
+	tq := testcore.RandomizeStr(s.T().Name())
+	endpoint := env.createRandomNexusEndpoint(ctx, s.T()).GetSpec().GetName()
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: tq}, "workflow")
+	s.NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	poll := func() *workflowservice.PollWorkflowTaskQueueResponse {
+		r, e := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{Namespace: env.Namespace().String(), TaskQueue: &taskqueuepb.TaskQueue{Name: tq}, Identity: "test"})
+		s.NoError(e)
+		return r
+	}
+	command := func(timeout time.Duration) *commandpb.Command {
+		return &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{Endpoint: endpoint, Service: "service", Operation: "operation", ScheduleToStartTimeout: durationpb.New(timeout)}}}
+	}
+	first := poll()
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: first.TaskToken, Commands: []*commandpb.Command{command(4 * time.Second)}})
+	s.NoError(err)
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "reset-point", nil))
+	resetTask := poll()
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: resetTask.TaskToken})
+	s.NoError(err)
+	history := env.GetHistory(env.Namespace().String(), execution)
+	var resetID int64
+	for _, event := range history {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			resetID = event.GetEventId()
+		}
+	}
+	s.Positive(resetID)
+	timeoutTask := poll()
+	timedout := s.RequireHistoryEvent(timeoutTask.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
+	oldID := timedout.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId()
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: timeoutTask.TaskToken, Commands: []*commandpb.Command{command(time.Minute)}})
+	s.ErrorContains(err, "PendingNexusOperationsLimitExceeded")
+	desc, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: env.Namespace().String(), Execution: execution, Archetype: chasm.WorkflowArchetype})
+	s.NoError(err)
+	s.Contains(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), strconv.FormatInt(oldID, 10))
+	restoreTimeoutCleanup()
+	reset, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "timeout cleanup reset regression", RequestId: uuid.NewString(), WorkflowTaskFinishEventId: resetID})
+	s.NoError(err)
+	resetExecution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: reset.GetRunId()}
+	resetHistory := env.GetHistory(env.Namespace().String(), resetExecution)
+	reapplied := s.RequireHistoryEvent(resetHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
+	s.Equal(oldID, reapplied.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId())
+	desc, err = env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: env.Namespace().String(), Execution: resetExecution, Archetype: chasm.WorkflowArchetype})
+	s.NoError(err)
+	s.Empty(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById())
+	retry := poll()
+	s.Equal(reset.GetRunId(), retry.GetWorkflowExecution().GetRunId())
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: retry.TaskToken, Commands: []*commandpb.Command{command(time.Minute)}})
+	s.NoError(err)
+}
+
+func (s *NexusWorkflowTestSuite) TestTimeoutRemovesOperationBeforeNextSchedule(chasmEnabled bool) {
+	if chasmEnabled {
+		s.T().Skip("legacy HSM timeout cleanup")
+	}
+	env := s.newTestEnv(false, testcore.WithDynamicConfig(nexusoperations.MaxConcurrentOperations, 1))
+	ctx := s.Context()
+	tq := testcore.RandomizeStr(s.T().Name())
+	endpoint := env.createRandomNexusEndpoint(ctx, s.T()).GetSpec().GetName()
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: tq}, "workflow")
+	s.NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	poll := func() *workflowservice.PollWorkflowTaskQueueResponse {
+		r, e := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{Namespace: env.Namespace().String(), TaskQueue: &taskqueuepb.TaskQueue{Name: tq}, Identity: "test"})
+		s.NoError(e)
+		return r
+	}
+	schedule := func() *commandpb.Command {
+		return &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{Endpoint: endpoint, Service: "service", Operation: "operation", ScheduleToStartTimeout: durationpb.New(time.Second)}}}
+	}
+	task := poll()
+	for i := range 3 {
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{schedule()}})
+		s.NoError(err)
+		task = poll()
+		timeouts := 0
+		for _, event := range task.History.Events {
+			if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT {
+				timeouts++
+			}
+		}
+		s.Equal(i+1, timeouts)
+		desc, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: env.Namespace().String(), Execution: execution, Archetype: chasm.WorkflowArchetype})
+		s.NoError(err)
+		s.Empty(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById())
+	}
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{schedule()}})
+	s.NoError(err)
+	history := env.GetHistory(env.Namespace().String(), execution)
+	count := 0
+	for _, event := range history {
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
+			count++
+		}
+	}
+	s.Equal(4, count)
+	s.RequireNoHistoryEvent(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+}
+
+func (s *NexusWorkflowTestSuite) TestResetRemovesRetainedTimedOutOperations(chasmEnabled bool) {
+	if chasmEnabled {
+		s.T().Skip("This test exercises legacy HSM timeout state")
+	}
+	env := s.newTestEnv(false)
+	restoreTimeoutCleanup := env.GetTestCluster().InjectHook(s.T(), testhooks.NewHook(testhooks.NexusRetainTimedOutOperation, true), env.Namespace())
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{Name: endpointName, Target: &nexuspb.EndpointTarget{
+			Variant: &nexuspb.EndpointTarget_Worker_{Worker: &nexuspb.EndpointTarget_Worker{
+				Namespace: env.Namespace().String(), TaskQueue: "unreachable-for-test",
+			}},
+		}},
+	})
+	s.NoError(err)
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, "workflow")
+	s.NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	poll := func() *workflowservice.PollWorkflowTaskQueueResponse {
+		response, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(), TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue}, Identity: "test",
+		})
+		s.NoError(err)
+		return response
+	}
+	command := func() *commandpb.Command {
+		return &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint: endpointName, Service: "service", Operation: "operation",
+					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+				},
+			},
+		}
+	}
+	firstTask := poll()
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: firstTask.TaskToken, Identity: "test", Commands: []*commandpb.Command{command(), command(), command()},
+	})
+	s.NoError(err)
+	s.Await(func(s *NexusWorkflowTestSuite) {
+		events := env.GetHistory(env.Namespace().String(), execution)
+		count := 0
+		for _, event := range events {
+			if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT {
+				count++
+			}
+		}
+		s.Equal(3, count)
+	}, 15*time.Second, 100*time.Millisecond)
+	desc, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(), Execution: execution, Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	s.Len(desc.DatabaseMutableState.GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), 3)
+	// Model an existing execution whose timed-out HSM entries exceed the current limit.
+	env.OverrideDynamicConfig(nexusoperations.MaxConcurrentOperations, 2)
+	// Complete a task after the timeouts to obtain a reset point after the retained nodes.
+	timeoutTask := poll()
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: timeoutTask.TaskToken, Identity: "test",
+	})
+	s.Require().NoError(err)
+	events := env.GetHistory(env.Namespace().String(), execution)
+	var resetID int64
+	for _, event := range events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			resetID = event.GetEventId()
+		}
+	}
+	s.Require().Positive(resetID)
+	s.Require().NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "try-schedule", nil))
+	nextTask := poll()
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: nextTask.TaskToken, Identity: "test", Commands: []*commandpb.Command{command()},
+	})
+	s.Require().ErrorContains(err, "PendingNexusOperationsLimitExceeded")
+	restoreTimeoutCleanup()
+	reset, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "recover retained timed out operations",
+		RequestId: uuid.NewString(), WorkflowTaskFinishEventId: resetID,
+	})
+	s.Require().NoError(err)
+	resetExecution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: reset.GetRunId()}
+	resetHistory := env.GetHistory(env.Namespace().String(), resetExecution)
+	timeoutCount := 0
+	for _, event := range resetHistory {
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT {
+			timeoutCount++
+		}
+	}
+	s.Require().Equal(3, timeoutCount)
+	desc, err = env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(), Execution: resetExecution, Archetype: chasm.WorkflowArchetype,
+	})
+	s.Require().NoError(err)
+	s.Empty(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById())
+	retry := poll()
+	s.Require().Equal(reset.GetRunId(), retry.GetWorkflowExecution().GetRunId())
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: retry.TaskToken, Identity: "test", Commands: []*commandpb.Command{command()},
+	})
+	s.Require().NoError(err)
+	desc, err = env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(), Execution: resetExecution, Archetype: chasm.WorkflowArchetype,
+	})
+	s.Require().NoError(err)
+	s.Len(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), 1)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToCloseTimeout(chasmEnabled bool) {
@@ -3834,18 +4241,25 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmE
 			s.NoError(w.Start())
 			defer w.Stop()
 
-			run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, callerWF)
-			s.NoError(err)
-
-			// Block until the Nexus operation has started.
-			startedHandle, err := env.SdkClient().UpdateWorkflow(ctx, client.UpdateWorkflowOptions{
-				WorkflowID:   run.GetID(),
-				RunID:        run.GetRunID(),
-				UpdateName:   awaitStartedUpdate,
-				WaitForStage: client.WorkflowUpdateStageCompleted,
+			// Block until the Nexus operation has started. Update-with-Start guarantees the update is accepted in
+			// the first workflow task; a separate UpdateWorkflow call can land in a later task, which changes the
+			// shape of the reset run's history asserted below.
+			startOp := env.SdkClient().NewWithStartWorkflowOperation(client.StartWorkflowOptions{
+				ID:                       testcore.RandomizeStr(s.T().Name()),
+				TaskQueue:                taskQueue,
+				WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			}, callerWF)
+			startedHandle, err := env.SdkClient().UpdateWithStartWorkflow(ctx, client.UpdateWithStartWorkflowOptions{
+				StartWorkflowOperation: startOp,
+				UpdateOptions: client.UpdateWorkflowOptions{
+					UpdateName:   awaitStartedUpdate,
+					WaitForStage: client.WorkflowUpdateStageCompleted,
+				},
 			})
 			s.NoError(err)
 			s.NoError(startedHandle.Get(ctx, nil))
+			run, err := startOp.Get(ctx)
+			s.NoError(err)
 
 			// The operation is created in the tree implied by the schedule-time flag, in the original run.
 			s.assertNexusOperationTree(ctx, env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}, !tc.enableChasmAtSchedule)
@@ -3878,6 +4292,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmE
 			// After the rebuild the operation lives on the tree implied by the current flag, verified on the
 			// specific post-reset run.
 			s.assertNexusOperationTree(ctx, env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}, expectHSMAfterReset)
+
+			// Signal only once the reset run has re-completed the update, otherwise the signal can be folded into
+			// that workflow task and change the shape of the history asserted below.
+			s.WaitForHistoryEventsSuffix(`
+  WorkflowTaskCompleted
+  WorkflowExecutionUpdateCompleted`,
+				env.GetHistoryFunc(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}),
+				10*time.Second,
+				10*time.Millisecond)
 
 			// Drive the reset run to completion, then assert on its final history.
 			s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), newRunID, "done", nil))

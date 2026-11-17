@@ -13,6 +13,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -711,14 +712,15 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 		Subqueue:           int(subqueue),
 		Limit:              limit,
 	})
-	if err != nil {
+	// Context canceled is expected if the task queue unloads during a GC.
+	if err != nil && !common.IsContextCanceledErr(err) {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
 			tag.Int("subqueue-id", int(subqueue)),
 			tag.TaskID(exclusiveMaxTaskID),
-			tag.WorkflowTaskQueueType(db.queue.TaskType()),
-			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
+			tag.TaskQueueType(db.queue.TaskType()),
+			tag.TaskQueueName(db.queue.PersistenceName()),
 		)
 	}
 	return n, err
@@ -752,14 +754,15 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 		ConditionRangeID: db.rangeID,
 	})
 	// ConditionFailedError means we lost ownership: not a store failure, caller will unload.
-	if _, lostOwnership := errors.AsType[*persistence.ConditionFailedError](err); err != nil && !lostOwnership {
+	// Context canceled is expected if the task queue unloads during a GC.
+	if _, lostOwnership := errors.AsType[*persistence.ConditionFailedError](err); err != nil && !lostOwnership && !common.IsContextCanceledErr(err) {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
 			tag.Int("subqueue-id", int(subqueue)),
 			tag.AckLevel(exclusiveMaxLevel),
-			tag.WorkflowTaskQueueType(db.queue.TaskType()),
-			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
+			tag.TaskQueueType(db.queue.TaskType()),
+			tag.TaskQueueName(db.queue.PersistenceName()),
 		)
 	}
 	return n, err

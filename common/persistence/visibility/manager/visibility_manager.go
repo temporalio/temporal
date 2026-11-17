@@ -60,8 +60,15 @@ type (
 	AdminVisibilityManager interface {
 		VisibilityManager
 
-		AdminListExecutions(ctx context.Context, request *AdminListExecutionsRequest) (*AdminListExecutionsResponse, error)
-		AdminCountExecutions(ctx context.Context, request *AdminCountExecutionsRequest) (*AdminCountExecutionsResponse, error)
+		AdminListExecutions(
+			ctx context.Context,
+			request *adminservice.ListExecutionsRequest,
+		) (*adminservice.ListExecutionsResponse, error)
+
+		AdminCountExecutions(
+			ctx context.Context,
+			request *adminservice.CountExecutionsRequest,
+		) (*adminservice.CountExecutionsResponse, error)
 
 		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
 	}
@@ -72,6 +79,7 @@ type (
 		Execution        *commonpb.WorkflowExecution
 		WorkflowTypeName string
 		StartTime        time.Time
+		CreateTime       time.Time // StartTime minus any inherited skipped time
 		Status           enumspb.WorkflowExecutionStatus
 		ExecutionTime    time.Time
 		TaskID           int64 // used as condition update version for ES and _version for SQL stores
@@ -157,6 +165,7 @@ type (
 		TaskID            int64
 		CloseTime         *time.Time
 		StartTime         time.Time
+		CreateTime        time.Time // zero if unknown
 		IsRetentionDelete bool
 	}
 
@@ -175,28 +184,6 @@ type (
 
 	AddSearchAttributesRequest struct {
 		SearchAttributes map[string]enumspb.IndexedValueType
-	}
-
-	AdminListExecutionsRequest struct {
-		Namespace     namespace.Name
-		Query         string
-		PageSize      int
-		NextPageToken []byte
-	}
-
-	AdminListExecutionsResponse struct {
-		Executions    []*adminservice.VisibilityExecutionInfo
-		NextPageToken []byte
-	}
-
-	AdminCountExecutionsRequest struct {
-		Namespace namespace.Name
-		Query     string
-	}
-
-	AdminCountExecutionsResponse struct {
-		Count  int64 // sum of counts in Groups
-		Groups []*adminservice.CountExecutionsResponse_AggregationGroup
 	}
 )
 

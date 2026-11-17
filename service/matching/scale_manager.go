@@ -279,12 +279,14 @@ func (sm *scaleManager) callScaler() {
 	if target == 0 {
 		sm.logger.Info("disabled managed scaling",
 			tag.Int32("prev-read", prevRead),
-			tag.Int32("prev-write", prevWrite))
+			tag.Int32("prev-write", prevWrite),
+			tag.String("reason", decision.Reason))
 	} else {
 		sm.logger.Info("new target",
 			tag.Int32("target", target),
 			tag.Int32("prev-target", prevTarget),
 			tag.Int32("max-target", newState.MaxTarget),
+			tag.String("reason", decision.Reason),
 			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
 	}
 	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
