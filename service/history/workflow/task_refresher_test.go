@@ -147,6 +147,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 			RunID:       tests.RunID,
 			EventID:     common.FirstEventID,
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		common.FirstEventID,
 		branchToken,
@@ -225,6 +226,7 @@ func (s *taskRefresherSuite) TestRefreshRecordWorkflowStartedTasks() {
 			RunID:       tests.RunID,
 			EventID:     common.FirstEventID,
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		common.FirstEventID,
 		branchToken,
@@ -276,6 +278,10 @@ func (s *taskRefresherSuite) TestRefreshWorkflowCloseTasks() {
 
 	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition, false)
 	s.NoError(err)
+
+	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(closeTime.AsTime(), false, true).Return(nil)
+	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition, true)
+	s.Require().NoError(err)
 
 	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		// TransitionCount is higher than workflow state's last update versioned transition,
@@ -1217,6 +1223,7 @@ func (s *taskRefresherSuite) TestRefreshRequestCancelExternalTasks() {
 			RunID:       tests.RunID,
 			EventID:     int64(6),
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		int64(4),
 		branchToken,
@@ -1303,6 +1310,7 @@ func (s *taskRefresherSuite) TestRefreshSignalExternalTasks() {
 			RunID:       tests.RunID,
 			EventID:     int64(6),
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		int64(4),
 		branchToken,

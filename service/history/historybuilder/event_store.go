@@ -117,10 +117,16 @@ func (b *EventStore) LatestEventBatchID() int64 {
 // appendToLatestBatch appends event to memLatestBatch, rolling into a new batch
 // first if the additional event would push the current batch over
 // maxEventBatchSizeInBytes. A value of <= 0 disables the check.
+//
+// The batch holding a run's first event is not split. This is needed for
+// replication of continue-as-new: only the first batch is replicated
+// with the closing run, so any events past it would be lost on the standby.
 func (b *EventStore) appendToLatestBatch(event *historypb.HistoryEvent) {
 	eventSize := proto.Size(event)
 	if limit := b.maxEventBatchSizeInBytes(); limit > 0 {
-		if len(b.memLatestBatch) > 0 && b.memLatestBatchSize+eventSize > limit {
+		if len(b.memLatestBatch) > 0 &&
+			b.memLatestBatch[0].GetEventId() != common.FirstEventID && // first batch is not split
+			b.memLatestBatchSize+eventSize > limit {
 			b.FlushAndCreateNewBatch()
 		}
 	}

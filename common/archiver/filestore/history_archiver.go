@@ -35,7 +35,7 @@ import (
 
 const (
 	// URIScheme is the scheme for the filestore implementation
-	URIScheme = "file"
+	URIScheme = archiver.URISchemeFilestore
 
 	errEncodeHistory = "failed to encode history batches"
 	errMakeDirectory = "failed to make directory"

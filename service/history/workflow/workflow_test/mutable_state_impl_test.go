@@ -97,7 +97,7 @@ func (c *mutationTestCase) Run(t *testing.T) {
 	t.Parallel()
 
 	nsEntry := tests.LocalNamespaceEntry
-	ms, _ := createMutableState(t, nsEntry, c.createConfig())
+	ms, _, _ := createMutableState(t, nsEntry, c.createConfig())
 
 	startWorkflowExecution(t, ms, nsEntry)
 
@@ -196,7 +196,7 @@ func addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableState
 	}
 }
 
-func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs.Config) (*workflow.MutableStateImpl, *events.MockCache) {
+func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs.Config) (*workflow.MutableStateImpl, *events.MockCache, *shard.ContextTest) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
@@ -238,7 +238,7 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 		{Version: 0, EventId: 1},
 	}
 
-	return ms, eventsCache
+	return ms, eventsCache, shardContext
 }
 
 func (c *mutationTestCase) createConfig() *configs.Config {
@@ -438,7 +438,7 @@ func TestGetNexusCompletion(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			nsEntry := tests.LocalNamespaceEntry
-			ms, events := createMutableState(t, nsEntry, tests.NewDynamicConfig())
+			ms, events, _ := createMutableState(t, nsEntry, tests.NewDynamicConfig())
 			startWorkflowExecution(t, ms, nsEntry)
 			workflowTask, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 			require.NoError(t, err)
@@ -474,7 +474,7 @@ func TestGetNexusCompletion(t *testing.T) {
 
 func TestLoadHistoryEventFromToken(t *testing.T) {
 	nsEntry := tests.LocalNamespaceEntry
-	ms, evs := createMutableState(t, nsEntry, tests.NewDynamicConfig())
+	ms, evs, shardContext := createMutableState(t, nsEntry, tests.NewDynamicConfig())
 	event := startWorkflowExecution(t, ms, nsEntry)
 	branchToken, err := ms.GetCurrentBranchToken()
 	require.NoError(t, err)
@@ -491,6 +491,7 @@ func TestLoadHistoryEventFromToken(t *testing.T) {
 		RunID:       wfKey.RunID,
 		EventID:     event.EventId,
 		Version:     0,
+		ShardUUID:   shardContext.GetOwner(),
 	}
 	evs.EXPECT().GetEvent(gomock.Any(), gomock.Any(), eventKey, firstEventID, branchToken).Return(event, nil)
 

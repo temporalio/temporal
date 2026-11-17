@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"math"
 	"sync/atomic"
 	"testing"
@@ -10,10 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -30,9 +33,12 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -234,7 +240,7 @@ func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.
 			out <- err
 			return nil
 		}
-		task.finish(taskFinishResult{err: err, consumedToken: true})
+		task.finish(err)
 		out <- task
 		return nil
 	})
@@ -565,18 +571,18 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpAddRateExceedsDispa
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpUsesDefaultRatioThreshold() {
-	// The default add-to-dispatch ratio threshold is 1.2, so a ratio just below it should not
-	// scale up while a ratio just above it should.
+	// defaultTestConfig pins the add-to-dispatch ratio threshold to 1.2, so a ratio just below it
+	// should not scale up while a ratio just above it should.
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
 
-	// 110/100 = 1.1, below the 1.2 default.
+	// 110/100 = 1.1, below the 1.2 threshold.
 	belowThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return belowThreshold })
 	s.Nil(decision)
 
-	// 130/100 = 1.3, above the 1.2 default.
+	// 130/100 = 1.3, above the 1.2 threshold.
 	aboveThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 130, TasksDispatchRate: 100}
 	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return aboveThreshold })
 	s.NotNil(decision)
@@ -588,14 +594,14 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpRatioThresholdIsCon
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
 
-	// 100/10 = 10, which would scale up under the default 1.2 threshold. Raising the threshold
+	// 100/10 = 10, which would scale up under the test config's 1.2 threshold. Raising the threshold
 	// above the actual ratio should suppress the scale-up.
 	highRatio := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
 	s.tqMgr.partitionMgr.config.PollerScalingTaskAddToDispatchRatio = func() float64 { return 20 }
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return highRatio })
 	s.Nil(decision)
 
-	// 110/100 = 1.1, which would not scale up under the default 1.2 threshold. Lowering the
+	// 110/100 = 1.1, which would not scale up under the test config's 1.2 threshold. Lowering the
 	// threshold below the actual ratio should trigger a scale-up.
 	lowRatio := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
 	s.tqMgr.partitionMgr.config.PollerScalingTaskAddToDispatchRatio = func() float64 { return 1.0 }
@@ -752,7 +758,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimit
 	s.Nil(decision)
 }
 
-// enablePollerScaleDecisionMetrics swaps in a capturing metrics handler and turns on the opt-in
+// enablePollerScaleDecisionMetrics swaps in a capturing metrics handler and turns on the
 // poller_scale_decision metric for the manager under test, returning the handler for assertions.
 func (s *PhysicalTaskQueueManagerTestSuite) enablePollerScaleDecisionMetrics() *metricstest.CaptureHandler {
 	handler := metricstest.NewCaptureHandler()
@@ -849,10 +855,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricNoSigna
 	s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricDisabledByDefault() {
-	// The opt-in config defaults to false, so no metric should be emitted.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricNotEmittedWhenDisabled() {
 	handler := metricstest.NewCaptureHandler()
 	s.tqMgr.metricsHandler = handler
+	s.tqMgr.partitionMgr.config.EnablePollerScalingDecisionMetrics = func() bool { return false }
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
 
@@ -1135,5 +1141,316 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2() {
 				s.assertPollerScaleDecision(capture, tc.wantDecision, tc.wantReason)
 			}
 		})
+	}
+}
+
+func TestIsDeploymentVersionInUserData(t *testing.T) {
+	t.Parallel()
+
+	const (
+		deploymentName = "my-deployment"
+		buildID        = "build-1"
+	)
+
+	deployment := &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    buildID,
+	}
+	version := worker_versioning.DeploymentVersionFromDeployment(deployment)
+
+	tests := []struct {
+		name     string
+		userData *persistencespb.VersionedTaskQueueUserData
+		want     bool
+	}{
+		{
+			name:     "version present",
+			userData: userDataWithDeploymentVersion(deploymentName, buildID),
+			want:     true,
+		},
+		{
+			name:     "version missing",
+			userData: userDataWithDeploymentVersion(deploymentName, "other-build"),
+			want:     false,
+		},
+		{
+			name: "empty deployment data",
+			userData: &persistencespb.VersionedTaskQueueUserData{
+				Data: &persistencespb.TaskQueueUserData{},
+			},
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			controller := gomock.NewController(t)
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			config := defaultTestConfig()
+
+			nsName := namespace.Name("ns-name")
+			ns, registry := createMockNamespaceCache(controller, nsName)
+
+			engine := createTestMatchingEngine(logger, controller, config, nil, registry)
+
+			queueKey := DeploymentQueueKey(
+				newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0),
+				deployment,
+			)
+			partition := queueKey.Partition()
+			tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, nsName)
+
+			partitionMgr, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, &mockUserDataManager{data: tc.userData})
+			require.NoError(t, err)
+
+			tqMgr, err := newPhysicalTaskQueueManager(partitionMgr, queueKey)
+			require.NoError(t, err)
+
+			got, err := tqMgr.isDeploymentVersionInUserData(version)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// The monitor starts only when registration succeeds and the poll ends
+// while the version is still missing from user data.
+func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		deploymentName = "my-deployment"
+		buildID        = "build-1"
+	)
+
+	tests := []struct {
+		name               string
+		registerErr        error
+		wantMonitorRunning bool
+		wantErr            error
+	}{
+		{
+			name:               "registration fails - monitor not started",
+			registerErr:        errors.New("registration failed"),
+			wantMonitorRunning: false,
+			wantErr:            errDeploymentVersionNotReady,
+		},
+		{
+			name:               "poll canceled while version missing - monitor started",
+			registerErr:        nil,
+			wantMonitorRunning: true,
+			wantErr:            context.Canceled,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			deployment := &deploymentpb.Deployment{
+				SeriesName: deploymentName,
+				BuildId:    buildID,
+			}
+			ns, tqMgr, deploymentClient := setupVersionedTQManager(t, deployment, tc.registerErr)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			deploymentClient.onRegister = cancel
+
+			pollMetadata := &pollMetadata{
+				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+					DeploymentName:       deploymentName,
+					BuildId:              buildID,
+				},
+			}
+
+			err := tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, pollMetadata)
+
+			require.ErrorIs(t, err, tc.wantErr)
+			require.True(t, deploymentClient.called, "RegisterTaskQueueWorker should have been called")
+			require.Equal(t, tc.wantMonitorRunning, tqMgr.deploymentVersionMonitorRunning.Load(),
+				"monitor should only start when the propagation wait ends without the version")
+		})
+	}
+}
+
+func TestDeploymentVersionMonitorNotStartedWhenVersionAppearsAfterRegistration(t *testing.T) {
+	t.Parallel()
+
+	deployment := &deploymentpb.Deployment{
+		SeriesName: "my-deployment",
+		BuildId:    "build-1",
+	}
+	ns, tqMgr, deploymentClient := setupVersionedTQManager(t, deployment, nil)
+	deploymentClient.onRegister = func() {
+		userDataMgr := tqMgr.partitionMgr.userDataManager.(*mockUserDataManager)
+		userDataMgr.Lock()
+		defer userDataMgr.Unlock()
+		userDataMgr.data = userDataWithDeploymentVersion(deployment.SeriesName, deployment.BuildId)
+	}
+
+	err := tqMgr.ensureRegisteredInDeploymentVersion(t.Context(), ns, &pollMetadata{
+		deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			DeploymentName:       deployment.SeriesName,
+			BuildId:              deployment.BuildId,
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, deploymentClient.called)
+	require.False(t, tqMgr.deploymentVersionMonitorRunning.Load())
+}
+
+// Count only registrations rejected by matching's task queue version limit.
+// At the limit, registration must still reach the deployment client so it can forget old versions.
+func TestTaskQueueVersionLimitReachedMetricIsEmitted(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		overLimit bool
+	}{
+		{name: "at limit allows registration"},
+		{name: "over limit records rejection", overLimit: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			deployment := &deploymentpb.Deployment{SeriesName: "deployment", BuildId: "new-build"}
+			ns, tqMgr, deploymentClient := setupVersionedTQManager(t, deployment, nil)
+			tqMgr.partitionMgr.engine.config.MaxVersionsInTaskQueue = dynamicconfig.GetIntPropertyFnFilteredByNamespace(1)
+			handler := metricstest.NewCaptureHandler()
+			tqMgr.partitionMgr.engine.metricsHandler = handler
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			// The poller's new build is absent; existing drained versions still count toward the limit.
+			data := userDataWithDeploymentVersion(deployment.SeriesName, "old-build")
+			versions := data.Data.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData[deployment.SeriesName].Versions
+			versions["old-build"].Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
+			if tc.overLimit {
+				versions["other-build"] = &deploymentspb.WorkerDeploymentVersionData{Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED}
+			}
+			tqMgr.partitionMgr.userDataManager.(*mockUserDataManager).data = data
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			// Cancel when registration is called so the test doesn't wait for user data.
+			deploymentClient.onRegister = cancel
+
+			err := tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, &pollMetadata{
+				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+					DeploymentName:       deployment.SeriesName,
+					BuildId:              deployment.BuildId,
+				},
+			})
+
+			recordings := capture.SnapshotMetric(metrics.WorkerDeploymentLimitExceeded.Name())
+			if tc.overLimit {
+				var exhausted *serviceerror.ResourceExhausted
+				require.ErrorAs(t, err, &exhausted)
+				require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, exhausted.Cause)
+				require.False(t, deploymentClient.called)
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+				require.Equal(t, map[string]string{"namespace": ns.Name().String(), "limit_type": "versions_per_task_queue"}, recordings[0].Tags)
+			} else {
+				require.ErrorIs(t, err, context.Canceled)
+				require.True(t, deploymentClient.called)
+				require.Empty(t, recordings)
+			}
+		})
+	}
+}
+
+// setupVersionedTQManager creates a physicalTaskQueueManagerImpl for a versioned
+// deployment with empty user data and a fake deployment client.
+func setupVersionedTQManager(
+	t *testing.T,
+	deployment *deploymentpb.Deployment,
+	registerErr error,
+) (*namespace.Namespace, *physicalTaskQueueManagerImpl, *fakeDeploymentClient) {
+	t.Helper()
+
+	controller := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	logger.Expect(testlogger.Error, "error while registering version")
+	logger.Expect(testlogger.Warn, "Worker deployment version not yet in user data; background monitoring active")
+
+	config := defaultTestConfig()
+	config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	nsName := namespace.Name("ns-name")
+	ns, registry := createMockNamespaceCache(controller, nsName)
+
+	deploymentClient := &fakeDeploymentClient{registerErr: registerErr}
+	engine := createTestMatchingEngine(logger, controller, config, nil, registry)
+	engine.workerDeploymentClient = deploymentClient
+	engine.testHooks = testhooks.NewTestHooks()
+	testhooks.Set(engine.testHooks, testhooks.MatchingDeploymentRegisterErrorBackoff, time.Duration(0), ns.ID())
+
+	queueKey := DeploymentQueueKey(
+		newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0),
+		deployment,
+	)
+	partition := queueKey.Partition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, nsName)
+
+	partitionMgr, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, engine.logger, engine.throttledLogger, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	require.NoError(t, err)
+
+	tqMgr, err := newPhysicalTaskQueueManager(partitionMgr, queueKey)
+	require.NoError(t, err)
+
+	// Cancel tqCtx on cleanup to stop any monitor goroutine.
+	t.Cleanup(tqMgr.tqCtxCancel)
+
+	return ns, tqMgr, deploymentClient
+}
+
+// fakeDeploymentClient implements workerdeployment.Client for testing.
+// Only RegisterTaskQueueWorker is implemented; all other methods panic if called.
+type fakeDeploymentClient struct {
+	workerdeployment.Client
+	registerErr error
+	called      bool
+	onRegister  func()
+}
+
+func (f *fakeDeploymentClient) RegisterTaskQueueWorker(
+	_ context.Context,
+	_ *namespace.Namespace,
+	_, _ string,
+	_ string,
+	_ enumspb.TaskQueueType,
+	_ string,
+) error {
+	f.called = true
+	if f.onRegister != nil {
+		f.onRegister()
+	}
+	return f.registerErr
+}
+
+func userDataWithDeploymentVersion(deploymentName, buildID string) *persistencespb.VersionedTaskQueueUserData {
+	return &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									buildID: {UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }

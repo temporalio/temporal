@@ -153,24 +153,26 @@ NexusOperationCancelRequestFailed events. Default true.`,
 )
 
 type Config struct {
-	NumHistoryShards                    int32
-	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
-	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxServiceNameLength                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationNameLength              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationTokenLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationHeaderSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
-	TrackedHeaderPrefixes               dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
-	RejectedHeaderPrefixes              dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
-	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
-	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
-	MetricTagConfig                     dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
-	RetryPolicy                         func() backoff.RetryPolicy
+	NumHistoryShards                     int32
+	RequestTimeout                       dynamicconfig.DurationPropertyFnWithDestinationFilter
+	MinRequestTimeout                    dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MaxConcurrentOperations              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxServiceNameLength                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationNameLength               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationTokenLength              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationHeaderSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	DisallowedOperationHeaders           dynamicconfig.TypedPropertyFn[[]string]
+	TrackedHeaderPrefixes                dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	RejectedHeaderPrefixes               dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	MaxOperationScheduleToCloseTimeout   dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	PayloadSizeLimit                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackURLTemplate                  dynamicconfig.StringPropertyFn
+	UseNewFailureWireFormat              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	RecordCancelRequestCompletionEvents  dynamicconfig.BoolPropertyFn
+	MetricTagConfig                      dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
+	RetryPolicy                          func() backoff.RetryPolicy
+	EnableOutboundTaskThrottleController dynamicconfig.BoolPropertyFn
+	TaskThrottleControllerSettings       dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
@@ -200,7 +202,9 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 				backoff.NoInterval,
 			)
 		},
-		NumHistoryShards: cfg.NumHistoryShards,
+		NumHistoryShards:                     cfg.NumHistoryShards,
+		EnableOutboundTaskThrottleController: dynamicconfig.EnableOutboundTaskThrottleController.Get(dc),
+		TaskThrottleControllerSettings:       dynamicconfig.TaskThrottleController.Get(dc),
 	}
 }
 

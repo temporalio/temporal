@@ -26,6 +26,7 @@ type (
 		RunID       string
 		EventID     int64
 		Version     int64
+		ShardUUID   string
 	}
 
 	Cache interface {
@@ -95,13 +96,15 @@ func newEventsCache(
 }
 
 func (e *CacheImpl) validateKey(key EventKey) bool {
-	if len(key.NamespaceID) == 0 || len(key.WorkflowID) == 0 || len(key.RunID) == 0 || key.EventID < common.FirstEventID {
+	if len(key.NamespaceID) == 0 || len(key.WorkflowID) == 0 || len(key.RunID) == 0 ||
+		len(key.ShardUUID) == 0 || key.EventID < common.FirstEventID {
 		// This is definitely a bug, but just warn and don't crash so we can find anywhere this happens.
 		e.logger.Warn("one or more ids is invalid in event cache",
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID),
 			tag.WorkflowNamespaceID(key.NamespaceID.String()),
-			tag.WorkflowEventID(key.EventID))
+			tag.WorkflowEventID(key.EventID),
+			tag.NewStringTag("shard-uuid", key.ShardUUID))
 		return false
 	}
 	return true

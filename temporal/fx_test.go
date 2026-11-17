@@ -6,14 +6,26 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	otelresource "go.opentelemetry.io/otel/sdk/resource"
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 )
 
@@ -433,4 +445,71 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServiceTracingModuleResource(t *testing.T) {
+	t.Parallel()
+
+	type tracingDependencies struct {
+		fx.In
+
+		Resource       *otelresource.Resource
+		TracerProvider trace.TracerProvider
+		Propagator     propagation.TextMapPropagator
+		ServerStats    telemetry.ServerStatsHandler
+		ClientStats    telemetry.ClientStatsHandler
+		HTTPClient     telemetry.HTTPClientTransportInstrumenter
+		HTTPServer     telemetry.HTTPServerHandlerInstrumenter
+	}
+
+	t.Run("without span processors", func(t *testing.T) {
+		t.Parallel()
+
+		var tracing tracingDependencies
+		app := fx.New(
+			fx.NopLogger,
+			fx.Supply(primitives.FrontendService, resource.InstanceID("test-instance")),
+			fx.Provide(func() log.Logger { return log.NewNoopLogger() }),
+			ServiceTracingModule,
+			fx.Populate(&tracing),
+		)
+		require.NoError(t, app.Err())
+		require.Equal(t, propagation.TraceContext{}, tracing.Propagator)
+		require.Empty(t, tracing.Resource.Attributes())
+		require.Equal(t, telemetry.NoopTracerProvider, tracing.TracerProvider)
+		require.Nil(t, tracing.ServerStats)
+		require.Nil(t, tracing.ClientStats)
+		require.Nil(t, tracing.HTTPClient)
+		require.Nil(t, tracing.HTTPServer)
+	})
+
+	t.Run("with span processor", func(t *testing.T) {
+		t.Parallel()
+
+		recorder := tracetest.NewSpanRecorder()
+		var tracing tracingDependencies
+		app := fx.New(
+			fx.NopLogger,
+			fx.Supply(primitives.FrontendService, resource.InstanceID("test-instance")),
+			fx.Provide(func() log.Logger { return log.NewNoopLogger() }),
+			ServiceTracingModule,
+			fx.Replace([]otelsdktrace.SpanProcessor{recorder}),
+			fx.Populate(&tracing),
+		)
+		require.NoError(t, app.Err())
+		require.Equal(t, propagation.TraceContext{}, tracing.Propagator)
+		require.Subset(t, tracing.Resource.Attributes(), []attribute.KeyValue{
+			semconv.ServiceVersionKey.String(headers.ServerVersion),
+			semconv.ServiceInstanceIDKey.String("test-instance"),
+		})
+		require.NotNil(t, tracing.ServerStats)
+		require.NotNil(t, tracing.ClientStats)
+		require.NotNil(t, tracing.HTTPClient)
+		require.NotNil(t, tracing.HTTPServer)
+
+		_, span := tracing.TracerProvider.Tracer("test").Start(t.Context(), "test")
+		span.End()
+		require.Len(t, recorder.Ended(), 1)
+		require.Equal(t, tracing.Resource, recorder.Ended()[0].Resource())
+	})
 }

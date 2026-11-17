@@ -23,7 +23,30 @@ func (a *Archival) Validate(namespaceDefaults *ArchivalNamespaceDefaults) error 
 		return errors.New("invalid visibility archival config")
 	}
 
-	return nil
+	if err := a.History.Provider.validate(); err != nil {
+		return err
+	}
+	return a.Visibility.Provider.validate()
+}
+
+func (p *HistoryArchiverProvider) validate() error {
+	if p == nil {
+		return nil
+	}
+	if err := p.Gstorage.validate("archival.history.provider.gstorage"); err != nil {
+		return err
+	}
+	return p.S3store.validate("archival.history.provider.s3store")
+}
+
+func (p *VisibilityArchiverProvider) validate() error {
+	if p == nil {
+		return nil
+	}
+	if err := p.Gstorage.validate("archival.visibility.provider.gstorage"); err != nil {
+		return err
+	}
+	return p.S3store.validate("archival.visibility.provider.s3store")
 }
 
 func isArchivalConfigValid(

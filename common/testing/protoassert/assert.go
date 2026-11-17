@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/temporalproto"
+	"go.temporal.io/server/common/testing/protodiff"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 )
@@ -83,12 +83,16 @@ func ProtoElementsMatch(t assert.TestingT, a any, b any, msgAndArgs ...any) bool
 	return assert.Fail(t, formatListDiff(a, b, extraA, extraB), msgAndArgs...)
 }
 
-func DeepEqual(t assert.TestingT, a any, b any) bool {
+// DeepEqual compares arbitrary values, such as structs holding proto messages, comparing the messages with proto
+// semantics. Pass cmp options, e.g. cmp.AllowUnexported, for types with unexported fields.
+func DeepEqual(t assert.TestingT, a any, b any, opts ...cmp.Option) bool { //nolint:forbidigo // protoassert wraps assert
 	if th, ok := t.(helper); ok {
 		th.Helper()
 	}
-
-	return temporalproto.DeepEqual(a, b)
+	if diff := protodiff.Diff(a, b, opts...); diff != "" {
+		return assert.Fail(t, fmt.Sprintf("Values are not deeply equal (-want +got):\n%v", diff)) //nolint:forbidigo // protoassert wraps assert
+	}
+	return true
 }
 
 func (x ProtoAssertions) ProtoEqual(a proto.Message, b proto.Message) bool {
@@ -105,12 +109,11 @@ func (x ProtoAssertions) NotProtoEqual(a proto.Message, b proto.Message) bool {
 	return NotProtoEqual(x.t, a, b)
 }
 
-func (x ProtoAssertions) DeepEqual(a any, b any) bool {
+func (x ProtoAssertions) DeepEqual(a any, b any, opts ...cmp.Option) bool {
 	if th, ok := x.t.(helper); ok {
 		th.Helper()
 	}
-
-	return temporalproto.DeepEqual(a, b)
+	return DeepEqual(x.t, a, b, opts...)
 }
 
 func (x ProtoAssertions) ProtoElementsMatch(a any, b any) bool {

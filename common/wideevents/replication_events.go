@@ -52,7 +52,8 @@ const (
 )
 
 const (
-	ReplErrorClassificationDuplicate ReplicationErrorClassification = "duplicate"
+	ReplErrorClassificationDuplicate      ReplicationErrorClassification = "duplicate"
+	ReplErrorClassificationBufferedEvents ReplicationErrorClassification = "buffered_events"
 )
 
 const (
@@ -109,9 +110,10 @@ const (
 const (
 	ParentChildLifecycleEventType = "parent_child_lifecycle"
 
-	ParentChildPhaseVerifyChildCompletion = "verify_child_completion"
-	ParentChildPhaseParentResend          = "parent_resend"
-	ParentChildPhaseChildResend           = "child_resend"
+	ParentChildPhaseVerifyChildCompletion    = "verify_child_completion"
+	ParentChildPhaseParentResend             = "parent_resend"
+	ParentChildPhaseChildResend              = "child_resend"
+	ParentChildPhaseOrphanedChildReplacement = "orphaned_child_replacement"
 
 	ParentChildOutcomeNotFound          = "not_found"
 	ParentChildOutcomeCompletionMissing = "completion_missing"
@@ -124,6 +126,7 @@ const (
 	ParentChildOutcomeDeduplicated      = "deduplicated"
 	ParentChildOutcomeLimited           = "limited"
 	ParentChildOutcomeFailed            = "failed"
+	ParentChildOutcomeReplaced          = "replaced"
 )
 
 // EmitReplicationError normalizes the common error envelope and emits it into the existing
@@ -239,7 +242,7 @@ type ReplicationLifecyclePayload struct {
 	// LastEventID/LastEventVersion are the last event on the target's current branch after applying.
 	LastEventID      int64
 	LastEventVersion int64
-	// Outcome is applied, verified, resend_needed or error. Failed applies emit no event at all.
+	// Outcome is applied, verified, resend_needed, replaced, or error. Failed applies emit no event at all.
 	Outcome string
 	// Error is the failure message when Outcome is error.
 	Error string

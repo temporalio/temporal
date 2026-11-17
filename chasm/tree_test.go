@@ -248,6 +248,38 @@ func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
 	s.NotEqual(WorkflowArchetypeID, rootNode.ArchetypeID())
 }
 
+func (s *nodeSuite) TestSetRootComponent_SyncsStructureChangedBeforeClose() {
+	rootNode, err := s.newTestTree(nil)
+	s.NoError(err)
+	ctx := NewMutableContext(context.Background(), rootNode)
+
+	rootComponent := &TestComponent{
+		SubComponent1: NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "sub-component-1"},
+		}),
+	}
+	s.NoError(rootNode.SetRootComponent(rootComponent))
+	// Sub-components created with the root are nodes before the transaction closes.
+	s.Contains(rootNode.children, "SubComponent1")
+
+	// Change the root's structure after SetRootComponent through the component held by the caller,
+	// as the updateFn of UpdateWithStartExecution does.
+	rootComponent.SubComponents = Map[string, *TestSubComponent1]{
+		"added": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "added"},
+		}),
+	}
+
+	mutations, err := rootNode.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "SubComponent1")
+	addedNode, ok := rootNode.findNode([]string{"SubComponents", "added"})
+	s.Require().True(ok, "sub-component added after SetRootComponent must be a node")
+	addedPath, err := s.nodePathEncoder.Encode(addedNode, nil)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, addedPath, "sub-component added after SetRootComponent must be persisted")
+}
+
 func (s *nodeSuite) TestInitSerializedNode_TypeData() {
 	node := newNode(s.nodeBase(), nil, "")
 	node.initSerializedNode(fieldTypeData)
@@ -4263,6 +4295,203 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+}
+
+// cleanTestComponentTree returns a test tree with its creation transaction already closed, and a
+// counter of NextTransitionCount calls made after that.
+func (s *nodeSuite) cleanTestComponentTree() (*Node, *int) {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	transitionCountCalls := 0
+	s.nodeBackend.HandleNextTransitionCount = func() int64 {
+		transitionCountCalls++
+		return 2
+	}
+	return root, &transitionCountCalls
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_KeepsMutation() {
+	root, transitionCountCalls := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: "speculative"}
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.True(root.IsDirty())
+	s.Zero(*transitionCountCalls)
+
+	mutations, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "")
+	s.Positive(*transitionCountCalls)
+}
+
+func (s *nodeSuite) TestRef_SpeculativeComponent() {
+	root, _ := s.cleanTestComponentTree()
+	savedTransitionCount := int64(1)
+	s.nodeBackend.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
+		return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: savedTransitionCount}
+	}
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+	testComponent.SubComponent2 = NewComponentField(mutableContext, &TestSubComponent2{
+		SubComponent2Data: &protoMessageType{CreateRequestId: "speculative"},
+	})
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	// Components persisted before the speculative transition keep their refs.
+	_, err = root.Ref(testComponent)
+	s.NoError(err)
+	_, err = root.Ref(testComponent.SubComponent1.Get(mutableContext))
+	s.NoError(err)
+
+	speculativeChild := testComponent.SubComponent2.Get(mutableContext)
+	_, err = root.Ref(speculativeChild)
+	s.ErrorIs(err, ErrSpeculativeComponentRef)
+
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	savedTransitionCount = 2
+	_, err = root.Ref(speculativeChild)
+	s.NoError(err)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_PendingUntilActiveClose() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 5 }
+	_, pending := root.SpeculativeTransitionFailoverVersion()
+	s.False(pending)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: "speculative"}
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	version, pending := root.SpeculativeTransitionFailoverVersion()
+	s.True(pending)
+	s.Equal(int64(5), version)
+
+	// A passive close is rejected and leaves the speculative changes in place.
+	_, err = root.CloseTransaction(context.Background(), false)
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+	_, pending = root.SpeculativeTransitionFailoverVersion()
+	s.True(pending)
+	s.True(root.IsDirty())
+
+	mutations, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "")
+	_, pending = root.SpeculativeTransitionFailoverVersion()
+	s.False(pending)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_RunsImmediatePureTasks() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	mutableContext.AddTask(component, taskAttributes, &TestPureTask{Data: []byte("immediate")})
+
+	executionCount := 0
+	// Times(1) also checks the real close does not run the task again.
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Execute(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).
+		DoAndReturn(func(MutableContext, any, TaskAttributes, *TestPureTask) error {
+			executionCount++
+			return nil
+		}).Times(1)
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Equal(1, executionCount)
+
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_SyncsNewSubComponent() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).SubComponent2 = NewComponentField(mutableContext, &TestSubComponent2{
+		SubComponent2Data: &protoMessageType{CreateRequestId: "sub2"},
+	})
+	s.NotContains(root.children, "SubComponent2")
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Contains(root.children, "SubComponent2")
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Contains(root.children, "SubComponent2")
+}
+
+func (s *nodeSuite) TestSpeculativeTransitionDecision() {
+	s.useStatefulExecutionState()
+	node := s.testComponentTree()
+	_, err := node.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	chasmCtx := NewMutableContext(context.Background(), node)
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	s.NoError(err)
+
+	// A transition that leaves the execution running stays speculative and notifies pollers.
+	tc.(*TestComponent).ComponentData.CreateRequestId = "updated"
+	decision, err := node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.Equal(TransitionDecision{PersistNow: false, NotifyPollers: true}, decision)
+
+	// A transition that closes the execution must be persisted.
+	tc.(*TestComponent).Complete(chasmCtx)
+	decision, err = node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.True(decision.PersistNow)
+}
+
+func (s *nodeSuite) TestSpeculativeTransitionDecision_Terminated() {
+	s.useStatefulExecutionState()
+	node := s.testComponentTree()
+	_, err := node.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	node.terminated = true
+	decision, err := node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.True(decision.PersistNow)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_KeepsNewTasks() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.TasksByCategory = nil
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("deferred")})
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Empty(s.nodeBackend.TasksByCategory)
+
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTransfer], 1)
 }
 
 func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {

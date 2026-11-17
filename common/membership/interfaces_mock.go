@@ -71,18 +71,18 @@ func (mr *MockMonitorMockRecorder) EvictSelf() *gomock.Call {
 }
 
 // EvictSelfAt mocks base method.
-func (m *MockMonitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+func (m *MockMonitor) EvictSelfAt(asOf time.Time, window time.Duration) (time.Duration, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EvictSelfAt", asOf)
+	ret := m.ctrl.Call(m, "EvictSelfAt", asOf, window)
 	ret0, _ := ret[0].(time.Duration)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // EvictSelfAt indicates an expected call of EvictSelfAt.
-func (mr *MockMonitorMockRecorder) EvictSelfAt(asOf any) *gomock.Call {
+func (mr *MockMonitorMockRecorder) EvictSelfAt(asOf, window any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelfAt", reflect.TypeOf((*MockMonitor)(nil).EvictSelfAt), asOf)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelfAt", reflect.TypeOf((*MockMonitor)(nil).EvictSelfAt), asOf, window)
 }
 
 // GetReachableMembers mocks base method.
@@ -276,6 +276,20 @@ func (m *MockServiceResolver) Members() []HostInfo {
 func (mr *MockServiceResolverMockRecorder) Members() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Members", reflect.TypeOf((*MockServiceResolver)(nil).Members))
+}
+
+// NextLookupChange mocks base method.
+func (m *MockServiceResolver) NextLookupChange(key string, n int) time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextLookupChange", key, n)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// NextLookupChange indicates an expected call of NextLookupChange.
+func (mr *MockServiceResolverMockRecorder) NextLookupChange(key, n any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextLookupChange", reflect.TypeOf((*MockServiceResolver)(nil).NextLookupChange), key, n)
 }
 
 // RemoveListener mocks base method.
