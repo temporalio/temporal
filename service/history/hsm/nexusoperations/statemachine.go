@@ -125,21 +125,22 @@ func (o Operation) CancelationNode(node *hsm.Node) (*hsm.Node, error) {
 	return child, err
 }
 
-// TimeSkippingTargets returns the logical deadlines that bound a skip while the operation waits
-// for an invocation retry. Any other state, a pending cancellation, or an already-due deadline
-// represents work that must run before workflow time can advance.
-func (o Operation) TimeSkippingTargets(node *hsm.Node, now time.Time) ([]time.Time, bool, error) {
+// AllowsTimeSkipping reports whether the operation has no in-flight work that must complete before
+// workflow time can advance.
+func (o Operation) AllowsTimeSkipping(node *hsm.Node) (bool, error) {
 	if o.State() != enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
-		return nil, false, nil
+		return false, nil
 	}
 	cancelRequested, err := o.cancelRequested(node)
 	if err != nil {
-		return nil, false, err
+		return false, err
 	}
-	if cancelRequested {
-		return nil, false, nil
-	}
+	return !cancelRequested, nil
+}
 
+// TimeSkippingTargets returns the logical deadlines that bound a skip while the operation waits
+// for an invocation retry.
+func (o Operation) TimeSkippingTargets() []time.Time {
 	targets := []time.Time{o.GetNextAttemptScheduleTime().AsTime()}
 	if timeout := o.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
 		targets = append(targets, o.GetScheduledTime().AsTime().Add(timeout))
@@ -147,12 +148,7 @@ func (o Operation) TimeSkippingTargets(node *hsm.Node, now time.Time) ([]time.Ti
 	if timeout := o.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		targets = append(targets, o.GetScheduledTime().AsTime().Add(timeout))
 	}
-	for _, target := range targets {
-		if !target.After(now) {
-			return nil, false, nil
-		}
-	}
-	return targets, true, nil
+	return targets
 }
 
 // transitionTasks returns tasks that are emitted as transition outputs.
