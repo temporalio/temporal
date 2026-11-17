@@ -5785,6 +5785,89 @@ func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RemovedBeforePersist
 	s.False(ok)
 }
 
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_ReplacesDurable() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"k": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "durable"},
+			SubComponent11: NewComponentField(ctx, &TestSubComponent11{
+				SubComponent11Data: &protoMessageType{RunId: "durable-child"},
+			}),
+		}),
+	}
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "SubComponents/k")
+	s.Contains(mutation.UpdatedNodes, "SubComponents/k/SubComponent11")
+
+	// Replacing the durable item with an ephemeral one deletes the durable item and its subtree.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents["k"] = NewComponentField(ctx, &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{RunId: "ephemeral"},
+	}, ComponentFieldEphemeral())
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Equal(map[string]struct{}{"SubComponents/k": {}, "SubComponents/k/SubComponent11": {}}, mutation.DeletedNodes)
+	s.NotContains(mutation.UpdatedNodes, "SubComponents/k")
+	s.NotContains(root.Snapshot(nil).Nodes, "SubComponents/k")
+	node, ok := root.findNode([]string{"SubComponents", "k"})
+	s.True(ok)
+	s.True(node.isEphemeral())
+	s.Empty(node.children)
+}
+
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RejectsDurableDataPointer() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+
+	// Pointers within the ephemeral subtree are allowed.
+	data := &protoMessageType{RunId: "ephemeral-data"}
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"ephemeral": NewComponentField(ctx, &TestSubComponent1{
+			SubData11: NewDataField(ctx, data),
+		}, ComponentFieldEphemeral()),
+		"ephemeral-pointer": NewComponentField(ctx, &TestSubComponent1{
+			SubData11: DataPointerTo(ctx, data),
+		}, ComponentFieldEphemeral()),
+	}
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.assertNoSubComponentsPaths(mutation.UpdatedNodes)
+
+	// A durable pointer to ephemeral data would dangle once the mutable state is reloaded.
+	tl, ok := s.logger.(*testlogger.TestLogger)
+	s.Require().True(ok)
+	tl.Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")
+
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents["durable"] = NewComponentField(ctx, &TestSubComponent1{
+		SubData11: DataPointerTo(ctx, data),
+	})
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.ErrorContains(err, "targets ephemeral data")
+}
+
 func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RejectsTasks() {
 	root := s.testComponentTree()
 	_, err := root.CloseTransaction(context.Background(), true)

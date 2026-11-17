@@ -1240,6 +1240,13 @@ func (n *Node) syncSubField(
 			)
 			return
 		}
+
+		if oldChildNode, ok := n.children[fieldN]; ok && childNode.ephemeral {
+			// An ephemeral node doesn't overwrite the persisted copy of the node it replaces, so delete it explicitly.
+			if err = oldChildNode.delete(false); err != nil {
+				return
+			}
+		}
 		childNode.setValue(fieldValue)
 
 		n.children[fieldN] = childNode
@@ -2699,6 +2706,14 @@ func (n *Node) resolveDeferredPointers() error {
 					}
 				case proto.Message:
 					resolvedPath, err = n.dataNodePath(value)
+					// Component pointers target ancestors, so only data pointers can outlive an ephemeral target.
+					if err == nil && n.valueToNode[value].isEphemeral() && !internal.node.isEphemeral() {
+						err = fmt.Errorf(
+							"pointer at path %v targets ephemeral data at path %v",
+							internal.node.path(),
+							resolvedPath,
+						)
+					}
 				default:
 					err = softassert.UnexpectedInternalErr(
 						n.logger,
