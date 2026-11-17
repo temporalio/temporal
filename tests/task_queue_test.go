@@ -238,8 +238,6 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	activityWorker = worker.New(env.SdkClient(), activityTaskQueue, worker.Options{
 		// Setting rate limit at worker level (this will be ignored in favor of the limit set through the api)
 		TaskQueueActivitiesPerSecond: workerRPS,
-		// Setting rate limit to throttle the worker to 4 activities per second
-		WorkerActivitiesPerSecond: 4,
 	})
 	activityWorker.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: activityName})
 	s.NoError(activityWorker.Start())
@@ -261,25 +259,17 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 }
 
 // TestTaskQueueAPIRateLimitOverridesWorkerLimit tests that the API rate limit overrides the worker rate limit.
-// It sets the API rate limit on a task queue to 5 RPS and then launches 25 activities.
-// Burst = 5 i.e int(math.Ceil(effectiveRPSPartitionWise)))
-// The expected time for all activities to complete is ~ 4 seconds ((25 - 5)/5) +/- 1 second buffer.
-// The first five activities should run immediately, and the rest should be throttled to 5 RPS.
-// The test verifies that the total time taken for all activities to complete is within the expected range
-// To avoid test flakiness, the test uses a buffer of 1 second for the expected total time.
-// Note: The flakiness buffer has since been increased to 3.5s, but it was still flaky (err context deadline exceeded),
-// so I now increased it to 3.75s and increasing the context deadline. If the buffer is >=4s, the test stops
-// testing anything because the test will succeed even if all the activities complete immediately as if there were no rate limit.
-// TODO(matching team): Possibly rewrite test if this issue persists.
+// It sets the API rate limit on a task queue to 5 RPS (below the worker's 50 RPS) and then launches 25 activities.
+// The limiter allows a burst of apiRPS+1 tasks, then spaces the rest 1/apiRPS apart, which bounds the span
+// from below. Latency can only lengthen the span, so the upper bound is loose.
 func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
-	s.T().Skip("skip until we make it less flaky")
 	const (
 		apiRPS            = 5.0
 		taskCount         = 25
-		buffer            = time.Duration(3.75 * float64(time.Second)) // High Buffer to account for test flakiness
+		burst             = int(apiRPS) + 1
 		activityTaskQueue = "RateLimitTest"
 	)
-	expectedTotal := time.Duration(float64(taskCount-int(apiRPS))/apiRPS) * time.Second
+	minSpan := time.Duration(float64(taskCount-burst) / apiRPS * float64(time.Second))
 	env := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
@@ -293,10 +283,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 		wg       sync.WaitGroup
 	)
 	const (
-		workerRPS = 50.0
-		// Test typically completes in ~6.2 seconds on average.
-		// Timeout is set to 10s to reduce flakiness.
-		// Note: Flaked at 10s, so trying 30s.
+		workerRPS    = 50.0
 		drainTimeout = 30 * time.Second
 		activityName = "trackableActivity"
 	)
@@ -322,8 +309,10 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 	s.Len(runTimes, taskCount)
 
 	totalGap := runTimes[len(runTimes)-1].Sub(runTimes[0])
-	s.GreaterOrEqual(totalGap, expectedTotal-buffer, "Activity run time too short — API rate limit override not taking effect over the worker rate limit")
-	s.LessOrEqual(totalGap, expectedTotal+buffer, "Activity run time too long — API rate limit override not enforced as expected")
+	s.T().Logf("Time taken for activities to run is %v vs minimum %v", totalGap, minSpan)
+	// Allow some slack below the minimum for jitter between dispatch and the worker recording the run time.
+	s.GreaterOrEqual(totalGap, minSpan-500*time.Millisecond, "Activity run time too short — API rate limit override not taking effect over the worker rate limit")
+	s.LessOrEqual(totalGap, 2*minSpan+2*time.Second, "Activity run time too long — API rate limit override not enforced as expected")
 }
 
 // TestTaskQueueAPIRateLimitZero ensures that when the API rate limit is set to 0,
@@ -569,7 +558,6 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 }
 
 func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced() {
-	s.T().Skip("skip until we make it less flaky")
 	const (
 		wholeQueueRPS = 10.0 // tighter
 		perKeyRPS     = 50.0 // looser than whole queue, should not bind
@@ -579,7 +567,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 	fairnessKeysWithWeight := map[string]float32{"A": 1.0, "B": 1.0, "C": 1.0}
 	tv := testvars.New(s.T())
 
-	env := s.newTestEnv()
+	env := s.newFairnessTestEnv()
 
 	// configure task queue
 	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
@@ -616,7 +604,6 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 }
 
 func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys() {
-	s.T().Skip("skip until we make it less flaky")
 	const (
 		perKeyRPS     = 5.0
 		wholeQueueRPS = 1000.0 // tighter
@@ -627,7 +614,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 
 	tv := testvars.New(s.T())
 
-	env := s.newTestEnv()
+	env := s.newFairnessTestEnv()
 
 	// configure task queue
 	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
@@ -669,7 +656,6 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 }
 
 func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThreeKeys() {
-	s.T().Skip("skip until we make it less flaky")
 	const (
 		perKeyRPS     = 5.0    // base per-key limit
 		wholeQueueRPS = 1000.0 // keep high so only per-key gates
@@ -683,7 +669,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThre
 	fairnessWeightOverrides := map[string]float32{"A": 1.0, "B": 2.0, "C": 1.0}
 
 	tv := testvars.New(s.T())
-	env := s.newTestEnv()
+	env := s.newFairnessTestEnv()
 
 	// configure task queue
 	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
@@ -898,6 +884,17 @@ func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
 	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
 }
 
+// newFairnessTestEnv creates a TestEnv with fairness enabled on a single partition. These must be
+// set before the task queue is loaded: changing fairness unloads loaded partitions asynchronously,
+// which races with the rest of the test.
+func (s *TaskQueueSuite) newFairnessTestEnv() *testcore.TestEnv {
+	return s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+}
+
 func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
@@ -909,12 +906,6 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 		fairnessKeys = append(fairnessKeys, k)
 	}
 	total := len(fairnessKeys) * activitiesPerKey
-
-	// Enable fairness
-	env.OverrideDynamicConfig(dynamicconfig.MatchingEnableFairness, true)
-	// Single partition for simplicity.
-	env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	// generate a unique base so IDs don't collide across shards/tests
 	base := uuid.NewString()
@@ -982,29 +973,47 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	}
 	allTimes := make([]time.Time, 0, total)
 
+	// Poll concurrently so that the drain rate is set by the rate limiter rather than by the
+	// latency of a single poller's poll/start/complete round trip.
+	const activityPollers = 8
+	var mu sync.Mutex
 	actsHandled := 0
-	for actsHandled < total {
-		if err := s.Context().Err(); err != nil {
-			s.T().Fatalf("context deadline while draining activity tasks: handled=%d/%d: %v", actsHandled, total, err)
-		}
-		_, err := env.TaskPoller().PollAndHandleActivityTask(
-			tv,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				var key string
-				s.NoError(payloads.Decode(task.Input, &key))
-				now := time.Now()
-				perKeyTimes[key] = append(perKeyTimes[key], now)
-				allTimes = append(allTimes, now)
-				nothing, encErr := payloads.Encode()
-				s.NoError(encErr)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
-			},
-			taskpoller.WithContext(s.Context()),
-		)
-		if err == nil {
-			actsHandled++
-		}
+	pollCtx, cancelPolls := context.WithCancel(s.Context())
+	defer cancelPolls()
+	var wg sync.WaitGroup
+	for range activityPollers {
+		wg.Go(func() {
+			for pollCtx.Err() == nil {
+				_, err := env.TaskPoller().PollAndHandleActivityTask(
+					tv,
+					func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+						var key string
+						if err := payloads.Decode(task.Input, &key); err != nil {
+							return nil, err
+						}
+						mu.Lock()
+						// Taken under the lock so that the recorded times are in order.
+						now := time.Now()
+						perKeyTimes[key] = append(perKeyTimes[key], now)
+						allTimes = append(allTimes, now)
+						mu.Unlock()
+						return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
+					},
+					taskpoller.WithContext(pollCtx),
+				)
+				if err == nil {
+					mu.Lock()
+					actsHandled++
+					if actsHandled == total {
+						cancelPolls()
+					}
+					mu.Unlock()
+				}
+			}
+		})
 	}
+	wg.Wait()
+	s.NoError(s.Context().Err(), "context deadline while draining activity tasks")
 	s.Equal(total, actsHandled)
 
 	// perKeyTimes : Used to verify that each key's activities are throttled correctly.
