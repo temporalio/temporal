@@ -2255,7 +2255,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 	}{
 		{
 			Name:        "valid SA field",
-			SaName:      "Keyword01",
+			SaName:      "CustomKeywordField",
 			ExpectedErr: nil,
 		},
 		{
@@ -2305,12 +2305,9 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 				return "", serviceerror.NewInvalidArgument("unknown alias")
 			}).Times(eventsWithSasCount)
 
-			// Mock GetAlias - for valid field names it returns an alias, for invalid ones it returns an error.
 			if subTest.ExpectedErr != nil {
-				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument("")).AnyTimes()
+				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				// For valid field names, GetAlias returns an alias (field exists in the ES schema).
-				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("CustomKeywordField", nil).AnyTimes()
 				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
@@ -2322,7 +2319,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 							if eventHasSas {
 								s.NotNil(unaliasedSas, "search attributes must be set on every event with search_attributes field")
 								s.Len(unaliasedSas.GetIndexedFields(), 1, "only 1 search attribute must be set")
-								s.ProtoEqual(saValue, unaliasedSas.GetIndexedFields()["Keyword01"])
+								s.ProtoEqual(saValue, unaliasedSas.GetIndexedFields()["CustomKeywordField"])
 							}
 						}
 					}

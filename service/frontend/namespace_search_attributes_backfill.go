@@ -53,13 +53,14 @@ func initializeSearchAttributeMappings(
 		}
 
 		for _, nsDetail := range response.Namespaces {
-			if err := updateSingleNamespaceSearchAttributeMappings(
+			err := updateSingleNamespaceSearchAttributeMappings(
 				ctx,
 				handler,
 				nsDetail,
 				indexSearchAttrs.CustomSearchAttributes,
 				logger,
-			); err != nil {
+			)
+			if err != nil {
 				return fmt.Errorf("failed to update namespace search attribute mappings: %w", err)
 			}
 		}

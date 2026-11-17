@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	vismanager "go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/wideevents"
@@ -99,7 +99,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.mockClusterMetadataMgr = persistence.NewMockClusterMetadataManager(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockVisibilityMgr = vismanager.NewMockVisibilityManager(s.controller)
-	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(false).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().HasStoreName(esconfig.PersistenceName).Return(false).AnyTimes()
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockNamespaceReplicator = nsreplication.NewReplicator(
 		s.mockProducer,
@@ -886,12 +886,14 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_BackfillsIdentityAli
 	}
 
 	mockVisibilityMgr := vismanager.NewMockVisibilityManager(s.controller)
-	mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
+	mockVisibilityMgr.EXPECT().HasStoreName(esconfig.PersistenceName).Return(true)
 	mockVisibilityMgr.EXPECT().GetIndexName().Return(indexName)
 
 	handler := newNamespaceHandler(
 		log.NewNoopLogger(),
+		wideevents.NoopLogger(),
 		s.mockMetadataMgr,
+		namespace.NewMockRegistry(s.controller),
 		s.mockClusterMetadata,
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
@@ -900,6 +902,8 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_BackfillsIdentityAli
 		mockVisibilityMgr,
 		s.fakeClock,
 		s.config,
+		nil,
+		metrics.NoopMetricsHandler,
 	)
 
 	s.mockClusterMetadataMgr.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(

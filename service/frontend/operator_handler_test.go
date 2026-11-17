@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace"
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.uber.org/mock/gomock"
-	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 )
