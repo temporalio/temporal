@@ -678,6 +678,7 @@ func emitBufferedEventsSkipped(
 	// the target is now missing ride in details.
 	details := map[string]any{
 		"disposition":           wideevents.ReplDispositionDiscarded,
+		"classification":        wideevents.ReplErrorClassificationBufferedEvents,
 		"replication_state":     replicationState.String(),
 		"buffered_events_count": mutableState.NumBufferedEvents(),
 		"source_next_event_id":  mutableState.GetNextEventID(),

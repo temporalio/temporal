@@ -104,6 +104,7 @@ func TestEmitBufferedEventsSkipped(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(fields["details"].AsString()), &details))
 		require.Equal(t, wideevents.ReplOperationTaskConversion, details["operation"])
 		require.Equal(t, string(wideevents.ReplDispositionDiscarded), details["disposition"])
+		require.Equal(t, string(wideevents.ReplErrorClassificationBufferedEvents), details["classification"])
 		require.Equal(t, enumspb.REPLICATION_STATE_HANDOVER.String(), details["replication_state"])
 		require.Equal(t, "target_cluster", details["target_cluster"])
 		require.EqualValues(t, 3, details["buffered_events_count"])

@@ -53,6 +53,9 @@ const (
 
 const (
 	ReplErrorClassificationDuplicate ReplicationErrorClassification = "duplicate"
+	// ReplErrorClassificationBufferedEvents marks work that could not proceed because the source
+	// mutable state had buffered events.
+	ReplErrorClassificationBufferedEvents ReplicationErrorClassification = "buffered_events"
 )
 
 const (
