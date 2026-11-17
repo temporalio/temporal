@@ -6473,6 +6473,59 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache")
 	})
 
+	t.Run("fan-out: refuses a poll that arrives after shutdown of an unloaded task queue", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		ns, mockNsRegistry := createMockNamespaceCache(ctrl, matchingTestNamespace)
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNsRegistry,
+			logger:                log.NewNoopLogger(),
+			timeSource:            clock.NewRealTimeSource(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		}
+
+		workerKey := "test-worker"
+		taskQueue := &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       ns.ID().String(),
+				TaskQueue:         taskQueue,
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_NEXUS,
+				WorkerInstanceKey: workerKey,
+			})
+		require.NoError(t, err)
+
+		// The poll loads the partition that the shutdown found unloaded.
+		partition := tqid.UnsafeTaskQueueFamily(ns.ID().String(), taskQueue.GetName()).TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).RootPartition()
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+		mockPM.EXPECT().LongPollExpirationInterval().Return(time.Minute)
+		mockPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).Times(0)
+		engine.partitions[partition.Key()] = mockPM
+
+		resp, err := engine.PollNexusTaskQueue(context.Background(),
+			&matchingservice.PollNexusTaskQueueRequest{
+				NamespaceId: ns.ID().String(),
+				Request: &workflowservice.PollNexusTaskQueueRequest{
+					Namespace:         ns.Name().String(),
+					TaskQueue:         taskQueue,
+					WorkerInstanceKey: workerKey,
+				},
+			},
+			metrics.NoopMetricsHandler,
+		)
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, &matchingservice.PollNexusTaskQueueResponse{}, resp)
+	})
+
 	t.Run("partition API adds worker to shutdown cache", func(t *testing.T) {
 		// CancelOutstandingWorkerPollsPartition should also populate the shutdown cache
 		// so that child matching hosts reject new polls from shutting-down workers.
