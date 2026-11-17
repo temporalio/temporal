@@ -682,6 +682,83 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 	}
 }
 
+func TestNexusResponseTokenNamespaceEnforcement(t *testing.T) {
+	t.Parallel()
+
+	namespaces := map[namespace.Name]*namespace.Namespace{}
+	for _, name := range []namespace.Name{"namespace-a", "namespace-b"} {
+		namespaces[name] = namespace.NewLocalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Id: name.String() + "-id", Name: name.String(), State: enumspb.NAMESPACE_STATE_REGISTERED},
+			nil,
+			"active",
+		)
+	}
+
+	methods := []struct {
+		name    string
+		apiName string
+		request func(namespace.Name, []byte) any
+	}{
+		{"completed", "RespondNexusTaskCompleted", func(name namespace.Name, token []byte) any {
+			return &workflowservice.RespondNexusTaskCompletedRequest{Namespace: name.String(), TaskToken: token}
+		}},
+		{"failed", "RespondNexusTaskFailed", func(name namespace.Name, token []byte) any {
+			return &workflowservice.RespondNexusTaskFailedRequest{Namespace: name.String(), TaskToken: token}
+		}},
+	}
+	cases := []struct {
+		name         string
+		requestName  namespace.Name
+		tokenName    namespace.Name
+		wantMismatch bool
+	}{
+		{"same namespace a", "namespace-a", "namespace-a", false},
+		{"token namespace differs from request", "namespace-a", "namespace-b", true},
+		{"same namespace b", "namespace-b", "namespace-b", false},
+	}
+
+	for _, method := range methods {
+		for _, tc := range cases {
+			t.Run(method.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				controller := gomock.NewController(t)
+				registry := namespace.NewMockRegistry(controller)
+				requestNS := namespaces[tc.requestName]
+				tokenNS := namespaces[tc.tokenName]
+				registry.EXPECT().GetNamespaceByID(tokenNS.ID()).Return(tokenNS, nil)
+				registry.EXPECT().GetNamespace(requestNS.Name()).Return(requestNS, nil)
+
+				token, err := tasktoken.NewSerializer().SerializeNexusTaskToken(&tokenspb.NexusTask{
+					NamespaceId: tokenNS.ID().String(),
+					TaskQueue:   "task-queue",
+					TaskId:      "test-task-id",
+				})
+				require.NoError(t, err)
+
+				validator := NewNamespaceValidatorInterceptor(
+					registry,
+					dynamicconfig.GetBoolPropertyFn(true),
+					dynamicconfig.GetIntPropertyFn(100),
+				)
+				handlerCalled := false
+				_, err = validator.StateValidationIntercept(context.Background(), method.request(tc.requestName, token),
+					&grpc.UnaryServerInfo{FullMethod: api.WorkflowServicePrefix + method.apiName},
+					func(context.Context, any) (any, error) {
+						handlerCalled = true
+						return struct{}{}, nil
+					})
+				if tc.wantMismatch {
+					require.ErrorIs(t, err, errTaskTokenNamespaceMismatch)
+					require.False(t, handlerCalled)
+				} else {
+					require.NoError(t, err)
+					require.True(t, handlerCalled)
+				}
+			})
+		}
+	}
+}
+
 func (s *namespaceValidatorSuite) Test_Intercept_DescribeHistoryHostRequests() {
 	// it's just a list of requests
 	testCases := []struct {
