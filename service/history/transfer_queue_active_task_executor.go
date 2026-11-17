@@ -213,7 +213,7 @@ func (t *transferQueueActiveTaskExecutor) processReleaseLimiterTask(
 					ReleaseSlots: []string{limiter.GetSlotId()},
 				})
 			default:
-				errs[i] = serviceerror.NewInternalf("unexpected limiter type %v", limiter.GetLimiterType())
+				errs[i] = queues.NewTerminalTaskError(fmt.Sprintf("unexpected limiter type %v", limiter.GetLimiterType()))
 			}
 		}
 		if i == len(task.Limiters)-1 {
