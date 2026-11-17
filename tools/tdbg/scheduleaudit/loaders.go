@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -142,6 +143,49 @@ func (l *grpcScheduleLoader) ListScheduleIDs(ctx context.Context, namespace stri
 	}
 }
 
+// ChasmScheduleVisibilityQuery selects running CHASM schedulers. The explicit TemporalNamespaceDivision filter is
+// required, otherwise the visibility query converter appends "TemporalNamespaceDivision IS NULL" and excludes CHASM
+// executions. Migration sentinels match too; callers must confirm the backend of each result.
+func ChasmScheduleVisibilityQuery() string {
+	return fmt.Sprintf("%s = '%d' AND ExecutionStatus = 'Running'", sadefs.TemporalNamespaceDivision, chasm.SchedulerArchetypeID)
+}
+
+// ListChasmScheduleIDs pages through running CHASM schedulers in visibility. A CHASM scheduler's business ID, returned as
+// the workflow ID, is the schedule ID. It paces and shrinks pages like ListScheduleIDs.
+func (l *grpcScheduleLoader) ListChasmScheduleIDs(ctx context.Context, namespace string, yield func(id string) error) error {
+	var pageToken []byte
+	pageSize := int32(visibilityPageSize)
+	query := ChasmScheduleVisibilityQuery()
+	for {
+		var resp *workflowservice.ListWorkflowExecutionsResponse
+		err := l.retrier.page(ctx, fmt.Sprintf("ListWorkflowExecutions(%s/chasm schedules)", namespace), &pageSize, func() error {
+			if err := l.listLimiter.Wait(ctx, namespace); err != nil {
+				return err
+			}
+			var rpcErr error
+			resp, rpcErr = l.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace:     namespace,
+				Query:         query,
+				PageSize:      pageSize,
+				NextPageToken: pageToken,
+			})
+			return rpcErr
+		})
+		if err != nil {
+			return err
+		}
+		for _, exec := range resp.GetExecutions() {
+			if err := yield(exec.GetExecution().GetWorkflowId()); err != nil {
+				return err
+			}
+		}
+		if len(resp.GetNextPageToken()) == 0 {
+			return nil
+		}
+		pageToken = resp.GetNextPageToken()
+	}
+}
+
 func (l *grpcScheduleLoader) LookupSchedule(ctx context.Context, namespace, scheduleID string) (ScheduleEntry, error) {
 	var resp *workflowservice.DescribeScheduleResponse
 	err := l.retrier.do(ctx, fmt.Sprintf("DescribeSchedule(%s/%s)", namespace, scheduleID), func() error {
@@ -169,6 +213,15 @@ func (l *grpcScheduleLoader) LookupSchedule(ctx context.Context, namespace, sche
 		Paused:       state.GetPaused(),
 		Policies:     policies,
 		Exhausted:    state.GetLimitedActions() && state.GetRemainingActions() == 0,
+
+		ActionWorkflowID: sched.GetAction().GetStartWorkflow().GetWorkflowId(),
+		Info: ScheduleInfo{
+			ActionCount:         info.GetActionCount(),
+			MissedCatchupWindow: info.GetMissedCatchupWindow(),
+			OverlapSkipped:      info.GetOverlapSkipped(),
+			BufferDropped:       info.GetBufferDropped(),
+			BufferSize:          info.GetBufferSize(),
+		},
 	}
 	if ct := info.GetCreateTime(); ct != nil {
 		entry.CreateTime = ct.AsTime()
@@ -202,6 +255,69 @@ func (l *grpcScheduleLoader) DescribeNamespace(ctx context.Context, namespace st
 		info.Retention = d.AsDuration()
 	}
 	return info, nil
+}
+
+// NewRetryingBackendResolver paces inner with limiter and retries its transient errors with the loaders' policy.
+func NewRetryingBackendResolver(inner BackendResolver, log io.Writer, limiter *NamespaceRateLimiter) BackendResolver {
+	return &retryingBackendResolver{inner: inner, retrier: &grpcRetrier{log: log}, limiter: limiter}
+}
+
+type retryingBackendResolver struct {
+	inner   BackendResolver
+	retrier *grpcRetrier
+	limiter requestLimiter
+}
+
+func (r *retryingBackendResolver) ResolveBackend(ctx context.Context, namespace, scheduleID string) (string, error) {
+	var backend string
+	err := r.retrier.do(ctx, fmt.Sprintf("ResolveBackend(%s/%s)", namespace, scheduleID), func() error {
+		if err := r.limiter.Wait(ctx, namespace); err != nil {
+			return err
+		}
+		var rpcErr error
+		backend, rpcErr = r.inner.ResolveBackend(ctx, namespace, scheduleID)
+		return rpcErr
+	})
+	return backend, err
+}
+
+// NewGRPCMissVerifier returns a MissVerifier backed by DescribeWorkflowExecution, paced by limiter.
+func NewGRPCMissVerifier(client workflowservice.WorkflowServiceClient, log io.Writer, limiter *NamespaceRateLimiter) MissVerifier {
+	return &grpcMissVerifier{client: client, retrier: &grpcRetrier{log: log}, limiter: limiter}
+}
+
+type grpcMissVerifier struct {
+	client  workflowservice.WorkflowServiceClient
+	retrier *grpcRetrier
+	limiter requestLimiter
+}
+
+func (v *grpcMissVerifier) DescribeAction(ctx context.Context, namespace, workflowID string) (Execution, error) {
+	var resp *workflowservice.DescribeWorkflowExecutionResponse
+	err := v.retrier.do(ctx, fmt.Sprintf("DescribeWorkflowExecution(%s/%s)", namespace, workflowID), func() error {
+		if err := v.limiter.Wait(ctx, namespace); err != nil {
+			return err
+		}
+		var rpcErr error
+		resp, rpcErr = v.client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		})
+		return rpcErr
+	})
+	if err != nil {
+		return Execution{}, err
+	}
+	info := resp.GetWorkflowExecutionInfo()
+	exec := Execution{
+		WorkflowID: info.GetExecution().GetWorkflowId(),
+		RunID:      info.GetExecution().GetRunId(),
+		Status:     info.GetStatus(),
+	}
+	if st := info.GetStartTime(); st != nil {
+		exec.StartTime = st.AsTime()
+	}
+	return exec, nil
 }
 
 // NewGRPCExecutionLoader returns an ExecutionLoader backed by the workflow-service frontend. log receives rate-limit

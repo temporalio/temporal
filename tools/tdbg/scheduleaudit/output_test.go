@@ -158,6 +158,44 @@ func TestRowWriter(t *testing.T) {
 	})
 }
 
+func TestRowWriterEnrichment(t *testing.T) {
+	miss := mustParseTime("2026-05-19T19:00:00Z")
+	skipped := mustParseTime("2026-05-19T20:00:00Z")
+	base := Result{
+		Namespace: "ns1", ScheduleID: "s1",
+		Info:   ScheduleInfo{ActionCount: 9, MissedCatchupWindow: 1, OverlapSkipped: 2, BufferDropped: 3, BufferSize: 4},
+		Missed: map[time.Time]string{miss: categoryRealMiss, skipped: categorySkipOverlap},
+	}
+
+	t.Run("unresolved backend and unverified misses render as null", func(t *testing.T) {
+		var buf bytes.Buffer
+		require.NoError(t, writeResults(&buf, []Result{base}))
+		require.Contains(t, buf.String(), `"backend":null`)
+		require.Contains(t, buf.String(), `"schedule_info":{"action_count":9,"missed_catchup_window":1,"overlap_skipped":2,"buffer_dropped":3,"buffer_size":4}`)
+		require.Contains(t, buf.String(), `"verification":null`)
+	})
+
+	t.Run("backend and verification are emitted", func(t *testing.T) {
+		r := base
+		r.Backend = BackendChasm
+		r.Verifications = map[time.Time]MissVerification{miss: {
+			Result: verificationStarted, WorkflowID: "wf-2026-05-19T19:00:00Z", RunID: "run",
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, StartTime: mustParseTime("2026-05-19T19:00:03Z"),
+		}}
+		var buf bytes.Buffer
+		require.NoError(t, writeResults(&buf, []Result{r}))
+		var got row
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &got))
+		require.Equal(t, BackendChasm, *got.Backend)
+		require.Len(t, got.Misses, 2)
+		require.Equal(t, &verificationRow{
+			Result: verificationStarted, WorkflowID: "wf-2026-05-19T19:00:00Z", RunID: "run", Status: "Completed",
+			Start: new(mustParseTime("2026-05-19T19:00:03Z")),
+		}, got.Misses[0].Verification)
+		require.Nil(t, got.Misses[1].Verification)
+	})
+}
+
 func writeResults(w io.Writer, results []Result) error {
 	rw := NewRowWriter(w, 0)
 	for _, result := range results {

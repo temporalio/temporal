@@ -493,11 +493,19 @@ OUTPUT FORMAT
     catchup_window                 the schedule's configured catchupWindow (Go duration string, e.g. "1m0s")
     paused                         whether the schedule is currently paused (only audited with --include-paused)
     create_time, update_time       schedule create/update times (null if unknown)
+    backend                        the schedule's CURRENT backend: workflow (workflow-backed scheduler), chasm (CHASM
+                                   scheduler), not_found, unexpected (both genuinely hold the ID), or error (lookup
+                                   failed). This is the backend at audit
+                                   time, not proof of which backend ran during the window. Same lookups as
+                                   'schedule migrate status --schedule-id'; a live sentinel on the other side is ignored.
+    schedule_info {action_count, missed_catchup_window, overlap_skipped, buffer_dropped, buffer_size}
+                                   DescribeSchedule counters. They cover the schedule's whole lifetime, not the window,
+                                   but help tell catchup/overlap drops apart from lost actions.
     expected, actual, matched      scheduled times; unique workflows observed; scheduled times matched to a workflow
     missed                         total unmatched scheduled times
     counts {on_time, late, delayed_overlap, real_miss, skip_overlap, pending, awaiting_start,
             inconclusive_overlap, paused}
-    misses [{nominal, category}]   every unmatched scheduled time and why:
+    misses [{nominal, category, verification}]   every unmatched scheduled time and why:
                                      real_miss                      no workflow and the policy doesn't justify a skip
                                                                     (a delays/concurrent policy, or a drops policy with
                                                                     nothing running). Warrants investigation.
@@ -511,6 +519,10 @@ OUTPUT FORMAT
 					                                                 or historical BufferOne occupancy is unknown
                                      paused                         schedule was paused before the window; benign
                                                                     (only with --include-paused)
+                                   verification is null unless --verify-misses looked the miss up directly (real_miss
+                                   only): {result, workflow_id, run_id, status, start, error}. result is started (the
+                                   workflow exists, so visibility missed it), not_found (confirmed missing), or error.
+                                   The category is not changed.
     scheduled_times [{nominal, jittered}]  every reconstructed fire in the window
     observed [{workflow_id, run_id, nominal, start, close, status}]  every workflow seen in visibility
     delays [{workflow_id, category, nominal, actual, desired, start, ...}]  per started action, how late it was:
@@ -547,6 +559,14 @@ CAVEATS AND LIMITATIONS
     unavailable. The audit reports such losses as real_miss; catchup_window lets users distinguish "true sustained
     outage" from "brief blip + tight catchup".
 
+  Verified misses: --verify-misses describes '<action workflow ID>-<nominal, UTC, seconds, RFC3339>', the ID both
+    workflow-backed and CHASM schedulers start actions under. It reports the latest run with that ID, so a workflow ID reuse policy
+    that allows duplicates can match a later run.
+
+  --chasm-only: whole namespaces are listed from visibility (running CHASM schedulers) instead of ListSchedules, and
+    every candidate's backend is confirmed before it is described (two extra lookups per schedule, paced by --rps).
+    Migration sentinels and schedules that are currently workflow-backed are skipped.
+
   Catchup under overlap=SKIP after a brief outage: when the V1 scheduler resumes with multiple queued actions, it
     dispatches only the oldest and discards the rest. The audit reports the discarded actions as real_miss. A burst of
     real_miss across many schedules within minutes typically indicates this behavior. To confirm, the user must:
@@ -559,8 +579,9 @@ CAVEATS AND LIMITATIONS
 
 INPUT STREAM (for --file / stdin)
   A JSONL stream of audit targets, one JSON object per line; schedule_id is optional (omit to audit the whole
-  namespace). Examples:
+  namespace). Each target names exactly one of namespace or namespace_id (resolved to a name). Examples:
     {"namespace":"my-namespace"}
+    {"namespace_id":"4a1f8e2c-0b6d-4c47-9a2e-6f3b1d5c7e90"}
     {"namespace":"orders-prod","schedule_id":"daily-cleanup-schedule"}
     {"namespace":"analytics-staging","schedule_id":"my-schedule"}
 
@@ -570,6 +591,8 @@ PRECEDENCE
   to guarantee the audit stays within a single namespace.
   With no stream (an interactive terminal and no --file), the flags define the target directly: --namespace alone
   audits that whole namespace; --namespace + --schedule-id audits that one schedule.
+  --all-namespaces audits every registered namespace except those named by --exclude-namespace; it cannot be
+  combined with --namespace or --file, and stdin is not read.
 
 TIME WINDOW
   --lookback-start / --lookback-end take a duration before now (e.g. 24h, 3d, 90m, 0s); "d" means exactly 24h.
@@ -594,6 +617,10 @@ EXAMPLES
     tdbg schedule audit --namespace my-ns --schedule-id my-schedule \
       --start-time 2026-05-19T18:00:00Z --end-time 2026-05-19T22:00:00Z
 
+  Every namespace's CHASM schedules, confirming each real miss directly:
+    tdbg schedule audit --all-namespaces --exclude-namespace temporal-system --chasm-only --verify-misses \
+      --lookback-start 24h > audit.jsonl
+
   Pipe stdout through jq (e.g. only schedules with real misses):
     tdbg schedule audit -f ./targets.jsonl --lookback-start 1d | jq 'select(.counts.real_miss > 0)'`,
 			Flags: []cli.Flag{
@@ -608,7 +635,8 @@ EXAMPLES
 					Name:    FlagFile,
 					Aliases: FlagFileAlias,
 					Usage: "Path to a JSONL stream of audit targets, one JSON object per line as " +
-						`'{"namespace":"...","schedule_id":"..."}' (schedule_id optional). Use '-' or omit to read ` +
+						`'{"namespace":"...","schedule_id":"..."}' (schedule_id optional; namespace_id may replace ` +
+						`namespace). Use '-' or omit to read ` +
 						"from stdin. Targets stream in as they are read.",
 				},
 				&cli.StringFlag{
@@ -664,6 +692,25 @@ EXAMPLES
 				&cli.BoolFlag{
 					Name:  FlagQuiet,
 					Usage: "Suppress audit progress, retry, and completion diagnostics written to stderr.",
+				},
+				&cli.BoolFlag{
+					Name: FlagAllNamespaces,
+					Usage: "Audit every registered namespace. Mutually exclusive with --namespace and --file; " +
+						"stdin is not read.",
+				},
+				&cli.StringSliceFlag{
+					Name:  FlagExcludeNamespace,
+					Usage: "With --all-namespaces, skip this namespace (name or ID). Repeatable.",
+				},
+				&cli.BoolFlag{
+					Name: FlagChasmOnly,
+					Usage: "Audit only CHASM schedules (current backend). Namespaces are listed from visibility, and " +
+						"every schedule's backend is confirmed before it is audited.",
+				},
+				&cli.BoolFlag{
+					Name: FlagVerifyMisses,
+					Usage: "For each real_miss on a flagged schedule, describe the workflow the action would have " +
+						"started, to tell visibility gaps from actions that never started.",
 				},
 			},
 			Action: func(c *cli.Context) error {

@@ -10,10 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/payload"
 	"google.golang.org/grpc"
@@ -323,7 +325,7 @@ func (c *adaptivePageClient) ListWorkflowExecutions(_ context.Context, req *work
 func TestAdaptiveListPageSizes(t *testing.T) {
 	t.Parallel()
 	oversized := status.Error(codes.ResourceExhausted, "grpc: received message larger than max (5078617 vs. 4194304)")
-	for _, api := range []string{"schedules", "executions"} {
+	for _, api := range []string{"schedules", "chasm-schedules", "executions"} {
 		t.Run(api, func(t *testing.T) {
 			t.Parallel()
 			run := func(t *testing.T, client *adaptivePageClient) error {
@@ -334,6 +336,10 @@ func TestAdaptiveListPageSizes(t *testing.T) {
 				if api == "schedules" {
 					loader := &grpcScheduleLoader{client: client, retrier: retrier, listLimiter: limiter}
 					return loader.ListScheduleIDs(t.Context(), "ns", func(string) error { return nil })
+				}
+				if api == "chasm-schedules" {
+					loader := &grpcScheduleLoader{client: client, retrier: retrier, listLimiter: limiter}
+					return loader.ListChasmScheduleIDs(t.Context(), "ns", func(string) error { return nil })
 				}
 				loader := &grpcExecutionLoader{client: client, retrier: retrier, limiter: limiter}
 				_, err := loader.ListExecutions(t.Context(), "ns", []string{"schedule"}, mustParseTime("2026-05-19T18:00:00Z"), mustParseTime("2026-05-19T22:00:00Z"))
@@ -375,4 +381,139 @@ func TestAdaptiveListPageSizes(t *testing.T) {
 			})
 		})
 	}
+}
+
+type chasmScheduleWorkflowClient struct {
+	workflowservice.WorkflowServiceClient
+	requests []*workflowservice.ListWorkflowExecutionsRequest
+}
+
+func (c *chasmScheduleWorkflowClient) ListWorkflowExecutions(
+	_ context.Context,
+	req *workflowservice.ListWorkflowExecutionsRequest,
+	_ ...grpc.CallOption,
+) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+	c.requests = append(c.requests, req)
+	return &workflowservice.ListWorkflowExecutionsResponse{Executions: []*workflowpb.WorkflowExecutionInfo{
+		{Execution: &commonpb.WorkflowExecution{WorkflowId: "chasm-a"}},
+		{Execution: &commonpb.WorkflowExecution{WorkflowId: "chasm-b"}},
+	}}, nil
+}
+
+func TestGRPCScheduleLoaderListsChasmSchedulesFromVisibility(t *testing.T) {
+	client := &chasmScheduleWorkflowClient{}
+	loader := NewGRPCScheduleLoader(client, io.Discard, nil, nil)
+	var ids []string
+	require.NoError(t, loader.ListChasmScheduleIDs(t.Context(), "ns", func(id string) error {
+		ids = append(ids, id)
+		return nil
+	}))
+	require.Equal(t, []string{"chasm-a", "chasm-b"}, ids)
+	require.Len(t, client.requests, 1)
+	require.Equal(t, "ns", client.requests[0].GetNamespace())
+	require.Equal(t, ChasmScheduleVisibilityQuery(), client.requests[0].GetQuery())
+	require.Contains(t, client.requests[0].GetQuery(), fmt.Sprintf("TemporalNamespaceDivision = '%d'", chasm.SchedulerArchetypeID))
+}
+
+type describeScheduleWorkflowClient struct {
+	workflowservice.WorkflowServiceClient
+}
+
+func (c *describeScheduleWorkflowClient) DescribeSchedule(
+	context.Context,
+	*workflowservice.DescribeScheduleRequest,
+	...grpc.CallOption,
+) (*workflowservice.DescribeScheduleResponse, error) {
+	return &workflowservice.DescribeScheduleResponse{
+		Schedule: &schedulepb.Schedule{Action: &schedulepb.ScheduleAction{Action: &schedulepb.ScheduleAction_StartWorkflow{
+			StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{WorkflowId: "base-wf"},
+		}}},
+		Info: &schedulepb.ScheduleInfo{
+			ActionCount:         10,
+			MissedCatchupWindow: 2,
+			OverlapSkipped:      3,
+			BufferDropped:       4,
+			BufferSize:          5,
+		},
+	}, nil
+}
+
+func TestGRPCScheduleLoaderKeepsActionWorkflowIDAndInfo(t *testing.T) {
+	loader := NewGRPCScheduleLoader(&describeScheduleWorkflowClient{}, io.Discard, nil, nil)
+	entry, err := loader.LookupSchedule(t.Context(), "ns", "s1")
+	require.NoError(t, err)
+	require.Equal(t, "base-wf", entry.ActionWorkflowID)
+	require.Equal(t, ScheduleInfo{ActionCount: 10, MissedCatchupWindow: 2, OverlapSkipped: 3, BufferDropped: 4, BufferSize: 5}, entry.Info)
+}
+
+type describeWorkflowClient struct {
+	workflowservice.WorkflowServiceClient
+	err      error
+	requests []*workflowservice.DescribeWorkflowExecutionRequest
+}
+
+func (c *describeWorkflowClient) DescribeWorkflowExecution(
+	_ context.Context,
+	req *workflowservice.DescribeWorkflowExecutionRequest,
+	_ ...grpc.CallOption,
+) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	c.requests = append(c.requests, req)
+	if c.err != nil {
+		return nil, c.err
+	}
+	return &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+		Execution: &commonpb.WorkflowExecution{WorkflowId: req.GetExecution().GetWorkflowId(), RunId: "run"},
+		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		StartTime: timestamppb.New(mustParseTime("2026-05-19T19:00:05Z")),
+	}}, nil
+}
+
+func TestGRPCMissVerifier(t *testing.T) {
+	t.Run("returns the latest run", func(t *testing.T) {
+		client := &describeWorkflowClient{}
+		exec, err := NewGRPCMissVerifier(client, io.Discard, nil).DescribeAction(t.Context(), "ns", "wf")
+		require.NoError(t, err)
+		require.Equal(t, Execution{
+			WorkflowID: "wf",
+			RunID:      "run",
+			Status:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			StartTime:  mustParseTime("2026-05-19T19:00:05Z"),
+		}, exec)
+		require.Equal(t, "ns", client.requests[0].GetNamespace())
+		require.Empty(t, client.requests[0].GetExecution().GetRunId())
+	})
+	t.Run("raw NotFound is returned without retrying", func(t *testing.T) {
+		client := &describeWorkflowClient{err: status.Error(codes.NotFound, "workflow not found")}
+		_, err := NewGRPCMissVerifier(client, io.Discard, nil).DescribeAction(t.Context(), "ns", "wf")
+		require.True(t, isNotFound(err))
+		require.Len(t, client.requests, 1)
+	})
+}
+
+type flakyBackendResolver struct {
+	failures int
+	calls    int
+}
+
+func (r *flakyBackendResolver) ResolveBackend(context.Context, string, string) (string, error) {
+	r.calls++
+	if r.calls <= r.failures {
+		return "", serviceerror.NewUnavailable("try again")
+	}
+	return BackendChasm, nil
+}
+
+func TestRetryingBackendResolver(t *testing.T) {
+	inner := &flakyBackendResolver{failures: 1}
+	limiter := &countingLimiter{}
+	resolver := &retryingBackendResolver{
+		inner:   inner,
+		retrier: &grpcRetrier{policy: backoff.NewExponentialRetryPolicy(time.Nanosecond).WithMaximumAttempts(2)},
+		limiter: limiter,
+	}
+	backend, err := resolver.ResolveBackend(t.Context(), "ns", "s1")
+	require.NoError(t, err)
+	require.Equal(t, BackendChasm, backend)
+	require.Equal(t, 2, inner.calls)
+	require.Equal(t, 2, limiter.waits)
 }

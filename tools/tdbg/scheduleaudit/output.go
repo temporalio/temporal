@@ -33,6 +33,16 @@ type row struct {
 	Paused        bool       `json:"paused"`
 	CreateTime    *time.Time `json:"create_time"`
 	UpdateTime    *time.Time `json:"update_time"`
+	// Backend is null unless the backend was resolved for this row.
+	Backend *string `json:"backend"`
+
+	ScheduleInfo struct {
+		ActionCount         int64 `json:"action_count"`
+		MissedCatchupWindow int64 `json:"missed_catchup_window"`
+		OverlapSkipped      int64 `json:"overlap_skipped"`
+		BufferDropped       int64 `json:"buffer_dropped"`
+		BufferSize          int64 `json:"buffer_size"`
+	} `json:"schedule_info"`
 
 	Expected int `json:"expected"`
 	Actual   int `json:"actual"`
@@ -60,6 +70,17 @@ type row struct {
 type missRow struct {
 	Nominal  time.Time `json:"nominal"`
 	Category string    `json:"category"`
+	// Verification is null unless the miss was looked up directly (--verify-misses, real_miss only).
+	Verification *verificationRow `json:"verification"`
+}
+
+type verificationRow struct {
+	Result     string     `json:"result"`
+	WorkflowID string     `json:"workflow_id"`
+	RunID      string     `json:"run_id"`
+	Status     string     `json:"status"`
+	Start      *time.Time `json:"start"`
+	Error      string     `json:"error"`
 }
 
 type scheduledTimeRow struct {
@@ -122,13 +143,19 @@ func (rw *RowWriter) Write(r Result) (bool, error) {
 }
 
 func (rw *RowWriter) flagged(r Result) bool {
+	return Flagged(r, rw.delayThreshold)
+}
+
+// Flagged reports whether r is emitted as a row: it is inconclusive, has missed times, or -- when delayThreshold > 0 --
+// some started action's dispatch delay reaches delayThreshold.
+func Flagged(r Result, delayThreshold time.Duration) bool {
 	if r.auditStatus() != auditStatusComplete {
 		return true
 	}
 	if r.TotalMissed() > 0 {
 		return true
 	}
-	return rw.delayThreshold > 0 && r.MaxDispatchDelay() >= rw.delayThreshold
+	return delayThreshold > 0 && r.MaxDispatchDelay() >= delayThreshold
 }
 
 func toRow(r Result) row {
@@ -147,6 +174,14 @@ func toRow(r Result) row {
 	out.Paused = r.Paused
 	out.CreateTime = utcPtr(r.CreateTime)
 	out.UpdateTime = utcPtr(r.UpdateTime)
+	if r.Backend != "" {
+		out.Backend = &r.Backend
+	}
+	out.ScheduleInfo.ActionCount = r.Info.ActionCount
+	out.ScheduleInfo.MissedCatchupWindow = r.Info.MissedCatchupWindow
+	out.ScheduleInfo.OverlapSkipped = r.Info.OverlapSkipped
+	out.ScheduleInfo.BufferDropped = r.Info.BufferDropped
+	out.ScheduleInfo.BufferSize = r.Info.BufferSize
 
 	out.Expected = r.Expected
 	out.Actual = r.Actual
@@ -189,7 +224,21 @@ func missRows(r Result) []missRow {
 	sortTimes(nominals)
 	out := make([]missRow, 0, len(nominals))
 	for _, t := range nominals {
-		out = append(out, missRow{Nominal: t.UTC(), Category: r.Missed[t]})
+		mr := missRow{Nominal: t.UTC(), Category: r.Missed[t]}
+		if v, ok := r.Verifications[t]; ok {
+			vr := verificationRow{
+				Result:     v.Result,
+				WorkflowID: v.WorkflowID,
+				RunID:      v.RunID,
+				Start:      utcPtr(v.StartTime),
+				Error:      v.Error,
+			}
+			if v.Result == verificationStarted {
+				vr.Status = v.Status.String()
+			}
+			mr.Verification = &vr
+		}
+		out = append(out, mr)
 	}
 	return out
 }
