@@ -186,11 +186,42 @@ type (
 		// speculativeTransitionFailoverVersion is the namespace failover version of the pending
 		// speculative transition.
 		speculativeTransitionFailoverVersion int64
+
+		// Armed speculative task wake-ups, latest fire time first. Kept across transactions.
+		speculativeWakeups []speculativeWakeup
+	}
+
+	// SpeculativeWakeupResult is what [Node.RunSpeculativeTaskWakeup] leaves for the caller.
+	SpeculativeWakeupResult struct {
+		// SideEffectTasks must run without the execution lock.
+		SideEffectTasks []SpeculativeTask
+		// PureTasksRan reports in-memory changes that the caller must commit as Decision says.
+		PureTasksRan bool
+		Decision     TransitionDecision
+	}
+
+	speculativeWakeup struct {
+		fireTime time.Time // In the execution's logical time.
+		task     *tasks.ChasmSpeculativeTaskWakeupTask
 	}
 
 	taskWithAttributes struct {
 		task       any
 		attributes TaskAttributes
+		// attempt counts in-memory runs of a speculative task that failed.
+		attempt int
+		// notBefore delays an in-memory retry of a speculative task.
+		notBefore time.Time
+	}
+
+	// SpeculativeTask is a task taken from memory to run outside a persisted transition.
+	SpeculativeTask struct {
+		node       *Node
+		path       []string // Read under the execution lock; handlers run without it.
+		task       any
+		attributes TaskAttributes
+		attempt    int
+		isPure     bool
 	}
 
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
@@ -228,6 +259,9 @@ type (
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		// AddSpeculativeTaskWakeup schedules an in-memory timer that runs due speculative tasks at
+		// fireTime.
+		AddSpeculativeTaskWakeup(fireTime time.Time) (*tasks.ChasmSpeculativeTaskWakeupTask, error)
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
@@ -480,6 +514,9 @@ func (n *Node) Component(
 
 	node, ok := n.findNode(ref.componentPath)
 	if !ok {
+		return nil, errComponentNotFound
+	}
+	if ref.inMemoryNode != nil && ref.inMemoryNode != node {
 		return nil, errComponentNotFound
 	}
 
@@ -1908,8 +1945,53 @@ func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
 		}
 	}
 
+	if n.speculativeTasksEnabled() {
+		if err := n.pruneSpeculativeTasks(); err != nil {
+			return err
+		}
+	}
+
 	n.speculativeTransitionPending = true
 	n.speculativeTransitionFailoverVersion = n.backend.GetCurrentVersion()
+	return nil
+}
+
+// pruneSpeculativeTasks drops pending tasks that are invalid or replaced by a singleton task, as
+// CloseTransaction does for the tasks it saves.
+func (n *Node) pruneSpeculativeTasks() error {
+	validateContext := NewContext(NewContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
+	for component, componentTasks := range n.newTasks {
+		node, ok := n.valueToNode[component]
+		if !ok {
+			delete(n.newTasks, component)
+			continue
+		}
+
+		var validTasks []taskWithAttributes
+		for _, t := range componentTasks {
+			valid, err := node.validateTask(
+				validateContext,
+				TaskInvocation{TaskAttributes: t.attributes},
+				t.task,
+			)
+			if err != nil {
+				return err
+			}
+			if valid {
+				validTasks = append(validTasks, t)
+			}
+		}
+
+		kept, err := n.filterExtraSingletonTasks(validTasks)
+		if err != nil {
+			return err
+		}
+		if len(kept) == 0 {
+			delete(n.newTasks, component)
+		} else {
+			n.newTasks[component] = kept
+		}
+	}
 	return nil
 }
 
@@ -1917,6 +1999,263 @@ func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
 // transition. The bool is false when none is pending.
 func (n *Node) SpeculativeTransitionFailoverVersion() (int64, bool) {
 	return n.speculativeTransitionFailoverVersion, n.speculativeTransitionPending
+}
+
+// TakeDueSpeculativeTasks removes and returns the due tasks when the root component is registered
+// with [SpeculativeOptions.EnableTasks]. Tasks of components no longer in the tree are dropped.
+func (n *Node) TakeDueSpeculativeTasks(now time.Time) ([]SpeculativeTask, error) {
+	if !n.speculativeTasksEnabled() {
+		return nil, nil
+	}
+	if err := n.syncSubComponents(); err != nil {
+		return nil, err
+	}
+
+	var due []SpeculativeTask
+	for component, componentTasks := range n.newTasks {
+		node, ok := n.valueToNode[component]
+		if !ok {
+			delete(n.newTasks, component)
+			continue
+		}
+
+		var remaining []taskWithAttributes
+		for _, t := range componentTasks {
+			if t.speculativeDueTime().After(now) {
+				remaining = append(remaining, t)
+				continue
+			}
+			rt, _ := n.registry.taskFor(t.task)
+			due = append(due, SpeculativeTask{
+				node:       node,
+				path:       node.path(),
+				task:       t.task,
+				attributes: t.attributes,
+				attempt:    t.attempt,
+				isPure:     rt.isPureTask,
+			})
+		}
+		if len(remaining) == 0 {
+			delete(n.newTasks, component)
+		} else {
+			n.newTasks[component] = remaining
+		}
+	}
+	return due, nil
+}
+
+// NextSpeculativeTaskTime returns the earliest scheduled time among the tasks that
+// [Node.TakeDueSpeculativeTasks] would take. An immediate task returns the zero time.
+func (n *Node) NextSpeculativeTaskTime() (time.Time, bool) {
+	var next time.Time
+	found := false
+	if !n.speculativeTasksEnabled() {
+		return next, found
+	}
+	for component, componentTasks := range n.newTasks {
+		if _, ok := n.valueToNode[component]; !ok {
+			continue
+		}
+		for _, t := range componentTasks {
+			if dueTime := t.speculativeDueTime(); !found || dueTime.Before(next) {
+				next = dueTime
+				found = true
+			}
+		}
+	}
+	return next, found
+}
+
+// RunSpeculativeTaskWakeup takes the due speculative tasks and runs the pure ones in memory. Any
+// wake-up runs what is due, including one that arming already pruned.
+func (n *Node) RunSpeculativeTaskWakeup(
+	ctx context.Context,
+	wakeup *tasks.ChasmSpeculativeTaskWakeupTask,
+	now time.Time,
+) (SpeculativeWakeupResult, error) {
+	// This run takes everything due, so wake-ups due by now are no longer needed.
+	n.speculativeWakeups = slices.DeleteFunc(n.speculativeWakeups, func(w speculativeWakeup) bool {
+		return w.task == wakeup || !w.fireTime.After(now)
+	})
+	due, err := n.TakeDueSpeculativeTasks(now)
+	if err != nil {
+		return SpeculativeWakeupResult{}, err
+	}
+
+	var result SpeculativeWakeupResult
+	// TakeDueSpeculativeTasks synced the tree; sync again only after a pure task runs.
+	needsSync := false
+	for _, task := range due {
+		if !task.isPure {
+			result.SideEffectTasks = append(result.SideEffectTasks, task)
+			continue
+		}
+		// An earlier pure task may have removed this task's component.
+		if needsSync {
+			if err := n.syncSubComponents(); err != nil {
+				return SpeculativeWakeupResult{}, err
+			}
+		}
+		// Check against deleted nodes
+		if node, ok := n.valueToNode[task.node.value]; !ok || node != task.node {
+			continue
+		}
+		executed, err := task.node.ExecutePureTask(ctx, task.attributes, task.task)
+		if err != nil {
+			return SpeculativeWakeupResult{}, err
+		}
+		needsSync = executed
+		result.PureTasksRan = result.PureTasksRan || executed
+	}
+
+	if result.PureTasksRan {
+		if err := n.ApplySpeculativeTransition(ctx); err != nil {
+			return SpeculativeWakeupResult{}, err
+		}
+		if result.Decision, err = n.SpeculativeTransitionDecision(ctx); err != nil {
+			return SpeculativeWakeupResult{}, err
+		}
+	}
+	return result, nil
+}
+
+// speculativeDueTime returns when an in-memory task may run. The zero time means now.
+func (t taskWithAttributes) speculativeDueTime() time.Time {
+	if t.notBefore.After(t.attributes.ScheduledTime) {
+		return t.notBefore
+	}
+	return t.attributes.ScheduledTime
+}
+
+// RequeueSpeculativeTask puts a failed side-effect task back to run again at the given time. It
+// returns false and drops the task when it already failed a retry or its component is gone.
+func (n *Node) RequeueSpeculativeTask(task SpeculativeTask, at time.Time) bool {
+	if task.attempt >= 1 {
+		// check if we want a metric here in the future
+		return false
+	}
+	if node, ok := n.valueToNode[task.node.value]; !ok || node != task.node {
+		return false
+	}
+	// A singleton task added since this one was taken has already replaced or ignored it.
+	if rt, ok := n.registry.taskFor(task.task); ok && rt.singletonMode != 0 &&
+		slices.ContainsFunc(n.newTasks[task.node.value], func(t taskWithAttributes) bool {
+			pendingRT, ok := n.registry.taskFor(t.task)
+			return ok && pendingRT.taskTypeID == rt.taskTypeID
+		}) {
+		return false
+	}
+	n.newTasks[task.node.value] = append(n.newTasks[task.node.value], taskWithAttributes{
+		task:       task.task,
+		attributes: task.attributes,
+		attempt:    task.attempt + 1,
+		notBefore:  at,
+	})
+	return true
+}
+
+// ExecuteSpeculativeSideEffectTask runs the handler of a side-effect task taken with
+// [Node.TakeDueSpeculativeTasks]. The handler gets a ref that resolves only while the task's
+// component is still in the tree.
+func (n *Node) ExecuteSpeculativeSideEffectTask(
+	ctx context.Context,
+	executionKey ExecutionKey,
+	task SpeculativeTask,
+	validate func(NodeBackend, Context, Component) error,
+) (retErr error) {
+	if engineFromContext(ctx) == nil {
+		return serviceerror.NewInternal("no CHASM engine set on context")
+	}
+	registrableTask, ok := n.registry.taskFor(task.task)
+	if !ok || registrableTask.isPureTask {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"ExecuteSpeculativeSideEffectTask called on an unregistered or pure task",
+			fmt.Errorf("%s", reflect.TypeOf(task.task).String()))
+	}
+
+	taskValue := reflect.ValueOf(task.task)
+	ref := ComponentRef{
+		ExecutionKey:  executionKey,
+		archetypeID:   n.ArchetypeID(),
+		componentPath: task.path,
+		inMemoryNode:  task.node,
+		// TaskInvocation attempts start at 1.
+		validationFn: makeValidationFn(registrableTask, validate, task.attempt+1, task.attributes, taskValue),
+	}
+
+	ctx = NewContextWithOperationIntent(ctx, OperationIntentProgress)
+
+	defer log.CapturePanic(n.logger, &retErr)
+
+	return registrableTask.sideEffectTaskExecuteFn(ctx, ref, task.attributes, task.task)
+}
+
+// speculativeWakeupGracePeriod is how long past its fire time an armed wake-up is still expected
+// to run. Older entries may have been lost, so they no longer block arming.
+const speculativeWakeupGracePeriod = time.Second
+
+// ArmSpeculativeTaskWakeup schedules a wake-up for the earliest speculative task if no armed
+// wake-up fires earlier.
+func (n *Node) ArmSpeculativeTaskWakeup() error {
+	fireTime, hasTaskToStart := n.NextSpeculativeTaskTime()
+	if !hasTaskToStart {
+		return nil
+	}
+	now := n.backend.Now()
+	if fireTime.IsZero() {
+		fireTime = now
+	}
+	// Entries are latest first, so lost wake-ups are at the end.
+	lostBefore := now.Add(-speculativeWakeupGracePeriod)
+	for last := len(n.speculativeWakeups) - 1; last >= 0 && n.speculativeWakeups[last].fireTime.Before(lostBefore); last-- {
+		n.speculativeWakeups = n.speculativeWakeups[:last]
+	}
+	if last := len(n.speculativeWakeups) - 1; last >= 0 && !fireTime.Before(n.speculativeWakeups[last].fireTime) {
+		return nil
+	}
+
+	task, err := n.backend.AddSpeculativeTaskWakeup(fireTime)
+	if err != nil {
+		return err
+	}
+	n.speculativeWakeups = append(n.speculativeWakeups, speculativeWakeup{fireTime: fireTime, task: task})
+	return nil
+}
+
+func (n *Node) speculativeTasksEnabled() bool {
+	rc, ok := n.registry.componentFor(n.root().value)
+	return ok && rc.speculativeOptions.EnableTasks
+}
+
+// filterExtraSingletonTasks keeps one pending task per [WithSingletonTask] type for a component.
+// Replace keeps the last one added and Ignore keeps the first.
+func (n *Node) filterExtraSingletonTasks(
+	componentTasks []taskWithAttributes,
+) ([]taskWithAttributes, error) {
+	kept := make([]taskWithAttributes, 0, len(componentTasks))
+	keptIdxByType := make(map[uint32]int)
+	for _, t := range componentTasks {
+		rt, ok := n.registry.taskFor(t.task)
+		if !ok {
+			return nil, softassert.UnexpectedInternalErr(
+				n.logger,
+				"task type is not registered",
+				fmt.Errorf("%s", reflect.TypeOf(t.task).String()))
+		}
+		if rt.singletonMode == 0 {
+			kept = append(kept, t)
+			continue
+		}
+		idx, exists := keptIdxByType[rt.taskTypeID]
+		if !exists {
+			keptIdxByType[rt.taskTypeID] = len(kept)
+			kept = append(kept, t)
+		} else if rt.singletonMode == SingletonTaskModeReplace {
+			kept[idx] = t
+		}
+	}
+	return kept, nil
 }
 
 // TransitionDecision describes the engine's actions for a transition.

@@ -50,6 +50,7 @@ func (l *TestLibrary) Components() []*RegistrableComponent {
 			WithBusinessIDAlias("TestBusinessId"),
 			WithSearchAttributes(TestComponentStartTimeSearchAttribute),
 			WithRecordPrincipals(),
+			WithSpeculativeOptions(SpeculativeOptions{EnableTasks: true}),
 		),
 		NewRegistrableComponent[*TestTimeSkippingImplComponent](testTimeSkippingComponentName),
 		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),

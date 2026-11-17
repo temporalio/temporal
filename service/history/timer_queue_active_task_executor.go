@@ -49,6 +49,10 @@ type (
 	}
 )
 
+// chasmSpeculativeTaskRetryDelay is how long a failed speculative CHASM side-effect task waits
+// before its one retry.
+const chasmSpeculativeTaskRetryDelay = time.Second
+
 func newTimerQueueActiveTaskExecutor(
 	shard historyi.ShardContext,
 	workflowCache wcache.Cache,
@@ -130,6 +134,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
+	case *tasks.ChasmSpeculativeTaskWakeupTask:
+		err = t.executeChasmSpeculativeTaskWakeup(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
@@ -1129,6 +1135,162 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 		tree,
 		task,
 	)
+}
+
+// executeChasmSpeculativeTaskWakeup runs the due tasks that speculative CHASM transitions left in
+// the cached execution. Pure tasks run under the execution lock and side-effect tasks run after it
+// is released. A failed side-effect task is put back once; the queue never retries the wake-up.
+func (t *timerQueueActiveTaskExecutor) executeChasmSpeculativeTaskWakeup(
+	ctx context.Context,
+	task *tasks.ChasmSpeculativeTaskWakeupTask,
+) error {
+	// The memory queue runs tasks for every namespace, so the wake-up checks that this cluster is active.
+	nsEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.NamespaceID))
+	if err != nil {
+		return err
+	}
+	if nsEntry.ActiveClusterName(namespace.RoutingKey{ID: task.WorkflowID}) != t.currentClusterName {
+		return nil
+	}
+
+	tree, sideEffectTasks, err := t.runChasmSpeculativeTaskWakeup(ctx, task)
+	if err != nil || len(sideEffectTasks) == 0 {
+		return err
+	}
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: task.NamespaceID,
+		BusinessID:  task.WorkflowID,
+		RunID:       task.RunID,
+	}
+	validate := func(backend chasm.NodeBackend, _ chasm.Context, _ chasm.Component) error {
+		if backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+			return consts.ErrWorkflowZombie
+		}
+		return nil
+	}
+
+	var failed []chasm.SpeculativeTask
+	for _, sideEffectTask := range sideEffectTasks {
+		if err := t.executeChasmSpeculativeSideEffectTask(ctx, tree, executionKey, sideEffectTask, validate); err != nil {
+			t.logger.Info("Speculative CHASM side-effect task failed.",
+				append(tasks.Tags(task), tag.Error(err))...)
+			failed = append(failed, sideEffectTask)
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return t.requeueChasmSpeculativeTasks(ctx, task, tree, failed)
+}
+
+func (t *timerQueueActiveTaskExecutor) executeChasmSpeculativeSideEffectTask(
+	ctx context.Context,
+	tree historyi.ChasmTree,
+	executionKey chasm.ExecutionKey,
+	task chasm.SpeculativeTask,
+	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+	return tree.ExecuteSpeculativeSideEffectTask(chasm.NewEngineContext(ctx, t.chasmEngine), executionKey, task, validate)
+}
+
+// runChasmSpeculativeTaskWakeup does the part of a wake-up that needs the execution lock. It
+// returns the tree and the side-effect tasks to run without the lock.
+func (t *timerQueueActiveTaskExecutor) runChasmSpeculativeTaskWakeup(
+	ctx context.Context,
+	task *tasks.ChasmSpeculativeTaskWakeupTask,
+) (_ historyi.ChasmTree, _ []chasm.SpeculativeTask, retErr error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	wfCtx, ms, release, err := t.loadCachedSpeculativeExecution(ctx, task)
+	if err != nil || ms == nil {
+		return nil, nil, err
+	}
+	defer func() { release(retErr) }()
+
+	tree := ms.ChasmTree()
+	result, err := tree.RunSpeculativeTaskWakeup(ctx, task, ms.Now())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if result.PureTasksRan {
+		if result.Decision.PersistNow {
+			if err := wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext); err != nil {
+				return nil, nil, err
+			}
+		} else {
+			if err := ms.ValidateChasmSpeculativeTransition(); err != nil {
+				return nil, nil, err
+			}
+			if result.Decision.NotifyPollers {
+				t.chasmEngine.NotifyExecution(chasm.ExecutionKey{
+					NamespaceID: task.NamespaceID,
+					BusinessID:  task.WorkflowID,
+					RunID:       task.RunID,
+				})
+			}
+		}
+	}
+
+	if err := tree.ArmSpeculativeTaskWakeup(); err != nil {
+		return nil, nil, err
+	}
+	return tree, result.SideEffectTasks, nil
+}
+
+// requeueChasmSpeculativeTasks puts failed side-effect tasks back to run once more. Tasks are
+// dropped when the execution was reloaded since they were taken.
+func (t *timerQueueActiveTaskExecutor) requeueChasmSpeculativeTasks(
+	ctx context.Context,
+	task *tasks.ChasmSpeculativeTaskWakeupTask,
+	takenFrom historyi.ChasmTree,
+	failed []chasm.SpeculativeTask,
+) (retErr error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	_, ms, release, err := t.loadCachedSpeculativeExecution(ctx, task)
+	if err != nil || ms == nil {
+		return err
+	}
+	defer func() { release(retErr) }()
+
+	tree := ms.ChasmTree()
+	if tree != takenFrom {
+		return nil
+	}
+	retryAt := ms.Now().Add(chasmSpeculativeTaskRetryDelay)
+	for _, failedTask := range failed {
+		tree.RequeueSpeculativeTask(failedTask, retryAt)
+	}
+	return tree.ArmSpeculativeTaskWakeup()
+}
+
+// loadCachedSpeculativeExecution locks the execution and returns its mutable state only if it is
+// already cached. Speculative tasks live only in the cached copy, so there is nothing to load from
+// the database. A nil mutable state means the lock is already released.
+func (t *timerQueueActiveTaskExecutor) loadCachedSpeculativeExecution(
+	ctx context.Context,
+	task *tasks.ChasmSpeculativeTaskWakeupTask,
+) (historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc, error) {
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if wfCtxImpl, ok := wfCtx.(*workflow.ContextImpl); ok && wfCtxImpl.MutableState == nil {
+		release(nil)
+		return nil, nil, nil, nil
+	}
+	ms, err := wfCtx.LoadMutableState(ctx, t.shardContext)
+	if err != nil {
+		release(err)
+		return nil, nil, nil, err
+	}
+	return wfCtx, ms, release, nil
 }
 
 func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(

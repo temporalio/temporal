@@ -116,6 +116,20 @@ func (mr *MockChasmTreeMockRecorder) ArchetypeID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ArchetypeID", reflect.TypeOf((*MockChasmTree)(nil).ArchetypeID))
 }
 
+// ArmSpeculativeTaskWakeup mocks base method.
+func (m *MockChasmTree) ArmSpeculativeTaskWakeup() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ArmSpeculativeTaskWakeup")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ArmSpeculativeTaskWakeup indicates an expected call of ArmSpeculativeTaskWakeup.
+func (mr *MockChasmTreeMockRecorder) ArmSpeculativeTaskWakeup() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ArmSpeculativeTaskWakeup", reflect.TypeOf((*MockChasmTree)(nil).ArmSpeculativeTaskWakeup))
+}
+
 // CloseTransaction mocks base method.
 func (m *MockChasmTree) CloseTransaction(ctx context.Context, isActive bool) (chasm.NodesMutation, error) {
 	m.ctrl.T.Helper()
@@ -203,6 +217,20 @@ func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectTask(ctx, executionKey, ta
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSideEffectTask), ctx, executionKey, task, validate)
 }
 
+// ExecuteSpeculativeSideEffectTask mocks base method.
+func (m *MockChasmTree) ExecuteSpeculativeSideEffectTask(ctx context.Context, executionKey chasm.ExecutionKey, task chasm.SpeculativeTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteSpeculativeSideEffectTask", ctx, executionKey, task, validate)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecuteSpeculativeSideEffectTask indicates an expected call of ExecuteSpeculativeSideEffectTask.
+func (mr *MockChasmTreeMockRecorder) ExecuteSpeculativeSideEffectTask(ctx, executionKey, task, validate any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSpeculativeSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSpeculativeSideEffectTask), ctx, executionKey, task, validate)
+}
+
 // IsDirty mocks base method.
 func (m *MockChasmTree) IsDirty() bool {
 	m.ctrl.T.Helper()
@@ -284,6 +312,35 @@ func (m *MockChasmTree) RefreshTasks() error {
 func (mr *MockChasmTreeMockRecorder) RefreshTasks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockChasmTree)(nil).RefreshTasks))
+}
+
+// RequeueSpeculativeTask mocks base method.
+func (m *MockChasmTree) RequeueSpeculativeTask(task chasm.SpeculativeTask, at time.Time) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RequeueSpeculativeTask", task, at)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// RequeueSpeculativeTask indicates an expected call of RequeueSpeculativeTask.
+func (mr *MockChasmTreeMockRecorder) RequeueSpeculativeTask(task, at any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequeueSpeculativeTask", reflect.TypeOf((*MockChasmTree)(nil).RequeueSpeculativeTask), task, at)
+}
+
+// RunSpeculativeTaskWakeup mocks base method.
+func (m *MockChasmTree) RunSpeculativeTaskWakeup(ctx context.Context, wakeup *tasks.ChasmSpeculativeTaskWakeupTask, now time.Time) (chasm.SpeculativeWakeupResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunSpeculativeTaskWakeup", ctx, wakeup, now)
+	ret0, _ := ret[0].(chasm.SpeculativeWakeupResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RunSpeculativeTaskWakeup indicates an expected call of RunSpeculativeTaskWakeup.
+func (mr *MockChasmTreeMockRecorder) RunSpeculativeTaskWakeup(ctx, wakeup, now any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunSpeculativeTaskWakeup", reflect.TypeOf((*MockChasmTree)(nil).RunSpeculativeTaskWakeup), ctx, wakeup, now)
 }
 
 // Snapshot mocks base method.

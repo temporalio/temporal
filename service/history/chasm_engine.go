@@ -544,6 +544,9 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		if err := mutableState.ValidateChasmSpeculativeTransition(); err != nil {
 			return nil, err
 		}
+		if err := chasmTree.ArmSpeculativeTaskWakeup(); err != nil {
+			return nil, err
+		}
 		if decision.NotifyPollers {
 			workflowKey := mutableState.GetWorkflowKey()
 			e.NotifyExecution(chasm.ExecutionKey{
@@ -556,9 +559,9 @@ func (e *ChasmEngine) applyUpdateWithLease(
 
 	serializedRef, err := mutableContext.Ref(component)
 	if err != nil {
-		if errors.As(err, new(*serviceerror.NotFound)) {
-			// The update may legitimately delete the addressed component, in which case
-			// there is no new ref to return even though the transition succeeded.
+		if errors.As(err, new(*serviceerror.NotFound)) || errors.Is(err, chasm.ErrSpeculativeComponentRef) {
+			// The transition succeeded but there is no ref to return: the update deleted the
+			// addressed component, or a speculative transition created it and it isn't persisted yet.
 			return nil, nil
 		}
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)

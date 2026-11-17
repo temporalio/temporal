@@ -4484,14 +4484,640 @@ func (s *nodeSuite) TestApplySpeculativeTransition_KeepsNewTasks() {
 	s.NoError(err)
 	mutableContext.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("deferred")})
 
+	// Validated at the speculative apply and again at the real close.
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
 	s.NoError(root.ApplySpeculativeTransition(context.Background()))
 	s.Empty(s.nodeBackend.TasksByCategory)
+
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTransfer], 1)
+}
+
+func (s *nodeSuite) TestTakeDueSpeculativeTasks_RemovesDueOnly() {
+	root, _ := s.cleanTestComponentTree()
+	s.allowSpeculativeTaskValidation()
+	now := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("now")})
+	mutableContext.AddTask(component, TaskAttributes{ScheduledTime: now.Add(time.Minute)}, &TestPureTask{Data: []byte("later")})
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	due, err := root.TakeDueSpeculativeTasks(now)
+	s.NoError(err)
+	s.Len(due, 1)
+	s.Equal([]byte("now"), due[0].task.(*TestSideEffectTask).Data)
+	s.False(due[0].isPure)
+	s.Same(root, due[0].node)
+
+	next, ok := root.NextSpeculativeTaskTime()
+	s.True(ok)
+	s.Equal(now.Add(time.Minute), next)
+
+	due, err = root.TakeDueSpeculativeTasks(now.Add(time.Minute))
+	s.NoError(err)
+	s.Len(due, 1)
+	s.True(due[0].isPure)
+	s.Empty(root.newTasks)
+
+	_, ok = root.NextSpeculativeTaskTime()
+	s.False(ok)
+}
+
+func (s *nodeSuite) TestTakeDueSpeculativeTasks_DropsDeletedComponent() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+	subComponent1 := testComponent.SubComponent1.Get(mutableContext)
+	mutableContext.AddTask(subComponent1, TaskAttributes{}, &TestSideEffectTask{Data: []byte("deleted")})
+	testComponent.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	due, err := root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Empty(due)
+	s.NotContains(root.newTasks, subComponent1)
+}
+
+func (s *nodeSuite) TestTakeDueSpeculativeTasks_TakesChildTasks() {
+	root, _ := s.cleanTestComponentTree()
+	s.allowSpeculativeTaskValidation()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	subComponent11 := component.(*TestComponent).SubComponent1.Get(mutableContext).SubComponent11.Get(mutableContext)
+	mutableContext.AddTask(subComponent11, TaskAttributes{}, &TestSideEffectTask{Data: []byte("child")})
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	due, err := root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Len(due, 1)
+	s.Equal([]byte("child"), due[0].task.(*TestSideEffectTask).Data)
+	s.Same(root.valueToNode[subComponent11], due[0].node)
+	s.Empty(root.newTasks)
+}
+
+func (s *nodeSuite) TestTakeDueSpeculativeTasks_RootNotOptedIn() {
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+	var nilSerializedNodes map[string]*persistencespb.ChasmNode
+	root, err := s.newTestTree(nilSerializedNodes)
+	s.NoError(err)
+	s.NoError(root.SetRootComponent(&TestTimeSkippingImplComponent{
+		ComponentData: &protoMessageType{CreateRequestId: "not-opted-in"},
+	}))
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.nodeBackend.TasksByCategory = nil
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("not-opted-in")})
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	due, err := root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Empty(due)
+	_, ok := root.NextSpeculativeTaskTime()
+	s.False(ok)
 
 	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	_, err = root.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTransfer], 1)
+}
+
+func (s *nodeSuite) TestTakeDueSpeculativeTasks_Singleton() {
+	root, _ := s.cleanTestComponentTree()
+	s.allowSpeculativeTaskValidation()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("replace-first")})
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("replace-second")})
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSingletonIgnoreSideEffectTask{Data: []byte("ignore-first")})
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSingletonIgnoreSideEffectTask{Data: []byte("ignore-second")})
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	due, err := root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Len(due, 2)
+	s.Equal([]byte("replace-second"), due[0].task.(*TestSingletonReplaceSideEffectTask).Data)
+	s.Equal([]byte("ignore-first"), due[1].task.(*TestSingletonIgnoreSideEffectTask).Data)
+}
+
+// allowSpeculativeTaskValidation accepts every task that ApplySpeculativeTransition validates.
+func (s *nodeSuite) allowSpeculativeTaskValidation() {
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+	s.testLibrary.mockSingletonIgnoreSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+}
+
+// addSpeculativeTasks adds tasks to the root component in one speculative transition.
+func (s *nodeSuite) addSpeculativeTasks(root *Node, newTasks ...any) {
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	for _, task := range newTasks {
+		mutableContext.AddTask(component, TaskAttributes{}, task)
+	}
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_InvalidReplaceTaskKeepsEarlier() {
+	root, _ := s.cleanTestComponentTree()
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ Context, _ any, _ TaskInvocation, task *TestSingletonReplaceSideEffectTask) (bool, error) {
+			return string(task.Data) == "valid", nil
+		}).AnyTimes()
+
+	s.addSpeculativeTasks(root, &TestSingletonReplaceSideEffectTask{Data: []byte("valid")})
+	s.addSpeculativeTasks(root, &TestSingletonReplaceSideEffectTask{Data: []byte("invalid")})
+
+	due, err := root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Require().Len(due, 1)
+	s.Equal([]byte("valid"), due[0].task.(*TestSingletonReplaceSideEffectTask).Data)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_InvalidIgnoreTaskKeepsLater() {
+	root, _ := s.cleanTestComponentTree()
+	s.testLibrary.mockSingletonIgnoreSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ Context, _ any, _ TaskInvocation, task *TestSingletonIgnoreSideEffectTask) (bool, error) {
+			return string(task.Data) == "valid", nil
+		}).AnyTimes()
+
+	s.addSpeculativeTasks(root,
+		&TestSingletonIgnoreSideEffectTask{Data: []byte("invalid")},
+		&TestSingletonIgnoreSideEffectTask{Data: []byte("valid")},
+	)
+
+	due, err := root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Require().Len(due, 1)
+	s.Equal([]byte("valid"), due[0].task.(*TestSingletonIgnoreSideEffectTask).Data)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_ReplacedTaskStaysReplaced() {
+	root, _ := s.cleanTestComponentTree()
+	replacementValid := true
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ Context, _ any, _ TaskInvocation, task *TestSingletonReplaceSideEffectTask) (bool, error) {
+			return string(task.Data) == "replaced" || replacementValid, nil
+		}).AnyTimes()
+
+	s.addSpeculativeTasks(root, &TestSingletonReplaceSideEffectTask{Data: []byte("replaced")})
+	s.addSpeculativeTasks(root, &TestSingletonReplaceSideEffectTask{Data: []byte("replacement")})
+	// A later transition invalidates the replacement. The replaced task must not come back.
+	replacementValid = false
+	s.addSpeculativeTasks(root)
+
+	due, err := root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Empty(due)
+}
+
+func (s *nodeSuite) TestRequeueSpeculativeTask_NewerSingletonWins() {
+	root, _ := s.cleanTestComponentTree()
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+
+	s.addSpeculativeTasks(root, &TestSingletonReplaceSideEffectTask{Data: []byte("older")})
+	due, err := root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Require().Len(due, 1)
+
+	s.addSpeculativeTasks(root, &TestSingletonReplaceSideEffectTask{Data: []byte("newer")})
+	s.False(root.RequeueSpeculativeTask(due[0], time.Time{}))
+
+	due, err = root.TakeDueSpeculativeTasks(time.Now())
+	s.NoError(err)
+	s.Require().Len(due, 1)
+	s.Equal([]byte("newer"), due[0].task.(*TestSingletonReplaceSideEffectTask).Data)
+}
+
+func (s *nodeSuite) TestComponent_InMemoryRef_SameNode() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	subComponent1 := component.(*TestComponent).SubComponent1.Get(mutableContext)
+	node := root.valueToNode[subComponent1]
+	ref := ComponentRef{componentPath: node.path(), inMemoryNode: node}
+
+	resolved, err := root.Component(NewContext(context.Background(), root), ref)
+	s.NoError(err)
+	s.Same(subComponent1, resolved)
+}
+
+func (s *nodeSuite) TestComponent_InMemoryRef_Recreated() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+	node := root.valueToNode[testComponent.SubComponent1.Get(mutableContext)]
+	ref := ComponentRef{componentPath: node.path(), inMemoryNode: node}
+
+	testComponent.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	mutableContext = NewMutableContext(context.Background(), root)
+	component, err = root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).SubComponent1 = NewComponentField(mutableContext, &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{CreateRequestId: "recreated"},
+	})
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	recreatedNode, ok := root.findNode(ref.componentPath)
+	s.True(ok)
+	s.NotSame(node, recreatedNode)
+
+	_, err = root.Component(NewContext(context.Background(), root), ref)
+	s.ErrorIs(err, errComponentNotFound)
+}
+
+func (s *nodeSuite) TestArmSpeculativeTaskWakeup_OnlyEarlier() {
+	root, _ := s.cleanTestComponentTree()
+	s.allowSpeculativeTaskValidation()
+	now := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.nodeBackend.HandleNow = func() time.Time { return now }
+	var armed []time.Time
+	s.nodeBackend.HandleAddSpeculativeTaskWakeup = func(fireTime time.Time) (*tasks.ChasmSpeculativeTaskWakeupTask, error) {
+		armed = append(armed, fireTime)
+		return &tasks.ChasmSpeculativeTaskWakeupTask{VisibilityTimestamp: fireTime}, nil
+	}
+
+	addTaskAndArm := func(attributes TaskAttributes) {
+		mutableContext := NewMutableContext(context.Background(), root)
+		component, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		mutableContext.AddTask(component, attributes, &TestSideEffectTask{})
+		s.NoError(root.ApplySpeculativeTransition(context.Background()))
+		s.NoError(root.ArmSpeculativeTaskWakeup())
+	}
+
+	addTaskAndArm(TaskAttributes{ScheduledTime: now.Add(2 * time.Minute)})
+	addTaskAndArm(TaskAttributes{ScheduledTime: now.Add(time.Minute)})
+	addTaskAndArm(TaskAttributes{ScheduledTime: now.Add(3 * time.Minute)})
+	s.Equal([]time.Time{now.Add(2 * time.Minute), now.Add(time.Minute)}, armed)
+
+	// An immediate task fires at the current time.
+	addTaskAndArm(TaskAttributes{})
+	s.Equal([]time.Time{now.Add(2 * time.Minute), now.Add(time.Minute), now}, armed)
+}
+
+func (s *nodeSuite) TestArmSpeculativeTaskWakeup_PrunesLostWakeup() {
+	root, _ := s.cleanTestComponentTree()
+	s.allowSpeculativeTaskValidation()
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	now := start
+	s.nodeBackend.HandleNow = func() time.Time { return now }
+	var armed []*tasks.ChasmSpeculativeTaskWakeupTask
+	s.nodeBackend.HandleAddSpeculativeTaskWakeup = func(fireTime time.Time) (*tasks.ChasmSpeculativeTaskWakeupTask, error) {
+		task := &tasks.ChasmSpeculativeTaskWakeupTask{VisibilityTimestamp: fireTime}
+		armed = append(armed, task)
+		return task, nil
+	}
+
+	addTaskAndArm := func(attributes TaskAttributes) {
+		mutableContext := NewMutableContext(context.Background(), root)
+		component, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		mutableContext.AddTask(component, attributes, &TestSideEffectTask{})
+		s.NoError(root.ApplySpeculativeTransition(context.Background()))
+		s.NoError(root.ArmSpeculativeTaskWakeup())
+	}
+
+	addTaskAndArm(TaskAttributes{ScheduledTime: start.Add(5 * time.Minute)})
+	// This wake-up is lost: it never runs.
+	addTaskAndArm(TaskAttributes{})
+	s.Len(armed, 2)
+	future, lost := armed[0], armed[1]
+
+	// Within the grace period the lost wake-up may still be queued.
+	now = start.Add(speculativeWakeupGracePeriod)
+	addTaskAndArm(TaskAttributes{})
+	s.Len(armed, 2)
+
+	now = start.Add(speculativeWakeupGracePeriod + time.Millisecond)
+	addTaskAndArm(TaskAttributes{})
+	s.Len(armed, 3)
+	s.Equal(now, armed[2].VisibilityTimestamp)
+	s.Equal([]*tasks.ChasmSpeculativeTaskWakeupTask{future, armed[2]}, s.armedSpeculativeWakeups(root))
+	s.NotContains(s.armedSpeculativeWakeups(root), lost)
+}
+
+func (s *nodeSuite) TestArmSpeculativeTaskWakeup_NoTasks() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.HandleAddSpeculativeTaskWakeup = func(time.Time) (*tasks.ChasmSpeculativeTaskWakeupTask, error) {
+		s.FailNow("no wake-up expected")
+		return nil, nil
+	}
+	s.NoError(root.ArmSpeculativeTaskWakeup())
+}
+
+func (s *nodeSuite) armedSpeculativeWakeups(root *Node) []*tasks.ChasmSpeculativeTaskWakeupTask {
+	var armed []*tasks.ChasmSpeculativeTaskWakeupTask
+	for _, w := range root.speculativeWakeups {
+		armed = append(armed, w.task)
+	}
+	return armed
+}
+
+func (s *nodeSuite) takeOneSpeculativeSideEffectTask(
+	root *Node,
+	component Component,
+	now time.Time,
+) SpeculativeTask {
+	mutableContext := NewMutableContext(context.Background(), root)
+	mutableContext.AddTask(component, TaskAttributes{Destination: "destination"}, &TestSideEffectTask{Data: []byte("speculative")})
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	due, err := root.TakeDueSpeculativeTasks(now)
+	s.NoError(err)
+	s.Require().Len(due, 1)
+	return due[0]
+}
+
+func (s *nodeSuite) TestExecuteSpeculativeSideEffectTask_InMemoryRef() {
+	root, _ := s.cleanTestComponentTree()
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	subComponent1 := component.(*TestComponent).SubComponent1.Get(mutableContext)
+	task := s.takeOneSpeculativeSideEffectTask(root, subComponent1, time.Now())
+
+	executionKey := ExecutionKey{NamespaceID: "ns", BusinessID: "id", RunID: "run"}
+	validated := false
+	validate := func(NodeBackend, Context, Component) error {
+		validated = true
+		return nil
+	}
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Execute(gomock.Any(), gomock.Any(), gomock.Eq(TaskAttributes{Destination: "destination"}), gomock.Any()).
+		DoAndReturn(func(_ context.Context, ref ComponentRef, _ TaskAttributes, task *TestSideEffectTask) error {
+			s.Equal(executionKey, ref.ExecutionKey)
+			s.Equal(root.ArchetypeID(), ref.archetypeID)
+			s.Equal([]string{"SubComponent1"}, ref.componentPath)
+			s.Same(root.valueToNode[subComponent1], ref.inMemoryNode)
+			s.Nil(ref.componentInitialVT)
+			s.Nil(ref.executionLastUpdateVT)
+			s.Equal([]byte("speculative"), task.Data)
+
+			resolved, err := root.Component(NewContext(context.Background(), root), ref)
+			s.NoError(err)
+			s.Same(subComponent1, resolved)
+			return nil
+		}).Times(1)
+
+	ctx := NewEngineContext(context.Background(), NewMockEngine(s.controller))
+	s.NoError(root.ExecuteSpeculativeSideEffectTask(ctx, executionKey, task, validate))
+	s.True(validated)
+}
+
+func (s *nodeSuite) TestSpeculativeSideEffectTask_ValidationAttempts() {
+	root, _ := s.cleanTestComponentTree()
+	now := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	var attempts []int
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ Context, _ any, invocation TaskInvocation, _ *TestSideEffectTask) (bool, error) {
+			attempts = append(attempts, invocation.Attempt)
+			return true, nil
+		}).AnyTimes()
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Execute(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
+			_, err := root.Component(NewContext(ctx, root), ref)
+			return err
+		}).Times(2)
+
+	executionKey := ExecutionKey{NamespaceID: "ns", BusinessID: "id", RunID: "run"}
+	validate := func(NodeBackend, Context, Component) error { return nil }
+	ctx := NewEngineContext(context.Background(), NewMockEngine(s.controller))
+	runDueTask := func() SpeculativeTask {
+		due, err := root.TakeDueSpeculativeTasks(now)
+		s.NoError(err)
+		s.Require().Len(due, 1)
+		s.NoError(root.ExecuteSpeculativeSideEffectTask(ctx, executionKey, due[0], validate))
+		return due[0]
+	}
+
+	s.addSpeculativeTasks(root, &TestSideEffectTask{})
+	task := runDueTask()
+	s.True(root.RequeueSpeculativeTask(task, now))
+	s.addSpeculativeTasks(root)
+	runDueTask()
+
+	// Validation when a transition is applied reports 0; runs report 1 and then 2.
+	s.Equal([]int{0, 1, 0, 2}, attempts)
+}
+
+func (s *nodeSuite) TestRequeueSpeculativeTask_RetryOnceThenDrop() {
+	root, _ := s.cleanTestComponentTree()
+	now := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	task := s.takeOneSpeculativeSideEffectTask(root, component, now)
+
+	s.True(root.RequeueSpeculativeTask(task, now.Add(time.Second)))
+	next, ok := root.NextSpeculativeTaskTime()
+	s.True(ok)
+	s.Equal(now.Add(time.Second), next)
+
+	due, err := root.TakeDueSpeculativeTasks(now)
+	s.NoError(err)
+	s.Empty(due)
+
+	due, err = root.TakeDueSpeculativeTasks(now.Add(time.Second))
+	s.NoError(err)
+	s.Require().Len(due, 1)
+	s.Equal(1, due[0].attempt)
+	s.Equal(TaskAttributes{Destination: "destination"}, due[0].attributes)
+
+	s.False(root.RequeueSpeculativeTask(due[0], now.Add(2*time.Second)))
+	s.Empty(root.newTasks)
+}
+
+func (s *nodeSuite) TestRequeueSpeculativeTask_ComponentGone() {
+	root, _ := s.cleanTestComponentTree()
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+	task := s.takeOneSpeculativeSideEffectTask(root, testComponent.SubComponent1.Get(mutableContext), time.Now())
+
+	mutableContext = NewMutableContext(context.Background(), root)
+	component, err = root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).SubComponent1 = NewEmptyField[*TestSubComponent1]()
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	s.False(root.RequeueSpeculativeTask(task, time.Now()))
+	s.Empty(root.newTasks)
+}
+
+func (s *nodeSuite) TestRunSpeculativeTaskWakeup_RunsPureReturnsSideEffect() {
+	root, _ := s.cleanTestComponentTree()
+	now := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.nodeBackend.HandleNow = func() time.Time { return now }
+	wakeup := &tasks.ChasmSpeculativeTaskWakeupTask{VisibilityTimestamp: now}
+	s.nodeBackend.HandleAddSpeculativeTaskWakeup = func(time.Time) (*tasks.ChasmSpeculativeTaskWakeupTask, error) {
+		return wakeup, nil
+	}
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	mutableContext.AddTask(component, TaskAttributes{ScheduledTime: now}, &TestPureTask{Data: []byte("pure")})
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("side-effect")})
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+
+	// A scheduled pure task is validated when its transition is applied, before it runs, and after,
+	// to check it invalidated itself.
+	gomock.InOrder(
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Execute(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ MutableContext, c any, _ TaskAttributes, _ *TestPureTask) error {
+				c.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: "pure-ran"}
+				return nil
+			}),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil),
+	)
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.NoError(root.ArmSpeculativeTaskWakeup())
+
+	result, err := root.RunSpeculativeTaskWakeup(context.Background(), wakeup, now)
+	s.NoError(err)
+	s.True(result.PureTasksRan)
+	s.False(result.Decision.PersistNow)
+	s.Require().Len(result.SideEffectTasks, 1)
+	s.Equal([]byte("side-effect"), result.SideEffectTasks[0].task.(*TestSideEffectTask).Data)
+	s.Equal("pure-ran", component.(*TestComponent).ComponentData.GetCreateRequestId())
+	s.Empty(root.newTasks)
+
+	// Nothing is left to run.
+	result, err = root.RunSpeculativeTaskWakeup(context.Background(), wakeup, now)
+	s.NoError(err)
+	s.Equal(SpeculativeWakeupResult{}, result)
+}
+
+func (s *nodeSuite) TestRunSpeculativeTaskWakeup_PrunedWakeupRunsDueTasks() {
+	root, _ := s.cleanTestComponentTree()
+	s.allowSpeculativeTaskValidation()
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	now := start
+	s.nodeBackend.HandleNow = func() time.Time { return now }
+	var armed []*tasks.ChasmSpeculativeTaskWakeupTask
+	s.nodeBackend.HandleAddSpeculativeTaskWakeup = func(fireTime time.Time) (*tasks.ChasmSpeculativeTaskWakeupTask, error) {
+		task := &tasks.ChasmSpeculativeTaskWakeupTask{VisibilityTimestamp: fireTime}
+		armed = append(armed, task)
+		return task, nil
+	}
+
+	addTaskAndArm := func() {
+		mutableContext := NewMutableContext(context.Background(), root)
+		component, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		mutableContext.AddTask(component, TaskAttributes{}, &TestSideEffectTask{})
+		s.NoError(root.ApplySpeculativeTransition(context.Background()))
+		s.NoError(root.ArmSpeculativeTaskWakeup())
+	}
+
+	addTaskAndArm()
+	// The first wake-up is still queued when a later update prunes it and arms another.
+	now = start.Add(speculativeWakeupGracePeriod + time.Millisecond)
+	addTaskAndArm()
+	s.Require().Len(armed, 2)
+	pruned, replacement := armed[0], armed[1]
+
+	result, err := root.RunSpeculativeTaskWakeup(context.Background(), pruned, now)
+	s.NoError(err)
+	s.Len(result.SideEffectTasks, 2)
+
+	// Nothing is left to run, so nothing new is armed.
+	s.NoError(root.ArmSpeculativeTaskWakeup())
+	s.Len(armed, 2)
+
+	result, err = root.RunSpeculativeTaskWakeup(context.Background(), replacement, now)
+	s.NoError(err)
+	s.Equal(SpeculativeWakeupResult{}, result)
+}
+
+func (s *nodeSuite) TestRunSpeculativeTaskWakeup_DropsDueWakeups() {
+	root, _ := s.cleanTestComponentTree()
+	s.allowSpeculativeTaskValidation()
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	now := start
+	s.nodeBackend.HandleNow = func() time.Time { return now }
+	var armed []*tasks.ChasmSpeculativeTaskWakeupTask
+	s.nodeBackend.HandleAddSpeculativeTaskWakeup = func(fireTime time.Time) (*tasks.ChasmSpeculativeTaskWakeupTask, error) {
+		task := &tasks.ChasmSpeculativeTaskWakeupTask{VisibilityTimestamp: fireTime}
+		armed = append(armed, task)
+		return task, nil
+	}
+
+	addTaskAndArm := func(attributes TaskAttributes) {
+		mutableContext := NewMutableContext(context.Background(), root)
+		component, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		mutableContext.AddTask(component, attributes, &TestSideEffectTask{})
+		s.NoError(root.ApplySpeculativeTransition(context.Background()))
+		s.NoError(root.ArmSpeculativeTaskWakeup())
+	}
+
+	addTaskAndArm(TaskAttributes{ScheduledTime: start.Add(500 * time.Millisecond)})
+	// This wake-up is lost: it never runs.
+	addTaskAndArm(TaskAttributes{})
+	addTaskAndArm(TaskAttributes{ScheduledTime: start.Add(time.Minute)})
+	s.Require().Len(armed, 2)
+	firing, lost := armed[0], armed[1]
+
+	// The lost wake-up is still within the grace period when the later one runs.
+	now = start.Add(500 * time.Millisecond)
+	result, err := root.RunSpeculativeTaskWakeup(context.Background(), firing, now)
+	s.NoError(err)
+	s.Len(result.SideEffectTasks, 2)
+
+	// The run dropped the lost wake-up, so the remaining task is armed.
+	s.NoError(root.ArmSpeculativeTaskWakeup())
+	s.Require().Len(armed, 3)
+	s.Equal(start.Add(time.Minute), armed[2].VisibilityTimestamp)
+	s.Equal([]*tasks.ChasmSpeculativeTaskWakeupTask{armed[2]}, s.armedSpeculativeWakeups(root))
+	s.NotContains(s.armedSpeculativeWakeups(root), lost)
 }
 
 func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {

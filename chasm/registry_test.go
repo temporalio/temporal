@@ -122,6 +122,32 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
 	s.Require().False(normalRC.IsDetached())
 }
 
+func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithSpeculativeOptions() {
+	r := chasm.NewRegistry(s.logger)
+	ctrl := gomock.NewController(s.T())
+	lib := chasm.NewMockLibrary(ctrl)
+	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
+	lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*chasm.MockComponent](
+			"SpeculativeComponent",
+			chasm.WithSpeculativeOptions(chasm.SpeculativeOptions{EnableTasks: true}),
+		),
+	})
+	lib.EXPECT().Tasks().Return(nil)
+	lib.EXPECT().NexusServices().Return(nil)
+	lib.EXPECT().NexusServiceProcessors().Return(nil)
+
+	err := r.Register(lib)
+	s.Require().NoError(err)
+
+	speculativeRC, ok := r.Component("TestLibrary.SpeculativeComponent")
+	s.Require().True(ok)
+	s.Require().True(speculativeRC.SpeculativeOptions().EnableTasks)
+
+	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
+	s.Require().False(normalRC.SpeculativeOptions().EnableTasks)
+}
+
 func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithRetention() {
 	r := chasm.NewRegistry(s.logger)
 	ctrl := gomock.NewController(s.T())
