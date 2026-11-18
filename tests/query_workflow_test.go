@@ -269,27 +269,10 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		queryRejectCondition enumspb.QueryRejectCondition
 	}
 
-	runTestCase := func(s *QueryWorkflowSuite, tc testCase, completed bool) {
-		ctx := s.Context()
-		wid := testcore.RandomizeStr("nexus-query-workflow-tests")
-		run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-			ID:        wid,
-			TaskQueue: env.WorkerTaskQueue(),
-		}, workflowFn)
-		s.NoError(err)
-		closeWorkflow := func() {
-			s.NoError(env.SdkClient().SignalWorkflow(ctx, wid, "", signalName, "order-delivered"))
-			s.NoError(run.Get(ctx, nil))
-		}
-		if completed {
-			// set the query result via signal so that query "reload" on completed workflow is verified inline
-			closeWorkflow()
-		} else {
-			defer closeWorkflow()
-		}
-		resp, err := env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+	checkQueryLink := func(s *QueryWorkflowSuite, run sdkclient.WorkflowRun, tc testCase) {
+		resp, err := env.FrontendClient().QueryWorkflow(s.Context(), &workflowservice.QueryWorkflowRequest{
 			Namespace:            env.Namespace().String(),
-			Execution:            &commonpb.WorkflowExecution{WorkflowId: wid},
+			Execution:            &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 			Query:                tc.query,
 			QueryRejectCondition: tc.queryRejectCondition,
 		})
@@ -301,7 +284,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		link := resp.GetLink().GetWorkflow()
 		s.NotNil(link, "query must carry a link of type workflow")
 		s.Equal(env.Namespace().String(), link.GetNamespace())
-		s.Equal(wid, link.GetWorkflowId())
+		s.Equal(run.GetID(), link.GetWorkflowId())
 		s.Equal(run.GetRunID(), link.GetRunId())
 		s.Equal(tc.reason, link.GetReason())
 		if tc.result != "" {
@@ -309,10 +292,28 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		}
 	}
 
-	runCases := func(groupName string, cases []testCase, completed bool) {
+	runCases := func(groupName string, cases []testCase, completeBeforeQuery bool) {
 		for _, tc := range cases {
-			s.RunSequential(groupName+"/"+tc.name, func(s *QueryWorkflowSuite) { //nolint:testifylint // subtests need serialized execution(running, completed)
-				runTestCase(s, tc, completed)
+			s.Run(groupName+"/"+tc.name, func(s *QueryWorkflowSuite) {
+				ctx := s.Context()
+				wid := testcore.RandomizeStr("nexus-query-workflow-tests")
+				run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+					ID:        wid,
+					TaskQueue: env.WorkerTaskQueue(),
+				}, workflowFn)
+				s.NoError(err)
+				closeWorkflow := func() {
+					s.NoError(env.SdkClient().SignalWorkflow(ctx, wid, "", signalName, "order-delivered"))
+					s.NoError(run.Get(ctx, nil))
+				}
+				if completeBeforeQuery {
+					// set the query result via signal so that query "reload" on completed workflow is verified inline
+					closeWorkflow()
+				} else {
+					defer closeWorkflow()
+				}
+
+				checkQueryLink(s, run, tc)
 			})
 		}
 	}
