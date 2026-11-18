@@ -6,6 +6,7 @@ import (
 	"maps"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/wideevents"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -632,4 +634,80 @@ func versionHistoryEntries(items []*historyspb.VersionHistoryItem) []wideevents.
 		out = append(out, wideevents.VersionHistoryEntry{EventID: item.GetEventId(), Version: item.GetVersion()})
 	}
 	return out
+}
+
+// emitBufferedEventsSkipped records that a state-sync task was converted to nothing because the
+// source mutable state had buffered events. Such a skip relies on a later transition to carry the
+// state once the buffer flushes. If no later transition is shipped first, for example because the
+// namespace enters handover and the source stops accepting writes, the target is left behind with
+// no other trace of the skip. The workflow's replication state is recorded so skips that precede a
+// handover can be found. It never affects control flow.
+func emitBufferedEventsSkipped(
+	shardContext historyi.ShardContext,
+	taskInfo tasks.Task,
+	targetClusterID int32,
+	mutableState historyi.MutableState,
+) {
+	if !shardContext.GetConfig().EmitReplicationLifecycleEvents() {
+		return
+	}
+	logger := shardContext.GetEventLogger()
+	if logger == nil {
+		return
+	}
+	namespaceName := ""
+	replicationState := enumspb.REPLICATION_STATE_UNSPECIFIED
+	if nsEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID())); err == nil {
+		namespaceName = nsEntry.Name().String()
+		replicationState = nsEntry.ReplicationState(taskInfo.GetWorkflowID())
+	}
+
+	clusterMetadata := shardContext.GetClusterMetadata()
+	payload := wideevents.ReplicationLifecyclePayload{
+		TaskType:      replicationTaskTypeName(taskInfo),
+		Shard:         shardContext.GetShardID(),
+		Namespace:     namespaceName,
+		NamespaceID:   taskInfo.GetNamespaceID(),
+		WorkflowID:    taskInfo.GetWorkflowID(),
+		RunID:         taskInfo.GetRunID(),
+		SourceCluster: clusterMetadata.GetCurrentClusterName(),
+		SourceShard:   shardContext.GetShardID(),
+		SourceTaskID:  taskInfo.GetTaskID(),
+	}
+	// The error phase emits only the common identity plus details, so the target and the event range
+	// the target is now missing ride in details.
+	details := map[string]any{
+		"disposition":           wideevents.ReplDispositionDiscarded,
+		"classification":        wideevents.ReplErrorClassificationBufferedEvents,
+		"replication_state":     replicationState.String(),
+		"buffered_events_count": mutableState.NumBufferedEvents(),
+		"source_next_event_id":  mutableState.GetNextEventID(),
+	}
+	// The started workflow task is what events buffer behind; its start time bounds how long the
+	// buffer has been open.
+	if wft := mutableState.GetStartedWorkflowTask(); wft != nil {
+		details["started_wft_scheduled_event_id"] = wft.ScheduledEventID
+		details["started_wft_started_event_id"] = wft.StartedEventID
+		details["started_wft_started_time"] = wft.StartedTime
+		details["started_wft_attempt"] = wft.Attempt
+	}
+	if name, _, err := ClusterIDToClusterNameShardCount(clusterMetadata.GetAllClusterInfo(), targetClusterID); err == nil {
+		details["target_cluster"] = name
+	}
+	if svt, ok := taskInfo.(*tasks.SyncVersionedTransitionTask); ok {
+		details["task_first_event_id"] = svt.FirstEventID
+		details["task_next_event_id"] = svt.NextEventID
+		if vt := svt.VersionedTransition; vt != nil {
+			payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
+			payload.TransitionCount = vt.GetTransitionCount()
+		}
+	}
+	wideevents.EmitReplicationError(
+		logger,
+		payload,
+		wideevents.ReplOperationTaskConversion,
+		"Skipped state sync because source has buffered events",
+		nil,
+		details,
+	)
 }
