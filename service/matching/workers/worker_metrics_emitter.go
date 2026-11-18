@@ -168,13 +168,18 @@ func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb 
 		s := wideevents.WorkerTaskTypeStats{}
 		if pollerInfo != nil {
 			s.CurrentPollers = new(pollerInfo.GetCurrentPollers())
-			// TODO: Use the SDK-reported poller target when available.
-			s.TargetPollers = s.CurrentPollers
+			// A target of 0 means the SDK did not report one: either it predates
+			// the field, or the pool never started. A real target is always at
+			// least 1, so leave the stat unset rather than export a false zero.
+			if target := pollerInfo.GetTargetPollers(); target > 0 {
+				s.TargetPollers = new(target)
+			}
 		}
 		if stickyInfo != nil {
 			s.CurrentStickyPollers = new(stickyInfo.GetCurrentPollers())
-			// TODO: Use the SDK-reported sticky poller target when available.
-			s.TargetStickyPollers = s.CurrentStickyPollers
+			if target := stickyInfo.GetTargetPollers(); target > 0 {
+				s.TargetStickyPollers = new(target)
+			}
 		}
 		if slots != nil {
 			totalSlots := slots.GetCurrentAvailableSlots() + slots.GetCurrentUsedSlots()

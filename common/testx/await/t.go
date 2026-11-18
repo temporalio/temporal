@@ -66,7 +66,7 @@ func (t *T) Errorf(format string, args ...any) {
 // Unlike testing.TB.FailNow(), this does NOT mark the test as failed.
 func (t *T) FailNow() {
 	t.Fail()
-	panic(attemptFailed{})
+	panic(attemptFailed{}) //nolint:forbidigo // Unwind only the current assertion attempt.
 }
 
 // Fatal records an error message and stops this attempt.
