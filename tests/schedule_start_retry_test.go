@@ -54,7 +54,7 @@ func (suite *ScheduleCHASMSuite) TestStartsAfterAPSRetryExhaustion() {
 				return nil
 			})
 			first := time.Now().UTC().Truncate(time.Second).Add(3 * time.Second)
-			second := first.Add(10 * time.Second)
+			second := first.Add(20 * time.Second)
 			sched := &schedulepb.Schedule{
 				Spec:     &schedulepb.ScheduleSpec{Calendar: []*schedulepb.CalendarSpec{calendarSpec(first), calendarSpec(second)}},
 				Action:   startWorkflowAction(env, wid, wt),
