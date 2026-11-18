@@ -1093,6 +1093,7 @@ func (s *matchingEngineSuite) TestRespondNexusTask_RejectsOtherNamespace() {
 						Outcome: &matchingservice.DispatchNexusTaskResponse_Response{Response: completed.GetResponse()},
 					}
 				} else {
+					//nolint:staticcheck // SA1019: v1.30 matching forwards the legacy Nexus handler error.
 					failed := &workflowservice.RespondNexusTaskFailedRequest{Error: &nexuspb.HandlerError{Failure: &nexuspb.Failure{Message: "failed"}}}
 					respond = func(nsID string) error {
 						_, err := s.matchingEngine.RespondNexusTaskFailed(context.Background(), &matchingservice.RespondNexusTaskFailedRequest{
@@ -1104,6 +1105,7 @@ func (s *matchingEngineSuite) TestRespondNexusTask_RejectsOtherNamespace() {
 						return err
 					}
 					expected = &matchingservice.DispatchNexusTaskResponse{
+						//nolint:staticcheck // SA1019: v1.30 matching forwards the legacy Nexus handler error.
 						Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{HandlerError: failed.GetError()},
 					}
 				}
