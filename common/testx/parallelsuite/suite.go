@@ -39,6 +39,8 @@ type Scope interface {
 	TB() testing.TB
 	Require() *require.Assertions
 	AssertionT() require.TestingT
+
+	// Common assertions for test helpers.
 	NoError(err error, msgAndArgs ...any)
 	Equal(expected, actual any, msgAndArgs ...any)
 	Nil(object any, msgAndArgs ...any)
