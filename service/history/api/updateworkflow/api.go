@@ -221,7 +221,11 @@ func (u *Updater) applyRequest(
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
 	}
-	u.newUpdateWithNexusContext = !alreadyExisted && updateRequest.GetPropagatedNexusSerializationContext() != nil
+	// Sticky: update-with-start can re-apply this request on the same registry, where the Update this
+	// request admitted already exists.
+	if !alreadyExisted && updateRequest.GetPropagatedNexusSerializationContext() != nil {
+		u.newUpdateWithNexusContext = true
+	}
 
 	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
 	if err != nil {

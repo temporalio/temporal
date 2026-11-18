@@ -248,20 +248,25 @@ func TestApplyRequest_MarksNewUpdateWithNexusContext(t *testing.T) {
 	ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
 	registry := update.NewRegistry(ms)
 
-	apply := func(id string, nexusContext *nexuspb.PropagatedSerializationContext) bool {
+	newUpdater := func(id string, nexusContext *nexuspb.PropagatedSerializationContext) *Updater {
 		req := createUpdateRequest(id)
 		req.Request.Request.Input = &updatepb.Input{Name: "update"}
 		req.Request.Request.PropagatedNexusSerializationContext = nexusContext
-		updater := &Updater{req: req}
+		return &Updater{req: req}
+	}
+	apply := func(updater *Updater) bool {
 		_, err := updater.ApplyRequest(context.Background(), registry, ms)
 		require.NoError(t, err)
 		return updater.newUpdateWithNexusContext
 	}
 	nexusContext := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "service", Operation: "operation"}
 
-	require.True(t, apply("with-context", nexusContext))
-	require.False(t, apply("with-context", nexusContext), "a duplicate request for an existing Update is not new")
-	require.False(t, apply("without-context", nil))
+	updater := newUpdater("with-context", nexusContext)
+	require.True(t, apply(updater))
+	// Update-with-start can re-apply the same request on the same registry.
+	require.True(t, apply(updater), "re-applying the request that admitted the Update keeps it marked")
+	require.False(t, apply(newUpdater("with-context", nexusContext)), "a duplicate request for an existing Update is not new")
+	require.False(t, apply(newUpdater("without-context", nil)))
 }
 
 // An Update whose callbacks would breach the execution's limits must be rejected before it is
