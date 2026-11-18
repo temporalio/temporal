@@ -856,6 +856,44 @@ func (mr *MockClusterMetadataStoreMockRecorder) UpsertClusterMembership(ctx, req
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertClusterMembership", reflect.TypeOf((*MockClusterMetadataStore)(nil).UpsertClusterMembership), ctx, request)
 }
 
+// MockRunAlreadyExistsChecker is a mock of RunAlreadyExistsChecker interface.
+type MockRunAlreadyExistsChecker struct {
+	ctrl     *gomock.Controller
+	recorder *MockRunAlreadyExistsCheckerMockRecorder
+	isgomock struct{}
+}
+
+// MockRunAlreadyExistsCheckerMockRecorder is the mock recorder for MockRunAlreadyExistsChecker.
+type MockRunAlreadyExistsCheckerMockRecorder struct {
+	mock *MockRunAlreadyExistsChecker
+}
+
+// NewMockRunAlreadyExistsChecker creates a new mock instance.
+func NewMockRunAlreadyExistsChecker(ctrl *gomock.Controller) *MockRunAlreadyExistsChecker {
+	mock := &MockRunAlreadyExistsChecker{ctrl: ctrl}
+	mock.recorder = &MockRunAlreadyExistsCheckerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRunAlreadyExistsChecker) EXPECT() *MockRunAlreadyExistsCheckerMockRecorder {
+	return m.recorder
+}
+
+// SupportsCheckRunAlreadyExists mocks base method.
+func (m *MockRunAlreadyExistsChecker) SupportsCheckRunAlreadyExists() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SupportsCheckRunAlreadyExists")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SupportsCheckRunAlreadyExists indicates an expected call of SupportsCheckRunAlreadyExists.
+func (mr *MockRunAlreadyExistsCheckerMockRecorder) SupportsCheckRunAlreadyExists() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SupportsCheckRunAlreadyExists", reflect.TypeOf((*MockRunAlreadyExistsChecker)(nil).SupportsCheckRunAlreadyExists))
+}
+
 // MockExecutionStore is a mock of ExecutionStore interface.
 type MockExecutionStore struct {
 	ctrl     *gomock.Controller

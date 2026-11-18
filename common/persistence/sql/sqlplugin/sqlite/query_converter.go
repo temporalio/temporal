@@ -158,7 +158,7 @@ func (c *queryConverter) BuildSelectStmt(
 
 	if queryParams.QueryExpr != nil {
 		if queryString := sqlparser.String(queryParams.QueryExpr); queryString != "" {
-			whereClauses = append(whereClauses, queryString)
+			whereClauses = append(whereClauses, "("+queryString+")")
 		}
 	}
 

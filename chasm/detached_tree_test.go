@@ -17,15 +17,16 @@ func TestReadOnlyNodeBackend_UnsupportedPanics(t *testing.T) {
 	})
 
 	for name, call := range map[string]func(){
-		"NextTransitionCount":  func() { backend.NextTransitionCount() },
-		"AddTasks":             func() { backend.AddTasks() },
-		"DeleteCHASMPureTasks": func() { backend.DeleteCHASMPureTasks(time.Time{}) },
-		"GetNamespaceEntry":    func() { backend.GetNamespaceEntry() },
-		"GetCurrentVersion":    func() { backend.GetCurrentVersion() },
+		"NextTransitionCount":          func() { backend.NextTransitionCount() },
+		"AddTasks":                     func() { backend.AddTasks() },
+		"DeletePhysicalCHASMPureTasks": func() { backend.DeletePhysicalCHASMPureTasks(time.Time{}) },
+		"GetNamespaceEntry":            func() { backend.GetNamespaceEntry() },
+		"GetCurrentVersion":            func() { backend.GetCurrentVersion() },
 		"ChasmSkipPersistenceEnabled": func() {
 			backend.ChasmSkipPersistenceEnabled()
 		},
 		"SetTimeSkippingConfig":        func() { backend.SetTimeSkippingConfig(nil) },
+		"IsTimeSkippingFeatureEnabled": func() { backend.IsTimeSkippingFeatureEnabled(SchedulerArchetypeID) },
 		"RecordTimeSkippingTransition": func() { backend.RecordTimeSkippingTransition(nil) },
 		"ChasmDLQScheduledPureTaskOnValidationEnabled": func() {
 			backend.ChasmDLQScheduledPureTaskOnValidationEnabled()

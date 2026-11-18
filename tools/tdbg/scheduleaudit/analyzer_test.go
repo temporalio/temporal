@@ -918,6 +918,29 @@ func TestAuditor(t *testing.T) {
 		require.Equal(t, 4, r.Count(categoryRealMiss))
 		require.Zero(t, r.Count(categorySkipOverlap))
 	})
+
+	t.Run("closed target stream: returns once drained", func(t *testing.T) {
+		// An empty stream deterministically hits the path where drainInput observes the closed input with no work
+		// queued or active; the dispatcher must exit instead of blocking in select.
+		a := &Auditor{
+			WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
+			WindowEnd:   mustParseTime("2026-05-19T20:00:00Z"),
+			Schedules:   &fakeScheduleLoader{},
+			Executions:  &fakeExecutionLoader{},
+			Progress:    io.Discard,
+		}
+		done := make(chan error, 1)
+		go func() {
+			_, err := runAudit(a)
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(10 * time.Second):
+			require.FailNow(t, "Auditor.Run did not return after the target stream was closed")
+		}
+	})
 }
 
 func TestScheduledTimesJitter(t *testing.T) {

@@ -376,6 +376,22 @@ func TestDefaultReplicationResolver_ActiveInCluster(t *testing.T) {
 	}
 }
 
+func TestDefaultReplicationResolver_CanDeleteNamespaceFromCluster(t *testing.T) {
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "active-cluster",
+			Clusters:          []string{"active-cluster", "passive-cluster"},
+		},
+		FailoverVersion: 1,
+	}
+	resolver := factory(detail)
+
+	require.True(t, resolver.CanDeleteNamespaceFromCluster("active-cluster"))
+	require.False(t, resolver.CanDeleteNamespaceFromCluster("passive-cluster"))
+	require.True(t, resolver.CanDeleteNamespaceFromCluster("removed-cluster"))
+}
+
 func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	factory := namespace.NewDefaultReplicationResolverFactory()
 

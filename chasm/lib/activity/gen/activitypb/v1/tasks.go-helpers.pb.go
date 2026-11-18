@@ -192,6 +192,80 @@ func (this *HeartbeatTimeoutTask) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type WorkerCommandDispatchTask to the protobuf v3 wire format
+func (val *WorkerCommandDispatchTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type WorkerCommandDispatchTask from the protobuf v3 wire format
+func (val *WorkerCommandDispatchTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *WorkerCommandDispatchTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two WorkerCommandDispatchTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *WorkerCommandDispatchTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *WorkerCommandDispatchTask
+	switch t := that.(type) {
+	case *WorkerCommandDispatchTask:
+		that1 = t
+	case WorkerCommandDispatchTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CancelCommand to the protobuf v3 wire format
+func (val *CancelCommand) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CancelCommand from the protobuf v3 wire format
+func (val *CancelCommand) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CancelCommand) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CancelCommand values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CancelCommand) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CancelCommand
+	switch t := that.(type) {
+	case *CancelCommand:
+		that1 = t
+	case CancelCommand:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 var (
 	DispatchReason_shorthandValue = map[string]int32{
 		"Unspecified": 0,

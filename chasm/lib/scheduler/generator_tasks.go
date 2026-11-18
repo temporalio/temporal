@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -143,6 +144,9 @@ func (g *GeneratorTaskHandler) Execute(
 
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
+	// Task progress is independent of action progress. An obsolete timer can
+	// execute without processing an action and must still invalidate itself.
+	generator.LastProcessedTaskTime = timestamppb.New(util.MaxTime(t2, generator.GetLastProcessedTaskTime().AsTime()))
 	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
 	g.rearmTasks(ctx, generator, scheduler, metricsHandler, tweakables.IdleTime, result.NextWakeupTime)
@@ -202,10 +206,18 @@ func (g *GeneratorTaskHandler) rearmTasks(
 	sched.IdleCloseTime = nil
 
 	if !nextWakeupTime.IsZero() {
-		// Keep the generator task perpetually scheduled. When paused, the next
-		// fire will simply advance the HWM without appending actions (handled in
-		// ProcessTimeRange).
-		generator.scheduleTask(ctx, nextWakeupTime)
+		// A clock rollback can put the next action before the task validation
+		// watermark. Defer the wakeup to the next queue tick after that watermark
+		// so it remains valid. Keep the action cursor so the delayed action is
+		// processed when the clock catches up, subject to the catchup window.
+		validationWatermark := util.MaxTime(
+			generator.GetLastProcessedTime().AsTime(),
+			generator.GetLastProcessedTaskTime().AsTime(),
+		)
+		earliestWakeup := validationWatermark.
+			Truncate(common.ScheduledTaskMinPrecision).
+			Add(common.ScheduledTaskMinPrecision)
+		generator.scheduleTask(ctx, util.MaxTime(nextWakeupTime, earliestWakeup))
 	} else {
 		// Hold open without a task: see the comment block above.
 		metricsHandler.Counter(metrics.SchedulerGeneratorLoopCompleted.Name()).Record(1)
@@ -229,7 +241,7 @@ func (g *GeneratorTaskHandler) Validate(
 	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
 	return validateTaskHighWaterMark(
-		generator.GetLastProcessedTime(),
+		timestamppb.New(util.MaxTime(generator.GetLastProcessedTime().AsTime(), generator.GetLastProcessedTaskTime().AsTime())),
 		attrs.ScheduledTime,
 	)
 }

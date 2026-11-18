@@ -193,6 +193,80 @@ func TestPlanAPIRelease(t *testing.T) {
 	}
 }
 
+// TestPlanAPIReleaseCandidate covers the one difference a release candidate
+// makes: the release is planned in full and reported, but not performed.
+// Everything else about the branch is decided exactly as its cloud branch is,
+// so a candidate that cannot be planned still fails.
+func TestPlanAPIReleaseCandidate(t *testing.T) {
+	const branch = "master"
+	const rcBranch = "cloud/v1.33.0-165-rc.20261014113044"
+	repo := initLocalRepo(t, branch)
+	setupLocalKnownModules(t, repo, branch)
+	stubResolveCommit(t, "full-api-go-sha", "corresponding-api-sha")
+
+	pseudo := func(tag, hash string) string {
+		return fmt.Sprintf("%s-0.20240101000000-%s", tag, hash[:12])
+	}
+
+	t.Run("a release degrades to a dry run", func(t *testing.T) {
+		f := parseGoMod(t, makeGoMod(map[string]string{
+			apiModulePath:        pseudo("v1.2.5", repo.untaggedHash),
+			"go.temporal.io/sdk": "v1.31.0",
+		}))
+
+		plan, err := planAPIRelease(context.Background(), rcBranch, f)
+		require.NoError(t, err)
+		require.Equal(t, actionDryRun, plan.action)
+		require.Contains(t, plan.reason, "is a release candidate")
+
+		// What would have been dispatched is still reported, so the dry run
+		// shows the release it is standing in for.
+		require.Equal(t, "v1.2.5", plan.tag)
+		require.Equal(t, "v1.2.4", plan.baseTag)
+		require.Equal(t, "full-api-go-sha", plan.apiGoSHA)
+		require.Equal(t, "corresponding-api-sha", plan.apiRef)
+	})
+
+	t.Run("a no-op stays a no-op", func(t *testing.T) {
+		f := parseGoMod(t, makeGoMod(map[string]string{
+			apiModulePath:        pseudo("v1.2.5", repo.lightweightTagHash),
+			"go.temporal.io/sdk": "v1.31.0",
+		}))
+
+		plan, err := planAPIRelease(context.Background(), rcBranch, f)
+		require.NoError(t, err)
+		require.Equal(t, actionNoop, plan.action)
+	})
+
+	// The collision that prompted the dry run: a candidate pinning a stale
+	// pseudo-version whose tag another commit already holds. Reporting it is
+	// the point, so it fails here as it would on the cloud branch.
+	t.Run("a planning failure still fails", func(t *testing.T) {
+		f := parseGoMod(t, makeGoMod(map[string]string{
+			apiModulePath:        pseudo("v1.2.4", repo.untaggedHash),
+			"go.temporal.io/sdk": "v1.31.0",
+		}))
+
+		plan, err := planAPIRelease(context.Background(), rcBranch, f)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "tag v1.2.4 already exists")
+		require.NotEqual(t, actionDryRun, plan.action)
+	})
+
+	// The marker is what distinguishes the two, so the branch it is a
+	// candidate for must still release.
+	t.Run("the cloud branch it precedes still releases", func(t *testing.T) {
+		f := parseGoMod(t, makeGoMod(map[string]string{
+			apiModulePath:        pseudo("v1.2.5", repo.untaggedHash),
+			"go.temporal.io/sdk": "v1.31.0",
+		}))
+
+		plan, err := planAPIRelease(context.Background(), "cloud/v1.33.0-165", f)
+		require.NoError(t, err)
+		require.Equal(t, actionRelease, plan.action)
+	})
+}
+
 func TestPlanAPIReleaseModuleMissing(t *testing.T) {
 	f := parseGoMod(t, "module test\n\ngo 1.21\n")
 	_, err := planAPIRelease(context.Background(), "cloud/v1.32.0-163", f)

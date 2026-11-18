@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"testing"
 	"time"
 
@@ -472,6 +473,7 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 				metricsHandler:    metricsHandler,
 				logger:            log.NewTestLogger(),
 				matchingClient:    matchingClient,
+				linkValidator:     test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 			}
 
 			callback := newNexusHandlerCallback(t)
@@ -645,6 +647,7 @@ func TestExecuteInvocationTaskNexusHandler_DispatchedRequest(t *testing.T) {
 				metricsHandler:    metrics.NoopMetricsHandler,
 				logger:            log.NewTestLogger(),
 				matchingClient:    matchingClient,
+				linkValidator:     test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 			}
 
 			callback := newNexusHandlerCallback(t)
@@ -826,6 +829,19 @@ func TestExecuteInvocationTaskNexusHandler_RecordsHandlerLinks(t *testing.T) {
 			wantLinks: nil,
 		},
 		{
+			// Links beyond the per-request limit (10 by default) are dropped rather than failing the
+			// delivery.
+			name: "links-beyond-limit-are-dropped",
+			response: startOperationResponse(&nexuspb.StartOperationResponse{
+				Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+					SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+						Links: slices.Repeat([]*nexuspb.Link{responseLink}, 11),
+					},
+				},
+			}),
+			wantLinks: slices.Repeat([]*commonpb.Link{expectedLink}, 10),
+		},
+		{
 			// A failed delivery is not a completed one, so there is nothing to link to. The
 			// callback will be retried and the next attempt's response is what counts.
 			name:      "handler-failure-records-nothing",
@@ -856,6 +872,7 @@ func TestExecuteInvocationTaskNexusHandler_RecordsHandlerLinks(t *testing.T) {
 				metricsHandler:    metrics.NoopMetricsHandler,
 				logger:            log.NewTestLogger(),
 				matchingClient:    matchingClient,
+				linkValidator:     test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 			}
 
 			cb := newNexusHandlerCallback(t)

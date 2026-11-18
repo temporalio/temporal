@@ -1,6 +1,10 @@
 package clitest
 
 import (
+	"net"
+
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/tools/common/schema/test"
 	"go.temporal.io/server/tools/sql"
@@ -75,6 +79,38 @@ func (s *SetupSchemaTestSuite) TestCreateDatabase() {
 	s.NoError(err)
 	err = s.conn.DropDatabase(testDatabase)
 	s.NoError(err)
+}
+
+func (s *SetupSchemaTestSuite) TestCreateDatabaseWithPasswordCommand() {
+	testDatabase := testCLIDatabasePrefix + shuffle.String(testCLIDatabaseSuffix)
+	err := sql.RunTool([]string{
+		"./tool",
+		"--ep", s.host,
+		"--p", s.port,
+		"-u", testUser,
+		"--password-command", "echo",
+		"--password-command-arg", testPassword,
+		"--pl", s.pluginName,
+		"--db", testDatabase,
+		"create",
+	})
+	s.NoError(err)
+	err = s.conn.DropDatabase(testDatabase)
+	s.NoError(err)
+}
+
+func (s *SetupSchemaTestSuite) TestCreateDatabaseWithWrongPasswordFromCommand() {
+	err := sql.DoCreateDatabase(&config.SQL{
+		ConnectAddr: net.JoinHostPort(s.host, s.port),
+		User:        testUser,
+		PasswordCommand: &config.PasswordCommandConfig{
+			Command: "echo",
+			Args:    []string{"wrong-password"},
+		},
+		PluginName:   s.pluginName,
+		DatabaseName: testCLIDatabasePrefix + shuffle.String(testCLIDatabaseSuffix),
+	}, "", log.NewTestLogger())
+	s.Error(err)
 }
 
 func (s *SetupSchemaTestSuite) TestCreateDatabaseIdempotent() {

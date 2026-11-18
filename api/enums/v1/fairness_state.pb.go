@@ -23,6 +23,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Deprecated. Retained for compatibility with older servers during rolling upgrades.
+//
+// Deprecated: Marked as deprecated in temporal/server/api/enums/v1/fairness_state.proto.
 type FairnessState int32
 
 const (
@@ -91,12 +94,12 @@ var File_temporal_server_api_enums_v1_fairness_state_proto protoreflect.FileDesc
 
 const file_temporal_server_api_enums_v1_fairness_state_proto_rawDesc = "" +
 	"\n" +
-	"1temporal/server/api/enums/v1/fairness_state.proto\x12\x1ctemporal.server.api.enums.v1*t\n" +
+	"1temporal/server/api/enums/v1/fairness_state.proto\x12\x1ctemporal.server.api.enums.v1*x\n" +
 	"\rFairnessState\x12\x1e\n" +
 	"\x1aFAIRNESS_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11FAIRNESS_STATE_V0\x10\x01\x12\x15\n" +
 	"\x11FAIRNESS_STATE_V1\x10\x02\x12\x15\n" +
-	"\x11FAIRNESS_STATE_V2\x10\x03B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
+	"\x11FAIRNESS_STATE_V2\x10\x03\x1a\x02\x18\x01B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
 
 var (
 	file_temporal_server_api_enums_v1_fairness_state_proto_rawDescOnce sync.Once

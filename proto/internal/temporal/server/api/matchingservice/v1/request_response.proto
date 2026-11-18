@@ -149,6 +149,7 @@ message PollActivityTaskQueueResponse {
   temporal.api.common.v1.RetryPolicy retry_policy = 19;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 20;
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 21;
 }
 
 message AddWorkflowTaskRequest {
@@ -796,6 +797,7 @@ message DescribeWorkerResponse {
   temporal.api.worker.v1.WorkerInfo worker_info = 1;
 }
 
+// Deprecated. Fairness selection is controlled by dynamic configuration.
 // (-- api-linter: core::0134::request-resource-required=disabled
 //     aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0134::request-mask-required=disabled
@@ -809,6 +811,7 @@ message UpdateFairnessStateRequest {
   temporal.server.api.enums.v1.FairnessState fairness_state = 4;
 }
 
+// Deprecated. Fairness selection is controlled by dynamic configuration.
 message UpdateFairnessStateResponse {}
 
 message CheckTaskQueueVersionMembershipRequest {

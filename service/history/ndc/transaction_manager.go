@@ -4,6 +4,7 @@ package ndc
 
 import (
 	"context"
+	"slices"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -306,6 +307,13 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		// case 1.b
 		// need to reset target workflow (which is also the current workflow)
 		// to accept events to be reapplied
+		if !slices.ContainsFunc(totalEvents, func(event *historypb.HistoryEvent) bool {
+			return canReapplyOnReset(r.shardContext.StateMachineRegistry(), event)
+		}) {
+			// For a closed workflow, if none of the events can be reapplied (e.g. no signal, no update, etc.), skip reset.
+			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
+		}
+
 		baseMutableState := targetWorkflow.GetMutableState()
 		namespaceID := namespace.ID(baseMutableState.GetExecutionInfo().NamespaceId)
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
@@ -341,6 +349,14 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 		baseNextEventID := baseMutableState.GetNextEventID()
 
+		namespaceName, err := r.namespaceRegistry.GetNamespaceName(namespaceID)
+		if err != nil {
+			return 0, historyi.TransactionPolicyActive, err
+		}
+		var resetRequestID string
+		if r.shardContext.GetConfig().EnableResetWorkflowRequestIDDeduplication(namespaceName.String()) {
+			resetRequestID = uuid.New().String()
+		}
 		err = r.workflowResetter.ResetWorkflow(
 			ctx,
 			namespaceID,
@@ -351,6 +367,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			baseRebuildLastEventVersion,
 			baseNextEventID,
 			resetRunID,
+			resetRequestID,
 			targetWorkflow,
 			targetWorkflow,
 			EventsReapplicationResetWorkflowReason,

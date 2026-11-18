@@ -174,6 +174,8 @@ message GetMutableStateResponse {
   // Transient or speculative workflow task events which are not yet persisted in the history.
   // These events should be appended to the history when it is returned to the worker.
   temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
+  // Nexus operation context for this workflow, used by workers to select payload serialization.
+  temporal.api.nexus.v1.PropagatedSerializationContext nexus_serialization_context = 27;
 }
 
 message PollMutableStateRequest {
@@ -270,6 +272,8 @@ message RecordWorkflowTaskStartedRequest {
   // Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
   // Sent only if the target version is different from the poller's version.
   temporal.api.deployment.v1.WorkerDeploymentVersion target_deployment_version = 13;
+  // Flow control limiters attached to this task.
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 14;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -381,6 +385,8 @@ message RecordActivityTaskStartedRequest {
   // start information is carried within this component, obviating the need to use the fields that apply to embedded
   // activities with the exception of version_directive.
   bytes component_ref = 14;
+  // Flow control limiters attached to this task.
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 15;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -398,6 +404,8 @@ message RecordActivityTaskStartedResponse {
   int64 start_version = 12;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 13;
+  // Nexus operation context for this activity, used by workers to select payload serialization.
+  temporal.api.nexus.v1.PropagatedSerializationContext nexus_serialization_context = 14;
 }
 
 message RespondWorkflowTaskCompletedRequest {
@@ -800,6 +808,9 @@ message DescribeMutableStateResponse {
   // DatabaseMutableState is always available,
   // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
   temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
+  // Storage usage on this cluster as of the time of the request: the stored counters plus the
+  // interval since this cluster's last state transition. Equals the stored counters once closed.
+  temporal.server.api.persistence.v1.StorageUsage current_storage_usage = 3;
 }
 
 // At least one of the parameters needs to be provided.

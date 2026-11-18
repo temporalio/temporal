@@ -1,18 +1,69 @@
 package workflow
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/number"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func (s *mutableStateSuite) TestSetupNewWorkflowForRetryPropagatesNexusSerializationContext() {
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	newRunID := "00000000-0000-4000-8000-000000000002"
+	var newRunStartEvent *historypb.HistoryEvent
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Do(func(key events.EventKey, event *historypb.HistoryEvent) {
+		if key.RunID == newRunID && event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			newRunStartEvent = event
+		}
+	}).Times(2)
+	startEvent, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:                        &commonpb.WorkflowType{Name: "workflow"},
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout:                  durationpb.New(time.Hour),
+				PropagatedNexusSerializationContext: serializationContext,
+			},
+		},
+	)
+	s.Require().NoError(err)
+
+	newMutableState := NewMutableState(s.mockShard, s.mockEventsCache, s.logger,
+		s.namespaceEntry, tests.WorkflowID, newRunID, time.Now().UTC())
+	err = SetupNewWorkflowForRetryOrCron(
+		context.Background(), s.mutableState, newMutableState, newRunID,
+		startEvent.GetWorkflowExecutionStartedEventAttributes(), nil, nil, nil,
+		time.Second, enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY,
+	)
+	s.Require().NoError(err)
+	s.Require().NotNil(newRunStartEvent)
+	protorequire.ProtoEqual(s.T(), serializationContext,
+		newRunStartEvent.GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext())
+}
 
 func Test_NonRetriableErrors(t *testing.T) {
 	attempt := int32(1)

@@ -12,6 +12,7 @@ var (
 	FlagWorkflowIDAlias            = []string{"wid"}
 	FlagRunID                      = "run-id"
 	FlagRunIDAlias                 = []string{"rid"}
+	FlagDeploymentName             = "name"
 	FlagBusinessID                 = "business-id"
 	FlagBusinessIDAlias            = []string{"bid", FlagWorkflowID, FlagWorkflowIDAlias[0]}
 	FlagArchetype                  = "archetype"
@@ -75,6 +76,7 @@ var (
 	FlagFair                       = "fair"
 	FlagMinPass                    = "min-pass"
 	FlagVisibilityQuery            = "query"
+	FlagVisibilityQueryAlias       = []string{"q"}
 	FlagJobID                      = "job-id"
 	FlagDecode                     = "decode"
 	FlagScheduleID                 = "schedule-id"
@@ -96,6 +98,10 @@ var (
 	FlagDelayThreshold             = "delay-threshold"
 	FlagIncludePaused              = "include-paused"
 	FlagQuiet                      = "quiet"
+	FlagMinPendingAge              = "min-pending-age"
+	FlagMaxHistoryPages            = "max-history-pages"
+	FlagResumeToken                = "resume-token"
+	FlagOutput                     = "output"
 )
 
 var (

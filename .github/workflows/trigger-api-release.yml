@@ -6,6 +6,10 @@
 #
 # This runs unattended, and a silent failure means the invariant is quietly
 # violated, so anything that goes wrong is reported to Slack.
+#
+# Release candidate branches (cloud/v1.33.0-165-rc.20261014113044 and the like)
+# are cut daily and discarded, but a tag is permanent and public, so they
+# degrade to a dry run.
 name: Trigger api-go release for cloud branch
 
 on:

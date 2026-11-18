@@ -117,18 +117,18 @@ func (mr *MockChasmTreeMockRecorder) ArchetypeID() *gomock.Call {
 }
 
 // CloseTransaction mocks base method.
-func (m *MockChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (m *MockChasmTree) CloseTransaction(ctx context.Context, isActive bool) (chasm.NodesMutation, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseTransaction")
+	ret := m.ctrl.Call(m, "CloseTransaction", ctx, isActive)
 	ret0, _ := ret[0].(chasm.NodesMutation)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CloseTransaction indicates an expected call of CloseTransaction.
-func (mr *MockChasmTreeMockRecorder) CloseTransaction() *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) CloseTransaction(ctx, isActive any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction), ctx, isActive)
 }
 
 // Component mocks base method.
@@ -298,6 +298,21 @@ func (m *MockChasmTree) Snapshot(arg0 *persistence.VersionedTransition) chasm.No
 func (mr *MockChasmTreeMockRecorder) Snapshot(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Snapshot", reflect.TypeOf((*MockChasmTree)(nil).Snapshot), arg0)
+}
+
+// SpeculativeTransitionFailoverVersion mocks base method.
+func (m *MockChasmTree) SpeculativeTransitionFailoverVersion() (int64, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SpeculativeTransitionFailoverVersion")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// SpeculativeTransitionFailoverVersion indicates an expected call of SpeculativeTransitionFailoverVersion.
+func (mr *MockChasmTreeMockRecorder) SpeculativeTransitionFailoverVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SpeculativeTransitionFailoverVersion", reflect.TypeOf((*MockChasmTree)(nil).SpeculativeTransitionFailoverVersion))
 }
 
 // Terminate mocks base method.

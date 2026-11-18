@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"strconv"
 
@@ -58,6 +59,8 @@ type (
 		// paginationLimiter enforces the process-wide and per-namespace limits on the
 		// total size of all in-flight pagination buffers. nil is treated as "no limit".
 		paginationLimiter *limiter.KeyedBytesLimiter
+
+		checkRunAlreadyExists bool
 	}
 
 	// workflowTaskIdentity identifies a specific workflow task attempt
@@ -94,10 +97,11 @@ type (
 	// ExecutionTransactionPayload contains the persistence payload produced by closing
 	// an update-with-new transaction.
 	ExecutionTransactionPayload struct {
-		ExecutionMutation    *persistence.WorkflowMutation
-		ExecutionEvents      []*persistence.WorkflowEvents
-		NewExecutionSnapshot *persistence.WorkflowSnapshot
-		NewExecutionEvents   []*persistence.WorkflowEvents
+		ExecutionMutation                 *persistence.WorkflowMutation
+		ExecutionEvents                   []*persistence.WorkflowEvents
+		NewExecutionSnapshot              *persistence.WorkflowSnapshot
+		NewExecutionEvents                []*persistence.WorkflowEvents
+		NewExecutionCheckRunAlreadyExists bool
 	}
 )
 
@@ -160,6 +164,10 @@ func (c *ContextImpl) Lock(
 	return c.lock.Acquire(ctx, lockPriority, 1)
 }
 
+func (c *ContextImpl) TryLock(lockPriority locks.Priority) bool {
+	return c.lock.TryAcquire(lockPriority, 1)
+}
+
 func (c *ContextImpl) Unlock() {
 	c.lock.Release(1)
 }
@@ -191,11 +199,21 @@ func (c *ContextImpl) clearTaskCompletionBuffer() {
 	if c.taskCompletionBuffer == nil {
 		return
 	}
-	if c.paginationLimiter != nil {
-		used := c.paginationLimiter.Release(c.taskCompletionBuffer.namespace, c.taskCompletionBuffer.totalSize)
+	c.detachTaskCompletionBuffer()()
+}
+
+// detachTaskCompletionBuffer drops the in-progress buffer but keeps its bytes reserved
+// in the limiter. The returned func returns them and must be called exactly once
+func (c *ContextImpl) detachTaskCompletionBuffer() func() {
+	buffer := c.taskCompletionBuffer
+	c.taskCompletionBuffer = nil
+	if buffer == nil || c.paginationLimiter == nil {
+		return func() {}
+	}
+	return func() {
+		used := c.paginationLimiter.Release(buffer.namespace, buffer.totalSize)
 		metrics.WorkflowTaskCompletionBufferInflightBytes.With(c.metricsHandler).Record(float64(used))
 	}
-	c.taskCompletionBuffer = nil
 }
 
 // startedWorkflowTaskIdentity returns the identity of the currently started workflow
@@ -252,7 +270,8 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 	if c.taskCompletionBuffer != nil && c.taskCompletionBuffer.identity != identity {
 		c.clearTaskCompletionBuffer()
 	}
-	if c.taskCompletionBuffer == nil {
+	newPagination := c.taskCompletionBuffer == nil
+	if newPagination {
 		c.taskCompletionBuffer = &TaskCompletionBuffer{
 			pages:     make(map[int32][]*commandpb.Command),
 			identity:  identity,
@@ -274,18 +293,33 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 	}
 
 	// Apply the process-wide limit and its per-namespace share so one
-	// namespace cannot exhaust the whole process budget.
+	// namespace cannot exhaust the whole process budget. A page that starts a
+	// new pagination only gets a fraction of both limits. The rest is kept for
+	// in-flight paginations, so they can complete under memory pressure.
 	if c.paginationLimiter != nil {
-		processLimit := int64(c.config.WorkflowTaskCompletionBufferTotalSizeLimit())
-		nsRatio := c.config.WorkflowTaskCompletionBufferNamespaceRatio(nsName)
-		nsLimit := int64(nsRatio * float64(processLimit))
-		ok, used := c.paginationLimiter.TryReserve(nsName, pageBytes, processLimit, nsLimit)
+		processLimit := float64(c.config.WorkflowTaskCompletionBufferTotalSizeLimit())
+		nsLimit := c.config.WorkflowTaskCompletionBufferNamespaceRatio(nsName) * processLimit
+		if newPagination {
+			ratio := c.config.WorkflowTaskCompletionBufferNewPaginationRatio(nsName)
+			if ratio <= 0 || ratio > 1 {
+				ratio = 1
+			}
+			processLimit *= ratio
+			nsLimit *= ratio
+		}
+		ok, used := c.paginationLimiter.TryReserve(
+			nsName, pageBytes, int64(math.Ceil(processLimit)), int64(math.Ceil(nsLimit)))
 		if !ok {
-			// BufferLost makes the SDK resend from page 0, so retaining the
-			// partial buffer buys. Clear it to release the reserved bytes back
-			// to the budget.
+			// BufferLost makes the SDK resend from page 0, so the partial buffer
+			// can never be used. Clear it to release the reserved bytes back to
+			// the budget.
 			c.clearTaskCompletionBuffer()
-			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
+			if newPagination {
+				metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonNewPaginationLimit))
+				return serviceerror.NewWorkflowTaskCompletionBufferLostf(
+					"workflow task completion buffer memory limit for new paginations reached")
+			}
+			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMemoryLimit))
 			return serviceerror.NewWorkflowTaskCompletionBufferLostf(
 				"workflow task completion buffer memory limit reached while buffering page %d", request.GetPageNumber())
 		}
@@ -333,6 +367,11 @@ func validatePageRequest(request *workflowservice.RespondWorkflowTaskCompletedRe
 // (0..finalPageNumber-1) in order, clears the buffer, and returns the merged
 // commands to be prepended to the final page's own commands.
 //
+// On success the buffer's bytes stay reserved in the pagination limiter until
+// the caller invokes the returned release func, which it does once the
+// transaction is persisted. This way the limiter also bounds the memory held
+// while persisting.
+//
 // It returns a typed WorkflowTaskCompletionBufferLost error when the buffer
 // is missing, belongs to a different workflow task/attempt, or has a gap.
 // Buffer-lost is transient: no WorkflowTaskCompleted event is written and
@@ -341,33 +380,38 @@ func (c *ContextImpl) GetMergedTaskCompletionPages(
 	schedID int64,
 	attempt int32,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-) ([]*commandpb.Command, error) {
+) ([]*commandpb.Command, func(), error) {
 	if request.GetIntermediatePage() {
-		return nil, serviceerror.NewInternal(
+		return nil, nil, serviceerror.NewInternal(
 			"GetMergedTaskCompletionPages: expected final page")
 	}
 	if err := validatePageRequest(request); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer c.clearTaskCompletionBuffer()
+	// Merged or not, the buffer can't be used again. On error its bytes are
+	// returned right away, on success by the caller after the persist.
+	buffer := c.taskCompletionBuffer
+	release := c.detachTaskCompletionBuffer()
 	finalPageNumber := request.GetPageNumber()
 	// The version comes from the started workflow task, the same authority buffering used,
 	// so a buffer built for a workflow task that has since been superseded on a
 	// higher-version branch (same schedID/attempt) is treated as lost.
 	identity := workflowTaskIdentity{schedID: schedID, attempt: attempt, version: c.startedWorkflowTaskIdentity().version}
-	if c.taskCompletionBuffer == nil || c.taskCompletionBuffer.identity != identity {
-		metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
-		return nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
+	if buffer == nil || buffer.identity != identity {
+		release()
+		metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMissingBuffer))
+		return nil, nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
 			"workflow task completion buffer lost for scheduled event %d attempt %d", schedID, attempt)
 	}
 	// Every page in 0..finalPageNumber-1 must be present. A gap means a page was
 	// lost or never sent; merging anyway would silently drop commands.
-	merged := make([]*commandpb.Command, 0, len(c.taskCompletionBuffer.pages))
+	merged := make([]*commandpb.Command, 0, len(buffer.pages))
 	for page := range finalPageNumber {
-		cmds, ok := c.taskCompletionBuffer.pages[page]
+		cmds, ok := buffer.pages[page]
 		if !ok {
-			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
-			return nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
+			release()
+			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMissingPage))
+			return nil, nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
 				"workflow task completion buffer missing page %d of %d", page, finalPageNumber)
 		}
 		merged = append(merged, cmds...)
@@ -375,8 +419,8 @@ func (c *ContextImpl) GetMergedTaskCompletionPages(
 	// Total completion size = buffered intermediate pages plus the final page (which
 	// is never buffered, so it must be added explicitly)
 	metrics.WorkflowTaskCompletionPaginatedBytes.With(c.metricsHandler).Record(
-		c.taskCompletionBuffer.totalSize + taskCompletionPageBytes(request.Commands))
-	return merged, nil
+		buffer.totalSize + taskCompletionPageBytes(request.Commands))
+	return merged, release, nil
 }
 
 func (c *ContextImpl) GetArchetypeID() chasm.ArchetypeID {
@@ -411,6 +455,15 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if c.MutableState != nil {
+		// Speculative CHASM changes from an earlier failover version were never replicated. Reload from
+		// the DB so they are not mixed with state written by another cluster.
+		version, pending := c.MutableState.ChasmTree().SpeculativeTransitionFailoverVersion()
+		if pending && version != namespaceEntry.FailoverVersion(c.workflowKey.WorkflowID) {
+			c.Clear()
+		}
 	}
 
 	if c.MutableState == nil {
@@ -505,6 +558,14 @@ func (c *ContextImpl) PersistWorkflowEvents(
 	return PersistWorkflowEvents(ctx, shardContext, workflowEventsSlice...)
 }
 
+func (c *ContextImpl) SetCheckRunAlreadyExists(verify bool) {
+	c.checkRunAlreadyExists = verify
+}
+
+func (c *ContextImpl) CheckRunAlreadyExists() bool {
+	return c.checkRunAlreadyExists
+}
+
 func (c *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -519,7 +580,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 
 	if transactionPolicy == historyi.TransactionPolicyActive {
 		if rl := shardContext.BusinessIDReuseRateLimiter(
-			namespace.ID(c.workflowKey.NamespaceID),
+			newMutableState.GetNamespaceEntry().Name(),
 			c.workflowKey.WorkflowID,
 			c.archetypeID,
 		); rl != nil && !rl.Allow() {
@@ -548,6 +609,8 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		ArchetypeID: c.archetypeID,
+
+		CheckRunAlreadyExists: c.checkRunAlreadyExists,
 
 		NewWorkflowSnapshot: *newWorkflow,
 		NewWorkflowEvents:   newWorkflowEvents,
@@ -857,6 +920,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 					shardContext,
 					updateMode,
 					newMutableState,
+					updateWorkflowTransactionPolicy,
 					payload,
 				)
 			},
@@ -932,6 +996,7 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 		shardContext,
 		updateMode,
 		newMutableState,
+		updateWorkflowTransactionPolicy,
 		payload,
 	)
 }
@@ -947,7 +1012,7 @@ func (c *ContextImpl) prepareMutableStateTransaction(
 			execInfo := newMutableState.GetExecutionInfo()
 			newArchetypeID := newContext.GetArchetypeID()
 			if rl := shardContext.BusinessIDReuseRateLimiter(
-				namespace.ID(execInfo.NamespaceId),
+				newMutableState.GetNamespaceEntry().Name(),
 				execInfo.WorkflowId,
 				newArchetypeID,
 			); rl != nil && !rl.Allow() {
@@ -997,6 +1062,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 		if err != nil {
 			return nil, err
 		}
+		payload.NewExecutionCheckRunAlreadyExists = payload.NewExecutionSnapshot != nil && newContext.CheckRunAlreadyExists()
 	}
 	return payload, nil
 }
@@ -1006,6 +1072,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	shardContext historyi.ShardContext,
 	updateMode persistence.UpdateWorkflowMode,
 	newMutableState historyi.MutableState,
+	transactionPolicy historyi.TransactionPolicy,
 	payload *ExecutionTransactionPayload,
 ) error {
 	if err := c.mergeUpdateWithNewReplicationTasks(
@@ -1051,9 +1118,13 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		MutableStateFailoverVersion(newMutableState),
 		payload.NewExecutionSnapshot,
 		payload.NewExecutionEvents,
+		payload.NewExecutionCheckRunAlreadyExists,
 		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err
+	}
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		c.emitWorkflowHeartbeatNotificationBufferedInputMetrics(payload.ExecutionMutation.NewBufferedEvents)
 	}
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
@@ -1064,6 +1135,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		c.metricsHandler,
 		c.GetNamespace(shardContext),
 		c.MutableState.GetExecutionState().State,
+		wroteEvents(payload.ExecutionEvents),
 		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
 		int(c.MutableState.GetNextEventID()-1),
 	)
@@ -1312,7 +1384,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 		for _, e := range events.Events {
 			event := e
-			if shouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
+			if ShouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}

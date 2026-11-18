@@ -899,6 +899,11 @@ func (d *namespaceDispatcher) run() error {
 		if d.firstErr != nil && len(d.active) == 0 {
 			return d.firstErr
 		}
+		// drainInput may have just observed the closed input with nothing left queued or active; every select case
+		// below would then be nil or idle, so re-check termination before blocking.
+		if d.input == nil && d.queued == 0 && len(d.active) == 0 {
+			break
+		}
 
 		select {
 		case <-d.ctxDone:

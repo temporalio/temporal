@@ -739,7 +739,9 @@ func TestCancelationValidTransitions(t *testing.T) {
 func TestCancelationBeforeStarted(t *testing.T) {
 	// Setup
 	backend := &hsmtest.NodeBackend{}
-	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), nil))
+	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		StartToCloseTimeout: durationpb.New(time.Minute),
+	}))
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return op.Cancel(root, time.Now(), 0)
 	}))
@@ -779,7 +781,8 @@ func TestCancelationBeforeStarted(t *testing.T) {
 
 	secondOp, ok := opLog[1].(hsm.TransitionOperation)
 	require.True(t, ok)
-	require.Empty(t, secondOp.Output.Tasks)
+	require.Len(t, secondOp.Output.Tasks, 1)
+	require.Equal(t, nexusoperations.TaskTypeStartToCloseTimeout, secondOp.Output.Tasks[0].Type())
 
 	node, err = root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 	require.NoError(t, err)

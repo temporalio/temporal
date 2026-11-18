@@ -174,6 +174,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	newWorkflowFailoverVersion *int64,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	checkRunAlreadyExists bool,
 	isWorkflow bool,
 ) (int64, int64, error) {
 
@@ -195,6 +196,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 			UpdateWorkflowEvents:   currentWorkflowEventsSeq,
 			NewWorkflowSnapshot:    newWorkflowSnapshot,
 			NewWorkflowEvents:      newWorkflowEventsSeq,
+			CheckRunAlreadyExists:  checkRunAlreadyExists,
 		},
 		isWorkflow,
 	)
@@ -372,6 +374,7 @@ func createWorkflowExecution(
 		switch err.(type) {
 		case *persistence.CurrentWorkflowConditionFailedError,
 			*persistence.WorkflowConditionFailedError,
+			*persistence.WorkflowRunAlreadyExistsError,
 			*persistence.ConditionFailedError,
 			*serviceerror.ResourceExhausted:
 			// it is possible that workflow already exists and caller need to apply

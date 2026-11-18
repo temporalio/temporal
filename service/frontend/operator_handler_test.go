@@ -24,7 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
@@ -165,7 +165,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeNames:                []string{elasticsearch.PersistenceName},
+			storeNames:                []string{esconfig.PersistenceName},
 			getSearchAttributesCalled: true,
 			getSearchAttributesErr:    errors.New("mock error get search attributes"),
 			expectedErrMsg:            "mock error get search attributes",
@@ -177,7 +177,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeNames:                []string{elasticsearch.PersistenceName},
+			storeNames:                []string{esconfig.PersistenceName},
 			indexName:                 testIndexName,
 			getSearchAttributesCalled: true,
 			addInternalSuccess:        true,
@@ -191,7 +191,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(tc.indexName).AnyTimes()
 
 			saTypeMap := searchattribute.TestNameTypeMap()
-			if len(tc.storeNames) > 0 && tc.storeNames[0] == elasticsearch.PersistenceName {
+			if len(tc.storeNames) > 0 && tc.storeNames[0] == esconfig.PersistenceName {
 				saTypeMap = searchattribute.TestEsNameTypeMap()
 			}
 
@@ -291,7 +291,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 
 			testIndexName1 := testIndexName + "-1"
 			testIndexName2 := testIndexName + "-2"
-			mockVisManager1.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+			mockVisManager1.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName}).AnyTimes()
 			mockVisManager1.EXPECT().GetIndexName().Return(testIndexName1).AnyTimes()
 			mockVisManager2.EXPECT().GetStoreNames().Return([]string{mysql.PluginName}).AnyTimes()
 			mockVisManager2.EXPECT().GetIndexName().Return(testIndexName2).AnyTimes()
@@ -359,8 +359,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 		addEsCalled            bool
 		addEsSchemaErr         error
 		addEsMetadataErr       error
-		addSqlCalled           bool
-		addSqlErr              error
+		addSQLCalled           bool
+		addSQLErr              error
 		expectedErrMsg         string
 	}{
 		{
@@ -370,7 +370,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:              elasticsearch.PersistenceName,
+			storeName:              esconfig.PersistenceName,
 			indexName:              testIndexName,
 			getSearchAttributesErr: errors.New("mock error get search attributes"),
 			expectedErrMsg:         "Unable to get search attributes: mock error get search attributes",
@@ -382,7 +382,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:      elasticsearch.PersistenceName,
+			storeName:      esconfig.PersistenceName,
 			indexName:      testIndexName,
 			addEsCalled:    true,
 			addEsSchemaErr: errors.New("mock error add es schema"),
@@ -395,7 +395,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:        elasticsearch.PersistenceName,
+			storeName:        esconfig.PersistenceName,
 			indexName:        testIndexName,
 			addEsCalled:      true,
 			addEsMetadataErr: errors.New("mock error add es metadata"),
@@ -408,7 +408,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:      elasticsearch.PersistenceName,
+			storeName:      esconfig.PersistenceName,
 			indexName:      testIndexName,
 			addEsCalled:    true,
 			expectedErrMsg: "",
@@ -423,8 +423,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 			},
 			storeName:      mysql.PluginName,
 			indexName:      testIndexName,
-			addSqlCalled:   true,
-			addSqlErr:      errors.New("mock error add sql mapping"),
+			addSQLCalled:   true,
+			addSQLErr:      errors.New("mock error add sql mapping"),
 			expectedErrMsg: "mock error add sql mapping",
 		},
 		{
@@ -437,7 +437,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 			},
 			storeName:      mysql.PluginName,
 			indexName:      testIndexName,
-			addSqlCalled:   true,
+			addSQLCalled:   true,
 			expectedErrMsg: "",
 		},
 	}
@@ -445,7 +445,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			saTypeMap := searchattribute.TestNameTypeMap()
-			if tc.storeName == elasticsearch.PersistenceName {
+			if tc.storeName == esconfig.PersistenceName {
 				saTypeMap = searchattribute.TestEsNameTypeMap()
 			}
 
@@ -470,7 +470,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 				}
 			}
 
-			if tc.addSqlCalled {
+			if tc.addSQLCalled {
 				s.mockResource.ClientFactory.EXPECT().
 					NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
 					Return(nil, s.mockResource.GetFrontendClient(), nil)
@@ -491,7 +491,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 
 				s.mockResource.FrontendClient.EXPECT().
 					UpdateNamespace(gomock.Any(), gomock.Any()).
-					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addSqlErr)
+					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addSQLErr)
 			}
 
 			err := s.handler.addSearchAttributesInternal(ctx, tc.request, s.mockResource.VisibilityManager)
@@ -823,16 +823,16 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_Elasticsearch() {
 	ctx := context.Background()
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(esconfig.PersistenceName).Return(true)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestEsNameTypeMap(), nil)
 	resp, err := handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.NotNil(resp)
 
 	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.NameTypeMap{}, errors.New("random error"))
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
-	s.Error(err)
+	s.Require().Error(err)
 	s.Nil(resp)
 }
 
@@ -840,7 +840,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 	handler := s.handler
 	ctx := context.Background()
 
-	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(false)
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(esconfig.PersistenceName).Return(false)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.ClientFactory.EXPECT().
 		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
@@ -915,7 +915,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_Elasticsearch() {
 	for _, testCase := range testCases {
 		s.Run(testCase.Name, func() {
 			saTypeMap := searchattribute.TestEsNameTypeMap()
-			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName, true).

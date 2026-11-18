@@ -242,8 +242,23 @@ func (b *readOnlyNodeBackend) ChasmSkipPersistenceEnabled() bool {
 	return false
 }
 
+func (b *readOnlyNodeBackend) ChasmLogicalTaskCountAlertThreshold(string) int {
+	b.unsupported("ChasmLogicalTaskCountAlertThreshold")
+	return 0
+}
+
 func (b *readOnlyNodeBackend) SetTimeSkippingConfig(*commonpb.TimeSkippingConfig) {
 	b.unsupported("SetTimeSkippingConfig")
+}
+
+func (b *readOnlyNodeBackend) IsTimeSkippingFeatureEnabled(ArchetypeID) bool {
+	b.unsupported("IsTimeSkippingFeatureEnabled")
+	return false
+}
+
+func (b *readOnlyNodeBackend) TimeSkippingMaxAccumulatedDuration() time.Duration {
+	b.unsupported("TimeSkippingMaxAccumulatedDuration")
+	return 0
 }
 
 func (b *readOnlyNodeBackend) RecordTimeSkippingTransition(*TimeSkippingTransition) {
@@ -264,8 +279,8 @@ func (b *readOnlyNodeBackend) AddTasks(...tasks.Task) {
 	b.unsupported("AddTasks")
 }
 
-func (b *readOnlyNodeBackend) DeleteCHASMPureTasks(time.Time) {
-	b.unsupported("DeleteCHASMPureTasks")
+func (b *readOnlyNodeBackend) DeletePhysicalCHASMPureTasks(time.Time) {
+	b.unsupported("DeletePhysicalCHASMPureTasks")
 }
 
 func (b *readOnlyNodeBackend) UpdateWorkflowStateStatus(

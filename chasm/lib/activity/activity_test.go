@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -19,11 +21,15 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -72,6 +78,35 @@ func TestSearchAttributesIncludesExecutionTime(t *testing.T) {
 	}
 }
 
+func TestStandaloneActivityPropagatesNexusSerializationContext(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Now() },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "namespace-id", BusinessID: "activity-id", RunID: "run-id"}
+			},
+		},
+	}
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	activity, err := NewStandaloneActivity(ctx, &workflowservice.StartActivityExecutionRequest{
+		ActivityType:                        &commonpb.ActivityType{Name: "activity"},
+		TaskQueue:                           &taskqueuepb.TaskQueue{Name: "task-queue"},
+		StartToCloseTimeout:                 durationpb.New(time.Minute),
+		PropagatedNexusSerializationContext: serializationContext,
+	})
+	require.NoError(t, err)
+
+	response, err := activity.GenerateRecordActivityTaskStartedResponse(ctx, "namespace")
+	require.NoError(t, err)
+	require.Equal(t, serializationContext, response.GetNexusSerializationContext())
+	require.Equal(t, serializationContext, activity.buildActivityExecutionInfo(ctx, &workflowservice.DescribeActivityExecutionRequest{}).GetPropagatedNexusSerializationContext())
+	require.Equal(t, serializationContext, activity.buildPollActivityExecutionResponse(ctx).GetFrontendResponse().GetPropagatedNexusSerializationContext())
+}
+
 func TestHandleStarted(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	testRequestID := "test-request-id"
@@ -82,26 +117,28 @@ func TestHandleStarted(t *testing.T) {
 	startedTime := timestamppb.New(testTime.Add(-1 * time.Minute))
 
 	testCases := []struct {
-		name           string
-		activityStatus activitypb.ActivityExecutionStatus
-		attemptStamp   int32
-		requestStamp   int32
-		startRequestID string
-		requestID      string
-		attemptCount   int32
-		dispatchTime   *timestamppb.Timestamp
-		metricSamples  int
-		metricLatency  time.Duration
-		checkOutcome   func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error)
+		name             string
+		activityStatus   activitypb.ActivityExecutionStatus
+		attemptStamp     int32
+		requestStamp     int32
+		startRequestID   string
+		requestID        string
+		attemptCount     int32
+		dispatchTime     *timestamppb.Timestamp
+		metricSamples    int
+		metricLatency    time.Duration
+		expectLastWorker bool
+		checkOutcome     func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error)
 	}{
 		{
-			name:           "successful transition from scheduled",
-			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			attemptStamp:   testStamp,
-			requestStamp:   testStamp,
-			requestID:      testRequestID,
-			metricSamples:  1,
-			metricLatency:  30 * time.Second,
+			name:             "successful transition from scheduled",
+			activityStatus:   activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			attemptStamp:     testStamp,
+			requestStamp:     testStamp,
+			requestID:        testRequestID,
+			metricSamples:    1,
+			metricLatency:    30 * time.Second,
+			expectLastWorker: true,
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
 				require.Equal(t, int32(1), response.Attempt)
 				require.NoError(t, err)
@@ -110,15 +147,16 @@ func TestHandleStarted(t *testing.T) {
 		{
 			// Latency is measured from the attempt's dispatch time, 10s ago, not from the schedule
 			// time 30s ago: a retry excludes the earlier attempts and the backoff between them.
-			name:           "successful transition from scheduled - retry attempt",
-			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			attemptStamp:   testStamp,
-			requestStamp:   testStamp,
-			requestID:      testRequestID,
-			attemptCount:   2,
-			dispatchTime:   timestamppb.New(testTime.Add(-10 * time.Second)),
-			metricSamples:  1,
-			metricLatency:  10 * time.Second,
+			name:             "successful transition from scheduled - retry attempt",
+			activityStatus:   activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			attemptStamp:     testStamp,
+			requestStamp:     testStamp,
+			requestID:        testRequestID,
+			attemptCount:     2,
+			dispatchTime:     timestamppb.New(testTime.Add(-10 * time.Second)),
+			metricSamples:    1,
+			metricLatency:    10 * time.Second,
+			expectLastWorker: true,
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
 				require.Equal(t, int32(2), response.Attempt)
 				require.NoError(t, err)
@@ -244,11 +282,13 @@ func TestHandleStarted(t *testing.T) {
 					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
-							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+							BreakdownMetricsByTaskQueue:       dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+							EnableCancelActivityWorkerCommand: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 						},
 					}),
 				},
 			}
+			ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, &commonpb.Principal{Type: "jwt", Name: "poll-worker"})
 
 			// Setup activity state
 			attemptState := &activitypb.ActivityAttemptState{
@@ -297,12 +337,20 @@ func TestHandleStarted(t *testing.T) {
 			request := &historyservice.RecordActivityTaskStartedRequest{
 				Stamp:     tc.requestStamp,
 				RequestId: tc.requestID,
+				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+					Namespace: "test-namespace",
+					Identity:  "poll-worker-identity",
+				},
 			}
 
 			// Execute HandleStarted
 			response, err := activity.HandleStarted(ctx, request)
 
 			tc.checkOutcome(t, response, err)
+			if tc.expectLastWorker {
+				require.Equal(t, "poll-worker-identity", attemptState.GetLastWorkerIdentity())
+				protorequire.ProtoEqual(t, &commonpb.Principal{Type: "jwt", Name: "poll-worker"}, attemptState.GetLastWorkerPrincipal())
+			}
 			recordings := metricCapture.Snapshot()[metrics.TaskScheduleToStartLatency.Name()]
 			require.Len(t, recordings, tc.metricSamples)
 			if tc.metricSamples > 0 {
@@ -368,7 +416,8 @@ func TestActivityTerminate(t *testing.T) {
 					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
-							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+							BreakdownMetricsByTaskQueue:       dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+							EnableCancelActivityWorkerCommand: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 						},
 					}),
 				},
@@ -781,6 +830,163 @@ func TestActivityTaskTokenLegacyStampCompatibility(t *testing.T) {
 	}
 }
 
+func newWorkerResponseTestActivity(
+	t *testing.T,
+	status activitypb.ActivityExecutionStatus,
+) (*chasm.MockMutableContext, *Activity, *tokenspb.Task) {
+	t.Helper()
+
+	const (
+		namespaceID = "test-namespace-id"
+		activityID  = "test-activity-id"
+		runID       = "test-run-id"
+	)
+
+	componentRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  activityID,
+		RunId:       runID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow:            func(chasm.Component) time.Time { return defaultTime },
+			HandleNamespaceEntry: testNamespaceEntry,
+		},
+	}
+	ctx.GoCtx = context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{config: &Config{
+		BreakdownMetricsByTaskQueue:               dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+		MutableStateActivityFailureSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
+	}})
+
+	activityState := &activitypb.ActivityState{
+		ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+		RetryPolicy:            defaultRetryPolicy,
+		ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+		ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+		StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+		ScheduleTime:           timestamppb.New(defaultTime.Add(-time.Minute)),
+		Status:                 status,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+	}
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		activityState.CancelState = &activitypb.ActivityCancelState{Identity: "cancelling-client"}
+	}
+	attempt := &activitypb.ActivityAttemptState{
+		Count:        1,
+		Stamp:        1,
+		StartedStamp: 1,
+		StartedTime:  timestamppb.New(defaultTime.Add(-time.Minute)),
+	}
+	activity := &Activity{
+		ActivityState: activityState,
+		LastAttempt:   chasm.NewDataField(ctx, attempt),
+		Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+	return ctx, activity, &tokenspb.Task{
+		NamespaceId:          namespaceID,
+		Attempt:              1,
+		ActivityAttemptStamp: 1,
+		ComponentRef:         componentRef,
+	}
+}
+
+func TestHandleFailedRetryRecordsLastWorker(t *testing.T) {
+	ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+	principal := &commonpb.Principal{Type: "jwt", Name: "worker-1"}
+	ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
+	_, err := activity.HandleFailed(ctx, RespondFailedEvent{
+		Token: token,
+		Request: &historyservice.RespondActivityTaskFailedRequest{
+			NamespaceId: token.GetNamespaceId(),
+			FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+				Identity: "retry-worker-identity",
+				Failure: &failurepb.Failure{
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "retryable"},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "retry-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
+	protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+}
+
+func TestWorkerResponsesRecordLastWorker(t *testing.T) {
+	t.Run("completed without principal clears previous principal", func(t *testing.T) {
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+		activity.LastAttempt.Get(ctx).LastWorkerPrincipal = &commonpb.Principal{Type: "jwt", Name: "previous-worker"}
+		_, err := activity.HandleCompleted(ctx, RespondCompletedEvent{
+			Token: token,
+			Request: &historyservice.RespondActivityTaskCompletedRequest{
+				NamespaceId:     token.GetNamespaceId(),
+				CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{Identity: "completion-worker-identity"},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "completion-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
+		require.Nil(t, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	})
+
+	t.Run("completed", func(t *testing.T) {
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+		principal := &commonpb.Principal{Type: "jwt", Name: "completion-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
+		_, err := activity.HandleCompleted(ctx, RespondCompletedEvent{
+			Token: token,
+			Request: &historyservice.RespondActivityTaskCompletedRequest{
+				NamespaceId:     token.GetNamespaceId(),
+				CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{Identity: "completion-worker-identity"},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "completion-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	})
+
+	t.Run("terminal failure", func(t *testing.T) {
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+		principal := &commonpb.Principal{Type: "jwt", Name: "failure-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
+		_, err := activity.HandleFailed(ctx, RespondFailedEvent{
+			Token: token,
+			Request: &historyservice.RespondActivityTaskFailedRequest{
+				NamespaceId: token.GetNamespaceId(),
+				FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+					Identity: "failure-worker-identity",
+					Failure: &failurepb.Failure{
+						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "failure-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	})
+
+	t.Run("canceled", func(t *testing.T) {
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED)
+		principal := &commonpb.Principal{Type: "jwt", Name: "cancel-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
+		_, err := activity.HandleCanceled(ctx, RespondCancelledEvent{
+			Token: token,
+			Request: &historyservice.RespondActivityTaskCanceledRequest{
+				NamespaceId:   token.GetNamespaceId(),
+				CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{Identity: "cancel-worker-identity"},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "cancel-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	})
+}
+
 func TestContextMetadata(t *testing.T) {
 	t.Run("returns activity type and task queue", func(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
@@ -982,11 +1188,7 @@ func TestAttachLinks_SameRequestIDIsNoOp(t *testing.T) {
 			},
 		},
 	}
-	validator := newLinkValidator(
-		func(string) int { return 100 },
-		func(string) int { return 100 },
-		func(string) int { return 4000 },
-	)
+	validator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
 	}
@@ -1017,11 +1219,7 @@ func TestAttachLinks_RejectsClosedActivity(t *testing.T) {
 			},
 		},
 	}
-	validator := newLinkValidator(
-		func(string) int { return 100 },
-		func(string) int { return 100 },
-		func(string) int { return 4000 },
-	)
+	validator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
 	}
@@ -1047,11 +1245,7 @@ func TestAttachLinks_IdempotentAfterClose(t *testing.T) {
 			},
 		},
 	}
-	validator := newLinkValidator(
-		func(string) int { return 100 },
-		func(string) int { return 100 },
-		func(string) int { return 4000 },
-	)
+	validator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
 	}
@@ -1086,17 +1280,118 @@ func TestAttachLinks_RejectsWhenComponentCapExceeded(t *testing.T) {
 		},
 	}
 	// per-component cap = 1; activity already has 1 link, so any additional must fail.
-	validator := newLinkValidator(
-		func(string) int { return 100 },
-		func(string) int { return 1 },
-		func(string) int { return 4000 },
-	)
+	cfg := test.NewLinksValidatorConfig()
+	cfg.MaxLinksPerExecution = func(string) int { return 1 }
+	validator := test.NewLinksValidator(t, cfg)
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
 	}
 
 	err := activity.attachLinks(ctx, []*commonpb.Link{newLink}, "req-new", validator, "ns")
 	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+}
+
+// TestAttachLinks_TotalSizeCap verifies that attachLinks enforces the per-execution cap on the total
+// size of caller-attached links, both when an activity is created and when links are attached to an
+// existing one (e.g. via on_conflict_options.attach_links).
+func TestAttachLinks_TotalSizeCap(t *testing.T) {
+	newLink := func(workflowID string) *commonpb.Link {
+		return &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: workflowID, RunId: "run"},
+		}}
+	}
+	newContext := func(stored map[string][]*commonpb.Link) *chasm.MockMutableContext {
+		return &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleLinks: func(chasm.Component) []*commonpb.Link {
+					var all []*commonpb.Link
+					for _, ls := range stored {
+						all = append(all, ls...)
+					}
+					return all
+				},
+				HandleRequestLinks: func(_ chasm.Component, reqID string) ([]*commonpb.Link, error) {
+					return stored[reqID], nil
+				},
+			},
+		}
+	}
+	newValidator := func(t *testing.T, totalMaxSize int) commonlinks.Validator {
+		t.Helper()
+		cfg := test.NewLinksValidatorConfig()
+		cfg.TotalLinksMaxSize = func(string) int { return totalMaxSize }
+		return test.NewLinksValidator(t, cfg)
+	}
+	newActivity := func() *Activity {
+		return &Activity{
+			ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
+		}
+	}
+
+	t.Run("RejectsOnCreate", func(t *testing.T) {
+		// Each link fits on its own; together they are one byte over the cap.
+		linkA, linkB := newLink("a"), newLink("b")
+		ctx := newContext(map[string][]*commonpb.Link{})
+		activity := newActivity()
+
+		err := activity.attachLinks(ctx, []*commonpb.Link{linkA, linkB}, "req-1", newValidator(t, linkA.Size()+linkB.Size()-1), "ns")
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "bytes of links to an execution")
+		require.Empty(t, ctx.LinksByRequest[activity])
+	})
+
+	t.Run("AcceptsAttachWithinCap", func(t *testing.T) {
+		existing, added := newLink("existing"), newLink("added")
+		ctx := newContext(map[string][]*commonpb.Link{"req-existing": {existing}})
+		activity := newActivity()
+
+		// The cap leaves exactly enough room for the added link.
+		err := activity.attachLinks(ctx, []*commonpb.Link{added}, "req-new", newValidator(t, existing.Size()+added.Size()), "ns")
+		require.NoError(t, err)
+		require.Equal(t, []*commonpb.Link{added}, ctx.LinksByRequest[activity]["req-new"])
+	})
+
+	t.Run("RejectsAttachExceedingCap", func(t *testing.T) {
+		existing, added := newLink("existing"), newLink("added")
+		ctx := newContext(map[string][]*commonpb.Link{"req-existing": {existing}})
+		activity := newActivity()
+
+		err := activity.attachLinks(ctx, []*commonpb.Link{added}, "req-new", newValidator(t, existing.Size()+added.Size()-1), "ns")
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "bytes of links to an execution")
+		require.Empty(t, ctx.LinksByRequest[activity])
+	})
+}
+
+// TestAttachLinks_OnlyEnforcesAggregateLimits verifies that attachLinks skips the
+// per-request count and size checks. The frontend runs those checks, and
+// attachLinks only enforces the per-execution limit.
+func TestAttachLinks_OnlyEnforcesAggregateLimits(t *testing.T) {
+	linkA := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
+	}}
+	linkB := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "b", RunId: "run"},
+	}}
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleRequestLinks: func(chasm.Component, string) ([]*commonpb.Link, error) {
+				return nil, nil
+			},
+		},
+	}
+	// Both links would fail the per-request count and size limits.
+	cfg := test.NewLinksValidatorConfig()
+	cfg.MaxLinksPerRequest = func(string) int { return 1 }
+	cfg.LinkMaxSize = func(string) int { return 1 }
+	validator := test.NewLinksValidator(t, cfg)
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
+	}
+
+	require.NoError(t, activity.attachLinks(ctx, []*commonpb.Link{linkA, linkB}, "req-1", validator, "ns"))
+	require.Equal(t, []*commonpb.Link{linkA, linkB}, ctx.LinksByRequest[activity]["req-1"])
 }
 
 // TestEffectiveUserMetadata_FallsBackToLegacy ensures that activities persisted

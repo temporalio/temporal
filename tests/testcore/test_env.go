@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
 )
@@ -93,6 +94,7 @@ type TestEnv struct {
 type TestOption func(*testOptions)
 
 type testOptions struct {
+	testTimeout              time.Duration
 	dedicatedCluster         bool
 	needWorkerService        bool
 	dedicatedReason          string
@@ -101,6 +103,11 @@ type testOptions struct {
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 	historyTaskRecorder      bool
+	persistenceFaults        []PersistenceFault
+	// t is the test passed to NewEnv. This allows testOptions hooks to
+	// be able to access t, i.e., to register a t.Cleanup(...) hook in
+	// an option function
+	t *testing.T
 }
 
 type dynamicConfigOverride struct {
@@ -109,6 +116,13 @@ type dynamicConfigOverride struct {
 }
 
 type versionHeadersContextKey struct{}
+
+// WithTestTimeout sets the timeout for the environment's test context.
+func WithTestTimeout(timeout time.Duration) TestOption {
+	return func(o *testOptions) {
+		o.testTimeout = timeout
+	}
+}
 
 // WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
 // Use this for tests that have cluster-global side effects.
@@ -171,15 +185,6 @@ func WithMTLS() TestOption {
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, withMTLS())
 		o.dedicatedReason = "mTLS enabled"
-	}
-}
-
-// WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
-func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
-	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
-		o.dedicatedReason = "fault injection config used"
 	}
 }
 
@@ -261,14 +266,18 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
 
-	// Create the test context before any expensive setup, so that the deadline
-	// extension below can compensate for the time setup takes.
-	ctx := testcontext.For(t)
-
-	var options testOptions
+	options := testOptions{t: t}
 	for _, opt := range opts {
 		opt(&options)
 	}
+
+	// Create the test context before any expensive setup, so that the deadline
+	// extension below can compensate for the time setup takes.
+	// Must precede decorator registration, which otherwise fixes the default timeout.
+	testcontext.For(t, testcontext.WithTimeout(options.testTimeout))
+	testtelemetry.AttachTestName(t)
+	ctx := testcontext.For(t)
+
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 	if options.dedicatedReason != "" {
 		dedicatedGuard.record(options.dedicatedReason)

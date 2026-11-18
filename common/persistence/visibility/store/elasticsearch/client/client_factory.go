@@ -5,9 +5,10 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 )
 
-func NewClient(config *Config, httpClient *http.Client, logger log.Logger) (Client, error) {
+func NewClient(config *esconfig.Config, httpClient *http.Client, logger log.Logger) (Client, error) {
 	switch config.Version {
 	case "v8", "v7", "":
 		return newClient(config, httpClient, logger)
@@ -16,7 +17,7 @@ func NewClient(config *Config, httpClient *http.Client, logger log.Logger) (Clie
 	}
 }
 
-func NewCLIClient(config *Config, logger log.Logger) (CLIClient, error) {
+func NewCLIClient(config *esconfig.Config, logger log.Logger) (CLIClient, error) {
 	switch config.Version {
 	case "v8", "v7", "":
 		return newClient(config, nil, logger)
@@ -25,7 +26,7 @@ func NewCLIClient(config *Config, logger log.Logger) (CLIClient, error) {
 	}
 }
 
-func NewFunctionalTestsClient(config *Config, logger log.Logger) (IntegrationTestsClient, error) {
+func NewFunctionalTestsClient(config *esconfig.Config, logger log.Logger) (IntegrationTestsClient, error) {
 	switch config.Version {
 	case "v8", "v7", "":
 		return newClient(config, nil, logger)

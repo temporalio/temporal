@@ -23,6 +23,7 @@ const apiGoRepoSlug = "temporalio/api-go"
 const (
 	actionNoop    = "noop"
 	actionRelease = "release"
+	actionDryRun  = "dry-run"
 	actionError   = "error"
 )
 
@@ -159,6 +160,18 @@ func planAPIRelease(ctx context.Context, branch string, modFile *modfile.File) (
 	plan.baseTag = rel.baseTag
 	plan.apiGoSHA = apiGoSHA
 	plan.apiRef = apiRef
+
+	// A release candidate is cut daily and discarded, but the tag it would
+	// create is permanent and public, so creating it is left to the cloud
+	// branch the candidate is for. The plan is still built in full, and still
+	// reported: a candidate that cannot be planned is advance warning that the
+	// branch it precedes will not release either.
+	if strings.Contains(branch, rcBranchMarker) {
+		plan.action = actionDryRun
+		plan.reason = fmt.Sprintf("%s is a release candidate; commit %s would be released as %s (base %s)",
+			branch, rel.rev, rel.tag, rel.baseTag)
+	}
+
 	return plan, nil
 }
 

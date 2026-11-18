@@ -247,6 +247,12 @@ func withEngineMetricsHandler(handler metrics.Handler) engineTestOption {
 	}
 }
 
+func withEngineNamespaceName(name string) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithNamespaceName(namespaceID, name))
+	}
+}
+
 func newEngineTestConfig(opts ...engineTestOption) *engineTestConfig {
 	config := &engineTestConfig{}
 	for _, opt := range opts {
@@ -437,7 +443,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	generator := sched.Generator.Get(ctx)
 	generator.LastProcessedTime = timestamppb.New(now)
 
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(context.Background(), true)
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
 	}
@@ -485,7 +491,7 @@ func (e *testEnv) ReadContext() chasm.Context {
 func (e *testEnv) CloseTransaction() error {
 	e.t.Helper()
 
-	_, err := e.Node.CloseTransaction()
+	_, err := e.Node.CloseTransaction(context.Background(), true)
 	if err != nil {
 		return err
 	}
@@ -594,7 +600,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
 
-	tv := testvars.New(t)
+	tv := testvars.New(t).WithNamespaceName(namespace).WithNamespaceID(namespaceID)
 	nodeBackend.HandleNow = timeSource.Now
 	nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
@@ -640,7 +646,7 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 	if err != nil {
 		t.Fatalf("failed to set root component: %v", err)
 	}
-	_, err = infra.node.CloseTransaction()
+	_, err = infra.node.CloseTransaction(context.Background(), true)
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
 	}
@@ -660,7 +666,7 @@ func setupSentinelForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCont
 	if err != nil {
 		t.Fatalf("failed to set root component: %v", err)
 	}
-	_, err = infra.node.CloseTransaction()
+	_, err = infra.node.CloseTransaction(context.Background(), true)
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
 	}

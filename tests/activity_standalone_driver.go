@@ -118,8 +118,15 @@ func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	id := fmt.Sprintf("%s-%d", d.activityIDPrefix, d.numStarted)
 	resp, err := d.env.FrontendClient().StartActivityExecution(d.testContext(), d.startRequest(cfg, id, id))
 	require.NoError(t, err)
+	state := activityDriverState{cfg: cfg}
+	if cfg.EagerStart {
+		task := resp.GetEagerActivityTask()
+		require.NotNil(t, task, "eager standalone activity start did not return a task")
+		state.token = task.GetTaskToken()
+		state.startedAttempt = task.GetAttempt()
+	}
 	return &saaHandle{
-		activityDriverState: activityDriverState{cfg: cfg},
+		activityDriverState: state,
 		model:               newActivityModel(cfg),
 		d:                   d,
 		activityID:          id,
@@ -137,6 +144,7 @@ func (d *saaDriver) startRequest(c activityConfig, activityID, taskQueue string)
 	}
 	return &workflowservice.StartActivityExecutionRequest{
 		Namespace:              d.env.Namespace().String(),
+		RequestEagerExecution:  c.EagerStart,
 		ActivityId:             activityID,
 		ActivityType:           d.env.Tv().ActivityType(),
 		Identity:               d.env.Tv().ClientIdentity(),

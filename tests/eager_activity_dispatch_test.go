@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -49,6 +50,60 @@ func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 		taskpoller.CompleteWorkflowHandler,
 		taskpoller.WithTimeout(20*time.Second),
 	)
+	require.NoError(t, err)
+}
+
+func TestEagerActivityBatchWithRateLimit(t *testing.T) {
+	t.Parallel()
+
+	env := testcore.NewEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+	tv := env.Tv()
+	lowPriority := tv.WithActivityIDNumber(1)
+	mediumPriority := tv.WithActivityIDNumber(2)
+	highPriority := tv.WithActivityIDNumber(3)
+	startEagerActivityTestWorkflow(t, env, tv)
+	capture := env.StartNamespaceMetricCapture()
+	poller := env.TaskPoller()
+	response, err := poller.PollAndHandleWorkflowTask(tv,
+		func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					eagerActivityDispatchTestCommand(lowPriority, true, 5),
+					eagerActivityDispatchTestCommand(mediumPriority, true, 3),
+					eagerActivityDispatchTestCommand(highPriority, true, 1),
+				},
+			}, nil
+		},
+	)
+	require.NoError(t, err)
+	// A one-second burst at one task per second admits two initial grants.
+	require.Len(t, response.GetActivityTasks(), 2)
+	require.Equal(t, mediumPriority.ActivityID(), response.GetActivityTasks()[0].GetActivityId())
+	require.Equal(t, highPriority.ActivityID(), response.GetActivityTasks()[1].GetActivityId())
+	for _, metric := range []string{metrics.EagerDispatchRequestsSent.Name(), metrics.EagerDispatchRequests.Name()} {
+		recordings := capture.Metric(metric)
+		require.Len(t, recordings, 1, "all three activities should share one grant RPC")
+		require.Equal(t, int64(3), recordings[0].Value)
+	}
+	for _, eagerActivity := range response.GetActivityTasks() {
+		_, err := poller.HandleActivityTask(tv, eagerActivity, taskpoller.CompleteActivityTask(tv))
+		require.NoError(t, err)
+	}
+	_, err = poller.PollAndHandleActivityTask(lowPriority,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			require.Equal(t, lowPriority.ActivityID(), task.GetActivityId())
+			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
+		},
+		taskpoller.WithTimeout(20*time.Second),
+	)
+	require.NoError(t, err)
+	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.CompleteWorkflowHandler)
 	require.NoError(t, err)
 }
 

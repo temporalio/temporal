@@ -34,17 +34,20 @@ type RequestValidator struct {
 	config           Config
 	saMapperProvider searchattribute.MapperProvider
 	saValidator      *searchattribute.Validator
+	linkValidator    commonlinks.Validator
 }
 
 func NewValidator(
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	linkValidator commonlinks.Validator,
 ) *RequestValidator {
 	return &RequestValidator{
 		config:           config,
 		saMapperProvider: saMapperProvider,
 		saValidator:      saValidator,
+		linkValidator:    linkValidator,
 	}
 }
 
@@ -149,6 +152,9 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 	if request == nil {
 		return serviceerror.NewInvalidArgument("request is empty")
 	}
+	if err := v.config.validateAndPopulateWorkflowTimeSkippingConfig(request.GetTimeSkippingConfig(), request.GetNamespace()); err != nil {
+		return err
+	}
 
 	if err := v.ValidateWorkflowID(request.GetWorkflowId()); err != nil {
 		return err
@@ -217,5 +223,5 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 		return err
 	}
 
-	return commonlinks.Validate(request.GetLinks(), v.config.maxLinksPerRequest(request.GetNamespace()), v.config.linkMaxSize(request.GetNamespace()))
+	return v.linkValidator.Validate(request.GetNamespace(), request.GetLinks(), nil)
 }

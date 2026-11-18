@@ -1,6 +1,7 @@
 package elasticsearch
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -9,7 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/persistence/visibility/store/query/querytest"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 func TestQueryConverter_GetDatetimeFormat(t *testing.T) {
@@ -133,13 +139,13 @@ func TestQueryConverter_BuildAndExpr(t *testing.T) {
 			in: []elastic.Query{
 				elastic.NewTermQuery("field1", "foo"),
 				nil,
-				newBoolQuery().Should(elastic.NewTermQuery("field2", "bar")).MinimumNumberShouldMatch(1),
+				newBoolQuery().Should(elastic.NewTermQuery("field2", "bar")),
 				newBoolQuery().MustNot(elastic.NewTermQuery("field3", "zzz")),
 			},
 			out: newBoolQuery().
 				Filter(
 					elastic.NewTermQuery("field1", "foo"),
-					newBoolQuery().Should(elastic.NewTermQuery("field2", "bar")).MinimumNumberShouldMatch(1),
+					newBoolQuery().Should(elastic.NewTermQuery("field2", "bar")),
 				).
 				MustNot(elastic.NewTermQuery("field3", "zzz")),
 		},
@@ -208,8 +214,7 @@ func TestQueryConverter_BuildOrExpr(t *testing.T) {
 				Should(
 					elastic.NewTermQuery("field1", "foo"),
 					newBoolQuery().Filter(elastic.NewTermQuery("field2", "bar")),
-				).
-				MinimumNumberShouldMatch(1),
+				),
 		},
 		{
 			name: "multiple queries",
@@ -224,17 +229,16 @@ func TestQueryConverter_BuildOrExpr(t *testing.T) {
 					elastic.NewTermQuery("field1", "foo"),
 					newBoolQuery().Filter(elastic.NewTermQuery("field2", "bar")),
 					newBoolQuery().MustNot(elastic.NewTermQuery("field3", "zzz")),
-				).
-				MinimumNumberShouldMatch(1),
+				),
 		},
 		{
 			name: "multiple queries reuse",
 			in: []elastic.Query{
 				elastic.NewTermQuery("field1", "foo"),
 				nil,
-				newBoolQuery().Should(elastic.NewTermQuery("field2", "bar")).MinimumNumberShouldMatch(1),
+				newBoolQuery().Should(elastic.NewTermQuery("field2", "bar")),
 				newBoolQuery().MustNot(elastic.NewTermQuery("field3", "zzz")),
-				newBoolQuery().Should(elastic.NewTermQuery("field4", "aaa")).MinimumNumberShouldMatch(1),
+				newBoolQuery().Should(elastic.NewTermQuery("field4", "aaa")),
 			},
 			out: newBoolQuery().
 				Should(
@@ -242,8 +246,7 @@ func TestQueryConverter_BuildOrExpr(t *testing.T) {
 					elastic.NewTermQuery("field4", "aaa"),
 					elastic.NewTermQuery("field1", "foo"),
 					newBoolQuery().MustNot(elastic.NewTermQuery("field3", "zzz")),
-				).
-				MinimumNumberShouldMatch(1),
+				),
 		},
 	}
 
@@ -306,21 +309,21 @@ func TestQueryConverter_ConvertComparisonExpr(t *testing.T) {
 			operator: sqlparser.EqualStr,
 			col:      intCol,
 			value:    123,
-			out:      elastic.NewTermQuery(intCol.FieldName, 123),
+			out:      newTermQuery(intCol.FieldName, 123),
 		},
 		{
 			name:     "operator not equal",
 			operator: sqlparser.NotEqualStr,
 			col:      intCol,
 			value:    123,
-			out:      newBoolQuery().MustNot(elastic.NewTermQuery(intCol.FieldName, 123)),
+			out:      newBoolQuery().MustNot(newTermQuery(intCol.FieldName, 123)),
 		},
 		{
 			name:     "operator in",
 			operator: sqlparser.InStr,
 			col:      intCol,
 			value:    []any{123, 456},
-			out:      elastic.NewTermsQuery(intCol.FieldName, 123, 456),
+			out:      newTermsQuery(intCol.FieldName, 123, 456),
 		},
 		{
 			name:     "operator not in",
@@ -328,7 +331,7 @@ func TestQueryConverter_ConvertComparisonExpr(t *testing.T) {
 			col:      intCol,
 			value:    []any{123, 456},
 			out: newBoolQuery().MustNot(
-				elastic.NewTermsQuery(intCol.FieldName, 123, 456),
+				newTermsQuery(intCol.FieldName, 123, 456),
 			),
 		},
 		{
@@ -409,21 +412,21 @@ func TestQueryConverter_ConvertKeywordComparisonExpr(t *testing.T) {
 			operator: sqlparser.EqualStr,
 			col:      keywordCol,
 			value:    "foo",
-			out:      elastic.NewTermQuery(keywordCol.FieldName, "foo"),
+			out:      newTermQuery(keywordCol.FieldName, "foo"),
 		},
 		{
 			name:     "operator not equal",
 			operator: sqlparser.NotEqualStr,
 			col:      keywordCol,
 			value:    "foo",
-			out:      newBoolQuery().MustNot(elastic.NewTermQuery(keywordCol.FieldName, "foo")),
+			out:      newBoolQuery().MustNot(newTermQuery(keywordCol.FieldName, "foo")),
 		},
 		{
 			name:     "operator in",
 			operator: sqlparser.InStr,
 			col:      keywordCol,
 			value:    []any{"foo", "bar"},
-			out:      elastic.NewTermsQuery(keywordCol.FieldName, "foo", "bar"),
+			out:      newTermsQuery(keywordCol.FieldName, "foo", "bar"),
 		},
 		{
 			name:     "operator not in",
@@ -431,7 +434,7 @@ func TestQueryConverter_ConvertKeywordComparisonExpr(t *testing.T) {
 			col:      keywordCol,
 			value:    []any{"foo", "bar"},
 			out: newBoolQuery().MustNot(
-				elastic.NewTermsQuery(keywordCol.FieldName, "foo", "bar"),
+				newTermsQuery(keywordCol.FieldName, "foo", "bar"),
 			),
 		},
 		{
@@ -518,21 +521,21 @@ func TestQueryConverter_ConvertKeywordListComparisonExpr(t *testing.T) {
 			operator: sqlparser.EqualStr,
 			col:      keywordListCol,
 			value:    "foo",
-			out:      elastic.NewTermQuery(keywordListCol.FieldName, "foo"),
+			out:      newTermQuery(keywordListCol.FieldName, "foo"),
 		},
 		{
 			name:     "operator not equal",
 			operator: sqlparser.NotEqualStr,
 			col:      keywordListCol,
 			value:    "foo",
-			out:      newBoolQuery().MustNot(elastic.NewTermQuery(keywordListCol.FieldName, "foo")),
+			out:      newBoolQuery().MustNot(newTermQuery(keywordListCol.FieldName, "foo")),
 		},
 		{
 			name:     "operator in",
 			operator: sqlparser.InStr,
 			col:      keywordListCol,
 			value:    []any{"foo", "bar"},
-			out:      elastic.NewTermsQuery(keywordListCol.FieldName, "foo", "bar"),
+			out:      newTermsQuery(keywordListCol.FieldName, "foo", "bar"),
 		},
 		{
 			name:     "operator not in",
@@ -540,7 +543,7 @@ func TestQueryConverter_ConvertKeywordListComparisonExpr(t *testing.T) {
 			col:      keywordListCol,
 			value:    []any{"foo", "bar"},
 			out: newBoolQuery().MustNot(
-				elastic.NewTermsQuery(keywordListCol.FieldName, "foo", "bar"),
+				newTermsQuery(keywordListCol.FieldName, "foo", "bar"),
 			),
 		},
 		{
@@ -749,4 +752,39 @@ func TestQueryConverter_ConvertIsExpr(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestElasticsearchQueryConverter(t *testing.T) {
+	t.Parallel()
+	querytest.Run(
+		t,
+		querytest.Elasticsearch,
+		newESQueryConverter,
+		serializeESQuery,
+	)
+}
+
+func newESQueryConverter() *query.QueryConverter[elastic.Query] {
+	return NewQueryConverter(
+		namespace.Name("test-namespace"),
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
+	)
+}
+
+func serializeESQuery(q elastic.Query) (string, error) {
+	if q == nil {
+		return "", nil
+	}
+	source, err := q.Source()
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(source)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
