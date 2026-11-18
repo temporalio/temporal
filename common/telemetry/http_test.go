@@ -461,11 +461,14 @@ func TestNewHTTPHandler(t *testing.T) {
 		recorder := tracetest.NewSpanRecorder()
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 		instrumenter := NewHTTPServerHandlerInstrumenter(tp, nil)
-		instrumenter.Instrument(handler, "test-handler").ServeHTTP(
+		const operation = "temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint"
+		instrumenter.Instrument(handler, operation).ServeHTTP(
 			httptest.NewRecorder(),
-			httptest.NewRequest(http.MethodGet, "http://example.com", nil),
+			httptest.NewRequest(http.MethodPost, "http://example.com", nil),
 		)
-		require.Equal(t, "test-handler", recorder.Ended()[0].Name())
+		spans := recorder.Ended()
+		require.Len(t, spans, 1)
+		require.Equal(t, operation, spans[0].Name())
 	})
 
 	// Debug-only headers and payloads must remain absent unless debug mode is enabled.
