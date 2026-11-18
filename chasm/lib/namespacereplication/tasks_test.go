@@ -2235,6 +2235,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		want := &adminservice.ApplyNamespaceMutationRequest{
 			NamespaceTask:        task,
 			NamespaceTaskPayload: payload,
+			TargetCluster:        "cellB",
 		}
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Cond(func(request *adminservice.ApplyNamespaceMutationRequest) bool {
 			return proto.Equal(want, request)

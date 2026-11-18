@@ -288,6 +288,9 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
+		if options.Addressed {
+			return true, nil
+		}
 		return h.admitter.Admit(ctx, h.currentCluster, task, options), nil
 	default:
 		// return the original err

@@ -368,7 +368,7 @@ func TestShadowTriggerErrorMetricWithoutEvents(t *testing.T) {
 	defer mh.StopCapture(capture)
 	handler := &namespaceHandler{logger: log.NewNoopLogger(), clusterMetadata: metadata, metricsHandler: mh, chasmNsReplClient: &failingShadowTriggerClient{}}
 	detail := &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}, Config: &persistencespb.NamespaceConfig{}, ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cellA", "cellB"}}}
-	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, nil, true, false)
+	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, detail.GetReplicationConfig().GetClusters(), nil, true, false)
 	await.Require(t.Context(), t, func(t *await.T) {
 		values := capture.SnapshotMetric(metrics.NamespaceReplicationShadowTriggerOutcomes.Name())
 		require.Len(t, values, 1)
@@ -396,7 +396,7 @@ func TestShadowSourceObserverPanicDoesNotPreventTrigger(t *testing.T) {
 		eventLogger: &panicRemoteClusterEventLogger{}, config: &Config{EmitNamespaceLifecycleEvents: func() bool { return true }},
 	}
 	detail := &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}, Config: &persistencespb.NamespaceConfig{}, ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cellA", "cellB"}}}
-	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, nil, true, false)
+	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, detail.GetReplicationConfig().GetClusters(), nil, true, false)
 	require.Equal(t, "namespace-id", await.Rcv(t, client.requests).GetNamespaceId())
 	await.Rcv(t, panicRecorded)
 	require.Len(t, capture.SnapshotMetric(metrics.NamespaceReplicationShadowPreparationOutcomes.Name()), 1)

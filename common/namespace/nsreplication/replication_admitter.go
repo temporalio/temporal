@@ -21,6 +21,22 @@ type AdmissionOptions struct {
 	// The default policy retains the snapshot even if no namespace exists locally,
 	// fencing delayed older additions. Custom policies retain control of admission.
 	RemovedPeer bool
+	// Addressed marks a delivery whose source membership decision the receiver
+	// trusts (see AddressedDeliveryPolicy). It is admitted without consulting
+	// the admission policy. Legacy delivery never sets it.
+	Addressed bool
+}
+
+// AddressedDeliveryPolicy reports whether a receiver trusts the source's
+// membership decision for an authoritative CHASM delivery addressed to it.
+// When it does, the receiver skips its own removed-peer check and admits the
+// snapshot because the source addressed it. The default trusts nothing, so the
+// receiver checks membership itself.
+type AddressedDeliveryPolicy func(task *replicationspb.NamespaceTaskAttributes) bool
+
+// NewDefaultAddressedDeliveryPolicy creates the default AddressedDeliveryPolicy.
+func NewDefaultAddressedDeliveryPolicy() AddressedDeliveryPolicy {
+	return func(*replicationspb.NamespaceTaskAttributes) bool { return false }
 }
 
 // DefaultAdmitter accepts member snapshots and explicit removal deliveries.

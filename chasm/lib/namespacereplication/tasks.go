@@ -851,6 +851,9 @@ type applyPeerTaskHandlerOptions struct {
 	MetricsHandler  metrics.Handler
 	EventLogger     otellog.Logger
 	DynamicConfig   *dynamicconfig.Collection
+	// ReplicationResolverFactory resolves replica membership for removed-peer
+	// detection; it must agree with the frontend that computed the peer list.
+	ReplicationResolverFactory namespace.ReplicationResolverFactory `optional:"true"`
 }
 
 type applyPeerTaskHandler struct {
@@ -868,12 +871,14 @@ type applyPeerTaskHandler struct {
 	// Retriable peer failures are retried with capped exponential backoff over a
 	// configurable budget by recordPeerOutcome + TransitionPeerRetry (see
 	// statemachine.go), not by CHASM's default task retry.
-	config *config
-	logger log.Logger
+	config                     *config
+	logger                     log.Logger
+	replicationResolverFactory namespace.ReplicationResolverFactory
 }
 
 func newApplyPeerTaskHandler(opts applyPeerTaskHandlerOptions) *applyPeerTaskHandler {
 	return &applyPeerTaskHandler{
+		replicationResolverFactory:   opts.ReplicationResolverFactory,
 		peerApplier:                  opts.PeerApplier,
 		currentCluster:               opts.ClusterMetadata.GetCurrentClusterName(),
 		metricsHandler:               opts.MetricsHandler,
@@ -934,6 +939,7 @@ func (h *applyPeerTaskHandler) Execute(
 		Detail                  *persistencespb.NamespaceDetail
 		Shadow                  bool
 		ShadowLegacyTaskPayload []byte
+		RemovedPeers            *namespacereplicationpb.RemovedPeers
 	}
 	loaded, readErr := chasm.ReadComponent(
 		ctx,
@@ -945,6 +951,7 @@ func (h *applyPeerTaskHandler) Execute(
 				Detail:                  common.CloneProto(m.GetNamespaceDetail()),
 				Shadow:                  m.GetShadow(),
 				ShadowLegacyTaskPayload: bytes.Clone(m.GetShadowLegacyTaskPayload()),
+				RemovedPeers:            common.CloneProto(m.GetRemovedPeers()),
 			}, nil
 		},
 		nil,
@@ -973,7 +980,7 @@ func (h *applyPeerTaskHandler) Execute(
 		// Targets are the union of previous and new membership. A target absent
 		// from the new list must retain the removal snapshot to fence older adds.
 		RemovedPeer: !loaded.Shadow && loaded.Operation == enumsspb.NAMESPACE_OPERATION_UPDATE &&
-			!slices.Contains(loaded.Detail.GetReplicationConfig().GetClusters(), task.GetTargetCell()),
+			h.removedPeer(loaded.RemovedPeers, loaded.Detail, task.GetTargetCell()),
 		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
 	}
 	result, applyErr := h.peerApplier.Apply(callCtx, request)
@@ -1010,6 +1017,29 @@ func (h *applyPeerTaskHandler) Execute(
 		return record(classifyPeerErr(resultErr), resultErr)
 	}
 	return record(outcome, nil)
+}
+
+// replicationClusters returns the namespace's replica cells, falling back to
+// ReplicationConfig.Clusters when no resolver factory is configured.
+// removedPeer uses the removed set the source recorded with the mutation. Only
+// mutations created before the source recorded it derive membership again.
+func (h *applyPeerTaskHandler) removedPeer(
+	recorded *namespacereplicationpb.RemovedPeers,
+	detail *persistencespb.NamespaceDetail,
+	target string,
+) bool {
+	if recorded != nil {
+		return slices.Contains(recorded.GetCells(), target)
+	}
+	return !slices.Contains(h.replicationClusters(detail), target)
+}
+
+func (h *applyPeerTaskHandler) replicationClusters(detail *persistencespb.NamespaceDetail) []string {
+	factory := h.replicationResolverFactory
+	if factory == nil {
+		factory = namespace.NewDefaultReplicationResolverFactory()
+	}
+	return factory(detail).ClusterNames(namespace.EmptyBusinessID)
 }
 
 // peerOutcomeFromResult maps a transport-neutral PeerApplyResult onto the

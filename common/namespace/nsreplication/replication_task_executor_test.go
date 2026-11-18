@@ -666,6 +666,34 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeNotAdmitted))
 }
 
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_AddressedTaskSkipsAdmitter() {
+	// The admission policy would decline: this cluster is not in the snapshot.
+	task := &replicationspb.NamespaceTaskAttributes{
+		Id:                 uuid.NewString(),
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
+		Info: &namespacepb.NamespaceInfo{
+			Name:  uuid.NewString(),
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+		Config: &namespacepb.NamespaceConfig{},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: "another-cluster"},
+			},
+		},
+	}
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: task.GetInfo().GetName(),
+	}).Return(nil, &serviceerror.NamespaceNotFound{})
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{ID: task.GetId()}, nil)
+
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{
+		Admission: AdmissionOptions{Addressed: true},
+	})
+	s.Require().NoError(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
+}
+
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateLocalNamespaceTask_NotAdmitted() {
 	task := &replicationspb.NamespaceTaskAttributes{
 		Id:                 uuid.NewString(),

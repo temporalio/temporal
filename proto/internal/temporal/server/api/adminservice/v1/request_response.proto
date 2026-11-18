@@ -239,6 +239,10 @@ message ApplyNamespaceMutationRequest {
   // The default admission policy retains this snapshot even when the namespace
   // is absent, so its config version fences delayed older additions.
   bool removed_peer = 10;
+
+  // Cluster the source addressed this delivery to. A receiver rejects a delivery
+  // whose target_cluster names another cluster. Unset by older sources.
+  string target_cluster = 11;
 }
 
 message ApplyNamespaceMutationResponse {

@@ -59,6 +59,9 @@ type (
 		config                 *Config
 		chasmNsReplClient      namespacereplicationpb.NamespaceReplicationServiceClient
 		metricsHandler         metrics.Handler
+		// replicationResolverFactory resolves replica membership. Deployments can
+		// derive membership from namespace state other than ReplicationConfig.Clusters.
+		replicationResolverFactory namespace.ReplicationResolverFactory
 	}
 
 	namespaceReplicationTransportMode int
@@ -99,6 +102,7 @@ func newNamespaceHandler(
 	config *Config,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
 	metricsHandler metrics.Handler,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
@@ -114,7 +118,14 @@ func newNamespaceHandler(
 		config:                 config,
 		chasmNsReplClient:      chasmNsReplClient,
 		metricsHandler:         metricsHandler,
+
+		replicationResolverFactory: replicationResolverFactory,
 	}
+}
+
+// replicationClusters returns the cells that hold a replica of the namespace.
+func (d *namespaceHandler) replicationClusters(detail *persistencespb.NamespaceDetail) []string {
+	return d.replicationResolverFactory(detail).ClusterNames(namespace.EmptyBusinessID)
 }
 
 // RegisterNamespace register a new namespace
@@ -269,6 +280,8 @@ func (d *namespaceHandler) RegisterNamespace(
 		IsGlobalNamespace: isGlobalNamespace,
 	}
 	transportMode := d.effectiveNamespaceReplicationTransportMode()
+	replicationClusters := d.replicationClusters(namespaceRequest.Namespace)
+	shouldReplicate := nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationClusters, false, info.GetState())
 
 	applyLegacy := func() (string, error) {
 		response, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
@@ -295,12 +308,13 @@ func (d *namespaceHandler) RegisterNamespace(
 	var namespaceID string
 	switch transportMode {
 	case namespaceReplicationTransportCHASM:
-		if nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationConfig.GetClusters(), false, info.GetState()) {
+		if shouldReplicate {
 			namespaceID = info.GetId()
 			err = d.triggerNamespaceMutation(ctx, namespaceID+":"+uuid.NewString(), &namespacereplicationpb.NamespaceMutation{
 				Operation:         enumsspb.NAMESPACE_OPERATION_CREATE,
 				NamespaceDetail:   namespaceRequest.Namespace,
-				PeerCells:         peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), replicationConfig.GetClusters(), nil),
+				PeerCells:         peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), replicationClusters, nil),
+				RemovedPeers:      removedPeersFromClusters(d.clusterMetadata.GetCurrentClusterName(), replicationClusters, nil),
 				IsGlobalNamespace: isGlobalNamespace,
 			})
 			if err == nil {
@@ -325,6 +339,7 @@ func (d *namespaceHandler) RegisterNamespace(
 					nil,
 				),
 				0,
+				replicationClusters,
 				nil,
 				isGlobalNamespace,
 				false,
@@ -467,6 +482,7 @@ func (d *namespaceHandler) UpdateNamespace(
 	if err != nil {
 		return nil, err
 	}
+	previousReplicationClusters := d.replicationClusters(common.CloneProto(getResponse.Namespace))
 
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
@@ -722,6 +738,11 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 	}
 
+	replicationClusters := d.replicationClusters(detail)
+	replicationClustersChanged := clusterListChanged ||
+		!slices.Equal(slices.Sorted(slices.Values(previousReplicationClusters)), slices.Sorted(slices.Values(replicationClusters)))
+	shouldReplicate := nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationClusters, replicationClustersChanged, info.GetState())
+
 	applyLegacy := func() error {
 		if updateReq != nil {
 			if err := d.metadataMgr.UpdateNamespace(ctx, updateReq); err != nil {
@@ -753,12 +774,13 @@ func (d *namespaceHandler) UpdateNamespace(
 
 	switch transportMode {
 	case namespaceReplicationTransportCHASM:
-		if nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationConfig.GetClusters(), clusterListChanged, info.GetState()) {
+		if shouldReplicate {
 			err = d.triggerNamespaceMutation(ctx, info.GetId()+":"+uuid.NewString(), &namespacereplicationpb.NamespaceMutation{
 				Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
 				NamespaceDetail:   detail,
 				ExpectedVersion:   notificationVersion,
-				PeerCells:         peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), replicationConfig.GetClusters(), oldReplicationClusters),
+				PeerCells:         peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), replicationClusters, previousReplicationClusters),
+				RemovedPeers:      removedPeersFromClusters(d.clusterMetadata.GetCurrentClusterName(), replicationClusters, previousReplicationClusters),
 				IsGlobalNamespace: isGlobalNamespace,
 				// A no-op republishes the source snapshot without a local write
 				// or consuming a notification-version CAS slot.
@@ -793,9 +815,10 @@ func (d *namespaceHandler) UpdateNamespace(
 					failoverHistory,
 				),
 				notificationVersion,
-				oldReplicationClusters,
+				replicationClusters,
+				previousReplicationClusters,
 				isGlobalNamespace,
-				clusterListChanged,
+				replicationClustersChanged,
 			)
 		}
 	default:
@@ -1513,6 +1536,7 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	chasmDetail *persistencespb.NamespaceDetail,
 	legacyDetail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
+	currentClusters []string,
 	previousClusters []string,
 	isGlobalNamespace bool,
 	clusterListChanged bool,
@@ -1520,7 +1544,7 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	if !nsreplication.ShouldReplicateNamespace(
 		false,
 		isGlobalNamespace,
-		chasmDetail.GetReplicationConfig().GetClusters(),
+		currentClusters,
 		clusterListChanged,
 		chasmDetail.GetInfo().GetState(),
 	) {
@@ -1530,7 +1554,7 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	legacyTask := nsreplication.NamespaceDetailToTaskAttributes(operation, legacyDetail)
 	namespaceID := chasmDetail.GetInfo().GetId()
 	businessID := namespaceID + ":" + uuid.NewString()
-	peerCells := peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), chasmDetail.GetReplicationConfig().GetClusters(), previousClusters)
+	peerCells := peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), currentClusters, previousClusters)
 	legacyPayload, err := nsreplication.MarshalNamespaceTask(legacyTask)
 	d.recordShadowSourceOutcome(legacyTask, legacyPayload, businessID, peerCells, "prepare", err)
 	if err != nil {
@@ -1552,6 +1576,7 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			NamespaceDetail:         chasmDetail,
 			ExpectedVersion:         expectedVersion,
 			PeerCells:               peerCells,
+			RemovedPeers:            removedPeersFromClusters(d.clusterMetadata.GetCurrentClusterName(), currentClusters, previousClusters),
 			IsGlobalNamespace:       isGlobalNamespace,
 			Shadow:                  true,
 			ShadowLegacyTaskPayload: legacyPayload,
@@ -1628,4 +1653,18 @@ func peerCellsFromClusters(currentCluster string, newClusters, previousClusters 
 	add(newClusters)
 	add(previousClusters)
 	return peerCells
+}
+
+// removedPeersFromClusters returns the peers that leave the replica set. The
+// source records them with the mutation so delivery does not derive membership
+// again, which could disagree when membership depends on more than the snapshot.
+func removedPeersFromClusters(currentCluster string, newClusters, previousClusters []string) *namespacereplicationpb.RemovedPeers {
+	removed := &namespacereplicationpb.RemovedPeers{}
+	for _, clusterName := range previousClusters {
+		if clusterName == currentCluster || slices.Contains(newClusters, clusterName) || slices.Contains(removed.Cells, clusterName) {
+			continue
+		}
+		removed.Cells = append(removed.Cells, clusterName)
+	}
+	return removed
 }

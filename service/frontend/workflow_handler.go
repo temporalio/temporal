@@ -356,6 +356,7 @@ func NewWorkflowHandler(
 	validator *workflow.RequestValidator,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
 	metricsHandler metrics.Handler,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		ActivityHandler:       activityHandler,
@@ -384,6 +385,7 @@ func NewWorkflowHandler(
 			config,
 			chasmNsReplClient,
 			metricsHandler,
+			replicationResolverFactory,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,

@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
@@ -78,7 +79,7 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 				handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
 					nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
 					archiver.NewArchivalMetadata(dc, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-					nil, clock.NewEventTimeSource(), cfg, client, nil)
+					nil, clock.NewEventTimeSource(), cfg, client, nil, namespace.NewDefaultReplicationResolverFactory())
 				clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 				clusters.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 				clusters.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
@@ -238,6 +239,7 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 		detail,
 		legacyDetail,
 		7,
+		detail.GetReplicationConfig().GetClusters(),
 		[]string{"cell-a", "cell-c"},
 		true,
 		true,
@@ -284,7 +286,7 @@ func TestInvokeShadowNamespaceMutationSkipsWhenLegacyWouldNotReplicate(t *testin
 			if tc.deleted {
 				detail.Info.State = enumspb.NAMESPACE_STATE_DELETED
 			}
-			handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 0, nil, tc.global, false)
+			handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 0, detail.GetReplicationConfig().GetClusters(), nil, tc.global, false)
 			select {
 			case <-client.requests:
 				t.Fatal("unexpected shadow dispatch")
@@ -351,6 +353,7 @@ func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {
 			detail,
 			detail,
 			7,
+			detail.GetReplicationConfig().GetClusters(),
 			nil,
 			true,
 			true,
@@ -393,7 +396,7 @@ func TestInvokeShadowNamespaceMutationReferencePreparationFailure(t *testing.T) 
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
 	}
 	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE,
-		detail, detail, 7, nil, true, false)
+		detail, detail, 7, detail.GetReplicationConfig().GetClusters(), nil, true, false)
 	select {
 	case <-client.requests:
 		t.Fatal("shadow dispatch started without a valid legacy reference")

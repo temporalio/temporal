@@ -97,6 +97,8 @@ type (
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		namespaceMutationExecutor  nsreplication.MutationTaskExecutor
+		replicationResolverFactory namespace.ReplicationResolverFactory
+		addressedDeliveryPolicy    nsreplication.AddressedDeliveryPolicy
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.AdminVisibilityManager
 		persistenceExecutionName   string
@@ -160,6 +162,13 @@ type (
 		// use the following components.
 		CategoryRegistry tasks.TaskCategoryRegistry
 		matchingClient   matchingservice.MatchingServiceClient
+
+		// ReplicationResolverFactory resolves replica membership when validating
+		// removed-peer namespace mutations. Nil uses ReplicationConfig.Clusters.
+		ReplicationResolverFactory namespace.ReplicationResolverFactory
+		// AddressedDeliveryPolicy decides which addressed CHASM deliveries skip
+		// the receiver's own membership checks. Nil trusts none.
+		AddressedDeliveryPolicy nsreplication.AddressedDeliveryPolicy
 	}
 )
 
@@ -189,6 +198,8 @@ func NewAdminHandler(
 		config:                     args.Config,
 		namespaceDLQHandler:        namespaceDLQHandler,
 		namespaceMutationExecutor:  namespaceMutationExecutor,
+		replicationResolverFactory: args.ReplicationResolverFactory,
+		addressedDeliveryPolicy:    args.AddressedDeliveryPolicy,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
@@ -1106,16 +1117,28 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			Transport: nsreplication.CHASMReplicationTransport,
 		})
 		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
+		currentCluster := adh.clusterMetadata.GetCurrentClusterName()
+		if target := request.GetTargetCluster(); target != "" && target != currentCluster {
+			err := serviceerror.NewFailedPreconditionf("namespace mutation addressed to cluster %q reached cluster %q", target, currentCluster)
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+			return nil, err
+		}
+		// A trusted delivery follows the membership decision the source made when
+		// it created the mutation, so the receiver neither re-checks a removal nor
+		// consults its admission policy.
+		addressed := request.GetTargetCluster() != "" && adh.addressedDeliveryPolicy != nil && adh.addressedDeliveryPolicy(payloadTask)
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after
 		// the source has stopped targeting this peer. Legacy never sets this marker.
-		if request.GetRemovedPeer() {
-			clusters := payloadTask.GetReplicationConfig().GetClusters()
-			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
-				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
-					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
-				}) {
+		if request.GetRemovedPeer() && !addressed {
+			resolverFactory := adh.replicationResolverFactory
+			if resolverFactory == nil {
+				resolverFactory = namespace.NewDefaultReplicationResolverFactory()
+			}
+			members := resolverFactory(nsreplication.NamespaceDetailFromTaskAttributes(payloadTask)).ClusterNames(namespace.EmptyBusinessID)
+			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(members) == 0 ||
+				slices.Contains(members, currentCluster) {
 				err := serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
 				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 				return nil, err
@@ -1133,7 +1156,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
 			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
-				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer()},
+				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer(), Addressed: addressed},
 			})
 		}, policy, func(err error) bool {
 			_, retryable := errors.AsType[*serviceerror.Unavailable](err)

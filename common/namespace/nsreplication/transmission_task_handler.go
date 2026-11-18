@@ -155,6 +155,28 @@ func NamespaceDetailFromTransmissionTask(
 	}
 }
 
+// NamespaceDetailFromTaskAttributes rebuilds the persisted namespace shape carried
+// by a replication task, for policies that inspect the replicated detail.
+func NamespaceDetailFromTaskAttributes(task *replicationspb.NamespaceTaskAttributes) *persistencespb.NamespaceDetail {
+	return &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:          task.GetId(),
+			Name:        task.GetInfo().GetName(),
+			State:       task.GetInfo().GetState(),
+			Description: task.GetInfo().GetDescription(),
+			Owner:       task.GetInfo().GetOwnerEmail(),
+			Data:        task.GetInfo().GetData(),
+		},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: task.GetReplicationConfig().GetActiveClusterName(),
+			Clusters:          ConvertClusterReplicationConfigFromProto(task.GetReplicationConfig().GetClusters()),
+			State:             task.GetReplicationConfig().GetState(),
+		},
+		ConfigVersion:   task.GetConfigVersion(),
+		FailoverVersion: task.GetFailoverVersion(),
+	}
+}
+
 // ShouldReplicateNamespace reports whether a namespace mutation must be
 // propagated to peer clusters at all. It is the single replicate/skip gate,
 // shared by the legacy queue and CHASM namespace replication transports so they
