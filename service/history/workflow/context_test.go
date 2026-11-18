@@ -903,3 +903,45 @@ func (s *contextSuite) TestTaskCompletionBuffer_MemoryLimitReason() {
 	s.Len(recordings, 1)
 	s.Equal(string(metrics.BufferLostReasonMemoryLimit), recordings[0].Tags["reason"])
 }
+
+// newContextWithSpeculativeMutableState returns the suite's context holding a cached mutable state with a
+// pending speculative CHASM transition applied at speculativeVersion.
+func (s *contextSuite) newContextWithSpeculativeMutableState(speculativeVersion int64) *historyi.MockMutableState {
+	controller := gomock.NewController(s.T())
+	mockChasmTree := historyi.NewMockChasmTree(controller)
+	mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(speculativeVersion, true)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	mockMutableState := historyi.NewMockMutableState(controller)
+	mockMutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
+	s.workflowContext.MutableState = mockMutableState
+	return mockMutableState
+}
+
+func (s *contextSuite) TestLoadMutableState_SpeculativeChasmTransitionSameFailoverVersion() {
+	failoverVersion := tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID)
+	mockMutableState := s.newContextWithSpeculativeMutableState(failoverVersion)
+	mockMutableState.EXPECT().StartTransaction(tests.LocalNamespaceEntry).Return(false, nil)
+
+	ms, err := s.workflowContext.LoadMutableState(context.Background(), s.mockShard)
+	s.NoError(err)
+	s.Same(mockMutableState, ms)
+}
+
+func (s *contextSuite) TestLoadMutableState_SpeculativeChasmTransitionFailoverVersionChanged() {
+	failoverVersion := tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID)
+	mockMutableState := s.newContextWithSpeculativeMutableState(failoverVersion + 1)
+	mockMutableState.EXPECT().GetQueryRegistry().Return(NewQueryRegistry())
+	mockMutableState.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask()
+	readErr := serviceerror.NewUnavailable("read failed")
+	s.mockShard.Resource.ExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: tests.WorkflowKey.NamespaceID,
+		WorkflowID:  tests.WorkflowKey.WorkflowID,
+		RunID:       tests.WorkflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	}).Return(nil, readErr)
+
+	_, err := s.workflowContext.LoadMutableState(context.Background(), s.mockShard)
+	s.ErrorIs(err, readErr)
+	s.Nil(s.workflowContext.MutableState)
+}

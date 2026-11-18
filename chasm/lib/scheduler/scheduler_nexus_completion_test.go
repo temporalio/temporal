@@ -293,7 +293,7 @@ func TestHandleNexusCompletion_MigratedRunningWorkflowKeepsCompletionState(t *te
 	require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, migrated.GetOverlapPolicy())
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	_, engineCtx := newTestEngineContext(t, logger)
+	_, engineCtx := newTestEngineContext(t, logger, withEngineNamespaceName(namespace))
 	handler := scheduler.NewTestHandler(logger)
 	_, err := handler.TestCreateFromMigrationState(engineCtx, req)
 	require.NoError(t, err)
@@ -316,6 +316,7 @@ func TestHandleNexusCompletion_MigratedRunningWorkflowKeepsCompletionState(t *te
 
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			require.Equal(t, namespace, s.Namespace)
 			require.Equal(t, "tracked workflow failed", s.LastCompletionResult.Get(ctx).GetFailure().GetMessage())
 			require.True(t, s.Schedule.State.Paused)
 			return struct{}{}, nil

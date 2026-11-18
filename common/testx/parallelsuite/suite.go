@@ -39,6 +39,8 @@ type Scope interface {
 	TB() testing.TB
 	Require() *require.Assertions
 	AssertionT() require.TestingT
+
+	// Common assertions for test helpers.
 	NoError(err error, msgAndArgs ...any)
 	Equal(expected, actual any, msgAndArgs ...any)
 	Nil(object any, msgAndArgs ...any)
@@ -59,6 +61,16 @@ func WithContext(ctx context.Context, scope Scope) Scope {
 
 func (s contextScope) Context() context.Context {
 	return s.ctx
+}
+
+// Await retries fn on assertion failure until the timeout or scope cancellation.
+// The scope passed to fn carries the context and assertions for that attempt.
+func Await(s Scope, fn func(Scope), timeout, interval time.Duration) {
+	tb := s.TB()
+	tb.Helper()
+	await.Require(s.Context(), tb, func(t *await.T) {
+		fn(t)
+	}, timeout, interval)
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
