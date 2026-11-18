@@ -337,13 +337,6 @@ lint-code: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting code with temporal_minimal..."
 	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_VARIANT_DIRS))
 
-.PHONY: lint-parallelsuite
-lint-parallelsuite: $(GOLANGCI_LINT)
-	@printf $(COLOR) "Linting parallel suites in tests/..."
-	@GOWORK=off "$(GOLANGCI_LINT)" run --enable-only=parallelsuitelint \
-		--config=.github/.golangci.yml --build-tags "$(ALL_TEST_TAGS)" \
-		$(if $(PARALLELSUITELINT_BASE_REV),--new-from-rev="$(PARALLELSUITELINT_BASE_REV)") ./tests/...
-
 $(GOLANGCI_LINT): .github/.custom-gcl.yml \
 		common/testx/parallelsuitelint/*.go common/testx/parallelsuitelint/golangci/*.go \
 		common/testx/parallelsuitelint/go.mod common/testx/parallelsuitelint/go.sum
