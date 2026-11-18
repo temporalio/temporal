@@ -16,7 +16,7 @@ type (
 		StoreID          string
 		IDReusePolicy    chasm.BusinessIDReusePolicy
 		IDConflictPolicy chasm.BusinessIDConflictPolicy
-		// RequestID, when set, identifies the start request via chasm.WithStartRequestID.
+		// RequestID, when set, identifies the start request via chasm.WithRequestID.
 		RequestID string
 	}
 
@@ -106,7 +106,7 @@ func NewPayloadStoreHandler(
 		},
 		nil,
 		chasm.WithBusinessIDPolicy(request.IDReusePolicy, request.IDConflictPolicy),
-		chasm.WithStartRequestID(request.RequestID),
+		chasm.WithRequestID(request.RequestID),
 	)
 	if err != nil {
 		return NewPayloadStoreResponse{}, err

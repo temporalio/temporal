@@ -307,6 +307,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 
 	cbValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), s.mockNamespaceCache)
 	s.NoError(err)
+	linkValidator := test.NewLinksValidator(s.T(), test.NewLinksValidatorConfig())
 
 	saValidator := searchattribute.NewValidator(
 		s.mockResource.GetSearchAttributesProvider(),
@@ -325,6 +326,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	)
 	return NewWorkflowHandler(
 		cbValidator,
+		linkValidator,
 		config,
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
@@ -375,6 +377,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			}, log.NewNoopLogger())),
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
+			linkValidator,
 		),
 		nil,
 		metrics.NoopMetricsHandler,
@@ -1150,7 +1153,6 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDupli
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
@@ -1353,7 +1355,6 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregatedLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace(callbacks.AddressMatchRules{
 		Rules: []callbacks.AddressMatchRule{
 			{
@@ -1506,7 +1507,6 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkf
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1568,7 +1568,6 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Priority() {
 func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWorkflowExecutionRequest{
@@ -1600,7 +1599,6 @@ func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks()
 func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1703,7 +1701,6 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Succeed_WithCustom
 func (s *WorkflowHandlerSuite) TestRequestCancelWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -6847,8 +6844,10 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 
 func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
 	wh := s.getWorkflowHandler(config)
+	linkCfg := test.NewLinksValidatorConfig()
+	linkCfg.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh.linkValidator = test.NewLinksValidator(s.T(), linkCfg)
 	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.testNamespace.String(),
@@ -7046,5 +7045,55 @@ func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
 		Nexus: &commonpb.Callback_Nexus{
 			Url: "https://localhost/nexus-callback",
 		},
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestOnNamespaceStateChange_CancelsPollsOfSoftDeletedNamespace() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	info := func(state enumspb.NamespaceState) *persistencespb.NamespaceInfo {
+		return &persistencespb.NamespaceInfo{Id: s.testNamespaceID.String(), Name: s.testNamespace.String(), State: state}
+	}
+	activeHere := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: cluster.TestCurrentClusterName,
+		Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+	}
+
+	testCases := []struct {
+		name       string
+		ns         *namespace.Namespace
+		wantCancel bool
+	}{
+		{
+			name:       "local soft-deleted",
+			ns:         namespace.NewLocalNamespaceForTest(info(enumspb.NAMESPACE_STATE_SOFT_DELETED), nil, cluster.TestCurrentClusterName),
+			wantCancel: true,
+		},
+		{
+			name:       "global soft-deleted, active here",
+			ns:         namespace.NewGlobalNamespaceForTest(info(enumspb.NAMESPACE_STATE_SOFT_DELETED), nil, activeHere, 1),
+			wantCancel: true,
+		},
+		{
+			name:       "registered",
+			ns:         namespace.NewLocalNamespaceForTest(info(enumspb.NAMESPACE_STATE_REGISTERED), nil, cluster.TestCurrentClusterName),
+			wantCancel: false,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			pollCtx := wh.registerOutstandingPollContext(context.Background(), "poller", s.testNamespaceID.String())
+			otherPollCtx := wh.registerOutstandingPollContext(context.Background(), "poller", "other-namespace-id")
+			defer wh.unregisterOutstandingPollContext("poller", s.testNamespaceID.String())
+			defer wh.unregisterOutstandingPollContext("poller", "other-namespace-id")
+
+			wh.onNamespaceStateChange(tc.ns, false)
+
+			if tc.wantCancel {
+				s.ErrorIs(pollCtx.Err(), context.Canceled)
+			} else {
+				s.NoError(pollCtx.Err())
+			}
+			s.NoError(otherPollCtx.Err())
+		})
 	}
 }

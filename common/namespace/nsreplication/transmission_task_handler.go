@@ -235,6 +235,7 @@ func NamespaceDetailToTaskAttributes(
 		ConfigVersion:   detail.ConfigVersion,
 		FailoverVersion: detail.FailoverVersion,
 		FailoverHistory: convertFailoverHistoryToReplicationProto(replicationConfig.FailoverHistory),
+		RestoreInfo:     info.RestoreInfo,
 	}
 
 	if replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {
