@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -722,4 +723,76 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 	require.Error(t, err)
 	require.Empty(t, activity.GetLastResetRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+}
+
+// Verify options updates preserve unpause jitter using a fixed future deadline.
+// Random jitter makes this timing difficult to verify deterministically in a functional test.
+func TestOptionsUpdatePreservesUnpauseJitter(t *testing.T) {
+	t.Parallel()
+
+	for _, policyUpdate := range []bool{false, true} {
+		name := "unrelated options"
+		if policyUpdate {
+			name = "retry policy"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			now := defaultTime
+			ctx := newOperatorCommandTestContext(t)
+			ctx.HandleNow = func(chasm.Component) time.Time { return now }
+			ctx.HandleMetricsHandler = func() metrics.Handler { return metrics.NoopMetricsHandler }
+			attempt := &activitypb.ActivityAttemptState{
+				Count: 3, Stamp: 7,
+				CompleteTime: timestamppb.New(defaultTime.Add(-time.Minute)),
+				DispatchTime: timestamppb.New(defaultTime.Add(10 * time.Second)),
+			}
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:                  activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+					ActivityType:            &commonpb.ActivityType{Name: "test-type"},
+					TaskQueue:               &taskqueuepb.TaskQueue{Name: "test-queue"},
+					ScheduleTime:            timestamppb.New(defaultTime.Add(-time.Minute)),
+					FirstAttemptStartedTime: timestamppb.New(defaultTime.Add(-time.Minute)),
+					StartToCloseTimeout:     durationpb.New(time.Minute),
+					ScheduleToStartTimeout:  durationpb.New(20 * time.Second),
+					RetryPolicy: &commonpb.RetryPolicy{
+						InitialInterval: durationpb.New(time.Hour), BackoffCoefficient: 1,
+					},
+				},
+				LastAttempt: chasm.NewDataField(ctx, attempt),
+			}
+			options := &apiactivitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(time.Second)}
+			mask := []string{"heartbeat_timeout"}
+			if policyUpdate {
+				options = &apiactivitypb.ActivityOptions{RetryPolicy: &commonpb.RetryPolicy{InitialInterval: durationpb.New(2 * time.Hour)}}
+				mask = []string{"retry_policy.initial_interval"}
+			}
+
+			_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+				FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					ActivityOptions: options, UpdateMask: &fieldmaskpb.FieldMask{Paths: mask},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, defaultTime.Add(10*time.Second), attempt.GetDispatchTime().AsTime())
+			require.EqualValues(t, 3, attempt.GetCount())
+			require.Nil(t, attempt.GetCurrentRetryInterval())
+			require.Len(t, ctx.Tasks, 2)
+			require.Equal(t, defaultTime.Add(10*time.Second), ctx.Tasks[0].Attributes.ScheduledTime)
+			protorequire.ProtoEqual(t, &activitypb.ActivityDispatchTask{
+				Stamp: 8, DispatchReason: activitypb.DISPATCH_REASON_RETRY,
+				StartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
+			}, ctx.Tasks[0].Payload.(*activitypb.ActivityDispatchTask))
+			require.Equal(t, defaultTime.Add(30*time.Second), ctx.Tasks[1].Attributes.ScheduledTime)
+			protorequire.ProtoEqual(t, &activitypb.ScheduleToStartTimeoutTask{Stamp: 8}, ctx.Tasks[1].Payload.(*activitypb.ScheduleToStartTimeoutTask))
+
+			require.Equal(t, defaultTime.Add(10*time.Second), activity.nextAttemptDispatchTime(ctx, attempt).AsTime())
+			require.Equal(t, 70*time.Second, activity.currentRetryInterval(ctx, attempt).AsDuration())
+
+			now = defaultTime.Add(11 * time.Second)
+			require.Nil(t, activity.nextAttemptDispatchTime(ctx, attempt))
+			require.Nil(t, activity.currentRetryInterval(ctx, attempt))
+		})
+	}
 }
