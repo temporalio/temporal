@@ -58,7 +58,7 @@ func TestSessionActivityWithoutPlacementRollsBackCommands(t *testing.T) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
 	})
 	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
-	require.ErrorContains(t, err, "require a sticky workflow task queue")
+	require.ErrorContains(t, err, "require the workflow to have been started by a multi-session worker")
 	execution := tv.WithRunID(started.RunId).WorkflowExecution()
 	failed := false
 	for _, event := range env.GetHistory(env.Namespace().String(), execution) {
@@ -88,7 +88,9 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	})
 	require.NoError(t, err)
 	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
-	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
+	}).HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		var commands []*commandpb.Command
 		for _, useSession := range []bool{false, true} {
 			sessionOptions := &sessionpb.ActivitySessionOptions{}
@@ -193,13 +195,19 @@ func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.V
 		})()
 	}
 
-	poller, _ := env.pollWftAndHandle(s, tv, false, nil, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err := poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		TaskQueue:         tv.TaskQueue(),
+		SessionOptions:    multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
+	}).HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		response := env.respondWftWithActivities(tv, tv, true, behavior, "session-activity")
 		response.Commands[0].GetScheduleActivityTaskCommandAttributes().SessionOptions = &sessionpb.ActivitySessionOptions{
 			Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}},
 		}
 		return response, nil
-	})
+	}, taskpoller.WithTimeout(time.Minute))
+	s.Require().NoError(err)
 	if expectStickyRejection {
 		s.Require().ErrorAs(await.Rcv(s.T(), rejectedDispatch), new(*serviceerrors.StickyWorkerUnavailable))
 		description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -213,7 +221,7 @@ func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.V
 		return
 	}
 
-	_, err := poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+	_, err = poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
 		TaskQueue: tv.StickyTaskQueue(), DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	}).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		s.Require().Equal("session-activity", task.ActivityId)
