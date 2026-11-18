@@ -203,6 +203,64 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	)
 }
 
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_ForwardsTokenNamespaceAndTaskID() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueue:   "test-tq",
+		TaskId:      "test-task-id",
+	})
+	s.NoError(err)
+
+	s.mockMatchingClient.EXPECT().
+		RespondNexusTaskCompleted(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskCompletedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+			s.Require().Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+			s.Require().Equal("test-task-id", req.GetTaskId())
+			return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
+		})
+
+	_, err = wh.RespondNexusTaskCompleted(context.Background(), &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: s.testNamespace.String(),
+		TaskToken: token,
+	})
+	s.NoError(err)
+}
+
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskFailed_ForwardsTokenNamespaceAndTaskID() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueue:   "test-tq",
+		TaskId:      "test-task-id",
+	})
+	s.NoError(err)
+
+	s.mockMatchingClient.EXPECT().
+		RespondNexusTaskFailed(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskFailedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+			s.Require().Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+			s.Require().Equal("test-task-id", req.GetTaskId())
+			return &matchingservice.RespondNexusTaskFailedResponse{}, nil
+		})
+
+	_, err = wh.RespondNexusTaskFailed(context.Background(), &workflowservice.RespondNexusTaskFailedRequest{
+		Namespace: s.testNamespace.String(),
+		TaskToken: token,
+		Failure: &failurepb.Failure{
+			Message: "test failure",
+			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
