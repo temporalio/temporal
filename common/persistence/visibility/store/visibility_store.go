@@ -116,6 +116,7 @@ type (
 		RunID            string
 		WorkflowTypeName string
 		StartTime        time.Time
+		CreateTime       time.Time
 		Status           enumspb.WorkflowExecutionStatus
 		ExecutionTime    time.Time
 		TaskID           int64

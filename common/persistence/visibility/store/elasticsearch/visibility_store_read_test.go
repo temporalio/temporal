@@ -234,6 +234,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal() {
 	s.NoError(err)
 	p, err := s.visibilityStore.buildSearchParametersInternal(request, queryConverter)
 	s.NoError(err)
+	s.False(p.QueryTime.IsZero())
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -256,6 +258,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal() {
 	s.NoError(err)
 	p, err = s.visibilityStore.buildSearchParametersInternal(request, queryConverter)
 	s.NoError(err)
+	s.False(p.QueryTime.IsZero())
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -280,6 +284,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal() {
 	s.NoError(err)
 	p, err = s.visibilityStore.buildSearchParametersInternal(request, queryConverter)
 	s.NoError(err)
+	s.False(p.QueryTime.IsZero())
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -333,6 +339,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal_DisableOrderByClau
 	s.NoError(err)
 	p, err := s.visibilityStore.buildSearchParametersInternal(request, queryConverter)
 	s.NoError(err)
+	s.False(p.QueryTime.IsZero())
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -500,13 +508,49 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 	}
 }
 
+// TestBuildSearchParametersInternal_QueryTimeFromPageToken verifies that NOW() is resolved against
+// the query time stored in the page token, so that all pages of the same query use the same time.
+func (s *ESVisibilitySuite) TestBuildSearchParametersInternal_QueryTimeFromPageToken() {
+	queryTime := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
+	pageToken, err := s.visibilityStore.serializePageToken(&visibilityPageToken{QueryTime: &queryTime})
+	s.NoError(err)
+
+	buildParams := func(queryString string, nextPageToken []byte) *client.SearchParameters {
+		queryConverter, err := s.visibilityStore.newQueryConverter(
+			testNamespace,
+			nil, // chasmMapper
+			chasm.UnspecifiedArchetypeID,
+		)
+		s.NoError(err)
+		p, err := s.visibilityStore.buildSearchParametersInternal(
+			&searchParametersInternal{
+				NamespaceID:   testNamespaceID,
+				NamespaceName: testNamespace,
+				PageSize:      testPageSize,
+				Query:         queryString,
+				NextPageToken: nextPageToken,
+			},
+			queryConverter,
+		)
+		s.NoError(err)
+		return p
+	}
+
+	p := buildParams("StartTime > NOW() - '5h'", pageToken)
+	s.Equal(queryTime, p.QueryTime)
+
+	expected := buildParams("StartTime > '2026-03-31T12:00:00Z'", nil)
+	s.Equal(expected.Query, p.Query)
+}
+
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test for empty hits
 	searchResult := &elastic.SearchResult{
 		Hits: &elastic.SearchHits{
 			TotalHits: &elastic.TotalHits{},
 		}}
-	resp, err := s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, 1, nil)
+	queryTime := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
+	resp, err := s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, 1, nil, queryTime)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -529,14 +573,17 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	}
 	searchResult.Hits.Hits = []*elastic.SearchHit{searchHit}
 	searchResult.Hits.TotalHits.Value = 1
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, 1, nil)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, 1, nil, queryTime)
 	s.NoError(err)
-	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SearchAfter: []any{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"}})
+	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{
+		SearchAfter: []any{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"},
+		QueryTime:   &queryTime,
+	})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test page size > number of results
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, 2, nil)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, 2, nil, queryTime)
 	s.NoError(err)
 	s.Empty(resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
@@ -547,7 +594,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		searchResult.Hits.Hits = append(searchResult.Hits.Hits, searchHit)
 	}
 	numOfHits := len(searchResult.Hits.Hits)
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, numOfHits, nil)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, numOfHits, nil, queryTime)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
@@ -556,8 +603,9 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.NoError(err)
 	s.Equal(int64(1547596872371234567), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
+	s.Equal(&queryTime, nextPageToken.QueryTime)
 	// test page size > number of results
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, numOfHits+1, nil)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, numOfHits+1, nil, queryTime)
 	s.NoError(err)
 	s.Empty(resp.NextPageToken)
 	s.Equal(numOfHits, len(resp.Executions))
@@ -576,7 +624,11 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	s.NoError(err)
 	s.Nil(result)
 
-	token := &visibilityPageToken{SearchAfter: []any{int64(1629936710090695939), "unique"}}
+	tokenQueryTime := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
+	token := &visibilityPageToken{
+		SearchAfter: []any{int64(1629936710090695939), "unique"},
+		QueryTime:   &tokenQueryTime,
+	}
 	data, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	result, err = s.visibilityStore.deserializePageToken(data)
@@ -584,6 +636,7 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	resultSortValue, err := result.SearchAfter[0].(json.Number).Int64()
 	s.NoError(err)
 	s.Equal(token.SearchAfter[0].(int64), resultSortValue)
+	s.Equal(token.QueryTime, result.QueryTime)
 }
 
 func (s *ESVisibilitySuite) TestSerializePageToken() {
@@ -596,7 +649,11 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 	sortTime := int64(123)
 	tieBreaker := "unique"
-	newToken := &visibilityPageToken{SearchAfter: []any{sortTime, tieBreaker}}
+	newTokenQueryTime := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
+	newToken := &visibilityPageToken{
+		SearchAfter: []any{sortTime, tieBreaker},
+		QueryTime:   &newTokenQueryTime,
+	}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
 	s.True(len(data) > 0)
@@ -606,6 +663,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 	s.NoError(err)
 	s.Equal(newToken.SearchAfter[0], resultSortValue)
 	s.Equal(newToken.SearchAfter[1], token.SearchAfter[1])
+	s.Equal(newToken.QueryTime, token.QueryTime)
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
@@ -2077,6 +2135,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal_ChasmMapper() {
 	s.NoError(err)
 	p, err := s.visibilityStore.buildSearchParametersInternal(request, queryConverter)
 	s.NoError(err)
+	s.False(p.QueryTime.IsZero())
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -2103,6 +2163,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal_ChasmMapper() {
 	s.NoError(err)
 	p, err = s.visibilityStore.buildSearchParametersInternal(request, queryConverter)
 	s.NoError(err)
+	s.False(p.QueryTime.IsZero())
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,

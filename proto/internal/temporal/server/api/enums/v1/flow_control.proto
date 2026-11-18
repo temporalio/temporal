@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package temporal.server.api.enums.v1;
+
+option go_package = "go.temporal.io/server/api/enums/v1;enums";
+
+enum LimiterType {
+  LIMITER_TYPE_UNSPECIFIED = 0;
+  // External (chasm) concurrency limiter.
+  LIMITER_TYPE_CONCURRENCY = 1;
+  // Local (per-partition) ephemeral rate limit. This includes both whole-queue and
+  // per-fairness-key limiters.
+  LIMITER_TYPE_LOCAL_RATE_LIMIT = 2;
+}

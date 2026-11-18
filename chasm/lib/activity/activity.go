@@ -18,9 +18,11 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/headers"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/retrypolicy"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -227,6 +229,24 @@ func NewEmbeddedActivity(
 ) {
 }
 
+// buildWorkerCommandTaskToken builds the serialized task token for a worker command.
+// The token must match what was sent to the worker in the poll response.
+func (a *Activity) buildWorkerCommandTaskToken(ctx chasm.Context, _ chasm.NoValue) ([]byte, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	key := ctx.ExecutionKey()
+
+	token := tasktoken.NewStandaloneActivityTaskToken(
+		key.NamespaceID,
+		key.BusinessID, // activityID
+		a.GetActivityType().GetName(),
+		attempt.GetCount(),
+		attempt.GetComponentRef(),
+		attempt.GetStartedStamp(),
+	)
+
+	return token.Marshal()
+}
+
 // HandleStarted updates the activity on recording activity task started and populates the response.
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
 	*historyservice.RecordActivityTaskStartedResponse, error,
@@ -319,10 +339,12 @@ func (a *Activity) effectiveUserMetadata(ctx chasm.Context) *sdkpb.UserMetadata 
 // attachLinks records the given links on the activity keyed by requestID. Duplicates
 // within the same batch are skipped. If the requestID has already been used to attach
 // links the call is a no-op, making retries idempotent even after the activity has
-// closed. Returns an error if the activity is closed (and the requestID is new), if
-// the per-component cap would be exceeded, or if the request's per-link size,
-// per-request count, or variant shape is invalid.
-func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link, requestID string, validator *linkValidator, namespaceName string) error {
+// closed. Returns an error if the activity is closed (and the requestID is new), or
+// if the per-execution link aggregates would be exceeded.
+//
+// IMPORTANT: Only aggregate validations are performed here. The links are assumed to
+// have already been checked individually by the frontend via [commonlinks.Validator.Validate].
+func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link, requestID string, validator commonlinks.Validator, namespaceName string) error {
 	if len(links) == 0 {
 		return nil
 	}
@@ -340,10 +362,8 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 	if a.LifecycleState(ctx).IsClosed() {
 		return serviceerror.NewFailedPrecondition("cannot attach links to a closed activity")
 	}
-	if err := validator.ValidateRequest(namespaceName, links); err != nil {
-		return err
-	}
-	if err := validator.ValidateTotal(namespaceName, len(ctx.Links(a)), len(links)); err != nil {
+	linkUsage := commonlinks.UsageOf(ctx.Links(a))
+	if err := validator.ValidateAdditions(namespaceName, links, linkUsage); err != nil {
 		return err
 	}
 	return ctx.SetRequestLinks(a, requestID, links)
@@ -483,6 +503,9 @@ func (a *Activity) Terminate(
 		return chasm.TerminateComponentResponse{}, a.errClosed()
 	}
 
+	// TODO: Send worker commands when an activity is terminated. See Validate in
+	// worker_command_task_handler.go for why this is not yet supported.
+
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)
 	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, terminateEvent{
 		request:        req,
@@ -500,6 +523,23 @@ func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activityp
 		a.LastHeartbeat = chasm.NewDataField(ctx, heartbeat)
 	}
 	return heartbeat
+}
+
+// addWorkerCommandDispatchTask schedules a side-effect task to dispatch a worker command via the
+// worker control queue. No-op if the worker doesn't support worker commands (i.e., has no
+// control queue).
+func (a *Activity) addWorkerCommandDispatchTask(ctx chasm.MutableContext, task *activitypb.WorkerCommandDispatchTask) {
+	controlQueue := a.LastAttempt.Get(ctx).GetWorkerControlTaskQueue()
+	if controlQueue == "" {
+		return
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			Destination: controlQueue,
+		},
+		task,
+	)
 }
 
 // lastHeartbeatDetails returns the details recorded by the most recent heartbeat, or nil if

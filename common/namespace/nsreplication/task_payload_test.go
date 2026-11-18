@@ -60,6 +60,9 @@ func TestDifferingNamespaceTaskFieldsCoversSchema(t *testing.T) {
 		"failover_history": func(task *replicationspb.NamespaceTaskAttributes) {
 			task.FailoverHistory = []*replicationpb.FailoverStatus{{}}
 		},
+		"restore_info": func(task *replicationspb.NamespaceTaskAttributes) {
+			task.RestoreInfo = &persistencespb.NamespaceRestoreInfo{}
+		},
 	}
 	fields := (&replicationspb.NamespaceTaskAttributes{}).ProtoReflect().Descriptor().Fields()
 	require.Len(t, mutations, fields.Len(), "update field diagnostics and their tests when NamespaceTaskAttributes changes")

@@ -3842,8 +3842,14 @@ type ForceCANVersionSignalArgs struct {
 	// If provided, this state will be used instead of the current state
 	// when performing continue-as-new.
 	OverrideState *VersionLocalState `protobuf:"bytes,1,opt,name=override_state,json=overrideState,proto3" json:"override_state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Skip waiting for pending propagations before continuing as new. Defaults to false.
+	// Set this to true only when recovering a permanently stuck workflow.
+	// Abandoning in-flight propagation can leave task queues with stale routing or version data.
+	// If multiple force-CaN signals arrive before the workflow continues as new,
+	// the last signal determines whether to skip pending propagations.
+	SkipPendingPropagations bool `protobuf:"varint,2,opt,name=skip_pending_propagations,json=skipPendingPropagations,proto3" json:"skip_pending_propagations,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ForceCANVersionSignalArgs) Reset() {
@@ -3881,6 +3887,13 @@ func (x *ForceCANVersionSignalArgs) GetOverrideState() *VersionLocalState {
 		return x.OverrideState
 	}
 	return nil
+}
+
+func (x *ForceCANVersionSignalArgs) GetSkipPendingPropagations() bool {
+	if x != nil {
+		return x.SkipPendingPropagations
+	}
+	return false
 }
 
 // Signal input for demoting a version workflow (fire-and-forget from deployment workflow).
@@ -4516,9 +4529,10 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v28.temporal.api.compute.v1.ComputeConfigScalingGroupUpdateR\x05value:\x028\x01\"\x1d\n" +
 	"\x1bUpdateComputeConfigResponse\"\x84\x01\n" +
 	"\x1cForceCANDeploymentSignalArgs\x12d\n" +
-	"\x0eoverride_state\x18\x01 \x01(\v2=.temporal.server.api.deployment.v1.WorkerDeploymentLocalStateR\roverrideState\"x\n" +
+	"\x0eoverride_state\x18\x01 \x01(\v2=.temporal.server.api.deployment.v1.WorkerDeploymentLocalStateR\roverrideState\"\xb4\x01\n" +
 	"\x19ForceCANVersionSignalArgs\x12[\n" +
-	"\x0eoverride_state\x18\x01 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\roverrideState\"k\n" +
+	"\x0eoverride_state\x18\x01 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\roverrideState\x12:\n" +
+	"\x19skip_pending_propagations\x18\x02 \x01(\bR\x17skipPendingPropagations\"k\n" +
 	"\x17DemoteVersionSignalArgs\x12P\n" +
 	"\x0erouting_config\x18\x01 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\"\xbf\x01\n" +
 	"\x16TaskQueueFamilySummary\x12\x14\n" +

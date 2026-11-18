@@ -59,3 +59,7 @@ message ActivityStartDuringTransitionFailure {}
 // too far from the current value and the server rejects the call. It is an "Aborted" error.
 // The current values will be returned in a grpc trailer.
 message StalePartitionCountsFailure {}
+
+// FlowControlBlockedFailure indicates that the task was blocked by a flow control limiter and
+// should be spooled to backlog.
+message FlowControlBlockedFailure {}

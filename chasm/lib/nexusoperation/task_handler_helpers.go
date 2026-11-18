@@ -28,9 +28,27 @@ var (
 	ErrInvalidOperationToken = errors.New("invalid operation token")
 	errRequestTimedOut       = errors.New("request timed out")
 	errOpProcessorFailed     = errors.New("nexus operation processor failed")
+	// errRequestDeadlineTooShort is returned without making a request to an external endpoint when the task deadline,
+	// minus StateAccessBuffer, leaves less than MinOutboundRequestTimeout for it. It wraps context.DeadlineExceeded so
+	// the attempt is recorded as a retryable request timeout.
+	errRequestDeadlineTooShort = fmt.Errorf("not enough time left to make a request: %w", context.DeadlineExceeded)
 )
 
 const maxDuration = time.Duration(1<<63 - 1)
+
+// taskDestination returns the [chasm.TaskAttributes] Destination for an invocation or cancelation task targeting the
+// given endpoint. External endpoints are routed to the outbound queue grouped by endpoint name, which provides
+// per-destination rate limiting, concurrency control and circuit breaking for outgoing HTTP calls. The system endpoint
+// is served by an in-process RPC to the history service, so it has no use for any of that and returns an empty
+// destination, which places the task on the transfer queue instead.
+//
+// The queue also determines the time budget of each attempt, see StateAccessBuffer.
+func taskDestination(endpointName string) string {
+	if endpointName == commonnexus.SystemEndpoint {
+		return ""
+	}
+	return endpointName
+}
 
 type operationTimeoutBelowMinError struct {
 	timeoutType enumspb.TimeoutType
@@ -41,6 +59,9 @@ func (o *operationTimeoutBelowMinError) Error() string {
 }
 
 func isDestinationDown(err error) bool {
+	if errors.Is(err, errRequestDeadlineTooShort) {
+		return false
+	}
 	if _, ok := errors.AsType[serviceerror.ServiceError](err); ok {
 		return false
 	}
@@ -94,7 +115,7 @@ func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOp
 		if errors.Is(callErr, errOpProcessorFailed) {
 			return "operation-processor-failed"
 		}
-		if callCtx.Err() != nil {
+		if callCtx.Err() != nil || errors.Is(callErr, errRequestDeadlineTooShort) {
 			return "request-timeout"
 		}
 		if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
@@ -123,7 +144,7 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 		if _, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 			return "operation-timeout"
 		}
-		if callCtx.Err() != nil {
+		if callCtx.Err() != nil || errors.Is(callErr, errRequestDeadlineTooShort) {
 			return "request-timeout"
 		}
 		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
@@ -196,6 +217,8 @@ type invocationResult interface {
 
 type invocationResultOK struct {
 	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
+	// links are the handler's response links, already converted and sanitized.
+	links []*commonpb.Link
 }
 
 func (invocationResultOK) mustImplementInvocationResult() {}
@@ -226,10 +249,11 @@ func (invocationResultTimeout) mustImplementInvocationResult() {}
 
 func newInvocationResult(
 	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
+	links []*commonpb.Link,
 	callErr error,
 ) (invocationResult, error) {
 	if callErr == nil {
-		return invocationResultOK{response: response}, nil
+		return invocationResultOK{response: response, links: links}, nil
 	}
 
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {

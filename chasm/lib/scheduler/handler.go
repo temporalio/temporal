@@ -171,7 +171,14 @@ func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateSch
 		),
 		(*Scheduler).Update,
 		req,
+		chasm.WithRequestID(req.FrontendRequest.RequestId),
 	)
+	if errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
+		// A retry of a request that already succeeded.
+		return &schedulerpb.UpdateScheduleResponse{
+			FrontendResponse: &workflowservice.UpdateScheduleResponse{},
+		}, nil
+	}
 	return resp, err
 }
 
@@ -188,7 +195,14 @@ func (h *handler) PatchSchedule(ctx context.Context, req *schedulerpb.PatchSched
 		),
 		(*Scheduler).Patch,
 		req,
+		chasm.WithRequestID(req.FrontendRequest.RequestId),
 	)
+	if errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
+		// A retry of a request that already succeeded.
+		return &schedulerpb.PatchScheduleResponse{
+			FrontendResponse: &workflowservice.PatchScheduleResponse{},
+		}, nil
+	}
 	return resp, err
 }
 

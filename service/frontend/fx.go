@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -14,7 +15,6 @@ import (
 	"go.temporal.io/server/chasm/lib/namespacereplication"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -139,8 +140,10 @@ var Module = fx.Options(
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(CallbackValidatorProvider),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
+	fx.Provide(NamespaceMutationTaskExecutorProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
@@ -155,11 +158,10 @@ var Module = fx.Options(
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
+	fx.Invoke(backfillSearchAttributeMappings),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
-	fx.Provide(chasmnexus.NewFrontendHandler),
-	chasmnexus.Module,
+	chasmnexus.FrontendModule,
 	chasmscheduler.Module,
 	chasmworkflow.Module,
 	chasmcallback.Module,
@@ -885,7 +887,9 @@ func AdminHandlerProvider(
 	chasmRegistry *chasm.Registry,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
+	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -915,10 +919,37 @@ func AdminHandlerProvider(
 		chasmRegistry,
 		namespaceDataMerger,
 		schedulerClient,
+		metricsHandler,
 		taskCategoryRegistry,
 		matchingClient,
 	}
-	return NewAdminHandler(args, namespaceDLQHandler)
+	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)
+}
+
+func NamespaceMutationTaskExecutorProvider(
+	configuration *Config,
+	clusterMetadata cluster.Metadata,
+	persistenceMetadataManager persistence.MetadataManager,
+	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
+	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
+	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
+) nsreplication.MutationTaskExecutor {
+	return nsreplication.NewMutationTaskExecutor(
+		clusterMetadata.GetCurrentClusterName(),
+		persistenceMetadataManager,
+		namespaceDataMerger,
+		namespaceAdmitter,
+		logger,
+		testHooks,
+		nsreplication.WithNamespaceReplicationMetrics(metricsHandler),
+		nsreplication.WithNamespaceReplicationLifecycleEvents(
+			eventLogger,
+			configuration.EmitNamespaceLifecycleEvents,
+		),
+	)
 }
 
 // NamespaceDLQHandlerProvider provides the default namespace DLQ message handler.
@@ -1035,6 +1066,7 @@ func HandlerProvider(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
 	callbackValidator callbacks.Validator,
+	linkValidator links.Validator,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
@@ -1049,6 +1081,7 @@ func HandlerProvider(
 
 	wfHandler := NewWorkflowHandler(
 		callbackValidator,
+		linkValidator,
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
@@ -1084,8 +1117,10 @@ func HandlerProvider(
 			chasmworkflow.NewConfig(dc),
 			saMapperProvider,
 			saValidator,
+			linkValidator,
 		),
 		chasmNsReplClient,
+		metricsHandler,
 	)
 	return wfHandler
 }
@@ -1185,4 +1220,30 @@ func NexusEndpointClientProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+// backfillSearchAttributeMappings backfills namespace custom search attribute
+// aliases from cluster metadata with identity mappings during frontend initialization.
+// Only runs when Elasticsearch visibility is configured; updates go through the namespace handler.
+func backfillSearchAttributeMappings(
+	cfg *config.Config,
+	clusterMetadata cluster.Metadata,
+	metadataManager persistence.MetadataManager,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	handler Handler,
+	logger log.Logger,
+) error {
+	visDataStore := cfg.Persistence.GetVisibilityStoreConfig()
+	if visDataStore.Elasticsearch == nil {
+		return nil
+	}
+	return initializeSearchAttributeMappings(
+		context.Background(),
+		metadataManager,
+		clusterMetadataManager,
+		clusterMetadata.GetCurrentClusterName(),
+		visDataStore.GetIndexName(),
+		handler,
+		logger,
+	)
 }

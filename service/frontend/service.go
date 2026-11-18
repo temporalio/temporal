@@ -223,6 +223,7 @@ type Config struct {
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	BlockOldVersioningPollers      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -236,9 +237,6 @@ type Config struct {
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
 	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
-
-	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
@@ -431,6 +429,7 @@ func NewConfig(
 		EnableWorkerVersioningData:     dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Get(dc),
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
+		BlockOldVersioningPollers:      dynamicconfig.FrontendBlockOldVersioningPollers.Get(dc),
 
 		CallbackURLMaxLength:           dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		CallbackHeaderMaxSize:          dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
@@ -439,9 +438,6 @@ func NewConfig(
 		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
 		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
 		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
-
-		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
-		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
 		CallbackEndpointConfigs:      chasmcallback.AllowedAddresses.Get(dc),
 		WorkflowEnabledCallbackKinds: chasmworkflow.EnabledCallbackKinds.Get(dc),

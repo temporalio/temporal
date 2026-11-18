@@ -70,6 +70,7 @@ func (reason taskQueueUserDataSelectionReason) selectedUserDataSource() string {
 // worker versions found only in otherUserData are added. When both contain the
 // same routing configuration or worker version, the value with the higher revision is retained.
 // Equal revisions retain the value from baseUserData.
+// A nil otherUserData skips merging; a nil baseUserData starts with empty user data.
 func mergeTaskQueueUserDataDeployments(
 	baseUserData *persistencespb.TaskQueueUserData,
 	otherUserData *persistencespb.TaskQueueUserData,

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +26,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -479,11 +482,15 @@ func (suite *ScheduleCHASMSuite) TestPausedBehavior() {
 }
 
 func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklySkipCreateWithPatch() {
-	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, true)
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, true, 0)
 }
 
 func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklyAllowAllPatch() {
-	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, false)
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, false, 0)
+}
+
+func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklyWithWorkflowExecutionTimeout() {
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, true, 2*24*time.Hour)
 }
 
 func (suite *ScheduleCHASMSuite) TestMaxSkipCapsScheduleTimeSkipping() {
@@ -541,6 +548,7 @@ func testScheduleTimeSkippingWeekly(
 	t *testing.T,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	createWithPatch bool,
+	executionTimeout time.Duration,
 ) {
 	opts := append(
 		scheduleCommonOpts(t),
@@ -560,6 +568,10 @@ func testScheduleTimeSkippingWeekly(
 	fastForwardDuration := 3*week + 2*24*time.Hour
 	now := time.Now().UTC()
 	firstTick := now.Add(12 * time.Hour).Truncate(time.Second)
+	action := startWorkflowAction(s, wid, wt)
+	if executionTimeout > 0 {
+		action.GetStartWorkflow().WorkflowExecutionTimeout = durationpb.New(executionTimeout)
+	}
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{{
@@ -567,7 +579,7 @@ func testScheduleTimeSkippingWeekly(
 				Phase:    durationpb.New(time.Duration(firstTick.UnixNano() % week.Nanoseconds())),
 			}},
 		},
-		Action: startWorkflowAction(s, wid, wt),
+		Action: action,
 		Policies: &schedulepb.SchedulePolicies{
 			OverlapPolicy: overlapPolicy,
 		},
@@ -653,6 +665,21 @@ func testScheduleTimeSkippingWeekly(
 			&workflowScheduledStart,
 		))
 		require.Equal(t, expectedStart, workflowScheduledStart)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, workflowInfo.GetStatus())
+
+		if executionTimeout > 0 {
+			ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+				Namespace: s.Namespace().String(),
+				Execution: execution,
+				Archetype: chasm.WorkflowArchetype,
+			})
+			require.NoError(t, err)
+			require.WithinDuration(t,
+				workflowInfo.GetStartTime().AsTime().Add(executionTimeout),
+				ms.GetDatabaseMutableState().GetExecutionInfo().GetWorkflowExecutionExpirationTime().AsTime(),
+				time.Second,
+			)
+		}
 	}
 }
 
@@ -1212,6 +1239,69 @@ func (suite *ScheduleSuite) TestBufferSizeReportedWhenBuffered(chasmEnabled bool
 
 	s.GreaterOrEqual(lastDescribe.GetInfo().GetBufferSize(), int64(1), "BufferSize must reflect at least one buffered start")
 	s.GreaterOrEqual(len(lastDescribe.GetInfo().GetRunningWorkflows()), 1, "expected the buffered fire to be queued behind a running workflow")
+}
+
+// A retried PatchSchedule with the same request ID must not trigger the action again.
+func (suite *ScheduleSuite) TestPatchTriggerRetryDedupsRequestID(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-patch-dedup")
+	wid := testcore.RandomizeStr("sched-patch-dedup-wf")
+	wt := testcore.RandomizeStr("sched-patch-dedup-wt")
+
+	// A gated workflow keeps the first trigger running, so BUFFER_ALL buffers every later trigger
+	// and the buffer size counts them.
+	var runs atomic.Int32
+	registerGatedWorkflow(s, wt, &runs)
+
+	ctx := newContext(testcontext.For(t))
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(noOpInterval),
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		},
+	})
+	trigger := func(requestID string) {
+		_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Patch:      triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED),
+			Identity:   "test",
+			RequestId:  requestID,
+		})
+		require.NoError(t, err)
+	}
+	describe := func() (*workflowservice.DescribeScheduleResponse, error) {
+		return s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+	}
+
+	// Request IDs must be UUIDs: V1 records them as signal request IDs, which Cassandra stores as UUIDs.
+	trigger(uuid.NewString())
+	await.Requiref(ctx, t, func(at *await.T) {
+		require.Equal(at, int32(1), runs.Load())
+	}, awaitTimeout, pollInterval, "the first trigger should start a workflow")
+
+	secondRequestID := uuid.NewString()
+	trigger(secondRequestID)
+	await.Requiref(ctx, t, func(at *await.T) {
+		desc, err := describe()
+		require.NoError(at, err)
+		require.Equal(at, int64(1), desc.GetInfo().GetBufferSize())
+	}, awaitTimeout, pollInterval, "the second trigger should be buffered behind the running workflow")
+
+	// Retry the second trigger with the same request ID.
+	trigger(secondRequestID)
+	require.Never(t, func() bool {
+		desc, err := describe()
+		return err == nil && desc.GetInfo().GetBufferSize() != 1
+	}, neverWindow, pollInterval, "a retried trigger must not buffer another start")
+	require.Equal(t, int32(1), runs.Load())
 }
 
 // A full buffer (MaxBufferSize reached) makes the CHASM generator drop further
@@ -1983,8 +2073,10 @@ func (suite *ScheduleSuite) TestInput(chasmEnabled bool) {
 	await.RequireTrue(t, func() bool { return runs.Load() == 1 }, 8*time.Second, 200*time.Millisecond)
 }
 
-// A workflow with no return value must not hand the next run a last completion
-// result; V2 used to forward an empty, metadata-less payload that codecs reject.
+// A no-result run clears V2's last completion result, while V1 keeps the previous one;
+// an explicit nil (binary/null) is handed over as a result by both.
+// Whatever is handed over must decode; V2 used to forward an empty, metadata-less
+// payload that codecs reject.
 func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmEnabled bool) {
 	t := suite.T()
 	newContext := contextFactoryFor(chasmEnabled)
@@ -1994,13 +2086,38 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 	wid := testcore.RandomizeStr("sched-no-result-wf")
 	wt := testcore.RandomizeStr("sched-no-result-wt")
 
-	var runs, sawLastCompletionResult atomic.Int32
-	workflowFn := func(ctx workflow.Context) error {
-		if workflow.HasLastCompletionResult(ctx) {
-			sawLastCompletionResult.Store(1)
+	// Run 1 returns a value, run 2 nothing, run 3 an explicit nil (binary/null), later runs nothing.
+	// Each run records the last completion result it was handed.
+	var runs atomic.Int32
+	var seen sync.Map // run number -> "none", "null", "error" or the decoded value
+	workflowFn := func(ctx workflow.Context) (any, error) {
+		var n int32
+		if err := workflow.SideEffect(ctx, func(workflow.Context) any { return runs.Add(1) }).Get(&n); err != nil {
+			return nil, err
 		}
-		workflow.SideEffect(ctx, func(workflow.Context) any { return runs.Add(1) })
-		return nil
+		got := "none"
+		if workflow.HasLastCompletionResult(ctx) {
+			var result *string
+			switch err := workflow.GetLastCompletionResult(ctx, &result); {
+			case err != nil:
+				got = "error"
+			case result == nil:
+				got = "null"
+			default:
+				got = *result
+			}
+		}
+		seen.Store(n, got)
+		switch n {
+		case 1:
+			result := "value"
+			return &result, nil
+		case 3:
+			// A typed nil through `any` is encoded as binary/null; an untyped nil sends no result.
+			return (*string)(nil), nil
+		default:
+			return nil, nil
+		}
 	}
 	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
@@ -2027,17 +2144,28 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 	})
 	require.NoError(t, err)
 
-	await.RequireTrue(t, func() bool { return runs.Load() >= 3 }, 20*time.Second, 200*time.Millisecond)
-	require.Zero(t, sawLastCompletionResult.Load())
+	await.RequireTrue(t, func() bool { _, ok := seen.Load(int32(4)); return ok }, 25*time.Second, 200*time.Millisecond)
+	afterNoResult := "none"
+	if !chasmEnabled {
+		afterNoResult = "value" // V1 keeps the previous result.
+	}
+	for n, want := range map[int32]string{1: "none", 2: "value", 3: afterNoResult, 4: "null"} {
+		got, _ := seen.Load(n)
+		require.Equal(t, want, got, "run %d", n)
+	}
 }
 
 // TestScheduleLastCompletionResultMatchesV1 drives a V1 and a V2 schedule
 // through the same outcomes and requires every started event to be identical,
-// presence-aware (nil != empty Payloads).
+// presence-aware (nil != empty Payloads), except where a no-result run intentionally
+// diverges: V1 keeps the previous result and failure, V2 clears both. An explicit nil
+// (binary/null) is a result for both.
 func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
-	// Must precede env creation, which otherwise fixes the default timeout.
-	ctx := testcontext.For(t, testcontext.WithTimeout(3*time.Minute))
-	s := newScheduleEnv(t, append(scheduleCommonOpts(t), testcore.WithWorkerService("V1 scheduler"))...)
+	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithWorkerService("V1 scheduler"),
+		testcore.WithTestTimeout(3*time.Minute),
+	)...)
+	ctx := testcontext.For(t)
 
 	type sched struct {
 		name, scheduleID, workflowID string
@@ -2053,16 +2181,17 @@ func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 		value    = "value"
 		noResult = "no-result"
 		fail     = "fail"
+		null     = "null"
 	)
 	// Cancel/terminate/timeout are excluded: V2 diverges on ContinuedFailure there (separate fix).
-	steps := []string{value, noResult, fail, noResult, value, noResult, noResult}
+	steps := []string{value, noResult, fail, null, fail, noResult, value, null, noResult, noResult}
 
 	type step struct {
 		Index   int
 		Outcome string
 	}
 	var current sync.Map // workflow ID prefix -> step
-	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) (*string, error) {
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) (any, error) {
 		var st step
 		_ = workflow.SideEffect(ctx, func(workflow.Context) any {
 			id := workflow.GetInfo(ctx).WorkflowExecution.ID
@@ -2077,6 +2206,9 @@ func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 		switch st.Outcome {
 		case noResult:
 			return nil, nil
+		case null:
+			// Typed nil through `any` is encoded as binary/null.
+			return (*string)(nil), nil
 		case fail:
 			return nil, temporal.NewNonRetryableApplicationError("scripted failure", "lcr", nil)
 		default:
@@ -2156,12 +2288,27 @@ func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 		return started, events[len(events)-1].GetEventType()
 	}
 
+	v2ResultCleared, v2FailureCleared := false, false
 	for i, outcome := range steps {
 		started := make([]*historypb.WorkflowExecutionStartedEventAttributes, len(scheds))
 		closed := make([]enumspb.EventType, len(scheds))
 		for j, sc := range scheds {
 			current.Store(sc.workflowID, step{Index: i, Outcome: outcome})
 			started[j], closed[j] = runEvents(sc, i)
+		}
+		if v2ResultCleared {
+			started[0].LastCompletionResult = nil
+		}
+		if v2FailureCleared {
+			started[0].ContinuedFailure = nil
+		}
+		switch outcome {
+		case value, null:
+			v2ResultCleared, v2FailureCleared = false, false
+		case noResult:
+			v2ResultCleared, v2FailureCleared = true, true
+		default: // fail
+			v2FailureCleared = false
 		}
 		require.Empty(t, protodiff.Diff(started[0], started[1]), "step %d (%s): started event differs (-v1 +v2)", i, outcome)
 		require.Equal(t, closed[0], closed[1], "step %d (%s): close event differs (v1, v2)", i, outcome)
@@ -7171,4 +7318,71 @@ func (suite *ScheduleCHASMSuite) TestScheduleCountsVisibility() {
 		require.True(at, matchesQuery(at.Context(), fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName)))
 	}, 30*time.Second, 500*time.Millisecond,
 		"schedule must be queryable by ScheduleBufferedStartsCount >= 1")
+}
+
+// TestScheduleMetricLabelsMatchAcrossBackends guards against V1 and V2 emitting
+// the same metric name with different label keys. A single-process server shares
+// one Prometheus registry across history (V2) and worker (V1), and Prometheus
+// drops a metric whose label set differs from the one first registered.
+func TestScheduleMetricLabelsMatchAcrossBackends(t *testing.T) {
+	t.Parallel()
+	env := newScheduleEnv(t, testcore.WithWorkerService("V1 scheduler"))
+	metricCapture := env.StartNamespaceMetricCapture()
+
+	wt := testcore.RandomizeStr("sched-labels-wt")
+	var runs atomic.Int32
+	registerGatedWorkflow(env, wt, &runs)
+
+	backends := map[string]contextFactory{
+		metrics.ScheduleBackendLegacy: v1ContextFactory,
+		metrics.ScheduleBackendChasm:  chasmContextFactory,
+	}
+	sids := make(map[string]string, len(backends))
+	for backend, newContext := range backends {
+		ctx, cancel := context.WithTimeout(newContext(testcore.NewContext()), awaitTimeout)
+		sid := testcore.RandomizeStr("sched-labels-" + backend)
+		sids[backend] = sid
+		// The gated workflow never completes, so every tick after the first is
+		// skipped by the SKIP overlap policy.
+		createSchedule(ctx, t, env, sid, &schedulepb.Schedule{
+			Spec:     intervalSpec(fastInterval),
+			Action:   startWorkflowAction(env, testcore.RandomizeStr("sched-labels-wf-"+backend), wt),
+			Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
+		})
+		cancel()
+	}
+	t.Cleanup(func() {
+		for backend, sid := range sids {
+			ctx, cancel := context.WithTimeout(backends[backend](testcore.NewContext()), awaitTimeout)
+			completeRunningWorkflows(ctx, t, env, sid)
+			cancel()
+		}
+	})
+
+	labelKeysByBackend := func(name string) map[string][]string {
+		out := make(map[string][]string)
+		for _, rec := range metricCapture.Metric(name) {
+			backend := rec.Tags[metrics.ScheduleBackendTag]
+			if _, ok := out[backend]; ok {
+				continue
+			}
+			out[backend] = slices.Sorted(maps.Keys(rec.Tags))
+		}
+		return out
+	}
+
+	shared := []string{
+		metrics.ScheduleOverlapSkipped.Name(),
+		metrics.ScheduleActionSuccess.Name(),
+		metrics.ScheduleGenerateLatency.Name(),
+	}
+	for _, name := range shared {
+		await.RequireTruef(t, func() bool {
+			keys := labelKeysByBackend(name)
+			return len(keys[metrics.ScheduleBackendLegacy]) > 0 && len(keys[metrics.ScheduleBackendChasm]) > 0
+		}, awaitTimeout, pollInterval, "%s should be emitted by both backends", name)
+		keys := labelKeysByBackend(name)
+		require.Equal(t, keys[metrics.ScheduleBackendLegacy], keys[metrics.ScheduleBackendChasm],
+			"%s label keys differ between V1 and V2", name)
+	}
 }

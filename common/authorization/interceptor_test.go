@@ -120,6 +120,52 @@ func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
 	s.NoError(err)
 }
 
+func TestNexusResponseRequiresRequestedNamespaceAuthorization(t *testing.T) {
+	t.Parallel()
+	methods := []struct {
+		name    string
+		request any
+	}{
+		{"RespondNexusTaskCompleted", &workflowservice.RespondNexusTaskCompletedRequest{Namespace: "test-namespace"}},
+		{"RespondNexusTaskFailed", &workflowservice.RespondNexusTaskFailedRequest{Namespace: "test-namespace"}},
+	}
+	for _, method := range methods {
+		t.Run(method.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			mockAuthorizer := NewMockAuthorizer(controller)
+			fullMethod := api.WorkflowServicePrefix + method.name
+			mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, &CallTarget{
+				Namespace: "test-namespace",
+				APIName:   fullMethod,
+				Request:   method.request,
+			}).Return(Result{Decision: DecisionDeny}, nil)
+			interceptor := NewInterceptor(
+				nil,
+				mockAuthorizer,
+				metrics.NoopMetricsHandler,
+				log.NewNoopLogger(),
+				mockNamespaceChecker("test-namespace"),
+				nil,
+				"",
+				"",
+				dynamicconfig.GetBoolPropertyFn(false),
+				dynamicconfig.GetBoolPropertyFn(false),
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+				dynamicconfig.GetBoolPropertyFn(false),
+			)
+			handlerCalled := false
+			_, err := interceptor.Intercept(context.Background(), method.request, &grpc.UnaryServerInfo{FullMethod: fullMethod},
+				func(context.Context, any) (any, error) {
+					handlerCalled = true
+					return struct{}{}, nil
+				})
+			require.ErrorIs(t, err, errUnauthorized)
+			require.False(t, handlerCalled)
+		})
+	}
+}
+
 func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionDeny}, nil)

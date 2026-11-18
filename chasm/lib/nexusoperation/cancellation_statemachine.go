@@ -11,7 +11,8 @@ import (
 // EventCancellationScheduled is triggered when cancellation is meant to be scheduled for the first time - immediately
 // after it has been requested.
 type EventCancellationScheduled struct {
-	// Destination is the endpoint name for the cancellation task.
+	// Destination is the endpoint name for the cancellation task. The task is routed to the outbound queue unless the
+	// endpoint is the system endpoint, in which case it is scheduled on the transfer queue.
 	// Must be provided by the caller because ParentPtr is not available during inline creation.
 	Destination string
 }
@@ -23,7 +24,7 @@ var TransitionCancellationScheduled = chasm.NewTransition(
 		c.Attempt++
 
 		ctx.AddTask(c, chasm.TaskAttributes{
-			Destination: event.Destination,
+			Destination: taskDestination(event.Destination),
 		}, &nexusoperationpb.CancellationTask{
 			Attempt: c.Attempt,
 		})
@@ -45,7 +46,7 @@ var transitionCancellationRescheduled = chasm.NewTransition(
 		c.NextAttemptScheduleTime = nil
 
 		ctx.AddTask(c, chasm.TaskAttributes{
-			Destination: c.Operation.Get(ctx).GetEndpoint(),
+			Destination: taskDestination(c.Operation.Get(ctx).GetEndpoint()),
 		}, &nexusoperationpb.CancellationTask{
 			Attempt: c.Attempt,
 		})

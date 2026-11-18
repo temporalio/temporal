@@ -279,8 +279,8 @@ func (b *readOnlyNodeBackend) AddTasks(...tasks.Task) {
 	b.unsupported("AddTasks")
 }
 
-func (b *readOnlyNodeBackend) DeleteCHASMPureTasks(time.Time) {
-	b.unsupported("DeleteCHASMPureTasks")
+func (b *readOnlyNodeBackend) DeletePhysicalCHASMPureTasks(time.Time) {
+	b.unsupported("DeletePhysicalCHASMPureTasks")
 }
 
 func (b *readOnlyNodeBackend) UpdateWorkflowStateStatus(

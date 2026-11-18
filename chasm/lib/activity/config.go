@@ -67,6 +67,7 @@ type Config struct {
 	BreakdownMetricsByTaskQueue               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
 	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityEagerDispatchCheck          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCancelActivityWorkerCommand         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
 	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableEagerStart                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -90,6 +91,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		DefaultActivityRetryPolicy:                dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		EnableActivityEagerDispatchCheck:          dynamicconfig.EnableActivityEagerDispatchCheck.Get(dc),
 		EnableCallbacks:                           EnableCallbacks.Get(dc),
+		EnableCancelActivityWorkerCommand:         dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
 		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
 		Enabled:                                   Enabled.Get(dc),
 		EnableEagerStart:                          EnableEagerStart.Get(dc),
@@ -103,13 +105,4 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
 		VisibilityMaxPageSize:                     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}
-}
-
-// linkValidatorProvider builds the linkValidator from dynamic config.
-func linkValidatorProvider(dc *dynamicconfig.Collection) *linkValidator {
-	return newLinkValidator(
-		dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
-		dynamicconfig.MaxLinksPerComponent.Get(dc),
-		dynamicconfig.FrontendLinkMaxSize.Get(dc),
-	)
 }

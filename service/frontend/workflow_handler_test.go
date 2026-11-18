@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -132,6 +133,131 @@ func TestWorkflowHandlerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestValidatePollVersioningInfo(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		capabilities           *commonpb.WorkerVersionCapabilities
+		deploymentOptions      *deploymentpb.WorkerDeploymentOptions
+		blockOldPollers        bool
+		expectDeprecated       bool
+		expectedVersion        string
+		expectedAction         string
+		expectPermissionDenied bool
+	}{
+		{
+			name: "unversioned poller",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId: "build-id",
+			},
+		},
+		{
+			name: "v0.1 or v0.2 poller allowed",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "build-id",
+				UseVersioning: true,
+			},
+			expectDeprecated: true,
+			expectedVersion:  deprecatedWorkerVersioningV1OrV2,
+			expectedAction:   deprecatedWorkerVersioningPollAllowed,
+		},
+		{
+			name: "v0.3 poller allowed",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "deployment-series",
+			},
+			expectDeprecated: true,
+			expectedVersion:  deprecatedWorkerVersioningV3,
+			expectedAction:   deprecatedWorkerVersioningPollAllowed,
+		},
+		{
+			name: "current versioned poller not classified as deprecated",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "legacy-build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "legacy-deployment-series",
+			},
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       "deployment",
+				BuildId:              "build-id",
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
+			blockOldPollers: true,
+		},
+		{
+			name: "v0.1 or v0.2 poller blocked",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "build-id",
+				UseVersioning: true,
+			},
+			blockOldPollers:        true,
+			expectDeprecated:       true,
+			expectedVersion:        deprecatedWorkerVersioningV1OrV2,
+			expectedAction:         deprecatedWorkerVersioningPollBlocked,
+			expectPermissionDenied: true,
+		},
+		{
+			name: "v0.3 poller blocked",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "deployment-series",
+			},
+			blockOldPollers:        true,
+			expectDeprecated:       true,
+			expectedVersion:        deprecatedWorkerVersioningV3,
+			expectedAction:         deprecatedWorkerVersioningPollBlocked,
+			expectPermissionDenied: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+			config.BlockOldVersioningPollers = dc.GetBoolPropertyFnFilteredByNamespace(tc.blockOldPollers)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			ctx := interceptor.AddTelemetryContext(context.Background(), metricsHandler)
+			handler := &WorkflowHandler{
+				config: config,
+				logger: log.NewNoopLogger(),
+			}
+
+			err := handler.validatePollVersioningInfo(
+				ctx,
+				"namespace",
+				tc.capabilities,
+				tc.deploymentOptions,
+				&taskqueuepb.TaskQueue{Name: "task-queue"},
+			)
+			if tc.expectPermissionDenied {
+				var permissionDenied *serviceerror.PermissionDenied
+				require.ErrorAs(t, err, &permissionDenied)
+				require.ErrorIs(t, err, errOldWorkerVersioningPollerNotAllowed)
+			} else {
+				require.NoError(t, err)
+			}
+
+			recordings := capture.SnapshotMetric(metrics.DeprecatedWorkerVersioningPollCounter.Name())
+			if !tc.expectDeprecated {
+				require.Empty(t, recordings)
+				return
+			}
+			require.Equal(t, []*metricstest.CapturedRecording{
+				{
+					Value: int64(1),
+					Tags: map[string]string{
+						"action_type":               tc.expectedAction,
+						"worker_versioning_version": tc.expectedVersion,
+					},
+				},
+			}, recordings)
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) SetupSuite() {
 }
 
@@ -167,6 +293,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 	s.tokenSerializer = tasktoken.NewSerializer()
 
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName}).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().HasStoreName(esconfig.PersistenceName).Return(false).AnyTimes()
 	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 }
 
@@ -181,6 +308,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 
 	cbValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), s.mockNamespaceCache)
 	s.NoError(err)
+	linkValidator := test.NewLinksValidator(s.T(), test.NewLinksValidatorConfig())
 
 	saValidator := searchattribute.NewValidator(
 		s.mockResource.GetSearchAttributesProvider(),
@@ -199,6 +327,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	)
 	return NewWorkflowHandler(
 		cbValidator,
+		linkValidator,
 		config,
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
@@ -248,8 +377,10 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			}, log.NewNoopLogger())),
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
+			linkValidator,
 		),
 		nil,
+		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -292,6 +423,8 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueK
 			s.mockMatchingClient.EXPECT().
 				RespondNexusTaskCompleted(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskCompletedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+					s.Require().Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+					s.Require().Equal("test-task-id", req.GetTaskId())
 					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
 					return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
 				})
@@ -344,6 +477,8 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskFailed_PreservesTaskQueueKind
 			s.mockMatchingClient.EXPECT().
 				RespondNexusTaskFailed(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskFailedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+					s.Require().Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+					s.Require().Equal("test-task-id", req.GetTaskId())
 					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
 					return &matchingservice.RespondNexusTaskFailedResponse{}, nil
 				})
@@ -1022,7 +1157,6 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDupli
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
@@ -1225,7 +1359,6 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregatedLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace(callbacks.AddressMatchRules{
 		Rules: []callbacks.AddressMatchRule{
 			{
@@ -1378,7 +1511,6 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkf
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1440,7 +1572,6 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Priority() {
 func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.SignalWorkflowExecutionRequest{
@@ -1472,7 +1603,6 @@ func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks()
 func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1575,7 +1705,6 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Succeed_WithCustom
 func (s *WorkflowHandlerSuite) TestRequestCancelWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
 	req := &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -4379,6 +4508,27 @@ func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
 		s.ErrorIs(err, errWorkflowIDNotSet)
 	})
 
+	for _, tc := range []struct {
+		name  string
+		runID string
+	}{
+		{name: "valid run id", runID: "deadbeef-c001-4567-890a-bcdef0123456"},
+		{name: "malformed run id", runID: "invalid-run-id"},
+	} {
+		s.Run(tc.name+" is rejected as unsupported", func() {
+			req := newReq("ff-id")
+			req.WorkflowExecution = &commonpb.WorkflowExecution{
+				WorkflowId: "wf-id",
+				RunId:      tc.runID,
+			}
+			resp, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), req)
+			s.Require().Nil(resp)
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().ErrorContains(err, "polling workflow execution time skipping for a specific run ID is not supported")
+		})
+	}
+
 	s.Run("disabled dynamic config is rejected", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 		_, err := handler(false).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
@@ -6698,8 +6848,10 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 
 func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
 	config := s.newConfig()
-	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
 	wh := s.getWorkflowHandler(config)
+	linkCfg := test.NewLinksValidatorConfig()
+	linkCfg.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh.linkValidator = test.NewLinksValidator(s.T(), linkCfg)
 	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.testNamespace.String(),
@@ -6897,5 +7049,55 @@ func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
 		Nexus: &commonpb.Callback_Nexus{
 			Url: "https://localhost/nexus-callback",
 		},
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestOnNamespaceStateChange_CancelsPollsOfSoftDeletedNamespace() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	info := func(state enumspb.NamespaceState) *persistencespb.NamespaceInfo {
+		return &persistencespb.NamespaceInfo{Id: s.testNamespaceID.String(), Name: s.testNamespace.String(), State: state}
+	}
+	activeHere := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: cluster.TestCurrentClusterName,
+		Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+	}
+
+	testCases := []struct {
+		name       string
+		ns         *namespace.Namespace
+		wantCancel bool
+	}{
+		{
+			name:       "local soft-deleted",
+			ns:         namespace.NewLocalNamespaceForTest(info(enumspb.NAMESPACE_STATE_SOFT_DELETED), nil, cluster.TestCurrentClusterName),
+			wantCancel: true,
+		},
+		{
+			name:       "global soft-deleted, active here",
+			ns:         namespace.NewGlobalNamespaceForTest(info(enumspb.NAMESPACE_STATE_SOFT_DELETED), nil, activeHere, 1),
+			wantCancel: true,
+		},
+		{
+			name:       "registered",
+			ns:         namespace.NewLocalNamespaceForTest(info(enumspb.NAMESPACE_STATE_REGISTERED), nil, cluster.TestCurrentClusterName),
+			wantCancel: false,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			pollCtx := wh.registerOutstandingPollContext(context.Background(), "poller", s.testNamespaceID.String())
+			otherPollCtx := wh.registerOutstandingPollContext(context.Background(), "poller", "other-namespace-id")
+			defer wh.unregisterOutstandingPollContext("poller", s.testNamespaceID.String())
+			defer wh.unregisterOutstandingPollContext("poller", "other-namespace-id")
+
+			wh.onNamespaceStateChange(tc.ns, false)
+
+			if tc.wantCancel {
+				s.ErrorIs(pollCtx.Err(), context.Canceled)
+			} else {
+				s.NoError(pollCtx.Err())
+			}
+			s.NoError(otherPollCtx.Err())
+		})
 	}
 }

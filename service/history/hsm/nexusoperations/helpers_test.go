@@ -22,14 +22,18 @@ import (
 )
 
 type fakeEnv struct {
-	node *hsm.Node
+	node  *hsm.Node
+	nowFn func() time.Time
 }
 
 func (s fakeEnv) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) error {
 	return accessor(s.node)
 }
 
-func (fakeEnv) Now() time.Time {
+func (s fakeEnv) Now() time.Time {
+	if s.nowFn != nil {
+		return s.nowFn()
+	}
 	return time.Now()
 }
 
@@ -54,6 +58,10 @@ func newRoot(t *testing.T, backend *hsmtest.NodeBackend) *hsm.Node {
 }
 
 func newOperationNode(t *testing.T, backend *hsmtest.NodeBackend, event *historypb.HistoryEvent) *hsm.Node {
+	if backend.WorkflowTimeFn == nil {
+		workflowTime := event.GetEventTime().AsTime()
+		backend.WorkflowTimeFn = func() time.Time { return workflowTime }
+	}
 	root := newRoot(t, backend)
 	token, err := root.GenerateEventLoadToken(event)
 	require.NoError(t, err)

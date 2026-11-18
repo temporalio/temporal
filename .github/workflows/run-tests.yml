@@ -251,11 +251,6 @@ jobs:
       - name: Prepare Go
         uses: ./.github/actions/prepare-go
 
-      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
-        with:
-          working_directory: .github
-          install_args: protoc
-
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
@@ -467,17 +462,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - name: Start PostgreSQL
-        uses: ./.github/actions/docker-compose-start
-        with:
-          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: postgresql
-
       - name: Prepare Go
         uses: ./.github/actions/prepare-go
-
-      - name: Install PostgreSQL schema
-        run: make install-schema-postgresql12
 
       - name: Run mixed brain test
         timeout-minutes: 20
@@ -485,7 +471,6 @@ jobs:
         env:
           TEST_TIMEOUT: 18m
           MIXED_BRAIN_TEST_DURATION: 5m
-          PERSISTENCE_DRIVER: postgres12
 
       - name: Print memory snapshot
         if: always()
@@ -502,13 +487,6 @@ jobs:
       - name: Print Omes logs
         if: always()
         run: cat .testoutput/mixedbrain_omes_*.log || true
-
-      - name: Stop containerized dependencies
-        if: always()
-        uses: ./.github/actions/docker-compose-stop
-        with:
-          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
-          flags: -v
 
   test-status:
     if: always()

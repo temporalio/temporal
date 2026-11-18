@@ -3,12 +3,14 @@ package api
 import (
 	"bytes"
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -195,6 +197,79 @@ func reportBranchTokenMismatch(
 		tag.WorkflowBranchToken(currentBranchToken),
 		tag.WorkflowRequestBranchToken(loggedRequestToken),
 	)
+}
+
+// RefreshBranchTokenAfterRead returns the token mutable state now holds for the branch that readBranchToken
+// refers to, when that token's metadata differs from readBranchToken. The caller must then read the page again
+// with the returned token. It returns nil when the page can be used as read.
+//
+// Tiered storage switches a branch token's metadata in mutable state and then deletes the history the old token
+// points to, so a page read with the old token can come back short without an error. The check runs after the
+// read: if mutable state still holds readBranchToken at that point, the history had not been deleted while the
+// page was read.
+func RefreshBranchTokenAfterRead(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	workflowConsistencyChecker WorkflowConsistencyChecker,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	readBranchToken []byte,
+) ([]byte, error) {
+	config := shardContext.GetConfig()
+	if !config.EnablePaginationTokenBranchValidation() || !config.EnablePaginationTokenBranchReplacement() {
+		return nil, nil
+	}
+
+	response, err := GetMutableState(
+		ctx,
+		shardContext,
+		definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		workflowConsistencyChecker,
+	)
+	if err != nil {
+		if _, isNotFound := errors.AsType[*serviceerror.NotFound](err); isNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	histories := response.GetVersionHistories().GetHistories()
+	for _, versionHistory := range histories {
+		if bytes.Equal(versionHistory.GetBranchToken(), readBranchToken) {
+			return nil, nil
+		}
+	}
+	branchUtil := shardContext.GetExecutionManager().GetHistoryBranchUtil()
+	for _, versionHistory := range histories {
+		branchToken := versionHistory.GetBranchToken()
+		if !branchTokensReferToSameBranch(branchUtil, branchToken, readBranchToken) {
+			continue
+		}
+		reportBranchTokenMismatch(
+			shardContext,
+			namespaceName.String(),
+			execution,
+			branchTokenMismatchReasonSameBranchMetadata,
+			branchToken,
+			readBranchToken,
+		)
+		if config.EnablePaginationTokenBranchValidationShadowMode() {
+			return nil, nil
+		}
+		return branchToken, nil
+	}
+	// Raw history V2 takes its branch from the continuation token without checking it against mutable state, so
+	// report a branch this execution doesn't record but keep serving the page as read.
+	reportBranchTokenMismatch(
+		shardContext,
+		namespaceName.String(),
+		execution,
+		branchTokenMismatchReasonForeign,
+		response.GetCurrentBranchToken(),
+		readBranchToken,
+	)
+	return nil, nil
 }
 
 // ValidateBranchTokenForExecution replaces stale metadata for the current branch and rejects tokens

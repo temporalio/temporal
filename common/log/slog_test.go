@@ -3,7 +3,9 @@ package log
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type writeBuffer struct {
@@ -37,7 +40,12 @@ func TestSlogFromLayeredLogger(t *testing.T) {
 	l := NewSlogLogger(NewThrottledLogger(With(NewZapLogger(zap.New(core)), tag.ClusterName("corn")), quotas.InfDuration.Hours))
 	require.True(t, l.Enabled(context.Background(), slog.LevelInfo))
 	require.False(t, l.Enabled(context.Background(), slog.LevelDebug))
+	// Derive the expected call site rather than hardcoding it, so that editing anything above
+	// this point does not require updating the assertion below.
+	_, _, callerLine, ok := runtime.Caller(0)
 	l.With("a", "b").WithGroup("hey").With("ho", "lets").WithGroup("go").With("c", 4).Info("wow", "gg", "wp")
+	require.True(t, ok, "runtime.Caller failed")
+	wantCallSite := fmt.Sprintf("slog_test.go:%d", callerLine+1) // the Info call is one line below
 	var record map[string]any
 	err := json.Unmarshal(buffer.buf, &record)
 	require.NoError(t, err)
@@ -47,5 +55,46 @@ func TestSlogFromLayeredLogger(t *testing.T) {
 	require.Equal(t, "wp", record["hey.go.gg"])
 	require.Equal(t, "wow", record["msg"])
 	require.Equal(t, "corn", record["cluster-name"])
-	require.True(t, strings.HasSuffix(record["logging-call-at"].(string), "slog_test.go:40"), "%q doesn't end with %q", record["logging-call-at"], "slog_test.go:40")
+	require.True(t, strings.HasSuffix(record["logging-call-at"].(string), wantCallSite), "%q doesn't end with %q", record["logging-call-at"], wantCallSite)
+}
+
+// TestSlogLevelMapping pins Handle's level mapping to the one Enabled already uses
+// (convertSlogToZapLevel). slog levels are plain ints and the API supports values between the
+// named constants, so a record admitted by Enabled must also be emitted by Handle.
+func TestSlogLevelMapping(t *testing.T) {
+	core, recorded := observer.New(zap.DebugLevel)
+	l := NewSlogLogger(NewZapLogger(zap.New(core)))
+
+	for _, tc := range []struct {
+		name  string
+		level slog.Level
+		want  zapcore.Level
+	}{
+		// The named levels.
+		{"debug", slog.LevelDebug, zapcore.DebugLevel},
+		{"info", slog.LevelInfo, zapcore.InfoLevel},
+		{"warn", slog.LevelWarn, zapcore.WarnLevel},
+		{"error", slog.LevelError, zapcore.ErrorLevel},
+		// Levels between and beyond them, which slog explicitly permits.
+		{"below debug", slog.LevelDebug - 1, zapcore.DebugLevel},
+		{"between debug and info", slog.LevelDebug + 1, zapcore.DebugLevel},
+		{"between info and warn", slog.LevelInfo + 1, zapcore.InfoLevel},
+		{"between warn and error", slog.LevelWarn + 1, zapcore.WarnLevel},
+		{"above error", slog.LevelError + 1, zapcore.ErrorLevel},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := len(recorded.All())
+			require.True(t, l.Enabled(context.Background(), tc.level),
+				"Enabled must admit level %d", tc.level)
+
+			l.Log(context.Background(), tc.level, tc.name)
+
+			entries := recorded.All()
+			require.Len(t, entries, before+1,
+				"level %d was admitted by Enabled but dropped by Handle", tc.level)
+			got := entries[before]
+			require.Equal(t, tc.want, got.Level, "wrong zap level for slog level %d", tc.level)
+			require.Equal(t, tc.name, got.Message)
+		})
+	}
 }

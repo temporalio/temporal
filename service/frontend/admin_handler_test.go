@@ -147,6 +147,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClientFactory = s.mockResource.ClientFactory
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
+	s.mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockAdminVisibilityMgr = s.mockResource.AdminVisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
@@ -215,6 +216,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		nil, // metricsHandler
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -231,7 +233,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetLogger(),
 		testhooks.TestHooks{},
 	)
-	s.handler = NewAdminHandler(args, namespaceDLQHandler)
+	s.handler = NewAdminHandler(args, namespaceDLQHandler, nsreplication.NewMockMutationTaskExecutor(s.controller))
 	s.handler.Start()
 }
 
@@ -355,10 +357,10 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload()
 	s.Require().ErrorContains(err, "decode namespace_task_payload")
 }
 
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsAuthoritativeRequest() {
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsMissingPayload() {
 	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{})
-	var failedPrecondition *serviceerror.FailedPrecondition
-	s.ErrorAs(err, &failedPrecondition)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutationRejectsInvalidLegacyReference() {
@@ -1340,14 +1342,22 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 
 func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	namespaceID := "someId"
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: cluster.TestCurrentClusterName,
+		State:       enumspb.NAMESPACE_RESTORE_STATE_RUNNING,
+		StartTime:   timestamppb.New(time.Unix(100, 0)),
+	}
 	nsResponse := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			FailoverVersion: 1,
 			Info: &persistencespb.NamespaceInfo{
-				Id:    namespaceID,
-				Name:  "another random namespace name",
-				State: enumspb.NAMESPACE_STATE_DELETED,
-				Data:  make(map[string]string)},
+				Id:          namespaceID,
+				Name:        "another random namespace name",
+				State:       enumspb.NAMESPACE_STATE_DELETED,
+				Data:        make(map[string]string),
+				RestoreInfo: restoreInfo,
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -1373,6 +1383,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
+	protorequire.ProtoEqual(s.T(), restoreInfo, resp.GetRestoreInfo())
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {

@@ -47,11 +47,6 @@ type (
 		shutdownLock            sync.RWMutex
 	}
 
-	// ProcessorConfig is an alias of esconfig.ProcessorConfig.
-	//
-	// Deprecated: use esconfig.ProcessorConfig.
-	ProcessorConfig = esconfig.ProcessorConfig
-
 	ackFuture struct { // value of processorImpl.mapToAckFuture
 		future    *future.FutureImpl[bool]
 		createdAt time.Time    // Time when request was created (used to report metrics).
