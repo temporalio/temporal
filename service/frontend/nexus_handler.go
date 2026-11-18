@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -481,7 +482,7 @@ func (h *nexusHandler) StartOperation(
 	if err != nil {
 		return nil, err
 	}
-	oc.annotateServerSpanLinks(ctx, options.RequestID, handlerLinks)
+	nexusrpc.AnnotateServerSpanLinks(trace.SpanFromContext(ctx), options.RequestID, handlerLinks)
 	nexus.AddHandlerLinks(ctx, handlerLinks...)
 	return result, nil
 }
@@ -544,7 +545,7 @@ func (h *nexusHandler) forwardStartOperation(
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
-	oc.annotateServerSpanLinks(ctx, options.RequestID, resp.Links)
+	nexusrpc.AnnotateServerSpanLinks(trace.SpanFromContext(ctx), options.RequestID, resp.Links)
 	nexus.AddHandlerLinks(ctx, resp.Links...)
 
 	if resp.Successful != nil {

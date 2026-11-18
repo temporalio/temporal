@@ -417,54 +417,6 @@ func TestForwardStartOperation_PreservesResponseLinks(t *testing.T) {
 	require.Len(t, spans[0].Links(), 1)
 }
 
-func TestAnnotateServerSpanLinks_IgnoresUnrelatedWorkflowEvent(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	ctx, span := tracerProvider.Tracer("test").Start(t.Context(), "test")
-
-	link := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
-		Namespace:  "namespace",
-		WorkflowId: "workflow-id",
-		RunId:      "run-id",
-		Reference: &commonpb.Link_WorkflowEvent_EventRef{
-			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-			},
-		},
-	})
-	(&operationContext{}).annotateServerSpanLinks(ctx, "request-id", []nexus.Link{link})
-	span.End()
-
-	spans := recorder.Ended()
-	require.Len(t, spans, 1)
-	require.Empty(t, spans[0].Links())
-	require.Empty(t, spans[0].Attributes())
-}
-
-func TestAnnotateServerSpanLinks_IgnoresUnrelatedRequestIDReference(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	ctx, span := tracerProvider.Tracer("test").Start(t.Context(), "test")
-
-	link := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
-		Namespace:  "namespace",
-		WorkflowId: "workflow-id",
-		RunId:      "run-id",
-		Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-				RequestId: "other-request-id",
-			},
-		},
-	})
-	(&operationContext{}).annotateServerSpanLinks(ctx, "request-id", []nexus.Link{link})
-	span.End()
-
-	spans := recorder.Ended()
-	require.Len(t, spans, 1)
-	require.Empty(t, spans[0].Links())
-	require.Empty(t, spans[0].Attributes())
-}
-
 func TestNexusInterceptRequest_InvalidSDKVersion_ResultsInBadRequest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

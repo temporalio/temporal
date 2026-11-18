@@ -25,12 +25,14 @@ import (
 	"go.temporal.io/sdk/temporalnexus"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testtelemetry"
+	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -276,6 +278,31 @@ func (s *NexusOTELSuite) TestOperation() {
 			},
 		},
 	})
+
+	s.NoError(handlerEnv.SdkClient().SignalWorkflow(s.Context(), handlerWorkflowID, handlerRunID, "complete", nil))
+	s.Await(func(s *NexusOTELSuite) {
+		spans := exporter.GetSpans()
+		receivers := testtelemetry.FilterSpans(spans, func(span tracetest.SpanStub) bool {
+			return span.Name == strings.TrimPrefix(configs.CompleteNexusOperation, "/") &&
+				span.SpanKind == oteltrace.SpanKindServer
+		})
+		s.Require().Len(receivers, 1, "expected a Frontend HTTP span for the completion callback")
+		receiver := receivers[0]
+		senders := testtelemetry.FilterSpans(spans, func(span tracetest.SpanStub) bool {
+			return span.Name == "HTTP POST" && span.SpanKind == oteltrace.SpanKindClient &&
+				span.SpanContext.TraceID() == receiver.Parent.TraceID() &&
+				span.SpanContext.SpanID() == receiver.Parent.SpanID()
+		})
+		s.Require().Len(senders, 1, "expected the callback HTTP client span to be the receiver's parent")
+
+		completions := testtelemetry.FilterSpans(spans, func(span tracetest.SpanStub) bool {
+			return span.Name == strings.TrimPrefix(historyservice.HistoryService_CompleteNexusOperationChasm_FullMethodName, "/") &&
+				span.SpanKind == oteltrace.SpanKindClient &&
+				span.Parent.TraceID() == receiver.SpanContext.TraceID() &&
+				span.Parent.SpanID() == receiver.SpanContext.SpanID()
+		})
+		s.Require().Len(completions, 1, "expected the completion RPC to be a child of the Frontend HTTP span")
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 // Verifies worker-target Nexus operations connect local Frontend client and server spans.
