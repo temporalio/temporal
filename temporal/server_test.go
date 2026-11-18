@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || (temporal_with_ringpop && temporal_with_gstorage)
+
 package temporal_test
 
 import (
