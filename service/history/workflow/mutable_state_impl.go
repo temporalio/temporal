@@ -3744,6 +3744,10 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskScheduledEvent(
 	return ms.workflowTaskManager.ApplyWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp, workflowTaskType)
 }
 
+func (ms *MutableStateImpl) SetWorkflowTaskWorkerControlQueue(queue string) {
+	ms.workflowTaskManager.SetWorkflowTaskWorkerControlQueue(queue)
+}
+
 func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	scheduledEventID int64,
 	requestID string,
@@ -9866,6 +9870,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			AttemptsSinceLastSuccess: incoming.WorkflowTaskAttemptsSinceLastSuccess,
 			Stamp:                    incoming.WorkflowTaskStamp,
 			StartedTime:              incoming.WorkflowTaskStartedTime.AsTime(),
+			WorkerControlQueue:       incoming.WorkflowTaskWorkerControlQueue,
 			ScheduledTime:            incoming.WorkflowTaskScheduledTime.AsTime(),
 
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
@@ -9904,6 +9909,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.WorkflowTaskTimeout,
 			&info.WorkflowTaskAttempt,
 			&info.WorkflowTaskStartedTime,
+			&info.WorkflowTaskWorkerControlQueue,
 			&info.WorkflowTaskScheduledTime,
 			&info.WorkflowTaskOriginalScheduledTime,
 			&info.WorkflowTaskType,

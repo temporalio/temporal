@@ -176,6 +176,11 @@ func Invoke(
 				// Unable to add WorkflowTaskStarted event to history
 				return nil, err
 			}
+			if req.PollRequest.GetCapabilities().GetSupportsWorkflowHeartbeatNotification() {
+				// Workflow tasks started inline with ReturnNewWorkflowTask don't come through here.
+				// WorkflowTaskCompletedHandler.Invoke copies the completed task's WorkerControlQueue to them.
+				mutableState.SetWorkflowTaskWorkerControlQueue(req.PollRequest.GetWorkerControlTaskQueue())
+			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				// A speculative workflow task can remain in memory only if starting it did not
