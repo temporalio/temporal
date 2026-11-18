@@ -306,7 +306,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 			}
 			if tc.bound {
-				mutableState.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}})
+				mutableState.BindExclusiveWorker("sticky-worker", "")
 			}
 
 			transferTask := &tasks.ActivityTask{

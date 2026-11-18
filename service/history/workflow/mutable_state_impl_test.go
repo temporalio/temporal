@@ -10483,7 +10483,7 @@ func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
 			},
 		})
 	s.Require().NoError(err)
-	ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}})
+	ms.setSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}})
 	ms.executionInfo.DefaultWorkflowTaskTimeout = durationpb.New(time.Second)
 	ms.executionInfo.WorkflowTaskAttempt = 1
 	wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
@@ -10560,13 +10560,13 @@ func TestSetSessionStatePreservesExclusiveBinding(t *testing.T) {
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 			ms := &MutableStateImpl{logger: logger, executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
 			initial := &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
-			ms.SetSessionState(initial)
+			ms.setSessionState(initial)
 			var assertion *testlogger.Expectation
 			if tc.rejected {
 				assertion = logger.Expect(testlogger.Error, "failed assertion: attempted to replace an exclusive worker binding")
 			}
 
-			ms.SetSessionState(tc.state)
+			ms.setSessionState(tc.state)
 
 			if tc.rejected {
 				require.EqualValues(t, 1, assertion.MatchCount())
@@ -10661,7 +10661,7 @@ func TestSingleSessionStickyPolicy(t *testing.T) {
 			}}
 			if tc.bound {
 				state := &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
-				ms.SetSessionState(state)
+				ms.setSessionState(state)
 				protorequire.ProtoEqual(t, state, ms.executionInfo.GetSessionState())
 				require.Equal(t, "S", ms.executionInfo.GetStickyTaskQueue())
 				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())

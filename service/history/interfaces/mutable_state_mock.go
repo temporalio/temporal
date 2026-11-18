@@ -1721,6 +1721,18 @@ func (mr *MockMutableStateMockRecorder) AttachRequestID(requestID, eventType, ev
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachRequestID", reflect.TypeOf((*MockMutableState)(nil).AttachRequestID), requestID, eventType, eventID)
 }
 
+// BindExclusiveWorker mocks base method.
+func (m *MockMutableState) BindExclusiveWorker(stableIdentity, instanceKey string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "BindExclusiveWorker", stableIdentity, instanceKey)
+}
+
+// BindExclusiveWorker indicates an expected call of BindExclusiveWorker.
+func (mr *MockMutableStateMockRecorder) BindExclusiveWorker(stableIdentity, instanceKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindExclusiveWorker", reflect.TypeOf((*MockMutableState)(nil).BindExclusiveWorker), stableIdentity, instanceKey)
+}
+
 // ChasmEnabled mocks base method.
 func (m *MockMutableState) ChasmEnabled() bool {
 	m.ctrl.T.Helper()
@@ -3640,18 +3652,6 @@ func (m *MockMutableState) SetReplayEventBatchID(batchID int64) {
 func (mr *MockMutableStateMockRecorder) SetReplayEventBatchID(batchID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReplayEventBatchID", reflect.TypeOf((*MockMutableState)(nil).SetReplayEventBatchID), batchID)
-}
-
-// SetSessionState mocks base method.
-func (m *MockMutableState) SetSessionState(state *persistence.SessionState) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetSessionState", state)
-}
-
-// SetSessionState indicates an expected call of SetSessionState.
-func (mr *MockMutableStateMockRecorder) SetSessionState(state any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSessionState", reflect.TypeOf((*MockMutableState)(nil).SetSessionState), state)
 }
 
 // SetSpeculativeWorkflowTaskTimeoutTask mocks base method.

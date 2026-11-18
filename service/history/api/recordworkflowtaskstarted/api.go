@@ -12,8 +12,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -192,13 +190,7 @@ func Invoke(
 			newSingleSessionBinding := singleSession != nil && !sessionState.GetExclusiveWorker()
 			if newSingleSessionBinding {
 				// Bind after the task start is accepted so both changes commit in the same transaction.
-				mutableState.SetSessionState(&persistencespb.SessionState{
-					ExclusiveWorker: true,
-					BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{
-						WorkerQueue: stableIdentity,
-						InstanceKey: req.PollRequest.GetWorkerInstanceKey(),
-					},
-				})
+				mutableState.BindExclusiveWorker(stableIdentity, req.PollRequest.GetWorkerInstanceKey())
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {

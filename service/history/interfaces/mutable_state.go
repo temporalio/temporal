@@ -238,7 +238,7 @@ type (
 		GetApproximatePersistedSize() int
 
 		CurrentTaskQueue() *taskqueuepb.TaskQueue
-		SetSessionState(state *persistencespb.SessionState)
+		BindExclusiveWorker(stableIdentity string, instanceKey string)
 		SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration)
 		ClearStickyTaskQueue()
 		IsStickyTaskQueueSet() bool
