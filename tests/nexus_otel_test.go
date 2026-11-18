@@ -130,9 +130,9 @@ func (s *NexusOTELSuite) TestCallback() {
 	spanContext := oteltrace.SpanContextFromContext(
 		propagation.TraceContext{}.Extract(s.Context(), propagation.HeaderCarrier(headers)),
 	)
-	s.Require().True(spanContext.IsValid())
-	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
-	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
+	s.True(spanContext.IsValid())
+	s.Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
+	s.Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
 }
 
 // Verifies asynchronous start and cancellation connect real History client and Frontend server spans.
@@ -193,7 +193,7 @@ func (s *NexusOTELSuite) TestOperation() {
 	})
 	s.NoError(err)
 
-	s.Require().Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResponse.GetWaitStage())
+	s.Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResponse.GetWaitStage())
 	_, err = callerEnv.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
 		Namespace:   callerEnv.Namespace().String(),
 		OperationId: operationID,
@@ -324,9 +324,9 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	spanContext := oteltrace.SpanContextFromContext(
 		propagation.TraceContext{}.Extract(s.Context(), propagation.MapCarrier(request.header)),
 	)
-	s.Require().True(spanContext.IsValid())
-	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
-	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
+	s.True(spanContext.IsValid())
+	s.Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
+	s.Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
 	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskSpan{
 		{
 			TraceID: 1,
@@ -377,7 +377,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		RequestID: requestID,
 	})
 	var handlerErr *nexus.HandlerError
-	s.Require().ErrorAs(err, &handlerErr)
+	s.ErrorAs(err, &handlerErr)
 	s.NoError(s.Rcv(pollerErrCh))
 
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
@@ -394,8 +394,8 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 			"nexus.service":    "test-service",
 		},
 	}})
-	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
-	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
+	s.Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
+	s.Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
 	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskSpan{
 		{
 			TraceID: 1,
@@ -525,7 +525,7 @@ func requireExportedSpans[T any](
 	s.T().Helper()
 	s.Await(func(s *NexusOTELSuite) {
 		actual := project(exporter.GetSpans())
-		s.Require().Len(actual, len(expected))
-		s.Require().Equal(expected, actual)
+		s.Len(actual, len(expected))
+		s.Equal(expected, actual)
 	}, 10*time.Second, 100*time.Millisecond)
 }

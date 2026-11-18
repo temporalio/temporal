@@ -123,14 +123,14 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_J
 				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 			},
 		})
-		s.Require().NoError(err)
-		s.Require().Equal(targetNamespace+":"+jobID, resp.GetWorkflowId())
+		s.NoError(err)
+		s.Equal(targetNamespace+":"+jobID, resp.GetWorkflowId())
 
 		_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: primitives.SystemLocalNamespace,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: targetNamespace + ":" + jobID},
 		})
-		s.Require().NoError(err)
+		s.NoError(err)
 	}
 }
 

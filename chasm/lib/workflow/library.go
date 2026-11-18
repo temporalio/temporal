@@ -4,6 +4,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -16,6 +17,7 @@ type library struct {
 	config                      Config
 	saMapperProvider            searchattribute.MapperProvider
 	saValidator                 *searchattribute.Validator
+	linkValidator               commonlinks.Validator
 }
 
 func newLibrary(
@@ -24,12 +26,14 @@ func newLibrary(
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	linkValidator commonlinks.Validator,
 ) *library {
 	return &library{
 		registry:         registry,
 		config:           config,
 		saMapperProvider: saMapperProvider,
 		saValidator:      saValidator,
+		linkValidator:    linkValidator,
 		workflowServiceNexusHandler: &workflowServiceNexusHandler{
 			config:            config,
 			namespaceRegistry: namespaceRegistry,
@@ -102,6 +106,6 @@ func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
 		return nil
 	}
 	return []*chasm.NexusServiceProcessor{
-		NewWorkflowServiceNexusServiceProcessor(l.config, l.saMapperProvider, l.saValidator),
+		NewWorkflowServiceNexusServiceProcessor(l.config, l.saMapperProvider, l.saValidator, l.linkValidator),
 	}
 }

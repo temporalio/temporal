@@ -227,10 +227,11 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		return nil
 	}
 
-	if err := visManager.AddSearchAttributes(
+	err = visManager.AddSearchAttributes(
 		ctx,
 		&manager.AddSearchAttributesRequest{SearchAttributes: customAttributesToAdd},
-	); err != nil {
+	)
+	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
 

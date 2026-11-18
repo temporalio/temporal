@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -139,6 +140,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(CallbackValidatorProvider),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(NamespaceMutationTaskExecutorProvider),
@@ -1065,6 +1067,7 @@ func HandlerProvider(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
 	callbackValidator callbacks.Validator,
+	linkValidator links.Validator,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
@@ -1080,6 +1083,7 @@ func HandlerProvider(
 
 	wfHandler := NewWorkflowHandler(
 		callbackValidator,
+		linkValidator,
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
@@ -1115,6 +1119,7 @@ func HandlerProvider(
 			chasmworkflow.NewConfig(dc),
 			saMapperProvider,
 			saValidator,
+			linkValidator,
 		),
 		chasmNsReplClient,
 		metricsHandler,

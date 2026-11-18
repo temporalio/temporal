@@ -34,9 +34,11 @@ func newStartTestHandler(t *testing.T) (*handler, context.Context) {
 		metricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
 	}))
 
+	linksConfig := test.NewLinksValidatorConfig()
+	linksConfig.MaxLinksPerExecution = func(string) int { return 10 }
 	h := &handler{
 		callbackValidator: test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig()),
-		linkValidator:     newTestLinkValidator(10, 10),
+		linkValidator:     test.NewLinksValidator(t, linksConfig),
 		logger:            log.NewTestLogger(),
 	}
 	return h, chasm.NewEngineContext(context.Background(), chasmtest.NewEngine(t, registry))
