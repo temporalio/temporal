@@ -280,13 +280,17 @@ func newTestBacklogTask(age time.Duration, completionFunc func(*internalTask, ta
 // local pollers is forwarded to the parent, and that the parent's response determines the
 // outcome.
 func (s *PriMatcherSuite) TestChildOfferForwardsToParent() {
+	rpsErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "throttled")
+	busyErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow is busy")
 	cases := []struct {
 		name        string
 		forwardErr  error
 		wantOutcome syncMatchOutcome
+		wantErr     error
 	}{
-		{"Success", nil, syncMatchSuccess},
-		{"Failure", serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "throttled"), syncMatchNoPoller},
+		{"Success", nil, syncMatchSuccess, nil},
+		{"Failure", rpsErr, syncMatchNoPoller, nil},
+		{"WorkflowBusy", busyErr, syncMatchNoPoller, busyErr},
 	}
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
@@ -310,7 +314,7 @@ func (s *PriMatcherSuite) TestChildOfferForwardsToParent() {
 
 				task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{CreateTime: timestamppb.Now()}, nil, 0, nil)
 				outcome, err := tm.Offer(ctx, task)
-				require.NoError(t, err)
+				require.ErrorIs(t, err, tc.wantErr)
 				require.Equal(t, tc.wantOutcome, outcome)
 				require.NotNil(t, req)
 				require.Equal(t, testMatcherTaskQueue.RootPartition().RpcName(), req.GetTaskQueue().GetName())
@@ -887,5 +891,57 @@ func (s *PriMatcherSuite) TestForwardTasksIndependentBackoff() {
 			require.NoError(t, await.Rcv(t, done).forwardErr)
 		}
 		synctest.Wait()
+	})
+}
+
+func (s *PriMatcherSuite) TestForwardTaskDoesNotBackoffOnWorkflowBusy() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		busyErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow is busy")
+		started := make(chan struct{}, 2)
+		var calls atomic.Int32
+		client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+		client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(context.Context, *matchingservice.AddWorkflowTaskRequest, ...any) (*matchingservice.AddWorkflowTaskResponse, error) {
+				n := calls.Add(1)
+				started <- struct{}{}
+				if n == 1 {
+					return &matchingservice.AddWorkflowTaskResponse{}, busyErr
+				}
+				return &matchingservice.AddWorkflowTaskResponse{}, nil
+			},
+		).Times(2)
+
+		tm := s.newTestMatcher(ctx, testMatcherOpts{
+			partition: testMatcherTaskQueue.NormalPartition(1),
+			client:    client,
+			config: func(cfg *taskQueueConfig) {
+				cfg.ForwarderMaxOutstandingTasks = func() int { return 1 }
+				cfg.ForwarderMaxOutstandingPolls = func() int { return 0 }
+				cfg.ForwarderMaxRatePerSecond = func() float64 { return 1000 }
+			},
+		})
+		defer tm.Stop()
+
+		done := make(chan taskResponse, 2)
+		first := s.newBacklogTask(1, done)
+		first.forwardCtx = ctx
+		require.NoError(t, tm.AddTask(first))
+		tm.Start()
+
+		await.Rcv(t, started)
+		require.ErrorIs(t, await.Rcv(t, done).forwardErr, busyErr)
+
+		// A workflow-busy error must not send the forwarder into its 1s backoff.
+		// synctest would advance that sleep, so a jump here means the backoff ran.
+		before := time.Now()
+		second := s.newBacklogTask(2, done)
+		second.forwardCtx = ctx
+		require.NoError(t, tm.AddTask(second))
+		await.Rcv(t, started)
+		require.Less(t, time.Since(before), time.Second)
+		require.NoError(t, await.Rcv(t, done).forwardErr)
 	})
 }
