@@ -556,15 +556,17 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	lastExecution := closedExecutions[1]
 	for i := 2; i < 5; i++ {
 		executionInfo := closedExecutions[i]
-		// Round up the time precision to seconds
 		expectedBackoff := executionInfo.GetExecutionTime().AsTime().Sub(lastExecution.GetExecutionTime().AsTime())
 		// The execution time calculated based on last execution close time.
 		// However, the current execution time is based on the current start time.
 		// This code is to remove the diff between current start time and last execution close time.
 		// TODO: Remove this line once we unify the time source.
 		executionTimeDiff := executionInfo.GetStartTime().AsTime().Sub(lastExecution.GetCloseTime().AsTime())
-		// The backoff between any two executions should be a multiplier of the target backoff duration which is 3 in this test
-		s.Equal(0, int(expectedBackoff.Seconds()-executionTimeDiff.Seconds())%int(targetBackoffDuration.Seconds()))
+		// Round to seconds so subsecond timestamp differences do not shorten the interval during truncation.
+		adjustedBackoff := (expectedBackoff - executionTimeDiff).Round(time.Second)
+		s.Equal(time.Duration(0), adjustedBackoff%targetBackoffDuration,
+			"execution time difference %v minus start/close time difference %v rounds to %v; expected a multiple of %v",
+			expectedBackoff, executionTimeDiff, adjustedBackoff, targetBackoffDuration)
 		lastExecution = executionInfo
 	}
 }
