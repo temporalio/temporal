@@ -17,6 +17,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -875,6 +876,9 @@ func TestNamespaceReplicationProjectionsCoverReplicatedFields(t *testing.T) {
 		{name: "description", difference: "info.description", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Description = "other" }},
 		{name: "owner email", difference: "info.owner_email", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.OwnerEmail = "other@example.com" }},
 		{name: "data", difference: "info.data", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Data["key"] = "other" }},
+		{name: "restore metadata presence", difference: "restore_info", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) {
+			r.RestoreInfo = &persistencespb.NamespaceRestoreInfo{}
+		}},
 		{name: "retention", difference: "config.workflow_execution_retention_ttl", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) {
 			r.Config.WorkflowExecutionRetentionTtl = durationpb.New(48 * time.Hour)
 		}},

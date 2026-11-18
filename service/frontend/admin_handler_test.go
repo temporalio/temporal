@@ -1343,14 +1343,22 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 
 func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	namespaceID := "someId"
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: cluster.TestCurrentClusterName,
+		State:       enumspb.NAMESPACE_RESTORE_STATE_RUNNING,
+		StartTime:   timestamppb.New(time.Unix(100, 0)),
+	}
 	nsResponse := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			FailoverVersion: 1,
 			Info: &persistencespb.NamespaceInfo{
-				Id:    namespaceID,
-				Name:  "another random namespace name",
-				State: enumspb.NAMESPACE_STATE_DELETED,
-				Data:  make(map[string]string)},
+				Id:          namespaceID,
+				Name:        "another random namespace name",
+				State:       enumspb.NAMESPACE_STATE_DELETED,
+				Data:        make(map[string]string),
+				RestoreInfo: restoreInfo,
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -1376,6 +1384,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
+	protorequire.ProtoEqual(s.T(), restoreInfo, resp.GetRestoreInfo())
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
@@ -1433,7 +1442,7 @@ func (s *adminHandlerSuite) TestGetNamespace_ReturnsReplicatedFields() {
 		Info: &persistencespb.NamespaceInfo{
 			Id: "namespace-id", Name: "namespace", State: enumspb.NAMESPACE_STATE_REGISTERED,
 			Description: "description", Owner: "owner@example.com", Data: map[string]string{"key": "value"},
-			RestoreInfo: &persistencespb.NamespaceRestoreInfo{RestoreId: "source-local"},
+			RestoreInfo: &persistencespb.NamespaceRestoreInfo{RestoreId: "restore-id"},
 		},
 		Config: &persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(1), ArchivalBucket: "source-local",
@@ -1481,6 +1490,7 @@ func (s *adminHandlerSuite) TestGetNamespace_ReturnsReplicatedFields() {
 		FailoverVersion:   transmitted.FailoverVersion,
 		FailoverHistory:   transmitted.FailoverHistory,
 		IsGlobalNamespace: true,
+		RestoreInfo:       transmitted.RestoreInfo,
 	}
 	expected.Info.Id = transmitted.Id
 	s.ProtoEqual(expected, resp)

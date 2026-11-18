@@ -32,7 +32,10 @@ func TestNamespaceReplicationProjectionMatchesTransmission(t *testing.T) {
 		Info: &persistencespb.NamespaceInfo{
 			Id: "namespace-id", Name: "namespace", State: enumspb.NAMESPACE_STATE_REGISTERED,
 			Description: "description", Owner: "owner@example.com", Data: map[string]string{"key": "value"},
-			RestoreInfo: &persistencespb.NamespaceRestoreInfo{RestoreId: "source-local"},
+			RestoreInfo: &persistencespb.NamespaceRestoreInfo{
+				RestoreId: "restore-id", HostCluster: "cluster-a", State: enumspb.NAMESPACE_RESTORE_STATE_RUNNING,
+				StartTime: at, CloseTime: timestamppb.New(time.Unix(124, 0)),
+			},
 		},
 		Config: &persistencespb.NamespaceConfig{
 			Retention: durationpb.New(time.Hour), ArchivalBucket: "source-local",
@@ -54,7 +57,7 @@ func TestNamespaceReplicationProjectionMatchesTransmission(t *testing.T) {
 		},
 		ConfigVersion: 10, FailoverVersion: 20, FailoverNotificationVersion: 30, FailoverEndTime: at,
 	}
-	for _, message := range []proto.Message{detail, detail.Info, detail.Config, detail.ReplicationConfig, detail.ReplicationConfig.FailoverHistory[0]} {
+	for _, message := range []proto.Message{detail, detail.Info, detail.Info.RestoreInfo, detail.Config, detail.ReplicationConfig, detail.ReplicationConfig.FailoverHistory[0]} {
 		reflected := message.ProtoReflect()
 		fields := reflected.Descriptor().Fields()
 		for i := range fields.Len() {
@@ -68,6 +71,7 @@ func TestNamespaceReplicationProjectionMatchesTransmission(t *testing.T) {
 		Info: proto.CloneOf(transmitted.Info), Config: proto.CloneOf(transmitted.Config),
 		ReplicationConfig: proto.CloneOf(transmitted.ReplicationConfig), FailoverHistory: transmitted.FailoverHistory,
 		ConfigVersion: transmitted.ConfigVersion, FailoverVersion: transmitted.FailoverVersion, IsGlobalNamespace: true,
+		RestoreInfo: proto.CloneOf(transmitted.RestoreInfo),
 	}
 	response.Info.Id = transmitted.Id
 	config, failover, err := namespaceReplicationProjections(response, nil)
