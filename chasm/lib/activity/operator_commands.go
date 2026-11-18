@@ -229,7 +229,7 @@ func (a *Activity) mergeActivityOptions(
 	return ao, nil
 }
 
-func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request *activitypb.RequestCancelActivityExecutionRequest) (
+func (a *Activity) RequestCancel(ctx chasm.MutableContext, request *activitypb.RequestCancelActivityExecutionRequest) (
 	*activitypb.RequestCancelActivityExecutionResponse, error,
 ) {
 	req := request.GetFrontendRequest()
@@ -265,6 +265,7 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	if !hasAttemptInProgress {
 		metricsHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 		err := TransitionCanceled.Apply(a, ctx, cancelEvent{
+			identity:       req.GetIdentity(),
 			metricsHandler: metricsHandler,
 			fromStatus:     originalStatus,
 			details: &commonpb.Payloads{
@@ -288,7 +289,7 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 }
 
-func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activitypb.PauseActivityExecutionRequest) (
+func (a *Activity) Pause(ctx chasm.MutableContext, req *activitypb.PauseActivityExecutionRequest) (
 	*activitypb.PauseActivityExecutionResponse, error,
 ) {
 	// Deduplicate a replay of a request that already paused this activity, even if the
@@ -324,7 +325,7 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 	return &activitypb.PauseActivityExecutionResponse{}, nil
 }
 
-func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activitypb.UnpauseActivityExecutionRequest) (
+func (a *Activity) Unpause(ctx chasm.MutableContext, req *activitypb.UnpauseActivityExecutionRequest) (
 	_ *activitypb.UnpauseActivityExecutionResponse, retErr error,
 ) {
 	frontendReq := req.GetFrontendRequest()
@@ -362,9 +363,9 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	return &activitypb.UnpauseActivityExecutionResponse{}, nil
 }
 
-// isPaused reports whether the activity is currently paused (waiting) or has a pending pause request
+// IsPaused reports whether the activity is currently paused (waiting) or has a pending pause request
 // (worker still running).
-func (a *Activity) isPaused() bool {
+func (a *Activity) IsPaused() bool {
 	switch a.GetStatus() {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
@@ -410,7 +411,7 @@ func (a *Activity) clearHeartbeatDetails(ctx chasm.MutableContext) {
 	}
 }
 
-// handleReset handles the activity execution reset.
+// Reset handles the activity execution reset.
 //
 // For SCHEDULED and PAUSED activities (no worker running): re-dispatches at attempt 1. Any pending
 // retry backoff is discarded (reset clears CurrentRetryInterval), but a pending start_delay is
@@ -428,7 +429,7 @@ func (a *Activity) clearHeartbeatDetails(ctx chasm.MutableContext) {
 // takes effect on the new attempt 1.
 //
 // For CANCEL_REQUESTED activities: rejected with FailedPrecondition; cancel takes precedence.
-func (a *Activity) handleReset(
+func (a *Activity) Reset(
 	ctx chasm.MutableContext,
 	req *activitypb.ResetActivityExecutionRequest,
 ) (_ *activitypb.ResetActivityExecutionResponse, retErr error) {
@@ -571,7 +572,7 @@ func (a *Activity) resetImmediately(
 }
 
 // applyDeferredOptionRestore applies a Reset(RestoreOriginalOptions) that was deferred because a
-// worker was running an attempt at reset time (see handleReset).
+// worker was running an attempt at reset time (see Reset).
 func (a *Activity) applyDeferredOptionRestore(ctx chasm.MutableContext) {
 	if !a.ResetRestoreOptions {
 		return
@@ -581,7 +582,7 @@ func (a *Activity) applyDeferredOptionRestore(ctx chasm.MutableContext) {
 }
 
 // applyDeferredHeartbeatClear applies a Reset(ResetHeartbeat) that was deferred because a worker was
-// running an attempt at reset time (see handleReset).
+// running an attempt at reset time (see Reset).
 func (a *Activity) applyDeferredHeartbeatClear(ctx chasm.MutableContext) {
 	if !a.ResetShouldClearHeartbeat {
 		return

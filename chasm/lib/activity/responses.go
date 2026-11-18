@@ -181,7 +181,7 @@ func (a *Activity) runState() enumspb.PendingActivityState {
 		// The worker is still executing under its existing task token; the public PendingActivityState
 		// enum does not have a RESET_REQUESTED variant. The reset is surfaced to the worker via
 		// ActivityReset=true on its next heartbeat response.
-		if a.isPaused() {
+		if a.IsPaused() {
 			return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
 		}
 		if a.GetAwaitingCompletion() {

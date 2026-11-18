@@ -551,7 +551,7 @@ var supportedActivityOptionsUpdatePaths = map[string]struct{}{
 }
 
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
-func validateAndNormalizeUpdateActivityExecutionOptionsRequest(
+func ValidateAndNormalizeUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
 	maxIDLengthLimit int,

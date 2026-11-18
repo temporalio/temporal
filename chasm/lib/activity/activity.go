@@ -6,11 +6,13 @@ import (
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -46,9 +48,48 @@ var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ chasm.DescribableComponent = (*Activity)(nil)
 var _ callback.Host = (*Activity)(nil)
 
+// ActivityStore supplies owner-specific data and lifecycle hooks for an activity.
+// Standalone activities implement it themselves; workflow activities use their parent.
 type ActivityStore interface {
-	// RecordCompleted applies the provided function to record activity completion
-	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
+	CanDispatch(chasm.Context) bool
+	TaskMetadata(chasm.Context, *Activity) map[string]string
+
+	// PrepareStart runs before worker pickup and may apply an owner-driven pause.
+	// Returning false, nil skips pickup while allowing those changes to commit.
+	PrepareStart(chasm.MutableContext, *Activity) (bool, error)
+
+	// PrepareRetry applies owner retry rules before retry limits and backoff are checked.
+	// It may request a pause, which the retry transition must honor.
+	PrepareRetry(chasm.MutableContext, *Activity) error
+
+	// TruncateRetryFailure applies the owner's size limit to a failure retained for retry.
+	TruncateRetryFailure(chasm.MutableContext, *Activity, *failurepb.Failure) (*failurepb.Failure, error)
+
+	// OnActivityStarted records pickup in the owner after the activity's start transition,
+	// in the same transaction.
+	OnActivityStarted(chasm.MutableContext, *Activity, *historyservice.RecordActivityTaskStartedRequest) error
+
+	// OnActivityClosed invokes the terminal mutation once and records any parent history in the same transaction.
+	// It runs before the transition assigns the terminal status.
+	OnActivityClosed(chasm.MutableContext, *Activity, CloseEvent, func(chasm.MutableContext) error) error
+
+	// PrepareAddActivityTaskRequest adds owner-specific fields to the Matching request in place.
+	PrepareAddActivityTaskRequest(chasm.Context, *Activity, *matchingservice.AddActivityTaskRequest) error
+
+	// PopulateStartedResponse adds owner-specific fields to the worker pickup response in place.
+	// It also runs when reconstructing the response for a duplicate start request.
+	PopulateStartedResponse(chasm.Context, *Activity, *historyservice.RecordActivityTaskStartedResponse) error
+
+	WorkflowTypeName() string
+}
+
+// CloseEvent identifies a terminal activity transition for its owning execution.
+type CloseEvent struct {
+	Type     enumspb.EventType
+	Identity string
+
+	// ImmediateCancellation closes an activity without a running task, in response to a cancel request.
+	ImmediateCancellation bool
 }
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
@@ -151,7 +192,11 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
-func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
+func (a *Activity) ContextMetadata(ctx chasm.Context) map[string]string {
+	return a.StoreOrSelf(ctx).TaskMetadata(ctx, a)
+}
+
+func (a *Activity) TaskMetadata(_ chasm.Context, _ *Activity) map[string]string {
 	md := make(map[string]string, 2)
 	if actType := a.GetActivityType().GetName(); actType != "" {
 		md[contextutil.MetadataKeyStandaloneActivityType] = actType
@@ -267,6 +312,12 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 	if lastAttempt.GetStamp() != request.GetStamp() {
 		return nil, serviceerrors.NewObsoleteMatchingTask("activity attempt stamp mismatch")
 	}
+
+	allowed, err := a.StoreOrSelf(ctx).PrepareStart(ctx, a)
+	if err != nil || !allowed {
+		return nil, err
+	}
+
 	if err := TransitionStarted.Apply(a, ctx, request); err != nil {
 		if errors.Is(err, chasm.ErrInvalidTransition) {
 			return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
@@ -279,6 +330,11 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 			lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
 		)
 	}
+
+	if err := a.StoreOrSelf(ctx).OnActivityStarted(ctx, a, request); err != nil {
+		return nil, err
+	}
+
 	return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
 }
 
@@ -289,7 +345,6 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	key := ctx.ExecutionKey()
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
-	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
 	links := ctx.Links(a)
 	scheduledTime, startedTime := a.taskResponseTimes(attempt)
@@ -299,7 +354,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		handoffAttempt = attempt.GetHandoffState().GetCount()
 	}
 
-	return &historyservice.RecordActivityTaskStartedResponse{
+	response := &historyservice.RecordActivityTaskStartedResponse{
 		StartedTime:                 startedTime,
 		HandoffAttempt:              handoffAttempt,
 		HandoffOptions:              a.GetHandoffOptions(),
@@ -309,17 +364,13 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		ActivityRunId:               key.RunID,
 		WorkflowNamespace:           namespace,
 		HeartbeatDetails:            lastHeartbeat.GetDetails(),
-		NexusSerializationContext:   requestData.GetPropagatedNexusSerializationContext(),
 		CurrentAttemptScheduledTime: scheduledTime,
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),
 			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-					ActivityId:             key.BusinessID,
 					ActivityType:           a.GetActivityType(),
-					Input:                  requestData.GetInput(),
-					Header:                 requestData.GetHeader(),
 					TaskQueue:              a.GetTaskQueue(),
 					ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
 					ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
@@ -329,18 +380,46 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 			},
 			Links: links,
 		},
-	}, nil
+	}
+	if err := a.StoreOrSelf(ctx).PopulateStartedResponse(ctx, a, response); err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
-// RecordCompleted applies the provided function to record activity completion.
+// OnActivityClosed applies the provided function to record activity completion.
 // For standalone activities, it also triggers any registered completion callbacks.
-func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
+func (a *Activity) OnActivityClosed(ctx chasm.MutableContext, _ *Activity, _ CloseEvent, applyFn func(ctx chasm.MutableContext) error) error {
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
 
 	a.clearStartToCloseState(ctx)
 	return callback.ScheduleCompletionCallbacks(ctx, a)
+}
+
+func (a *Activity) OnActivityStarted(chasm.MutableContext, *Activity, *historyservice.RecordActivityTaskStartedRequest) error {
+	return nil
+}
+
+func (a *Activity) PrepareAddActivityTaskRequest(chasm.Context, *Activity, *matchingservice.AddActivityTaskRequest) error {
+	return nil
+}
+
+func (a *Activity) PopulateStartedResponse(ctx chasm.Context, _ *Activity, response *historyservice.RecordActivityTaskStartedResponse) error {
+	requestData := a.RequestData.Get(ctx)
+	attributes := response.GetScheduledEvent().GetActivityTaskScheduledEventAttributes()
+	attributes.ActivityId = ctx.ExecutionKey().BusinessID
+	attributes.Input = requestData.GetInput()
+	attributes.Header = requestData.GetHeader()
+	response.NexusSerializationContext = requestData.GetPropagatedNexusSerializationContext()
+
+	return nil
+}
+
+func (a *Activity) WorkflowTypeName() string {
+	return WorkflowTypeTag
 }
 
 // effectiveUserMetadata returns the activity's user metadata, preferring the
@@ -476,6 +555,7 @@ func (a *Activity) HandleCanceled(
 	metricsHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 
 	if err := TransitionCanceled.Apply(a, ctx, cancelEvent{
+		identity:       event.Request.GetCancelRequest().GetIdentity(),
 		details:        event.Request.GetCancelRequest().GetDetails(),
 		metricsHandler: metricsHandler,
 		fromStatus:     a.GetStatus(),
@@ -732,3 +812,10 @@ func (a *Activity) isActivityTaskStampValid(ctx chasm.Context, token *tokenspb.T
 
 	return tokenStamp == startedStamp
 }
+
+// CanDispatch always permits standalone dispatch; no parent workflow checks apply.
+func (a *Activity) CanDispatch(chasm.Context) bool { return true }
+
+func (a *Activity) PrepareStart(chasm.MutableContext, *Activity) (bool, error) { return true, nil }
+
+func (a *Activity) PrepareRetry(chasm.MutableContext, *Activity) error { return nil }

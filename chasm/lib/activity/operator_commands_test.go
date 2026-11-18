@@ -39,7 +39,7 @@ func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
 			},
 		}
 
-		_, err := activity.handleCancellationRequested(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+		_, err := activity.RequestCancel(ctx, &activitypb.RequestCancelActivityExecutionRequest{
 			FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
 				RequestId: requestID,
 			},
@@ -59,7 +59,7 @@ func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
 			},
 		}
 
-		_, err := activity.handleCancellationRequested(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+		_, err := activity.RequestCancel(ctx, &activitypb.RequestCancelActivityExecutionRequest{
 			FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
 				RequestId: "new-request-id",
 			},
@@ -139,7 +139,7 @@ func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
 			},
 		}
 
-		_, err := activity.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{
+		_, err := activity.Pause(ctx, &activitypb.PauseActivityExecutionRequest{
 			FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
 				RequestId: requestID,
 			},
@@ -159,7 +159,7 @@ func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
 			},
 		}
 
-		_, err := activity.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{
+		_, err := activity.Pause(ctx, &activitypb.PauseActivityExecutionRequest{
 			FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
 				RequestId: "new-request-id",
 			},
@@ -227,7 +227,7 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 			}
 
-			_, err := activity.handleCancellationRequested(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+			_, err := activity.RequestCancel(ctx, &activitypb.RequestCancelActivityExecutionRequest{
 				FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{Reason: "test"},
 			})
 			require.NoError(t, err)
@@ -307,7 +307,7 @@ func TestHandlePauseRequestedDedupBeforeValidation(t *testing.T) {
 				},
 			}
 
-			_, err := activity.handlePauseRequested(
+			_, err := activity.Pause(
 				&chasm.MockMutableContext{},
 				&activitypb.PauseActivityExecutionRequest{
 					FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
@@ -335,7 +335,7 @@ func TestHandleUnpauseRequestedRequestID(t *testing.T) {
 			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
 		}
 
-		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+		_, err := activity.Unpause(ctx, &activitypb.UnpauseActivityExecutionRequest{
 			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
 				RequestId: "unpause-request-id",
 			},
@@ -353,7 +353,7 @@ func TestHandleUnpauseRequestedRequestID(t *testing.T) {
 			},
 		}
 
-		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+		_, err := activity.Unpause(ctx, &activitypb.UnpauseActivityExecutionRequest{
 			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
 				RequestId: "unpause-request-id",
 			},
@@ -372,7 +372,7 @@ func TestHandleUnpauseRequestedRequestID(t *testing.T) {
 			},
 		}
 
-		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+		_, err := activity.Unpause(ctx, &activitypb.UnpauseActivityExecutionRequest{
 			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
 				RequestId: "failed-unpause-request-id",
 			},
@@ -395,7 +395,7 @@ func TestHandleResetRequestID(t *testing.T) {
 			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
 		}
 
-		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+		_, err := activity.Reset(ctx, &activitypb.ResetActivityExecutionRequest{
 			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
 				RequestId: "reset-request-id",
 			},
@@ -415,7 +415,7 @@ func TestHandleResetRequestID(t *testing.T) {
 			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
 		}
 
-		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+		_, err := activity.Reset(ctx, &activitypb.ResetActivityExecutionRequest{
 			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
 				RequestId: "reset-request-id",
 			},
@@ -435,7 +435,7 @@ func TestHandleResetRequestID(t *testing.T) {
 			},
 		}
 
-		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+		_, err := activity.Reset(ctx, &activitypb.ResetActivityExecutionRequest{
 			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
 				RequestId: "failed-reset-request-id",
 			},
@@ -742,7 +742,7 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 	}
 
-	_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+	_, err := activity.Reset(ctx, &activitypb.ResetActivityExecutionRequest{
 		FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
 			ActivityId:             "act",
 			RestoreOriginalOptions: true,
@@ -1174,7 +1174,7 @@ func TestUpdateOptionsRetryScheduling(t *testing.T) {
 					ctx.HandleNow = func(chasm.Component) time.Time { return now }
 					if testCase.unpause {
 						a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
-						_, err := a.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+						_, err := a.Unpause(ctx, &activitypb.UnpauseActivityExecutionRequest{
 							FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{},
 						})
 						require.NoError(t, err)
@@ -1410,7 +1410,7 @@ func TestHandoffOptionsRestorationAdmission(t *testing.T) {
 			if testCase.update {
 				_, err = a.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{ActivityId: "activity", RestoreOriginal: true}})
 			} else {
-				_, err = a.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{FrontendRequest: &workflowservice.ResetActivityExecutionRequest{ActivityId: "activity", RestoreOriginalOptions: true, KeepPaused: testCase.keepPaused}})
+				_, err = a.Reset(ctx, &activitypb.ResetActivityExecutionRequest{FrontendRequest: &workflowservice.ResetActivityExecutionRequest{ActivityId: "activity", RestoreOriginalOptions: true, KeepPaused: testCase.keepPaused}})
 			}
 
 			if !testCase.enabled {
@@ -1463,7 +1463,7 @@ func TestHandoffOptionsRestorationAdmission(t *testing.T) {
 		_, err := a.UpdateActivityExecutionOptions(ctx, request)
 		require.NoError(t, err)
 
-		_, err = a.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{FrontendRequest: &workflowservice.ResetActivityExecutionRequest{ActivityId: "activity", RestoreOriginalOptions: true}})
+		_, err = a.Reset(ctx, &activitypb.ResetActivityExecutionRequest{FrontendRequest: &workflowservice.ResetActivityExecutionRequest{ActivityId: "activity", RestoreOriginalOptions: true}})
 		require.NoError(t, err)
 		_, err = a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "worker yielded"}})
 		require.NoError(t, err)

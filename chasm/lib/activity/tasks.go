@@ -60,7 +60,7 @@ func (a *Activity) IsDispatchTaskValid(
 	ctx chasm.Context,
 	stamp int32,
 ) (bool, error) {
-	return TransitionStarted.Possible(a) && stamp == a.LastAttempt.Get(ctx).GetStamp(), nil
+	return TransitionStarted.Possible(a) && stamp == a.LastAttempt.Get(ctx).GetStamp() && a.StoreOrSelf(ctx).CanDispatch(ctx), nil
 }
 
 func (h *activityDispatchTaskHandler) Execute(

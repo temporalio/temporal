@@ -1653,7 +1653,7 @@ func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
 	originalStart := attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime()
 	originalStamp := attempt.GetHandoffState().GetStartToCloseStamp()
 
-	_, err := a.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{FrontendRequest: &workflowservice.PauseActivityExecutionRequest{}})
+	_, err := a.Pause(ctx, &activitypb.PauseActivityExecutionRequest{FrontendRequest: &workflowservice.PauseActivityExecutionRequest{}})
 	require.NoError(t, err)
 
 	_, err = a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "submission failed"}})
@@ -1664,7 +1664,7 @@ func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
 
 	// Unpause after the old timeout would have expired; pickup must get the full new window.
 	now = originalStart.Add(2 * a.GetStartToCloseTimeout().AsDuration())
-	_, err = a.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{}})
+	_, err = a.Unpause(ctx, &activitypb.UnpauseActivityExecutionRequest{FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{}})
 	require.NoError(t, err)
 
 	ctx.Tasks = nil

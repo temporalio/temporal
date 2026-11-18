@@ -579,11 +579,12 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 		return nil, serviceerror.NewInvalidArgument("handoff options are not supported for workflow activities")
 	}
 
-	if err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(
+	err := ValidateAndNormalizeUpdateActivityExecutionOptionsRequest(
 		req,
 		h.config.DefaultActivityRetryPolicy,
 		h.config.MaxIDLengthLimit(),
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 

@@ -65,7 +65,7 @@ func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) m
 		breakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		operation,
 		a.GetActivityType().GetName(),
-		WorkflowTypeTag,
+		a.StoreOrSelf(ctx).WorkflowTypeName(),
 		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
 	)
 }
