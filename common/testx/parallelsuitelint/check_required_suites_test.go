@@ -43,7 +43,7 @@ func TestRequiredSuites(t *testing.T) {
 			t.Parallel()
 
 			analyzer := New()
-			require.NoError(t, analyzer.Flags.Set("allow-standard-tests", tc.allow))
+			require.NoError(t, analyzer.Flags.Set("allow-non-parallelsuite-tests", tc.allow))
 			analysistest.Run(t, analysistest.TestData(), analyzer, tc.packages...)
 		})
 	}

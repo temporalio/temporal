@@ -43,7 +43,7 @@ func checkRequiredSuites(pass *analysis.Pass, allowedPackages string) {
 // checkTestEntrypoint requires ordinary tests to delegate directly to a suite runner.
 func checkTestEntrypoint(pass *analysis.Pass, fn *ast.FuncDecl) {
 	if ordinaryTest(pass, fn) && !suiteEntrypoint(pass, fn) {
-		pass.Reportf(fn.Pos(), "use parallelsuite.Run for tests; allow ordinary tests with -allow-standard-tests")
+		pass.Reportf(fn.Pos(), "use parallelsuite.Run for tests; allow ordinary tests with -allow-non-parallelsuite-tests")
 	}
 }
 

@@ -19,7 +19,7 @@ func TestPlugin(t *testing.T) {
 		{name: "defaults", packages: []string{"policy/required", "policy/adapted"}},
 		{
 			name:     "adoption exclusions preserve other checks",
-			settings: map[string]any{"allow-standard-tests": []string{"policy/allowed/..."}},
+			settings: map[string]any{"allow-non-parallelsuite-tests": []string{"policy/allowed/..."}},
 			packages: []string{"policy/allowed", "policy/allowed/child"},
 		},
 	} {
@@ -44,7 +44,7 @@ func TestInvalidSettings(t *testing.T) {
 		settings any
 	}{
 		{name: "unknown setting", settings: map[string]any{"typo": true}},
-		{name: "wrong value type", settings: map[string]any{"allow-standard-tests": true}},
+		{name: "wrong value type", settings: map[string]any{"allow-non-parallelsuite-tests": true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
