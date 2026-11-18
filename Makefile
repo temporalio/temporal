@@ -345,7 +345,7 @@ lint-parallelsuite: $(GOLANGCI_LINT)
 		$(if $(PARALLELSUITELINT_BASE_REV),--new-from-rev="$(PARALLELSUITELINT_BASE_REV)") ./tests/...
 
 $(GOLANGCI_LINT): .github/.custom-gcl.yml \
-		$(filter-out %_test.go,$(wildcard common/testx/parallelsuitelint/*.go common/testx/parallelsuitelint/golangci/*.go)) \
+		common/testx/parallelsuitelint/*.go common/testx/parallelsuitelint/golangci/*.go \
 		common/testx/parallelsuitelint/go.mod common/testx/parallelsuitelint/go.sum
 	@cd .github && GOWORK=off $(GOLANGCI_LINT_BOOTSTRAP) custom
 
