@@ -63,6 +63,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -248,7 +249,7 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:                  collection.NewSyncMap[string, chan *queryResult](),
+		queryResults:                  collection.NewSyncMap[taskResultKey, chan *queryResult](),
 		logger:                        logger,
 		throttledLogger:               log.ThrottledLogger(logger),
 		metricsHandler:                metrics.NoopMetricsHandler,
@@ -958,6 +959,171 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.matchingEngine.partitionsLock.RLock()
 	defer s.matchingEngine.partitionsLock.RUnlock()
 	s.Equal(0, len(s.matchingEngine.partitions))
+}
+
+func (s *matchingEngineSuite) TestRespondQueryTaskCompleted_RejectsOtherNamespace() {
+	tqName := "query-tq"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	execution := &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: uuid.NewString()}
+
+	type queryOutcome struct {
+		resp *matchingservice.QueryWorkflowResponse
+		err  error
+	}
+	queryDone := make(chan queryOutcome, 1)
+	go func() {
+		resp, err := s.matchingEngine.QueryWorkflow(context.Background(), &matchingservice.QueryWorkflowRequest{
+			NamespaceId: namespaceID,
+			TaskQueue:   taskQueue,
+			QueryRequest: &workflowservice.QueryWorkflowRequest{
+				Namespace: "ns",
+				Execution: execution,
+				Query:     &querypb.WorkflowQuery{QueryType: "q"},
+			},
+		})
+		queryDone <- queryOutcome{resp: resp, err: err}
+	}()
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			StickyTaskQueue: &taskqueuepb.TaskQueue{Name: tqName},
+		}, nil).Times(1)
+	var pollResp *matchingservice.PollWorkflowTaskQueueResponse
+	s.Require().EventuallyWithT(func(t *assert.CollectT) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var err error
+		pollResp, err = s.matchingEngine.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: namespaceID,
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: taskQueue,
+				Identity:  "identity",
+			},
+		}, metrics.NoopMetricsHandler)
+		require.NoError(t, err)
+		require.NotNil(t, pollResp.GetQuery())
+	}, 5*time.Second, 10*time.Millisecond)
+
+	queryToken, err := s.matchingEngine.tokenSerializer.DeserializeQueryTaskToken(pollResp.GetTaskToken())
+	s.NoError(err)
+
+	completed := &workflowservice.RespondQueryTaskCompletedRequest{
+		CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
+		QueryResult:   payloads.EncodeString("answer"),
+	}
+	respond := func(nsID string) error {
+		return s.matchingEngine.RespondQueryTaskCompleted(context.Background(), &matchingservice.RespondQueryTaskCompletedRequest{
+			NamespaceId:      nsID,
+			TaskQueue:        taskQueue,
+			TaskId:           queryToken.GetTaskId(),
+			CompletedRequest: completed,
+		}, metrics.NoopMetricsHandler)
+	}
+
+	s.ErrorAs(respond(uuid.NewString()), new(*serviceerror.NotFound))
+
+	s.NoError(respond(namespaceID))
+	var outcome queryOutcome
+	select {
+	case outcome = <-queryDone:
+	case <-time.After(5 * time.Second):
+		s.FailNow("query did not complete")
+	}
+	s.NoError(outcome.err)
+	protorequire.ProtoEqual(s.T(), completed.GetQueryResult(), outcome.resp.GetQueryResult())
+}
+
+func (s *matchingEngineSuite) TestRespondNexusTask_RejectsOtherNamespace() {
+	for _, kind := range []enumspb.TaskQueueKind{
+		enumspb.TASK_QUEUE_KIND_NORMAL,
+	} {
+		for _, method := range []string{"completed", "failed"} {
+			s.Run(kind.String()+"/"+method, func() {
+				s.matchingEngine.nexusResults = collection.NewSyncMap[taskResultKey, chan *nexusResult]()
+				s.matchingEngine.outstandingPollers = collection.NewSyncMap[string, context.CancelFunc]()
+				taskQueue := &taskqueuepb.TaskQueue{Name: "nexus-tq-" + uuid.NewString(), Kind: kind}
+
+				type dispatchOutcome struct {
+					resp *matchingservice.DispatchNexusTaskResponse
+					err  error
+				}
+				dispatchDone := make(chan dispatchOutcome, 1)
+				go func() {
+					resp, err := s.matchingEngine.DispatchNexusTask(context.Background(), &matchingservice.DispatchNexusTaskRequest{
+						NamespaceId: namespaceID,
+						TaskQueue:   taskQueue,
+						Request:     &nexuspb.Request{Header: map[string]string{}},
+					})
+					dispatchDone <- dispatchOutcome{resp: resp, err: err}
+				}()
+
+				var pollResp *matchingservice.PollNexusTaskQueueResponse
+				s.Require().EventuallyWithT(func(t *assert.CollectT) {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					var err error
+					pollResp, err = s.matchingEngine.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
+						NamespaceId: namespaceID,
+						Request: &workflowservice.PollNexusTaskQueueRequest{
+							TaskQueue: taskQueue,
+							Identity:  "identity",
+						},
+					}, metrics.NoopMetricsHandler)
+					require.NoError(t, err)
+					require.NotNil(t, pollResp.GetResponse())
+				}, 5*time.Second, 10*time.Millisecond)
+
+				nexusToken, err := s.matchingEngine.tokenSerializer.DeserializeNexusTaskToken(pollResp.GetResponse().GetTaskToken())
+				s.NoError(err)
+
+				var respond func(nsID string) error
+				var expected *matchingservice.DispatchNexusTaskResponse
+				if method == "completed" {
+					completed := &workflowservice.RespondNexusTaskCompletedRequest{Response: &nexuspb.Response{}}
+					respond = func(nsID string) error {
+						_, err := s.matchingEngine.RespondNexusTaskCompleted(context.Background(), &matchingservice.RespondNexusTaskCompletedRequest{
+							NamespaceId: nsID,
+							TaskQueue:   taskQueue,
+							TaskId:      nexusToken.GetTaskId(),
+							Request:     completed,
+						}, metrics.NoopMetricsHandler)
+						return err
+					}
+					expected = &matchingservice.DispatchNexusTaskResponse{
+						Outcome: &matchingservice.DispatchNexusTaskResponse_Response{Response: completed.GetResponse()},
+					}
+				} else {
+					//nolint:staticcheck // SA1019: v1.30 matching forwards the legacy Nexus handler error.
+					failed := &workflowservice.RespondNexusTaskFailedRequest{Error: &nexuspb.HandlerError{Failure: &nexuspb.Failure{Message: "failed"}}}
+					respond = func(nsID string) error {
+						_, err := s.matchingEngine.RespondNexusTaskFailed(context.Background(), &matchingservice.RespondNexusTaskFailedRequest{
+							NamespaceId: nsID,
+							TaskQueue:   taskQueue,
+							TaskId:      nexusToken.GetTaskId(),
+							Request:     failed,
+						}, metrics.NoopMetricsHandler)
+						return err
+					}
+					expected = &matchingservice.DispatchNexusTaskResponse{
+						//nolint:staticcheck // SA1019: v1.30 matching forwards the legacy Nexus handler error.
+						Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{HandlerError: failed.GetError()},
+					}
+				}
+
+				s.ErrorAs(respond(uuid.NewString()), new(*serviceerror.NotFound))
+
+				s.NoError(respond(namespaceID))
+				var outcome dispatchOutcome
+				select {
+				case outcome = <-dispatchDone:
+				case <-time.After(5 * time.Second):
+					s.FailNow("task did not complete")
+				}
+				s.NoError(outcome.err)
+				protorequire.ProtoEqual(s.T(), expected, outcome.resp)
+			})
+		}
+	}
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
@@ -3739,7 +3905,7 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 
 			partition := newRootPartition("my-nsid", "my-tq", enumspb.TASK_QUEUE_TYPE_NEXUS)
 			s.matchingEngine.partitions[partition.Key()] = mockPartitionManager
-			s.matchingEngine.nexusResults = collection.NewSyncMap[string, chan *nexusResult]()
+			s.matchingEngine.nexusResults = collection.NewSyncMap[taskResultKey, chan *nexusResult]()
 
 			ctx, cancel := context.WithTimeout(context.Background(), ctxTimeout)
 			defer cancel()
