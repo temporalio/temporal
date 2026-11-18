@@ -307,8 +307,9 @@ func (s *Starter) Invoke(
 	request := s.request.StartRequest
 	defer func() {
 		// Count only workflows this request created, not dedup responses (which also report Started).
-		if retError == nil && startOutcome == StartNew && resp.GetStarted() &&
-			request.GetPropagatedNexusSerializationContext() != nil {
+		startedNewWorkflow := startOutcome == StartNew && resp.GetStarted()
+		hasNexusSerializationCtx := request.GetPropagatedNexusSerializationContext() != nil
+		if retError == nil && startedNewWorkflow && hasNexusSerializationCtx {
 			metrics.NexusWorkflowStartWithContext.With(s.getMetricsHandler()).Record(1)
 		}
 	}()

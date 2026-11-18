@@ -67,7 +67,7 @@ type Updater struct {
 	// because it must be read while holding the workflow lease.
 	nexusSerializationContext *nexuspb.PropagatedSerializationContext
 	// newUpdateWithNexusContext is set in ApplyRequest when this request admitted a new Update that carries a
-	// Nexus serialization context, and is counted in OnSuccess.
+	// Nexus serialization context. (Used in tracking metrics.)
 	newUpdateWithNexusContext bool
 }
 
