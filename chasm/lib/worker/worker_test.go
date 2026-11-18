@@ -21,7 +21,7 @@ func TestRecordHeartbeat(t *testing.T) {
 		HandleNow: func(chasm.Component) time.Time { return now },
 	}}
 	group := newWorkerGroup()
-	require.NoError(t, group.recordHeartbeat(ctx, time.Minute))
+	require.NoError(t, group.recordHeartbeat(ctx, nil, time.Minute))
 	protorequire.ProtoEqual(t, &workerstatepb.WorkerGroupState{
 		Status:              workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 		LeaseExpirationTime: timestamppb.New(now.Add(time.Minute)),
@@ -34,7 +34,7 @@ func TestRecordHeartbeat(t *testing.T) {
 
 	// A later heartbeat extends the lease and schedules expiry at the new deadline.
 	now = now.Add(30 * time.Second)
-	require.NoError(t, group.recordHeartbeat(ctx, time.Minute))
+	require.NoError(t, group.recordHeartbeat(ctx, nil, time.Minute))
 	require.Equal(t, now.Add(time.Minute), group.GetLeaseExpirationTime().AsTime())
 	require.Len(t, ctx.Tasks, 2)
 	require.Same(t, group, ctx.Tasks[1].Component)
@@ -54,11 +54,11 @@ func TestRecordHeartbeatInvalidDuration(t *testing.T) {
 			t.Parallel()
 			ctx := &chasm.MockMutableContext{}
 			group := newWorkerGroup()
-			require.NoError(t, group.recordHeartbeat(ctx, time.Minute))
+			require.NoError(t, group.recordHeartbeat(ctx, nil, time.Minute))
 			before := common.CloneProto(group.WorkerGroupState)
 
 			// An invalid renewal must preserve the existing lease and schedule no task.
-			err := group.recordHeartbeat(ctx, tc.leaseDuration)
+			err := group.recordHeartbeat(ctx, nil, tc.leaseDuration)
 			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 			protorequire.ProtoEqual(t, before, group.WorkerGroupState)
 			require.Len(t, ctx.Tasks, 1)
@@ -70,13 +70,13 @@ func TestRecordHeartbeatInactiveGroup(t *testing.T) {
 	t.Parallel()
 	ctx := &chasm.MockMutableContext{}
 	group := newWorkerGroup()
-	require.NoError(t, group.recordHeartbeat(ctx, time.Minute))
+	require.NoError(t, group.recordHeartbeat(ctx, nil, time.Minute))
 	_, err := group.Terminate(ctx, chasm.TerminateComponentRequest{})
 	require.NoError(t, err)
 	before := common.CloneProto(group.WorkerGroupState)
 
 	// A heartbeat cannot reopen the current run after it closes.
-	err = group.recordHeartbeat(ctx, time.Minute)
+	err = group.recordHeartbeat(ctx, nil, time.Minute)
 	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 	protorequire.ProtoEqual(t, before, group.WorkerGroupState)
 	require.Len(t, ctx.Tasks, 1)

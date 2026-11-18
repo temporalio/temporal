@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
@@ -67,12 +68,21 @@ func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatu
 // cannot undo newer activity updates and retried heartbeats are not applied twice.
 func (g *WorkerGroup) recordHeartbeat(
 	ctx chasm.MutableContext,
+	heartbeats []*workerpb.WorkerHeartbeat,
 	leaseDuration time.Duration,
 ) error {
-	if leaseDuration <= 0 {
-		return serviceerror.NewInvalidArgument("worker lease duration must be positive")
+	if err := validateHeartbeat(leaseDuration); err != nil {
+		return err
 	}
+	// TODO: Track workers and their activity bindings from these heartbeats.
 	return transitionActiveHeartbeat.Apply(g, ctx, eventHeartbeatReceived{
 		leaseDuration: leaseDuration,
 	})
+}
+
+func validateHeartbeat(leaseDuration time.Duration) error {
+	if leaseDuration <= 0 {
+		return serviceerror.NewInvalidArgument("worker lease duration must be positive")
+	}
+	return nil
 }
