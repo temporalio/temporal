@@ -664,6 +664,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			if err != nil {
 				return nil, err
 			}
+			ms.SetWorkflowTaskWorkerControlQueue(currentWorkflowTask.WorkerControlQueue)
 		}
 	}
 
@@ -794,6 +795,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if err != nil {
 			return nil, err
 		}
+		ms.SetWorkflowTaskWorkerControlQueue(currentWorkflowTask.WorkerControlQueue)
 	}
 
 	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry)

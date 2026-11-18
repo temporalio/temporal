@@ -1158,6 +1158,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
 	}
+	m.ms.executionInfo.WorkflowTaskWorkerControlQueue = workflowTask.WorkerControlQueue
 	if !workflowTask.ScheduledTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
 	}
@@ -1182,6 +1183,10 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 		tag.Attempt(workflowTask.Attempt),
 		tag.WorkflowStartedTimestamp(workflowTask.StartedTime),
 		tag.WorkflowTaskType(workflowTask.Type.String()))
+}
+
+func (m *workflowTaskStateMachine) SetWorkflowTaskWorkerControlQueue(queue string) {
+	m.ms.executionInfo.WorkflowTaskWorkerControlQueue = queue
 }
 
 func (m *workflowTaskStateMachine) HasPendingWorkflowTask() bool {
@@ -1295,6 +1300,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		Attempt:                     m.ms.executionInfo.WorkflowTaskAttempt,
 		AttemptsSinceLastSuccess:    m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess,
 		StartedTime:                 m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
+		WorkerControlQueue:          m.ms.executionInfo.WorkflowTaskWorkerControlQueue,
 		ScheduledTime:               m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
 		TaskQueue:                   m.ms.CurrentTaskQueue(),
 		OriginalScheduledTime:       m.ms.executionInfo.WorkflowTaskOriginalScheduledTime.AsTime(),

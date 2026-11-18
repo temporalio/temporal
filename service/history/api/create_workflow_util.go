@@ -134,6 +134,9 @@ func NewWorkflowWithSignal(
 			// Unable to add WorkflowTaskStarted event to history
 			return nil, err
 		}
+		if startRequest.StartRequest.GetEagerWorkerCapabilities().GetSupportsWorkflowHeartbeatNotification() {
+			newMutableState.SetWorkflowTaskWorkerControlQueue(startRequest.StartRequest.GetEagerWorkerControlTaskQueue())
+		}
 	}
 
 	return newMutableState, nil
