@@ -38,6 +38,7 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 	if req.GetNamespaceId() == "" || req.GetWorkerGroupingKey() == "" {
 		return nil, serviceerror.NewInvalidArgument("namespace ID and worker grouping key are required")
 	}
+	heartbeats := req.GetFrontendRequest().GetWorkerHeartbeat()
 	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -53,8 +54,8 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 		func(chasm.MutableContext, *workerstatepb.RecordHeartbeatRequest) (*WorkerGroup, error) {
 			return newWorkerGroup(), nil
 		},
-		func(group *WorkerGroup, mctx chasm.MutableContext, request *workerstatepb.RecordHeartbeatRequest) (chasm.NoValue, error) {
-			return nil, group.recordHeartbeat(mctx, request.GetFrontendRequest().GetWorkerHeartbeat(), heartbeatTimeout)
+		func(group *WorkerGroup, mctx chasm.MutableContext, _ *workerstatepb.RecordHeartbeatRequest) (chasm.NoValue, error) {
+			return nil, group.recordHeartbeat(mctx, heartbeats, heartbeatTimeout)
 		},
 		req,
 		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),

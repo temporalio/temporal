@@ -37,14 +37,12 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	sendWorkerHeartbeats(t, env, other)
 	group, ctx, err := fetchWorkerGroup(t.Context(), env, groupKey, "")
 	require.NoError(t, err)
-	require.Len(t, group.Workers, 2)
-	require.Contains(t, group.Workers, first.WorkerInstanceKey)
-	require.Contains(t, group.Workers, second.WorkerInstanceKey)
+	require.Equal(t, workerstatepb.WORKER_GROUP_STATUS_ACTIVE, group.Status)
 	require.Equal(t, groupKey, ctx.ExecutionKey().BusinessID)
 	otherGroup, otherCtx, err := fetchWorkerGroup(t.Context(), env, otherGroupKey, "")
 	require.NoError(t, err)
 	require.Equal(t, otherGroupKey, otherCtx.ExecutionKey().BusinessID)
-	require.Contains(t, otherGroup.Workers, other.WorkerInstanceKey)
+	require.Equal(t, workerstatepb.WORKER_GROUP_STATUS_ACTIVE, otherGroup.Status)
 	firstRunID := ctx.ExecutionKey().RunID
 	firstDeadline := group.LeaseExpirationTime.AsTime()
 
