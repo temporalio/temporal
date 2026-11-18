@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -119,7 +120,7 @@ func TestPartitionScaling_Down(t *testing.T) {
 
 	t.Log("wait until 4,5 see no new tasks over a 2s window")
 	// nolint:staticcheck // until we rewrite the test
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
+	await.Require(testcontext.For(t), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()
@@ -196,7 +197,7 @@ func TestPartitionScaling_Down_FromDC(t *testing.T) {
 
 	t.Log("wait until 4,5 see no new tasks over a 2s window")
 	// nolint:staticcheck // until we rewrite the test
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
+	await.Require(testcontext.For(t), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()
@@ -241,7 +242,7 @@ func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
 
 	var polls map[int]int
 	t.Log("wait for 10 successful polls on each partition")
-	await.Require(s.Context(), t, func(c *await.T) {
+	await.Require(testcontext.For(t), t, func(c *await.T) {
 		polls = scalerCountPolls(s.Tv(), capture)
 		t.Log("polls(6)", polls)
 		require.Len(c, polls, 6)
@@ -258,7 +259,7 @@ func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
 
 	// initially, polls should continue going to all 6, but new tasks should go to only 3
 	// eventually, the three will report that they are drained, and then new polls should only go to 3.
-	await.Require(s.Context(), t, func(c *await.T) {
+	await.Require(testcontext.For(t), t, func(c *await.T) {
 		polls2 := scalerCountPolls(s.Tv(), capture)
 		diff := scalerSubtractPollCounts(polls2, polls)
 		polls = polls2
@@ -333,7 +334,7 @@ func TestPartitionScaling_Disable_ToFewerPartitions(t *testing.T) {
 
 	t.Log("wait until 1,2,3 see no new tasks over a 2s window")
 	// nolint:staticcheck // until we rewrite the test
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 1, 2, 3), 15*time.Second, time.Millisecond)
+	await.Require(testcontext.For(t), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 1, 2, 3), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()

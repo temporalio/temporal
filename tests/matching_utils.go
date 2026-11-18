@@ -12,27 +12,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/tests/testcore"
 )
-
-// runWithMatchingBehaviors runs a test with all combinations of matching behaviors.
-func runWithMatchingBehaviors(
-	t *testing.T,
-	baseOpts []testcore.TestOption,
-	subtest func(s *testcore.TestEnv, behavior testcore.MatchingBehavior),
-) {
-	for _, behavior := range testcore.AllMatchingBehaviors() {
-		t.Run(behavior.Name(), func(t *testing.T) {
-			opts := append([]testcore.TestOption{}, baseOpts...)
-			opts = append(opts, behavior.Options()...)
-
-			env := testcore.NewEnv(t, opts...)
-			behavior.InjectHooks(env)
-
-			subtest(env, behavior)
-		})
-	}
-}
 
 // syncDeploymentVersionToTaskQueues sends a SyncDeploymentUserData request to the matching service
 // to register a deployment version as current for the specified task queue types, then waits for

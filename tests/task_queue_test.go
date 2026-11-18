@@ -1024,38 +1024,42 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
 	s.testTaskDispatchLatencyMetric(testNexusTaskDispatchLatencyEmitted)
 }
 
-func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
-	runWithMatchingBehaviors(s.T(), nil, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
+func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(scope parallelsuite.Scope, s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
+	for _, b := range testcore.AllMatchingBehaviors() {
+		s.RunSequential(b.Name(), func(scope *TaskQueueSuite) {
+			s := testcore.NewEnv(scope.T(), b.Options()...)
+			b.InjectHooks(s)
 
-		// When task forwarding is forced, inject a delay so we can verify
-		// the latency metric captures forwarding time.
-		var forwardDelay time.Duration
-		if b.ForceTaskForward {
-			forwardDelay = 100 * time.Millisecond
-			s.InjectHook(testhooks.NewHook(testhooks.MatchingForwardTaskDelay, forwardDelay))
-			forwardDelay *= 2 // two forward hops
-		}
+			// When task forwarding is forced, inject a delay so we can verify
+			// the latency metric captures forwarding time.
+			var forwardDelay time.Duration
+			if b.ForceTaskForward {
+				forwardDelay = 100 * time.Millisecond
+				s.InjectHook(testhooks.NewHook(testhooks.MatchingForwardTaskDelay, forwardDelay))
+				forwardDelay *= 2 // two forward hops
+			}
 
-		// Determine expected tag values based on matching behavior.
-		expectedForwarded := "false"
-		expectedPartitionID := "0"
-		if b.ForceTaskForward {
-			expectedForwarded = "true"
-			expectedPartitionID = "11"
-		}
+			// Determine expected tag values based on matching behavior.
+			expectedForwarded := "false"
+			expectedPartitionID := "0"
+			if b.ForceTaskForward {
+				expectedForwarded = "true"
+				expectedPartitionID = "11"
+			}
 
-		// When async is forced, tasks always go through DB backlog.
-		// When sync is allowed, the source depends on timing and is non-deterministic.
-		expectedSource := "History"
-		if b.ForceAsync {
-			expectedSource = "DbBacklog"
-		}
+			// When async is forced, tasks always go through DB backlog.
+			// When sync is allowed, the source depends on timing and is non-deterministic.
+			expectedSource := "History"
+			if b.ForceAsync {
+				expectedSource = "DbBacklog"
+			}
 
-		scenario(s, expectedForwarded, expectedSource, expectedPartitionID, forwardDelay)
-	})
+			scenario(scope, s, expectedForwarded, expectedSource, expectedPartitionID, forwardDelay)
+		})
+	}
 }
 
-func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, minLatency time.Duration) {
+func testTaskDispatchLatencyEmitted(scope parallelsuite.Scope, s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, minLatency time.Duration) {
 	tv := testvars.New(s.T())
 
 	capture := s.StartNamespaceMetricCapture()
@@ -1107,7 +1111,7 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	} {
 		s.Eventually(func() bool {
 			resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-				s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+				scope.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: s.NamespaceID().String(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 						TaskQueue:     tv.TaskQueue().GetName(),
@@ -1130,7 +1134,7 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	}
 
 	// Start a workflow to generate a workflow task.
-	_, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := s.FrontendClient().StartWorkflowExecution(scope.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
@@ -1203,11 +1207,11 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	s.Equal(1, activityCount, "expected exactly 1 task_dispatch_latency recording for activity task")
 }
 
-func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
+func testNexusTaskDispatchLatencyEmitted(scope parallelsuite.Scope, s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 	tv := testvars.New(s.T())
 
 	// Create a nexus endpoint targeting our task queue.
-	_, err := s.GetTestCluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+	_, err := s.GetTestCluster().OperatorClient().CreateNexusEndpoint(scope.Context(), &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: "nexus-" + uuid.New().String(),
 			Target: &nexuspb.EndpointTarget{
@@ -1240,7 +1244,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	// Wait for nexus poller to arrive at root partition before dispatching.
 	s.Eventually(func() bool {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+			scope.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tv.TaskQueue().GetName(),
@@ -1272,7 +1276,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 		dispatchTQName = nexusTQ.NormalPartition(11).RpcName()
 	}
 
-	_, err = s.GetTestCluster().MatchingClient().DispatchNexusTask(s.Context(), &matchingservice.DispatchNexusTaskRequest{
+	_, err = s.GetTestCluster().MatchingClient().DispatchNexusTask(scope.Context(), &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: s.NamespaceID().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: dispatchTQName,
@@ -1323,7 +1327,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	s.Equal(1, nexusCount, "expected exactly 1 task_dispatch_latency recording for nexus task")
 }
 
-func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
+func testQueryTaskDispatchLatencyEmitted(scope parallelsuite.Scope, s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 	tv := testvars.New(s.T())
 
 	wftDone := make(chan struct{})
@@ -1342,7 +1346,7 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	// Wait for poller to arrive at root partition before starting workflow.
 	s.Eventually(func() bool {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+			scope.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tv.TaskQueue().GetName(),
@@ -1364,7 +1368,7 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	}, 10*time.Second, 50*time.Millisecond, "pollers did not arrive at root partition")
 
 	// Start workflow and wait for the initial WFT to be handled.
-	_, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := s.FrontendClient().StartWorkflowExecution(scope.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
@@ -1400,7 +1404,7 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	// Wait for query poller to arrive before issuing query.
 	s.Eventually(func() bool {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+			scope.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tv.TaskQueue().GetName(),
@@ -1422,7 +1426,7 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	}, 10*time.Second, 50*time.Millisecond, "query poller did not arrive at root partition")
 
 	// Issue the query.
-	_, err = s.FrontendClient().QueryWorkflow(s.Context(), &workflowservice.QueryWorkflowRequest{
+	_, err = s.FrontendClient().QueryWorkflow(scope.Context(), &workflowservice.QueryWorkflowRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 		Query:     &querypb.WorkflowQuery{QueryType: "test-query"},
