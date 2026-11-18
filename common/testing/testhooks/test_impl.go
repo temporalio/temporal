@@ -55,15 +55,6 @@ func Get[T any, S any](th TestHooks, key Key[T, S], scope S) (T, bool) {
 	return zero, false
 }
 
-// Call calls a func() hook if present.
-//
-// TestHooks should be used sparingly, see comment on TestHooks.
-func Call[S any](th TestHooks, key Key[func(), S], scope S) {
-	if hook, ok := Get(th, key, scope); ok {
-		hook()
-	}
-}
-
 // Hook bundles a key and value for type-erased use in InjectHook.
 type Hook struct {
 	scopeType ScopeType
