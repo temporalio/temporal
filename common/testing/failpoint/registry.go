@@ -22,6 +22,12 @@ type Registry interface {
 	Delete(key Key)
 }
 
+// Source provides the registry that Execute uses. Servers use their testhooks.TestHooks, so each
+// server, and each test cluster, has its own registry.
+type Source interface {
+	Failpoints() Registry
+}
+
 type registryCtxKey struct{}
 
 // InjectRegistry adds a failpoint registry to the context.
