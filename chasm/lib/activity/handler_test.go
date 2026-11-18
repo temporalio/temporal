@@ -209,9 +209,9 @@ func callbackCount(ctx context.Context, t *testing.T) int {
 	return count
 }
 
-// TestStartActivityExecution_UseExistingMetric verifies that the attach update, which also runs on a new
-// activity, records NexusActivityUseExisting only when it attaches to an existing activity.
-func TestStartActivityExecution_UseExistingMetric(t *testing.T) {
+// TestStartActivityExecution_UseExistingNexusContextMetric verifies that the attach update, which also runs on a
+// new activity, records NexusActivityUseExisting only when it attaches to an existing activity.
+func TestStartActivityExecution_UseExistingNexusContextMetric(t *testing.T) {
 	h, ctx, capture := newStartTestHandler(t)
 
 	resp, err := startWithAttach(ctx, h, "request-1", enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING)
@@ -234,9 +234,9 @@ func TestStartActivityExecution_UseExistingMetric(t *testing.T) {
 	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityUseExisting.Name()), 1)
 }
 
-// TestStartActivityExecution_StartWithContextMetric verifies that NexusActivityStartWithContext counts only
+// TestStartActivityExecution_StartWithNexusContextMetric verifies that NexusActivityStartWithContext counts only
 // new activities started with a Nexus serialization context.
-func TestStartActivityExecution_StartWithContextMetric(t *testing.T) {
+func TestStartActivityExecution_StartWithNexusContextMetric(t *testing.T) {
 	h, ctx, capture := newStartTestHandler(t)
 
 	resp, err := startWithAttach(ctx, h, "request-1", enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING)

@@ -221,8 +221,8 @@ func (u *Updater) applyRequest(
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
 	}
-	// Sticky: update-with-start can re-apply this request on the same registry, where the Update this
-	// request admitted already exists.
+	// Only set this to true, never back to false. Update-with-start can call ApplyRequest twice for the
+	// same request, and on the second call the Update this request created is already in the registry.
 	if !alreadyExisted && updateRequest.GetPropagatedNexusSerializationContext() != nil {
 		u.newUpdateWithNexusContext = true
 	}
