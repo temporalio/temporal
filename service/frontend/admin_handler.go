@@ -97,7 +97,6 @@ type (
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		namespaceMutationExecutor  nsreplication.MutationTaskExecutor
-		replicationResolverFactory namespace.ReplicationResolverFactory
 		deliveryPolicy             nsreplication.DeliveryPolicy
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.AdminVisibilityManager
@@ -163,9 +162,6 @@ type (
 		CategoryRegistry tasks.TaskCategoryRegistry
 		matchingClient   matchingservice.MatchingServiceClient
 
-		// ReplicationResolverFactory resolves replica membership when validating
-		// removed-peer namespace mutations. Nil uses ReplicationConfig.Clusters.
-		ReplicationResolverFactory namespace.ReplicationResolverFactory
 		// DeliveryPolicy decides which CHASM deliveries the receiver defers, and
 		// which addressed ones skip its own membership checks. Nil does neither.
 		DeliveryPolicy nsreplication.DeliveryPolicy
@@ -198,7 +194,6 @@ func NewAdminHandler(
 		config:                     args.Config,
 		namespaceDLQHandler:        namespaceDLQHandler,
 		namespaceMutationExecutor:  namespaceMutationExecutor,
-		replicationResolverFactory: args.ReplicationResolverFactory,
 		deliveryPolicy:             args.DeliveryPolicy,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
@@ -1142,13 +1137,11 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		// that delayed addition. Otherwise it can create stale membership after
 		// the source has stopped targeting this peer. Legacy never sets this marker.
 		if request.GetRemovedPeer() && !addressed {
-			resolverFactory := adh.replicationResolverFactory
-			if resolverFactory == nil {
-				resolverFactory = namespace.NewDefaultReplicationResolverFactory()
-			}
-			members := resolverFactory(nsreplication.NamespaceDetailFromTaskAttributes(payloadTask)).ClusterNames(namespace.EmptyBusinessID)
-			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(members) == 0 ||
-				slices.Contains(members, currentCluster) {
+			clusters := payloadTask.GetReplicationConfig().GetClusters()
+			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
+				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
+					return c.GetClusterName() == currentCluster
+				}) {
 				err := serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
 				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 				return nil, err

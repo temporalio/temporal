@@ -887,7 +887,6 @@ func AdminHandlerProvider(
 	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
-	replicationResolverFactory namespace.ReplicationResolverFactory,
 	deliveryPolicy nsreplication.DeliveryPolicy,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
@@ -921,7 +920,6 @@ func AdminHandlerProvider(
 		metricsHandler,
 		taskCategoryRegistry,
 		matchingClient,
-		replicationResolverFactory,
 		deliveryPolicy,
 	}
 	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)

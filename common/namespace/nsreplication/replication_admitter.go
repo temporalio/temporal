@@ -35,6 +35,9 @@ type AdmissionOptions struct {
 // source, so a retryable one (prefer FailedPrecondition; Unavailable marks the
 // destination down) defers a delivery the receiver cannot apply yet instead of
 // letting it succeed partially. The default trusts nothing and defers nothing.
+// An untrusted removal is checked against ReplicationConfig.Clusters, so a
+// deployment whose replication resolver decides membership differently must
+// trust the deliveries that resolver addressed.
 type DeliveryPolicy func(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (trust bool, err error)
 
 // NewDefaultDeliveryPolicy creates the default DeliveryPolicy.

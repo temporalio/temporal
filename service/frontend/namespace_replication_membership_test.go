@@ -144,49 +144,6 @@ func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
 	}
 }
 
-func TestRemovedPeerValidationUsesResolverMembership(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name    string
-		factory namespace.ReplicationResolverFactory
-		wantErr bool
-	}{
-		// The receiver is still in the legacy cluster list, so the default policy rejects the removal.
-		{name: "default factory", wantErr: true},
-		// Membership says the receiver was removed, matching what the source computed.
-		{name: "membership factory", factory: dataMembershipFactory()},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctrl := gomock.NewController(t)
-			clusters := cluster.NewMockMetadata(ctrl)
-			clusters.EXPECT().GetCurrentClusterName().Return("cellC").AnyTimes()
-			clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
-			executor := nsreplication.NewMockMutationTaskExecutor(ctrl)
-			if !tc.wantErr {
-				executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), gomock.Any()).Return(nsreplication.ApplyOutcomeApplied, nil)
-			}
-			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters, namespaceMutationExecutor: executor,
-				metricsHandler: metrics.NoopMetricsHandler, eventLogger: wideevents.NoopLogger(),
-				config:                     &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(false)},
-				replicationResolverFactory: tc.factory}
-			task := removalTestTask(true)
-			task.ReplicationConfig.Clusters = append(task.ReplicationConfig.Clusters, &replicationpb.ClusterReplicationConfig{ClusterName: "cellC"})
-			task.Info.Data = map[string]string{"members": "cellA"}
-			payload, err := nsreplication.MarshalNamespaceTask(task)
-			require.NoError(t, err)
-			resp, err := handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload, RemovedPeer: true})
-			if tc.wantErr {
-				var invalid *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalid)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, resp.GetOutcome())
-		})
-	}
-}
-
 func TestDeliveryPolicy(t *testing.T) {
 	t.Parallel()
 	trustAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) { return true, nil }

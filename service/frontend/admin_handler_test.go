@@ -219,7 +219,6 @@ func (s *adminHandlerSuite) SetupTest() {
 		nil, // metricsHandler
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
-		namespace.NewDefaultReplicationResolverFactory(),
 		nsreplication.NewDefaultDeliveryPolicy(),
 	}
 	s.currentClusterName = "current-cluster"
