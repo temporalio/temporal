@@ -47,7 +47,8 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 	// and enforce the minimum allowed timeout. Use the minimum for now.
 	heartbeatTimeout := h.config.MinHeartbeatTimeout(ns.Name().String())
 	// TODO: Once activity binding tracking is added, avoid creating or renewing
-	// runs for groups with no tracked activities.
+	// runs for groups with no tracked activities. Let the lease timer expire.
+	// If a later heartbeat reports activity bindings, create a new run.
 	_, err = chasm.UpdateWithStartExecution(
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetWorkerGroupingKey()},
