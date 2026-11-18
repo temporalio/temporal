@@ -72,9 +72,6 @@ const (
 		`PRIMARY KEY ((year, month), update_time));`
 
 	createKeyspaceCQL = `CREATE KEYSPACE IF NOT EXISTS %v ` +
-		`WITH replication = { 'class' : 'SimpleStrategy', 'replication_factor' : %v};`
-
-	createKeyspaceNetworkTopologyCQL = `CREATE KEYSPACE IF NOT EXISTS %v ` +
 		`WITH replication = { 'class' : 'NetworkTopologyStrategy', '%v' : %v};`
 )
 
@@ -143,12 +140,12 @@ func (client *cqlClient) DropDatabase(name string) error {
 
 // createKeyspace creates a cassandra Keyspace if it doesn't exist
 func (client *cqlClient) createKeyspace(name string) error {
-	if client.datacenter != "" {
-		client.logger.Info(fmt.Sprintf("Creating Keyspace %v using NetworkTopologyStrategy in Datacenter %v with RF=%v.", name, client.datacenter, client.nReplicas))
-		return client.Exec(fmt.Sprintf(createKeyspaceNetworkTopologyCQL, name, client.datacenter, client.nReplicas))
+	datacenter := client.datacenter
+	if datacenter == "" {
+		datacenter = "datacenter1"
 	}
-	client.logger.Info(fmt.Sprintf("Creating Keyspace %v using SimpleStrategy with RF=%v.", name, client.nReplicas))
-	return client.Exec(fmt.Sprintf(createKeyspaceCQL, name, client.nReplicas))
+	client.logger.Info(fmt.Sprintf("Creating Keyspace %v using NetworkTopologyStrategy in Datacenter %v with RF=%v.", name, datacenter, client.nReplicas))
+	return client.Exec(fmt.Sprintf(createKeyspaceCQL, name, datacenter, client.nReplicas))
 }
 
 // dropKeyspace drops a Keyspace
