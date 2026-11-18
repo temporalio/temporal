@@ -169,7 +169,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			errForRelease = retError
 		}
 		if retError != nil && currentWorkflowTask != nil && currentWorkflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && ms.IsStickyTaskQueueSet() &&
-			!ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
+			ms.SessionWorkerQueue() == "" {
 			// If, while completing WFT, error is occurred and returned to the worker then worker will clear its cache.
 			// New WFT will also be created on sticky task queue and sent to worker.
 			// Because worker doesn't have a workflow in cache, it needs to replay it from the beginning,
@@ -183,7 +183,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// TODO: remove this call when GetWorkflowExecutionHistory includes speculative WFT events.
 			//
 			// TODO(Shivam): This piece of code seems stale given that history.sendTransientOrSpeculativeWorkflowTaskEvents is true by default.
-			// Revisit this if exclusive workers in the future need added support for this.
+			// Revisit this if session based workers in the future need added support for this. For now, we are taking the risk of shipping these
+			// events but not giving up worker affinity.
 			if clearStickyErr := handler.clearStickyTaskQueue(ctx, workflowLease.GetContext()); clearStickyErr != nil {
 				handler.logger.Error("Failed to clear stickiness after speculative workflow task failed to complete.",
 					tag.NewErrorTag("clear-sticky-error", clearStickyErr),
@@ -364,7 +365,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			if err != nil {
 				return nil, err
 			}
-			ms.ClearStickyTaskQueue()
+			// A slow but alive bound worker keeps the binding; only its death moves the workflow.
+			ms.ClearStickyTaskQueueUnlessPartOfSession()
 			wtHeartbeatTimedOut = true
 		}
 	}
@@ -382,7 +384,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		metrics.CompleteWorkflowTaskWithStickyDisabledCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-		ms.ClearStickyTaskQueue()
+		// The binding, not the worker's cache, decides where a bound workflow's tasks go.
+		ms.ClearStickyTaskQueueUnlessPartOfSession()
 	} else {
 		metrics.CompleteWorkflowTaskWithStickyEnabledCounter.With(handler.metricsHandler).Record(
 			1,

@@ -274,12 +274,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return consts.ErrWorkflowCompleted
 	}
 
-	taskQueue, err := workflow.ActivityTaskQueue(mutableState, ai)
-	if err != nil {
-		// TODO (Shivam): Also, This error should not fail the activity transfer task
-		// since it could be sent to the DLQ. Ensure that this is not the case.
-		return err
-	}
+	taskQueue := workflow.ActivityTaskQueue(mutableState, ai)
 	sessionState := common.CloneProto(mutableState.GetExecutionInfo().GetSessionState())
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, ai)
@@ -290,8 +285,6 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	// NOTE (Shivam): Consider the case for general session activity tasks where in if the worker has
-	// changed between this, does this task correctly go to the new worker?
 	return t.pushActivity(ctx, task, taskQueue, sessionState, timeout, directive, priority, historyi.TransactionPolicyActive)
 }
 
@@ -371,7 +364,8 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// timeout timer task is already created which will timeout this task if no worker pick it up in 5s anyway.
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
-		// will re-create a new non-sticky task and reset sticky.
+		// will re-create a new non-sticky task and reset sticky; a workflow bound to a worker keeps its sticky queue
+		// and is re-offered there until Matching reports the worker unavailable.
 		err = t.pushWorkflowTask(
 			ctx,
 			transferTask,

@@ -499,8 +499,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, err
 	}
 
-	if attr.GetSessionOptions().GetWorkflowSession() != nil && executionInfo.GetStickyTaskQueue() == "" {
-		err := serviceerror.NewInvalidArgument("Workflow-session activities require a sticky workflow task queue")
+	// An unbound workflow still accepts session activities; they run from the normal queue until a
+	// multi-session worker binds the workflow again.
+	if attr.GetSessionOptions().GetWorkflowSession() != nil && executionInfo.GetSessionState() == nil {
+		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to have been started by a multi-session worker")
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
 

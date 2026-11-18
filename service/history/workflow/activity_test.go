@@ -15,12 +15,11 @@ import (
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -690,40 +689,29 @@ func (s *activitySuite) TestActivitySessionMembershipSurvivesHistoryAndRetry() {
 	}
 }
 
-func TestActivityTaskQueue(t *testing.T) {
-	t.Parallel()
+func (s *activitySuite) TestActivityTaskQueue() {
+	inSession := &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 	for _, tc := range []struct {
-		name             string
-		state            *persistencespb.ActivitySessionState
-		missingPlacement bool
+		name          string
+		activityState *persistencespb.ActivitySessionState
+		sessionState  *persistencespb.SessionState
+		wantSticky    bool
 	}{
-		{name: "no session state"},
-		{name: "empty session state", state: &persistencespb.ActivitySessionState{}},
-		{name: "session enabled", state: &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
-		{name: "session missing placement", missingPlacement: true, state: &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
+		{name: "not a session activity", sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}},
+		{name: "empty activity session state", activityState: &persistencespb.ActivitySessionState{}, sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}},
+		{name: "session activity follows the bound worker", activityState: inSession, sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}, wantSticky: true},
+		{name: "exclusive binding", activityState: inSession, sessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}, wantSticky: true},
+		{name: "unbound workflow uses the normal queue", activityState: inSession, sessionState: &persistencespb.SessionState{}},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			tv := testvars.New(t)
-			ms := historyi.NewMockMutableState(gomock.NewController(t))
-			ai := &persistencespb.ActivityInfo{TaskQueue: tv.TaskQueue().GetName(), SessionState: tc.state}
-			expected := tv.TaskQueue()
-			if tc.state.GetWorkflowSession() != nil {
-				current := tv.StickyTaskQueue()
-				if tc.missingPlacement {
-					current = tv.TaskQueue()
-				}
-				ms.EXPECT().CurrentTaskQueue().Return(current)
-				expected = current
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			s.mutableState.GetExecutionInfo().SessionState = tc.sessionState
+			ai := &persistencespb.ActivityInfo{TaskQueue: "task-queue", SessionState: tc.activityState}
+			expected := &taskqueuepb.TaskQueue{Name: "task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			if tc.wantSticky {
+				expected = &taskqueuepb.TaskQueue{Name: "X", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "task-queue"}
 			}
-			queue, err := ActivityTaskQueue(ms, ai)
-			if tc.missingPlacement {
-				require.ErrorIs(t, err, consts.ErrDependencyTaskNotCompleted)
-				require.Nil(t, queue)
-			} else {
-				require.NoError(t, err)
-				protorequire.ProtoEqual(t, expected, queue)
-			}
+			protorequire.ProtoEqual(s.T(), expected, ActivityTaskQueue(s.mutableState, ai))
 		})
 	}
 }

@@ -23,6 +23,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -91,6 +92,12 @@ const (
 
 	// Retained size for one activity failure once the limit MutableStateActivityFailureTotalSizeLimitError is exceeded.
 	minRetainedActivityFailureSize = 128
+
+	// defaultSessionStickyScheduleToStartTimeout is used when a workflow gets a non-exclusive binding to a worker before
+	// that worker has reported its sticky schedule-to-start timeout, which only arrives with a task completion.
+	// In practice, this default timeout is only used for non-exclusive bindings on the very first workflow task of a
+	// workflow that is bound to a worker or if the user has set a 0 value for the sticky schedule-to-start timeout.
+	defaultSessionStickyScheduleToStartTimeout = 5 * time.Second
 )
 
 // Scheduled tasks with timestamp after this will not be created.
@@ -1503,7 +1510,7 @@ func (ms *MutableStateImpl) BindExclusiveWorker(stableIdentity string, instanceK
 }
 
 // setSessionState writes the session state and mirrors its location in the sticky queue. Callers outside mutable
-// state go through BindExclusiveWorker, so the mirror and the exclusive binding hold.
+// state go through BindExclusiveWorker or UpdateNonExclusiveWorkerBinding, so the mirror and the exclusive binding hold.
 func (ms *MutableStateImpl) setSessionState(state *persistencespb.SessionState) {
 	current := ms.executionInfo.GetSessionState()
 	if current.GetExclusiveWorker() &&
@@ -1541,6 +1548,77 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 	return ms.executionInfo.StickyTaskQueue != ""
 }
 
+// SessionWorkerQueue returns the session's location (general or exclusive), or "" if it has none.
+func (ms *MutableStateImpl) SessionWorkerQueue() string {
+	return ms.executionInfo.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue()
+}
+
+// ClearStickyTaskQueueUnlessPartOfSession clears stickiness for a workflow that is not bound to a worker and reports
+// whether it did. A bound workflow keeps its binding, and the sticky queue mirroring it, until a worker change moves
+// or unbinds it: failures and timeouts on a live bound worker must not release the binding.
+func (ms *MutableStateImpl) ClearStickyTaskQueueUnlessPartOfSession() bool {
+	if ms.SessionWorkerQueue() != "" || !ms.IsStickyTaskQueueSet() {
+		return false
+	}
+	ms.ClearStickyTaskQueue()
+	return true
+}
+
+// UpdateNonExclusiveWorkerBinding gives the workflow a non-exclusive binding to the worker that starts its workflow
+// task, and reports whether the binding changed. previousWorkerQueue and previousStickyTimeout are captured before the
+// start cleared stickiness. Any change of binding reschedules pending session activities so they follow the worker.
+func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
+	options *sessionpb.WorkerSessionOptions,
+	previousWorkerQueue string,
+	previousStickyTimeout *durationpb.Duration,
+) (bool, error) {
+	if options.GetSingleSession() != nil || ms.executionInfo.GetSessionState().GetExclusiveWorker() {
+		// Exclusive bindings are made by BindExclusiveWorker.
+		return false, nil
+	}
+	workerQueue := options.GetMultiSession().GetWorkerAddress()
+	switch {
+	case workerQueue == "" && previousWorkerQueue == "":
+		// A worker without session options, and no binding to drop: ordinary or already-unbound workflow.
+		return false, nil
+	case workerQueue == "":
+		// Unbind: a worker without session options took over. Session activities move to the normal queue.
+		ms.unbindNonExclusiveWorker()
+	case workerQueue == previousWorkerQueue:
+		// Stickiness, and with it the binding, is only missing here if this start cleared it: the task came
+		// from the normal queue, or a deployment transition ran.
+		if ms.executionInfo.GetStickyTaskQueue() == workerQueue {
+			// No-op: the bound worker picked the task up from its sticky queue.
+			return false, nil
+		}
+		// Restore: the bound worker picked the task up from the normal queue. Its session activities
+		// are already queued there, so nothing is rescheduled. Note: We know that the task is picked from the
+		// normal queue because RecordWorkflowTaskStarted cleared the sticky queue when the start came from it.
+		ms.bindNonExclusiveWorker(workerQueue, previousStickyTimeout)
+		return true, nil
+	default:
+		// First bind, rebind after an unbind, or move to a new worker.
+		ms.bindNonExclusiveWorker(workerQueue, previousStickyTimeout)
+	}
+	return true, ms.reschedulePendingActivities(activityRescheduleForSessionMove, 0)
+}
+
+// unbindNonExclusiveWorker clears the workflow's non-exclusive binding and the sticky queue mirroring it. SessionState stays
+// present, so the workflow's session activities are still accepted and route to the normal queue.
+func (ms *MutableStateImpl) unbindNonExclusiveWorker() {
+	ms.setSessionState(&persistencespb.SessionState{})
+}
+
+// bindNonExclusiveWorker is setSessionState plus a real sticky schedule-to-start timeout for a non-exclusive binding.
+func (ms *MutableStateImpl) bindNonExclusiveWorker(workerQueue string, previousStickyTimeout *durationpb.Duration) {
+	ms.setSessionState(&persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: workerQueue}})
+	stickyTimeout := previousStickyTimeout
+	if stickyTimeout.AsDuration() <= 0 {
+		stickyTimeout = durationpb.New(defaultSessionStickyScheduleToStartTimeout)
+	}
+	ms.SetStickyTaskQueue(workerQueue, stickyTimeout)
+}
+
 // TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
 // Task queue kind (sticky or normal) is set based on comparison of normal task queue name
 // in mutable state and provided name.
@@ -1554,11 +1632,16 @@ func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*tas
 	}
 	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
 	if isStickyTq {
+		stickyTimeout := ms.executionInfo.StickyScheduleToStartTimeout
+		// A bound workflow's timed-out task is re-offered to the same worker, so a missing or 0 timeout would loop.
+		if ms.SessionWorkerQueue() != "" && stickyTimeout.AsDuration() <= 0 {
+			stickyTimeout = durationpb.New(defaultSessionStickyScheduleToStartTimeout)
+		}
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,
 			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 			NormalName: ms.executionInfo.TaskQueue,
-		}, ms.executionInfo.StickyScheduleToStartTimeout
+		}, stickyTimeout
 	}
 
 	// If tqName is normal task queue name.
@@ -6357,7 +6440,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		}
 	}
 
-	return requestReschedulePendingWorkflowTask, ms.reschedulePendingActivities(0)
+	return requestReschedulePendingWorkflowTask, ms.reschedulePendingActivities(activityRescheduleForDeploymentTransition, 0)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
@@ -10267,27 +10350,64 @@ func (ms *MutableStateImpl) GetShouldUseRampingVersion() bool {
 	return hasNoCompletedWorkflowTask && hasInitialBehaviorUseRampingVersion
 }
 
+// activityRescheduleReason selects which pending activities reschedulePendingActivities reissues, and how.
+type activityRescheduleReason int
+
+const (
+	// activityRescheduleForDeploymentTransition reissues every activity that is not started.
+	activityRescheduleForDeploymentTransition activityRescheduleReason = iota
+	// activityRescheduleForSessionMove reissues only ready workflow-session activities, so they follow the session
+	// location. Their schedule time and timers are unchanged.
+	activityRescheduleForSessionMove
+)
+
 // reschedulePendingActivities reschedules all the activities that are not started, so they are
 // scheduled against the right queue in matching.
-func (ms *MutableStateImpl) reschedulePendingActivities(wftScheduleToClose time.Duration) error {
+func (ms *MutableStateImpl) reschedulePendingActivities(reason activityRescheduleReason, wftScheduleToClose time.Duration) error {
+	if reason == activityRescheduleForSessionMove && ms.IsWorkflowExecutionStatusPaused() {
+		// Unpausing the workflow execution shall resume and dispatch the activities (session or not) to the right location
+		return nil
+	}
 	for _, ai := range ms.GetPendingActivityInfos() {
 		if ai.StartedEventId != common.EmptyEventID {
 			// TODO: skip task generation also when activity is in backoff period
 			// activity already started
 			continue
 		}
+		// A session move reissues only ready workflow-session activities.
+		// Skipped activities are dispatched later to the worker the workflow is bound to at that time:
+		//   - not a workflow-session activity: routed by its own task queue, and not dealt with here
+		//   - paused: unpause dispatches it to the new current location.
+		//   - in retry backoff: its retry timer dispatches it to the new current location. Only retries back off; a first
+		//     attempt with a future ScheduledTime (shifted by a deployment transition) is ready and is reissued.
+		//
+		// TODO (Shivam): Stale session activity copies left on the previous sticky queue are never
+		// collected when the activity has no schedule-to-start timeout, since the task queue scavenger
+		// only deletes expired tasks. Bound their expiry in Matching or scavenge abandoned session queues.
+		if reason == activityRescheduleForSessionMove &&
+			(ai.GetSessionState().GetWorkflowSession() == nil || ai.GetPaused() ||
+				(ai.GetAttempt() > 1 && ai.GetScheduledTime().AsTime().After(ms.Now()))) {
+			continue
+		}
 
 		// need to update stamp so the passive side regenerate the task
 		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
 			info.Stamp++
-			// Updating scheduled time because we don't want the time spent on the transition wft to
-			// be considered in the schedule-to-start latency calculation.
-			// This is specifically needed for the cases that the activity is blocked not because of a
-			// backlog but because of an ongoing transition. See ActivityStartDuringTransition error usage.
+			switch reason {
+			case activityRescheduleForDeploymentTransition:
+				// Updating scheduled time because we don't want the time spent on the transition wft to
+				// be considered in the schedule-to-start latency calculation.
+				// This is specifically needed for the cases that the activity is blocked not because of a
+				// backlog but because of an ongoing transition. See ActivityStartDuringTransition error usage.
 
-			info.ScheduledTime = timestamppb.New(info.ScheduledTime.AsTime().Add(wftScheduleToClose))
-			// This ensures the schedule to start timer task is regenerate so we don't miss the timout.
-			info.TimerTaskStatus &^= TimerTaskStatusCreatedScheduleToStart
+				info.ScheduledTime = timestamppb.New(info.ScheduledTime.AsTime().Add(wftScheduleToClose))
+				// This ensures the schedule to start timer task is regenerate so we don't miss the timout.
+				info.TimerTaskStatus &^= TimerTaskStatusCreatedScheduleToStart
+			case activityRescheduleForSessionMove:
+				// The new stamp makes the copy queued at the previously bound worker obsolete.
+			default:
+				return serviceerror.NewInternalf("unknown activity reschedule reason: %v", reason)
+			}
 			return nil
 		})
 		if err != nil {

@@ -37,6 +37,8 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
+			// TODO (Shivam): Confirm whether this API is still worth handling for workflow sessions at all, now that
+			// ShutdownWorker is preferred. Clearing stickiness here also drops a non-exclusive binding.
 			mutableState.ClearStickyTaskQueue()
 			return &api.UpdateWorkflowAction{
 				Noop:               true,

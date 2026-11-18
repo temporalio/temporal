@@ -231,10 +231,7 @@ func newActivityTaskPostActionInfo(
 	mutableState historyi.MutableState,
 	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
-	taskQueue, err := workflow.ActivityTaskQueue(mutableState, activityInfo)
-	if err != nil {
-		return nil, err
-	}
+	taskQueue := workflow.ActivityTaskQueue(mutableState, activityInfo)
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
 

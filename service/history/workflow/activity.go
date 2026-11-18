@@ -27,20 +27,21 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func ActivityTaskQueue(ms historyi.MutableState, ai *persistencespb.ActivityInfo) (*taskqueuepb.TaskQueue, error) {
+// ActivityTaskQueue returns where an activity is dispatched. A workflow-session activity goes to the
+// worker the workflow is bound to; with no binding (the workflow was unbound), it falls back to its normal queue.
+// When the location changes later, the move reschedules the activity.
+func ActivityTaskQueue(ms historyi.MutableState, ai *persistencespb.ActivityInfo) *taskqueuepb.TaskQueue {
+	normalQueue := &taskqueuepb.TaskQueue{Name: ai.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	if ai.GetSessionState().GetWorkflowSession() == nil {
-		return &taskqueuepb.TaskQueue{Name: ai.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, nil
+		return normalQueue
 	}
-	taskQueue := ms.CurrentTaskQueue()
-	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY || taskQueue.GetName() == "" {
-		// TODO (Shivam): Recover placement when a workflow task timeout clears stickiness after
-		// activity scheduling. This error makes the transfer or activity retry timer task retry
-		// without dispatching to the normal queue. This can happen in the case of general session's
-		// but not in the case of exclusive worker based sessions since in those, those WFT's do not
-		// clear stickiness ever.
-		return nil, consts.ErrDependencyTaskNotCompleted
+	workerQueue := ms.SessionWorkerQueue()
+	if workerQueue == "" {
+		// the activity says it's in the session, but the workflow has no location right now; we return the normal queue
+		// in this case
+		return normalQueue
 	}
-	return taskQueue, nil
+	return &taskqueuepb.TaskQueue{Name: workerQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: ai.TaskQueue}
 }
 
 func GetActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivityState {
