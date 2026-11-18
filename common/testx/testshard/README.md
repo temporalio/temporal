@@ -32,3 +32,9 @@ values are read on each call.
 
 For repeated checks, use `shard, err := testshard.FromEnv(options...)`, handle
 the error, then call `shard.SkipUnlessInShard(t)`.
+
+`parallelsuite.Run` and `RunLegacySequential` use these defaults automatically:
+
+```go
+parallelsuite.Run(t, &MySuite{})
+```
