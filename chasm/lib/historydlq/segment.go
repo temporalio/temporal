@@ -143,7 +143,6 @@ func (s *Segment) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValu
 	return []chasm.SearchAttributeKeyValue{
 		categorySearchAttribute.Value(int64(queue.GetTaskCategory())),
 		sourceSearchAttribute.Value(queue.GetSourceCluster()),
-		targetSearchAttribute.Value(queue.GetTargetCluster()),
 		minMessageIDSearchAttribute.Value(s.GetMinMessageId()),
 	}
 }

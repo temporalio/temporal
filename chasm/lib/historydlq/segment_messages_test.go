@@ -20,7 +20,7 @@ func TestSegmentMinimumPendingMessageID(t *testing.T) {
 	segment, err := NewSegment(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, int64(-1), segment.GetMinMessageId())
-	require.Equal(t, minMessageIDSearchAttribute.Value(-1), segment.SearchAttributes(ctx)[3])
+	require.Equal(t, minMessageIDSearchAttribute.Value(-1), segment.SearchAttributes(ctx)[2])
 	first, err := segment.Append(ctx, req)
 	require.NoError(t, err)
 	now = now.Add(-time.Hour)
@@ -29,12 +29,12 @@ func TestSegmentMinimumPendingMessageID(t *testing.T) {
 	require.NoError(t, err)
 	require.Less(t, second.MessageRef.MessageID, first.MessageRef.MessageID)
 	require.Equal(t, second.MessageRef.MessageID, segment.GetMinMessageId())
-	require.Equal(t, minMessageIDSearchAttribute.Value(second.MessageRef.MessageID), segment.SearchAttributes(ctx)[3])
+	require.Equal(t, minMessageIDSearchAttribute.Value(second.MessageRef.MessageID), segment.SearchAttributes(ctx)[2])
 	require.NoError(t, segment.ResolveEntry(ctx, second.MessageRef, historydlqpb.RESOLUTION_PURGED))
 	require.Equal(t, first.MessageRef.MessageID, segment.GetMinMessageId())
 	require.NoError(t, segment.ResolveEntry(ctx, first.MessageRef, historydlqpb.RESOLUTION_PURGED))
 	require.Equal(t, int64(-1), segment.GetMinMessageId())
-	require.Equal(t, minMessageIDSearchAttribute.Value(-1), segment.SearchAttributes(ctx)[3])
+	require.Equal(t, minMessageIDSearchAttribute.Value(-1), segment.SearchAttributes(ctx)[2])
 }
 
 func TestSegmentReadMessagesBoundedPage(t *testing.T) {

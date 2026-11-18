@@ -51,11 +51,11 @@ func (s *Segment) ResolveEntries(ctx chasm.MutableContext, req ResolveEntriesReq
 		if _, selected := selectedKeys[entryKey]; selected {
 			continue
 		}
-		selectedKeys[entryKey] = struct{}{}
 		field, present := s.Entries[entryKey]
 		if !present {
 			continue
 		}
+		selectedKeys[entryKey] = struct{}{}
 		entry, ok := field.TryGet(ctx)
 		if !ok || entry == nil || entry.EntryState == nil {
 			return serviceerror.NewDataLoss("history DLQ segment entry metadata is missing")
