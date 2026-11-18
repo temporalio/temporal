@@ -31,6 +31,7 @@ func (s *scopeAssertionsSuite) TestSuiteHelpers() {
 }
 
 func (s *scopeAssertionsSuite) TestAwaitHelpersRetryFailedAssertions() {
+	const timeout = time.Second
 	checks := map[string]func(parallelsuite.Scope){
 		"NoError":  func(s parallelsuite.Scope) { s.NoError(errors.New("not ready")) },
 		"Equal":    func(s parallelsuite.Scope) { s.Equal("ready", "pending") },
@@ -54,9 +55,11 @@ func (s *scopeAssertionsSuite) TestAwaitHelpersRetryFailedAssertions() {
 				checkScopeAssertions(s)
 				s.Equal(name, s.Context().Value(contextKey{}))
 				deadline, ok := s.Context().Deadline()
-				s.True(ok && time.Until(deadline) <= time.Second, "context must use the await deadline")
+				s.True(ok, "await context must have a deadline")
+				remaining := time.Until(deadline)
+				s.True(remaining <= timeout, "await deadline is %v away; want at most %v", remaining, timeout)
 				completed++
-			}, time.Second, time.Millisecond)
+			}, timeout, time.Millisecond)
 			s.Equal(2, attempts)
 			s.Equal(1, completed)
 		})
