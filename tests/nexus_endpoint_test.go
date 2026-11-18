@@ -422,7 +422,7 @@ func (s *MatchingSuite) TestList() {
 				results <- listResult{response: resp, err: err}
 			}()
 			if tc.request.Wait && tc.request.NextPageToken == nil && tc.request.LastKnownTableVersion != 0 {
-				env.createRandomNexusEndpoint(s.Context(), s.T())
+				env.createNexusEndpoint(ctx, s.T(), env.Tv().NexusEndpointName(), "unused")
 			}
 			select {
 			case result := <-results:
