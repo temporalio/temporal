@@ -57,6 +57,7 @@ type (
 		migrateWithRunningWorkflows  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		schedulerV1VersionCeiling    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		schedulerV1VersionOverride   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		catchupMatchesPerTask        dynamicconfig.IntPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS     dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		localActivitySleepLimit      dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -97,6 +98,7 @@ func NewResult(
 			migrateWithRunningWorkflows:  dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows.Get(dc),
 			schedulerV1VersionCeiling:    dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
 			schedulerV1VersionOverride:   dynamicconfig.SchedulerV1VersionOverride.Get(dc),
+			catchupMatchesPerTask:        dynamicconfig.SchedulerV1CatchupMatchesPerTask.Get(dc),
 			globalNSStartWorkflowRPS:     dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:                  dynamicconfig.BlobSizeLimitError.Get(dc),
 			localActivitySleepLimit:      dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
@@ -127,11 +129,15 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		versionOverride := func() int {
 			return s.schedulerV1VersionOverride(nsName)
 		}
+		catchupMatchesPerTask := func() int {
+			return s.catchupMatchesPerTask(nsName)
+		}
 		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, schedulerDynamicConfig{
 			enableCHASMMigration:        enableMigration,
 			migrateWithRunningWorkflows: migrateWithRunningWorkflows,
 			versionCeiling:              versionCeiling,
 			versionOverride:             versionOverride,
+			catchupMatchesPerTask:       catchupMatchesPerTask,
 		})
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
