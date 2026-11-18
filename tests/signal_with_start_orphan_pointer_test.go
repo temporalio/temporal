@@ -51,7 +51,7 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	orphanedRunID := startResp.RunId
 
 	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -64,10 +64,10 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 			}},
 		}, nil
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// Mutable state + history go away; current_executions stays. That's the bug shape.
-	s.Require().NoError(execMgr.DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
+	s.NoError(execMgr.DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: env.NamespaceID().String(),
 		WorkflowID:  tv.WorkflowID(),
@@ -82,7 +82,7 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 		WorkflowID:  tv.WorkflowID(),
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	env.Equal(orphanedRunID, current.RunID)
 	env.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, current.Status)
 
@@ -100,7 +100,7 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 		SignalName:            tv.SignalName(),
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	env.True(swsResp.Started)
 	env.NotEqual(orphanedRunID, swsResp.RunId)
 	env.Equal(swsResp.RunId, swsResp.FirstExecutionRunId)
@@ -111,6 +111,6 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 		WorkflowID:  tv.WorkflowID(),
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	env.Equal(swsResp.RunId, replaced.RunID)
 }

@@ -935,9 +935,7 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	// Drain workflow tasks -> schedule activities with Priority.FairnessKey.
 	wfHandled := 0
 	for wfHandled < total {
-		if err := s.Context().Err(); err != nil {
-			s.T().Fatalf("context deadline while draining workflow tasks: handled=%d/%d: %v", wfHandled, total, err)
-		}
+		s.NoError(s.Context().Err(), "context deadline while draining workflow tasks: handled=%d/%d", wfHandled, total)
 		_, err := env.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -984,9 +982,7 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 
 	actsHandled := 0
 	for actsHandled < total {
-		if err := s.Context().Err(); err != nil {
-			s.T().Fatalf("context deadline while draining activity tasks: handled=%d/%d: %v", actsHandled, total, err)
-		}
+		s.NoError(s.Context().Err(), "context deadline while draining activity tasks: handled=%d/%d", actsHandled, total)
 		_, err := env.TaskPoller().PollAndHandleActivityTask(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {

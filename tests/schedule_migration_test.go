@@ -251,7 +251,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 			nil, nil, time.Now().UTC(),
 		),
 	)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	sched := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -283,7 +283,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 			},
 		},
 	)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
@@ -293,7 +293,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 		RequestId:  uuid.NewString(),
 	})
 	var unavailableErr *serviceerror.Unavailable
-	s.Require().ErrorAs(err, &unavailableErr)
+	s.ErrorAs(err, &unavailableErr)
 	s.Contains(unavailableErr.Message, "sentinel")
 
 	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -302,7 +302,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 		SignalName:        completeSignal,
 		Identity:          "test",
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// The production sentinel completes after its idle timeout. This test uses a
 	// signal to reach the same retained COMPLETED state without waiting 15 minutes.
@@ -315,7 +315,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 		require.NoError(at, err)
 		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, closedSentinel.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
-	s.Require().Equal(dummy.DummyWFTypeName, closedSentinel.GetWorkflowExecutionInfo().GetType().GetName())
+	s.Equal(dummy.DummyWFTypeName, closedSentinel.GetWorkflowExecutionInfo().GetType().GetName())
 
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
@@ -324,7 +324,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	var migrated *workflowservice.DescribeWorkflowExecutionResponse
 	await.Require(ctx, s.T(), func(at *await.T) {
@@ -335,7 +335,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 		require.NoError(at, err)
 		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, migrated.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
-	s.Require().Equal(scheduler.WorkflowType, migrated.GetWorkflowExecutionInfo().GetType().GetName())
+	s.Equal(scheduler.WorkflowType, migrated.GetWorkflowExecutionInfo().GetType().GetName())
 }
 
 func (s *ScheduleMigrationTestSuite) TestCreateFromMigrationStateBlockedBySentinel() {
@@ -357,7 +357,7 @@ func (s *ScheduleMigrationTestSuite) TestCreateFromMigrationStateBlockedBySentin
 			ScheduleId:  sid,
 		},
 	)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	_, err = env.GetTestCluster().SchedulerClient().CreateFromMigrationState(
 		ctx,
@@ -381,7 +381,7 @@ func (s *ScheduleMigrationTestSuite) TestCreateFromMigrationStateBlockedBySentin
 		},
 	)
 	var unavailableErr *serviceerror.Unavailable
-	s.Require().ErrorAs(err, &unavailableErr)
+	s.ErrorAs(err, &unavailableErr)
 	s.Contains(unavailableErr.Message, "sentinel")
 }
 
@@ -429,14 +429,14 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 		Execution: &commonpb.WorkflowExecution{WorkflowId: sid},
 		Archetype: string(chasm.SchedulerArchetype),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	sentinelNode := sentinelResp.GetDatabaseMutableState().GetChasmNodes()[""]
-	s.Require().NotNil(sentinelNode)
+	s.NotNil(sentinelNode)
 	var sentinelState schedulerpb.SchedulerState
-	s.Require().NoError(proto.Unmarshal(sentinelNode.GetData().GetData(), &sentinelState))
-	s.Require().True(sentinelState.GetSentinel())
+	s.NoError(proto.Unmarshal(sentinelNode.GetData().GetData(), &sentinelState))
+	s.True(sentinelState.GetSentinel())
 	sentinelRunID := sentinelResp.GetDatabaseMutableState().GetExecutionState().GetRunId()
-	s.Require().NotEmpty(sentinelRunID)
+	s.NotEmpty(sentinelRunID)
 
 	migrationMarkerOutcomes := func(ctx context.Context) (failureTypes []string, succeeded int, markerErr error) {
 		history, markerErr := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -487,9 +487,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 		require.NoError(at, markerErr)
 		require.Len(at, failureTypes, 1)
 	}, awaitTimeout, pollInterval)
-	s.Require().NoError(markerErr)
-	s.Require().Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
-	s.Require().Zero(succeededMarkers)
+	s.NoError(markerErr)
+	s.Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
+	s.Zero(succeededMarkers)
 
 	_, err = env.AdminClient().DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
 		Namespace: nsName,
@@ -499,15 +499,15 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 		},
 		Archetype: string(chasm.SchedulerArchetype),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "wake migration after sentinel deletion"})
 	awaitV1SchedulerCompleted(ctx, s.T(), env, sid)
 
 	failureTypes, succeededMarkers, err = migrationMarkerOutcomes(ctx)
-	s.Require().NoError(err)
-	s.Require().Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
-	s.Require().Equal(1, succeededMarkers)
+	s.NoError(err)
+	s.Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
+	s.Equal(1, succeededMarkers)
 	requireV2ScheduleExists(ctx, s.T(), env, sid)
 }
 
@@ -530,7 +530,7 @@ func (s *ScheduleMigrationTestSuite) TestMigrateToWorkflowBlockedByCHASMSentinel
 			ScheduleId:  sid,
 		},
 	)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	_, err = env.GetTestCluster().SchedulerClient().MigrateToWorkflow(
 		ctx,
@@ -540,7 +540,7 @@ func (s *ScheduleMigrationTestSuite) TestMigrateToWorkflowBlockedByCHASMSentinel
 		},
 	)
 	var unavailableErr *serviceerror.Unavailable
-	s.Require().ErrorAs(err, &unavailableErr)
+	s.ErrorAs(err, &unavailableErr)
 	s.Contains(unavailableErr.Message, "sentinel")
 }
 
@@ -803,7 +803,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 
 	customKeyword := payload.EncodeString("round-trip-value")
 	customInt, err := payload.Encode(2026)
-	s.Require().NoError(err)
+	s.NoError(err)
 	memoValue := payload.EncodeString("round-trip-memo")
 	actionInput := payload.EncodeString("round-trip-input")
 	blockSignal := "block-round-trip-workflow"
@@ -848,7 +848,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 		}},
 		Memo: &commonpb.Memo{Fields: map[string]*commonpb.Payload{"round-trip": memoValue}},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	runningWfID := awaitRunningAction(ctx, s.T(), env, sid)
 
 	var predecessorRunID string
@@ -880,7 +880,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 		})
 		require.NoError(at, err)
 	}, 30*time.Second, 500*time.Millisecond)
-	s.Require().Len(before.GetInfo().GetRunningWorkflows(), 1)
+	s.Len(before.GetInfo().GetRunningWorkflows(), 1)
 	s.Equal(predecessorRunID, before.GetInfo().GetRunningWorkflows()[0].GetRunId(),
 		"V1 should retain the predecessor run ID after the action continues as new")
 
@@ -896,7 +896,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	awaitV1SchedulerCompleted(ctx, s.T(), env, sid)
 
 	await.Requiref(ctx, s.T(), func(at *await.T) {
@@ -929,7 +929,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// Routing is disabled, so this frontend DescribeSchedule reads restored V1 state.
 	var after *workflowservice.DescribeScheduleResponse
@@ -943,9 +943,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 
 	// Conflict tokens use different byte order in V1 and V2, but every leg must
 	// preserve their numeric value.
-	s.Require().Len(before.GetConflictToken(), 8)
-	s.Require().Len(v2.GetFrontendResponse().GetConflictToken(), 8)
-	s.Require().Len(after.GetConflictToken(), 8)
+	s.Len(before.GetConflictToken(), 8)
+	s.Len(v2.GetFrontendResponse().GetConflictToken(), 8)
+	s.Len(after.GetConflictToken(), 8)
 	beforeToken := int64(binary.BigEndian.Uint64(before.GetConflictToken()))
 	v2Token := int64(binary.LittleEndian.Uint64(v2.GetFrontendResponse().GetConflictToken()))
 	afterToken := int64(binary.BigEndian.Uint64(after.GetConflictToken()))
@@ -956,8 +956,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 	// timestamps by joining V1 RunningWorkflows with its matching RecentActions
 	// entry. Today that entry is deduplicated and the timestamps are replaced with
 	// migration time. Characterize that known loss until it is fixed.
-	s.Require().Len(before.GetInfo().GetRecentActions(), 1)
-	s.Require().Len(after.GetInfo().GetRecentActions(), 1)
+	s.Len(before.GetInfo().GetRecentActions(), 1)
+	s.Len(after.GetInfo().GetRecentActions(), 1)
 	s.NotEqual(
 		before.GetInfo().GetRecentActions()[0].GetScheduleTime().AsTime(),
 		after.GetInfo().GetRecentActions()[0].GetScheduleTime().AsTime(),
