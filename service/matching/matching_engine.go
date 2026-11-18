@@ -1887,6 +1887,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
+	descrResp.DescResponse.FairnessEnabled = pm.GetConfig().EnableFairness
 
 	if req.ReportStats {
 		if !pm.Partition().IsRoot() {
