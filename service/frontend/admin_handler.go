@@ -121,6 +121,7 @@ type (
 		timeSource                 clock.TimeSource
 		chasmVisibilityManager     chasm.VisibilityManager
 		chasmNsReplClient          namespacereplicationpb.NamespaceReplicationServiceClient
+		repairPolicy               nsreplication.RepairPolicy
 		schedulerClient            schedulerpb.SchedulerServiceClient
 		metricsHandler             metrics.Handler
 
@@ -159,6 +160,7 @@ type (
 		ChasmVisibilityManager              chasm.VisibilityManager
 		ChasmNsReplClient                   namespacereplicationpb.NamespaceReplicationServiceClient
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
+		RepairPolicy                        nsreplication.RepairPolicy
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
 		MetricsHandler                      metrics.Handler
 
@@ -220,6 +222,7 @@ func NewAdminHandler(
 		timeSource:                 args.TimeSource,
 		chasmVisibilityManager:     args.ChasmVisibilityManager,
 		chasmNsReplClient:          args.ChasmNsReplClient,
+		repairPolicy:               args.RepairPolicy,
 		schedulerClient:            args.SchedulerClient,
 		metricsHandler:             args.MetricsHandler,
 	}
@@ -1118,6 +1121,12 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			Transport: namespaceMutationTransport(request),
 		})
 		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
+		if request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
+			if err := adh.checkNamespaceRepairPolicy(ctx, payloadTask.GetId(), payloadTask.GetInfo().GetName(), payloadTask.GetInfo().GetData()); err != nil {
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+				return nil, err
+			}
+		}
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after

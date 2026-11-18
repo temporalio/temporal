@@ -111,6 +111,9 @@ func (adh *AdminHandler) validateNamespaceMutationRepair(
 		return err
 	}
 	detail := namespaceResponse.Namespace
+	if err := adh.checkNamespaceRepairPolicy(ctx, detail.GetInfo().GetId(), detail.GetInfo().GetName(), detail.GetInfo().GetData()); err != nil {
+		return err
+	}
 	if detail.GetConfigVersion() != request.GetVerifiedConfigVersion().GetValue() || detail.GetFailoverVersion() != request.GetVerifiedFailoverVersion().GetValue() {
 		return serviceerror.NewFailedPrecondition("source namespace versions changed after verification")
 	}
@@ -136,6 +139,20 @@ func (adh *AdminHandler) validateNamespaceMutationRepair(
 		return serviceerror.NewFailedPrecondition("authoritative namespace replica set changed before component reconciliation")
 	}
 	return nil
+}
+
+// checkNamespaceRepairPolicy refuses operator repair of a namespace the
+// deployment's repair policy does not support. A nil policy allows every namespace.
+func (adh *AdminHandler) checkNamespaceRepairPolicy(
+	ctx context.Context,
+	namespaceID string,
+	namespaceName string,
+	data map[string]string,
+) error {
+	if adh.repairPolicy == nil {
+		return nil
+	}
+	return adh.repairPolicy(ctx, namespaceID, namespaceName, data)
 }
 
 func (adh *AdminHandler) reconcileNamespaceMutationExecution(

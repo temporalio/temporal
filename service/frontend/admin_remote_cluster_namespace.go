@@ -5,9 +5,11 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/proto"
 )
 
 // GetRemoteClusterNamespace reads a namespace from a connected remote cluster
@@ -91,6 +93,14 @@ func (adh *AdminHandler) ApplyRemoteClusterNamespaceRepair(
 	}
 	if mutation.GetAttribution().GetOrigin() != adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
 		return nil, serviceerror.NewInvalidArgument("only operator-repair mutations are relayed")
+	}
+	// Refuse before contacting the peer. The peer checks the policy again and
+	// rejects a payload that does not decode, as it did before this check.
+	task := &replicationspb.NamespaceTaskAttributes{}
+	if proto.Unmarshal(mutation.GetNamespaceTaskPayload(), task) == nil {
+		if err := adh.checkNamespaceRepairPolicy(ctx, task.GetId(), task.GetInfo().GetName(), task.GetInfo().GetData()); err != nil {
+			return nil, err
+		}
 	}
 	remoteClient, err := adh.verifiedRemoteClusterAdminClient(ctx, clusterName)
 	if err != nil {

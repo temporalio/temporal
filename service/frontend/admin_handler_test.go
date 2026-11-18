@@ -218,6 +218,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		nil, // CHASM visibility manager
 		nil, // CHASM repair client
 		nsreplication.NewNoopDataMerger(),
+		nil, // repair policy
 		nil, // schedulerClient - not needed for most admin handler tests
 		nil, // metricsHandler
 		tasks.NewDefaultTaskCategoryRegistry(),
