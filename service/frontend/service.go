@@ -41,7 +41,7 @@ const (
 type Config struct {
 	NumHistoryShards                     int32
 	EmitNamespaceLifecycleEvents         dynamicconfig.BoolPropertyFn
-	NamespaceReplicationTransportMode    dynamicconfig.StringPropertyFnWithNamespaceFilter
+	NamespaceReplicationTransportMode    dynamicconfig.StringPropertyFn
 	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter

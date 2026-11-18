@@ -89,13 +89,7 @@ func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
 			logger := log.NewNoopLogger()
 			dc := dynamicconfig.NewNoopCollection()
 			cfg := NewConfig(dc, 32)
-			// Only the updated namespace uses the mode under test.
-			cfg.NamespaceReplicationTransportMode = func(namespace string) string {
-				if namespace == "ns" {
-					return tc.mode
-				}
-				return dynamicconfig.NamespaceReplicationTransportModeLegacy
-			}
+			cfg.NamespaceReplicationTransportMode = dynamicconfig.GetStringPropertyFn(tc.mode)
 			client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 			handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
 				nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
