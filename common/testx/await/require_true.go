@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/testx/testcontext"
 )
 
 const requireTrueMisuseHint = "do not use test assertions inside the predicate - return false to retry or use await.Require for assertions"

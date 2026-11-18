@@ -22,6 +22,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/callbacks"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -119,7 +120,7 @@ func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,
 	callbackValidator callbacks.Validator,
-	linkValidator *linkValidator,
+	linkValidator commonlinks.Validator,
 ) (*Operation, error) {
 	frontendReq := req.GetFrontendRequest()
 	op := NewOperation(&nexusoperationpb.OperationState{
@@ -307,7 +308,7 @@ func (o *Operation) HandleNexusCompletion(
 	completion *persistencespb.ChasmNexusCompletion,
 ) error {
 	// Request ID lets us reject a stale or misrouted completion.
-	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
+	if completion.GetRequestId() == "" || o.GetRequestId() != completion.GetRequestId() {
 		return serviceerror.NewNotFound("operation not found")
 	}
 
@@ -411,13 +412,12 @@ func (o *Operation) saveInvocationResult(
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:
-		links := commonnexus.ConvertNexusLinksToProtoLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
 			// An async operation transitions to STARTED here;
 			// HandleNexusCompletion will apply its outcome from the completion callback.
-			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, links)
+			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, r.links)
 		}
-		return nil, o.onCompleted(ctx, r.response.Successful, links)
+		return nil, o.onCompleted(ctx, r.response.Successful, r.links)
 	case invocationResultCancel:
 		return nil, o.onCanceled(ctx, r.failure)
 	case invocationResultFail:
@@ -465,14 +465,16 @@ func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperation
 // attachLinks records the given links on the operation keyed by requestID. Duplicates within the same
 // batch are kept as-is, matching the workflow and standalone activity start paths. If the requestID has
 // already been used to attach links the call is a no-op, making retries idempotent even after the
-// operation has closed. Returns an error if the operation is closed (and the requestID is new), if the
-// per-component cap would be exceeded, or if the request's per-link size, per-request count, or variant
-// shape is invalid.
+// operation has closed. Returns an error if the operation is closed (and the requestID is new), or if
+// the per-execution link aggregates would be exceeded.
+//
+// IMPORTANT: Only aggregate validations are performed here. The links are assumed to have already been
+// checked individually by the frontend via [commonlinks.Validator.Validate].
 func (o *Operation) attachLinks(
 	ctx chasm.MutableContext,
 	links []*commonpb.Link,
 	requestID string,
-	validator *linkValidator,
+	validator commonlinks.Validator,
 	namespaceName string,
 ) error {
 	if len(links) == 0 {
@@ -491,12 +493,10 @@ func (o *Operation) attachLinks(
 	if o.isClosed() {
 		return serviceerror.NewFailedPrecondition("cannot attach links to a closed nexus operation")
 	}
-	if err := validator.ValidateRequest(namespaceName, links); err != nil {
-		return err
-	}
-	// The cap bounds caller-attached links only; links returned by the Nexus handler
+	// The aggregates bound caller-attached links only; links returned by the Nexus handler
 	// (OperationState.links) arrive on a separate path and are not counted here.
-	if err := validator.ValidateTotal(namespaceName, len(ctx.Links(o)), len(links)); err != nil {
+	linkUsage := commonlinks.UsageOf(ctx.Links(o))
+	if err := validator.ValidateAdditions(namespaceName, links, linkUsage); err != nil {
 		return err
 	}
 	return ctx.SetRequestLinks(o, requestID, links)
@@ -693,6 +693,14 @@ func (o *Operation) DestinationBlocked(ctx chasm.Context) bool {
 	return opCtx.DestinationBlocked(ctx.ExecutionKey().NamespaceID, o.Endpoint)
 }
 
+// DestinationThrottled reports whether the caller RPS budget is holding this operation.
+func (o *Operation) DestinationThrottled(ctx chasm.Context) bool {
+	//nolint:revive // unchecked-type-assertion: intentional panic on missing context value
+	opCtx := ctx.Value(OperationContextKey).(*OperationContext)
+	return opCtx.DestinationThrottled != nil &&
+		opCtx.DestinationThrottled(ctx.NamespaceEntry().Name(), taskDestination(o.Endpoint))
+}
+
 func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperationExecutionInfo {
 	requestData := o.RequestData.Get(ctx)
 	key := ctx.ExecutionKey()
@@ -753,11 +761,18 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && o.DestinationBlocked(ctx) {
 		info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 		info.BlockedReason = "The circuit breaker is open."
+	} else if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && o.DestinationThrottled(ctx) {
+		info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+		info.BlockedReason = "Requests from this namespace to the endpoint are being rate limited."
 	}
 	if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
 		o.DestinationBlocked(ctx) {
 		info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 		info.CancellationInfo.BlockedReason = "The circuit breaker is open."
+	} else if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
+		o.DestinationThrottled(ctx) {
+		info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+		info.CancellationInfo.BlockedReason = "Requests from this namespace to the endpoint are being rate limited."
 	}
 
 	return info
@@ -806,12 +821,12 @@ func (o *Operation) emitOnSucceededMetrics(ctx chasm.Context, closeTime time.Tim
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
-func (o *Operation) emitOnFailedMetrics(ctx chasm.Context, closeTime time.Time) {
+func (o *Operation) emitOnFailedMetrics(ctx chasm.Context, closeTime time.Time, reason metrics.ReasonString) {
 	outcomeTag := metrics.OutcomeTag(
 		strings.ToLower(nexusoperationpb.OPERATION_STATUS_FAILED.String()),
 	)
 	handler := o.metricsHandler(ctx)
-	NexusOperationFailedCount.With(handler).Record(1)
+	NexusOperationFailedCount.With(handler).Record(1, metrics.ReasonTag(reason))
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 

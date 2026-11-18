@@ -25,6 +25,14 @@ func TestNewCassandraCluster(t *testing.T) {
 			cfg: config.Cassandra{},
 			err: nil,
 		},
+		"serialConsistency_bad": {
+			cfg: config.Cassandra{
+				Consistency: &config.CassandraStoreConsistency{
+					Default: &config.CassandraConsistencySettings{SerialConsistency: "bad_value"},
+				},
+			},
+			err: fmt.Errorf("unable to decode cassandra serial consistency: %w", fmt.Errorf("invalid consistency %q", "BAD_VALUE")),
+		},
 		"caCert_badBase64": {
 			cfg: config.Cassandra{
 				TLS: &auth.TLS{Enabled: true, CaData: "this isn't base64"},
