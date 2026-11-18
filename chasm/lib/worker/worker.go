@@ -1,4 +1,4 @@
-// Package worker models workers as CHASM components and tracks their liveness using timers.
+// Package worker tracks liveness for workers that share a lease.
 // Workers with the same worker_grouping_key share a lease under one WorkerGroup.
 package worker
 
@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	libraryName         = "worker"
-	groupComponentName  = "group"
-	workerComponentName = "worker"
+	libraryName        = "worker"
+	groupComponentName = "group"
 )
 
 var (
@@ -27,28 +26,14 @@ var (
 type WorkerGroup struct {
 	chasm.UnimplementedComponent
 	*workerstatepb.WorkerGroupState
-
-	Workers chasm.Map[string, *Worker]
 }
 
-// Worker identifies one member of the group.
-// Its worker instance key is the key in WorkerGroup.Workers.
-type Worker struct {
-	chasm.UnimplementedComponent
-	*workerstatepb.WorkerState
-}
-
-func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
-	return chasm.LifecycleStateRunning
-}
-
-// newWorkerGroup creates an active group with no workers or lease.
+// newWorkerGroup creates an active group without a lease.
 func newWorkerGroup() *WorkerGroup {
 	return &WorkerGroup{
 		WorkerGroupState: &workerstatepb.WorkerGroupState{
 			Status: workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 		},
-		Workers: make(chasm.Map[string, *Worker]),
 	}
 }
 
@@ -78,45 +63,26 @@ func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatu
 	g.Status = status
 }
 
-// recordHeartbeat adds new workers and renews the shared lease.
-// Workers omitted from the batch remain members.
-// TODO: Once heartbeat ordering is supported, treat workers missing from
-// the full heartbeat list as gone and reschedule their activities.
-// TODO: Handle ordering of heartbeats so that older heartbeats cannot undo newer
-// activity updates, and retried heartbeats are not applied twice.
+// recordHeartbeat renews the shared lease.
+// TODO: When tracking activity bindings, handle ordering so that older heartbeats
+// cannot undo newer activity updates and retried heartbeats are not applied twice.
 func (g *WorkerGroup) recordHeartbeat(
 	ctx chasm.MutableContext,
 	heartbeats []*workerpb.WorkerHeartbeat,
 	leaseDuration time.Duration,
 ) error {
-	if leaseDuration <= 0 {
-		return serviceerror.NewInvalidArgument("worker lease duration must be positive")
+	if err := validateHeartbeat(leaseDuration); err != nil {
+		return err
 	}
-	if len(heartbeats) == 0 {
-		return serviceerror.NewInvalidArgument("at least one worker heartbeat is required")
-	}
-	// Validate the entire batch before changing membership or renewing the lease.
-	for _, heartbeat := range heartbeats {
-		key := heartbeat.GetWorkerInstanceKey()
-		if key == "" {
-			return serviceerror.NewInvalidArgument("worker instance key is required")
-		}
-	}
+	// TODO: Track workers and their activity bindings from these heartbeats.
 	return transitionActiveHeartbeat.Apply(g, ctx, eventHeartbeatReceived{
-		heartbeats:    heartbeats,
 		leaseDuration: leaseDuration,
 	})
 }
 
-func (g *WorkerGroup) updateWorkers(ctx chasm.MutableContext, heartbeats []*workerpb.WorkerHeartbeat) {
-	for _, heartbeat := range heartbeats {
-		key := heartbeat.GetWorkerInstanceKey()
-		// Reuse existing worker components so their state is preserved across heartbeats.
-		if _, exists := g.Workers[key]; exists {
-			continue
-		}
-		g.Workers[key] = chasm.NewComponentField(ctx, &Worker{
-			WorkerState: &workerstatepb.WorkerState{},
-		})
+func validateHeartbeat(leaseDuration time.Duration) error {
+	if leaseDuration <= 0 {
+		return serviceerror.NewInvalidArgument("worker lease duration must be positive")
 	}
+	return nil
 }
