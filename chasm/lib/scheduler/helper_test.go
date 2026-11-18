@@ -368,7 +368,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
 
-	tv := testvars.New(t)
+	tv := testvars.New(t).WithNamespaceName(namespace).WithNamespaceID(namespaceID)
 	nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 	nodeBackend.HandleGetWorkflowKey = tv.Any().WorkflowKey
