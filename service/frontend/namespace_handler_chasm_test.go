@@ -74,7 +74,7 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 				logger := log.NewNoopLogger()
 				dc := dynamicconfig.NewNoopCollection()
 				cfg := NewConfig(dc, 32)
-				cfg.NamespaceReplicationTransportMode = dynamicconfig.GetStringPropertyFn(mode)
+				cfg.NamespaceReplicationTransportMode = dynamicconfig.GetStringPropertyFnFilteredByNamespace(mode)
 				client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 				handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
 					nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
@@ -220,7 +220,7 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
 		config: &Config{
-			NamespaceReplicationTransportMode: dynamicconfig.GetStringPropertyFn(dynamicconfig.NamespaceReplicationTransportModeShadow),
+			NamespaceReplicationTransportMode: dynamicconfig.GetStringPropertyFnFilteredByNamespace(dynamicconfig.NamespaceReplicationTransportModeShadow),
 		},
 	}
 	detail := &persistencespb.NamespaceDetail{
@@ -332,7 +332,7 @@ func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {
 		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
 		config: &Config{
-			NamespaceReplicationTransportMode: dynamicconfig.GetStringPropertyFn(dynamicconfig.NamespaceReplicationTransportModeShadow),
+			NamespaceReplicationTransportMode: dynamicconfig.GetStringPropertyFnFilteredByNamespace(dynamicconfig.NamespaceReplicationTransportModeShadow),
 		},
 	}
 	detail := &persistencespb.NamespaceDetail{
@@ -429,7 +429,7 @@ func TestEffectiveNamespaceReplicationTransportMode(t *testing.T) {
 					NamespaceReplicationTransportMode: dynamicconfig.NamespaceReplicationTransportMode.Get(dc),
 				},
 			}
-			require.Equal(t, tc.want, handler.effectiveNamespaceReplicationTransportMode())
+			require.Equal(t, tc.want, handler.effectiveNamespaceReplicationTransportMode("test-namespace"))
 		})
 	}
 }

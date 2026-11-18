@@ -22,21 +22,24 @@ type AdmissionOptions struct {
 	// fencing delayed older additions. Custom policies retain control of admission.
 	RemovedPeer bool
 	// Addressed marks a delivery whose source membership decision the receiver
-	// trusts (see AddressedDeliveryPolicy). It is admitted without consulting
+	// trusts (see DeliveryPolicy). It is admitted without consulting
 	// the admission policy. Legacy delivery never sets it.
 	Addressed bool
 }
 
-// AddressedDeliveryPolicy reports whether a receiver trusts the source's
-// membership decision for an authoritative CHASM delivery addressed to it.
-// When it does, the receiver skips its own removed-peer check and admits the
-// snapshot because the source addressed it. The default trusts nothing, so the
-// receiver checks membership itself.
-type AddressedDeliveryPolicy func(task *replicationspb.NamespaceTaskAttributes) bool
+// DeliveryPolicy decides how a receiver handles an authoritative CHASM delivery
+// before applying it. trust reports whether the receiver follows the source's
+// membership decision: it then skips its own removed-peer check and admits the
+// snapshot because the source addressed it. Trust is honored only for a
+// delivery addressed to this cluster. A non-nil error is returned to the
+// source, so a retryable one (prefer FailedPrecondition; Unavailable marks the
+// destination down) defers a delivery the receiver cannot apply yet instead of
+// letting it succeed partially. The default trusts nothing and defers nothing.
+type DeliveryPolicy func(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (trust bool, err error)
 
-// NewDefaultAddressedDeliveryPolicy creates the default AddressedDeliveryPolicy.
-func NewDefaultAddressedDeliveryPolicy() AddressedDeliveryPolicy {
-	return func(*replicationspb.NamespaceTaskAttributes) bool { return false }
+// NewDefaultDeliveryPolicy creates the default DeliveryPolicy.
+func NewDefaultDeliveryPolicy() DeliveryPolicy {
+	return func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) { return false, nil }
 }
 
 // DefaultAdmitter accepts member snapshots and explicit removal deliveries.

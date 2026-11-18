@@ -98,7 +98,7 @@ type (
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		namespaceMutationExecutor  nsreplication.MutationTaskExecutor
 		replicationResolverFactory namespace.ReplicationResolverFactory
-		addressedDeliveryPolicy    nsreplication.AddressedDeliveryPolicy
+		deliveryPolicy             nsreplication.DeliveryPolicy
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.AdminVisibilityManager
 		persistenceExecutionName   string
@@ -166,9 +166,9 @@ type (
 		// ReplicationResolverFactory resolves replica membership when validating
 		// removed-peer namespace mutations. Nil uses ReplicationConfig.Clusters.
 		ReplicationResolverFactory namespace.ReplicationResolverFactory
-		// AddressedDeliveryPolicy decides which addressed CHASM deliveries skip
-		// the receiver's own membership checks. Nil trusts none.
-		AddressedDeliveryPolicy nsreplication.AddressedDeliveryPolicy
+		// DeliveryPolicy decides which CHASM deliveries the receiver defers, and
+		// which addressed ones skip its own membership checks. Nil does neither.
+		DeliveryPolicy nsreplication.DeliveryPolicy
 	}
 )
 
@@ -199,7 +199,7 @@ func NewAdminHandler(
 		namespaceDLQHandler:        namespaceDLQHandler,
 		namespaceMutationExecutor:  namespaceMutationExecutor,
 		replicationResolverFactory: args.ReplicationResolverFactory,
-		addressedDeliveryPolicy:    args.AddressedDeliveryPolicy,
+		deliveryPolicy:             args.DeliveryPolicy,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
@@ -1123,10 +1123,20 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 			return nil, err
 		}
+		// The delivery policy runs before any check that ends a delivery for good,
+		// so a receiver that cannot apply it yet defers it to a later retry.
+		trusted := false
+		if adh.deliveryPolicy != nil {
+			var err error
+			if trusted, err = adh.deliveryPolicy(ctx, payloadTask); err != nil {
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+				return nil, err
+			}
+		}
 		// A trusted delivery follows the membership decision the source made when
 		// it created the mutation, so the receiver neither re-checks a removal nor
 		// consults its admission policy.
-		addressed := request.GetTargetCluster() != "" && adh.addressedDeliveryPolicy != nil && adh.addressedDeliveryPolicy(payloadTask)
+		addressed := request.GetTargetCluster() != "" && trusted
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after

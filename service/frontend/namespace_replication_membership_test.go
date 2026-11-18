@@ -89,7 +89,13 @@ func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
 			logger := log.NewNoopLogger()
 			dc := dynamicconfig.NewNoopCollection()
 			cfg := NewConfig(dc, 32)
-			cfg.NamespaceReplicationTransportMode = dynamicconfig.GetStringPropertyFn(tc.mode)
+			// Only the updated namespace uses the mode under test.
+			cfg.NamespaceReplicationTransportMode = func(namespace string) string {
+				if namespace == "ns" {
+					return tc.mode
+				}
+				return dynamicconfig.NamespaceReplicationTransportModeLegacy
+			}
 			client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 			handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
 				nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
@@ -187,12 +193,15 @@ func TestRemovedPeerValidationUsesResolverMembership(t *testing.T) {
 	}
 }
 
-func TestAddressedDeliveryPolicy(t *testing.T) {
+func TestDeliveryPolicy(t *testing.T) {
 	t.Parallel()
-	trustAll := func(*replicationspb.NamespaceTaskAttributes) bool { return true }
+	trustAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) { return true, nil }
+	deferAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) {
+		return true, serviceerror.NewFailedPrecondition("not ready")
+	}
 	for _, tc := range []struct {
 		name          string
-		policy        nsreplication.AddressedDeliveryPolicy
+		policy        nsreplication.DeliveryPolicy
 		target        string
 		removedPeer   bool
 		wantCode      codes.Code
@@ -205,6 +214,9 @@ func TestAddressedDeliveryPolicy(t *testing.T) {
 		// Older sources do not address deliveries, so the receiver checks membership itself.
 		{name: "unaddressed delivery is not trusted", policy: trustAll, removedPeer: true, wantCode: codes.InvalidArgument},
 		{name: "default policy admits through the admission policy", target: "cellC"},
+		// A deferral wins over the removed-peer check, which would end the delivery for good.
+		{name: "deferred delivery returns before the removed-peer check", policy: deferAll, target: "cellC", removedPeer: true, wantCode: codes.FailedPrecondition},
+		{name: "unaddressed delivery can be deferred", policy: deferAll, wantCode: codes.FailedPrecondition},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -220,8 +232,8 @@ func TestAddressedDeliveryPolicy(t *testing.T) {
 			}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters, namespaceMutationExecutor: executor,
 				metricsHandler: metrics.NoopMetricsHandler, eventLogger: wideevents.NoopLogger(),
-				config:                  &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(false)},
-				addressedDeliveryPolicy: tc.policy}
+				config:         &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(false)},
+				deliveryPolicy: tc.policy}
 			task := removalTestTask(true)
 			task.ReplicationConfig.Clusters = append(task.ReplicationConfig.Clusters, &replicationpb.ClusterReplicationConfig{ClusterName: "cellC"})
 			payload, err := nsreplication.MarshalNamespaceTask(task)

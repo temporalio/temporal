@@ -279,7 +279,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		},
 		IsGlobalNamespace: isGlobalNamespace,
 	}
-	transportMode := d.effectiveNamespaceReplicationTransportMode()
+	transportMode := d.effectiveNamespaceReplicationTransportMode(info.GetName())
 	replicationClusters := d.replicationClusters(namespaceRequest.Namespace)
 	shouldReplicate := nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationClusters, false, info.GetState())
 
@@ -693,7 +693,7 @@ func (d *namespaceHandler) UpdateNamespace(
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
 	}
-	transportMode := d.effectiveNamespaceReplicationTransportMode()
+	transportMode := d.effectiveNamespaceReplicationTransportMode(info.GetName())
 	namespaceChanged := configurationChanged || activeClusterChanged || needsNamespacePromotion
 	if namespaceChanged {
 		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
@@ -1592,8 +1592,8 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	}()
 }
 
-func (d *namespaceHandler) effectiveNamespaceReplicationTransportMode() namespaceReplicationTransportMode {
-	configuredMode := d.config.NamespaceReplicationTransportMode()
+func (d *namespaceHandler) effectiveNamespaceReplicationTransportMode(namespaceName string) namespaceReplicationTransportMode {
+	configuredMode := d.config.NamespaceReplicationTransportMode(namespaceName)
 	switch configuredMode {
 	case dynamicconfig.NamespaceReplicationTransportModeLegacy:
 		return namespaceReplicationTransportLegacy
@@ -1604,6 +1604,7 @@ func (d *namespaceHandler) effectiveNamespaceReplicationTransportMode() namespac
 	default:
 		d.logger.Warn(
 			"unknown namespace replication transport mode; using legacy transport",
+			tag.WorkflowNamespace(namespaceName),
 			tag.NewStringTag("mode", configuredMode),
 		)
 		return namespaceReplicationTransportLegacy

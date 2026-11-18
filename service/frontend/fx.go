@@ -134,7 +134,7 @@ var Module = fx.Options(
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(nsreplication.NewDefaultAdmitter),
-	fx.Provide(nsreplication.NewDefaultAddressedDeliveryPolicy),
+	fx.Provide(nsreplication.NewDefaultDeliveryPolicy),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
@@ -888,7 +888,7 @@ func AdminHandlerProvider(
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
 	replicationResolverFactory namespace.ReplicationResolverFactory,
-	addressedDeliveryPolicy nsreplication.AddressedDeliveryPolicy,
+	deliveryPolicy nsreplication.DeliveryPolicy,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -922,7 +922,7 @@ func AdminHandlerProvider(
 		taskCategoryRegistry,
 		matchingClient,
 		replicationResolverFactory,
-		addressedDeliveryPolicy,
+		deliveryPolicy,
 	}
 	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)
 }

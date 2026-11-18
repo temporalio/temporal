@@ -32,7 +32,19 @@ func TestNamespaceReplicationTransportMode(t *testing.T) {
 				require.Error(t, err)
 			}
 			collection := dynamicconfig.NewCollection(dynamicconfig.StaticClient{setting.Key(): tc.value}, log.NewNoopLogger())
-			require.Equal(t, tc.want, setting.Get(collection)())
+			require.Equal(t, tc.want, setting.Get(collection)("test-namespace"))
 		})
 	}
+}
+
+func TestNamespaceReplicationTransportModePerNamespace(t *testing.T) {
+	t.Parallel()
+	setting := dynamicconfig.NamespaceReplicationTransportMode
+	collection := dynamicconfig.NewCollection(dynamicconfig.StaticClient{setting.Key(): []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: "moved"}, Value: dynamicconfig.NamespaceReplicationTransportModeCHASM},
+		{Value: dynamicconfig.NamespaceReplicationTransportModeLegacy},
+	}}, log.NewNoopLogger())
+	mode := setting.Get(collection)
+	require.Equal(t, dynamicconfig.NamespaceReplicationTransportModeCHASM, mode("moved"))
+	require.Equal(t, dynamicconfig.NamespaceReplicationTransportModeLegacy, mode("other"))
 }

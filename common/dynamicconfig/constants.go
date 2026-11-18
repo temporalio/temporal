@@ -85,11 +85,12 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)
-	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
+	NamespaceReplicationTransportMode = NewNamespaceTypedSettingWithConverter(
 		"system.namespaceReplicationTransportMode",
 		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow, NamespaceReplicationTransportModeCHASM}),
 		NamespaceReplicationTransportModeLegacy,
-		`NamespaceReplicationTransportMode selects the outgoing namespace replication transport: legacy, shadow, or chasm.
+		`NamespaceReplicationTransportMode selects the outgoing replication transport for a namespace: legacy, shadow, or chasm.
+It can be set per namespace, so namespaces can move to chasm, or back to legacy, separately.
 Enable chasm only after compatible frontend/history binaries and authoritative replication observability are deployed on every participating cluster.
 Changing this setting does not disable incoming authoritative deliveries or stop existing CHASM executions.`,
 	)
