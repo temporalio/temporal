@@ -8052,11 +8052,30 @@ func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQ
 	if options == nil {
 		return nil
 	}
-	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
-		return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
-	}
-	if singleSession := options.GetSingleSession(); singleSession != nil {
-		stableIdentity := singleSession.GetStableIdentity()
+	sticky := taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY
+	switch admission := options.GetAdmission().(type) {
+	case *sessionpb.WorkerSessionOptions_MultiSession:
+		// Sent on both normal and sticky polls.
+		workerAddress := admission.MultiSession.GetWorkerAddress()
+		normalQueue := taskQueue.GetName()
+		if sticky {
+			normalQueue = taskQueue.GetNormalName()
+		}
+		if workerAddress == "" {
+			return serviceerror.NewInvalidArgument("multi-session worker address is required")
+		}
+		if workerAddress == normalQueue {
+			return serviceerror.NewInvalidArgument("multi-session worker address must not be the normal task queue")
+		}
+		if sticky && taskQueue.GetName() != workerAddress {
+			return serviceerror.NewInvalidArgument("multi-session sticky queue must match worker address")
+		}
+	case *sessionpb.WorkerSessionOptions_SingleSession:
+		// Sent on sticky polls only.
+		stableIdentity := admission.SingleSession.GetStableIdentity()
+		if !sticky {
+			return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
+		}
 		if stableIdentity == "" {
 			return serviceerror.NewInvalidArgument("single-session stable identity is required")
 		}
@@ -8066,6 +8085,11 @@ func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQ
 		if workerInstanceKey == "" {
 			// A session binding records the worker's instance key; Matching looks the worker up by it in its heartbeat registry.
 			return serviceerror.NewInvalidArgument("session worker instance key is required")
+		}
+	default:
+		// Options without an admission mode are only accepted on sticky polls.
+		if !sticky {
+			return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
 		}
 	}
 	return nil
