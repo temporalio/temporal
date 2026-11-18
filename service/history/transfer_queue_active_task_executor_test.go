@@ -70,6 +70,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -247,61 +248,90 @@ func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
-		RunId:      uuid.NewString(),
-	}
-	workflowType := "some random workflow type"
-	taskQueueName := "some random task queue"
+	for _, tc := range []struct {
+		name             string
+		session          bool
+		missingPlacement bool
+	}{
+		{name: "regular activity with sticky workflow"},
+		{name: "workflow-session activity", session: true},
+		{name: "workflow-session activity awaiting placement", session: true, missingPlacement: true},
+	} {
+		s.Run(tc.name, func() {
+			execution := &commonpb.WorkflowExecution{
+				WorkflowId: "some random workflow ID",
+				RunId:      uuid.NewString(),
+			}
+			workflowType := "some random workflow type"
+			taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
-	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: taskQueueName,
-					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+			_, err := mutableState.AddWorkflowExecutionStartedEvent(
+				execution,
+				&historyservice.StartWorkflowExecutionRequest{
+					Attempt:     1,
+					NamespaceId: s.namespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueueName,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+						WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+					},
 				},
-				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
-				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
-	)
-	s.NoError(err)
+			)
+			s.NoError(err)
 
-	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
-	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+			wt := addWorkflowTaskScheduledEvent(mutableState)
+			event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+			wt.StartedEventID = event.GetEventId()
+			event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := s.mustGenerateTaskID()
-	activityID := "activity-1"
-	activityType := "some random activity type"
-	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
+			taskID := s.mustGenerateTaskID()
+			activityID := "activity-1"
+			activityType := "some random activity type"
+			event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
-	transferTask := &tasks.ActivityTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		Version:             s.version,
-		TaskID:              taskID,
-		TaskQueue:           taskQueueName,
-		ScheduledEventID:    event.GetEventId(),
-		VisibilityTimestamp: time.Now().UTC(),
+			if tc.session {
+				ai.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
+			}
+			if !tc.missingPlacement {
+				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			}
+
+			transferTask := &tasks.ActivityTask{
+				WorkflowKey: definition.NewWorkflowKey(
+					s.namespaceID.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+				),
+				Version:             s.version,
+				TaskID:              taskID,
+				TaskQueue:           taskQueueName,
+				ScheduledEventID:    event.GetEventId(),
+				VisibilityTimestamp: time.Now().UTC(),
+			}
+
+			persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+			if !tc.missingPlacement {
+				request := s.createAddActivityTaskRequest(transferTask, ai)
+				if tc.session {
+					request.TaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
+				}
+				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
+			}
+
+			resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+			if tc.missingPlacement {
+				s.Require().ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
+			} else {
+				s.Require().NoError(resp.ExecutionErr)
+			}
+		})
 	}
-
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(s.createAddActivityTaskRequest(transferTask, ai)), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
-
-	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransferTask_ExecutesTask() {

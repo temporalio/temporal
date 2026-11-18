@@ -54,6 +54,7 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1916,6 +1917,19 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Activ
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pending() {
+	s.processPendingActivityRetryTimer(false, false)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PendingWorkflowSession() {
+	s.processPendingActivityRetryTimer(true, false)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PendingWorkflowSessionWithoutPlacement() {
+	s.processPendingActivityRetryTimer(true, true)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(useSession, missingPlacement bool) {
+	s.T().Helper()
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -1947,8 +1961,17 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	activityID := "activity"
 	activityType := "activity type"
 	timerTimeout := 2 * time.Second
-	scheduledEvent, _ := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, nil,
+	scheduledEvent, activityInfo := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, nil,
 		timerTimeout, timerTimeout, timerTimeout, timerTimeout)
+
+	expectedTaskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if useSession {
+		activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
+		if !missingPlacement {
+			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+		}
+		expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
+	}
 
 	timerSequence := workflow.NewTimerSequence(mutableState)
 	mutableState.InsertTasks[tasks.CategoryTimer] = nil
@@ -1979,6 +2002,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	if missingPlacement {
+		s.ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
+		return
+	}
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// resend history post action
@@ -1992,12 +2019,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	s.mockMatchingClient.EXPECT().AddActivityTask(
 		gomock.Any(),
 		&matchingservice.AddActivityTaskRequest{
-			NamespaceId: s.namespaceID.String(),
-			Execution:   execution,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueueName,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
+			NamespaceId:            s.namespaceID.String(),
+			Execution:              execution,
+			TaskQueue:              expectedTaskQueue,
 			ScheduledEventId:       scheduledEvent.EventId,
 			ScheduleToStartTimeout: durationpb.New(timerTimeout),
 			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),

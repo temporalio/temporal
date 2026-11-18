@@ -7,21 +7,28 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -623,6 +630,100 @@ func (s *activitySuite) TestResetActivity_ScheduledEventLookupErrors() {
 				false, false, true, 0)
 			s.Require().Error(err)
 			tc.assertErr(err)
+		})
+	}
+}
+
+/*
+TestActivitySessionMembershipSurvivesHistoryAndRetry tests internal activity membership:
+1. Serialize the public session options in the scheduled history event.
+2. Apply that event and create internal state only for workflow-session placement.
+3. Reload ActivityInfo and retry the activity while preserving its membership.
+*/
+func (s *activitySuite) TestActivitySessionMembershipSurvivesHistoryAndRetry() {
+	for _, tc := range []struct {
+		name      string
+		options   *sessionpb.ActivitySessionOptions
+		wantState *persistencespb.ActivitySessionState
+	}{
+		{name: "no session options"},
+		{name: "empty session options", options: &sessionpb.ActivitySessionOptions{}},
+		{
+			name:      "workflow session",
+			options:   &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
+			wantState: &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
+		},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			mutableState := NewMutableState(
+				s.mockShard, s.mockShard.MockEventsCache, s.mockShard.GetLogger(), tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC(),
+			)
+			command := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             "session-activity",
+				ActivityType:           &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "normal-queue"},
+				ScheduleToCloseTimeout: durationpb.New(time.Minute),
+				SessionOptions:         tc.options,
+			}
+			event, batchID := mutableState.hBuilder.AddActivityTaskScheduledEvent(4, command, tests.Namespace)
+			data, err := proto.Marshal(event)
+			require.NoError(t, err)
+			restoredEvent := &historypb.HistoryEvent{}
+			require.NoError(t, proto.Unmarshal(data, restoredEvent))
+			protorequire.ProtoEqual(t, tc.options, restoredEvent.GetActivityTaskScheduledEventAttributes().GetSessionOptions())
+
+			s.mockShard.MockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any())
+			ai, err := mutableState.ApplyActivityTaskScheduledEvent(batchID, restoredEvent)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, tc.wantState, ai.GetSessionState())
+			require.Equal(t, "normal-queue", ai.GetTaskQueue())
+
+			data, err = proto.Marshal(ai)
+			require.NoError(t, err)
+			restored := &persistencespb.ActivityInfo{}
+			require.NoError(t, proto.Unmarshal(data, restored))
+			UpdateActivityInfoForRetries(restored, 1, 2, nil, timestamppb.Now(), true)
+			protorequire.ProtoEqual(t, tc.wantState, restored.GetSessionState())
+			require.Equal(t, int32(2), restored.GetAttempt())
+		})
+	}
+}
+
+func TestActivityTaskQueue(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name             string
+		state            *persistencespb.ActivitySessionState
+		missingPlacement bool
+	}{
+		{name: "no session state"},
+		{name: "empty session state", state: &persistencespb.ActivitySessionState{}},
+		{name: "session enabled", state: &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
+		{name: "session missing placement", missingPlacement: true, state: &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tv := testvars.New(t)
+			ms := historyi.NewMockMutableState(gomock.NewController(t))
+			ai := &persistencespb.ActivityInfo{TaskQueue: tv.TaskQueue().GetName(), SessionState: tc.state}
+			expected := tv.TaskQueue()
+			if tc.state.GetWorkflowSession() != nil {
+				current := tv.StickyTaskQueue()
+				if tc.missingPlacement {
+					current = tv.TaskQueue()
+				}
+				ms.EXPECT().CurrentTaskQueue().Return(current)
+				expected = current
+			}
+			queue, err := ActivityTaskQueue(ms, ai)
+			if tc.missingPlacement {
+				require.ErrorIs(t, err, consts.ErrDependencyTaskNotCompleted)
+				require.Nil(t, queue)
+			} else {
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, expected, queue)
+			}
 		})
 	}
 }

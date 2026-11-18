@@ -77,6 +77,7 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -4469,6 +4470,11 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		Attempt:                 1,
 		ActivityType:            attributes.GetActivityType(),
 		Priority:                attributes.Priority,
+	}
+	if attributes.GetSessionOptions().GetWorkflowSession() != nil {
+		ai.SessionState = &persistencespb.ActivitySessionState{
+			Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}},
+		}
 	}
 
 	if attributes.UseWorkflowBuildId {

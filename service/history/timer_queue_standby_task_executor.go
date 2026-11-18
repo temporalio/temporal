@@ -9,7 +9,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
@@ -461,7 +460,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, activityInfo.ScheduleToStartTimeout.AsDuration(), activityInfo)
+		return newActivityTaskPostActionInfo(mutableState, activityInfo)
 	}
 
 	return t.processTimer(
@@ -780,16 +779,15 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	activityScheduleToStartTimeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
 
+	// TODO (Shivam): Add session activity fallback and placement handoff when no workflow task
+	// advertises a replacement worker.
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: activityTask.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityTask.WorkflowID,
 			RunId:      activityTask.RunID,
 		},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: pushActivityInfo.taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		TaskQueue:              pushActivityInfo.taskQueue,
 		ScheduledEventId:       activityTask.EventID,
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
