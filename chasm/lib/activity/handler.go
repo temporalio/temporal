@@ -195,6 +195,14 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		metrics.ActivityEagerExecutionCounter.With(eagerActivityMetricsHandler(h.metricsHandler, h.config, frontendReq)).Record(1)
 	}
 
+	if created && frontendReq.GetPropagatedNexusSerializationContext() != nil {
+		metrics.NexusActivityStartWithContext.With(h.metricsHandler).Record(1,
+			metrics.NamespaceTag(frontendReq.GetNamespace()),
+		)
+	}
+
+	// Count callback attachments involving Nexus context by whether that context matches or is missing.
+	// See: https://github.com/temporalio/temporal/issues/13153
 	if !created && nexusContextMatch != "" {
 		metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1,
 			metrics.NamespaceTag(frontendReq.GetNamespace()),
