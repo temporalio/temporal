@@ -34,6 +34,8 @@ import (
 	"go.temporal.io/server/common/namespace/nsmanager"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	vismanager "go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -55,6 +57,8 @@ type (
 		namespaceAttrValidator *nsmanager.Validator
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
+		clusterMetadataManager persistence.ClusterMetadataManager
+		visibilityMgr          vismanager.VisibilityManager
 		timeSource             clock.TimeSource
 		config                 *Config
 		chasmNsReplClient      namespacereplicationpb.NamespaceReplicationServiceClient
@@ -95,6 +99,8 @@ func newNamespaceHandler(
 	namespaceReplicator nsreplication.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	visibilityMgr vismanager.VisibilityManager,
 	timeSource clock.TimeSource,
 	config *Config,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
@@ -110,6 +116,8 @@ func newNamespaceHandler(
 		namespaceAttrValidator: nsmanager.NewValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
+		clusterMetadataManager: clusterMetadataManager,
+		visibilityMgr:          visibilityMgr,
 		timeSource:             timeSource,
 		config:                 config,
 		chasmNsReplClient:      chasmNsReplClient,
@@ -228,6 +236,9 @@ func (d *namespaceHandler) RegisterNamespace(
 		VisibilityArchivalUri:        nextVisibilityArchivalState.URI,
 		BadBinaries:                  &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		CustomSearchAttributeAliases: nil,
+	}
+	if err := d.seedIdentitySearchAttributeAliases(ctx, config); err != nil {
+		return nil, err
 	}
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -467,7 +478,6 @@ func (d *namespaceHandler) UpdateNamespace(
 	if err != nil {
 		return nil, err
 	}
-
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
@@ -944,6 +954,10 @@ func (d *namespaceHandler) DeprecateNamespace(
 	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: deprecateRequest.GetNamespace()})
 	if err != nil {
 		return nil, err
+	}
+	// The interceptor checks the registry, which can be stale.
+	if getResponse.Namespace.Info.State == enumspb.NAMESPACE_STATE_SOFT_DELETED {
+		return nil, errInvalidNamespaceStateUpdate
 	}
 
 	eventBefore := namespaceStateFields(getResponse.Namespace, getResponse.IsGlobalNamespace)
@@ -1434,6 +1448,39 @@ func (d *namespaceHandler) validateRetentionDuration(retention *durationpb.Durat
 	return nil
 }
 
+func (d *namespaceHandler) seedIdentitySearchAttributeAliases(
+	ctx context.Context,
+	config *persistencespb.NamespaceConfig,
+) error {
+	if d.visibilityMgr == nil || d.clusterMetadataManager == nil {
+		return nil
+	}
+	if !d.visibilityMgr.HasStoreName(esconfig.PersistenceName) {
+		return nil
+	}
+
+	clusterMetadataResponse, err := d.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	indexSearchAttrs := clusterMetadataResponse.IndexSearchAttributes[d.visibilityMgr.GetIndexName()]
+	if indexSearchAttrs == nil || len(indexSearchAttrs.CustomSearchAttributes) == 0 {
+		return nil
+	}
+
+	aliases := buildIdentitySearchAttributeAliases(
+		config.CustomSearchAttributeAliases,
+		indexSearchAttrs.CustomSearchAttributes,
+	)
+	if len(aliases) == 0 {
+		return nil
+	}
+
+	config.CustomSearchAttributeAliases = aliases
+	return nil
+}
+
 func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceResponse, nsUpdateRequest *workflowservice.UpdateNamespaceRequest) error {
 	if nsUpdateRequest.ReplicationConfig == nil ||
 		nsUpdateRequest.ReplicationConfig.State == enumspb.REPLICATION_STATE_UNSPECIFIED ||
@@ -1441,11 +1488,14 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 		return nil // no change
 	}
 
-	if existingNamespace.Namespace.Info.State != enumspb.NAMESPACE_STATE_REGISTERED {
+	// SOFT_DELETED allows migrating a soft-deleted namespace, and finishing a handover it entered.
+	if state := existingNamespace.Namespace.Info.State; state != enumspb.NAMESPACE_STATE_REGISTERED &&
+		state != enumspb.NAMESPACE_STATE_SOFT_DELETED {
 		return serviceerror.NewInvalidArgumentf(
-			"update ReplicationState is only supported when namespace is in %s state, current state: %s",
+			"update ReplicationState is only supported when namespace is in %s or %s state, current state: %s",
 			enumspb.NAMESPACE_STATE_REGISTERED,
-			existingNamespace.Namespace.Info.State,
+			enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			state,
 		)
 	}
 
@@ -1501,6 +1551,9 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 		}
 
 	case enumspb.NAMESPACE_STATE_DELETED:
+		return errInvalidNamespaceStateUpdate
+	case enumspb.NAMESPACE_STATE_SOFT_DELETED:
+		// Changed only by SoftDeleteNamespace and RestoreNamespace.
 		return errInvalidNamespaceStateUpdate
 	default:
 		return errInvalidNamespaceStateUpdate
