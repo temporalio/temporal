@@ -3,7 +3,6 @@ package parallelsuite
 import (
 	"context"
 	"testing"
-	"time"
 
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -27,12 +26,6 @@ func (s *Suite[T]) InitAssertions() {
 
 func WithContext(ctx context.Context, scope Scope) Scope {
 	return parallelsuite.WithContext(ctx, scope)
-}
-
-// Await retries fn on assertion failure with a scope for each attempt.
-func Await(s Scope, fn func(Scope), timeout, interval time.Duration) {
-	s.TB().Helper()
-	parallelsuite.Await(s, fn, timeout, interval)
 }
 
 func Run[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {

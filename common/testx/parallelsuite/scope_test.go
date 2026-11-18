@@ -1,11 +1,11 @@
 package parallelsuite_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
 
+	"go.temporal.io/testx/await"
 	"go.temporal.io/testx/parallelsuite"
 )
 
@@ -41,20 +41,15 @@ func (s *scopeAssertionsSuite) TestAwaitHelpersRetryFailedAssertions() {
 	}
 	for name, check := range checks {
 		s.Run(name, func(s *scopeAssertionsSuite) {
-			type contextKey struct{}
-			ctx := context.WithValue(s.Context(), contextKey{}, name)
-			scope := parallelsuite.WithContext(ctx, s)
 			attempts := 0
 			completed := 0
-			parallelsuite.Await(scope, func(s parallelsuite.Scope) {
+			await.Require(s.Context(), s.T(), func(t *await.T) {
 				attempts++
+				scope := parallelsuite.WithContext(t.Context(), t)
 				if attempts == 1 {
-					check(s)
+					check(scope)
 				}
-				checkScopeAssertions(s)
-				s.Equal(name, s.Context().Value(contextKey{}))
-				deadline, ok := s.Context().Deadline()
-				s.True(ok && time.Until(deadline) <= time.Second, "context must use the await deadline")
+				checkScopeAssertions(scope)
 				completed++
 			}, time.Second, time.Millisecond)
 			s.Equal(2, attempts)
