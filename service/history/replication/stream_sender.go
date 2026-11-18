@@ -180,15 +180,9 @@ func (s *StreamSenderImpl) Key() ClusterShardKeyPair {
 }
 
 func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
-	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			retErr = panicErr
-			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
-		}
-	}()
-
-	defer log.CapturePanic(s.logger, &panicErr)
+	defer log.CapturePanicWithHook(s.logger, &retErr, func(error) {
+		metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
+	})
 
 	for !s.shutdownChan.IsShutdown() {
 		if s.isTieredStackEnabled != s.config.EnableReplicationTaskTieredProcessing() {
@@ -227,15 +221,9 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 }
 
 func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr error) {
-	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			retErr = panicErr
-			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
-		}
-	}()
-
-	defer log.CapturePanic(s.logger, &panicErr)
+	defer log.CapturePanicWithHook(s.logger, &retErr, func(error) {
+		metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
+	})
 
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
