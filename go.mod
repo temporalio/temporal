@@ -49,7 +49,7 @@ require (
 	github.com/prometheus/common v0.62.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/temporalio/ringpop-go v0.1.3
 	github.com/temporalio/sqlparser v0.1.0
 	github.com/temporalio/tchannel-go v1.22.1
@@ -72,7 +72,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.45.0
 	go.opentelemetry.io/proto/otlp v1.11.0
 	go.temporal.io/api v1.64.4-0.20261117164335-8fd48a50f214
-	go.temporal.io/auto-scaled-workers v0.0.0-20261116173655-28df9181d2ca
+	go.temporal.io/auto-scaled-workers v0.0.0-20261118181853-5bf258cded4f
 	go.temporal.io/sdk v1.49.0
 	go.temporal.io/testx v0.0.0-20261112171501-c4cea589f218
 	go.uber.org/fx v1.24.0
@@ -182,7 +182,6 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -204,6 +203,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/dig v1.19.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
