@@ -718,6 +718,7 @@ func (c *clientImpl) doPollActivityTaskQueue(
 				TaskQueueMetadata:         request.PollRequest.TaskQueueMetadata,
 				WorkerVersionCapabilities: request.PollRequest.WorkerVersionCapabilities,
 				DeploymentOptions:         request.PollRequest.DeploymentOptions,
+				PollerPoolInfo:            request.PollRequest.PollerPoolInfo,
 				SessionOptions:            request.PollRequest.SessionOptions,
 			},
 			ForwardedSource: request.ForwardedSource,
@@ -781,6 +782,7 @@ func (c *clientImpl) doPollNexusTaskQueue(
 				WorkerVersionCapabilities: request.Request.WorkerVersionCapabilities,
 				DeploymentOptions:         request.Request.DeploymentOptions,
 				WorkerHeartbeat:           request.Request.WorkerHeartbeat,
+				PollerPoolInfo:            request.Request.PollerPoolInfo,
 			},
 			ForwardedSource: request.ForwardedSource,
 			Conditions:      request.Conditions,
@@ -844,6 +846,7 @@ func (c *clientImpl) doPollWorkflowTaskQueue(
 				BinaryChecksum:            request.PollRequest.BinaryChecksum,
 				WorkerVersionCapabilities: request.PollRequest.WorkerVersionCapabilities,
 				DeploymentOptions:         request.PollRequest.DeploymentOptions,
+				PollerPoolInfo:            request.PollRequest.PollerPoolInfo,
 				SessionOptions:            request.PollRequest.SessionOptions,
 			},
 			ForwardedSource: request.ForwardedSource,
@@ -902,6 +905,7 @@ func (c *clientImpl) doQueryWorkflow(
 			VersionDirective: request.VersionDirective,
 			ForwardInfo:      request.ForwardInfo,
 			Priority:         request.Priority,
+			SessionDirective: request.SessionDirective,
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)

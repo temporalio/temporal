@@ -2505,6 +2505,10 @@ func (ms *MutableStateImpl) HasAnyBufferedEvent(filter historybuilder.BufferedEv
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 
+func (ms *MutableStateImpl) NumBufferedEvents() int {
+	return ms.hBuilder.NumBufferedEvents()
+}
+
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
 // first event ID is the ID of a batch of events in a single history events record
 func (ms *MutableStateImpl) GetLastFirstEventIDTxnID() (int64, int64) {
@@ -7585,7 +7589,7 @@ func (ms *MutableStateImpl) AddTasks(
 		// vs. real distinction. The CategoryTypeScheduled drop-check above runs first so it
 		// compares virtual-vs-virtual (now is also virtual).
 		if category.Type() == tasks.CategoryTypeScheduled {
-			task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
+			task.SetVisibilityTime(ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(task.GetVisibilityTime()))
 		}
 
 		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
@@ -7618,7 +7622,7 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 func (ms *MutableStateImpl) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time) {
 	maxPhysicalScheduledTime := maxLogicalScheduledTime
 	if !maxLogicalScheduledTime.Equal(tasks.MaximumKey.FireTime) {
-		maxPhysicalScheduledTime = ms.ToRealTimeWithCurrentOffset(maxLogicalScheduledTime)
+		maxPhysicalScheduledTime = ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(maxLogicalScheduledTime)
 	}
 
 	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
@@ -7661,7 +7665,7 @@ func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 	// workflowTask.ScheduledTime / StartedTime, which come from the time-skipping wrapper).
 	// The in-memory scheduled queue dispatches against real wall-clock, so convert here —
 	// same boundary contract as AddTasks for persisted scheduled tasks.
-	task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
+	task.SetVisibilityTime(ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(task.GetVisibilityTime()))
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
@@ -7723,10 +7727,30 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 // However, certain in-memory changes (e.g. speculative workflow task) won't be cleared before releasing
 // the lock and have to be excluded from the check.
 func (ms *MutableStateImpl) IsDirty() bool {
+	if ms.isNonChasmDirty() {
+		return true
+	}
+	if !ms.chasmTree.IsDirty() {
+		return false
+	}
+	_, speculative := ms.chasmTree.SpeculativeTransitionFailoverVersion()
+	return !speculative
+}
+
+func (ms *MutableStateImpl) isNonChasmDirty() bool {
 	return ms.hBuilder.IsDirty() ||
 		len(ms.InsertTasks) > 0 ||
-		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty()
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+}
+
+// ValidateChasmSpeculativeTransition returns an error if the current transaction changed state outside the
+// CHASM tree. Only CHASM tree changes can stay in memory.
+func (ms *MutableStateImpl) ValidateChasmSpeculativeTransition() error {
+	if ms.isNonChasmDirty() {
+		// This line means there is a Dev error.
+		return serviceerror.NewInternal("speculative CHASM transition changed state outside the CHASM tree")
+	}
+	return nil
 }
 
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and
@@ -10394,9 +10418,10 @@ func logError(
 	logger.Error(msg, tags...)
 }
 
-func (ms *MutableStateImpl) ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time {
-	if virtualTime.IsZero() {
-		return virtualTime
-	}
-	return virtualTime.Add(-ms.accumulatedSkippedDuration())
+func (ms *MutableStateImpl) ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time {
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime)
+}
+
+func (ms *MutableStateImpl) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time {
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime)
 }

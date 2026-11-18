@@ -1069,14 +1069,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_StandbyH
 		Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	// Dedup branch must fire → bit cleared → CreateNextActivityTimer regenerates
 	// → UpdateWorkflowExecutionAsPassive routes through persistence.UpdateWorkflowExecution.
-	// Without ToRealTimeWithCurrentOffset the gate would skip and this expectation would go unmet.
+	// Without ToPhysicalTimeWithCurrentTimeSkippingOffset the gate would skip and this expectation would go unmet.
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(resp.ExecutionErr,
-		"standby heartbeat-dedup gate must fire under accumulated skip via ToRealTimeWithCurrentOffset(heartbeatTimeoutVis)")
+		"standby heartbeat-dedup gate must fire under accumulated skip via ToPhysicalTimeWithCurrentTimeSkippingOffset(heartbeatTimeoutVis)")
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pending() {
@@ -2066,7 +2066,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
-	ms.EXPECT().ToRealTimeWithCurrentOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
+	ms.EXPECT().ToPhysicalTimeWithCurrentTimeSkippingOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2202,7 +2202,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
-	ms.EXPECT().ToRealTimeWithCurrentOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
+	ms.EXPECT().ToPhysicalTimeWithCurrentTimeSkippingOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2313,7 +2313,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
-	ms.EXPECT().ToRealTimeWithCurrentOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
+	ms.EXPECT().ToPhysicalTimeWithCurrentTimeSkippingOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2523,6 +2523,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 	).AnyTimes()
 	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
+	ms.EXPECT().ToLogicalTimeWithCurrentTimeSkippingOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	// Add a valid timer task.
 	timerTask := &tasks.ChasmTaskPure{

@@ -299,6 +299,16 @@ func CreateSchedulerFromMigration(
 	req *schedulerpb.CreateFromMigrationStateRequest,
 ) (*Scheduler, error) {
 	state := req.GetState()
+	ns := ctx.NamespaceEntry()
+	// Migration state can originate from workflow commands, so namespace ownership
+	// must be checked against the execution context before adopting that state.
+	schedulerState := state.GetSchedulerState()
+	if req.GetNamespaceId() != ns.ID().String() || schedulerState.GetNamespaceId() != ns.ID().String() {
+		return nil, serviceerror.NewInvalidArgument("migration namespace ID does not match execution namespace ID")
+	}
+	// The name in V1 state may be stale after a namespace rename. Use the
+	// current name after verifying the stable namespace ID.
+	schedulerState.Namespace = ns.Name().String()
 
 	// Default to a non-nil empty result, matching NewScheduler. Migrated state
 	// may carry no completion result (e.g. a schedule migrated before its first
@@ -555,6 +565,17 @@ func (s *Scheduler) computeLastEventTime(ctx chasm.Context) time.Time {
 	// The recentActions list is unsorted.
 	for _, a := range s.recentActions(ctx) {
 		latest = util.MaxTime(latest, a.GetActualTime().AsTime())
+	}
+
+	// recentActions skips starts without a RunId. Count them by scheduled time,
+	// or the tick that buffers a schedule's final action can arm the idle task in
+	// the past and close it before InvokerExecuteTask runs.
+	if tweakablesFromContext(ctx).EnablePendingStartIdleFix {
+		for _, start := range s.Invoker.Get(ctx).GetBufferedStarts() {
+			if start.GetRunId() == "" {
+				latest = util.MaxTime(latest, start.GetActualTime().AsTime())
+			}
+		}
 	}
 
 	return latest

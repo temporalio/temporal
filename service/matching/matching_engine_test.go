@@ -247,7 +247,7 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
+		queryResults:        collection.NewSyncMap[string, pendingQuery](),
 		logger:              logger,
 		throttledLogger:     log.ThrottledLogger(logger),
 		metricsHandler:      metrics.NoopMetricsHandler,
@@ -1382,7 +1382,7 @@ func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
 			task.finish(nil)
 			answer := payloads.EncodeString("answer")
 			require.NoError(t, s.matchingEngine.RespondQueryTaskCompleted(ctx, &matchingservice.RespondQueryTaskCompletedRequest{
-				TaskId: task.query.taskID,
+				NamespaceId: tv.NamespaceID().String(), TaskId: task.query.taskID,
 				CompletedRequest: &workflowservice.RespondQueryTaskCompletedRequest{
 					CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED, QueryResult: answer,
 				},
@@ -1392,6 +1392,71 @@ func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
 			protorequire.ProtoEqual(t, &matchingservice.QueryWorkflowResponse{QueryResult: answer}, response)
 		})
 	}
+}
+
+func (s *matchingEngineSuite) TestRespondQueryTaskCompleted_RejectsOtherNamespace() {
+	tqName := "query-tq"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	execution := &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: uuid.NewString()}
+
+	type queryOutcome struct {
+		resp *matchingservice.QueryWorkflowResponse
+		err  error
+	}
+	queryDone := make(chan queryOutcome, 1)
+	go func() {
+		resp, err := s.matchingEngine.QueryWorkflow(context.Background(), &matchingservice.QueryWorkflowRequest{
+			NamespaceId: namespaceID,
+			TaskQueue:   taskQueue,
+			QueryRequest: &workflowservice.QueryWorkflowRequest{
+				Namespace: "ns",
+				Execution: execution,
+				Query:     &querypb.WorkflowQuery{QueryType: "q"},
+			},
+		})
+		queryDone <- queryOutcome{resp: resp, err: err}
+	}()
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			StickyTaskQueue: &taskqueuepb.TaskQueue{Name: tqName},
+		}, nil).Times(1)
+	var pollResp *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		var err error
+		pollResp, err = s.matchingEngine.PollWorkflowTaskQueue(t.Context(), &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: namespaceID,
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: taskQueue,
+				Identity:  "identity",
+			},
+		}, metrics.NoopMetricsHandler)
+		require.NoError(t, err)
+		require.NotNil(t, pollResp.GetQuery())
+	}, 5*time.Second, 10*time.Millisecond)
+
+	queryToken, err := s.matchingEngine.tokenSerializer.DeserializeQueryTaskToken(pollResp.GetTaskToken())
+	s.NoError(err)
+
+	completed := &workflowservice.RespondQueryTaskCompletedRequest{
+		CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
+		QueryResult:   payloads.EncodeString("answer"),
+	}
+	respond := func(nsID string) error {
+		return s.matchingEngine.RespondQueryTaskCompleted(context.Background(), &matchingservice.RespondQueryTaskCompletedRequest{
+			NamespaceId:      nsID,
+			TaskQueue:        taskQueue,
+			TaskId:           queryToken.GetTaskId(),
+			CompletedRequest: completed,
+		}, metrics.NoopMetricsHandler)
+	}
+
+	s.ErrorAs(respond(uuid.NewString()), new(*serviceerror.NotFound))
+
+	s.NoError(respond(namespaceID))
+	outcome := await.Rcv(s.T(), queryDone)
+	s.NoError(outcome.err)
+	protorequire.ProtoEqual(s.T(), completed.GetQueryResult(), outcome.resp.GetQueryResult())
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
@@ -6499,6 +6564,59 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache")
+	})
+
+	t.Run("fan-out: refuses a poll that arrives after shutdown of an unloaded task queue", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		ns, mockNsRegistry := createMockNamespaceCache(ctrl, matchingTestNamespace)
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNsRegistry,
+			logger:                log.NewNoopLogger(),
+			timeSource:            clock.NewRealTimeSource(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		}
+
+		workerKey := "test-worker"
+		taskQueue := &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       ns.ID().String(),
+				TaskQueue:         taskQueue,
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_NEXUS,
+				WorkerInstanceKey: workerKey,
+			})
+		require.NoError(t, err)
+
+		// The poll loads the partition that the shutdown found unloaded.
+		partition := tqid.UnsafeTaskQueueFamily(ns.ID().String(), taskQueue.GetName()).TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).RootPartition()
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+		mockPM.EXPECT().LongPollExpirationInterval().Return(time.Minute)
+		mockPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).Times(0)
+		engine.partitions[partition.Key()] = mockPM
+
+		resp, err := engine.PollNexusTaskQueue(context.Background(),
+			&matchingservice.PollNexusTaskQueueRequest{
+				NamespaceId: ns.ID().String(),
+				Request: &workflowservice.PollNexusTaskQueueRequest{
+					Namespace:         ns.Name().String(),
+					TaskQueue:         taskQueue,
+					WorkerInstanceKey: workerKey,
+				},
+			},
+			metrics.NoopMetricsHandler,
+		)
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, &matchingservice.PollNexusTaskQueueResponse{}, resp)
 	})
 
 	t.Run("partition API adds worker to shutdown cache", func(t *testing.T) {

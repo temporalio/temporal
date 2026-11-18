@@ -13,9 +13,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/testx/await"
+	"go.temporal.io/testx/testcontext"
 )
 
 func TestRequire_ImmediateSuccess(t *testing.T) {
@@ -186,10 +185,9 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	})
 
 	t.Run("retries after attempt timeout until await timeout", func(t *testing.T) {
-		attemptTimeoutEnv := 50 * time.Millisecond
-		attemptTimeout := attemptTimeoutEnv * debug.TimeoutMultiplier
+		attemptTimeout := 50 * time.Millisecond
 		pollInterval := 100 * time.Millisecond
-		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeoutEnv.String())
+		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeout.String())
 
 		ctx := testcontext.For(t)
 		var attempts atomic.Int32

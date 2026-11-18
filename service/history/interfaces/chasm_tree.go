@@ -27,6 +27,7 @@ type ChasmTree interface {
 	MarkTotalTimeSkippedUpdatedInPassive()
 	IsStateDirty() bool
 	IsDirty() bool
+	SpeculativeTransitionFailoverVersion() (int64, bool)
 	Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error
 	Archetype() (chasm.Archetype, error)
 	ArchetypeID() chasm.ArchetypeID

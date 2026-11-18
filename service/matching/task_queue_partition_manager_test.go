@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -2038,7 +2037,7 @@ type capturedTaskMatchDetails struct {
 	TaskQueueType        enumspb.TaskQueueType
 	SyncMatchOutcome     hooks.SyncMatchOutcome
 	DeploymentVersion    *deploymentpb.WorkerDeploymentVersion
-	SingleSessionOptions *sessionpb.SingleSessionOptions
+	SingleSessionOptions hooks.SingleSessionOptions
 }
 
 func (h *capturingTaskMatchHook) Create(details *hooks.TaskHookFactoryCreateDetails) hooks.TaskHook {
@@ -2060,7 +2059,7 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 		TaskQueueName:        h.taskQueueName,
 		TaskQueueType:        h.taskQueueType,
 		SyncMatchOutcome:     event.SyncMatchOutcome,
-		SingleSessionOptions: common.CloneProto(event.SingleSessionOptions),
+		SingleSessionOptions: event.SingleSessionOptions,
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -2331,9 +2330,9 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
 				delete(pm.engine.partitions, pm.partition.Key())
 				pm.engine.partitionsLock.Unlock()
 			}()
-			options := &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()}
+			options := hooks.SingleSessionOptions{WorkerStableIdentity: tv.StickyTaskQueue().GetName()}
 			if tc.general {
-				options = nil
+				options = hooks.SingleSessionOptions{}
 			}
 			sessionDirective := &taskqueuespb.TaskSessionDirective{
 				WorkerQueue: tv.StickyTaskQueue().GetName(), IsExclusiveWorkerAssigned: !tc.general,
@@ -2361,7 +2360,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
 			require.Len(t, calls, 1)
 			require.Equal(t, tc.taskType, calls[0].TaskQueueType)
 			require.Equal(t, hookOutcome, calls[0].SyncMatchOutcome)
-			protorequire.ProtoEqual(t, options, calls[0].SingleSessionOptions)
+			require.Equal(t, options, calls[0].SingleSessionOptions)
 			if tc.general {
 				require.Nil(t, calls[0].DeploymentVersion)
 			} else {
@@ -2739,6 +2738,39 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_UsesSelectedQ
 			return false
 		}
 	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_ReportsSingleSession() {
+	for _, assigned := range []bool{true, false} {
+		s.Run(fmt.Sprintf("assigned=%v", assigned), func() {
+			hook := &capturingTaskMatchHook{}
+			pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+			defer cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+
+			req := newTestQueryWorkflowRequest(nil)
+			req.SessionDirective = &taskqueuespb.TaskSessionDirective{WorkerQueue: "session", IsExclusiveWorkerAssigned: assigned}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, _ = pm.DispatchQueryTask(ctx, "task-id-1", req)
+			}()
+
+			await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+			calls := hook.getCalls()
+			s.Require().Len(calls, 1)
+			expected := hooks.SingleSessionOptions{}
+			if assigned {
+				expected.WorkerStableIdentity = "session"
+			}
+			s.Equal(expected, calls[0].SingleSessionOptions)
+
+			cancel()
+			<-done
+		})
+	}
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_DoesNotFireWithRecentPoller() {
