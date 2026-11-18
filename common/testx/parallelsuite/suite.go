@@ -63,6 +63,16 @@ func (s contextScope) Context() context.Context {
 	return s.ctx
 }
 
+// Await retries fn on assertion failure until the timeout or scope cancellation.
+// The scope passed to fn carries the context and assertions for that attempt.
+func Await(s Scope, fn func(Scope), timeout, interval time.Duration) {
+	tb := s.TB()
+	tb.Helper()
+	await.Require(s.Context(), tb, func(t *await.T) {
+		fn(t)
+	}, timeout, interval)
+}
+
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
 //
 // It enforces a strict rule: a test method (or subtest) must either use assertions
