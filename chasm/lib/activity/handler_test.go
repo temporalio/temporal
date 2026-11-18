@@ -234,6 +234,43 @@ func TestStartActivityExecution_UseExistingMetric(t *testing.T) {
 	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityUseExisting.Name()), 1)
 }
 
+// TestStartActivityExecution_StartWithContextMetric verifies that NexusActivityStartWithContext counts only
+// new activities started with a Nexus serialization context.
+func TestStartActivityExecution_StartWithContextMetric(t *testing.T) {
+	h, ctx, capture := newStartTestHandler(t)
+
+	resp, err := startWithAttach(ctx, h, "request-1", enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING)
+	require.NoError(t, err)
+	require.True(t, resp.GetStarted())
+	recordings := capture.SnapshotMetric(metrics.NexusActivityStartWithContext.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, "namespace", recordings[0].Tags[metrics.NamespaceTag("").Key])
+
+	// Attaching to the existing activity is not a new start.
+	resp, err = startWithAttach(ctx, h, "request-2", enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING)
+	require.NoError(t, err)
+	require.False(t, resp.GetStarted())
+	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityStartWithContext.Name()), 1)
+
+	// A new activity without a Nexus context is not counted.
+	plainResp, err := h.StartActivityExecution(ctx, &activitypb.StartActivityExecutionRequest{
+		NamespaceId: "namespace-id",
+		FrontendRequest: &workflowservice.StartActivityExecutionRequest{
+			Namespace:           "namespace",
+			ActivityId:          "activity-id-2",
+			ActivityType:        &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+			StartToCloseTimeout: durationpb.New(time.Minute),
+			RequestId:           "request-3",
+			IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, plainResp.GetFrontendResponse().GetStarted())
+	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityStartWithContext.Name()), 1)
+}
+
 // TestStartActivityExecution_FailRejectsAttach verifies that under ACTIVITY_ID_CONFLICT_POLICY_FAIL,
 // on_conflict_options do not attach to a running activity.
 func TestStartActivityExecution_FailRejectsAttach(t *testing.T) {

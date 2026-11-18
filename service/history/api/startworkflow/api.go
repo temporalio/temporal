@@ -305,6 +305,13 @@ func (s *Starter) Invoke(
 		}
 	}()
 	request := s.request.StartRequest
+	defer func() {
+		// Count only workflows this request created, not dedup responses (which also report Started).
+		if retError == nil && startOutcome == StartNew && resp.GetStarted() &&
+			request.GetPropagatedNexusSerializationContext() != nil {
+			metrics.NexusWorkflowStartWithContext.With(s.getMetricsHandler()).Record(1)
+		}
+	}()
 	if err := s.prepare(ctx); err != nil {
 		return nil, StartErr, err
 	}
@@ -973,6 +980,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	case nil:
 		if nexusContextMatch != "" {
 			// Count callback attachments involving Nexus context by whether that context matches or is missing.
+			// See: https://github.com/temporalio/temporal/issues/13153
 			metrics.NexusWorkflowUseExisting.With(s.getMetricsHandler()).Record(1, metrics.NexusSerializationContextMatchTag(nexusContextMatch))
 		}
 		resp := &historyservice.StartWorkflowExecutionResponse{

@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -231,6 +232,36 @@ func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
 		registry := update.NewRegistry(ms)
 		require.False(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
 	})
+}
+
+func TestApplyRequest_MarksNewUpdateWithNexusContext(t *testing.T) {
+	ms := historyi.NewMockMutableState(gomock.NewController(t))
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+	ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+	ms.EXPECT().HasStartedWorkflowTask().Return(false).AnyTimes()
+	ms.EXPECT().HasPendingWorkflowTask().Return(true).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	ms.EXPECT().VisitUpdates(gomock.Any())
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+	registry := update.NewRegistry(ms)
+
+	apply := func(id string, nexusContext *nexuspb.PropagatedSerializationContext) bool {
+		req := createUpdateRequest(id)
+		req.Request.Request.Input = &updatepb.Input{Name: "update"}
+		req.Request.Request.PropagatedNexusSerializationContext = nexusContext
+		updater := &Updater{req: req}
+		_, err := updater.ApplyRequest(context.Background(), registry, ms)
+		require.NoError(t, err)
+		return updater.newUpdateWithNexusContext
+	}
+	nexusContext := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "service", Operation: "operation"}
+
+	require.True(t, apply("with-context", nexusContext))
+	require.False(t, apply("with-context", nexusContext), "a duplicate request for an existing Update is not new")
+	require.False(t, apply("without-context", nil))
 }
 
 // An Update whose callbacks would breach the execution's limits must be rejected before it is
