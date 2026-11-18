@@ -11,7 +11,7 @@ import (
 )
 
 type plugin struct {
-	AllowStandardTests []string `json:"allow-standard-tests"`
+	AllowNonParallelsuiteTests []string `json:"allow-non-parallelsuite-tests"`
 }
 
 func init() {
@@ -28,7 +28,7 @@ func newPlugin(raw any) (register.LinterPlugin, error) {
 
 func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	analyzer := parallelsuitelint.New()
-	if err := analyzer.Flags.Set("allow-standard-tests", strings.Join(p.AllowStandardTests, ",")); err != nil {
+	if err := analyzer.Flags.Set("allow-non-parallelsuite-tests", strings.Join(p.AllowNonParallelsuiteTests, ",")); err != nil {
 		return nil, fmt.Errorf("configuring adoption exclusions: %w", err)
 	}
 	return []*analysis.Analyzer{analyzer}, nil

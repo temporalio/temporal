@@ -20,7 +20,7 @@ func New() *analysis.Analyzer {
 			return nil, nil //nolint:nilnil // Analysis reports diagnostics and has no result value.
 		},
 	}
-	analyzer.Flags.StringVar(&allowedPackages, "allow-standard-tests", "",
+	analyzer.Flags.StringVar(&allowedPackages, "allow-non-parallelsuite-tests", "",
 		"comma-separated package import paths allowing ordinary tests; /... includes descendants, ... allows all packages")
 	return analyzer
 }
