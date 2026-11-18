@@ -1109,7 +1109,7 @@ and deployment interaction in matching and history.`,
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
 		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",
 		false,
-		`If set to true (default is false), namespaces that are Nexus endpoint targets will be prevented from being deleted.`,
+		`If set to false (the default), namespaces that are Nexus endpoint targets will be prevented from being deleted.`,
 	)
 
 	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
