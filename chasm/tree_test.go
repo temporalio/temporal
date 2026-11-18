@@ -577,6 +577,12 @@ func (s *nodeSuite) TestPointerAttributes() {
 		SubComponent11: NewComponentField(nil, sc11),
 	}
 
+	ifaceSC1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{
+			RunId: "workflow_id_iface",
+		},
+	}
+
 	s.Run("Sync and serialize component with ancestor pointer", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
 		rootNode, err := s.newTestTree(nilSerializedNodes)
@@ -587,7 +593,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootComponent := &TestComponent{
 			MSPointer:                    NewMSPointer(s.nodeBackend),
 			SubComponent1:                NewComponentField(nil, sc1),
-			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
+			SubComponentInterfacePointer: NewComponentField[Component](nil, ifaceSC1),
 		}
 
 		// sc11 points to root (grandparent) -- an ancestor pointer.
@@ -640,7 +646,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		sc1ptr, ok := ifacePtr.(*TestSubComponent1)
 		s.True(ok)
-		s.ProtoEqual(sc1ptr.SubComponent1Data, sc1.SubComponent1Data)
+		s.ProtoEqual(sc1ptr.SubComponent1Data, ifaceSC1.SubComponent1Data)
 	})
 
 	s.Run("Clear ancestor pointer by setting it to the empty field", func() {
@@ -5695,6 +5701,115 @@ func (s *nodeSuite) TestCloseTransaction_ReplacedComponentDeletesSubtree() {
 	s.Contains(mutation.UpdatedNodes, "SubComponent1/SubData11")
 	_, ok := root.findNode([]string{"SubComponent1", "SubComponent11"})
 	s.False(ok)
+}
+
+func (s *nodeSuite) TestCloseTransaction_RejectsComponentAttachedTwice() {
+	const (
+		alreadyAttached = "component is already attached to the tree"
+		notAtFieldPath  = "field holds a node that isn't at the field's path"
+	)
+	tl, ok := s.logger.(*testlogger.TestLogger)
+	s.Require().True(ok)
+	tl.Expect(testlogger.Error, alreadyAttached)
+	tl.Expect(testlogger.Error, notAtFieldPath)
+
+	testCases := []struct {
+		name        string
+		mutate      func(ctx MutableContext, c *TestComponent)
+		expectedErr string
+	}{
+		{
+			name: "attached component wrapped by a new field at the same path",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponent1 = NewComponentField(ctx, c.SubComponent1.Get(ctx))
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "attached component wrapped by a new field at another path",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k": NewComponentField(ctx, c.SubComponent1.Get(ctx)),
+				}
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "attached component moved to another field",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k": NewComponentField(ctx, c.SubComponent1.Get(ctx)),
+				}
+				c.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "new component wrapped by fields at two paths",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				sub := &TestSubComponent1{SubComponent1Data: &protoMessageType{RunId: "new"}}
+				c.SubComponent1 = NewComponentField(ctx, sub)
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k": NewComponentField(ctx, sub),
+				}
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "new component field assigned to two paths",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				field := NewComponentField(ctx, &TestSubComponent1{SubComponent1Data: &protoMessageType{RunId: "new"}})
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k1": field,
+					"k2": field,
+				}
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "attached component field copied to another path",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k": c.SubComponent1,
+				}
+			},
+			expectedErr: notAtFieldPath,
+		},
+		{
+			name: "attached data field copied to another path",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubData1 = c.SubComponent1.Get(ctx).SubData11
+			},
+			expectedErr: notAtFieldPath,
+		},
+		{
+			name: "attached field moved into the component that replaces its parent",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponent1 = NewComponentField(ctx, &TestSubComponent1{
+					SubComponent11: c.SubComponent1.Get(ctx).SubComponent11,
+				})
+			},
+			expectedErr: notAtFieldPath,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			root := s.testComponentTree()
+			_, err := root.CloseTransaction(context.Background(), true)
+			s.NoError(err)
+
+			s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+			ctx := NewMutableContext(context.Background(), root)
+			c, err := root.Component(ctx, ComponentRef{})
+			s.NoError(err)
+			tc.mutate(ctx, c.(*TestComponent))
+			_, err = root.CloseTransaction(context.Background(), true)
+			var internalErr *serviceerror.Internal
+			s.ErrorAs(err, &internalErr)
+			s.ErrorContains(err, tc.expectedErr)
+		})
+	}
 }
 
 func (s *nodeSuite) TestCloseTransaction_EphemeralComponent() {

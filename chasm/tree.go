@@ -1192,6 +1192,17 @@ func (n *Node) syncSubField(
 		return
 	}
 
+	if internal.node != nil && n.children[fieldN] != internal.node {
+		// The field was copied from another field, possibly of a component whose node was deleted. Either way, the node
+		// isn't persisted at the field's path.
+		err = softassert.UnexpectedInternalErr(
+			n.logger,
+			"field holds a node that isn't at the field's path",
+			fmt.Errorf("field at path %v holds the node at path %v", append(n.path(), fieldN), internal.node.path()),
+		)
+		return
+	}
+
 	fieldValue := internal.value()
 	if internal.node == nil && fieldValue != nil {
 		fieldType := internal.fieldType()
@@ -1206,6 +1217,20 @@ func (n *Node) syncSubField(
 		switch fieldType {
 		case fieldTypeComponent:
 			if err = assertStructPointer(reflect.TypeOf(fieldValue)); err != nil {
+				return
+			}
+			if attachedNode, ok := n.valueToNode[fieldValue]; ok {
+				// The component's subtree and metadata belong to its node, so a new field can't take over the
+				// component, whether at another path or at the same one.
+				err = softassert.UnexpectedInternalErr(
+					n.logger,
+					"component is already attached to the tree",
+					fmt.Errorf(
+						"field at path %v holds the component at path %v",
+						append(n.path(), fieldN),
+						attachedNode.path(),
+					),
+				)
 				return
 			}
 
