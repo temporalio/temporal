@@ -68,11 +68,12 @@ func TestSegmentListMetadataOnly(t *testing.T) {
 				t.Fatalf("unknown test case: %s", name)
 			}
 			got, err := segment.ListEntries(ctx, ListEntriesRequest{Segment: ref, PageSize: 10, InclusiveMaxMessageID: math.MaxInt64})
+			require.NoError(t, err)
 			if name == "corrupt child" || name == "corrupt timestamp" || name == "corrupt identity" {
-				require.ErrorAs(t, err, new(*serviceerror.DataLoss))
+				require.Equal(t, EntryPage{Refs: refs[1:], CorruptEntryKeys: []string{refs[0].EntryKey}}, got)
+				require.Contains(t, segment.Entries, refs[0].EntryKey)
 				return
 			}
-			require.NoError(t, err)
 			require.Equal(t, EntryPage{Refs: refs}, got)
 		})
 	}

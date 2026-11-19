@@ -1,6 +1,7 @@
 package historydlq
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -87,7 +88,12 @@ func TestResolveEntriesBatch(t *testing.T) {
 			for _, field := range segment.Entries {
 				field.Get(ctx).Task = chasm.Field[*commonspb.HistoryTask]{}
 			}
-			require.NoError(t, segment.ResolveEntries(ctx, request))
+			result, err := segment.ResolveEntries(ctx, request)
+			require.NoError(t, err)
+			expectedResolvedKeys := slices.Clone(request.EntryKeys)
+			slices.Sort(expectedResolvedKeys)
+			expectedResolvedKeys = slices.Compact(expectedResolvedKeys)
+			require.Equal(t, ResolveEntriesResult{ResolvedEntryKeys: expectedResolvedKeys}, result)
 			var actualKeys []string
 			for key := range segment.Entries {
 				actualKeys = append(actualKeys, key)
@@ -96,7 +102,9 @@ func TestResolveEntriesBatch(t *testing.T) {
 			require.Equal(t, expectedBytes, segment.GetRetainedBytes())
 			require.Equal(t, expectedMinimum, segment.GetMinMessageId())
 			require.Equal(t, minMessageIDSearchAttribute.Value(expectedMinimum), segment.SearchAttributes(ctx)[2])
-			require.NoError(t, segment.ResolveEntries(ctx, request))
+			retry, err := segment.ResolveEntries(ctx, request)
+			require.NoError(t, err)
+			require.Equal(t, result, retry)
 			require.Equal(t, expectedBytes, segment.GetRetainedBytes())
 		})
 	}
@@ -105,16 +113,18 @@ func TestResolveEntriesBatch(t *testing.T) {
 func TestResolveEntriesMinimum(t *testing.T) {
 	t.Parallel()
 	segment, ctx, refs, emptyBytes := resolutionFixture(t)
-	require.NoError(t, segment.ResolveEntries(ctx, resolutionRequest(refs[0], refs[0].EntryKey, refs[1].EntryKey)))
+	_, err := segment.ResolveEntries(ctx, resolutionRequest(refs[0], refs[0].EntryKey, refs[1].EntryKey))
+	require.NoError(t, err)
 	require.Equal(t, refs[2].MessageID, segment.GetMinMessageId())
-	require.NoError(t, segment.ResolveEntries(ctx, resolutionRequest(refs[2], refs[2].EntryKey)))
+	_, err = segment.ResolveEntries(ctx, resolutionRequest(refs[2], refs[2].EntryKey))
+	require.NoError(t, err)
 	require.Equal(t, int64(-1), segment.GetMinMessageId())
 	require.Equal(t, emptyBytes, segment.GetRetainedBytes())
 }
 
 func TestResolveEntriesInvalidBatchIsAtomic(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"empty key", "too many keys", "invalid reason", "wrong run", "wrong business", "wrong queue", "missing selected metadata", "missing remaining metadata"} {
+	for _, kind := range []string{"empty key", "too many keys", "invalid reason", "wrong run", "wrong business", "wrong queue"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			segment, ctx, refs, _ := resolutionFixture(t)
@@ -134,10 +144,6 @@ func TestResolveEntriesInvalidBatchIsAtomic(t *testing.T) {
 				request.Segment.BusinessID = "different"
 			case "wrong queue":
 				request.Segment.Queue.SourceCluster = "different"
-			case "missing selected metadata":
-				segment.Entries[refs[1].EntryKey] = chasm.Field[*Entry]{}
-			case "missing remaining metadata":
-				segment.Entries[refs[2].EntryKey] = chasm.Field[*Entry]{}
 			default:
 				t.Fatalf("unknown test case: %s", kind)
 			}
@@ -150,14 +156,13 @@ func TestResolveEntriesInvalidBatchIsAtomic(t *testing.T) {
 					beforeMetadata[key] = proto.Clone(entry.EntryState).(*historydlqpb.EntryState)
 				}
 			}
-			err := segment.ResolveEntries(ctx, request)
+			result, err := segment.ResolveEntries(ctx, request)
+			require.Equal(t, ResolveEntriesResult{}, result)
 			switch kind {
 			case "wrong run", "wrong business":
 				require.ErrorAs(t, err, new(*serviceerror.NotFound))
 			case "wrong queue":
 				require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-			case "missing selected metadata", "missing remaining metadata":
-				require.ErrorAs(t, err, new(*serviceerror.DataLoss))
 			default:
 				require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 			}
@@ -177,7 +182,9 @@ func TestResolveEntriesBatchLimit(t *testing.T) {
 	for range 1000 {
 		request.EntryKeys = append(request.EntryKeys, "already-resolved")
 	}
-	require.NoError(t, segment.ResolveEntries(ctx, request))
+	_, err := segment.ResolveEntries(ctx, request)
+	require.NoError(t, err)
 	request.EntryKeys = append(request.EntryKeys, "one-more")
-	require.ErrorAs(t, segment.ResolveEntries(ctx, request), new(*serviceerror.InvalidArgument))
+	_, err = segment.ResolveEntries(ctx, request)
+	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 }

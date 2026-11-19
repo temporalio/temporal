@@ -120,11 +120,18 @@ func (s *Segment) ReadEntry(ctx chasm.Context, ref MessageRef) (StoredMessage, e
 
 // ResolveEntry deletes an entry and its payload. Missing entries are already resolved.
 func (s *Segment) ResolveEntry(ctx chasm.MutableContext, ref MessageRef, reason historydlqpb.Resolution) error {
-	return s.ResolveEntries(ctx, ResolveEntriesRequest{
+	result, err := s.ResolveEntries(ctx, ResolveEntriesRequest{
 		Segment:    SegmentRef{Queue: ref.Queue, BusinessID: ref.BusinessID, RunID: ref.RunID},
 		EntryKeys:  []string{ref.EntryKey},
 		Resolution: reason,
 	})
+	if err != nil {
+		return err
+	}
+	if len(result.CorruptEntryKeys) > 0 {
+		return serviceerror.NewDataLossf("history DLQ entry %q was retained because its metadata is invalid", ref.EntryKey)
+	}
+	return nil
 }
 
 func (s *Segment) LifecycleState(chasm.Context) chasm.LifecycleState {

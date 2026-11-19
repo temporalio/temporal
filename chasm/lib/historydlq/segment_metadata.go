@@ -5,6 +5,8 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -23,9 +25,33 @@ type ListEntriesRequest struct {
 type EntryPage struct {
 	Refs          []MessageRef
 	NextPageToken []byte
+	// CorruptEntryKeys lists retained entries across the segment, repeated on each page.
+	CorruptEntryKeys []string
 }
 
-type SegmentStats struct{ PendingCount, LastMessageID int64 }
+type SegmentStats struct {
+	PendingCount, LastMessageID int64
+	// CorruptEntryKeys identifies entries excluded from LastMessageID.
+	CorruptEntryKeys []string
+}
+
+func (s *Segment) logCorruptEntry(ctx chasm.Context, key, operation string, err error) {
+	queue := s.GetQueue()
+	tags := []tag.Tag{
+		tag.TaskCategoryID(int(queue.GetTaskCategory())),
+		tag.SourceCluster(queue.GetSourceCluster()),
+		tag.TargetCluster(queue.GetTargetCluster()),
+		tag.String("entry-key", key),
+		tag.Operation(operation),
+		tag.Error(err),
+	}
+	entry, ok := s.Entries[key].TryGet(ctx)
+	if ok && entry != nil && entry.EntryState != nil && entry.GetMessageId() >= 0 {
+		tags = append(tags, tag.DLQMessageID(entry.GetMessageId()))
+	}
+	ctx.Logger().Error("History DLQ message could not be processed and was retained", tags...)
+	metrics.HistoryDLQCorruptEntry.With(ctx.MetricsHandler()).Record(1)
+}
 
 func validateSegmentRef(ref SegmentRef) error {
 	if ref.BusinessID == "" || ref.RunID == "" {
@@ -73,6 +99,7 @@ func (s *Segment) entryMetadata(ctx chasm.Context, key string, field chasm.Field
 }
 
 // ListEntries returns pending entry references without loading task payloads.
+// Callers must process Refs and report CorruptEntryKeys as partial failure.
 func (s *Segment) ListEntries(ctx chasm.Context, req ListEntriesRequest) (EntryPage, error) {
 	if err := validateListEntriesRequest(req); err != nil {
 		return EntryPage{}, err
@@ -85,10 +112,13 @@ func (s *Segment) ListEntries(ctx chasm.Context, req ListEntriesRequest) (EntryP
 		return EntryPage{}, err
 	}
 	var refs []MessageRef
+	var corruptEntryKeys []string
 	for key, field := range s.Entries {
 		ref, err := s.entryMetadata(ctx, key, field)
 		if err != nil {
-			return EntryPage{}, err
+			s.logCorruptEntry(ctx, key, "ListEntries", err)
+			corruptEntryKeys = append(corruptEntryKeys, key)
+			continue
 		}
 		if ref.MessageID <= req.InclusiveMaxMessageID && (cursor == nil || compareEntryTuple(ref.MessageID, ref.EntryKey, cursor.MessageID, cursor.EntryKey) > 0) {
 			refs = append(refs, ref)
@@ -97,7 +127,8 @@ func (s *Segment) ListEntries(ctx chasm.Context, req ListEntriesRequest) (EntryP
 	slices.SortFunc(refs, func(a, b MessageRef) int {
 		return compareEntryTuple(a.MessageID, a.EntryKey, b.MessageID, b.EntryKey)
 	})
-	page := EntryPage{Refs: refs}
+	slices.Sort(corruptEntryKeys)
+	page := EntryPage{Refs: refs, CorruptEntryKeys: corruptEntryKeys}
 	if len(refs) > req.PageSize {
 		page.Refs = refs[:req.PageSize]
 		page.NextPageToken = encodeSegmentCursor(req, page.Refs[len(page.Refs)-1])
@@ -111,12 +142,15 @@ func (s *Segment) DescribeSegment(ctx chasm.Context, ref SegmentRef) (SegmentSta
 	}
 	stats := SegmentStats{}
 	for key, field := range s.Entries {
+		stats.PendingCount++
 		metadata, err := s.entryMetadata(ctx, key, field)
 		if err != nil {
-			return SegmentStats{}, err
+			s.logCorruptEntry(ctx, key, "DescribeSegment", err)
+			stats.CorruptEntryKeys = append(stats.CorruptEntryKeys, key)
+			continue
 		}
-		stats.PendingCount++
 		stats.LastMessageID = max(stats.LastMessageID, metadata.MessageID)
 	}
+	slices.Sort(stats.CorruptEntryKeys)
 	return stats, nil
 }

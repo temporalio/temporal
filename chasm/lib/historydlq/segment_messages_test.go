@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/serviceerror"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/chasm"
 	historydlqpb "go.temporal.io/server/chasm/lib/historydlq/gen/historydlqpb/v1"
@@ -66,8 +65,13 @@ func TestSegmentReadMessagesReportsMissingPayload(t *testing.T) {
 	t.Parallel()
 	segment, ctx, ref, refs := metadataFixture(t)
 	segment.Entries[refs[0].EntryKey].Get(ctx).Task = chasm.Field[*commonspb.HistoryTask]{}
-	_, err := segment.ReadSegmentMessages(ctx, ReadSegmentMessagesRequest{Segment: ref, PageSize: 10, InclusiveMaxMessageID: refs[0].MessageID})
-	require.ErrorAs(t, err, new(*serviceerror.DataLoss))
+	page, err := segment.ReadSegmentMessages(ctx, ReadSegmentMessagesRequest{Segment: ref, PageSize: 10, InclusiveMaxMessageID: refs[0].MessageID})
+	require.NoError(t, err)
+	require.Equal(t, []string{refs[0].EntryKey}, page.CorruptEntryKeys)
+	require.Len(t, page.Messages, 1)
+	require.Equal(t, refs[1], page.Messages[0].Ref)
+	protorequire.ProtoEqual(t, testEnqueueRequest().Task, page.Messages[0].Task)
+	require.Len(t, segment.Entries, 2)
 }
 
 func TestSegmentMinimumWithNumericTies(t *testing.T) {

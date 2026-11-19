@@ -52,7 +52,7 @@ func (e *Entry) Read(ctx chasm.Context, ref MessageRef, sourceShardID int32) (St
 		SourceTaskIdentity: entryTaskIdentityProtoToIdentity(e.GetSourceTaskIdentity(), sourceShardID),
 	}
 	task, ok := e.Task.TryGet(ctx)
-	if !ok {
+	if !ok || task == nil {
 		return StoredMessage{}, serviceerror.NewDataLoss("history DLQ entry is missing its task")
 	}
 	stored.Task = common.CloneProto(task)
