@@ -335,7 +335,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	frontendClient := cluster.FrontendClient()
 	env := &TestEnv{
 		functionalTestBase: base,
-		HistoryUtils:       historyutils.New(t, frontendClient, ns),
+		HistoryUtils:       historyutils.New(frontendClient, ns),
 		UpdateUtils:        updateutils.New(t),
 		cluster:            cluster,
 		nsName:             ns,
