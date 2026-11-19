@@ -69,9 +69,11 @@ type Env interface {
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
 
+type HistoryReader = historyrequire.Reader
+
 type TestEnv struct {
 	functionalTestBase *functionalTestBase
-	historyrequire.Reader
+	HistoryReader
 	updateutils.UpdateUtils
 
 	Logger log.Logger
@@ -335,7 +337,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	frontendClient := cluster.FrontendClient()
 	env := &TestEnv{
 		functionalTestBase: base,
-		Reader:             historyrequire.NewReader(frontendClient, ns),
+		HistoryReader:      historyrequire.NewReader(frontendClient, ns),
 		UpdateUtils:        updateutils.New(t),
 		cluster:            cluster,
 		nsName:             ns,
