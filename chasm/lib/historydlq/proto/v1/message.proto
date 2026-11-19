@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.historydlq.proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "temporal/server/api/common/v1/dlq.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/historydlq/gen/historydlqpb;historydlqpb";
+
+// Resolution identifies the operation that removes a DLQ entry.
+enum Resolution {
+  RESOLUTION_UNSPECIFIED = 0; // No resolution was specified.
+  RESOLUTION_MERGED = 1; // The task was accepted back into processing, but may still fail during execution.
+  RESOLUTION_PURGED = 2; // The operator discarded the task without re-enqueueing it.
+}
+
+// SegmentState contains the identity and storage budget of one DLQ segment.
+message SegmentState {
+  // Queue whose entries are stored in this segment.
+  temporal.server.api.common.v1.HistoryDLQKey queue = 1;
+  // Source shard whose tasks belong to this segment.
+  int32 source_shard_id = 2;
+  // Conservative retained-byte budget, including metadata and framework reserves.
+  int64 retained_bytes = 4;
+  // Smallest pending message ID, or -1 when the segment is empty.
+  int64 min_message_id = 6;
+}
+
+// EntryTaskIdentity identifies an original task within its segment.
+message EntryTaskIdentity {
+  // ID assigned when the original task was persisted.
+  int64 task_id = 1;
+  // Original execution namespace.
+  string namespace_id = 2;
+  // Original execution Business ID (Workflow ID for workflows).
+  string business_id = 3;
+  // Original execution Run ID.
+  string run_id = 4;
+  // Original execution archetype; zero is permitted for workflow tasks.
+  uint32 archetype_id = 5;
+}
+
+// EntryState contains metadata for one task in a DLQ segment.
+message EntryState {
+  // Identity of the persisted task that this entry represents.
+  EntryTaskIdentity source_task_identity = 1;
+  // Server-assigned numeric bound for operator requests; collisions are allowed.
+  int64 message_id = 2;
+  // Server time assigned once when the entry is accepted.
+  google.protobuf.Timestamp enqueued_at = 3;
+  // Serialized HistoryTask size, released from the segment budget on resolution.
+  int64 payload_size_bytes = 7;
+}
