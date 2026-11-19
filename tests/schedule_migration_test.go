@@ -1744,19 +1744,11 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	s.NoError(err)
 }
 
-type ScheduleMigrationIsolatedSuite struct {
-	parallelsuite.Suite[*ScheduleMigrationIsolatedSuite]
-}
-
-func TestScheduleMigrationIsolatedSuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleMigrationIsolatedSuite{})
-}
-
 // TestScheduleMigrationV1ToV2NoDuplicateRecentActions verifies that migrating
 // a V1 schedule with a running workflow to V2 does not produce duplicate entries
 // in RecentActions. In V1, recordAction puts the same workflow in both
 // RunningWorkflows and RecentActions. The migration must deduplicate these.
-func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateRecentActions() {
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2NoDuplicateRecentActions() {
 	// Create the env without EnableChasm so that CreateSchedule does not write
 	// a CHASM sentinel (which would block the migration activity).
 	env := newScheduleEnv(
@@ -1817,7 +1809,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateR
 
 	// Wait for the V1 scheduler to start the workflow and record it as running.
 	var runningWfID string
-	s.Await(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Await(func(s *ScheduleMigrationTestSuite) {
 		descResp, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
@@ -1846,7 +1838,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateR
 
 	// Wait for the V1 scheduler workflow to complete (migration done).
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
-	s.Await(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Await(func(s *ScheduleMigrationTestSuite) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
 			s.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
@@ -1898,7 +1890,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2NoDuplicateR
 // auto-migration is deferred while a workflow is running (the scheduler keeps
 // running rather than migrating and completing); when the gate is turned on,
 // auto-migration proceeds even with a running workflow.
-func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationDeferredWithRunningWorkflow() {
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDeferredWithRunningWorkflow() {
 	// Create the env without EnableChasm so that CreateSchedule produces a V1
 	// (workflow-backed) schedule rather than a CHASM sentinel.
 	env := newScheduleEnv(
@@ -1960,7 +1952,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationDeferredWithRunnin
 
 	// Wait for the V1 scheduler to start the workflow and record it as running.
 	var runningWfID string
-	s.Await(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Await(func(s *ScheduleMigrationTestSuite) {
 		descResp, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
@@ -2001,7 +1993,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationDeferredWithRunnin
 
 	// Turn the gate on; auto-migration now proceeds even with the workflow running.
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
-	s.Awaitf(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Awaitf(func(s *ScheduleMigrationTestSuite) {
 		s.True(v1Migrated(s.Context()))
 	}, 15*time.Second, 500*time.Millisecond,
 		"migration should proceed once the gate allows running workflows")
@@ -2483,7 +2475,7 @@ func TestScheduleMigration_ValidatesNamespaceState(t *testing.T) {
 // SchedulerCallbacksTask must run first, observe the workflow as completed,
 // stamp Completed, and only then fire ProcessBuffer (which then sees
 // isRunning=false and does not apply SKIP).
-func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesNotSkipPending() {
+func (s *ScheduleMigrationTestSuite) TestScheduleMigration_StaleRunningDoesNotSkipPending() {
 	env := newScheduleEnv(
 		s.T(),
 		testcore.WithWorkerService("scheduler operations"),
@@ -2514,7 +2506,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesN
 	})
 	s.NoError(err)
 	runningRunID := startResp.GetRunId()
-	s.Await(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Await(func(s *ScheduleMigrationTestSuite) {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: runningWid, RunId: runningRunID},
@@ -2605,7 +2597,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesN
 	//   - The pending start, kicked off by ProcessBuffer once isRunning
 	//     resolves to false, then run to completion by the SDK worker.
 	var lastDesc *schedulerpb.DescribeScheduleResponse
-	s.Awaitf(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Awaitf(func(s *ScheduleMigrationTestSuite) {
 		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
 			s.Context(),
 			&schedulerpb.DescribeScheduleRequest{
@@ -2629,7 +2621,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_StaleRunningDoesN
 // completion state when the execution has already failed. In particular, the
 // PauseOnFailure policy must apply even though Describe supplies no failure
 // payload.
-func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion() {
+func (s *ScheduleMigrationTestSuite) TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion() {
 	env := newScheduleEnv(
 		s.T(),
 		testcore.WithWorkerService("scheduler operations"),
@@ -2657,7 +2649,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_ClosedFailedWorkf
 	})
 	s.NoError(err)
 
-	s.Await(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Await(func(s *ScheduleMigrationTestSuite) {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: startResp.GetRunId()},
@@ -2713,7 +2705,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_ClosedFailedWorkf
 	)
 	s.NoError(err)
 
-	s.Awaitf(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Awaitf(func(s *ScheduleMigrationTestSuite) {
 		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
 			s.Context(),
 			&schedulerpb.DescribeScheduleRequest{
@@ -2859,7 +2851,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 	}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for V1 schedule %q", stayV1SID)
 }
 
-func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_NoRunningWorkflows_GeneratorStarts() {
+func (s *ScheduleMigrationTestSuite) TestScheduleMigration_NoRunningWorkflows_GeneratorStarts() {
 	// Use a very short idle time so the schedule closes quickly once the generator
 	// determines there's nothing to do (empty spec → no next wakeup time → idle).
 	shortIdleTime := 500 * time.Millisecond
@@ -2924,7 +2916,7 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_NoRunningWorkflow
 	}
 
 	// Confirm the schedule is live on the CHASM stack before polling for closure.
-	s.Await(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Await(func(s *ScheduleMigrationTestSuite) {
 		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(s.Context(), descReq)
 		s.NoError(err)
 	}, 6*time.Second, 100*time.Millisecond)
@@ -2932,13 +2924,13 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigration_NoRunningWorkflow
 	// If generator.Generate() was never called, the idle task is never scheduled
 	// and the schedule stays open indefinitely. Closing proves the generator ran.
 	var closedErr *serviceerror.FailedPrecondition
-	s.Await(func(s *ScheduleMigrationIsolatedSuite) {
+	s.Await(func(s *ScheduleMigrationTestSuite) {
 		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(s.Context(), descReq)
 		s.ErrorAs(err, &closedErr)
 	}, 6*time.Second, 100*time.Millisecond)
 }
 
-func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory() {
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory() {
 	// TODO: This is the admin-API directly poking a migration to v2:
 	s.T().Skip("admin MigrateSchedule path still injects EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED " +
 		"into a running workflow's history; remove this skip when the retroactive callback-attach is fixed")

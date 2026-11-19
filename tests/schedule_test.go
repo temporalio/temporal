@@ -2158,24 +2158,16 @@ func (s *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmEnabl
 	}
 }
 
-type ScheduleCompatibilitySuite struct {
-	parallelsuite.Suite[*ScheduleCompatibilitySuite]
-}
-
-func TestScheduleCompatibilitySuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleCompatibilitySuite{})
-}
-
 // TestScheduleLastCompletionResultMatchesV1 drives a V1 and a V2 schedule
 // through the same outcomes and requires every started event to be identical,
 // presence-aware (nil != empty Payloads), except where a no-result run intentionally
 // diverges: V1 keeps the previous result and failure, V2 clears both. An explicit nil
 // (binary/null) is a result for both.
-func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1() {
-	env := newScheduleEnv(s.T(), append(scheduleCommonOpts(s.T()),
+func (s *ScheduleV1Suite) TestScheduleLastCompletionResultMatchesV1() {
+	env := newScheduleEnv(s.T(),
 		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithTestTimeout(3*time.Minute),
-	)...)
+	)
 	ctx := testcontext.For(s.T())
 
 	type sched struct {
@@ -2258,7 +2250,7 @@ func (s *ScheduleCompatibilitySuite) TestScheduleLastCompletionResultMatchesV1()
 		s.NoError(err, sc.name)
 
 		var execution *commonpb.WorkflowExecution
-		s.Awaitf(func(s *ScheduleCompatibilitySuite) {
+		s.Awaitf(func(s *ScheduleV1Suite) {
 			desc, err := env.FrontendClient().DescribeSchedule(sc.newContext(ctx), &workflowservice.DescribeScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sc.scheduleID,
