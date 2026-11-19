@@ -6,13 +6,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testcontext"
 )
@@ -29,12 +27,12 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 		StartToClose:  activityShortTimeout,
 	}
 
-	waitUntilTimeoutVisible := func(t *testing.T, timeoutInfo func(require.TestingT) activityTimeoutInfo) {
+	waitUntilTimeoutVisible := func(s *activityParityTestSuite, timeoutInfo func(require.TestingT) activityTimeoutInfo) {
 		var got activityTimeoutInfo
-		await.Require(t.Context(), t, func(t *await.T) {
-			got = timeoutInfo(t)
-			t.Require().Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, got.timeout)
-			t.Require().Equal(int32(2), got.attempt)
+		s.Await(func(s *activityParityTestSuite) {
+			got = timeoutInfo(s.AssertionT())
+			s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, got.timeout)
+			s.Equal(int32(2), got.attempt)
 		}, cfg.StartToClose+activityDriverTimerMargin, activityDriverPollInterval)
 	}
 
@@ -42,7 +40,7 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 		t := s.T()
 		a := newWFADriver(t, newActivityParityEnv(t), cfg).start(t, cfg)
 		a.driveEvent(t, model.Poll)
-		waitUntilTimeoutVisible(t, a.timeoutInfo)
+		waitUntilTimeoutVisible(s, a.timeoutInfo)
 		a.awaitTimeout(t, model.StartToCloseElapses, time.Now().Add(waitForDriver))
 	})
 
@@ -50,7 +48,7 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 		t := s.T()
 		a := newSAADriver(t, newActivityParityEnv(t), cfg).start(t, cfg)
 		a.driveEvent(t, model.Poll)
-		waitUntilTimeoutVisible(t, a.timeoutInfo)
+		waitUntilTimeoutVisible(s, a.timeoutInfo)
 		a.awaitTimeout(t, model.StartToCloseElapses, time.Now().Add(waitForDriver))
 	})
 }
@@ -59,7 +57,9 @@ type ActivityDriverSuite struct {
 	parallelsuite.Suite[*ActivityDriverSuite]
 }
 
-func TestActivityDriverSuite(t *testing.T) { parallelsuite.Run(t, &ActivityDriverSuite{}) }
+func TestActivityDriverSuite(t *testing.T) {
+	parallelsuite.Run(t, &ActivityDriverSuite{})
+}
 
 // The model refuses two sorts of trace event: one whose clock is not running, and a Poll that
 // finds no task. Driving either waits for something that never happens.
@@ -136,19 +136,19 @@ func (s *ActivityDriverSuite) TestDriverContextReflectsExtension() {
 		"WFA": func(t *testing.T) contextualDriver { return newWFADriver(t, nil, activityConfig{}) },
 	} {
 		s.Run(name, func(s *ActivityDriverSuite) {
-			synctest.Test(s.T(), func(t *testing.T) {
-				d := newDriver(t)
+			s.Synctest(func(s *ActivityDriverSuite) {
+				d := newDriver(s.T())
 				before, ok := d.testContext().Deadline()
-				require.True(t, ok)
+				s.True(ok)
 
-				extended := testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout()+time.Minute)
+				extended := testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout()+time.Minute)
 				extendedDeadline, ok := extended.Deadline()
-				require.True(t, ok)
-				require.True(t, extendedDeadline.After(before), "test setup: EnsureRemaining should have extended the deadline")
+				s.True(ok)
+				s.True(extendedDeadline.After(before), "test setup: EnsureRemaining should have extended the deadline")
 
 				after, ok := d.testContext().Deadline()
-				require.True(t, ok)
-				require.Equal(t, extendedDeadline, after,
+				s.True(ok)
+				s.Equal(extendedDeadline, after,
 					"driver must observe the extended deadline, not the one captured at construction")
 			})
 		})

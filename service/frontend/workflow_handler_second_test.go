@@ -142,12 +142,12 @@ func TestDescribeScheduleAnnotatesScheduledWorkflowWithTypes(t *testing.T) {
 	searchAttrProvider := makeSearchAttributesProviderStub(
 		controller,
 		map[string]enumspb.IndexedValueType{
-			"Keyword01": enumspb.INDEXED_VALUE_TYPE_TEXT,
-			"Bool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_TEXT,
+			"CustomBoolField":    enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
 	)
 	response := makeResponseWithScheduledWorkflowAttributes(
-		map[string]string{"Keyword01": "keyword", "Bool01": "true"})
+		map[string]string{"CustomKeywordField": "keyword", "CustomBoolField": "true"})
 
 	h := makeWorkflowHandler(visibilityManager, searchAttrProvider)
 
@@ -157,9 +157,9 @@ func TestDescribeScheduleAnnotatesScheduledWorkflowWithTypes(t *testing.T) {
 		t.Fatalf("error %v", err)
 	}
 	assertScheduledWorkflowSearchAttributeHasAssociatedTypeOf(
-		t, response, "Keyword01", enumspb.INDEXED_VALUE_TYPE_TEXT)
+		t, response, "CustomKeywordField", enumspb.INDEXED_VALUE_TYPE_TEXT)
 	assertScheduledWorkflowSearchAttributeHasAssociatedTypeOf(
-		t, response, "Bool01", enumspb.INDEXED_VALUE_TYPE_BOOL)
+		t, response, "CustomBoolField", enumspb.INDEXED_VALUE_TYPE_BOOL)
 }
 
 func assertScheduledWorkflowSearchAttributeHasAssociatedTypeOf(
@@ -170,15 +170,7 @@ func assertScheduledWorkflowSearchAttributeHasAssociatedTypeOf(
 ) {
 	t.Helper()
 	attributes := getScheduledWorkflowSearchAttributes(response)
-	if attributes == nil || attributes.IndexedFields == nil {
-		t.Fatal("response SearchAttributes or IndexedFields is nil")
-	}
-	key := "AliasFor" + searchAttribute
-	field, ok := attributes.IndexedFields[key]
-	if !ok {
-		t.Fatalf("IndexedFields missing key %q", key)
-	}
-	actualAttributeType := field.Metadata[searchattribute.MetadataType]
+	actualAttributeType := attributes.IndexedFields["AliasFor"+searchAttribute].Metadata[searchattribute.MetadataType]
 	if string(actualAttributeType) != expectedType.String() {
 		t.Errorf(
 			"expected type %s for attribute %s, got %s",

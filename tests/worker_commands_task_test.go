@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -661,9 +660,9 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 		},
 	)
 	s.NoError(err)
-	env.NotEmpty(wftResp.GetActivityTasks(), "Expected eager activity task in WFT completion response")
+	s.NotEmpty(wftResp.GetActivityTasks(), "Expected eager activity task in WFT completion response")
 	eagerActivityTaskToken := wftResp.GetActivityTasks()[0].TaskToken
-	env.NotEmpty(eagerActivityTaskToken, "Expected task token from eager activity")
+	s.NotEmpty(eagerActivityTaskToken, "Expected task token from eager activity")
 	s.T().Log("Activity eagerly dispatched")
 
 	// Request workflow cancellation
@@ -705,7 +704,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 	// Poll Nexus control queue - cancel command should be dispatched because
 	// StartedClock is set for the eager activity.
 	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
-	await.RequireTruef(s.T(), func() bool {
+	s.AwaitTruef(func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer pollCancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
@@ -722,17 +721,17 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 
 	// Verify the cancel command
 	startOp := nexusPollResp.Request.GetStartOperation()
-	env.NotNil(startOp)
-	env.Equal("temporal.api.nexusservices.workerservice.v1.WorkerService", startOp.Service)
-	env.Equal("ExecuteCommands", startOp.Operation)
+	s.NotNil(startOp)
+	s.Equal("temporal.api.nexusservices.workerservice.v1.WorkerService", startOp.Service)
+	s.Equal("ExecuteCommands", startOp.Operation)
 
 	var executeReq workerservicepb.ExecuteCommandsRequest
 	err = payload.Decode(startOp.Payload, &executeReq)
 	s.NoError(err)
-	env.Len(executeReq.Commands, 1)
+	s.Len(executeReq.Commands, 1)
 	cancelCmd := executeReq.Commands[0].GetCancelActivity()
-	env.NotNil(cancelCmd, "Expected CancelActivity command")
-	env.Equal(eagerActivityTaskToken, cancelCmd.TaskToken,
+	s.NotNil(cancelCmd, "Expected CancelActivity command")
+	s.Equal(eagerActivityTaskToken, cancelCmd.TaskToken,
 		"Cancel command task token must match the eager activity's task token")
 	s.T().Log("SUCCESS: Received cancel command on control queue for eagerly dispatched activity")
 }

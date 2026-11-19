@@ -19,7 +19,7 @@ import (
 func runWithMatchingBehaviors(
 	t *testing.T,
 	baseOpts []testcore.TestOption,
-	subtest func(s *testcore.TestEnv, behavior testcore.MatchingBehavior),
+	subtest func(t *testing.T, s *testcore.TestEnv, behavior testcore.MatchingBehavior),
 ) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
 		t.Run(behavior.Name(), func(t *testing.T) {
@@ -29,7 +29,7 @@ func runWithMatchingBehaviors(
 			env := testcore.NewEnv(t, opts...)
 			behavior.InjectHooks(env)
 
-			subtest(env, behavior)
+			subtest(t, env, behavior)
 		})
 	}
 }

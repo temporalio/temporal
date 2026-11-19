@@ -383,8 +383,6 @@ func NewWorkflowHandler(
 			),
 			archivalMetadata,
 			archiverProvider,
-			clusterMetadataManager,
-			visibilityMgr,
 			timeSource,
 			config,
 			chasmNsReplClient,
