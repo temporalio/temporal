@@ -59,7 +59,9 @@ type ActivityDriverSuite struct {
 	parallelsuite.Suite[*ActivityDriverSuite]
 }
 
-func TestActivityDriverSuite(t *testing.T) { parallelsuite.Run(t, &ActivityDriverSuite{}) }
+func TestActivityDriverSuite(t *testing.T) {
+	parallelsuite.Run(t, &ActivityDriverSuite{})
+}
 
 // The model refuses two sorts of trace event: one whose clock is not running, and a Poll that
 // finds no task. Driving either waits for something that never happens.

@@ -109,7 +109,9 @@ type ActivityAPIPauseSuite struct {
 	parallelsuite.Suite[*ActivityAPIPauseSuite]
 }
 
-func TestActivityAPIPauseSuite(t *testing.T) { parallelsuite.Run(t, &ActivityAPIPauseSuite{}) }
+func TestActivityAPIPauseSuite(t *testing.T) {
+	parallelsuite.Run(t, &ActivityAPIPauseSuite{})
+}
 
 func (s *ActivityAPIPauseSuite) TestClient() {
 	for _, api := range pauseAPIs() {

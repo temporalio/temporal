@@ -59,7 +59,9 @@ type PartitionScalingSuite struct {
 	parallelsuite.Suite[*PartitionScalingSuite]
 }
 
-func TestPartitionScalingSuite(t *testing.T) { parallelsuite.Run(t, &PartitionScalingSuite{}) }
+func TestPartitionScalingSuite(t *testing.T) {
+	parallelsuite.Run(t, &PartitionScalingSuite{})
+}
 
 func (s *PartitionScalingSuite) TestPartitionScaling_Up() {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately

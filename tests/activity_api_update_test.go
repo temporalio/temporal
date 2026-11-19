@@ -107,7 +107,9 @@ type ActivityAPIUpdateSuite struct {
 	parallelsuite.Suite[*ActivityAPIUpdateSuite]
 }
 
-func TestActivityAPIUpdateSuite(t *testing.T) { parallelsuite.Run(t, &ActivityAPIUpdateSuite{}) }
+func TestActivityAPIUpdateSuite(t *testing.T) {
+	parallelsuite.Run(t, &ActivityAPIUpdateSuite{})
+}
 
 func (s *ActivityAPIUpdateSuite) TestClient() {
 	for _, api := range updateAPIs() {
