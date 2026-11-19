@@ -46,7 +46,7 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	require.NoError(t, err)
 	res, err := getdlqtasks.Invoke(
 		context.Background(),
-		historydlq.NewStore(manager, tasks.NewDefaultTaskCategoryRegistry(), nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}),
+		historydlq.NewStore(manager, tasks.NewDefaultTaskCategoryRegistry(), nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}, nil),
 		&historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
 				TaskCategory:  int32(tasks.CategoryTransfer.ID()),

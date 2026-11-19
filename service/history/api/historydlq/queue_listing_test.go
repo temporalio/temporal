@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	dlq "go.temporal.io/server/chasm/lib/historydlq"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -61,7 +62,6 @@ func queueListingFixture(t *testing.T) (*Store, []*historyservice.ListQueuesResp
 			ChasmSearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"HistoryDLQCategory":      category,
 				"HistoryDLQSourceCluster": payload.EncodeString(queue.SourceCluster),
-				"HistoryDLQTargetCluster": payload.EncodeString(queue.TargetCluster),
 			}}})
 		stats[ref] = []dlq.SegmentStats{{PendingCount: 2, LastMessageID: 100}, {PendingCount: 3, LastMessageID: 90}, {PendingCount: 4, LastMessageID: 200}}[i]
 	}
@@ -76,7 +76,10 @@ func queueListingFixture(t *testing.T) (*Store, []*historyservice.ListQueuesResp
 			return &visibilityservice.ListChasmExecutionsResponse{Executions: append(rows[1:], rows[0])}, nil
 		}).AnyTimes()
 	legacyOnlyName := persistence.GetHistoryTaskQueueName(2, "legacy", "target")
+	clusterMetadata := cluster.NewMockMetadata(gomock.NewController(t))
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("target").AnyTimes()
 	store := &Store{
+		clusterMetadata:   clusterMetadata,
 		visibilityManager: vis,
 		queueV2Manager: queueLister{list: func(_ context.Context, req *persistence.ListQueuesRequest) (*persistence.ListQueuesResponse, error) {
 			require.Equal(t, persistence.QueueTypeHistoryDLQ, req.QueueType)

@@ -30,7 +30,8 @@ func TestDiscoverSegmentsQueueScope(t *testing.T) {
 		require.Equal(t, primitives.SystemLocalNamespace, req.NamespaceName)
 		require.Contains(t, req.Query, "HistoryDLQCategory = 1")
 		require.Contains(t, req.Query, "HistoryDLQSourceCluster = "+sqlparser.String(sqlparser.NewStrVal([]byte(queue.SourceCluster))))
-		require.Contains(t, req.Query, "HistoryDLQTargetCluster = "+sqlparser.String(sqlparser.NewStrVal([]byte(queue.TargetCluster))))
+
+		require.NotContains(t, req.Query, "HistoryDLQTargetCluster")
 		require.NotContains(t, req.Query, "HistoryDLQPending")
 		return &visibilityservice.ListChasmExecutionsResponse{}, nil
 	})
@@ -148,7 +149,7 @@ func TestDiscoverAllSegmentsInvalidQueueAttributes(t *testing.T) {
 		{"missing category", "HistoryDLQCategory", nil},
 		{"category exceeds int32", "HistoryDLQCategory", int64(1 << 32)},
 		{"invalid source type", "HistoryDLQSourceCluster", 42},
-		{"empty target", "HistoryDLQTargetCluster", ""},
+		{"empty source", "HistoryDLQSourceCluster", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -159,7 +160,6 @@ func TestDiscoverAllSegmentsInvalidQueueAttributes(t *testing.T) {
 			fields := map[string]*commonpb.Payload{
 				"HistoryDLQCategory":      category,
 				"HistoryDLQSourceCluster": payload.EncodeString("source"),
-				"HistoryDLQTargetCluster": payload.EncodeString("target"),
 			}
 			if tc.value == nil {
 				delete(fields, tc.field)
@@ -173,9 +173,40 @@ func TestDiscoverAllSegmentsInvalidQueueAttributes(t *testing.T) {
 				&visibilityservice.ListChasmExecutionsResponse{Executions: []*chasmspb.VisibilityExecutionInfo{{
 					BusinessId: id, RunId: "run", ChasmSearchAttributes: &commonpb.SearchAttributes{IndexedFields: fields},
 				}}}, nil)
-			refs, err := DiscoverAllSegments(t.Context(), vis)
+			refs, err := DiscoverAllSegments(t.Context(), vis, "target")
 			require.ErrorAs(t, err, new(*serviceerror.DataLoss))
 			require.Nil(t, refs)
 		})
 	}
+}
+
+func TestDiscoverAllSegmentsUsesLocalCluster(t *testing.T) {
+	t.Parallel()
+	queue := testRequest().Queue
+	queue.TargetCluster = "local-target"
+	id, err := SegmentBusinessID(queue, testRequest().SourceTaskIdentity)
+	require.NoError(t, err)
+	category, err := payload.Encode(int64(queue.CategoryID))
+	require.NoError(t, err)
+	vis := chasm.NewMockVisibilityManager(gomock.NewController(t))
+	vis.EXPECT().ListExecutions(gomock.Any(), reflect.TypeFor[*Segment](), gomock.Any()).Return(
+		&visibilityservice.ListChasmExecutionsResponse{Executions: []*chasmspb.VisibilityExecutionInfo{{
+			BusinessId: id,
+			RunId:      "run",
+			ChasmSearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+				"HistoryDLQCategory":      category,
+				"HistoryDLQSourceCluster": payload.EncodeString(queue.SourceCluster),
+			}},
+		}}}, nil)
+	refs, err := DiscoverAllSegments(t.Context(), vis, queue.TargetCluster)
+	require.NoError(t, err)
+	require.Equal(t, []SegmentRef{{Queue: queue, BusinessID: id, RunID: "run"}}, refs)
+}
+
+func TestDiscoverAllSegmentsRequiresLocalCluster(t *testing.T) {
+	t.Parallel()
+	vis := chasm.NewMockVisibilityManager(gomock.NewController(t))
+	refs, err := DiscoverAllSegments(t.Context(), vis, "")
+	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+	require.Nil(t, refs)
 }

@@ -145,7 +145,7 @@ func (s *Store) combinedQueuePage(
 	if err != nil {
 		return nil, false, err
 	}
-	segments, err := dlq.DiscoverAllSegments(ctx, s.visibilityManager)
+	segments, err := dlq.DiscoverAllSegments(ctx, s.visibilityManager, s.clusterMetadata.GetCurrentClusterName())
 	if err != nil {
 		return nil, false, err
 	}

@@ -26,7 +26,7 @@ func TestInvoke_UnavailableError(t *testing.T) {
 
 	_, err := listqueues.Invoke(
 		context.Background(),
-		historydlq.NewStore(failingHistoryTaskQueueManager{}, nil, nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}),
+		historydlq.NewStore(failingHistoryTaskQueueManager{}, nil, nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}, nil),
 		&historyservice.ListQueuesRequest{
 			QueueType: int32(persistence.QueueTypeHistoryDLQ),
 			PageSize:  0,

@@ -23,7 +23,7 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	ctx := context.Background()
 	store := historydlq.NewStore(manager, nil, nil, nil, &configs.Config{
 		TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false),
-	})
+	}, nil)
 	t.Run("HappyPath", func(t *testing.T) {
 		inTask := &tasks.WorkflowTask{
 			TaskID: 42,

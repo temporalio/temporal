@@ -48,7 +48,7 @@ func TestDiscoverSegmentsQueueScope(t *testing.T) {
 			require.Equal(t, headers.CallerTypePreemptable, headers.GetCallerInfo(ctx).CallerType)
 			require.Contains(t, req.Query, "HistoryDLQCategory = 3")
 			require.Contains(t, req.Query, "HistoryDLQSourceCluster = 'source'")
-			require.Contains(t, req.Query, "HistoryDLQTargetCluster = 'target'")
+			require.NotContains(t, req.Query, "HistoryDLQTargetCluster")
 			require.Contains(t, req.Query, "HistoryDLQMinMessageID <= 10")
 			return &visibilityservice.ListChasmExecutionsResponse{Executions: []*chasmspb.VisibilityExecutionInfo{
 				{BusinessId: segment.BusinessID, RunId: segment.RunID},

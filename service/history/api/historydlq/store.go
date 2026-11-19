@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	dlq "go.temporal.io/server/chasm/lib/historydlq"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/persistence"
@@ -28,10 +29,11 @@ type Store struct {
 	chasmClient       segmentClient
 	visibilityManager chasm.VisibilityManager
 	readCHASM         dynamicconfig.BoolPropertyFn
+	clusterMetadata   cluster.Metadata
 }
 
-func NewStore(queueV2Manager persistence.HistoryTaskQueueManager, categoryRegistry tasks.TaskCategoryRegistry, chasmClient *dlq.Client, visibilityManager chasm.VisibilityManager, config *configs.Config) *Store {
-	return &Store{queueV2Manager: queueV2Manager, categoryRegistry: categoryRegistry, chasmClient: chasmClient, visibilityManager: visibilityManager, readCHASM: config.TaskDLQReadCHASM}
+func NewStore(queueV2Manager persistence.HistoryTaskQueueManager, categoryRegistry tasks.TaskCategoryRegistry, chasmClient *dlq.Client, visibilityManager chasm.VisibilityManager, config *configs.Config, clusterMetadata cluster.Metadata) *Store {
+	return &Store{queueV2Manager: queueV2Manager, categoryRegistry: categoryRegistry, chasmClient: chasmClient, visibilityManager: visibilityManager, readCHASM: config.TaskDLQReadCHASM, clusterMetadata: clusterMetadata}
 }
 
 func (s *Store) GetDLQTasks(ctx context.Context, req *historyservice.GetDLQTasksRequest) (*historyservice.GetDLQTasksResponse, error) {

@@ -28,7 +28,7 @@ func TestInvoke_InvalidTaskCategory(t *testing.T) {
 	t.Parallel()
 
 	_, err := getdlqtasks.Invoke(context.Background(),
-		historydlq.NewStore(nil, tasks.NewDefaultTaskCategoryRegistry(), nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}),
+		historydlq.NewStore(nil, tasks.NewDefaultTaskCategoryRegistry(), nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}, nil),
 		&historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
 				TaskCategory: -1,
@@ -47,7 +47,7 @@ func TestInvoke_ZeroPageSize(t *testing.T) {
 
 	_, err := getdlqtasks.Invoke(
 		context.Background(),
-		historydlq.NewStore(new(persistence.HistoryTaskQueueManagerImpl), tasks.NewDefaultTaskCategoryRegistry(), nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}),
+		historydlq.NewStore(new(persistence.HistoryTaskQueueManagerImpl), tasks.NewDefaultTaskCategoryRegistry(), nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}, nil),
 		&historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
 				TaskCategory: int32(tasks.CategoryTransfer.ID()),
@@ -64,7 +64,7 @@ func TestInvoke_UnavailableError(t *testing.T) {
 
 	_, err := getdlqtasks.Invoke(
 		context.Background(),
-		historydlq.NewStore(failingHistoryTaskQueueManager{}, tasks.NewDefaultTaskCategoryRegistry(), nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}),
+		historydlq.NewStore(failingHistoryTaskQueueManager{}, tasks.NewDefaultTaskCategoryRegistry(), nil, nil, &configs.Config{TaskDLQReadCHASM: dynamicconfig.GetBoolPropertyFn(false)}, nil),
 		&historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
 				TaskCategory:  int32(tasks.CategoryTransfer.ID()),

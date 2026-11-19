@@ -123,7 +123,6 @@ func TestSegmentQueueIdentity(t *testing.T) {
 	require.Equal(t, []chasm.SearchAttributeKeyValue{
 		categorySearchAttribute.Value(int64(req.Queue.CategoryID)),
 		sourceSearchAttribute.Value(req.Queue.SourceCluster),
-		targetSearchAttribute.Value(req.Queue.TargetCluster),
 		minMessageIDSearchAttribute.Value(-1),
 	}, segment.SearchAttributes(ctx))
 	require.IsType(t, &emptypb.Empty{}, segment.Memo(ctx))
@@ -152,7 +151,7 @@ func TestSegmentAppendDistinctEntries(t *testing.T) {
 	require.Equal(t, first.Queue, firstRef.Queue)
 	require.Equal(t, second.Queue, secondRef.Queue)
 	require.Len(t, segment.Entries, 2)
-	require.Equal(t, minMessageIDSearchAttribute.Value(min(firstRef.MessageID, secondRef.MessageID)), segment.SearchAttributes(ctx)[3])
+	require.Equal(t, minMessageIDSearchAttribute.Value(min(firstRef.MessageID, secondRef.MessageID)), segment.SearchAttributes(ctx)[2])
 
 	stored, err := segment.ReadEntry(ctx, secondRef)
 	require.NoError(t, err)
@@ -425,7 +424,7 @@ func TestSegmentResolveDeletesEntry(t *testing.T) {
 			require.NoError(t, segment.ResolveEntry(ctx, ref, reason))
 			require.Empty(t, segment.Entries)
 			require.Equal(t, emptyRetainedBytes, segment.GetRetainedBytes())
-			require.Equal(t, minMessageIDSearchAttribute.Value(-1), segment.SearchAttributes(ctx)[3])
+			require.Equal(t, minMessageIDSearchAttribute.Value(-1), segment.SearchAttributes(ctx)[2])
 			require.Equal(t, chasm.LifecycleStateRunning, segment.LifecycleState(ctx))
 			_, err = segment.ReadEntry(ctx, ref)
 			require.ErrorAs(t, err, new(*serviceerror.NotFound))

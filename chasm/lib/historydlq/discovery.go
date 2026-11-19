@@ -27,25 +27,27 @@ func DiscoverSegments(ctx context.Context, visibilityManager chasm.VisibilityMan
 		return nil, serviceerror.NewInvalidArgument("history DLQ requires a nonnegative message bound")
 	}
 	quote := func(value string) string { return sqlparser.String(sqlparser.NewStrVal([]byte(value))) }
-	query := fmt.Sprintf("%s = %d AND %s = %s AND %s = %s",
+	query := fmt.Sprintf("%s = %d AND %s = %s",
 		categorySearchAttribute.Value(0).Alias, queue.CategoryID,
 		sourceSearchAttribute.Value("").Alias, quote(queue.SourceCluster),
-		targetSearchAttribute.Value("").Alias, quote(queue.TargetCluster),
 	)
 	query += fmt.Sprintf(" AND %s >= 0 AND %s <= %d",
 		minMessageIDSearchAttribute.Value(0).Alias,
 		minMessageIDSearchAttribute.Value(0).Alias, inclusiveMaxMessageID,
 	)
-	return discoverSegments(ctx, visibilityManager, query, &queue)
+	return discoverSegments(ctx, visibilityManager, query, &queue, queue.TargetCluster)
 }
 
 // DiscoverAllSegments returns pending segment candidates across history DLQs.
-func DiscoverAllSegments(ctx context.Context, visibilityManager chasm.VisibilityManager) ([]SegmentRef, error) {
+func DiscoverAllSegments(ctx context.Context, visibilityManager chasm.VisibilityManager, currentClusterName string) ([]SegmentRef, error) {
+	if currentClusterName == "" {
+		return nil, serviceerror.NewInvalidArgument("history DLQ discovery requires the current cluster name")
+	}
 	query := minMessageIDSearchAttribute.Value(0).Alias + " >= 0"
-	return discoverSegments(ctx, visibilityManager, query, nil)
+	return discoverSegments(ctx, visibilityManager, query, nil, currentClusterName)
 }
 
-func discoverSegments(ctx context.Context, visibilityManager chasm.VisibilityManager, query string, queue *QueueKey) ([]SegmentRef, error) {
+func discoverSegments(ctx context.Context, visibilityManager chasm.VisibilityManager, query string, queue *QueueKey, currentClusterName string) ([]SegmentRef, error) {
 	request := &chasm.ListExecutionsRequest{NamespaceName: primitives.SystemLocalNamespace, Query: query, PageSize: 1000}
 	found := make(map[SegmentRef]struct{})
 	tokens := make(map[string]struct{})
@@ -61,7 +63,7 @@ func discoverSegments(ctx context.Context, visibilityManager chasm.VisibilityMan
 			return nil, serviceerror.NewDataLoss("history DLQ visibility returned no response")
 		}
 		for _, execution := range response.GetExecutions() {
-			ref, err := discoveredSegmentRef(execution, queue)
+			ref, err := discoveredSegmentRef(execution, queue, currentClusterName)
 			if err != nil {
 				return nil, err
 			}
@@ -90,7 +92,7 @@ func discoverSegments(ctx context.Context, visibilityManager chasm.VisibilityMan
 	return refs, nil
 }
 
-func discoveredSegmentRef(execution *chasmspb.VisibilityExecutionInfo, queue *QueueKey) (SegmentRef, error) {
+func discoveredSegmentRef(execution *chasmspb.VisibilityExecutionInfo, queue *QueueKey, currentClusterName string) (SegmentRef, error) {
 	id := execution.GetBusinessId()
 	suffix, ok := strings.CutPrefix(id, "historydlq:segment:v0:")
 	decoded, err := hex.DecodeString(suffix)
@@ -102,16 +104,13 @@ func discoveredSegmentRef(execution *chasmspb.VisibilityExecutionInfo, queue *Qu
 	}
 	fields := execution.GetChasmSearchAttributes().GetIndexedFields()
 	var category int64
-	var discoveredQueue QueueKey
+	discoveredQueue := QueueKey{TargetCluster: currentClusterName}
 	if err := payload.Decode(fields[categorySearchAttribute.Value(0).Alias], &category); err != nil || category <= 0 || category > math.MaxInt32 {
 		return SegmentRef{}, serviceerror.NewDataLoss("history DLQ visibility returned an invalid queue category")
 	}
 	discoveredQueue.CategoryID = int32(category)
 	if err := payload.Decode(fields[sourceSearchAttribute.Value("").Alias], &discoveredQueue.SourceCluster); err != nil {
 		return SegmentRef{}, serviceerror.NewDataLoss("history DLQ visibility returned an invalid source cluster")
-	}
-	if err := payload.Decode(fields[targetSearchAttribute.Value("").Alias], &discoveredQueue.TargetCluster); err != nil {
-		return SegmentRef{}, serviceerror.NewDataLoss("history DLQ visibility returned an invalid target cluster")
 	}
 	if err := validateQueue(discoveredQueue); err != nil {
 		return SegmentRef{}, serviceerror.NewDataLoss("history DLQ visibility returned an invalid queue identity")

@@ -95,7 +95,7 @@ func TestResolveEntriesBatch(t *testing.T) {
 			require.ElementsMatch(t, expectedKeys, actualKeys)
 			require.Equal(t, expectedBytes, segment.GetRetainedBytes())
 			require.Equal(t, expectedMinimum, segment.GetMinMessageId())
-			require.Equal(t, minMessageIDSearchAttribute.Value(expectedMinimum), segment.SearchAttributes(ctx)[3])
+			require.Equal(t, minMessageIDSearchAttribute.Value(expectedMinimum), segment.SearchAttributes(ctx)[2])
 			require.NoError(t, segment.ResolveEntries(ctx, request))
 			require.Equal(t, expectedBytes, segment.GetRetainedBytes())
 		})
