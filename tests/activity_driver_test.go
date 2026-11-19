@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -137,19 +136,19 @@ func (s *ActivityDriverSuite) TestDriverContextReflectsExtension() {
 		"WFA": func(t *testing.T) contextualDriver { return newWFADriver(t, nil, activityConfig{}) },
 	} {
 		s.Run(name, func(s *ActivityDriverSuite) {
-			synctest.Test(s.T(), func(t *testing.T) {
-				d := newDriver(t)
+			s.Synctest(func(s *ActivityDriverSuite) {
+				d := newDriver(s.T())
 				before, ok := d.testContext().Deadline()
-				require.True(t, ok)
+				s.True(ok)
 
-				extended := testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout()+time.Minute)
+				extended := testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout()+time.Minute)
 				extendedDeadline, ok := extended.Deadline()
-				require.True(t, ok)
-				require.True(t, extendedDeadline.After(before), "test setup: EnsureRemaining should have extended the deadline")
+				s.True(ok)
+				s.True(extendedDeadline.After(before), "test setup: EnsureRemaining should have extended the deadline")
 
 				after, ok := d.testContext().Deadline()
-				require.True(t, ok)
-				require.Equal(t, extendedDeadline, after,
+				s.True(ok)
+				s.Equal(extendedDeadline, after,
 					"driver must observe the extended deadline, not the one captured at construction")
 			})
 		})
