@@ -246,7 +246,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 			return env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 		}, 5*time.Second, 500*time.Millisecond)
 
-		shardID := common.WorkflowIDToHistoryShard(env.NamespaceID().String(), run.GetID(), env.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
+		shardID := common.WorkflowIDToHistoryShard(env.NamespaceID().String(), run.GetID(), env.HistoryShardCount())
 		workflowExecution, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: env.NamespaceID().String(),

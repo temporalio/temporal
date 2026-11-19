@@ -39,7 +39,7 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		tv.WorkflowID(),
-		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+		env.HistoryShardCount(),
 	)
 	execMgr := env.GetTestCluster().ExecutionManager()
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())

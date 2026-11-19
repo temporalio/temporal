@@ -37,7 +37,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) getMutableState(env *testcore.T
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		workflowID,
-		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+		env.HistoryShardCount(),
 	)
 	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
