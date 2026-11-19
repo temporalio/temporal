@@ -426,10 +426,10 @@ func (e *TestEnv) RegisterNamespace(
 	return e.functionalTestBase.RegisterNamespace(ctx, nsName, retentionDays, archivalState, historyArchivalURI, visibilityArchivalURI)
 }
 
-func (e *TestEnv) GetHistoryFunc(nsName string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+func (e *TestEnv) GetHistoryFunc(nsName namespace.Name, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
 		historyResponse, err := e.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:       nsName,
+			Namespace:       nsName.String(),
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
 		})
@@ -438,7 +438,7 @@ func (e *TestEnv) GetHistoryFunc(nsName string, execution *commonpb.WorkflowExec
 		events := historyResponse.History.Events
 		for historyResponse.NextPageToken != nil {
 			historyResponse, err = e.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace:     nsName,
+				Namespace:     nsName.String(),
 				Execution:     execution,
 				NextPageToken: historyResponse.NextPageToken,
 			})
@@ -450,15 +450,14 @@ func (e *TestEnv) GetHistoryFunc(nsName string, execution *commonpb.WorkflowExec
 	}
 }
 
-func (e *TestEnv) GetHistory(nsName string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (e *TestEnv) GetHistory(nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	return e.GetHistoryFunc(nsName, execution)()
 }
 
-func (e *TestEnv) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
+func (e *TestEnv) SendSignal(nsName namespace.Name, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
-	// TODO (alex): change to nsName namespace.Name
 	_, err := e.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         nsName,
+		Namespace:         nsName.String(),
 		WorkflowExecution: execution,
 		SignalName:        signalName,
 		Input:             input,
