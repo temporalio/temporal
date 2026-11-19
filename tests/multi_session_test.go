@@ -35,18 +35,29 @@ type sessionMoveEnv struct {
 	env    *testcore.TestEnv
 	tv     *testvars.TestVars
 	poller *taskpoller.TaskPoller
+	// firstRunID is the run started by newSessionMoveEnv.
+	firstRunID string
 }
 
 func newSessionMoveEnv(t *testing.T, workflowTaskTimeout time.Duration) *sessionMoveEnv {
+	return newSessionMoveEnvForNextRun(t, workflowTaskTimeout, nextRunCase{})
+}
+
+// newSessionMoveEnvForNextRun is newSessionMoveEnv for a workflow started with the retry policy or cron schedule that
+// nextRun needs.
+func newSessionMoveEnvForNextRun(t *testing.T, workflowTaskTimeout time.Duration, nextRun nextRunCase) *sessionMoveEnv {
 	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true))
 	tv := env.Tv()
-	_, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	started, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
 		WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
 		WorkflowRunTimeout: durationpb.New(5 * time.Minute), WorkflowTaskTimeout: durationpb.New(workflowTaskTimeout),
+		RetryPolicy: nextRun.retryPolicy, CronSchedule: nextRun.cronSchedule,
 	})
 	require.NoError(t, err)
-	return &sessionMoveEnv{t: t, env: env, tv: tv, poller: taskpoller.New(t, env.FrontendClient(), env.Namespace().String())}
+	return &sessionMoveEnv{
+		t: t, env: env, tv: tv, poller: taskpoller.New(t, env.FrontendClient(), env.Namespace().String()), firstRunID: started.GetRunId(),
+	}
 }
 
 func (e *sessionMoveEnv) stickyQueue(worker string) *taskqueuepb.TaskQueue {
@@ -210,6 +221,16 @@ func (e *sessionMoveEnv) requireSessionActivityOn(queue *taskqueuepb.TaskQueue) 
 	task, err := e.pollActivityTask(queue, 30*time.Second)
 	require.NoError(e.t, err)
 	require.Equal(e.t, "session-activity", task.GetActivityId())
+}
+
+// requireNextRunOn requires the next run's first workflow task on queue, started by worker ("" for a worker without
+// session options).
+func (e *sessionMoveEnv) requireNextRunOn(worker string, queue *taskqueuepb.TaskQueue) {
+	err := e.pollWorkflowTask(worker, queue, 10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.NotEqual(e.t, e.firstRunID, task.GetWorkflowExecution().GetRunId(), "expected the next run's task")
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	require.NoError(e.t, err)
 }
 
 func (e *sessionMoveEnv) requireNoActivityOn(queue *taskqueuepb.TaskQueue) {
@@ -526,6 +547,70 @@ func TestWorkflowSessionActivityMoveReschedulesPendingWorkflowTask(t *testing.T)
 		return nil, nil
 	})
 	require.Error(t, err)
+}
+
+/*
+TestWorkflowSessionInheritedByNextRun tests that a new run of the workflow keeps the session on its worker:
+ 1. Session worker Y starts the first workflow task, binding the workflow to Y, and closes the run with a
+    continue-as-new, a failure under a retry policy, or a completion under a cron schedule.
+ 2. The next run's first workflow task is delivered on Y's sticky queue instead of the normal queue.
+*/
+func TestWorkflowSessionInheritedByNextRun(t *testing.T) {
+	t.Parallel()
+	for _, tc := range nextRunCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newSessionMoveEnvForNextRun(t, 10*time.Second, tc)
+			e.registerStickyPoller("Y")
+			err := e.pollWorkflowTask("Y", e.tv.TaskQueue(), 30*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{tc.command(e.tv)}, StickyAttributes: e.stickyAttributes("Y", 5*time.Second),
+				}, nil
+			})
+			require.NoError(t, err)
+
+			e.requireNextRunOn("Y", e.stickyQueue("Y"))
+		})
+	}
+}
+
+/*
+TestWorkflowSessionInheritedBindingFallsBackWhenWorkerGone tests a next run whose inherited worker is gone:
+ 1. Worker Y binds the workflow from the normal queue but never polls its sticky queue, so Matching treats it as gone.
+ 2. Y continues the workflow as new; the next run inherits the binding to Y.
+ 3. Its first workflow task falls back to the normal queue, where any worker can start it.
+*/
+func TestWorkflowSessionInheritedBindingFallsBackWhenWorkerGone(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	err := e.pollWorkflowTask("Y", e.tv.TaskQueue(), 30*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{continueAsNewCmd(e.tv.WorkflowType(), e.tv.TaskQueue())}, StickyAttributes: e.stickyAttributes("Y", time.Second),
+		}, nil
+	})
+	require.NoError(t, err)
+
+	e.requireNextRunOn("", e.tv.TaskQueue())
+}
+
+// nextRunCase is one way a workflow starts its next run, for tests of what the next run inherits.
+type nextRunCase struct {
+	name         string
+	retryPolicy  *commonpb.RetryPolicy
+	cronSchedule string
+	// command closes the first run.
+	command func(tv *testvars.TestVars) *commandpb.Command
+}
+
+func nextRunCases() []nextRunCase {
+	return []nextRunCase{
+		{name: "continue-as-new", command: func(tv *testvars.TestVars) *commandpb.Command {
+			return continueAsNewCmd(tv.WorkflowType(), tv.TaskQueue())
+		}},
+		{name: "retry", retryPolicy: &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), BackoffCoefficient: 1, MaximumAttempts: 2},
+			command: func(*testvars.TestVars) *commandpb.Command { return failCmd("retry me") }},
+		{name: "cron", cronSchedule: "@every 1s", command: func(*testvars.TestVars) *commandpb.Command { return completeCmd() }},
+	}
 }
 
 func multiSessionWorkerOptions(workerAddress string) *sessionpb.WorkerSessionOptions {

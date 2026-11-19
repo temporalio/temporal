@@ -11334,6 +11334,66 @@ func (s *mutableStateSuite) TestApplySessionInfo() {
 }
 
 /*
+TestApplyWorkflowExecutionStartedEventInheritsSessionInfo tests the binding a new run (continue-as-new, retry, cron)
+takes from its started event:
+ 1. An inherited binding binds the new run to the same worker, with the sticky queue mirroring it.
+ 2. Without an inherited binding, the workflow's ordinary stickiness is left alone.
+*/
+func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEventInheritsSessionInfo() {
+	for _, tc := range []struct {
+		name              string
+		inherited         *sessionpb.SessionInfo
+		stickyTaskQueue   string
+		wantSessionState  *persistencespb.SessionState
+		wantSticky        string
+		wantStickyTimeout time.Duration
+	}{
+		{
+			name:             "exclusive",
+			inherited:        &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: "S"}},
+			wantSessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}},
+			wantSticky:       "S",
+		},
+		{
+			name:              "non-exclusive",
+			inherited:         &sessionpb.SessionInfo{BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: "X"}},
+			wantSessionState:  &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}},
+			wantSticky:        "X",
+			wantStickyTimeout: defaultSessionStickyScheduleToStartTimeout,
+		},
+		{
+			name:            "nothing inherited keeps ordinary stickiness",
+			stickyTaskQueue: "ordinary-sticky",
+			wantSticky:      "ordinary-sticky",
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+			s.mutableState.executionInfo.StickyTaskQueue = tc.stickyTaskQueue
+
+			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+				&historyservice.StartWorkflowExecutionRequest{
+					NamespaceId: tests.NamespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType:       &commonpb.WorkflowType{Name: "workflow"},
+						TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+						WorkflowRunTimeout: durationpb.New(time.Hour),
+					},
+					InheritedSessionInfo: tc.inherited,
+				},
+			)
+
+			s.Require().NoError(err)
+			protorequire.ProtoEqual(s.T(), tc.wantSessionState, s.mutableState.executionInfo.GetSessionState())
+			s.Require().Equal(tc.wantSticky, s.mutableState.executionInfo.GetStickyTaskQueue())
+			s.Require().Equal(tc.wantStickyTimeout, s.mutableState.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+		})
+	}
+}
+
+/*
 TestStickyScheduleToStartTimeoutForBoundWorkflow tests the sticky timeout used for a workflow task's timer:
  1. A workflow bound to a worker whose reported sticky timeout is missing or 0 gets the default, since its
     timed-out task is re-offered to the same worker and a 0 timer would loop.
