@@ -1551,7 +1551,9 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 		require.Len(t, resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {
-			if info.Name == tqName || info.Type == tqType {
+			// Both the workflow and activity entries share tqName, and the response order is not
+			// deterministic, so we must match on both name and type.
+			if info.Name == tqName && info.Type == tqType {
 				label := "DescribeWorkerDeploymentVersion[" + tqType.String() + "]"
 				validateTaskQueueStats(require.New(t), label, info.Stats, expectation)
 				if expectation.BacklogCount > 0 {
