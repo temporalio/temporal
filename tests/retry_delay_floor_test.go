@@ -155,14 +155,14 @@ func (s *NamespaceInterceptorTestSuite) TestRetryDelayFloorHTTPAPI() {
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	requestBody, err := protojson.Marshal(&workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    uuid.NewString(),
 		WorkflowType: &commonpb.WorkflowType{Name: "retry-delay-floor-http"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 	workflowID := uuid.NewString()
 	url := "http://" + env.HttpAPIAddress() + "/namespaces/" + rateLimitNamespace + "/workflows/" + workflowID
 	type response struct {
@@ -204,39 +204,39 @@ func (s *NamespaceInterceptorTestSuite) TestRetryDelayFloorHTTPAPI() {
 	sawNonRejectedResponse := false
 	for range numRequests {
 		result := <-responses
-		require.NoError(s.T(), result.err)
+		s.NoError(result.err)
 		if result.statusCode == http.StatusTooManyRequests {
 			retryStatusBody = result.body
 		} else {
 			sawNonRejectedResponse = true
 		}
 	}
-	require.True(s.T(), sawNonRejectedResponse, "all concurrent HTTP requests were rate limited")
-	require.NotEmpty(s.T(), retryStatusBody, "concurrent HTTP requests did not reach the namespace rate limit")
+	s.True(sawNonRejectedResponse, "all concurrent HTTP requests were rate limited")
+	s.NotEmpty(retryStatusBody, "concurrent HTTP requests did not reach the namespace rate limit")
 
 	var responseStatus struct {
 		Code    int               `json:"code"`
 		Details []json.RawMessage `json:"details"`
 	}
-	require.NoError(s.T(), json.Unmarshal(retryStatusBody, &responseStatus))
-	require.Equal(s.T(), int(codes.ResourceExhausted), responseStatus.Code)
-	require.Len(s.T(), responseStatus.Details, 2)
+	s.NoError(json.Unmarshal(retryStatusBody, &responseStatus))
+	s.Equal(int(codes.ResourceExhausted), responseStatus.Code)
+	s.Len(responseStatus.Details, 2)
 	var resourceExhaustedDetail struct {
 		Type  string `json:"@type"`
 		Cause string `json:"cause"`
 		Scope string `json:"scope"`
 	}
-	require.NoError(s.T(), json.Unmarshal(responseStatus.Details[0], &resourceExhaustedDetail))
-	require.Equal(s.T(), "type.googleapis.com/temporal.api.errordetails.v1.ResourceExhaustedFailure", resourceExhaustedDetail.Type)
-	require.Equal(s.T(), "RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT", resourceExhaustedDetail.Cause)
-	require.Equal(s.T(), "RESOURCE_EXHAUSTED_SCOPE_NAMESPACE", resourceExhaustedDetail.Scope)
+	s.NoError(json.Unmarshal(responseStatus.Details[0], &resourceExhaustedDetail))
+	s.Equal("type.googleapis.com/temporal.api.errordetails.v1.ResourceExhaustedFailure", resourceExhaustedDetail.Type)
+	s.Equal("RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT", resourceExhaustedDetail.Cause)
+	s.Equal("RESOURCE_EXHAUSTED_SCOPE_NAMESPACE", resourceExhaustedDetail.Scope)
 	var retryInfoDetail struct {
 		Type       string `json:"@type"`
 		RetryDelay string `json:"retryDelay"`
 	}
-	require.NoError(s.T(), json.Unmarshal(responseStatus.Details[1], &retryInfoDetail))
-	require.Equal(s.T(), "type.googleapis.com/google.rpc.RetryInfo", retryInfoDetail.Type)
-	require.Equal(s.T(), "2s", retryInfoDetail.RetryDelay)
+	s.NoError(json.Unmarshal(responseStatus.Details[1], &retryInfoDetail))
+	s.Equal("type.googleapis.com/google.rpc.RetryInfo", retryInfoDetail.Type)
+	s.Equal("2s", retryInfoDetail.RetryDelay)
 }
 
 func assertResourceExhaustedRetryDelay(t *testing.T, err error, cause enumspb.ResourceExhaustedCause, wantDelay time.Duration) {

@@ -8546,6 +8546,50 @@ func (s *mutableStateSuite) TestCloseTransaction_ChasmTreeReceivesPrincipal() {
 	}
 }
 
+// newMutableStateWithDirtyChasmTree returns a mutable state whose CHASM tree reports pending changes.
+func (s *mutableStateSuite) newMutableStateWithDirtyChasmTree() (*MutableStateImpl, *historyi.MockChasmTree) {
+	namespaceEntry := tests.GlobalNamespaceEntry
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, s.buildWorkflowMutableState(), 123)
+	s.NoError(err)
+	s.NoError(mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false))
+
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes()
+	mutableState.chasmTree = mockChasmTree
+	return mutableState, mockChasmTree
+}
+
+func (s *mutableStateSuite) TestIsDirty_SpeculativeChasmTransition() {
+	for _, tc := range []struct {
+		name        string
+		speculative bool
+		expected    bool
+	}{
+		{name: "speculative changes are ignored", speculative: true, expected: false},
+		{name: "regular changes are dirty", speculative: false, expected: true},
+	} {
+		s.Run(tc.name, func() {
+			mutableState, mockChasmTree := s.newMutableStateWithDirtyChasmTree()
+			mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(0), tc.speculative).AnyTimes()
+			s.Require().Equal(tc.expected, mutableState.IsDirty())
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestValidateChasmSpeculativeTransition() {
+	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
+	s.NoError(mutableState.ValidateChasmSpeculativeTransition())
+}
+
+func (s *mutableStateSuite) TestValidateChasmSpeculativeTransition_RejectsNonChasmChanges() {
+	mutableState, _ := s.newMutableStateWithDirtyChasmTree()
+	mutableState.AddTasks(&tasks.ChasmTask{WorkflowKey: mutableState.GetWorkflowKey()})
+
+	err := mutableState.ValidateChasmSpeculativeTransition()
+	var internalErr *serviceerror.Internal
+	s.ErrorAs(err, &internalErr)
+}
+
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 	s.mockConfig.EnablePrincipalPropagation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	namespaceEntry := tests.GlobalNamespaceEntry

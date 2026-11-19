@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -775,11 +776,23 @@ func (s *streamReceiverSuite) TestSendEventLoop_Panic_Captured() {
 		panic("panic")
 	})
 
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.streamReceiver.MetricsHandler = metricsHandler
+
 	s.streamReceiver.sendEventLoop() // should not cause panic
+	s.Len(capture.Snapshot()[metrics.ReplicationStreamPanic.Name()], 1)
 }
 
 func (s *streamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.streamReceiver.MetricsHandler = metricsHandler
+
 	s.streamReceiver.recvEventLoop() // should not cause panic
+	s.Len(capture.Snapshot()[metrics.ReplicationStreamPanic.Name()], 1)
 }
 
 func (s *streamReceiverSuite) TestLivenessMonitor() {

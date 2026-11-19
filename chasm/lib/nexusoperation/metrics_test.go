@@ -93,12 +93,12 @@ func TestBackendMetricTagDisabledByDefault(t *testing.T) {
 func TestOperationFailedReason(t *testing.T) {
 	t.Parallel()
 
-	rejected, err := newInvocationResult(nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad input"))
+	rejected, err := newInvocationResult(nil, nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad input"))
 	require.NoError(t, err)
 	require.IsType(t, invocationResultFail{}, rejected)
 	handlerFailure := rejected.(invocationResultFail).failure
 
-	failed, err := newInvocationResult(nil, nexus.NewOperationFailedErrorf("insufficient funds"))
+	failed, err := newInvocationResult(nil, nil, nexus.NewOperationFailedErrorf("insufficient funds"))
 	require.NoError(t, err)
 	require.IsType(t, invocationResultFail{}, failed)
 	operationFailure := failed.(invocationResultFail).failure

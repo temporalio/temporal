@@ -52,7 +52,8 @@ const (
 )
 
 const (
-	ReplErrorClassificationDuplicate ReplicationErrorClassification = "duplicate"
+	ReplErrorClassificationDuplicate      ReplicationErrorClassification = "duplicate"
+	ReplErrorClassificationBufferedEvents ReplicationErrorClassification = "buffered_events"
 )
 
 const (

@@ -105,7 +105,7 @@ func (s *WorkflowAPIBatchCancelClientTestSuite) TestWorkflowBatchCancel_Success(
 						cancelRequests = append(cancelRequests, event)
 					}
 				}
-				s.Require().Len(cancelRequests, 1)
+				s.Len(cancelRequests, 1)
 				attrs := cancelRequests[0].GetWorkflowExecutionCancelRequestedEventAttributes()
 				s.Equal("batch-canceler", attrs.GetIdentity())
 				s.Equal("test", attrs.GetCause())
