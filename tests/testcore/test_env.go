@@ -388,6 +388,10 @@ func (e *TestEnv) GetTestCluster() *TestCluster {
 	return e.cluster
 }
 
+func (e *TestEnv) GetTestClusterConfig() *TestClusterConfig {
+	return e.functionalTestBase.testClusterConfig
+}
+
 func (e *TestEnv) HistoryShardCount() int32 {
 	return e.functionalTestBase.testClusterConfig.HistoryConfig.NumHistoryShards
 }
