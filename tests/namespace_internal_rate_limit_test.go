@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,7 +33,6 @@ func (s *NamespaceInterceptorTestSuite) TestInternalPerNamespaceRateLimit() {
 	overrideForRateLimitNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 1)
 	overrideForRateLimitNamespace(dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance, float64(1))
 	overrideForRateLimitNamespace(dynamicconfig.FrontendEnableInternalPerNSNamespaceRPS, true)
-	// Leaves headroom for the namespace's own system worker polls, which share this budget.
 	overrideForRateLimitNamespace(dynamicconfig.FrontendInternalPerNSMaxNamespaceRPSPerInstance, 20)
 
 	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
@@ -54,29 +54,36 @@ func (s *NamespaceInterceptorTestSuite) TestInternalPerNamespaceRateLimit() {
 		})
 		return err
 	}
-	readUntilRateLimited := func(workflowID string) *serviceerror.ResourceExhausted {
-		for range 200 {
-			err := readHistory(workflowID)
+	// Concurrent reads outpace the limiter's refill however long each admitted read takes.
+	requireBurstRateLimited := func(workflowID string, wantMessage string) {
+		const numReads = 100
+		errs := make(chan error, numReads)
+		var wg sync.WaitGroup
+		for range numReads {
+			wg.Go(func() { errs <- readHistory(workflowID) })
+		}
+		wg.Wait()
+		close(errs)
+		rejected := 0
+		for err := range errs {
 			if resourceExhausted, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
-				return resourceExhausted
+				require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
+				require.Equal(t, wantMessage, resourceExhausted.Message)
+				rejected++
+				continue
 			}
 			_, notFound := errors.AsType[*serviceerror.NotFound](err)
 			require.True(t, notFound, "expected missing execution before rate limit, got: %v", err)
 		}
-		require.FailNow(t, "rapid RPCs did not reach the rate limit")
-		return nil
+		require.Positive(t, rejected, "concurrent RPCs did not reach the rate limit")
 	}
 	customerWorkflowID := uuid.NewString()
 	systemWorkflowID := primitives.ScheduleWorkflowIDPrefix + uuid.NewString()
 
-	customerRejected := readUntilRateLimited(customerWorkflowID)
-	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, customerRejected.Cause)
-	require.Equal(t, interceptor.ErrNamespaceRateLimitServerBusy.Message, customerRejected.Message)
+	requireBurstRateLimited(customerWorkflowID, interceptor.ErrNamespaceRateLimitServerBusy.Message)
 
 	_, notFound := errors.AsType[*serviceerror.NotFound](readHistory(systemWorkflowID))
 	require.True(t, notFound, "system workflow history read was throttled by the exhausted namespace budget")
 
-	systemRejected := readUntilRateLimited(systemWorkflowID)
-	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, systemRejected.Cause)
-	require.Equal(t, interceptor.ErrInternalPerNSNamespaceRateLimitServerBusy.Message, systemRejected.Message)
+	requireBurstRateLimited(systemWorkflowID, interceptor.ErrInternalPerNSNamespaceRateLimitServerBusy.Message)
 }
