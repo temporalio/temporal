@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -997,6 +998,43 @@ func TestRepairCarriesSourceRestoreInfo(t *testing.T) {
 			require.True(t, result.Readback)
 		})
 	}
+}
+
+// Repair writes only what verify's projections carry, and readback rebuilds the
+// expected namespace from the repair task one top-level field at a time. A
+// replicated field the projections skip is cleared on every target repair
+// writes; a projected field readback skips fails every repair of a namespace
+// that sets it. Nested fields are copied whole, so only top-level fields need
+// this guard.
+func TestRepairReadbackCoversEveryProjectedField(t *testing.T) {
+	t.Parallel()
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 11, 20)
+	source.RestoreInfo = &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: "cluster-a",
+		State:       enumspb.NAMESPACE_RESTORE_STATE_COMPLETED,
+	}
+
+	// Without a value on the source, a projected field compares nil to nil and
+	// the readback below would pass without covering it. Repair sets the
+	// operation itself and compares versions outside the projections.
+	notProjected := map[protoreflect.Name]bool{"namespace_operation": true, "config_version": true, "failover_version": true}
+	configProjection, failoverProjection, err := namespaceReplicationProjections(source, nil)
+	require.NoError(t, err)
+	fields := configProjection.ProtoReflect().Descriptor().Fields()
+	for i := range fields.Len() {
+		field := fields.Get(i)
+		if notProjected[field.Name()] {
+			continue
+		}
+		require.Truef(t, configProjection.ProtoReflect().Has(field) || failoverProjection.ProtoReflect().Has(field),
+			"the projections leave %s unset: compare it in verify and set it on the source above, "+
+				"or list it in notProjected only if repair may clear it on the targets it writes", field.Name())
+	}
+
+	task, err := buildNamespaceReplicationRepairTask(source, source, nil)
+	require.NoError(t, err)
+	require.NoError(t, validateNamespaceRepairReadback(task, proto.CloneOf(source), nil))
 }
 
 func TestRepairCreateRejectsNameCollisionAfterPlanning(t *testing.T) {
