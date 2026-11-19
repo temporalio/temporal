@@ -68,7 +68,7 @@ type Env interface {
 
 type TestEnv struct {
 	*functionalTestBase
-	historyutils.Reader
+	historyutils.HistoryUtils
 
 	// Shadows functionalTestBase.Assertions with a per-test instance bound to
 	// this TestEnv's own *testing.T, avoiding data races when parallel tests
@@ -337,7 +337,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	frontendClient := cluster.FrontendClient()
 	env := &TestEnv{
 		functionalTestBase: base,
-		Reader:             historyutils.NewReader(t, frontendClient),
+		HistoryUtils:       historyutils.New(t, frontendClient),
 		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
