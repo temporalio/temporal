@@ -185,15 +185,16 @@ func ensureContextTimeout(ctx context.Context) (context.Context, context.CancelF
 	return context.WithTimeout(ctx, defaultBlobstoreTimeout)
 }
 func Upload(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte) error {
-	ctx, cancel := ensureContextTimeout(ctx)
-	defer cancel()
-
-	return upload(ctx, s3cli, URI, key, data, nil)
+	return upload(ctx, s3cli, URI, key, data, nil, "")
 }
 
 // UploadIfHashChanged is best-effort because the metadata check and upload are not atomic.
 // It returns whether an upload was performed.
 func UploadIfHashChanged(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, recordHash string) (bool, error) {
+	return uploadIfHashChanged(ctx, s3cli, URI, key, data, recordHash, "")
+}
+
+func uploadIfHashChanged(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, recordHash string, storageClass types.StorageClass) (bool, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 
@@ -210,16 +211,20 @@ func UploadIfHashChanged(ctx context.Context, s3cli S3API, URI archiver.URI, key
 
 	err = upload(ctx, s3cli, URI, key, data, map[string]string{
 		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
-	})
+	}, storageClass)
 	return err == nil, err
 }
 
-func upload(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, metadata map[string]string) error {
+func upload(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, metadata map[string]string, storageClass types.StorageClass) error {
+	ctx, cancel := ensureContextTimeout(ctx)
+	defer cancel()
+
 	_, err := s3cli.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:   aws.String(URI.Hostname()),
-		Key:      aws.String(key),
-		Body:     bytes.NewReader(data),
-		Metadata: metadata,
+		Bucket:       aws.String(URI.Hostname()),
+		Key:          aws.String(key),
+		Body:         bytes.NewReader(data),
+		Metadata:     metadata,
+		StorageClass: storageClass,
 	})
 	if err != nil {
 		if _, ok := errors.AsType[*types.NoSuchBucket](err); ok {

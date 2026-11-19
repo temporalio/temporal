@@ -51,6 +51,7 @@ type (
 		logger           log.Logger
 		metricsHandler   metrics.Handler
 		s3cli            S3API
+		storageClass     types.StorageClass
 		// only set in test code
 		historyIterator archiver.HistoryIterator
 	}
@@ -85,6 +86,9 @@ func newHistoryArchiver(
 	s3config *config.S3Archiver,
 	historyIterator archiver.HistoryIterator,
 ) (*historyArchiver, error) {
+	if err := s3config.Validate(); err != nil {
+		return nil, err
+	}
 	if len(s3config.Region) == 0 {
 		return nil, errEmptyAwsRegion
 	}
@@ -105,6 +109,7 @@ func newHistoryArchiver(
 			o.UsePathStyle = s3config.S3ForcePathStyle
 		}),
 		historyIterator: historyIterator,
+		storageClass:    types.StorageClass(s3config.StorageClass),
 	}, nil
 }
 
@@ -195,7 +200,7 @@ func (h *historyArchiver) Archive(
 		if exists {
 			metrics.HistoryArchiverBlobExistsCount.With(handler).Record(1)
 		} else {
-			if err := Upload(ctx, h.s3cli, URI, key, encodedHistoryBlob); err != nil {
+			if err := upload(ctx, h.s3cli, URI, key, encodedHistoryBlob, nil, h.storageClass); err != nil {
 				if isRetryableError(err) {
 					logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
 				} else {
