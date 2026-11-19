@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testcontext"
 )
@@ -29,12 +28,12 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 		StartToClose:  activityShortTimeout,
 	}
 
-	waitUntilTimeoutVisible := func(t *testing.T, timeoutInfo func(require.TestingT) activityTimeoutInfo) {
+	waitUntilTimeoutVisible := func(s *activityParityTestSuite, timeoutInfo func(require.TestingT) activityTimeoutInfo) {
 		var got activityTimeoutInfo
-		await.Require(t.Context(), t, func(t *await.T) {
-			got = timeoutInfo(t)
-			t.Require().Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, got.timeout)
-			t.Require().Equal(int32(2), got.attempt)
+		s.Await(func(s *activityParityTestSuite) {
+			got = timeoutInfo(s.AssertionT())
+			s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, got.timeout)
+			s.Equal(int32(2), got.attempt)
 		}, cfg.StartToClose+activityDriverTimerMargin, activityDriverPollInterval)
 	}
 
@@ -42,7 +41,7 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 		t := s.T()
 		a := newWFADriver(t, newActivityParityEnv(t), cfg).start(t, cfg)
 		a.driveEvent(t, model.Poll)
-		waitUntilTimeoutVisible(t, a.timeoutInfo)
+		waitUntilTimeoutVisible(s, a.timeoutInfo)
 		a.awaitTimeout(t, model.StartToCloseElapses, time.Now().Add(waitForDriver))
 	})
 
@@ -50,7 +49,7 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 		t := s.T()
 		a := newSAADriver(t, newActivityParityEnv(t), cfg).start(t, cfg)
 		a.driveEvent(t, model.Poll)
-		waitUntilTimeoutVisible(t, a.timeoutInfo)
+		waitUntilTimeoutVisible(s, a.timeoutInfo)
 		a.awaitTimeout(t, model.StartToCloseElapses, time.Now().Add(waitForDriver))
 	})
 }

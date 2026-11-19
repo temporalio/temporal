@@ -21,7 +21,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/tests/testcore"
@@ -104,7 +103,7 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 						}, nil
 					})
 				s.NoError(err)
-				s.NoError(await.Rcv(s.T(), result))
+				s.NoError(s.Rcv(result))
 			case "timer":
 				_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
 					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -258,7 +257,7 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 					}, nil
 				})
 			s.NoError(err)
-			s.NoError(await.Rcv(s.T(), updateResult))
+			s.NoError(s.Rcv(updateResult))
 		})
 	}
 }
@@ -400,8 +399,8 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		WorkflowTaskTimeout: time.Minute,
 	}, parent)
 	s.NoError(err)
-	await.Rcv(s.T(), activityStarted)
-	op := await.Rcv(s.T(), callback)
+	s.Rcv(activityStarted)
+	op := s.Rcv(callback)
 	s.Await(func(s *NexusWorkflowTestSuite) {
 		history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED)
@@ -412,7 +411,7 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
 	}, 10*time.Second, 100*time.Millisecond)
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "begin-local-activity", nil))
-	await.Rcv(s.T(), localActivityStarted)
+	s.Rcv(localActivityStarted)
 
 	capture := env.StartNamespaceMetricCapture()
 	finishActivity()

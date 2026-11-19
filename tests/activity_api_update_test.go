@@ -14,7 +14,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -131,7 +130,7 @@ func (s *ActivityAPIUpdateSuite) TestClient() {
 						return "", activityErr
 					}
 
-					await.Rcv(s.T(), activityUpdated)
+					s.Rcv(activityUpdated)
 					return "done!", nil
 				}
 
@@ -361,7 +360,7 @@ func (s *ActivityAPIUpdateSuite) TestClient() {
 						return "", activityErr
 					}
 
-					await.Rcv(s.T(), activityUpdated)
+					s.Rcv(activityUpdated)
 					return "done!", nil
 				}
 
@@ -480,7 +479,7 @@ func (s *ActivityAPIUpdateSuite) TestExecutionOptions() {
 			if startedActivityCount.Load() == 1 {
 				return "", errors.New("bad-luck-please-retry")
 			}
-			await.Rcv(s.T(), activityUpdated)
+			s.Rcv(activityUpdated)
 			return "done!", nil
 		}
 
@@ -672,7 +671,7 @@ func (s *ActivityAPIUpdateSuite) TestExecutionOptions() {
 			if startedActivityCount.Load() == 1 {
 				return "", errors.New("bad-luck-please-retry")
 			}
-			await.Rcv(s.T(), activityUpdated)
+			s.Rcv(activityUpdated)
 			return "done!", nil
 		}
 

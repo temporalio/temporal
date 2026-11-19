@@ -21,7 +21,6 @@ import (
 	contextpropagationspb "go.temporal.io/server/api/contextpropagation/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
@@ -170,7 +169,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						await.Rcv(s.T(), activityPausedCn)
+						s.Rcv(activityPausedCn)
 						return "", activityErr
 					}
 					return "done!", nil
@@ -297,7 +296,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						await.Rcv(s.T(), activityPausedCn)
+						s.Rcv(activityPausedCn)
 						return "", activityErr
 					}
 					if shouldSucceed.Load() {
@@ -596,7 +595,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 						activityErr := errors.New("bad-luck-please-retry")
 						return "", activityErr
 					}
-					await.Rcv(s.T(), activityCompleteCn)
+					s.Rcv(activityCompleteCn)
 					return "done!", nil
 				}
 
@@ -694,7 +693,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						await.Rcv(s.T(), activityPausedCn)
+						s.Rcv(activityPausedCn)
 						return "", activityErr
 					}
 					return "done!", nil
@@ -885,7 +884,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 					if !activityWasReset.Load() {
 						return "", errors.New("bad-luck-please-retry")
 					}
-					await.Rcv(s.T(), activityCompleteCh)
+					s.Rcv(activityCompleteCh)
 					return "done!", nil
 				}
 
@@ -1029,7 +1028,7 @@ func (s *ActivityAPIPauseSuite) TestAttributesToActivityInContextMetadata() {
 	}, workflowFn)
 	s.NoError(err)
 
-	await.Rcv(s.T(), activityStartedCn)
+	s.Rcv(activityStartedCn)
 
 	var trailer metadata.MD
 	_, err = env.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{

@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -705,7 +704,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorkerWithEagerActivity() 
 	// Poll Nexus control queue - cancel command should be dispatched because
 	// StartedClock is set for the eager activity.
 	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
-	await.RequireTruef(s.T(), func() bool {
+	s.AwaitTruef(func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer pollCancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
