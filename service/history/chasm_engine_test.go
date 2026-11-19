@@ -2425,6 +2425,7 @@ func (s *chasmEngineSuite) newTestMutableState(
 	mutableState := workflow.NewMutableState(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		s.mockShard.GetLogger(),
 		s.namespaceEntry,
 		key.BusinessID,

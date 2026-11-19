@@ -17,6 +17,7 @@ type (
 			newWorkflowFailoverVersion int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+			newChasmLogMessagesSeq []*persistence.ChasmLogMessages,
 			isWorkflow bool,
 		) (int64, error)
 
@@ -43,9 +44,11 @@ type (
 			currentWorkflowFailoverVersion int64,
 			currentWorkflowMutation *persistence.WorkflowMutation,
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+			currentChasmLogMessagesSeq []*persistence.ChasmLogMessages,
 			newWorkflowFailoverVersion *int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+			newChasmLogMessagesSeq []*persistence.ChasmLogMessages,
 			// checkRunAlreadyExists applies to newWorkflowSnapshot only.
 			checkRunAlreadyExists bool,
 			isWorkflow bool,

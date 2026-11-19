@@ -58,7 +58,14 @@ func (s *mutableStateSuite) enableChasmCallbacks(maxCallbacks int) *MutableState
 
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	return NewMutableState(
-		s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC(),
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		time.Now().UTC(),
 	)
 }
 
@@ -228,7 +235,15 @@ func (s *mutableStateSuite) TestChasmCompletionCallbacks_RetryKeepsCallbacksOver
 
 	newRunID := uuid.NewString()
 	newRun, err := NewMutableStateInChain(
-		s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, newRunID, time.Now().UTC(), ms,
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		tests.WorkflowID,
+		newRunID,
+		time.Now().UTC(),
+		ms,
 	)
 	s.NoError(err)
 	s.NoError(SetupNewWorkflowForRetryOrCron(

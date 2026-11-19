@@ -42,11 +42,12 @@ type (
 	retryActivitySuite struct {
 		suite.Suite
 
-		controller       *gomock.Controller
-		mockConfig       *configs.Config
-		mockShard        *shard.ContextTest
-		mockEventsCache  *events.MockCache
-		onActivityCreate *snapshot
+		controller                *gomock.Controller
+		mockConfig                *configs.Config
+		mockShard                 *shard.ContextTest
+		mockEventsCache           *events.MockCache
+		mockChasmLogMessagesCache *events.MockChasmLogEventsCache
+		onActivityCreate          *snapshot
 
 		mutableState    *MutableStateImpl
 		nextBackoffStub nextBackoffIntervalStub
@@ -105,6 +106,7 @@ func (s *retryActivitySuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsCache = events.NewMockCache(s.controller)
+	s.mockChasmLogMessagesCache = events.NewMockChasmLogEventsCache(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -128,6 +130,7 @@ func (s *retryActivitySuite) SetupTest() {
 	s.mutableState = NewMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		tests.LocalNamespaceEntry,
 		tests.WorkflowID,

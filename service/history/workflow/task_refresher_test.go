@@ -79,6 +79,7 @@ func (s *taskRefresherSuite) SetupTest() {
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		s.mockShard.GetLogger(),
 		s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 		tests.WorkflowID,
@@ -121,6 +122,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -204,6 +206,7 @@ func (s *taskRefresherSuite) TestRefreshRecordWorkflowStartedTasks() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -267,6 +270,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowCloseTasks() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -452,6 +456,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowTaskTasks() {
 			mutableState, err := NewMutableStateFromDB(
 				s.mockShard,
 				s.mockShard.GetEventsCache(),
+				s.mockShard.GetChasmLogMessagesCache(),
 				log.NewTestLogger(),
 				tests.LocalNamespaceEntry,
 				tc.msRecordProvider(),
@@ -498,6 +503,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowTaskTasks_WhenPaused() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -633,6 +639,7 @@ func (s *taskRefresherSuite) TestRefreshActivityTasks() {
 			mutableState, err := NewMutableStateFromDB(
 				s.mockShard,
 				s.mockShard.GetEventsCache(),
+				s.mockShard.GetChasmLogMessagesCache(),
 				log.NewTestLogger(),
 				tests.LocalNamespaceEntry,
 				mutableStateRecord,
@@ -727,6 +734,7 @@ func (s *taskRefresherSuite) TestRefreshActivityTasks_WhenPaused() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -779,6 +787,7 @@ func (s *taskRefresherSuite) TestRefreshUserTimer() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -845,6 +854,7 @@ func (s *taskRefresherSuite) TestRefreshUserTimer_Partial_NoUpdatedTimers_MaskNo
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -911,6 +921,7 @@ func (s *taskRefresherSuite) TestRefreshUserTimer_Partial_NoUpdatedTimers_MaskCr
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -971,6 +982,7 @@ func (s *taskRefresherSuite) TestRefreshUserTimer_FullRefresh_ClearsMasks_Enqueu
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -1025,6 +1037,7 @@ func (s *taskRefresherSuite) TestRefreshUserTimer_RunExpiration_SkipsTask() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -1103,6 +1116,7 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -1198,6 +1212,7 @@ func (s *taskRefresherSuite) TestRefreshRequestCancelExternalTasks() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -1285,6 +1300,7 @@ func (s *taskRefresherSuite) TestRefreshSignalExternalTasks() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -1345,6 +1361,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowSearchAttributesTasks() {
 	mutableState, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
 		log.NewTestLogger(),
 		tests.LocalNamespaceEntry,
 		mutableStateRecord,
@@ -1511,6 +1528,7 @@ func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
 			mutableState, err := NewMutableStateFromDB(
 				s.mockShard,
 				s.mockShard.GetEventsCache(),
+				s.mockShard.GetChasmLogMessagesCache(),
 				log.NewTestLogger(),
 				tests.LocalNamespaceEntry,
 				&persistencespb.WorkflowMutableState{

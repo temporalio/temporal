@@ -186,6 +186,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 			targetWorkflow.GetMutableState(),
 			targetWorkflowPayload.ExecutionSnapshot,
 			targetWorkflowPayload.ExecutionEvents,
+			targetWorkflowPayload.ExecutionChasmLogMessages,
 			historyi.TransactionPolicyPassive,
 		)
 	}
@@ -203,6 +204,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		targetWorkflow.GetMutableState(),
 		targetWorkflowPayload.ExecutionSnapshot,
 		targetWorkflowPayload.ExecutionEvents,
+		targetWorkflowPayload.ExecutionChasmLogMessages,
 		historyi.TransactionPolicyPassive,
 	)
 }
@@ -297,6 +299,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
 		ms,
 		targetWorkflowPayload.ExecutionSnapshot,
 		targetWorkflowPayload.ExecutionEvents,
+		targetWorkflowPayload.ExecutionChasmLogMessages,
 		historyi.TransactionPolicyPassive,
 	)
 	switch err.(type) {

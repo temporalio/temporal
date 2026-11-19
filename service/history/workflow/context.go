@@ -99,8 +99,10 @@ type (
 	ExecutionTransactionPayload struct {
 		ExecutionMutation                 *persistence.WorkflowMutation
 		ExecutionEvents                   []*persistence.WorkflowEvents
+		ExecutionChasmLogMessages         []*persistence.ChasmLogMessages
 		NewExecutionSnapshot              *persistence.WorkflowSnapshot
 		NewExecutionEvents                []*persistence.WorkflowEvents
+		NewExecutionChasmLogMessages      []*persistence.ChasmLogMessages
 		NewExecutionCheckRunAlreadyExists bool
 	}
 )
@@ -448,6 +450,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		mutableState, err := NewMutableStateFromDB(
 			shardContext,
 			shardContext.GetEventsCache(),
+			shardContext.GetChasmLogMessagesCache(),
 			c.logger,
 			namespaceEntry,
 			response.State,
@@ -525,6 +528,14 @@ func (c *ContextImpl) PersistWorkflowEvents(
 	return PersistWorkflowEvents(ctx, shardContext, workflowEventsSlice...)
 }
 
+func (c *ContextImpl) PersistChasmLogMessages(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	chasmLogMessages ...*persistence.ChasmLogMessages,
+) (int64, error) {
+	return PersistChasmLogMessages(ctx, shardContext, chasmLogMessages...)
+}
+
 func (c *ContextImpl) SetCheckRunAlreadyExists(verify bool) {
 	c.checkRunAlreadyExists = verify
 }
@@ -542,6 +553,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	newMutableState historyi.MutableState,
 	newWorkflow *persistence.WorkflowSnapshot,
 	newWorkflowEvents []*persistence.WorkflowEvents,
+	newChasmLogMessages []*persistence.ChasmLogMessages,
 	transactionPolicy historyi.TransactionPolicy,
 ) (retError error) {
 
@@ -581,6 +593,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 
 		NewWorkflowSnapshot: *newWorkflow,
 		NewWorkflowEvents:   newWorkflowEvents,
+		NewChasmLogMessages: newChasmLogMessages,
 	}
 
 	_, err := createWorkflowExecution(
@@ -1020,8 +1033,9 @@ func (c *ContextImpl) closeMutableStateTransaction(
 	}
 
 	payload := &ExecutionTransactionPayload{
-		ExecutionMutation: updatePayload.ExecutionMutation,
-		ExecutionEvents:   updatePayload.ExecutionEvents,
+		ExecutionMutation:         updatePayload.ExecutionMutation,
+		ExecutionEvents:           updatePayload.ExecutionEvents,
+		ExecutionChasmLogMessages: updatePayload.ExecutionChasmLogMessages,
 	}
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
 		newExecutionPayload, err := newMutableState.CloseTransactionAsSnapshot(
@@ -1033,6 +1047,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 		}
 		payload.NewExecutionSnapshot = newExecutionPayload.ExecutionSnapshot
 		payload.NewExecutionEvents = newExecutionPayload.ExecutionEvents
+		payload.NewExecutionChasmLogMessages = newExecutionPayload.ExecutionChasmLogMessages
 		payload.NewExecutionCheckRunAlreadyExists = payload.NewExecutionSnapshot != nil && newContext.CheckRunAlreadyExists()
 	}
 	return payload, nil
@@ -1085,9 +1100,11 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		c.MutableState.GetCurrentVersion(),
 		payload.ExecutionMutation,
 		payload.ExecutionEvents,
+		payload.ExecutionChasmLogMessages,
 		MutableStateFailoverVersion(newMutableState),
 		payload.NewExecutionSnapshot,
 		payload.NewExecutionEvents,
+		payload.NewExecutionChasmLogMessages,
 		payload.NewExecutionCheckRunAlreadyExists,
 		c.MutableState.IsWorkflow(),
 	); err != nil {

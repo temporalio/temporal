@@ -231,6 +231,7 @@ type (
 
 		NewWorkflowSnapshot WorkflowSnapshot
 		NewWorkflowEvents   []*WorkflowEvents
+		NewChasmLogMessages []*ChasmLogMessages
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
@@ -252,8 +253,10 @@ type (
 
 		UpdateWorkflowMutation WorkflowMutation
 		UpdateWorkflowEvents   []*WorkflowEvents
+		UpdateChasmLogMessages []*ChasmLogMessages
 		NewWorkflowSnapshot    *WorkflowSnapshot
 		NewWorkflowEvents      []*WorkflowEvents
+		NewChasmLogMessages    []*ChasmLogMessages
 	}
 
 	// UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest
@@ -358,6 +361,16 @@ type (
 		PrevTxnID   int64
 		TxnID       int64
 		Events      []*historypb.HistoryEvent
+	}
+
+	ChasmLogMessages struct {
+		NamespaceID string
+		BusinessID  string
+		RunID       string
+		BranchToken []byte
+		PrevTxnID   int64
+		TxnID       int64
+		Messages    []*persistencespb.ChasmLogMessage
 	}
 
 	// WorkflowMutation is used as generic workflow execution state mutation
@@ -833,6 +846,30 @@ type (
 		TransactionID int64
 		// NodeID is the first event id.
 		NodeID int64
+	}
+
+	// AppendChasmLogNodeRequest is used to append a batch of chasm log nodes
+	AppendChasmLogNodeRequest struct {
+		// The shard to get history node data
+		ShardID int32
+		// true if this is the first append request to the branch
+		IsNewBranch bool
+		// the info for clean up data in background
+		Info string
+		// The branch to be appended
+		BranchToken []byte
+		// The batch of messages to be appended. The first sequenceID will become the nodeID of this batch
+		Messages []*persistencespb.ChasmLogMessage
+		// TransactionID for events before these events. For events chaining
+		PrevTransactionID int64
+		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
+		TransactionID int64
+	}
+
+	// AppendChasmLogNodeResponse is a response to AppendChasmLogNodeRequest
+	AppendChasmLogNodeResponse struct {
+		// the size of the message data that has been appended
+		Size int
 	}
 
 	// ReadHistoryBranchRequest is used to read a history branch

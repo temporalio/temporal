@@ -57,6 +57,7 @@ type (
 		ChasmNodeToBlob(node *persistencespb.ChasmNode) (*commonpb.DataBlob, error)
 		// ChasmNodeToBlobs returns the metadata blob first, followed by the data blob.
 		ChasmNodeToBlobs(node *persistencespb.ChasmNode) (*commonpb.DataBlob, *commonpb.DataBlob, error)
+		ChasmLogMessagesToBlob(batch []*persistencespb.ChasmLogMessage) (*commonpb.DataBlob, error)
 		TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (*commonpb.DataBlob, error)
 		TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo) (*commonpb.DataBlob, error)
 		ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo) (*commonpb.DataBlob, error)
@@ -94,6 +95,7 @@ type (
 		NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error)
 		ChasmNodeFromBlob(blob *commonpb.DataBlob) (*persistencespb.ChasmNode, error)
 		ChasmNodeFromBlobs(metadata *commonpb.DataBlob, data *commonpb.DataBlob) (*persistencespb.ChasmNode, error)
+		ChasmLogMessagesFromBlob(data *commonpb.DataBlob) ([]*persistencespb.ChasmLogMessage, error)
 		TransferTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TransferTaskInfo, error)
 		TimerTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerTaskInfo, error)
 		ReplicationTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ReplicationTaskInfo, error)
@@ -612,6 +614,27 @@ func (t *serializerImpl) ChasmNodeToBlob(node *persistencespb.ChasmNode) (*commo
 func (t *serializerImpl) ChasmNodeFromBlob(blob *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
 	result := &persistencespb.ChasmNode{}
 	return result, Decode(blob, result)
+}
+
+func (t *serializerImpl) ChasmLogMessagesToBlob(
+	messages []*persistencespb.ChasmLogMessage,
+) (*commonpb.DataBlob, error) {
+	return t.serialize(&persistencespb.ChasmLogMessageBatch{Messages: messages})
+}
+
+func (t *serializerImpl) ChasmLogMessagesFromBlob(
+	data *commonpb.DataBlob,
+) ([]*persistencespb.ChasmLogMessage, error) {
+	if data == nil {
+		return nil, nil
+	}
+	if len(data.Data) == 0 {
+		return nil, nil
+	}
+
+	batch := &persistencespb.ChasmLogMessageBatch{}
+	err := Decode(data, batch)
+	return batch.GetMessages(), err
 }
 
 func (t *serializerImpl) TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (*commonpb.DataBlob, error) {

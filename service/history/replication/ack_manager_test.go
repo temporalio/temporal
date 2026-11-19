@@ -290,7 +290,23 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 		s.mockShard.GetLogger(),
 		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	chasmLogMessagesCache := events.NewHostLevelChasmLogMessagesCache(
+		s.mockShard.GetExecutionManager(),
+		s.mockShard.GetPayloadSerializer(),
+		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
+	)
+	ms := workflow.TestLocalMutableState(
+		s.mockShard,
+		eventsCache,
+		chasmLogMessagesCache,
+		tests.GlobalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -338,7 +354,23 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 		s.mockShard.GetLogger(),
 		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	chasmLogMessagesCache := events.NewHostLevelChasmLogMessagesCache(
+		s.mockShard.GetExecutionManager(),
+		s.mockShard.GetPayloadSerializer(),
+		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
+	)
+	ms := workflow.TestLocalMutableState(
+		s.mockShard,
+		eventsCache,
+		chasmLogMessagesCache,
+		tests.GlobalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -386,7 +418,23 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 		s.mockShard.GetLogger(),
 		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	chasmLogMessagesCache := events.NewHostLevelChasmLogMessagesCache(
+		s.mockShard.GetExecutionManager(),
+		s.mockShard.GetPayloadSerializer(),
+		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
+	)
+	ms := workflow.TestLocalMutableState(
+		s.mockShard,
+		eventsCache,
+		chasmLogMessagesCache,
+		tests.GlobalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -469,7 +517,23 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 		s.mockShard.GetLogger(),
 		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	chasmLogMessagesCache := events.NewHostLevelChasmLogMessagesCache(
+		s.mockShard.GetExecutionManager(),
+		s.mockShard.GetPayloadSerializer(),
+		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
+	)
+	ms := workflow.TestLocalMutableState(
+		s.mockShard,
+		eventsCache,
+		chasmLogMessagesCache,
+		tests.GlobalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{

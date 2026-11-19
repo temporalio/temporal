@@ -40,7 +40,8 @@ type ContextTest struct {
 
 	Resource *resourcetest.Test
 
-	MockEventsCache *events.MockCache
+	MockEventsCache           *events.MockCache
+	MockChasmLogMessagesCache *events.MockChasmLogEventsCache
 }
 
 var _ historyi.ShardContext = (*ContextTest)(nil)
@@ -71,9 +72,11 @@ func NewTestContext(
 	}
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
+	chasmLogMessagesCache := events.NewMockChasmLogEventsCache(ctrl)
 	shard := newTestContext(
 		resourceTest,
 		eventsCache,
+		chasmLogMessagesCache,
 		ContextConfigOverrides{
 			ShardInfo:   shardInfo,
 			Config:      config,
@@ -81,9 +84,10 @@ func NewTestContext(
 		},
 	)
 	return &ContextTest{
-		Resource:        resourceTest,
-		ContextImpl:     shard,
-		MockEventsCache: eventsCache,
+		Resource:                  resourceTest,
+		ContextImpl:               shard,
+		MockEventsCache:           eventsCache,
+		MockChasmLogMessagesCache: chasmLogMessagesCache,
 	}
 }
 
@@ -108,7 +112,13 @@ func NewStubContext(
 ) *StubContext {
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
-	shard := newTestContext(resourceTest, eventsCache, overrides)
+	chasmLogMessagesCache := events.NewMockChasmLogEventsCache(ctrl)
+	shard := newTestContext(
+		resourceTest,
+		eventsCache,
+		chasmLogMessagesCache,
+		overrides,
+	)
 
 	result := &StubContext{
 		ContextTest: ContextTest{
@@ -121,7 +131,12 @@ func NewStubContext(
 	return result
 }
 
-func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config ContextConfigOverrides) *ContextImpl {
+func newTestContext(
+	t *resourcetest.Test,
+	eventsCache events.Cache,
+	chasmLogMessagesCache events.ChasmLogMessagesCache,
+	config ContextConfigOverrides,
+) *ContextImpl {
 	hostInfoProvider := t.GetHostInfoProvider()
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	if config.ShardInfo.QueueStates == nil {
@@ -157,19 +172,20 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	}
 
 	ctx := &ContextImpl{
-		shardID:             config.ShardInfo.GetShardId(),
-		owner:               owner,
-		stringRepr:          fmt.Sprintf("Shard(%d)", config.ShardInfo.GetShardId()),
-		executionManager:    executionManager,
-		metricsHandler:      t.MetricsHandler,
-		eventsCache:         eventsCache,
-		config:              config.Config,
-		contextTaggedLogger: t.GetLogger(),
-		throttledLogger:     t.GetThrottledLogger(),
-		lifecycleCtx:        lifecycleCtx,
-		lifecycleCancel:     lifecycleCancel,
-		queueMetricEmitter:  sync.Once{},
-		eventLogger:         config.EventLogger,
+		shardID:               config.ShardInfo.GetShardId(),
+		owner:                 owner,
+		stringRepr:            fmt.Sprintf("Shard(%d)", config.ShardInfo.GetShardId()),
+		executionManager:      executionManager,
+		metricsHandler:        t.MetricsHandler,
+		eventsCache:           eventsCache,
+		chasmLogMessagesCache: chasmLogMessagesCache,
+		config:                config.Config,
+		contextTaggedLogger:   t.GetLogger(),
+		throttledLogger:       t.GetThrottledLogger(),
+		lifecycleCtx:          lifecycleCtx,
+		lifecycleCancel:       lifecycleCancel,
+		queueMetricEmitter:    sync.Once{},
+		eventLogger:           config.EventLogger,
 
 		state:              contextStateAcquired,
 		engineFuture:       future.NewFuture[historyi.Engine](),
@@ -227,6 +243,12 @@ func (s *ContextTest) SetEngineForTesting(engine historyi.Engine) {
 func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 	// for testing only, will only be called immediately after initialization
 	s.eventsCache = c
+}
+
+// SetChasmLogMessagesCacheForTesting sets s.chasmLogMessagesCache. Only used by tests.
+func (s *ContextTest) SetChasmLogMessagesCacheForTesting(c events.ChasmLogMessagesCache) {
+	// for testing only, will only be called immediately after initialization
+	s.chasmLogMessagesCache = c
 }
 
 // SetLoggers sets both s.throttledLogger and s.contextTaggedLogger. Only used by tests.

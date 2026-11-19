@@ -13,6 +13,7 @@ const (
 	chasmMapTypePrefix           = "chasm.Map["
 	chasmMSPointerType           = "chasm.MSPointer"
 	chasmParentPointerTypePrefix = "chasm.ParentPtr["
+	chasmLogTypePrefix           = "chasm.Log["
 
 	fieldNameTag = "name"
 )
@@ -26,6 +27,7 @@ const (
 	fieldKindSubMap
 	fieldKindMutableState
 	fieldKindParentPtr
+	fieldKindLog
 )
 
 type fieldInfo struct {
@@ -44,14 +46,13 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 	valueT := valueV.Type()
 	dataFieldName := ""
 	return func(yield func(fi fieldInfo) bool) {
-		for i := 0; i < valueT.Elem().NumField(); i++ {
-			fieldV := valueV.Elem().Field(i)
+		for f, fieldV := range valueV.Elem().Fields() {
 			fieldT := fieldV.Type()
 			if fieldT == UnimplementedComponentT {
 				continue
 			}
 
-			fieldN := fieldName(valueT.Elem().Field(i))
+			fieldN := fieldName(f)
 			var fieldErr error
 			fieldK := fieldKindUnspecified
 			if fieldT.AssignableTo(protoMessageT) {
@@ -67,7 +68,8 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 					case chasmFieldTypePrefix,
 						chasmMapTypePrefix,
 						chasmMSPointerType,
-						chasmParentPointerTypePrefix:
+						chasmParentPointerTypePrefix,
+						chasmLogTypePrefix:
 						fieldErr = serviceerror.NewInternalf("%s.%s: CHASM fields must not be pointers", valueT, fieldN)
 					default:
 						continue
@@ -82,11 +84,12 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 						fieldK = fieldKindMutableState
 					case chasmParentPointerTypePrefix:
 						fieldK = fieldKindParentPtr
+					case chasmLogTypePrefix:
+						fieldK = fieldKindLog
 					default:
 						continue // Skip non-CHASM fields.
 					}
 				}
-
 			}
 
 			if !yield(fieldInfo{val: fieldV, typ: fieldT, name: fieldN, kind: fieldK, err: fieldErr}) {
@@ -123,7 +126,8 @@ func unmanagedFieldsOf(valueT reflect.Type) iter.Seq[fieldInfo] {
 			case chasmFieldTypePrefix,
 				chasmMapTypePrefix,
 				chasmMSPointerType,
-				chasmParentPointerTypePrefix:
+				chasmParentPointerTypePrefix,
+				chasmLogTypePrefix:
 				continue // Skip CHASM fields.
 			default:
 				if !yield(fieldInfo{typ: fieldT, name: fieldN}) {

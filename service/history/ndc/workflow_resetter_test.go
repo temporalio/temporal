@@ -214,14 +214,24 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
+		nil, // currentChasmPayloadBatches
 		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
+		nil,   // newChasmPayloadBatches
 		false, // checkRunAlreadyExists: reset keeps a random run ID
 		true,  // isWorkflow
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
 
-	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)
+	err := s.workflowResetter.persistToDB(
+		context.Background(),
+		currentWorkflow,
+		currentWorkflow,
+		currentMutation,
+		currentEventsSeq,
+		nil, // currentChasmPayloadBatches
+		resetWorkflow,
+	)
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
 	s.False(currentReleaseCalled)
@@ -296,14 +306,24 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
+		nil, // currentChasmPayloadBatches
 		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
+		nil,   // newChasmPayloadBatches
 		false, // checkRunAlreadyExists: reset keeps a random run ID
 		true,  // isWorkflow
 	).Return(int64(0), int64(0), nil)
 
-	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentWorkflow, nil, nil, resetWorkflow)
+	err := s.workflowResetter.persistToDB(
+		context.Background(),
+		currentWorkflow,
+		currentWorkflow,
+		nil,
+		nil,
+		nil,
+		resetWorkflow,
+	)
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
 	s.False(currentReleaseCalled)
@@ -345,13 +365,15 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 			EventId: 123,
 		}},
 	}}
+	resetChasmLogMessagesSeq := []*persistence.ChasmLogMessages{}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		context.Background(),
 		historyi.TransactionPolicyActive,
 	).Return(
 		&historyi.SnapshotTransactionPayload{
-			ExecutionSnapshot: resetSnapshot,
-			ExecutionEvents:   resetEventsSeq,
+			ExecutionSnapshot:         resetSnapshot,
+			ExecutionEvents:           resetEventsSeq,
+			ExecutionChasmLogMessages: resetChasmLogMessagesSeq,
 		},
 		nil,
 	)
@@ -382,9 +404,11 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 		int64(0),
 		baseMutation,
 		baseEventsSeq,
+		([]*persistence.ChasmLogMessages)(nil),
 		(*int64)(nil),
 		(*persistence.WorkflowSnapshot)(nil),
 		([]*persistence.WorkflowEvents)(nil),
+		([]*persistence.ChasmLogMessages)(nil),
 		false, // checkRunAlreadyExists: no new run
 		true,  // isWorkflow
 	).Return(baseUpdateEventsSize, int64(0), nil)
@@ -399,11 +423,20 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 		int64(0),
 		resetSnapshot,
 		resetEventsSeq,
+		resetChasmLogMessagesSeq,
 		true, // isWorkflow
 	).Return(resetNewEventsSize, nil).After(baseUpdateCurrent)
 
 	// nil current workflow, and nil current mutation/events.
-	err := s.workflowResetter.persistToDB(context.Background(), baseWorkflow, nil, nil, nil, resetWorkflow)
+	err := s.workflowResetter.persistToDB(
+		context.Background(),
+		baseWorkflow,
+		nil,
+		nil,
+		nil,
+		nil,
+		resetWorkflow,
+	)
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
 	s.False(resetReleaseCalled)

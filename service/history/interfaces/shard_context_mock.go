@@ -96,6 +96,21 @@ func (mr *MockShardContextMockRecorder) AddTasks(ctx, request any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockShardContext)(nil).AddTasks), ctx, request)
 }
 
+// AppendChasmLogMessages mocks base method.
+func (m *MockShardContext) AppendChasmLogMessages(ctx context.Context, request *persistence0.AppendChasmLogNodeRequest, namespaceID namespace.ID, execution *common.WorkflowExecution) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendChasmLogMessages", ctx, request, namespaceID, execution)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AppendChasmLogMessages indicates an expected call of AppendChasmLogMessages.
+func (mr *MockShardContextMockRecorder) AppendChasmLogMessages(ctx, request, namespaceID, execution any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendChasmLogMessages", reflect.TypeOf((*MockShardContext)(nil).AppendChasmLogMessages), ctx, request, namespaceID, execution)
+}
+
 // AppendHistoryEvents mocks base method.
 func (m *MockShardContext) AppendHistoryEvents(ctx context.Context, request *persistence0.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *common.WorkflowExecution) (int, error) {
 	m.ctrl.T.Helper()
@@ -311,6 +326,20 @@ func (m *MockShardContext) GetCachedWorkflowContext(ctx context.Context, namespa
 func (mr *MockShardContextMockRecorder) GetCachedWorkflowContext(ctx, namespaceID, execution, lockPriority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedWorkflowContext", reflect.TypeOf((*MockShardContext)(nil).GetCachedWorkflowContext), ctx, namespaceID, execution, lockPriority)
+}
+
+// GetChasmLogMessagesCache mocks base method.
+func (m *MockShardContext) GetChasmLogMessagesCache() events.ChasmLogMessagesCache {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChasmLogMessagesCache")
+	ret0, _ := ret[0].(events.ChasmLogMessagesCache)
+	return ret0
+}
+
+// GetChasmLogMessagesCache indicates an expected call of GetChasmLogMessagesCache.
+func (mr *MockShardContextMockRecorder) GetChasmLogMessagesCache() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmLogMessagesCache", reflect.TypeOf((*MockShardContext)(nil).GetChasmLogMessagesCache))
 }
 
 // GetClusterMetadata mocks base method.
@@ -957,6 +986,21 @@ func (mr *MockControllableContextMockRecorder) AddTasks(ctx, request any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockControllableContext)(nil).AddTasks), ctx, request)
 }
 
+// AppendChasmLogMessages mocks base method.
+func (m *MockControllableContext) AppendChasmLogMessages(ctx context.Context, request *persistence0.AppendChasmLogNodeRequest, namespaceID namespace.ID, execution *common.WorkflowExecution) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendChasmLogMessages", ctx, request, namespaceID, execution)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AppendChasmLogMessages indicates an expected call of AppendChasmLogMessages.
+func (mr *MockControllableContextMockRecorder) AppendChasmLogMessages(ctx, request, namespaceID, execution any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendChasmLogMessages", reflect.TypeOf((*MockControllableContext)(nil).AppendChasmLogMessages), ctx, request, namespaceID, execution)
+}
+
 // AppendHistoryEvents mocks base method.
 func (m *MockControllableContext) AppendHistoryEvents(ctx context.Context, request *persistence0.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *common.WorkflowExecution) (int, error) {
 	m.ctrl.T.Helper()
@@ -1184,6 +1228,20 @@ func (m *MockControllableContext) GetCachedWorkflowContext(ctx context.Context, 
 func (mr *MockControllableContextMockRecorder) GetCachedWorkflowContext(ctx, namespaceID, execution, lockPriority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedWorkflowContext", reflect.TypeOf((*MockControllableContext)(nil).GetCachedWorkflowContext), ctx, namespaceID, execution, lockPriority)
+}
+
+// GetChasmLogMessagesCache mocks base method.
+func (m *MockControllableContext) GetChasmLogMessagesCache() events.ChasmLogMessagesCache {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChasmLogMessagesCache")
+	ret0, _ := ret[0].(events.ChasmLogMessagesCache)
+	return ret0
+}
+
+// GetChasmLogMessagesCache indicates an expected call of GetChasmLogMessagesCache.
+func (mr *MockControllableContextMockRecorder) GetChasmLogMessagesCache() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmLogMessagesCache", reflect.TypeOf((*MockControllableContext)(nil).GetChasmLogMessagesCache))
 }
 
 // GetClusterMetadata mocks base method.

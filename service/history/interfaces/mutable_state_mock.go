@@ -2044,6 +2044,21 @@ func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks(targetClusters an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks), targetClusters)
 }
 
+// GenerateTaskIDs mocks base method.
+func (m *MockMutableState) GenerateTaskIDs(number int) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateTaskIDs", number)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateTaskIDs indicates an expected call of GenerateTaskIDs.
+func (mr *MockMutableStateMockRecorder) GenerateTaskIDs(number any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateTaskIDs", reflect.TypeOf((*MockMutableState)(nil).GenerateTaskIDs), number)
+}
+
 // GetActivityByActivityID mocks base method.
 func (m *MockMutableState) GetActivityByActivityID(arg0 string) (*persistence.ActivityInfo, bool) {
 	m.ctrl.T.Helper()
@@ -3387,6 +3402,21 @@ func (m *MockMutableState) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 func (mr *MockMutableStateMockRecorder) IsWorkflowPendingOnWorkflowTaskBackoff() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowPendingOnWorkflowTaskBackoff", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowPendingOnWorkflowTaskBackoff))
+}
+
+// LoadChasmLogMessages mocks base method.
+func (m *MockMutableState) LoadChasmLogMessages(ctx context.Context, token []byte, branch *persistence.HistoryBranch) (*persistence.ChasmLogMessageBatch, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LoadChasmLogMessages", ctx, token, branch)
+	ret0, _ := ret[0].(*persistence.ChasmLogMessageBatch)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LoadChasmLogMessages indicates an expected call of LoadChasmLogMessages.
+func (mr *MockMutableStateMockRecorder) LoadChasmLogMessages(ctx, token, branch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadChasmLogMessages", reflect.TypeOf((*MockMutableState)(nil).LoadChasmLogMessages), ctx, token, branch)
 }
 
 // LoadHistoryEvent mocks base method.

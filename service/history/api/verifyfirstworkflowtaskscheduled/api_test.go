@@ -50,6 +50,7 @@ type (
 
 		controller                 *gomock.Controller
 		mockEventsCache            *events.MockCache
+		mockChasmLogMessagesCache  *events.MockChasmLogEventsCache
 		mockExecutionMgr           *persistence.MockExecutionManager
 		shardContext               *shard.ContextTest
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
@@ -102,6 +103,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) SetupTest() {
 		wcache.NewHostLevelCache(s.shardContext.GetConfig(), s.shardContext.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{}))
 	s.mockEventsCache = s.shardContext.MockEventsCache
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockChasmLogMessagesCache = s.shardContext.MockChasmLogMessagesCache
 	s.logger = s.shardContext.GetLogger()
 }
 
@@ -204,7 +206,15 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
+	ms := workflow.TestGlobalMutableState(
+		s.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.Version,
+		tests.WorkflowID,
+		tests.RunID,
+	)
 
 	addWorkflowExecutionStartedEventWithParent(ms,
 		&commonpb.WorkflowExecution{
@@ -236,7 +246,15 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
+	ms := workflow.TestGlobalMutableState(
+		s.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.Version,
+		tests.WorkflowID,
+		tests.RunID,
+	)
 
 	addWorkflowExecutionStartedEventWithParent(ms,
 		&commonpb.WorkflowExecution{
@@ -269,7 +287,15 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
+	ms := workflow.TestGlobalMutableState(
+		s.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.Version,
+		tests.WorkflowID,
+		tests.RunID,
+	)
 
 	addWorkflowExecutionStartedEventWithParent(ms,
 		&commonpb.WorkflowExecution{
@@ -296,7 +322,15 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
+	ms := workflow.TestGlobalMutableState(
+		s.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.Version,
+		tests.WorkflowID,
+		tests.RunID,
+	)
 
 	addWorkflowExecutionStartedEventWithParent(ms,
 		&commonpb.WorkflowExecution{

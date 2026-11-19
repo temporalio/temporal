@@ -524,6 +524,7 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 	var mutableState historyi.MutableState = workflow.NewMutableState(
 		r.shardContext,
 		r.shardContext.GetEventsCache(),
+		r.shardContext.GetChasmLogMessagesCache(),
 		task.getLogger(),
 		namespaceEntry,
 		task.getWorkflowID(),

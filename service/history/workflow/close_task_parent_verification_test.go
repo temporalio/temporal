@@ -73,7 +73,16 @@ func TestRefreshCloseTaskParentVerification(t *testing.T) {
 			registry := hsm.NewRegistry()
 			require.NoError(t, RegisterStateMachine(registry))
 			testShard.SetStateMachineRegistry(registry)
-			ms := NewMutableState(testShard, testShard.GetEventsCache(), testShard.GetLogger(), tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now())
+			ms := NewMutableState(
+				testShard,
+				testShard.GetEventsCache(),
+				testShard.GetChasmLogMessagesCache(),
+				testShard.GetLogger(),
+				tests.LocalNamespaceEntry,
+				tests.WorkflowID,
+				tests.RunID,
+				time.Now(),
+			)
 			ms.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 			ms.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 			ms.executionInfo.CloseTransferTaskId = tc.closeTaskID

@@ -660,7 +660,7 @@ func (s *signalWithStartWorkflowSuite) TestStartAndSignalWithoutCurrentWorkflow_
 	}
 	newContext.EXPECT().CreateWorkflowExecution(
 		ctx, s.shardContext, persistence.CreateWorkflowModeBrandNew, "", int64(0),
-		newMutableState, gomock.Any(), gomock.Any(), historyi.TransactionPolicyActive,
+		newMutableState, gomock.Any(), gomock.Any(), gomock.Any(), historyi.TransactionPolicyActive,
 	).Return(failedErr)
 	newWorkflowLease := api.NewWorkflowLease(newContext, wcache.NoopReleaseFn, newMutableState)
 

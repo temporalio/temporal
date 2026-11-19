@@ -1736,6 +1736,7 @@ func TestPartitionedSnapshot_ClusterLocalFieldGuard(t *testing.T) {
 				"data_attributes",
 				"collection_attributes",
 				"pointer_attributes",
+				"log_attributes",
 			},
 		},
 		{

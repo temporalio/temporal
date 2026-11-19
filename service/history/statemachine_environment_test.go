@@ -406,7 +406,15 @@ func (s *taskExecutorTestContext) prepareMutableStateWithReadyNexusCompletionCal
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
 	}
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(execution.GetWorkflowId()), execution.GetWorkflowId(), execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		s.mockShard.GetChasmLogMessagesCache(),
+		s.mockShard.GetLogger(),
+		s.namespaceEntry.FailoverVersion(execution.GetWorkflowId()),
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+	)
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{

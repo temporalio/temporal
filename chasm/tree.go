@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
@@ -29,9 +30,9 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -191,6 +192,8 @@ type (
 	NodesMutation struct {
 		UpdatedNodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
 		DeletedNodes map[string]struct{}
+
+		LogMutations []*LogMutation
 	}
 
 	// NodesSnapshot is a snapshot for all nodes rooted at a given node n,
@@ -246,6 +249,12 @@ type (
 		IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool
 		TimeSkippingMaxAccumulatedDuration() time.Duration
 		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
+		GenerateTaskIDs(number int) ([]int64, error)
+		LoadChasmLogMessages(
+			ctx context.Context,
+			token []byte,
+			branch *persistencespb.HistoryBranch,
+		) (*persistencespb.ChasmLogMessageBatch, error)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -698,6 +707,10 @@ func (n *Node) isMap() bool {
 	return n.serializedNode.GetMetadata().GetCollectionAttributes() != nil
 }
 
+func (n *Node) isLog() bool {
+	return n.serializedNode.GetMetadata().GetLogAttributes() != nil
+}
+
 func (n *Node) isDetached() bool {
 	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
 	if componentAttr == nil {
@@ -809,6 +822,20 @@ func (n *Node) initSerializedCollectionNode() {
 	}
 }
 
+func (n *Node) initSerializedLogNode() {
+	n.serializedNode = &persistencespb.ChasmNode{
+		Metadata: &persistencespb.ChasmNodeMetadata{
+			InitialVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          n.backend.NextTransitionCount(),
+				NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+			},
+			Attributes: &persistencespb.ChasmNodeMetadata_LogAttributes{
+				LogAttributes: &persistencespb.ChasmLogAttributes{},
+			},
+		},
+	}
+}
+
 func (n *Node) setSerializedNode(
 	nodePath []string,
 	encodedPath string,
@@ -849,6 +876,8 @@ func (n *Node) serialize() error {
 		return n.serializeCollectionNode()
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		return n.serializePointerNode()
+	case *persistencespb.ChasmNodeMetadata_LogAttributes:
+		return n.serializeLogNode()
 	default:
 		return softassert.UnexpectedInternalErr(n.logger, "unknown node type", nil)
 	}
@@ -1022,6 +1051,19 @@ func (n *Node) syncSubComponents() error {
 				return err
 			}
 			collectionNode.setValueState(min(valueStateNeedSerialize, collectionNode.valueState))
+			childrenToKeep[field.name] = struct{}{}
+		case fieldKindLog:
+			chasmLog := field.val.Addr().Interface() // *Log[T]
+			logNode := n.children[field.name]
+			if logNode == nil {
+				logNode = newNode(n.nodeBase, n, field.name)
+				logNode.initSerializedLogNode()
+				chasmLog.(logInternalIf).setNode(logNode)
+				n.children[field.name] = logNode
+			}
+			// Set reference to Log[T] so it can read/write unexported fields.
+			logNode.setValue(chasmLog)
+			logNode.setValueState(valueStateNeedSerialize)
 			childrenToKeep[field.name] = struct{}{}
 		}
 	}
@@ -1283,6 +1325,28 @@ func (n *Node) serializePointerNode() error {
 	return nil
 }
 
+func (n *Node) serializeLogNode() error {
+	logAttr := n.serializedNode.Metadata.GetLogAttributes()
+	if logAttr.Metadata == nil {
+		logAttr.Metadata = &persistencespb.ChasmLogMetadata{
+			Branch: &persistencespb.HistoryBranch{
+				TreeId:    n.backend.GetWorkflowKey().RunID,
+				BranchId:  primitives.NewUUID().String(),
+				Ancestors: []*persistencespb.HistoryBranchRange{},
+			},
+		}
+	}
+
+	valueV := reflect.ValueOf(n.value) // *Log[T]
+	chasmLog := valueV.Interface().(logInternalIf)
+	logAttr.Metadata.HeadBatchId = chasmLog.getHeadBatchID()
+	logAttr.Metadata.LastSequenceId = chasmLog.getLastSequenceID()
+
+	n.updateLastUpdateVersionedTransition()
+	n.setValueState(valueStateSynced)
+	return nil
+}
+
 func (n *Node) updateLastUpdateVersionedTransition() {
 	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
 		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
@@ -1316,6 +1380,10 @@ func (n *Node) deserialize(
 		softassert.Fail(
 			n.logger,
 			"deserialize shouldn't be called on the collection node because it is deserialized with the parent component.")
+	case *persistencespb.ChasmNodeMetadata_LogAttributes:
+		softassert.Fail(
+			n.logger,
+			"deserialize shouldn't be called on the log node because it is deserialized with the parent component.")
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		return n.deserializePointerNode()
 	}
@@ -1373,6 +1441,12 @@ func (n *Node) deserializeComponentNode(
 				}
 			} else if field.val.IsNil() {
 				field.val.Set(reflect.MakeMap(field.typ))
+			}
+		case fieldKindLog:
+			if logNode, found := n.children[field.name]; found {
+				chasmLogV := reflect.New(field.typ) // *Log[T]
+				chasmLogV.Interface().(logInternalIf).init(logNode)
+				field.val.Set(chasmLogV.Elem())
 			}
 		case fieldKindMutableState:
 			field.val.Set(reflect.ValueOf(NewMSPointer(n.backend)))
@@ -1464,11 +1538,11 @@ func (n *Node) structuredRef(
 	componentPath := refNode.path()
 	workflowKey := refNode.backend.GetWorkflowKey()
 	return ComponentRef{
-		ExecutionKey: ExecutionKey{
-			NamespaceID: workflowKey.NamespaceID,
-			BusinessID:  workflowKey.WorkflowID,
-			RunID:       workflowKey.RunID,
-		},
+		// ExecutionKey
+		NamespaceID: workflowKey.NamespaceID,
+		BusinessID:  workflowKey.WorkflowID,
+		RunID:       workflowKey.RunID,
+
 		archetypeID: n.ArchetypeID(),
 		// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 		// Using VersionedTransition of the entire tree might be too strict.
@@ -1836,6 +1910,10 @@ func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutati
 		return NodesMutation{}, err
 	}
 
+	if err := n.closeTransactionHandleLogMessages(); err != nil {
+		return NodesMutation{}, err
+	}
+
 	if err := n.closeTransactionUpdateComponentTasks(nextVersionedTransition); err != nil {
 		return NodesMutation{}, err
 	}
@@ -2088,7 +2166,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
 		skipIfClean := skipPersistenceIfClean &&
-			(node.isComponent() || node.isData() || node.isMap()) &&
+			(node.isComponent() || node.isData() || node.isMap() || node.isLog()) &&
 			prevVersionedTransition != nil &&
 			!node.hasNewTransactionSideEffects()
 		var prevData *commonpb.DataBlob
@@ -2258,6 +2336,66 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	)
 }
 
+func (n *Node) closeTransactionHandleLogMessages() error {
+	for _, node := range n.andAllChildren() {
+		// no-op if node is not a Log
+		logAttr := node.serializedNode.Metadata.GetLogAttributes()
+		if logAttr == nil {
+			continue
+		}
+
+		logV := reflect.ValueOf(node.value).Elem()              // Log[T]
+		newBatchesV := logV.FieldByName(logNewBatchesFieldName) // []LogMessageBatch[T]
+		if newBatchesV.Len() == 0 {
+			continue
+		}
+
+		txnIDs, err := n.backend.GenerateTaskIDs(newBatchesV.Len())
+		if err != nil {
+			return err
+		}
+
+		currentBranch := logAttr.GetMetadata().GetBranch()
+		lastTxnID := logAttr.GetMetadata().GetLastTransactionId()
+		logMutation := &LogMutation{
+			Branch:  currentBranch,
+			Batches: make([]*LogEventBatchMutation, newBatchesV.Len()),
+		}
+
+		version := node.backend.GetCurrentVersion()
+		for i := range newBatchesV.Len() {
+			batchV := newBatchesV.Index(i) // LogMessageBatch[T]
+			logMessages := make([]*persistencespb.ChasmLogMessage, batchV.Len())
+			for j := range batchV.Len() {
+				messageV := batchV.Index(j) // *LogMessage[T]
+				message := getUnexportedValue[logMessageInternalIf](messageV)
+				blob, err := encodeChasmBlob(message.ProtoMessage())
+				if err != nil {
+					return err
+				}
+				logMessages[j] = &persistencespb.ChasmLogMessage{
+					SequenceId: message.SequenceID(),
+					Version:    version,
+					Data:       blob,
+				}
+			}
+
+			logMutation.Batches[i] = &LogEventBatchMutation{
+				TxnID:     txnIDs[i],
+				PrevTxnID: lastTxnID,
+				Messages:  logMessages,
+			}
+			lastTxnID = txnIDs[i]
+		}
+
+		logAttr.Metadata.LastTransactionId = lastTxnID
+		n.setValueState(valueStateNeedDeserialize)
+		n.mutation.LogMutations = append(n.mutation.LogMutations, logMutation)
+	}
+
+	return nil
+}
+
 // countLogicalTasks adds componentAttr's logical task counts, keyed by task type ID, into
 // counts, tracking only task types opted into the task count metrics, and returns the
 // possibly reallocated map.
@@ -2396,10 +2534,9 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 		valid, err := n.validateTask(
 			validateContext,
 			TaskInvocation{
-				TaskAttributes: TaskAttributes{
-					ScheduledTime: existingTask.ScheduledTime.AsTime(),
-					Destination:   existingTask.Destination,
-				},
+				// TaskAttributes
+				ScheduledTime: existingTask.ScheduledTime.AsTime(),
+				Destination:   existingTask.Destination,
 			},
 			existingTaskInstance,
 		)
@@ -3982,10 +4119,10 @@ func (n *Node) ValidateSideEffectTask(
 	isValidByComponent, retErr = node.validateTask(
 		validateCtx,
 		TaskInvocation{
-			TaskAttributes: TaskAttributes{
-				ScheduledTime: chasmTask.GetVisibilityTime(),
-				Destination:   chasmTask.Destination,
-			},
+			// TaskAttributes
+			ScheduledTime: chasmTask.GetVisibilityTime(),
+			Destination:   chasmTask.Destination,
+
 			Attempt: chasmTask.Attempt,
 		},
 		chasmTask.DeserializedTask.Interface(),
@@ -4178,6 +4315,17 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 	return serialization.Encode(m, serialization.WithDeterministicProto3)
 }
 
+// decodeChasmBlob decodes CHASM data and task payloads through the env-aware
+func decodeChasmBlob[T proto.Message](dataBlob *commonpb.DataBlob) (T, error) {
+	valueT := reflect.TypeFor[T]()
+	valueV, err := unmarshalProto(dataBlob, valueT)
+	if err != nil {
+		var zero T
+		return zero, nil
+	}
+	return valueV.Interface().(T), nil
+}
+
 func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
 	// Replication does not mark the subtree dirty. Re-stamp timers only when the
 	// replicated accumulated skip changed.
@@ -4343,4 +4491,69 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 		transition.GateByFastForward(ff)
 	}
 	return transition
+}
+
+// setUnexportedField sets an unexported field using unsafe
+func setUnexportedField(obj reflect.Value, fieldName string, value any) error {
+	if obj.Kind() == reflect.Pointer {
+		obj = obj.Elem()
+	}
+
+	if obj.Kind() != reflect.Struct {
+		return errors.New("object is not a struct")
+	}
+
+	field := obj.FieldByName(fieldName)
+	if !field.IsValid() {
+		return fmt.Errorf("field %s not found", fieldName)
+	}
+	if !field.CanAddr() {
+		return errors.New("field not addressable")
+	}
+
+	// Use unsafe to bypass visibility restrictions
+	reflect.NewAt(field.Type(), field.Addr().UnsafePointer()).
+		Elem().
+		Set(reflect.ValueOf(value))
+
+	return nil
+}
+
+// getUnexportedField gets a field using unsafe for unexported fields.
+func getUnexportedField[T any](obj reflect.Value, fieldName string) (T, error) {
+	var zero T
+
+	if obj.Kind() == reflect.Pointer {
+		obj = obj.Elem()
+	}
+
+	if obj.Kind() != reflect.Struct {
+		return zero, errors.New("object is not a struct")
+	}
+
+	field := obj.FieldByName(fieldName)
+	if !field.IsValid() {
+		return zero, fmt.Errorf("field %s not found", fieldName)
+	}
+
+	if field.CanInterface() {
+		return field.Interface().(T), nil
+	}
+
+	if !field.CanAddr() {
+		return zero, errors.New("field not addressable")
+	}
+
+	// Create a temporary value at the field's address to read it
+	return reflect.NewAt(field.Type(), field.Addr().UnsafePointer()).
+		Elem().
+		Interface().(T), nil
+}
+
+func getUnexportedValue[T any](obj reflect.Value) T {
+	if obj.CanInterface() {
+		return obj.Interface().(T)
+	}
+	val := reflect.NewAt(obj.Type(), obj.Addr().UnsafePointer()).Elem()
+	return val.Interface().(T)
 }

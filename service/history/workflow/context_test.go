@@ -574,6 +574,7 @@ func (s *contextSuite) TestRefreshTask() {
 			s.workflowContext.MutableState, err = NewMutableStateFromDB(
 				s.mockShard,
 				s.mockShard.MockEventsCache,
+				s.mockShard.MockChasmLogMessagesCache,
 				s.mockShard.GetLogger(),
 				tests.LocalNamespaceEntry,
 				tc.persistedMutableState(),

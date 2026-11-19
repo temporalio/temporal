@@ -312,6 +312,7 @@ func (r *StateRebuilderImpl) initializeBuilders(
 	resetMutableState := workflow.NewMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),
+		r.shard.GetChasmLogMessagesCache(),
 		r.logger,
 		namespaceEntry,
 		workflowIdentifier.GetWorkflowID(),

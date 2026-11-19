@@ -49,6 +49,12 @@ type (
 			workflowEventsSlice ...*persistence.WorkflowEvents,
 		) (int64, error)
 
+		PersistChasmLogMessages(
+			ctx context.Context,
+			shardContext ShardContext,
+			chasmLogMessages ...*persistence.ChasmLogMessages,
+		) (int64, error)
+
 		// SetCheckRunAlreadyExists makes the store confirm this run's derived run ID is unused on create.
 		// Set when the run ID is derived rather than random.
 		SetCheckRunAlreadyExists(verify bool)
@@ -65,6 +71,7 @@ type (
 			newMutableState MutableState,
 			newWorkflow *persistence.WorkflowSnapshot,
 			newWorkflowEvents []*persistence.WorkflowEvents,
+			newChasmLogMessages []*persistence.ChasmLogMessages,
 			transactionPolicy TransactionPolicy,
 		) error
 		ConflictResolveWorkflowExecution(

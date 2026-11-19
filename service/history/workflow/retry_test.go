@@ -52,8 +52,16 @@ func (s *mutableStateSuite) TestSetupNewWorkflowForRetryPropagatesNexusSerializa
 	)
 	s.Require().NoError(err)
 
-	newMutableState := NewMutableState(s.mockShard, s.mockEventsCache, s.logger,
-		s.namespaceEntry, tests.WorkflowID, newRunID, time.Now().UTC())
+	newMutableState := NewMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		tests.WorkflowID,
+		newRunID,
+		time.Now().UTC(),
+	)
 	err = SetupNewWorkflowForRetryOrCron(
 		context.Background(), s.mutableState, newMutableState, newRunID,
 		startEvent.GetWorkflowExecutionStartedEventAttributes(), nil, nil, nil,

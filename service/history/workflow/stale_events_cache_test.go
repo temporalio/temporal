@@ -65,12 +65,33 @@ func TestStaleCachedEventNotServedAfterShardReload(t *testing.T) {
 
 	// Shard instance A, and the process-lifetime events cache shared by every shard on the host.
 	shardA := newShard(1)
-	hostCache := events.NewHostLevelEventsCache(
-		shardA.GetExecutionManager(), cfg, metrics.NoopMetricsHandler, logger, false)
+	eventsCache := events.NewHostLevelEventsCache(
+		shardA.GetExecutionManager(),
+		cfg,
+		metrics.NoopMetricsHandler,
+		logger,
+		false,
+	)
+	chasmLogMessagesCache := events.NewHostLevelChasmLogMessagesCache(
+		shardA.GetExecutionManager(),
+		shardA.GetPayloadSerializer(),
+		cfg,
+		metrics.NoopMetricsHandler,
+		logger,
+		false,
+	)
 
 	// Shard A schedules an activity at eventID 5. Applying the event caches it, and then the
 	// transaction that built it fails to persist.
-	msA := TestGlobalMutableState(shardA, hostCache, logger, version, tests.WorkflowID, tests.RunID)
+	msA := TestGlobalMutableState(
+		shardA,
+		eventsCache,
+		chasmLogMessagesCache,
+		logger,
+		version,
+		tests.WorkflowID,
+		tests.RunID,
+	)
 	msA.GetExecutionInfo().VersionHistories = versionHistories()
 	staleEvent := &historypb.HistoryEvent{
 		EventId:   eventID,
@@ -113,7 +134,15 @@ func TestStaleCachedEventNotServedAfterShardReload(t *testing.T) {
 			HistoryEvents: []*historypb.HistoryEvent{persistedEvent},
 		}, nil).Times(1)
 
-	msB := TestGlobalMutableState(shardB, hostCache, logger, version, tests.WorkflowID, tests.RunID)
+		msB := TestGlobalMutableState(
+			shardB,
+			eventsCache,
+			chasmLogMessagesCache,
+			logger,
+			version,
+			tests.WorkflowID,
+			tests.RunID,
+		)
 	msB.GetExecutionInfo().VersionHistories = versionHistories()
 	msB.pendingChildExecutionInfoIDs = map[int64]*persistencespb.ChildExecutionInfo{
 		eventID: {InitiatedEventId: eventID, InitiatedEventBatchId: eventID},

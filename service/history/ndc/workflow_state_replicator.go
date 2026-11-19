@@ -687,6 +687,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithoutNewRun(
 	localMutableState := workflow.NewMutableState(
 		r.shardContext,
 		r.shardContext.GetEventsCache(),
+		r.shardContext.GetChasmLogMessagesCache(),
 		r.logger,
 		nsEntry,
 		executionInfo.WorkflowId,
@@ -775,6 +776,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithNewRun(
 	localMutableState := workflow.NewMutableState(
 		r.shardContext,
 		r.shardContext.GetEventsCache(),
+		r.shardContext.GetChasmLogMessagesCache(),
 		r.logger,
 		nsEntry,
 		executionInfo.WorkflowId,
@@ -1340,6 +1342,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 		newRunMutableState, err = workflow.NewMutableStateInChain(
 			r.shardContext,
 			r.shardContext.GetEventsCache(),
+			r.shardContext.GetChasmLogMessagesCache(),
 			r.logger,
 			originalMutableState.GetNamespaceEntry(),
 			workflowID,
@@ -1354,6 +1357,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 		newRunMutableState = workflow.NewMutableState(
 			r.shardContext,
 			r.shardContext.GetEventsCache(),
+			r.shardContext.GetChasmLogMessagesCache(),
 			r.logger,
 			originalMutableState.GetNamespaceEntry(),
 			workflowID,
@@ -1811,6 +1815,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	mutableState, err := workflow.NewSanitizedMutableState(
 		r.shardContext,
 		r.shardContext.GetEventsCache(),
+		r.shardContext.GetChasmLogMessagesCache(),
 		r.logger,
 		ns,
 		sourceMutableState,

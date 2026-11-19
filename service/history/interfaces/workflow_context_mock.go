@@ -103,17 +103,17 @@ func (mr *MockWorkflowContextMockRecorder) ConflictResolveWorkflowExecution(ctx,
 }
 
 // CreateWorkflowExecution mocks base method.
-func (m *MockWorkflowContext) CreateWorkflowExecution(ctx context.Context, shardContext ShardContext, createMode persistence0.CreateWorkflowMode, prevRunID string, prevLastWriteVersion int64, newMutableState MutableState, newWorkflow *persistence0.WorkflowSnapshot, newWorkflowEvents []*persistence0.WorkflowEvents, transactionPolicy TransactionPolicy) error {
+func (m *MockWorkflowContext) CreateWorkflowExecution(ctx context.Context, shardContext ShardContext, createMode persistence0.CreateWorkflowMode, prevRunID string, prevLastWriteVersion int64, newMutableState MutableState, newWorkflow *persistence0.WorkflowSnapshot, newWorkflowEvents []*persistence0.WorkflowEvents, newChasmLogMessages []*persistence0.ChasmLogMessages, transactionPolicy TransactionPolicy) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateWorkflowExecution", ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, transactionPolicy)
+	ret := m.ctrl.Call(m, "CreateWorkflowExecution", ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, newChasmLogMessages, transactionPolicy)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateWorkflowExecution indicates an expected call of CreateWorkflowExecution.
-func (mr *MockWorkflowContextMockRecorder) CreateWorkflowExecution(ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, transactionPolicy any) *gomock.Call {
+func (mr *MockWorkflowContextMockRecorder) CreateWorkflowExecution(ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, newChasmLogMessages, transactionPolicy any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockWorkflowContext)(nil).CreateWorkflowExecution), ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, transactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockWorkflowContext)(nil).CreateWorkflowExecution), ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, newChasmLogMessages, transactionPolicy)
 }
 
 // GetArchetypeID mocks base method.
@@ -215,6 +215,26 @@ func (m *MockWorkflowContext) Lock(ctx context.Context, lockPriority locks.Prior
 func (mr *MockWorkflowContextMockRecorder) Lock(ctx, lockPriority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockWorkflowContext)(nil).Lock), ctx, lockPriority)
+}
+
+// PersistChasmLogMessages mocks base method.
+func (m *MockWorkflowContext) PersistChasmLogMessages(ctx context.Context, shardContext ShardContext, chasmLogMessages ...*persistence0.ChasmLogMessages) (int64, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, shardContext}
+	for _, a := range chasmLogMessages {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PersistChasmLogMessages", varargs...)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PersistChasmLogMessages indicates an expected call of PersistChasmLogMessages.
+func (mr *MockWorkflowContextMockRecorder) PersistChasmLogMessages(ctx, shardContext any, chasmLogMessages ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, shardContext}, chasmLogMessages...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistChasmLogMessages", reflect.TypeOf((*MockWorkflowContext)(nil).PersistChasmLogMessages), varargs...)
 }
 
 // PersistWorkflowEvents mocks base method.

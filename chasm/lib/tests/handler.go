@@ -46,6 +46,13 @@ type (
 
 	CancelPayloadStoreResponse struct{}
 
+	DeletePayloadStoreRequest struct {
+		NamespaceID namespace.ID
+		StoreID     string
+		Reason      string
+		Identity    string
+	}
+
 	AddPayloadRequest struct {
 		NamespaceID namespace.ID
 		StoreID     string
@@ -78,11 +85,33 @@ type (
 		State *testspb.TestPayloadStore
 	}
 
-	DeletePayloadStoreRequest struct {
+	AppendMessagesRequest struct {
 		NamespaceID namespace.ID
 		StoreID     string
-		Reason      string
-		Identity    string
+		Messages    []*commonpb.Payload
+	}
+
+	AppendMessagesResponse struct {
+		State *testspb.TestPayloadStore
+	}
+
+	GetMessagesRequest struct {
+		NamespaceID namespace.ID
+		StoreID     string
+		Offset      int64
+	}
+
+	GetMessagesResponse struct {
+		Messages []*chasm.LogMessage[*commonpb.Payload]
+	}
+
+	ConsumeMessagesRequest struct {
+		NamespaceID namespace.ID
+		StoreID     string
+	}
+
+	ConsumeMessagesResponse struct {
+		Messages []*chasm.LogMessage[*commonpb.Payload]
 	}
 )
 
@@ -164,6 +193,24 @@ func CancelPayloadStoreHandler(
 	return resp, err
 }
 
+func DeletePayloadStoreHandler(
+	ctx context.Context,
+	request DeletePayloadStoreRequest,
+) error {
+	return chasm.DeleteExecution[*PayloadStore](
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: request.NamespaceID.String(),
+			BusinessID:  request.StoreID,
+		},
+		chasm.DeleteExecutionRequest{
+			// TerminateComponentRequest
+			Reason:   request.Reason,
+			Identity: request.Identity,
+		},
+	)
+}
+
 func AddPayloadHandler(
 	ctx context.Context,
 	request AddPayloadRequest,
@@ -210,25 +257,6 @@ func GetPayloadHandler(
 	}, nil
 }
 
-func DeletePayloadStoreHandler(
-	ctx context.Context,
-	request DeletePayloadStoreRequest,
-) error {
-	return chasm.DeleteExecution[*PayloadStore](
-		ctx,
-		chasm.ExecutionKey{
-			NamespaceID: request.NamespaceID.String(),
-			BusinessID:  request.StoreID,
-		},
-		chasm.DeleteExecutionRequest{
-			TerminateComponentRequest: chasm.TerminateComponentRequest{
-				Reason:   request.Reason,
-				Identity: request.Identity,
-			},
-		},
-	)
-}
-
 func RemovePayloadHandler(
 	ctx context.Context,
 	request RemovePayloadRequest,
@@ -249,5 +277,74 @@ func RemovePayloadHandler(
 	}
 	return RemovePayloadResponse{
 		State: state,
+	}, nil
+}
+
+func AppendMessagesHandler(
+	ctx context.Context,
+	request AppendMessagesRequest,
+) (AppendMessagesResponse, error) {
+	state, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: request.NamespaceID.String(),
+				BusinessID:  request.StoreID,
+			},
+		),
+		(*PayloadStore).AppendMessages,
+		request,
+	)
+	if err != nil {
+		return AppendMessagesResponse{}, err
+	}
+	return AppendMessagesResponse{
+		State: state,
+	}, nil
+}
+
+func GetMessagesHandler(
+	ctx context.Context,
+	request GetMessagesRequest,
+) (GetMessagesResponse, error) {
+	messages, err := chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: request.NamespaceID.String(),
+				BusinessID:  request.StoreID,
+			},
+		),
+		(*PayloadStore).GetMessages,
+		request.Offset,
+	)
+	if err != nil {
+		return GetMessagesResponse{}, err
+	}
+	return GetMessagesResponse{
+		Messages: messages,
+	}, nil
+}
+
+func ConsumeMessagesHandler(
+	ctx context.Context,
+	request ConsumeMessagesRequest,
+) (ConsumeMessagesResponse, error) {
+	messages, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: request.NamespaceID.String(),
+				BusinessID:  request.StoreID,
+			},
+		),
+		(*PayloadStore).ConsumeMessages,
+		nil,
+	)
+	if err != nil {
+		return ConsumeMessagesResponse{}, err
+	}
+	return ConsumeMessagesResponse{
+		Messages: messages,
 	}, nil
 }

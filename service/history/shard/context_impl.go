@@ -88,21 +88,22 @@ type (
 
 	ContextImpl struct {
 		// These fields are constant:
-		shardID             int32
-		owner               string
-		stringRepr          string
-		executionManager    persistence.ExecutionManager
-		metricsHandler      metrics.Handler
-		eventLogger         otellog.Logger
-		eventsCache         events.Cache
-		closeCallback       CloseCallback
-		config              *configs.Config
-		contextTaggedLogger log.Logger
-		throttledLogger     log.Logger
-		engineFactory       EngineFactory
-		engineFuture        *future.FutureImpl[historyi.Engine]
-		queueMetricEmitter  sync.Once
-		finalizer           *finalizer.Finalizer
+		shardID               int32
+		owner                 string
+		stringRepr            string
+		executionManager      persistence.ExecutionManager
+		metricsHandler        metrics.Handler
+		eventLogger           otellog.Logger
+		eventsCache           events.Cache
+		chasmLogMessagesCache events.ChasmLogMessagesCache
+		closeCallback         CloseCallback
+		config                *configs.Config
+		contextTaggedLogger   log.Logger
+		throttledLogger       log.Logger
+		engineFactory         EngineFactory
+		engineFuture          *future.FutureImpl[historyi.Engine]
+		queueMetricEmitter    sync.Once
+		finalizer             *finalizer.Finalizer
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -875,14 +876,11 @@ func (s *ContextImpl) AppendHistoryEvents(
 	request *persistence.AppendHistoryNodesRequest,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
-) (int, error) {
+) (size int, retError error) {
 	if err := s.errorByState(); err != nil {
 		return 0, err
 	}
 
-	request.ShardID = s.shardID
-
-	size := 0
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
@@ -902,11 +900,49 @@ func (s *ContextImpl) AppendHistoryEvents(
 				tag.WorkflowHistorySizeBytes(size))
 		}
 	}()
-	resp, err0 := s.GetExecutionManager().AppendHistoryNodes(ctx, request)
+
+	request.ShardID = s.shardID
+	resp, err := s.GetExecutionManager().AppendHistoryNodes(ctx, request)
 	if resp != nil {
 		size = resp.Size
 	}
-	return size, err0
+	return size, err
+}
+
+func (s *ContextImpl) AppendChasmLogMessages(
+	ctx context.Context,
+	request *persistence.AppendChasmLogNodeRequest,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+) (size int, retError error) {
+	if err := s.errorByState(); err != nil {
+		return 0, err
+	}
+
+	if len(request.Messages) == 0 {
+		return 0, nil
+	}
+
+	blob, err := s.payloadSerializer.ChasmLogMessagesToBlob(request.Messages)
+	if err != nil {
+		return 0, err
+	}
+
+	request.ShardID = s.shardID
+	resp, err := s.GetExecutionManager().AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
+		ShardID:           request.ShardID,
+		IsNewBranch:       request.IsNewBranch,
+		Info:              request.Info,
+		BranchToken:       request.BranchToken,
+		History:           blob,
+		PrevTransactionID: request.PrevTransactionID,
+		TransactionID:     request.TransactionID,
+		NodeID:            request.Messages[0].GetSequenceId(),
+	})
+	if resp != nil {
+		size = resp.Size
+	}
+	return size, err
 }
 
 func (s *ContextImpl) DeleteWorkflowExecution(
@@ -1113,6 +1149,11 @@ func (s *ContextImpl) GetConfig() *configs.Config {
 func (s *ContextImpl) GetEventsCache() events.Cache {
 	// constant from initialization (except for tests), no need for locks
 	return s.eventsCache
+}
+
+func (s *ContextImpl) GetChasmLogMessagesCache() events.ChasmLogMessagesCache {
+	// constant from initialization (except for tests), no need for locks
+	return s.chasmLogMessagesCache
 }
 
 func (s *ContextImpl) GetLogger() log.Logger {
@@ -2177,6 +2218,7 @@ func newContext(
 	hostInfoProvider membership.HostInfoProvider,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	eventsCache events.Cache,
+	chasmLogMessagesCache events.ChasmLogMessagesCache,
 	stateMachineRegistry *hsm.Registry,
 	chasmRegistry *chasm.Registry,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
@@ -2262,9 +2304,18 @@ func newContext(
 	})
 	if shardContext.GetConfig().EnableHostLevelEventsCache() {
 		shardContext.eventsCache = eventsCache
+		shardContext.chasmLogMessagesCache = chasmLogMessagesCache
 	} else {
 		shardContext.eventsCache = events.NewShardLevelEventsCache(
 			shardContext.executionManager,
+			shardContext.config,
+			shardContext.metricsHandler,
+			shardContext.contextTaggedLogger,
+			false,
+		)
+		shardContext.chasmLogMessagesCache = events.NewShardLevelChasmLogMessagesCache(
+			shardContext.executionManager,
+			shardContext.payloadSerializer,
 			shardContext.config,
 			shardContext.metricsHandler,
 			shardContext.contextTaggedLogger,

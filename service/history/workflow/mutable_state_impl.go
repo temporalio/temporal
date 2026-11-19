@@ -277,6 +277,7 @@ type (
 		shard                  historyi.ShardContext
 		clusterMetadata        cluster.Metadata
 		eventsCache            events.Cache
+		chasmLogMessagesCache  events.ChasmLogMessagesCache
 		config                 *configs.Config
 		timeSource             clock.TimeSource
 		logger                 log.Logger
@@ -306,6 +307,7 @@ var _ historyi.MutableState = (*MutableStateImpl)(nil)
 func NewMutableState(
 	shard historyi.ShardContext,
 	eventsCache events.Cache,
+	chasmLogMessagesCache events.ChasmLogMessagesCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
@@ -379,14 +381,15 @@ func NewMutableState(
 
 		QueryRegistry: NewQueryRegistry(),
 
-		shard:            shard,
-		clusterMetadata:  shard.GetClusterMetadata(),
-		eventsCache:      eventsCache,
-		config:           shard.GetConfig(),
-		timeSource:       shard.GetTimeSource(),
-		logger:           logger,
-		metricsHandler:   shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
-		endpointRegistry: shard.EndpointRegistry(),
+		shard:                 shard,
+		clusterMetadata:       shard.GetClusterMetadata(),
+		eventsCache:           eventsCache,
+		chasmLogMessagesCache: chasmLogMessagesCache,
+		config:                shard.GetConfig(),
+		timeSource:            shard.GetTimeSource(),
+		logger:                logger,
+		metricsHandler:        shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		endpointRegistry:      shard.EndpointRegistry(),
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
@@ -423,7 +426,7 @@ func NewMutableState(
 
 	s.hBuilder = historybuilder.New(
 		s.timeSource,
-		s.shard.GenerateTaskIDs,
+		s.GenerateTaskIDs,
 		s.currentVersion,
 		common.FirstEventID,
 		s.bufferEventsInDB,
@@ -451,6 +454,7 @@ func NewMutableState(
 func NewMutableStateFromDB(
 	shard historyi.ShardContext,
 	eventsCache events.Cache,
+	chasmLogMessagesCache events.ChasmLogMessagesCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	dbRecord *persistencespb.WorkflowMutableState,
@@ -462,6 +466,7 @@ func NewMutableStateFromDB(
 	mutableState := NewMutableState(
 		shard,
 		eventsCache,
+		chasmLogMessagesCache,
 		logger,
 		namespaceEntry,
 		dbRecord.ExecutionInfo.WorkflowId,
@@ -545,7 +550,7 @@ func NewMutableStateFromDB(
 
 	mutableState.hBuilder = historybuilder.New(
 		mutableState.timeSource,
-		mutableState.shard.GenerateTaskIDs,
+		mutableState.GenerateTaskIDs,
 		common.EmptyVersion,
 		dbRecord.NextEventId,
 		dbRecord.BufferedEvents,
@@ -611,6 +616,7 @@ func NewMutableStateFromDB(
 func NewSanitizedMutableState(
 	shard historyi.ShardContext,
 	eventsCache events.Cache,
+	chasmLogMessagesCache events.ChasmLogMessagesCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	mutableStateRecord *persistencespb.WorkflowMutableState,
@@ -624,7 +630,15 @@ func NewSanitizedMutableState(
 		return nil, err
 	}
 
-	mutableState, err := NewMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
+	mutableState, err := NewMutableStateFromDB(
+		shard,
+		eventsCache,
+		chasmLogMessagesCache,
+		logger,
+		namespaceEntry,
+		mutableStateRecord,
+		1, // dbRecordVersion
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -636,6 +650,7 @@ func NewSanitizedMutableState(
 func NewMutableStateInChain(
 	shardContext historyi.ShardContext,
 	eventsCache events.Cache,
+	chasmLogMessagesCache events.ChasmLogMessagesCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
@@ -646,6 +661,7 @@ func NewMutableStateInChain(
 	newMutableState := NewMutableState(
 		shardContext,
 		eventsCache,
+		chasmLogMessagesCache,
 		logger,
 		namespaceEntry,
 		workflowID,
@@ -1211,7 +1227,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 
 	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
-		ms.shard.GenerateTaskIDs,
+		ms.GenerateTaskIDs,
 		ms.currentVersion,
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
@@ -1466,6 +1482,33 @@ func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) 
 	eventKey := ms.eventKey(ref.EventId, version)
 
 	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
+}
+
+func (ms *MutableStateImpl) LoadChasmLogMessages(
+	ctx context.Context,
+	token []byte,
+	branch *persistencespb.HistoryBranch,
+) (*persistencespb.ChasmLogMessageBatch, error) {
+	ref := &tokenspb.HistoryEventRef{}
+	err := proto.Unmarshal(token, ref)
+	if err != nil {
+		return nil, err
+	}
+	branchToken, err := ms.shard.GetPayloadSerializer().HistoryBranchToBlob(branch)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheKey := events.ChasmLogMessagesKey{
+		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
+		BusinessID:  ms.executionInfo.WorkflowId,
+		RunID:       ms.executionState.RunId,
+		BatchID:     ref.EventBatchId,
+		Version:     ms.GetCurrentVersion(),
+		ShardUUID:   ms.shard.GetOwner(),
+	}
+
+	return ms.chasmLogMessagesCache.GetLogMessageBatch(ctx, ms.shard.GetShardID(), cacheKey, branchToken.Data)
 }
 
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
@@ -6468,6 +6511,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	newMutableState, err := NewMutableStateInChain(
 		ms.shard,
 		ms.shard.GetEventsCache(),
+		ms.shard.GetChasmLogMessagesCache(),
 		ms.logger,
 		ms.namespaceEntry,
 		ms.executionInfo.WorkflowId,
@@ -7797,8 +7841,9 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, err
 	}
 	return &historyi.MutationTransactionPayload{
-		ExecutionMutation: workflowMutation,
-		ExecutionEvents:   result.workflowEventsSeq,
+		ExecutionMutation:         workflowMutation,
+		ExecutionEvents:           result.workflowEventsSeq,
+		ExecutionChasmLogMessages: result.chasmLogMessages,
 	}, nil
 }
 
@@ -7845,8 +7890,9 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		return nil, err
 	}
 	return &historyi.SnapshotTransactionPayload{
-		ExecutionSnapshot: workflowSnapshot,
-		ExecutionEvents:   result.workflowEventsSeq,
+		ExecutionSnapshot:         workflowSnapshot,
+		ExecutionEvents:           result.workflowEventsSeq,
+		ExecutionChasmLogMessages: result.chasmLogMessages,
 	}, nil
 }
 
@@ -7867,6 +7913,10 @@ func (ms *MutableStateImpl) UpdateDuplicatedResource(
 
 func (ms *MutableStateImpl) GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error) {
 	return ms.taskGenerator.GenerateMigrationTasks(targetClusters)
+}
+
+func (ms *MutableStateImpl) GenerateTaskIDs(number int) ([]int64, error) {
+	return ms.shard.GenerateTaskIDs(number)
 }
 
 func (ms *MutableStateImpl) updateSearchAttributes(
@@ -7895,6 +7945,7 @@ type closeTransactionResult struct {
 	clearBuffer        bool
 	checksum           *persistencespb.Checksum
 	chasmNodesMutation chasm.NodesMutation
+	chasmLogMessages   []*persistence.ChasmLogMessages
 }
 
 func (ms *MutableStateImpl) SetContextMetadata(
@@ -7975,7 +8026,10 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
-	chasmNodesMutation, err := ms.chasmTree.CloseTransaction(ctx, transactionPolicy == historyi.TransactionPolicyActive)
+	chasmNodesMutation, err := ms.chasmTree.CloseTransaction(
+		ctx,
+		transactionPolicy == historyi.TransactionPolicyActive,
+	)
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -7988,6 +8042,13 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.approximateSize += newSize - ms.chasmNodeSizes[nodePath]
 		ms.chasmNodeSizes[nodePath] = newSize
 	}
+
+	chasmLogMessages, err := ms.closeTransactionPrepareChasmLogMessages(chasmNodesMutation)
+	if err != nil {
+		return closeTransactionResult{}, err
+	}
+	// chasmPayloads now contains chasmNodesMutation.StoreMutation, so we can unset it.
+	chasmNodesMutation.LogMutations = nil
 
 	// Enforce the CHASM request-ID limit before the executionState blob is captured into the
 	// mutation/snapshot below. Gating (active + attached-this-transaction) lives in the helper.
@@ -8043,7 +8104,42 @@ func (ms *MutableStateImpl) closeTransaction(
 		clearBuffer:        clearBuffer,
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
+		chasmLogMessages:   chasmLogMessages,
 	}, nil
+}
+
+func (ms *MutableStateImpl) closeTransactionPrepareChasmLogMessages(
+	chasmMutation chasm.NodesMutation,
+) ([]*persistence.ChasmLogMessages, error) {
+	numBatches := 0
+	for _, s := range chasmMutation.LogMutations {
+		numBatches += len(s.Batches)
+	}
+
+	if numBatches == 0 {
+		return nil, nil
+	}
+
+	chasmPayloads := make([]*persistence.ChasmLogMessages, 0, numBatches)
+	for _, s := range chasmMutation.LogMutations {
+		branchToken, err := ms.shard.GetPayloadSerializer().HistoryBranchToBlob(s.Branch)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, batch := range s.Batches {
+			chasmPayloads = append(chasmPayloads, &persistence.ChasmLogMessages{
+				NamespaceID: ms.executionInfo.NamespaceId,
+				BusinessID:  ms.executionInfo.WorkflowId,
+				RunID:       ms.executionState.RunId,
+				BranchToken: branchToken.Data,
+				PrevTxnID:   batch.PrevTxnID,
+				TxnID:       batch.TxnID,
+				Messages:    batch.Messages,
+			})
+		}
+	}
+	return chasmPayloads, nil
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
@@ -8307,7 +8403,7 @@ func (ms *MutableStateImpl) UpdateLastRunningClock(
 			for _, batch := range eventsSeq {
 				eventCount += len(batch.Events)
 			}
-			taskIDs, err := ms.shard.GenerateTaskIDs(eventCount)
+			taskIDs, err := ms.GenerateTaskIDs(eventCount)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -8730,7 +8826,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 
 	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
-		ms.shard.GenerateTaskIDs,
+		ms.GenerateTaskIDs,
 		ms.GetCurrentVersion(),
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
@@ -8770,7 +8866,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	ms.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID, historyMutation.RequestIDToEventID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
-	historyNodeTxnIDs, err := ms.shard.GenerateTaskIDs(len(newEventsBatches))
+	historyNodeTxnIDs, err := ms.GenerateTaskIDs(len(newEventsBatches))
 	if err != nil {
 		return nil, nil, nil, false, err
 	}

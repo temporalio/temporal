@@ -1,6 +1,8 @@
 package tests
 
 import (
+	"context"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -39,7 +41,9 @@ type (
 
 		State *testspb.TestPayloadStore
 
-		Payloads   chasm.Map[string, *commonpb.Payload]
+		Payloads chasm.Map[string, *commonpb.Payload]
+		Messages chasm.Log[*commonpb.Payload]
+
 		Visibility chasm.Field[*chasm.Visibility]
 	}
 
@@ -199,6 +203,62 @@ func (s *PayloadStore) RemovePayload(
 	delete(s.State.ExpirationTimes, key)
 
 	return common.CloneProto(s.State), nil
+}
+
+func (s *PayloadStore) AppendMessages(
+	mutableContext chasm.MutableContext,
+	request AppendMessagesRequest,
+) (*testspb.TestPayloadStore, error) {
+	if err := assertContextValue(mutableContext); err != nil {
+		return nil, err
+	}
+
+	if len(request.Messages) == 0 {
+		return nil, serviceerror.NewInvalidArgument("no messages to append")
+	}
+
+	s.Messages.Append(request.Messages...)
+	s.State.TotalCount++
+	for _, msg := range request.Messages {
+		s.State.TotalSize += int64(len(msg.Data))
+	}
+
+	return common.CloneProto(s.State), nil
+}
+
+func (s *PayloadStore) GetMessages(
+	chasmContext chasm.Context,
+	offset int64,
+) ([]*chasm.LogMessage[*commonpb.Payload], error) {
+	if err := assertContextValue(chasmContext); err != nil {
+		return nil, err
+	}
+
+	batchIter := s.Messages.ReadBatch(context.Background(), offset)
+	if batchIter.HasNext() {
+		return batchIter.Next()
+	}
+	return nil, nil
+}
+
+func (s *PayloadStore) ConsumeMessages(
+	chasmContext chasm.MutableContext,
+	_ chasm.NoValue,
+) ([]*chasm.LogMessage[*commonpb.Payload], error) {
+	if err := assertContextValue(chasmContext); err != nil {
+		return nil, err
+	}
+
+	batchIter := s.Messages.ReadBatch(context.Background(), 0)
+	if batchIter.HasNext() {
+		res, err := batchIter.Next()
+		if err != nil {
+			return nil, err
+		}
+		err = s.Messages.AdvanceHead(context.Background(), res[len(res)-1].SequenceID()+1)
+		return res, err
+	}
+	return nil, nil
 }
 
 func (s *PayloadStore) LifecycleState(

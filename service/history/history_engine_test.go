@@ -133,8 +133,9 @@ type (
 		mockSearchAttributesProvider       *searchattribute.MockProvider
 		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
 
-		eventsCache events.Cache
-		config      *configs.Config
+		eventsCache           events.Cache
+		chasmLogMessagesCache events.ChasmLogMessagesCache
+		config                *configs.Config
 	}
 )
 
@@ -190,6 +191,14 @@ func (s *engineSuite) SetupTest() {
 
 	s.eventsCache = events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
+		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
+	)
+	s.chasmLogMessagesCache = events.NewHostLevelChasmLogMessagesCache(
+		s.mockShard.GetExecutionManager(),
+		s.mockShard.GetPayloadSerializer(),
 		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
 		s.mockShard.GetLogger(),
@@ -278,8 +287,15 @@ func (s *engineSuite) TestGetMutableStateSync() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
-		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -340,8 +356,15 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
-		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -412,8 +435,15 @@ func (s *engineSuite) TestGetMutableStateLongPoll_ShardClosed() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
-		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -459,6 +489,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	ms := workflow.TestLocalMutableState(
 		s.historyEngine.shardContext,
 		s.eventsCache,
+		s.chasmLogMessagesCache,
 		tests.LocalNamespaceEntry,
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
@@ -522,8 +553,15 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -553,7 +591,15 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	identity := "testIdentity"
 	workflowType := "wType"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	event := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -598,7 +644,15 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	identity := "testIdentity"
 	workflowType := "wType"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	event := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -668,7 +722,15 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	identity := "testIdentity"
 	workflowType := "wType"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -718,7 +780,15 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	workflowType := "wType"
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -789,7 +859,15 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	workflowType := "wType"
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -853,7 +931,15 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	workflowType := "wType"
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -935,7 +1021,15 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	workflowType := "wType"
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -1087,8 +1181,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedUpdateExecutionFailed() {
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tq, identity)
@@ -1128,8 +1229,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfTaskCompleted() {
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tq, identity)
@@ -1168,8 +1276,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfTaskNotStarted() {
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 
@@ -1208,8 +1323,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 	activity3Type := "activity_type3"
 	activity3Input := payloads.EncodeString("input3")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt1 := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(ms, wt1.ScheduledEventID, tq, identity)
@@ -1313,8 +1435,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_StaleCache() {
 	identity := "testIdentity"
 	input := payloads.EncodeString("input")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -1366,8 +1495,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 	activity2Result := payloads.EncodeString("activity2_result")
 	workflowResult := payloads.EncodeString("workflow result")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	wt1 := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(ms, wt1.ScheduledEventID, tl, identity)
@@ -1451,8 +1587,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 	activity2Result := payloads.EncodeString("activity2_result")
 	reason := "workflow fail reason"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	wt1 := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(ms, wt1.ScheduledEventID, tl, identity)
@@ -1531,8 +1674,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 	activity1Input := payloads.EncodeString("input1")
 	activity1Result := payloads.EncodeString("activity1_result")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	wt1 := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(ms, wt1.ScheduledEventID, tl, identity)
@@ -1654,8 +1804,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		identity := "testIdentity"
 		input := payloads.EncodeString("input")
 
-		ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-			tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+		ms := workflow.TestLocalMutableState(
+			s.historyEngine.shardContext,
+			s.eventsCache,
+			s.chasmLogMessagesCache,
+			tests.LocalNamespaceEntry,
+			we.GetWorkflowId(),
+			we.GetRunId(),
+			log.NewTestLogger(),
+		)
 		addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), time.Duration(runTimeout*10)*time.Second, time.Duration(runTimeout)*time.Second, 200*time.Second, identity)
 		wt := addWorkflowTaskScheduledEvent(ms)
 		addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -1747,8 +1904,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(ns.ID()).Return(ns, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(ns.ID()).Return(ns, nil).AnyTimes()
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		ns, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		ns,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -1805,8 +1969,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	identity := "testIdentity"
 	input := payloads.EncodeString("input")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -1892,8 +2063,15 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration() *histor
 		SignalRequest: &signal,
 	}
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -1947,8 +2125,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 	identity := "testIdentity"
 	input := payloads.EncodeString("input")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2063,8 +2248,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Ca
 	identity := "testIdentity"
 	input := payloads.EncodeString("input")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2150,8 +2342,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Wo
 	identity := "testIdentity"
 	input := payloads.EncodeString("input")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2231,8 +2430,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2275,8 +2481,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2319,8 +2532,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2364,8 +2584,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 	identity := "testIdentity"
 	workflowResult := payloads.EncodeString("success")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2417,8 +2644,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 	identity := "testIdentity"
 	reason := "fail workflow reason"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2469,8 +2703,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2525,8 +2766,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2592,8 +2840,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2660,8 +2915,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 	identity := "testIdentity"
 	foreignNamespace := namespace.Name("unknown namespace")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2806,8 +3068,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -2844,8 +3113,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -2886,8 +3162,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	activityInput := payloads.EncodeString("input1")
 	activityResult := payloads.EncodeString("activity result")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2934,8 +3217,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	activityInput := payloads.EncodeString("input1")
 	activityResult := payloads.EncodeString("activity result")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -2984,8 +3274,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	activityInput := payloads.EncodeString("input1")
 	activityResult := payloads.EncodeString("activity result")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3030,8 +3327,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activityInput := payloads.EncodeString("input1")
 	activityResult := payloads.EncodeString("activity result")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3077,8 +3381,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	activityInput := payloads.EncodeString("input1")
 	activityResult := payloads.EncodeString("activity result")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3136,8 +3447,15 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	workflowTaskScheduledEvent := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, workflowTaskScheduledEvent.ScheduledEventID, tl, identity)
@@ -3284,8 +3602,15 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -3322,8 +3647,15 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -3363,8 +3695,15 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3410,8 +3749,15 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	activityInput := payloads.EncodeString("input1")
 	serverFailure := failure.NewServerFailure("fail reason", true)
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3458,8 +3804,15 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3502,8 +3855,15 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3548,8 +3908,15 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	activityInput := payloads.EncodeString("input1")
 	serverFailure := failure.NewServerFailure("failed", false)
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3606,8 +3973,15 @@ func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
 	activityInput := payloads.EncodeString("input1")
 	serverFailure := failure.NewServerFailure("failed", false)
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3673,8 +4047,15 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	workflowTaskScheduledEvent := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, workflowTaskScheduledEvent.ScheduledEventID, tl, identity)
@@ -3732,8 +4113,15 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3780,8 +4168,15 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3835,8 +4230,15 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3883,8 +4285,15 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3928,8 +4337,15 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -3987,8 +4403,15 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	}
 	taskToken, _ := tt.Marshal()
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	workflowTaskScheduledEvent := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, workflowTaskScheduledEvent.ScheduledEventID, tl, identity)
@@ -4069,8 +4492,15 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, workflowExecution.WorkflowId, workflowExecution.RunId, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		workflowExecution.WorkflowId,
+		workflowExecution.RunId,
+		log.NewTestLogger(),
+	)
 	// Add dummy event
 	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -4108,8 +4538,15 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, workflowExecution.WorkflowId, workflowExecution.RunId, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		workflowExecution.WorkflowId,
+		workflowExecution.RunId,
+		log.NewTestLogger(),
+	)
 	// Add dummy event
 	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -4147,8 +4584,15 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	identity := "testIdentity"
 	activityScheduledEventID := int64(99)
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -4211,8 +4655,15 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -4275,8 +4726,15 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -4337,8 +4795,15 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 	activityInput := payloads.EncodeString("input1")
 	workflowResult := payloads.EncodeString("workflow result")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -4404,8 +4869,15 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -4508,8 +4980,15 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -4612,8 +5091,15 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
@@ -4761,8 +5247,15 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	identity := "testIdentity"
 	timerID := "t1"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
@@ -4863,8 +5356,15 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 	identity := "testIdentity"
 	timerID := "t1"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	// Verify cancel timer with a start event.
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
@@ -4922,8 +5422,15 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	identity := "testIdentity"
 	timerID := "t1"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	// Verify cancel timer with a start event.
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
@@ -4987,8 +5494,15 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	identity := "testIdentity"
 	timerID := "t1"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	// Verify cancel timer with a start event.
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
@@ -5065,8 +5579,15 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 		},
 	}
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -5127,8 +5648,15 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 				},
 			}
 
-			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-				tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+			ms := workflow.TestLocalMutableState(
+				s.historyEngine.shardContext,
+				s.eventsCache,
+				s.chasmLogMessagesCache,
+				tests.LocalNamespaceEntry,
+				we.GetWorkflowId(),
+				we.GetRunId(),
+				log.NewTestLogger(),
+			)
 			addWorkflowExecutionStartedEvent(ms, &we, "wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
 			addWorkflowTaskScheduledEvent(ms)
 
@@ -5211,8 +5739,15 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 				},
 			}
 
-			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-				tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+			ms := workflow.TestLocalMutableState(
+				s.historyEngine.shardContext,
+				s.eventsCache,
+				s.chasmLogMessagesCache,
+				tests.LocalNamespaceEntry,
+				we.GetWorkflowId(),
+				we.GetRunId(),
+				log.NewTestLogger(),
+			)
 			addWorkflowExecutionStartedEvent(ms, &we, "wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
 			addWorkflowTaskScheduledEvent(ms)
 
@@ -5277,8 +5812,15 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 		},
 	}
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -5319,8 +5861,15 @@ func (s *engineSuite) TestSignalWorkflowExecution_WorkflowTaskBackoff() {
 		},
 	}
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:               we.WorkflowId,
 		WorkflowType:             &commonpb.WorkflowType{Name: "wType"},
@@ -5379,8 +5928,15 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 		RequestId:         requestID,
 	}
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.eventsCache,
+		s.chasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -5432,6 +5988,7 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 	ms := workflow.TestGlobalMutableState(
 		s.historyEngine.shardContext,
 		s.eventsCache,
+		s.chasmLogMessagesCache,
 		log.NewTestLogger(),
 		namespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()),
 		workflowExecution.GetWorkflowId(),
@@ -5475,6 +6032,7 @@ func (s *engineSuite) TestReapplyEvents_IgnoreSameClusterEvents() {
 	ms := workflow.TestLocalMutableState(
 		s.historyEngine.shardContext,
 		s.eventsCache,
+		s.chasmLogMessagesCache,
 		tests.LocalNamespaceEntry,
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
@@ -5537,6 +6095,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	ms := workflow.TestGlobalMutableState(
 		s.historyEngine.shardContext,
 		s.eventsCache,
+		s.chasmLogMessagesCache,
 		log.NewTestLogger(),
 		namespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()),
 		workflowExecution.GetWorkflowId(),

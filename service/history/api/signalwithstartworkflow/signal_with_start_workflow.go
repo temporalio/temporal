@@ -345,6 +345,7 @@ func startAndSignalWithoutCurrentWorkflow(
 		newWorkflowLease.GetMutableState(),
 		transactionPayload.ExecutionSnapshot,
 		transactionPayload.ExecutionEvents,
+		transactionPayload.ExecutionChasmLogMessages,
 		historyi.TransactionPolicyActive,
 	)
 	// CurrentWorkflowConditionFailedError.RequestIDs does not record signal delivery.

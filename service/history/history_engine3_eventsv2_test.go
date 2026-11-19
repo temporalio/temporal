@@ -51,18 +51,19 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller              *gomock.Controller
-		mockShard               *shard.ContextTest
-		mockTxProcessor         *queues.MockQueue
-		mockTimerProcessor      *queues.MockQueue
-		mockVisibilityProcessor *queues.MockQueue
-		mockEventsCache         *events.MockCache
-		mockNamespaceCache      *namespace.MockRegistry
-		mockClusterMetadata     *cluster.MockMetadata
-		workflowCache           wcache.Cache
-		historyEngine           *historyEngineImpl
-		mockExecutionMgr        *persistence.MockExecutionManager
-		mockVisibilityManager   *manager.MockVisibilityManager
+		controller                *gomock.Controller
+		mockShard                 *shard.ContextTest
+		mockTxProcessor           *queues.MockQueue
+		mockTimerProcessor        *queues.MockQueue
+		mockVisibilityProcessor   *queues.MockQueue
+		mockEventsCache           *events.MockCache
+		mockChasmLogMessagesCache *events.MockChasmLogEventsCache
+		mockNamespaceCache        *namespace.MockRegistry
+		mockClusterMetadata       *cluster.MockMetadata
+		workflowCache             wcache.Cache
+		historyEngine             *historyEngineImpl
+		mockExecutionMgr          *persistence.MockExecutionManager
+		mockVisibilityManager     *manager.MockVisibilityManager
 
 		config *configs.Config
 		logger log.Logger
@@ -114,6 +115,7 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockEventsCache = s.mockShard.MockEventsCache
+	s.mockChasmLogMessagesCache = s.mockShard.MockChasmLogMessagesCache
 	s.mockVisibilityManager = s.mockShard.Resource.VisibilityManager
 
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
@@ -216,8 +218,15 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
-		we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	executionInfo := ms.GetExecutionInfo()
 	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	executionInfo.StickyTaskQueue = stickyTl
@@ -330,8 +339,15 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
-		we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		we.GetWorkflowId(),
+		we.GetRunId(),
+		log.NewTestLogger(),
+	)
 	executionInfo := ms.GetExecutionInfo()
 	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	executionInfo.StickyTaskQueue = stickyTl
@@ -459,8 +475,15 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
-		workflowID, runID, log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		tests.LocalNamespaceEntry,
+		workflowID,
+		runID,
+		log.NewTestLogger(),
+	)
 	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,

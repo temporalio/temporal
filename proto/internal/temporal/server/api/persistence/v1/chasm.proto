@@ -6,6 +6,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
+import "temporal/server/api/persistence/v1/history_tree.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
@@ -29,6 +30,7 @@ message ChasmNodeMetadata {
     ChasmDataAttributes data_attributes = 12;
     ChasmCollectionAttributes collection_attributes = 13;
     ChasmPointerAttributes pointer_attributes = 14;
+    ChasmLogAttributes log_attributes = 15;
   }
 }
 
@@ -115,6 +117,40 @@ message ChasmCollectionAttributes {}
 
 message ChasmPointerAttributes {
   repeated string node_path = 1;
+}
+
+message ChasmLogAttributes {
+  ChasmLogMetadata metadata = 1;
+}
+
+message ChasmLogMetadata {
+  HistoryBranch branch = 1;
+  // Head batch ID references the first valid message batch of the Log.
+  int64 head_batch_id = 2;
+  int64 last_sequence_id = 3;
+  int64 last_transaction_id = 4;
+}
+
+message ChasmLogMessage {
+  // Monotonically increasing number, starts at 1.
+  int64 sequence_id = 1;
+  // Failover version of the message, used by the server for multi-cluster
+  // replication and versioning.
+  int64 version = 2;
+  // The payload itself.
+  temporal.api.common.v1.DataBlob data = 3;
+}
+
+message ChasmLogMessageBatch {
+  repeated ChasmLogMessage messages = 1;
+}
+
+message ChasmPayloadBatch {
+  string tree_id = 1;
+  string branch_id = 2;
+  int64 txn_id = 3;
+  int64 prev_txn_id = 4;
+  repeated ChasmLogMessage payloads = 5;
 }
 
 // ChasmTaskInfo includes component-facing task metadata

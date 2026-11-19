@@ -330,3 +330,17 @@ func (b *readOnlyNodeBackend) GetNexusUpdateCompletion(
 	b.unsupported("GetNexusUpdateCompletion")
 	return nexusrpc.CompleteOperationOptions{}, nil
 }
+
+func (b *readOnlyNodeBackend) GenerateTaskIDs(number int) ([]int64, error) {
+	b.unsupported("GenerateTaskIDs")
+	return nil, nil
+}
+
+func (b *readOnlyNodeBackend) LoadChasmLogMessages(
+	ctx context.Context,
+	token []byte,
+	branch *persistencespb.HistoryBranch,
+) (*persistencespb.ChasmLogMessageBatch, error) {
+	b.unsupported("LoadChasmLogMessages")
+	return nil, nil
+}

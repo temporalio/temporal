@@ -1565,6 +1565,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 	newMutableState, err := workflow.NewMutableStateInChain(
 		handler.shard,
 		handler.shard.GetEventsCache(),
+		handler.shard.GetChasmLogMessagesCache(),
 		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
@@ -1625,6 +1626,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 	newMutableState, err := workflow.NewMutableStateInChain(
 		handler.shard,
 		handler.shard.GetEventsCache(),
+		handler.shard.GetChasmLogMessagesCache(),
 		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,

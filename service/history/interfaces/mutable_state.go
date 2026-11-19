@@ -47,6 +47,7 @@ type (
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		SetReplayEventBatchID(batchID int64)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+		LoadChasmLogMessages(ctx context.Context, token []byte, branch *persistencespb.HistoryBranch) (*persistencespb.ChasmLogMessageBatch, error)
 
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
@@ -364,6 +365,7 @@ type (
 		CloseTransactionAsSnapshot(ctx context.Context, transactionPolicy TransactionPolicy) (*SnapshotTransactionPayload, error)
 		UpdateLastRunningClock([]*persistence.WorkflowEvents) (*persistencespb.WorkflowExecutionInfo, []*persistence.WorkflowEvents, error)
 		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
+		GenerateTaskIDs(number int) ([]int64, error)
 
 		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.
 		// Input backoffDuration is current backoff for next run.

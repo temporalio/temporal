@@ -181,6 +181,7 @@ func createMutableState(
 	newMutableState := workflow.NewMutableState(
 		shard,
 		shard.GetEventsCache(),
+		shard.GetChasmLogMessagesCache(),
 		shard.GetLogger(),
 		namespaceEntry,
 		workflowID,

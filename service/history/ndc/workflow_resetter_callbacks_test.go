@@ -67,8 +67,18 @@ func newChasmCallbacksMutableState(t *testing.T) *workflow.MutableStateImpl {
 	eventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	shardCtx.SetEventsCacheForTesting(eventsCache)
 
+	chasmLogMessagesCache := events.NewMockChasmLogEventsCache(ctrl)
+	shardCtx.SetChasmLogMessagesCacheForTesting(chasmLogMessagesCache)
+
 	ms := workflow.NewMutableState(
-		shardCtx, eventsCache, shardCtx.GetLogger(), namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC(),
+		shardCtx,
+		eventsCache,
+		chasmLogMessagesCache,
+		shardCtx.GetLogger(),
+		namespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		time.Now().UTC(),
 	)
 	_, err := ms.AddWorkflowExecutionStartedEvent(
 		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},

@@ -54,6 +54,7 @@ type (
 		mutableState     historyi.MutableState
 		snapshot         *persistence.WorkflowSnapshot
 		events           []*persistence.WorkflowEvents
+		logMessages      []*persistence.ChasmLogMessages
 	}
 
 	currentExecutionInfo struct {
@@ -840,7 +841,7 @@ func (e *ChasmEngine) lockCurrentExecution(
 	businessID string,
 	archetypeID chasm.ArchetypeID,
 ) (historyi.ReleaseWorkflowContextFunc, error) {
-	currentExecutionReleaseFn, err := e.executionCache.GetOrCreateCurrentExecution(
+	return e.executionCache.GetOrCreateCurrentExecution(
 		ctx,
 		shardContext,
 		namespaceID,
@@ -848,11 +849,6 @@ func (e *ChasmEngine) lockCurrentExecution(
 		archetypeID,
 		locks.PriorityHigh,
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	return currentExecutionReleaseFn, nil
 }
 
 func (e *ChasmEngine) createNewExecution(
@@ -895,6 +891,7 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 	mutableState := workflow.NewMutableState(
 		shardContext,
 		shardContext.GetEventsCache(),
+		shardContext.GetChasmLogMessagesCache(),
 		shardContext.GetLogger(),
 		nsEntry,
 		executionKey.BusinessID,
@@ -957,6 +954,7 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 		mutableState: mutableState,
 		snapshot:     transactionPayload.ExecutionSnapshot,
 		events:       transactionPayload.ExecutionEvents,
+		logMessages:  transactionPayload.ExecutionChasmLogMessages,
 	}, nil
 }
 
@@ -974,6 +972,7 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newExecutionParams.mutableState,
 		newExecutionParams.snapshot,
 		newExecutionParams.events,
+		newExecutionParams.logMessages,
 		historyi.TransactionPolicyActive,
 	)
 	if err == nil {
@@ -1175,6 +1174,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		newExecutionParams.mutableState,
 		newExecutionParams.snapshot,
 		newExecutionParams.events,
+		newExecutionParams.logMessages,
 		historyi.TransactionPolicyActive,
 	); err != nil {
 		return chasm.StartExecutionResult{}, err

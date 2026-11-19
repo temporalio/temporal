@@ -141,6 +141,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 	var currentWorkflowMutation *persistence.WorkflowMutation
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
+	var currentWorkflowChasmLogMessages []*persistence.ChasmLogMessages
 	// Every reapply path below deliberately uses the pre-fork baseBranchToken, not the rewritten
 	// token that forkAndGenerateBranchToken returns. A storage layer that rewrites the base token
 	// only guarantees the range below the fork point is readable through it; these reads start at
@@ -187,6 +188,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		}
 		currentWorkflowMutation = currentExecutionPayload.ExecutionMutation
 		currentWorkflowEventsSeq = currentExecutionPayload.ExecutionEvents
+		currentWorkflowChasmLogMessages = currentExecutionPayload.ExecutionChasmLogMessages
 
 		reapplyEventsFn = func(ctx context.Context, resetMutableState historyi.MutableState) error {
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
@@ -280,6 +282,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		currentWorkflow,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
+		currentWorkflowChasmLogMessages,
 		resetWorkflow,
 	); err != nil {
 		return err
@@ -375,6 +378,7 @@ func (r *workflowResetterImpl) persistToDB(
 	currentWorkflow Workflow,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+	currentChasmPayloadBatches []*persistence.ChasmLogMessages,
 	resetWorkflow Workflow,
 ) error {
 	resetExecutionPayload, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
@@ -407,9 +411,11 @@ func (r *workflowResetterImpl) persistToDB(
 			baseWorkflow.GetMutableState().GetCurrentVersion(),
 			baseExecutionPayload.ExecutionMutation,
 			baseExecutionPayload.ExecutionEvents,
-			nil,
-			nil,
-			nil,
+			baseExecutionPayload.ExecutionChasmLogMessages,
+			nil,   // newWorkflowFailoverVersion
+			nil,   // newWorkflowSnapshot
+			nil,   // newWorkflowEventsSeq
+			nil,   // newChasmPayloadBatches
 			false, // checkRunAlreadyExists: no new run in this update
 			baseWorkflow.GetMutableState().IsWorkflow(),
 		); err != nil {
@@ -422,6 +428,7 @@ func (r *workflowResetterImpl) persistToDB(
 			resetWorkflow.GetMutableState().GetCurrentVersion(),
 			resetExecutionPayload.ExecutionSnapshot,
 			resetExecutionPayload.ExecutionEvents,
+			resetExecutionPayload.ExecutionChasmLogMessages,
 			resetWorkflow.GetMutableState().IsWorkflow(),
 		); err != nil {
 			return err
@@ -447,26 +454,26 @@ func (r *workflowResetterImpl) persistToDB(
 
 			currentWorkflowMutation = currentExecutionPayload.ExecutionMutation
 			currentWorkflowEventsSeq = currentExecutionPayload.ExecutionEvents
+			currentChasmPayloadBatches = currentExecutionPayload.ExecutionChasmLogMessages
 		}
 
-		if _, _, err := r.transaction.UpdateWorkflowExecution(
+		_, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
 			chasm.WorkflowArchetypeID,
 			currentWorkflow.GetMutableState().GetCurrentVersion(),
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,
+			currentChasmPayloadBatches,
 			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
 			resetExecutionPayload.ExecutionSnapshot,
 			resetExecutionPayload.ExecutionEvents,
+			resetExecutionPayload.ExecutionChasmLogMessages,
 			// checkRunAlreadyExists: reset must keep a random run ID; a derived one would collide with the base run.
 			false,
 			currentWorkflow.GetMutableState().IsWorkflow(),
-		); err != nil {
-			return err
-		}
-		return nil
-
+		)
+		return err
 	}
 
 	if currentWorkflowMutation == nil {
@@ -495,7 +502,7 @@ func (r *workflowResetterImpl) persistToDB(
 	}
 	resetRunVersion := resetWorkflow.GetMutableState().GetCurrentVersion()
 	currentRunVerson := currentWorkflow.GetMutableState().GetCurrentVersion()
-	if _, _, _, err := r.transaction.ConflictResolveWorkflowExecution(
+	_, _, _, err = r.transaction.ConflictResolveWorkflowExecution(
 		ctx,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		chasm.WorkflowArchetypeID,
@@ -509,10 +516,8 @@ func (r *workflowResetterImpl) persistToDB(
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
 		currentWorkflow.GetMutableState().IsWorkflow(),
-	); err != nil {
-		return err
-	}
-	return nil
+	)
+	return err
 }
 
 func (r *workflowResetterImpl) replayResetWorkflow(

@@ -222,10 +222,12 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 	logger := log.NewNoopLogger()
 	eventsCache := events.NewMockCache(ctrl)
 	eventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	chasmLogMessagesCache := events.NewMockChasmLogEventsCache(ctrl)
 
 	ms := workflow.NewMutableState(
 		shardContext,
 		eventsCache,
+		chasmLogMessagesCache,
 		logger,
 		nsEntry,
 		tests.WorkflowID,

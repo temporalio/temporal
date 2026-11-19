@@ -19,13 +19,23 @@ import (
 func TestLocalMutableState(
 	shard historyi.ShardContext,
 	eventsCache events.Cache,
+	chasmLogMessagesCache events.ChasmLogMessagesCache,
 	ns *namespace.Namespace,
 	workflowID string,
 	runID string,
 	logger log.Logger,
 ) *MutableStateImpl {
 
-	ms := NewMutableState(shard, eventsCache, logger, ns, workflowID, runID, time.Now().UTC())
+	ms := NewMutableState(
+		shard,
+		eventsCache,
+		chasmLogMessagesCache,
+		logger,
+		ns,
+		workflowID,
+		runID,
+		time.Now().UTC(),
+	)
 	ms.executionInfo.NamespaceId = string(ns.ID())
 	ms.executionInfo.WorkflowId = workflowID
 	ms.executionState.RunId = runID
@@ -71,13 +81,22 @@ func NewMapEventCache(
 func TestGlobalMutableState(
 	shard historyi.ShardContext,
 	eventsCache events.Cache,
+	chasmLogMessagesCache events.ChasmLogMessagesCache,
 	logger log.Logger,
 	version int64,
 	workflowID string,
 	runID string,
 ) *MutableStateImpl {
-
-	ms := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, workflowID, runID, time.Now().UTC())
+	ms := NewMutableState(
+		shard,
+		eventsCache,
+		chasmLogMessagesCache,
+		logger,
+		tests.GlobalNamespaceEntry,
+		workflowID,
+		runID,
+		time.Now().UTC(),
+	)
 	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionState().StartTime
 	ms.GetExecutionInfo().TransitionHistory = UpdatedTransitionHistory(ms.GetExecutionInfo().TransitionHistory, version)
 	_ = ms.UpdateCurrentVersion(version, false)

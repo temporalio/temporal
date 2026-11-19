@@ -325,30 +325,16 @@ func (m *executionManagerImpl) deserializeBranchInfos(
 func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	request *AppendHistoryNodesRequest,
 ) (*InternalAppendHistoryNodesRequest, error) {
-	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
-	}
-
 	if len(request.Events) == 0 {
 		return nil, &InvalidPersistenceRequestError{
 			Msg: "events to be appended cannot be empty",
 		}
 	}
-	sortAncestors(branch.Ancestors)
 
 	version := request.Events[0].Version
 	nodeID := request.Events[0].EventId
 	lastID := nodeID - 1
 
-	if nodeID <= 0 {
-		return nil, &InvalidPersistenceRequestError{
-			Msg: "eventID cannot be less than 1",
-		}
-	}
-	if err := m.validateTransactionIDs(request.ShardID, request.BranchToken, nodeID, request.PrevTransactionID, request.TransactionID); err != nil {
-		return nil, err
-	}
 	for _, e := range request.Events {
 		if e.Version != version {
 			return nil, &InvalidPersistenceRequestError{
@@ -357,7 +343,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 		}
 		if e.EventId != lastID+1 {
 			return nil, &InvalidPersistenceRequestError{
-				Msg: "event ID must be continous",
+				Msg: "event ID must be continuous",
 			}
 		}
 		lastID++
@@ -368,49 +354,19 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	if err != nil {
 		return nil, err
 	}
-	size := len(blob.Data)
-	sizeLimit := m.transactionSizeLimit()
-	if size > sizeLimit {
-		return nil, &TransactionSizeLimitError{
-			Msg: fmt.Sprintf("transaction size of %v bytes exceeds limit of %v bytes", size, sizeLimit),
-		}
-	}
 
-	req := &InternalAppendHistoryNodesRequest{
-		BranchToken: request.BranchToken,
-		IsNewBranch: request.IsNewBranch,
-		Info:        request.Info,
-		BranchInfo:  branch,
-		Node: InternalHistoryNode{
-			NodeID:            nodeID,
-			Events:            blob,
+	return m.serializeAppendRawHistoryNodesRequest(
+		&AppendRawHistoryNodesRequest{
+			ShardID:           request.ShardID,
+			IsNewBranch:       request.IsNewBranch,
+			Info:              request.Info,
+			BranchToken:       request.BranchToken,
+			History:           blob,
 			PrevTransactionID: request.PrevTransactionID,
 			TransactionID:     request.TransactionID,
+			NodeID:            nodeID,
 		},
-		ShardID: request.ShardID,
-	}
-
-	if req.IsNewBranch {
-		// TreeInfo is only needed for new branch
-		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchToken: request.BranchToken, // NOTE: this is redundant but double-writing until 1 minor release later
-			BranchInfo:  branch,
-			ForkTime:    timestamp.TimeNowPtrUtc(),
-			Info:        request.Info,
-		})
-		if err != nil {
-			return nil, err
-		}
-		req.TreeInfo = treeInfoBlob
-	}
-
-	if nodeID < GetBeginNodeID(branch) {
-		return nil, &InvalidPersistenceRequestError{
-			Msg: "cannot append to ancestors' nodes",
-		}
-	}
-
-	return req, nil
+	)
 }
 
 // validateTransactionIDs rejects a node whose TransactionID is not greater than its PrevTransactionID.
@@ -439,7 +395,6 @@ func (m *executionManagerImpl) validateTransactionIDs(
 }
 
 func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
-	ctx context.Context,
 	request *AppendRawHistoryNodesRequest,
 ) (*InternalAppendHistoryNodesRequest, error) {
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
@@ -449,7 +404,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 
 	if request.History == nil || len(request.History.Data) == 0 {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: "events to be appended cannot be empty",
+			Msg: "data to be appended cannot be empty",
 		}
 	}
 	sortAncestors(branch.Ancestors)
@@ -457,7 +412,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	nodeID := request.NodeID
 	if nodeID <= 0 {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: "eventID cannot be less than 1",
+			Msg: "nodeID cannot be less than 1",
 		}
 	}
 	if err := m.validateTransactionIDs(request.ShardID, request.BranchToken, nodeID, request.PrevTransactionID, request.TransactionID); err != nil {
@@ -509,20 +464,64 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	return req, nil
 }
 
+func (m *executionManagerImpl) serializeAppendChasmLogNodeRequest(
+	request *AppendChasmLogNodeRequest,
+) (*InternalAppendHistoryNodesRequest, error) {
+	if len(request.Messages) == 0 {
+		return nil, &InvalidPersistenceRequestError{
+			Msg: "payloads to be appended cannot be empty",
+		}
+	}
+
+	version := request.Messages[0].Version
+	nodeID := request.Messages[0].SequenceId
+	lastID := nodeID - 1
+
+	for _, e := range request.Messages {
+		if e.Version != version {
+			return nil, &InvalidPersistenceRequestError{
+				Msg: "payload version must be the same inside a batch",
+			}
+		}
+		if e.SequenceId != lastID+1 {
+			return nil, &InvalidPersistenceRequestError{
+				Msg: "payload ID must be continuous",
+			}
+		}
+		lastID++
+	}
+
+	// nodeID will be the first payloadID
+	blob, err := m.serializer.ChasmLogMessagesToBlob(request.Messages)
+	if err != nil {
+		return nil, err
+	}
+
+	return m.serializeAppendRawHistoryNodesRequest(
+		&AppendRawHistoryNodesRequest{
+			ShardID:           request.ShardID,
+			IsNewBranch:       request.IsNewBranch,
+			Info:              request.Info,
+			BranchToken:       request.BranchToken,
+			History:           blob,
+			PrevTransactionID: request.PrevTransactionID,
+			TransactionID:     request.TransactionID,
+			NodeID:            nodeID,
+		},
+	)
+}
+
 // AppendHistoryNodes add a node to history node table
 func (m *executionManagerImpl) AppendHistoryNodes(
 	ctx context.Context,
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
-
 	req, err := m.serializeAppendHistoryNodesRequest(request)
-
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.persistence.AppendHistoryNodes(ctx, req)
-
 	return &AppendHistoryNodesResponse{
 		Size: len(req.Node.Events.Data),
 	}, err
@@ -533,8 +532,7 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 	ctx context.Context,
 	request *AppendRawHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
-
-	req, err := m.serializeAppendRawHistoryNodesRequest(ctx, request)
+	req, err := m.serializeAppendRawHistoryNodesRequest(request)
 	if err != nil {
 		return nil, err
 	}

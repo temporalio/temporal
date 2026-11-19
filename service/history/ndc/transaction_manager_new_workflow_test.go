@@ -176,6 +176,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 					ExecutionState: executionState,
 				}
 				workflowEventsSeq := []*persistence.WorkflowEvents{}
+				chasmLogMessagesSeq := []*persistence.ChasmLogMessages{}
 
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 				mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
@@ -187,8 +188,9 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 					historyi.TransactionPolicyPassive,
 				).Return(
 					&historyi.SnapshotTransactionPayload{
-						ExecutionSnapshot: workflowSnapshot,
-						ExecutionEvents:   workflowEventsSeq,
+						ExecutionSnapshot:         workflowSnapshot,
+						ExecutionEvents:           workflowEventsSeq,
+						ExecutionChasmLogMessages: chasmLogMessagesSeq,
 					},
 					nil,
 				)
@@ -206,6 +208,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 					mutableState,
 					workflowSnapshot,
 					workflowEventsSeq,
+					chasmLogMessagesSeq,
 					historyi.TransactionPolicyPassive,
 				).DoAndReturn(func(
 					_ context.Context,
@@ -216,6 +219,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 					_ historyi.MutableState,
 					workflowSnapshot *persistence.WorkflowSnapshot,
 					_ []*persistence.WorkflowEvents,
+					_ []*persistence.ChasmLogMessages,
 					_ historyi.TransactionPolicy,
 				) error {
 					s.Equal(expectedMode, createMode)
@@ -287,6 +291,7 @@ func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentR
 			EventId: common.FirstEventID + rand.Int63(),
 		}},
 	}}
+	chasmLogMessagesSeq := []*persistence.ChasmLogMessages{}
 	mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
 	mutableState.EXPECT().GetReapplyCandidateEvents().Return(nil)
@@ -295,8 +300,9 @@ func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentR
 		historyi.TransactionPolicyPassive,
 	).Return(
 		&historyi.SnapshotTransactionPayload{
-			ExecutionSnapshot: workflowSnapshot,
-			ExecutionEvents:   workflowEventsSeq,
+			ExecutionSnapshot:         workflowSnapshot,
+			ExecutionEvents:           workflowEventsSeq,
+			ExecutionChasmLogMessages: chasmLogMessagesSeq,
 		},
 		nil,
 	)
@@ -318,6 +324,7 @@ func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentR
 		mutableState,
 		workflowSnapshot,
 		workflowEventsSeq,
+		chasmLogMessagesSeq,
 		historyi.TransactionPolicyPassive,
 	).DoAndReturn(func(
 		_ context.Context,
@@ -328,6 +335,7 @@ func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentR
 		_ historyi.MutableState,
 		workflowSnapshot *persistence.WorkflowSnapshot,
 		_ []*persistence.WorkflowEvents,
+		_ []*persistence.ChasmLogMessages,
 		_ historyi.TransactionPolicy,
 	) error {
 		s.Equal(persistence.CreateWorkflowModeBypassCurrent, createMode)
@@ -370,6 +378,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 			EventId: common.FirstEventID + rand.Int63(),
 		}},
 	}}
+	chasmLogMessagesSeq := []*persistence.ChasmLogMessages{}
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
@@ -381,8 +390,9 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 		historyi.TransactionPolicyPassive,
 	).Return(
 		&historyi.SnapshotTransactionPayload{
-			ExecutionSnapshot: workflowSnapshot,
-			ExecutionEvents:   workflowEventsSeq,
+			ExecutionSnapshot:         workflowSnapshot,
+			ExecutionEvents:           workflowEventsSeq,
+			ExecutionChasmLogMessages: chasmLogMessagesSeq,
 		},
 		nil,
 	)
@@ -401,6 +411,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 		mutableState,
 		workflowSnapshot,
 		workflowEventsSeq,
+		chasmLogMessagesSeq,
 		gomock.Any(),
 	).DoAndReturn(func(
 		_ context.Context,
@@ -411,6 +422,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 		_ historyi.MutableState,
 		workflowSnapshot *persistence.WorkflowSnapshot,
 		_ []*persistence.WorkflowEvents,
+		_ []*persistence.ChasmLogMessages,
 		_ historyi.TransactionPolicy,
 	) error {
 		s.Equal(persistence.CreateWorkflowModeBypassCurrent, createMode)
@@ -456,6 +468,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 			EventId: common.FirstEventID + rand.Int63(),
 		}},
 	}}
+	targetChasmLogMessagesSeq := []*persistence.ChasmLogMessages{}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
@@ -468,8 +481,9 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 		historyi.TransactionPolicyPassive,
 	).Return(
 		&historyi.SnapshotTransactionPayload{
-			ExecutionSnapshot: targetWorkflowSnapshot,
-			ExecutionEvents:   targetWorkflowEventsSeq,
+			ExecutionSnapshot:         targetWorkflowSnapshot,
+			ExecutionEvents:           targetWorkflowEventsSeq,
+			ExecutionChasmLogMessages: targetChasmLogMessagesSeq,
 		},
 		nil,
 	)
@@ -497,6 +511,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		targetChasmLogMessagesSeq,
 		gomock.Any(),
 	).Return(nil)
 
@@ -540,6 +555,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 			EventId: common.FirstEventID + rand.Int63(),
 		}},
 	}}
+	targetChasmLogMessagesSeq := []*persistence.ChasmLogMessages{}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
@@ -552,8 +568,9 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		historyi.TransactionPolicyPassive,
 	).Return(
 		&historyi.SnapshotTransactionPayload{
-			ExecutionSnapshot: targetWorkflowSnapshot,
-			ExecutionEvents:   targetWorkflowEventsSeq,
+			ExecutionSnapshot:         targetWorkflowSnapshot,
+			ExecutionEvents:           targetWorkflowEventsSeq,
+			ExecutionChasmLogMessages: targetChasmLogMessagesSeq,
 		},
 		nil,
 	)
@@ -574,6 +591,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		targetChasmLogMessagesSeq,
 		gomock.Any(),
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
@@ -614,6 +632,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		},
 	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{}
+	targetChasmLogMessagesSeq := []*persistence.ChasmLogMessages{}
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID.String(),
@@ -627,8 +646,9 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		historyi.TransactionPolicyPassive,
 	).Return(
 		&historyi.SnapshotTransactionPayload{
-			ExecutionSnapshot: targetWorkflowSnapshot,
-			ExecutionEvents:   targetWorkflowEventsSeq,
+			ExecutionSnapshot:         targetWorkflowSnapshot,
+			ExecutionEvents:           targetWorkflowEventsSeq,
+			ExecutionChasmLogMessages: targetChasmLogMessagesSeq,
 		},
 		nil,
 	)
@@ -661,6 +681,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		targetChasmLogMessagesSeq,
 		gomock.Any(),
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, eventsToApply).Return(nil)
@@ -705,6 +726,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 			EventId: common.FirstEventID + rand.Int63(),
 		}},
 	}}
+	targetChasmLogMessagesSeq := []*persistence.ChasmLogMessages{}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
@@ -717,8 +739,9 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		historyi.TransactionPolicyPassive,
 	).Return(
 		&historyi.SnapshotTransactionPayload{
-			ExecutionSnapshot: targetWorkflowSnapshot,
-			ExecutionEvents:   targetWorkflowEventsSeq,
+			ExecutionSnapshot:         targetWorkflowSnapshot,
+			ExecutionEvents:           targetWorkflowEventsSeq,
+			ExecutionChasmLogMessages: targetChasmLogMessagesSeq,
 		},
 		nil,
 	)
@@ -739,6 +762,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		targetChasmLogMessagesSeq,
 		gomock.Any(),
 	).Return(&persistence.WorkflowConditionFailedError{})
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)

@@ -47,6 +47,8 @@ type MockNodeBackend struct {
 	HandleTimeSkippingMaxAccumulatedDuration  func() time.Duration
 	HandleNow                                 func() time.Time
 	HandleRecordTimeSkippingTransition        func(transition *TimeSkippingTransition)
+	HandleGenerateTaskIDs                     func(number int) ([]int64, error)
+	HandleLoadChasmLogMessages                func(ctx context.Context, token []byte, branch *persistencespb.HistoryBranch) (*persistencespb.ChasmLogMessageBatch, error)
 
 	HandleChasmDLQScheduledPureTaskOnValidationEnabled func() bool
 
@@ -315,4 +317,22 @@ func (m *MockNodeBackend) NumTasksAdded() int {
 		count += len(ts)
 	}
 	return count
+}
+
+func (m *MockNodeBackend) GenerateTaskIDs(number int) ([]int64, error) {
+	if m.HandleGenerateTaskIDs != nil {
+		return m.HandleGenerateTaskIDs(number)
+	}
+	return nil, nil
+}
+
+func (m *MockNodeBackend) LoadChasmLogMessages(
+	ctx context.Context,
+	token []byte,
+	branch *persistencespb.HistoryBranch,
+) (*persistencespb.ChasmLogMessageBatch, error) {
+	if m.HandleLoadChasmLogMessages != nil {
+		return m.HandleLoadChasmLogMessages(ctx, token, branch)
+	}
+	return nil, nil
 }

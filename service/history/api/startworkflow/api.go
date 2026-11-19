@@ -392,6 +392,7 @@ func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationPa
 		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
+		nil, // newChasmLogMessages
 		historyi.TransactionPolicyActive,
 	)
 }
@@ -496,6 +497,7 @@ func (s *Starter) createAsCurrent(
 		mutableState,
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
+		nil, // newChasmLogMessages
 		historyi.TransactionPolicyActive,
 	)
 }

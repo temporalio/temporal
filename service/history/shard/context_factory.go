@@ -61,6 +61,7 @@ type (
 		TimeSource                  clock.TimeSource
 		TaskCategoryRegistry        tasks.TaskCategoryRegistry
 		EventsCache                 events.Cache
+		ChasmLogMessagesCache       events.ChasmLogMessagesCache
 
 		StateMachineRegistry   *hsm.Registry
 		ChasmRegistry          *chasm.Registry
@@ -109,6 +110,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.HostInfoProvider,
 		c.TaskCategoryRegistry,
 		c.EventsCache,
+		c.ChasmLogMessagesCache,
 		c.StateMachineRegistry,
 		c.ChasmRegistry,
 		c.ChasmWorkflowRegistry,

@@ -73,7 +73,14 @@ func (s *activitySuite) SetupTest() {
 	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mutableState = NewMutableState(
-		s.mockShard, s.mockShard.MockEventsCache, s.mockShard.GetLogger(), tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC(),
+		s.mockShard,
+		s.mockShard.MockEventsCache,
+		s.mockShard.MockChasmLogMessagesCache,
+		s.mockShard.GetLogger(),
+		tests.GlobalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		time.Now().UTC(),
 	)
 }
 

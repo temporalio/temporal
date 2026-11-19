@@ -57,6 +57,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	newWorkflowFailoverVersion int64,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	newChasmLogMessagesSeq []*persistence.ChasmLogMessages,
 	isWorkflow bool,
 ) (int64, error) {
 
@@ -76,6 +77,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 			ArchetypeID:         archetypeID,
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 			NewWorkflowEvents:   newWorkflowEventsSeq,
+			NewChasmLogMessages: newChasmLogMessagesSeq,
 		},
 		isWorkflow,
 	)
@@ -171,9 +173,11 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	currentWorkflowFailoverVersion int64,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+	currentChasmLogMessagesSeq []*persistence.ChasmLogMessages,
 	newWorkflowFailoverVersion *int64,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	newChasmLogMessagesSeq []*persistence.ChasmLogMessages,
 	checkRunAlreadyExists bool,
 	isWorkflow bool,
 ) (int64, int64, error) {
@@ -194,8 +198,10 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 			ArchetypeID:            archetypeID,
 			UpdateWorkflowMutation: *currentWorkflowMutation,
 			UpdateWorkflowEvents:   currentWorkflowEventsSeq,
+			UpdateChasmLogMessages: currentChasmLogMessagesSeq,
 			NewWorkflowSnapshot:    newWorkflowSnapshot,
 			NewWorkflowEvents:      newWorkflowEventsSeq,
+			NewChasmLogMessages:    newChasmLogMessagesSeq,
 			CheckRunAlreadyExists:  checkRunAlreadyExists,
 		},
 		isWorkflow,
@@ -318,7 +324,6 @@ func persistNonFirstWorkflowEvents(
 	shardContext historyi.ShardContext,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
-
 	if len(workflowEvents.Events) == 0 {
 		return 0, nil // allow update workflow without events
 	}
@@ -356,9 +361,69 @@ func appendHistoryEvents(
 	execution *commonpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
-
 	resp, err := shardContext.AppendHistoryEvents(ctx, request, namespaceID, execution)
 	return int64(resp), err
+}
+
+func PersistChasmLogMessages(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	chasmLogMessages ...*persistence.ChasmLogMessages,
+) (int64, error) {
+	var totalSize int64
+	for _, messageBatch := range chasmLogMessages {
+		if len(messageBatch.Messages) == 0 {
+			continue // allow update chasm log without messages
+		}
+
+		firstSequenceID := messageBatch.Messages[0].SequenceId
+		size, err := persistChasmLogMessages(
+			ctx,
+			shardContext,
+			messageBatch,
+			firstSequenceID == common.FirstEventID,
+		)
+		if err != nil {
+			return 0, err
+		}
+		totalSize += size
+	}
+	return totalSize, nil
+}
+
+func persistChasmLogMessages(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	chasmLogMessages *persistence.ChasmLogMessages,
+	isNewBranch bool,
+) (int64, error) {
+	if !isNewBranch && len(chasmLogMessages.Messages) == 0 {
+		return 0, nil // allow update chasm log without messages
+	}
+
+	namespaceID := namespace.ID(chasmLogMessages.NamespaceID)
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: chasmLogMessages.BusinessID,
+		RunId:      chasmLogMessages.RunID,
+	}
+	branchToken := chasmLogMessages.BranchToken
+	messages := chasmLogMessages.Messages
+	prevTxnID := chasmLogMessages.PrevTxnID
+	txnID := chasmLogMessages.TxnID
+
+	size, err := shardContext.AppendChasmLogMessages(
+		ctx,
+		&persistence.AppendChasmLogNodeRequest{
+			IsNewBranch:       isNewBranch,
+			BranchToken:       branchToken,
+			Messages:          messages,
+			PrevTransactionID: prevTxnID,
+			TransactionID:     txnID,
+		},
+		namespaceID,
+		&execution,
+	)
+	return int64(size), err
 }
 
 func createWorkflowExecution(

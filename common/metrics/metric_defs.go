@@ -52,6 +52,7 @@ const (
 
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
+	ChasmLogMessagesCacheTypeTagValue                 = "chasm_log_messages"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
 	ReactivationSignalDedupCacheTypeTagValue          = "reactivation_signal_dedup"
 	RoutingInfoCacheTypeTagValue                      = "routing_info"

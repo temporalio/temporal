@@ -130,6 +130,7 @@ func (r *MutableStateInitializerImpl) InitializeFromDB(
 			workflow.NewMutableState(
 				r.shardContext,
 				r.shardContext.GetEventsCache(),
+				r.shardContext.GetChasmLogMessagesCache(),
 				r.logger,
 				namespaceEntry,
 				workflowKey.WorkflowID,
@@ -172,6 +173,7 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 	mutableState, err := workflow.NewMutableStateFromDB(
 		r.shardContext,
 		r.shardContext.GetEventsCache(),
+		r.shardContext.GetChasmLogMessagesCache(),
 		r.logger,
 		namespaceEntry,
 		mutableStateRow,

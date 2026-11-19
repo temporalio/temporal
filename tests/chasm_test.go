@@ -154,7 +154,7 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 	)
 	s.NoError(err)
 
-	_, err = tests.AddPayloadHandler(
+	addPayloadResp, err := tests.AddPayloadHandler(
 		ctx,
 		tests.AddPayloadRequest{
 			NamespaceID: cenv.NamespaceID(),
@@ -164,6 +164,8 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 		},
 	)
 	s.NoError(err)
+	s.Equal(int64(1), addPayloadResp.State.TotalCount)
+	s.Positive(addPayloadResp.State.TotalSize)
 
 	descResp, err := tests.DescribePayloadStoreHandler(
 		ctx,
@@ -173,8 +175,132 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 		},
 	)
 	s.NoError(err)
-	s.Equal(int64(1), descResp.State.TotalCount)
-	s.Positive(descResp.State.TotalSize)
+	s.ProtoEqual(addPayloadResp.State, descResp.State)
+}
+
+func (s *ChasmSuite) TestPayloadStore_Log() {
+	cenv := newChasmTestEnv(s.Context(), s.T())
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	appendMessagesResp1, err := tests.AppendMessagesHandler(
+		ctx,
+		tests.AppendMessagesRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+			Messages: []*commonpb.Payload{
+				payload.EncodeString("message1"),
+				payload.EncodeString("message2"),
+			},
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(1), appendMessagesResp1.State.TotalCount)
+	s.Positive(appendMessagesResp1.State.TotalSize)
+
+	appendMessagesResp2, err := tests.AppendMessagesHandler(
+		ctx,
+		tests.AppendMessagesRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+			Messages: []*commonpb.Payload{
+				payload.EncodeString("message3"),
+				payload.EncodeString("message4"),
+				payload.EncodeString("message5"),
+			},
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(2), appendMessagesResp2.State.TotalCount)
+	s.Positive(appendMessagesResp2.State.TotalSize)
+
+	descResp, err := tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.ProtoEqual(appendMessagesResp2.State, descResp.State)
+
+	getMessagesResp1, err := tests.GetMessagesHandler(
+		ctx,
+		tests.GetMessagesRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+			Offset:      0,
+		},
+	)
+	s.NoError(err)
+	s.Len(getMessagesResp1.Messages, 2)
+
+	for i := range getMessagesResp1.Messages {
+		var msg string
+		s.NoError(payload.Decode(getMessagesResp1.Messages[i].Message(), &msg))
+		s.Equal(fmt.Sprintf("message%d", 1+i), msg)
+	}
+
+	getMessagesResp2, err := tests.GetMessagesHandler(
+		ctx,
+		tests.GetMessagesRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+			Offset:      int64(len(getMessagesResp1.Messages)),
+		},
+	)
+	s.NoError(err)
+	s.Len(getMessagesResp2.Messages, 3)
+
+	for i := range getMessagesResp2.Messages {
+		var msg string
+		s.NoError(payload.Decode(getMessagesResp2.Messages[i].Message(), &msg))
+		s.Equal(fmt.Sprintf("message%d", 3+i), msg)
+	}
+
+	consumeMessagesResp1, err := tests.ConsumeMessagesHandler(
+		ctx,
+		tests.ConsumeMessagesRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.Len(consumeMessagesResp1.Messages, 2)
+
+	for i := range consumeMessagesResp1.Messages {
+		var msg string
+		s.NoError(payload.Decode(consumeMessagesResp1.Messages[i].Message(), &msg))
+		s.Equal(fmt.Sprintf("message%d", 1+i), msg)
+	}
+
+	consumeMessagesResp2, err := tests.ConsumeMessagesHandler(
+		ctx,
+		tests.ConsumeMessagesRequest{
+			NamespaceID: cenv.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.Len(consumeMessagesResp2.Messages, 3)
+
+	for i := range consumeMessagesResp2.Messages {
+		var msg string
+		s.NoError(payload.Decode(consumeMessagesResp2.Messages[i].Message(), &msg))
+		s.Equal(fmt.Sprintf("message%d", 3+i), msg)
+	}
 }
 
 func (s *ChasmSuite) TestPayloadStore_PureTask() {

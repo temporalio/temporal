@@ -301,6 +301,191 @@ func (this *ChasmPointerAttributes) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ChasmLogAttributes to the protobuf v3 wire format
+func (val *ChasmLogAttributes) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ChasmLogAttributes from the protobuf v3 wire format
+func (val *ChasmLogAttributes) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ChasmLogAttributes) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ChasmLogAttributes values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ChasmLogAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ChasmLogAttributes
+	switch t := that.(type) {
+	case *ChasmLogAttributes:
+		that1 = t
+	case ChasmLogAttributes:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ChasmLogMetadata to the protobuf v3 wire format
+func (val *ChasmLogMetadata) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ChasmLogMetadata from the protobuf v3 wire format
+func (val *ChasmLogMetadata) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ChasmLogMetadata) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ChasmLogMetadata values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ChasmLogMetadata) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ChasmLogMetadata
+	switch t := that.(type) {
+	case *ChasmLogMetadata:
+		that1 = t
+	case ChasmLogMetadata:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ChasmLogMessage to the protobuf v3 wire format
+func (val *ChasmLogMessage) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ChasmLogMessage from the protobuf v3 wire format
+func (val *ChasmLogMessage) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ChasmLogMessage) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ChasmLogMessage values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ChasmLogMessage) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ChasmLogMessage
+	switch t := that.(type) {
+	case *ChasmLogMessage:
+		that1 = t
+	case ChasmLogMessage:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ChasmLogMessageBatch to the protobuf v3 wire format
+func (val *ChasmLogMessageBatch) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ChasmLogMessageBatch from the protobuf v3 wire format
+func (val *ChasmLogMessageBatch) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ChasmLogMessageBatch) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ChasmLogMessageBatch values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ChasmLogMessageBatch) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ChasmLogMessageBatch
+	switch t := that.(type) {
+	case *ChasmLogMessageBatch:
+		that1 = t
+	case ChasmLogMessageBatch:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ChasmPayloadBatch to the protobuf v3 wire format
+func (val *ChasmPayloadBatch) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ChasmPayloadBatch from the protobuf v3 wire format
+func (val *ChasmPayloadBatch) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ChasmPayloadBatch) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ChasmPayloadBatch values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ChasmPayloadBatch) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ChasmPayloadBatch
+	switch t := that.(type) {
+	case *ChasmPayloadBatch:
+		that1 = t
+	case ChasmPayloadBatch:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ChasmTaskInfo to the protobuf v3 wire format
 func (val *ChasmTaskInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

@@ -63,12 +63,13 @@ type (
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
-		controller         *gomock.Controller
-		mockShard          *shard.ContextTest
-		mockEventsCache    *events.MockCache
-		mockExecutionMgr   *persistence.MockExecutionManager
-		workflowCache      wcache.Cache
-		mockNamespaceCache *namespace.MockRegistry
+		controller                *gomock.Controller
+		mockShard                 *shard.ContextTest
+		mockEventsCache           *events.MockCache
+		mockChasmLogMessagesCache *events.MockChasmLogEventsCache
+		mockExecutionMgr          *persistence.MockExecutionManager
+		workflowCache             wcache.Cache
+		mockNamespaceCache        *namespace.MockRegistry
 
 		logger log.Logger
 
@@ -121,6 +122,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 
 	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockChasmLogMessagesCache = s.mockShard.MockChasmLogMessagesCache
 	s.logger = s.mockShard.GetLogger()
 
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
@@ -822,8 +824,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) requireCounterHasWorkerDeploymentTag
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.TestVars) historyi.WorkflowContext {
-	ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
-		tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.workflowTaskCompletedHandler.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		tv.Namespace(),
+		tv.WorkflowID(),
+		tv.RunID(),
+		log.NewTestLogger(),
+	)
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:               tv.WorkflowID(),
@@ -932,8 +941,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *testvars.TestVars) (historyi.WorkflowContext, []byte) {
-	ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
-		tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.workflowTaskCompletedHandler.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		tv.Namespace(),
+		tv.WorkflowID(),
+		tv.RunID(),
+		log.NewTestLogger(),
+	)
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:               tv.WorkflowID(),
@@ -1410,8 +1426,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(tv *testvars.TestVars) (historyi.WorkflowContext, []byte) {
-	ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
-		tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
+	ms := workflow.TestLocalMutableState(
+		s.workflowTaskCompletedHandler.shardContext,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		tv.Namespace(),
+		tv.WorkflowID(),
+		tv.RunID(),
+		log.NewTestLogger(),
+	)
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:               tv.WorkflowID(),

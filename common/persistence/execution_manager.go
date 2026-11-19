@@ -160,6 +160,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		request.ShardID,
 		request.NewWorkflowSnapshot.ExecutionInfo,
 		request.NewWorkflowEvents,
+		request.NewChasmLogMessages,
 	)
 	if err != nil {
 		return nil, err
@@ -231,6 +232,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		request.ShardID,
 		request.UpdateWorkflowMutation.ExecutionInfo,
 		request.UpdateWorkflowEvents,
+		request.UpdateChasmLogMessages,
 	)
 	if err != nil {
 		return nil, err
@@ -246,6 +248,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 			request.ShardID,
 			request.NewWorkflowSnapshot.ExecutionInfo,
 			request.NewWorkflowEvents,
+			request.NewChasmLogMessages,
 		)
 		if err != nil {
 			return nil, err
@@ -378,6 +381,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		request.ShardID,
 		request.ResetWorkflowSnapshot.ExecutionInfo,
 		request.ResetWorkflowEvents,
+		nil, // chasmPayloadBatches
 	)
 	if err != nil {
 		return nil, err
@@ -393,6 +397,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 			request.ShardID,
 			request.NewWorkflowSnapshot.ExecutionInfo,
 			request.NewWorkflowEvents,
+			nil, // chasmPayloadBatches
 		)
 		if err != nil {
 			return nil, err
@@ -409,6 +414,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 			request.ShardID,
 			request.CurrentWorkflowMutation.ExecutionInfo,
 			request.CurrentWorkflowEvents,
+			nil, // chasmPayloadBatches
 		)
 		if err != nil {
 			return nil, err
@@ -584,14 +590,19 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 	shardID int32,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	eventBatches []*WorkflowEvents,
+	chasmPayloadBatches []*ChasmLogMessages,
 ) (map[XDCCacheKey]XDCCacheValue, []*InternalAppendHistoryNodesRequest, *HistoryStatistics, error) {
 	var historyStatistics HistoryStatistics
-	if len(eventBatches) == 0 {
+	if len(eventBatches)+len(chasmPayloadBatches) == 0 {
 		return nil, nil, &historyStatistics, nil
 	}
 
 	xdcKVs := make(map[XDCCacheKey]XDCCacheValue, len(eventBatches))
-	workflowNewEvents := make([]*InternalAppendHistoryNodesRequest, 0, len(eventBatches))
+	workflowNewEvents := make(
+		[]*InternalAppendHistoryNodesRequest,
+		0,
+		len(eventBatches)+len(chasmPayloadBatches),
+	)
 	for _, workflowEvents := range eventBatches {
 		newEvents, err := m.serializeWorkflowEvents(shardID, workflowEvents)
 		if err != nil {
@@ -619,6 +630,13 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 		workflowNewEvents = append(workflowNewEvents, newEvents)
 		historyStatistics.SizeDiff += len(newEvents.Node.Events.Data)
 		historyStatistics.CountDiff += len(workflowEvents.Events)
+	}
+	for _, chasmPayloadBatch := range chasmPayloadBatches {
+		newMessages, err := m.serializeChasmLogMessages(shardID, chasmPayloadBatch)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		workflowNewEvents = append(workflowNewEvents, newMessages)
 	}
 	return xdcKVs, workflowNewEvents, &historyStatistics, nil
 }
@@ -677,6 +695,34 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 	}
 
 	return m.serializeAppendHistoryNodesRequest(request)
+}
+
+func (m *executionManagerImpl) serializeChasmLogMessages(
+	shardID int32,
+	chasmLogMessages *ChasmLogMessages,
+) (*InternalAppendHistoryNodesRequest, error) {
+	if len(chasmLogMessages.Messages) == 0 {
+		return nil, nil // allow update chasm log without messages
+	}
+
+	request := &AppendChasmLogNodeRequest{
+		ShardID:           shardID,
+		BranchToken:       chasmLogMessages.BranchToken,
+		Messages:          chasmLogMessages.Messages,
+		PrevTransactionID: chasmLogMessages.PrevTxnID,
+		TransactionID:     chasmLogMessages.TxnID,
+	}
+
+	if chasmLogMessages.Messages[0].SequenceId == common.FirstEventID {
+		request.IsNewBranch = true
+		request.Info = BuildHistoryGarbageCleanupInfo(
+			chasmLogMessages.NamespaceID,
+			chasmLogMessages.BusinessID,
+			chasmLogMessages.RunID,
+		)
+	}
+
+	return m.serializeAppendChasmLogNodeRequest(request)
 }
 
 func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport

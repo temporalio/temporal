@@ -118,6 +118,7 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 			},
 		},
 		[]*persistence.WorkflowEvents{},
+		[]*persistence.ChasmLogMessages{},
 		true, // isWorkflow
 	)
 	s.Equal(timeoutErr, err)
@@ -146,9 +147,11 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 			},
 		},
 		[]*persistence.WorkflowEvents{},
+		[]*persistence.ChasmLogMessages{},
 		new(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
+		[]*persistence.ChasmLogMessages{},
 		false, // checkRunAlreadyExists
 		true,  // isWorkflow
 	)
@@ -247,6 +250,8 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 					},
 				},
 				tc.events,
+				nil,
+				nil,
 				nil,
 				nil,
 				nil,

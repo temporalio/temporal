@@ -83,10 +83,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller      *gomock.Controller
-		mockConfig      *configs.Config
-		mockShard       *shard.ContextTest
-		mockEventsCache *events.MockCache
+		controller                *gomock.Controller
+		mockConfig                *configs.Config
+		mockShard                 *shard.ContextTest
+		mockEventsCache           *events.MockCache
+		mockChasmLogMessagesCache *events.MockChasmLogEventsCache
 
 		namespaceEntry *namespace.Namespace
 		mutableState   *MutableStateImpl
@@ -188,6 +189,7 @@ func (s *mutableStateSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsCache = events.NewMockCache(s.controller)
+	s.mockChasmLogMessagesCache = events.NewMockChasmLogEventsCache(s.controller)
 
 	s.mockConfig = tests.NewDynamicConfig()
 	s.mockConfig.ReplicationMultipleBatches = dynamicconfig.GetBoolPropertyFn(s.replicationMultipleBatches)
@@ -218,7 +220,16 @@ func (s *mutableStateSuite) SetupTest() {
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+	s.mutableState = NewMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		time.Now().UTC(),
+	)
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -229,7 +240,16 @@ func (s *mutableStateSuite) TearDownTest() {
 func (s *mutableStateSuite) SetupSubTest() {
 	// create a fresh mutable state for each sub test
 	// this will be invoked upon s.Run()
-	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.mutableState.GetNamespaceEntry(), tests.WorkflowID, tests.RunID, time.Now().UTC())
+	s.mutableState = NewMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.mutableState.GetNamespaceEntry(),
+		tests.WorkflowID,
+		tests.RunID,
+		time.Now().UTC(),
+	)
 }
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied_ApplyWorkflowTaskCompleted() {
@@ -239,6 +259,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -273,6 +294,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -298,6 +320,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -587,6 +610,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -668,6 +692,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -741,6 +766,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -780,6 +806,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	ms := TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		int64(12),
 		tv.WorkflowID(),
@@ -1071,6 +1098,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -1673,7 +1701,15 @@ func (s *mutableStateSuite) TestChecksum() {
 			// create mutable state and verify checksum is generated on close
 			loadErrors = loadErrorsFunc()
 			var err error
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
@@ -1687,7 +1723,15 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// verify checksum is verified on Load
 			dbState.Checksum = csum
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 
@@ -1699,7 +1743,15 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// modify checksum and verify Load fails
 			dbState.Checksum.Value[0]++
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			s.Equal(loadErrors+1, loadErrorsFunc())
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
@@ -1709,7 +1761,15 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
 				return float64((s.mutableState.executionInfo.LastUpdateTime.AsTime().UnixNano() / int64(time.Second)) + 1)
 			}
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 			s.Nil(s.mutableState.checksum)
@@ -2369,6 +2429,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChan
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -2404,6 +2465,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		version,
 		workflowID,
@@ -2469,6 +2531,7 @@ func (s *mutableStateSuite) TestNewMutableStateInChain() {
 				currentMutableState := TestGlobalMutableState(
 					s.mockShard,
 					s.mockEventsCache,
+					s.mockChasmLogMessagesCache,
 					s.logger,
 					1000,
 					tests.WorkflowID,
@@ -2479,6 +2542,7 @@ func (s *mutableStateSuite) TestNewMutableStateInChain() {
 				newMutableState, err := NewMutableStateInChain(
 					s.mockShard,
 					s.mockEventsCache,
+					s.mockChasmLogMessagesCache,
 					s.logger,
 					tests.GlobalNamespaceEntry,
 					tests.WorkflowID,
@@ -2499,6 +2563,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	mutableState := TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		1000,
 		tests.WorkflowID,
@@ -2526,7 +2591,15 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	s.NoError(err)
 
 	mutableStateProto := mutableState.CloneToProto()
-	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0)
+	sanitizedMutableState, err := NewSanitizedMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.LocalNamespaceEntry,
+		mutableStateProto,
+		0,
+	)
 	s.NoError(err)
 	s.Equal(int64(0), sanitizedMutableState.executionInfo.LastFirstEventTxnId)
 	s.Nil(sanitizedMutableState.executionInfo.ParentClock)
@@ -2912,6 +2985,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.mutableState, err = NewMutableStateFromDB(
 		s.mockShard,
 		NewMapEventCache(s.T(), cacheStore),
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		namespaceEntry,
 		dbstate,
@@ -3021,6 +3095,7 @@ func (s *mutableStateSuite) TestUpdateInfos_NexusSerializationContext() {
 	s.mutableState, err = NewMutableStateFromDB(
 		s.mockShard,
 		NewMapEventCache(s.T(), cacheStore),
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		namespaceEntry,
 		s.buildWorkflowMutableState(),
@@ -3103,7 +3178,16 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_PersistsChasm
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			s.mockConfig.EnableCHASMWorkflowRootOnStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.rootOnStart)
-			ms := NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+			ms := NewMutableState(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				s.namespaceEntry,
+				tests.WorkflowID,
+				tests.RunID,
+				time.Now().UTC(),
+			)
 			s.True(ms.ChasmEnabled())
 
 			_, err := ms.AddWorkflowExecutionStartedEvent(
@@ -3203,7 +3287,15 @@ func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 	state := s.buildWorkflowMutableState()
 
 	var err error
-	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.mutableState, err = NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.LocalNamespaceEntry,
+		state,
+		123,
+	)
 	s.NoError(err)
 
 	var scheduledEventID int64
@@ -3249,7 +3341,15 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	dbState.ExecutionInfo.PropagatedNexusSerializationContext = serializationContext
 
 	var err error
-	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.mutableState, err = NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.LocalNamespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
@@ -3438,7 +3538,15 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 
 			var err error
 			namespaceEntry := tests.GlobalNamespaceEntry
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				namespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
@@ -3778,6 +3886,7 @@ func (s *mutableStateSuite) TestActivityFailureSizeFreshLoad() {
 	reloaded, err := NewMutableStateFromDB(
 		s.mockShard,
 		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
 		s.logger,
 		tests.LocalNamespaceEntry,
 		s.mutableState.CloneToProto(),
@@ -3970,7 +4079,15 @@ func (s *mutableStateSuite) TestupdateBuildIdsAndDeploymentSearchAttributes() {
 		s.T().Run(c.name, func(t *testing.T) {
 			dbState := s.buildWorkflowMutableState()
 			var err error
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 
 			// Max 0
@@ -4010,7 +4127,15 @@ func (s *mutableStateSuite) TestUpdateUsedDeploymentVersionsSearchAttribute() {
 	// Set up initial state with a deployment version
 	dbState := s.buildWorkflowMutableState()
 	var err error
-	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.mutableState, err = NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.LocalNamespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	// Test 1: First deployment version added
@@ -4054,7 +4179,15 @@ func (s *mutableStateSuite) TestUpdateUsedDeploymentVersionsSearchAttribute() {
 func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 	dbState := s.buildWorkflowMutableState()
 	var err error
-	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.mutableState, err = NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		tests.LocalNamespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	s.Nil(s.cleanedResetPoints().GetPoints())
@@ -4369,7 +4502,15 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			}
 
 			var err error
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				namespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
@@ -4714,7 +4855,15 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 			dbState.BufferedEvents = nil
 
 			var err error
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				namespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
@@ -4870,7 +5019,15 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			}
 
 			var err error
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				namespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
@@ -5469,7 +5626,16 @@ func (s *mutableStateSuite) TestMaxAllowedTimer() {
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(1)
-			s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+			s.mutableState = NewMutableState(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				s.namespaceEntry,
+				tests.WorkflowID,
+				tests.RunID,
+				time.Now().UTC(),
+			)
 
 			workflowKey := s.mutableState.GetWorkflowKey()
 			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
@@ -5666,7 +5832,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActi
 			dbState.ActivityInfos[100] = &persistencespb.ActivityInfo{
 				ScheduledEventId: 100,
 			}
-			ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+			ms, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				s.namespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 
 			if tc.disablingTransitionHistory {
@@ -5690,7 +5864,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActi
 func (s *mutableStateSuite) TestVersionedTransitionInDB() {
 	// case 1: versionedTransitionInDB is not nil
 	dbState := s.buildWorkflowMutableState()
-	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	ms, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
@@ -5705,7 +5887,15 @@ func (s *mutableStateSuite) TestVersionedTransitionInDB() {
 	// case 2: versionedTransitionInDB is nil
 	dbState = s.buildWorkflowMutableState()
 	dbState.ExecutionInfo.TransitionHistory = nil
-	ms, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	ms, err = NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	s.Nil(ms.versionedTransitionInDB)
@@ -5862,7 +6052,15 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		s.T().Run(tc.name, func(t *testing.T) {
 			dbState := s.buildWorkflowMutableState()
 
-			mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+			mutableState, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				s.namespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 
 			currentVersionedTransition := mutableState.CurrentVersionedTransition()
@@ -5902,7 +6100,15 @@ func tombstoneExists(
 func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanLimit() {
 	dbState := s.buildWorkflowMutableState()
 
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 	mutableState.executionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{
 		{
@@ -5953,7 +6159,15 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanL
 func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEmpty() {
 	dbState := s.buildWorkflowMutableState()
 
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 	mutableState.executionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{
 		{
@@ -5982,7 +6196,15 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workflow() {
 	dbState := s.buildWorkflowMutableState()
 
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout
@@ -6007,7 +6229,15 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workf
 func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWorkflow_Active() {
 	dbState := s.buildWorkflowMutableState()
 
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout
@@ -6045,7 +6275,15 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWorkflow_Passive() {
 	dbState := s.buildWorkflowMutableState()
 
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout
@@ -6530,10 +6768,26 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 				Nodes: state.ChasmNodes,
 			}
 
-			originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			originMS, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				state,
+				123,
+			)
 			s.NoError(err)
 
-			currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			currentMS, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				state,
+				123,
+			)
 			s.NoError(err)
 			currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
 			currentMockChasmTree.EXPECT().ApplySnapshot(chasmNodesSnapshot).Return(nil).Times(1)
@@ -6569,7 +6823,15 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			}
 			state.SignalRequestedIds = append(state.SignalRequestedIds, "signal_requested_id_2")
 
-			targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			targetMS, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				state,
+				123,
+			)
 			s.NoError(err)
 			targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
 			targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasmNodesSnapshot).Times(1)
@@ -6684,7 +6946,15 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			state := s.buildWorkflowMutableState()
 			s.addChangesForStateReplication(state)
 
-			originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			originMS, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				state,
+				123,
+			)
 			s.NoError(err)
 			tombstones := []*persistencespb.StateMachineTombstoneBatch{
 				{
@@ -6700,7 +6970,15 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			}
 			originMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
 
-			currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			currentMS, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				state,
+				123,
+			)
 			s.NoError(err)
 			currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
 			currentMockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
@@ -6721,7 +6999,15 @@ func (s *mutableStateSuite) TestApplyMutation() {
 				},
 			}
 
-			targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+			targetMS, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				tests.LocalNamespaceEntry,
+				state,
+				123,
+			)
 			s.NoError(err)
 
 			targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
@@ -7129,7 +7415,15 @@ func (s *mutableStateSuite) TestApplyUpdatesToSubStateMachines_ActivityTimerTask
 
 	dbState := s.buildWorkflowMutableState()
 	dbState.ActivityInfos[scheduledEventID] = local
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	// The replicated copy advances the versioned transition (otherwise the update is
@@ -7178,7 +7472,15 @@ func (s *mutableStateSuite) TestApplyUpdatesToSubStateMachines_ChildExecutionClo
 		TransitionCount:          1,
 	}
 
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	// The replicated copy advances the versioned transition and, as the sender sanitized
@@ -7220,7 +7522,15 @@ func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
 		StartToCloseTimeout:    timestamp.DurationFromSeconds(300),
 		HeartbeatTimeout:       timestamp.DurationFromSeconds(50),
 	}
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 	originalTime := time.Now().UTC().Add(time.Second * 60)
 	mutableState.pendingActivityTimerHeartbeats[scheduleEventId] = originalTime
@@ -7756,7 +8066,15 @@ func (s *mutableStateSuite) TestCHASMNodeSize() {
 		ChasmNodes:     dbState.ChasmNodes,
 	}
 
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 
 	chasmNodesSize := 0
@@ -8225,7 +8543,15 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
 			dbState.BufferedEvents = nil
 
 			var err error
-			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				namespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
@@ -8286,7 +8612,15 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalSkippedCountsBufferedE
 	dbState.BufferedEvents = nil
 
 	var err error
-	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+	s.mutableState, err = NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 	s.NoError(err)
@@ -8352,7 +8686,15 @@ func (s *mutableStateSuite) TestCloseTransaction_ChasmTreeReceivesPrincipal() {
 		s.Run(tc.name, func() {
 			namespaceEntry := tests.GlobalNamespaceEntry
 			dbState := s.buildWorkflowMutableState()
-			mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			mutableState, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockEventsCache,
+				s.mockChasmLogMessagesCache,
+				s.logger,
+				namespaceEntry,
+				dbState,
+				123,
+			)
 			s.NoError(err)
 			err = mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
@@ -8380,7 +8722,15 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 	dbState := s.buildWorkflowMutableState()
 
 	var err error
-	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+	s.mutableState, err = NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.mockChasmLogMessagesCache,
+		s.logger,
+		namespaceEntry,
+		dbState,
+		123,
+	)
 	s.NoError(err)
 	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 	s.NoError(err)
@@ -8811,7 +9161,15 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 
 		dbState := buildEligibleState(timerExpiry)
 		dbState.ExecutionInfo.TimeSkippingInfo.Config.Enabled = false
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -8880,7 +9238,15 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 			},
 		}
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -8913,7 +9279,15 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		now := s.mockShard.GetTimeSource().Now()
 		timerExpiry := now.Add(2 * time.Hour)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, buildEligibleState(timerExpiry), 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			buildEligibleState(timerExpiry),
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -8943,7 +9317,15 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		dbState := buildEligibleState(timerExpiry)
 		dbState.ExecutionInfo.TimeSkippingInfo = nil // time skipping not configured
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -8967,7 +9349,15 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		dbState := buildEligibleState(now.Add(time.Hour))
 		dbState.TimerInfos = nil // no pending timers → nothing to skip to
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -8990,7 +9380,15 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		now := s.mockShard.GetTimeSource().Now()
 		timerExpiry := now.Add(2 * time.Hour)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, buildEligibleState(timerExpiry), 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			buildEligibleState(timerExpiry),
+			1,
+		)
 		s.Require().NoError(err)
 
 		mutation, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
@@ -9135,7 +9533,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		dbState := buildRunningState()
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -9157,7 +9563,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		dbState := buildRunningState()
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusCreated)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -9174,7 +9588,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		dbState := buildRunningState()
 		dbState.ActivityInfos = pendingScheduledActivity(0)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -9194,7 +9616,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		dbState := buildRunningState()
 		dbState.ActivityInfos = pendingScheduledActivity(TimerTaskStatusCreatedScheduleToStart)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -9214,7 +9644,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
 		dbState.ActivityInfos = pendingScheduledActivity(0)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		// StartTransaction is needed to initialize currentVersion so closeTransactionWithPolicyCheck
 		// can call ClusterNameForFailoverVersion with the right version.
@@ -9235,7 +9673,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
 		dbState.ActivityInfos = pendingScheduledActivity(0)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 
 		mutation, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
@@ -9263,7 +9709,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		}
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -9296,7 +9750,15 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		}
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusCreated)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		ms, err := NewMutableStateFromDB(
+			s.mockShard,
+			s.mockEventsCache,
+			s.mockChasmLogMessagesCache,
+			s.logger,
+			s.namespaceEntry,
+			dbState,
+			1,
+		)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
@@ -9636,6 +10098,7 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			mockEventsCache := events.NewMockCache(ctrl)
+			mockChasmLogMessagesCache := events.NewMockChasmLogEventsCache(ctrl)
 			mockConfig := tests.NewDynamicConfig()
 			mockConfig.EnableCancelActivityWorkerCommand = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.featureEnabled)
 
@@ -9662,7 +10125,16 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 			mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 			mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
-			ms := NewMutableState(mockShard, mockEventsCache, log.NewTestLogger(), namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+			ms := NewMutableState(
+				mockShard,
+				mockEventsCache,
+				mockChasmLogMessagesCache,
+				log.NewTestLogger(),
+				namespaceEntry,
+				tests.WorkflowID,
+				tests.RunID,
+				time.Now().UTC(),
+			)
 			ms.pendingActivityInfoIDs = tc.activities
 
 			err := ms.GenerateActivityCancelCommandsForClose()

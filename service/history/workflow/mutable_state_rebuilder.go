@@ -830,6 +830,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 		newRunMutableState, err = NewMutableStateInChain(
 			b.shard,
 			b.shard.GetEventsCache(),
+			b.shard.GetChasmLogMessagesCache(),
 			b.logger,
 			b.mutableState.GetNamespaceEntry(),
 			newExecution.WorkflowId,
@@ -844,6 +845,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 		newRunMutableState = NewMutableState(
 			b.shard,
 			b.shard.GetEventsCache(),
+			b.shard.GetChasmLogMessagesCache(),
 			b.logger,
 			b.mutableState.GetNamespaceEntry(),
 			newExecution.WorkflowId,
