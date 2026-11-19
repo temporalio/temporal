@@ -29,6 +29,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
@@ -256,11 +257,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 		session        bool
 		droppedSession bool
 		bound          bool
+		workerGone     bool
 	}{
 		{name: "regular activity with sticky workflow"},
 		{name: "workflow-session activity", session: true},
 		{name: "single-session activity", session: true, bound: true},
 		{name: "workflow-session activity after the session was dropped", session: true, droppedSession: true},
+		{name: "workflow-session activity whose bound worker is gone", session: true, workerGone: true},
 	} {
 		s.Run(tc.name, func() {
 			execution := &commonpb.WorkflowExecution{
@@ -338,7 +341,19 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			if tc.session && !tc.droppedSession {
 				request.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}, IsExclusiveWorkerAssigned: tc.bound}
 			}
-			s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
+			if tc.workerGone {
+				normalRequest := common.CloneProto(request)
+				normalRequest.TaskQueue = &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+				normalRequest.SessionDirective = nil
+				gomock.InOrder(
+					s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(common.CloneProto(request)), gomock.Any()).
+						Return(nil, &serviceerrors.StickyWorkerUnavailable{}),
+					s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(normalRequest), gomock.Any()).
+						Return(&matchingservice.AddActivityTaskResponse{}, nil),
+				)
+			} else {
+				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
+			}
 
 			resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 			s.Require().NoError(resp.ExecutionErr)

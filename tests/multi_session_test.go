@@ -86,6 +86,19 @@ func (e *sessionMoveEnv) registerStickyPoller(worker string) {
 	require.Error(e.t, err)
 }
 
+// registerStickyActivityPoller makes a worker look alive on its sticky activity queue, as a real worker that polls
+// it from startup would. Without it, Matching treats the worker as gone and session activities fall back.
+func (e *sessionMoveEnv) registerStickyActivityPoller(worker string) {
+	_, err := e.poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: e.stickyQueue(worker), Identity: "worker-" + worker, SessionOptions: multiSessionWorkerOptions(e.stickyQueue(worker).GetName()),
+		WorkerInstanceKey: e.instanceKey(worker),
+	}).HandleTask(e.tv, func(*workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		require.FailNow(e.t, "no activity task expected while registering a sticky activity poller")
+		return nil, nil
+	}, taskpoller.WithTimeout(stickyPollTimeout))
+	require.Error(e.t, err)
+}
+
 func (e *sessionMoveEnv) pollActivityTask(queue *taskqueuepb.TaskQueue, timeout time.Duration) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	var task *workflowservice.PollActivityTaskQueueResponse
 	_, err := e.poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{TaskQueue: queue}).HandleTask(e.tv,
@@ -114,8 +127,8 @@ func (e *sessionMoveEnv) scheduleSessionActivity(id string) *commandpb.Command {
 	}
 }
 
-// bindToA starts the session on worker A from the normal queue and schedules one session activity, which is
-// dispatched to A's sticky queue. A never polls its sticky queue, so Matching considers it unavailable.
+// bindToA starts the session on worker A from the normal queue and schedules one session activity. A never polls
+// its sticky queues, so Matching considers it unavailable and the activity falls back to the normal queue.
 func (e *sessionMoveEnv) bindToA(stickyScheduleToStart time.Duration) {
 	err := e.pollWorkflowTask("A", e.tv.TaskQueue(), 30*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -160,6 +173,7 @@ func TestWorkflowSessionMovesWithWorkflowTask(t *testing.T) {
 	e.bindToA(time.Second)
 
 	e.signal()
+	e.registerStickyActivityPoller("B")
 	e.completeOn("B", e.tv.TaskQueue(), 30*time.Second)
 
 	e.requireSessionActivityOn(e.stickyQueue("B"))
@@ -222,6 +236,7 @@ func TestWorkflowSessionRecoversWhenNewWorkerCrashesMidTask(t *testing.T) {
 	})
 	require.Error(t, err, "B's late failure response is rejected because its task already timed out")
 
+	e.registerStickyActivityPoller("C")
 	e.completeOn("C", e.tv.TaskQueue(), time.Minute)
 	e.requireSessionActivityOn(e.stickyQueue("C"))
 
@@ -256,6 +271,7 @@ func TestWorkflowSessionDroppedAndRebound(t *testing.T) {
 	e.completeOn("", e.tv.TaskQueue(), 30*time.Second)
 
 	e.signal()
+	e.registerStickyActivityPoller("W")
 	e.completeOn("W", e.tv.TaskQueue(), 30*time.Second)
 
 	e.requireNoActivityOn(e.tv.TaskQueue())

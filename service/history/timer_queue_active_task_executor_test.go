@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	pm "go.temporal.io/server/common/testing/protomock"
@@ -1387,10 +1388,12 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 		name           string
 		session        bool
 		droppedSession bool
+		workerGone     bool
 	}{
 		{name: "regular activity with sticky workflow"},
 		{name: "workflow-session activity", session: true},
 		{name: "workflow-session activity after the session was dropped", session: true, droppedSession: true},
+		{name: "workflow-session activity whose bound worker is gone", session: true, workerGone: true},
 	} {
 		s.Run(tc.name, func() {
 			execution := &commonpb.WorkflowExecution{
@@ -1475,7 +1478,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 
 			persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-			expectedTaskQueue := &taskqueuepb.TaskQueue{Name: activityInfo.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			normalTaskQueue := &taskqueuepb.TaskQueue{Name: activityInfo.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			expectedTaskQueue := normalTaskQueue
 			if tc.session && !tc.droppedSession {
 				expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 			}
@@ -1495,8 +1499,17 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 					VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
 				}
 			}
-			s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(expectedTaskQueue)), gomock.Any()).
-				Return(&matchingservice.AddActivityTaskResponse{}, nil)
+			if tc.workerGone {
+				gomock.InOrder(
+					s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(expectedTaskQueue)), gomock.Any()).
+						Return(nil, &serviceerrors.StickyWorkerUnavailable{}),
+					s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(normalTaskQueue)), gomock.Any()).
+						Return(&matchingservice.AddActivityTaskResponse{}, nil),
+				)
+			} else {
+				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(expectedTaskQueue)), gomock.Any()).
+					Return(&matchingservice.AddActivityTaskResponse{}, nil)
+			}
 
 			resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 			s.Require().NoError(resp.ExecutionErr)

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -93,6 +95,23 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
+// addActivityTask pushes an activity task to Matching. When Matching reports that the worker owning a sticky queue is
+// dead, the task is sent to the activity's normal queue instead. The workflow's binding is left as it is: the worker
+// that starts the activity moves it.
+func addActivityTask(
+	ctx context.Context,
+	matchingClient resource.MatchingRawClient,
+	request *matchingservice.AddActivityTaskRequest,
+) (*matchingservice.AddActivityTaskResponse, error) {
+	resp, err := matchingClient.AddActivityTask(ctx, request)
+	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); !ok {
+		return resp, err
+	}
+	request.TaskQueue = &taskqueuepb.TaskQueue{Name: request.GetTaskQueue().GetNormalName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	request.SessionDirective = nil
+	return matchingClient.AddActivityTask(ctx, request)
+}
+
 func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx context.Context,
 	task *tasks.ActivityTask,
@@ -103,7 +122,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
-	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	resp, err := addActivityTask(ctx, t.matchingRawClient, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -125,9 +144,6 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	}
 
 	if err != nil {
-		// TODO (Shivam): Handle StickyWorkerUnavailable when versioning rejects sticky
-		// placement. Activity dispatch currently retries the sticky queue;
-		// normal-queue fallback is not implemented.
 		return err
 	}
 
