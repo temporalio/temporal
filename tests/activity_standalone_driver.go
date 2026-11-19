@@ -283,7 +283,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 		return err
 	case model.RespondFailedType:
 		req := &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: respondFailedFailure(e, a.cfg),
 		}
 		if e.HasHeartbeatDetails {
 			req.LastHeartbeatDetails = activityHeartbeatDetails
@@ -293,7 +293,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	case model.RespondFailedByIDType:
 		req := &workflowservice.RespondActivityTaskFailedByIdRequest{
 			Namespace: ns, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
-			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+			Failure: respondFailedFailure(e, a.cfg),
 		}
 		if e.HasHeartbeatDetails {
 			req.LastHeartbeatDetails = activityHeartbeatDetails
