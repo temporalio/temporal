@@ -97,6 +97,7 @@ const (
 
 	errFailedPrecondition   = "FailedPrecondition"
 	errInvalidComputeConfig = "errInvalidComputeConfig"
+	errWCILimitExceeded     = "errWCILimitExceeded"
 
 	ErrVersionIsDraining         = "version '%s' cannot be deleted since it is draining"
 	ErrVersionHasPollers         = "version '%s' cannot be deleted since it has active pollers"

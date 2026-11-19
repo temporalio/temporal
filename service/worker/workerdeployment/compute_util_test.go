@@ -1,6 +1,7 @@
 package workerdeployment
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -8,7 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	computepb "go.temporal.io/api/compute/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
+	"go.temporal.io/sdk/temporal"
 )
 
 func TestComputeConfigScalingGroupsToWCISpec_EmptyGroups(t *testing.T) {
@@ -99,4 +102,45 @@ func TestWciValidationStatusToComputeStatus_Failed(t *testing.T) {
 	require.NotNil(t, result.ProviderValidation)
 	require.Equal(t, "lambda unreachable", result.ProviderValidation.ErrorMessage)
 	require.Equal(t, ts, result.ProviderValidation.LastCheckTime.AsTime())
+}
+
+func TestWciClientErrorToActivityError(t *testing.T) {
+	tests := []struct {
+		name         string
+		err          error
+		wantType     string // empty means the error is passed through unchanged
+		wantAppError bool
+	}{
+		{name: "invalid argument", err: serviceerror.NewInvalidArgument("bad"), wantType: errInvalidComputeConfig, wantAppError: true},
+		{name: "failed precondition", err: serviceerror.NewFailedPrecondition("nope"), wantType: errFailedPrecondition, wantAppError: true},
+		{
+			name: "resource exhausted limit",
+			err: &serviceerror.ResourceExhausted{
+				Message: "reached maximum worker controller instances in namespace (10)",
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS,
+			},
+			wantType:     errWCILimitExceeded,
+			wantAppError: true,
+		},
+		{
+			name: "resource exhausted busy workflow stays retryable",
+			err:  &serviceerror.ResourceExhausted{Message: "busy", Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW},
+		},
+		{name: "other error", err: errors.New("boom")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := wciClientErrorToActivityError(tt.err)
+			appErr, ok := errors.AsType[*temporal.ApplicationError](got)
+			if !tt.wantAppError {
+				assert.False(t, ok)
+				assert.Equal(t, tt.err, got)
+				return
+			}
+			require.True(t, ok)
+			assert.Equal(t, tt.wantType, appErr.Type())
+			assert.True(t, appErr.NonRetryable())
+			assert.Contains(t, appErr.Message(), tt.err.Error())
+		})
+	}
 }

@@ -5,6 +5,7 @@ import (
 
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/temporal"
@@ -136,6 +137,9 @@ func wciClientErrorToActivityError(err error) error {
 	}
 	if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 		return temporal.NewNonRetryableApplicationError(err.Error(), errFailedPrecondition, nil)
+	}
+	if re, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok && re.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS {
+		return temporal.NewNonRetryableApplicationError(err.Error(), errWCILimitExceeded, nil)
 	}
 	return err
 }
