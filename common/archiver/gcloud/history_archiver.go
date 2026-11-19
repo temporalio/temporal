@@ -173,7 +173,11 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 			totalUploadSize = totalUploadSize + int64(binary.Size(encodedHistoryPart))
 		}
 
-		if err := saveHistoryIteratorState(ctx, featureCatalog, historyIterator, part, &progress); err != nil {
+		// Advance to the next part on every page. This must not depend on a ProgressManager being set:
+		// the history service calls Archive without one, and every page would otherwise overwrite part 0.
+		progress.CurrentPageNumber = part + 1
+
+		if err := saveHistoryIteratorState(ctx, featureCatalog, historyIterator, &progress); err != nil {
 			return err
 		}
 	}
@@ -372,12 +376,11 @@ func loadHistoryIterator(ctx context.Context, request *archiver.ArchiveHistoryRe
 	return
 }
 
-func saveHistoryIteratorState(ctx context.Context, featureCatalog *archiver.ArchiveFeatureCatalog, historyIterator archiver.HistoryIterator, currentPartNum int, progress *progress) (err error) {
+func saveHistoryIteratorState(ctx context.Context, featureCatalog *archiver.ArchiveFeatureCatalog, historyIterator archiver.HistoryIterator, progress *progress) (err error) {
 	var state []byte
 	if featureCatalog.ProgressManager != nil {
 		state, err = historyIterator.GetState()
 		if err == nil {
-			progress.CurrentPageNumber = currentPartNum + 1
 			progress.IteratorState = state
 
 			err = featureCatalog.ProgressManager.RecordProgress(ctx, progress)
