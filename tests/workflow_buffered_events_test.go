@@ -81,13 +81,13 @@ func (s *WorkflowBufferedEventsSuite) TestRateLimitBufferedEvents() {
 				buf := new(bytes.Buffer)
 				err := binary.Write(buf, binary.LittleEndian, byte(i))
 				s.NoError(err)
-				s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
+				s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 			}
 
 			buf := new(bytes.Buffer)
 			err := binary.Write(buf, binary.LittleEndian, byte(101))
 			s.NoError(err)
-			signalErr := env.SendSignal(env.Namespace().String(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
+			signalErr := env.SendSignal(env.Namespace(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
 			s.NoError(signalErr)
 
 			// this command will be ignored as workflow task has already failed

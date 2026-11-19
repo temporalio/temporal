@@ -454,11 +454,10 @@ func (e *TestEnv) GetHistory(nsName string, execution *commonpb.WorkflowExecutio
 	return e.GetHistoryFunc(nsName, execution)()
 }
 
-func (e *TestEnv) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
+func (e *TestEnv) SendSignal(nsName namespace.Name, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
-	// TODO (alex): change to nsName namespace.Name
 	_, err := e.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         nsName,
+		Namespace:         nsName.String(),
 		WorkflowExecution: execution,
 		SignalName:        signalName,
 		Input:             input,
