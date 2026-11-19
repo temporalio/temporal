@@ -18,7 +18,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -508,46 +507,6 @@ func (e *TestEnv) T() *testing.T {
 
 func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
-}
-
-// ReadHistory reads every page of workflow history using ctx.
-func (e *TestEnv) ReadHistory(
-	ctx context.Context,
-	nsName namespace.Name,
-	execution *commonpb.WorkflowExecution,
-) ([]*historypb.HistoryEvent, error) {
-	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:       nsName.String(),
-		Execution:       execution,
-		MaximumPageSize: 5, // Use small page size to force pagination code path
-	}
-	var events []*historypb.HistoryEvent
-	for {
-		response, err := e.FrontendClient().GetWorkflowExecutionHistory(ctx, request)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, response.GetHistory().GetEvents()...)
-		request.NextPageToken = response.GetNextPageToken()
-		if len(request.NextPageToken) == 0 {
-			return events, nil
-		}
-		request.MaximumPageSize = 0
-	}
-}
-
-func (e *TestEnv) GetHistoryFunc(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
-	return func() []*historypb.HistoryEvent {
-		e.t.Helper()
-		return e.GetHistory(ctx, nsName, execution)
-	}
-}
-
-func (e *TestEnv) GetHistory(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	e.t.Helper()
-	events, err := e.ReadHistory(ctx, nsName, execution)
-	require.NoError(e.t, err)
-	return events
 }
 
 // InjectRequestFault registers a pre-handler gRPC fault injection scoped to this test's namespace.
