@@ -292,7 +292,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
 	s.NoError(err)
 
 	// check history, the signal event should be after the complete workflow task
-	historyEvents := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -318,7 +318,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 
 	// check history, the WorkflowExecutionOptionsUpdated event should be after the complete workflow task
-	historyEvents = env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{
+	historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -493,7 +493,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEventsOutOfOrder() {
 	s.NoError(err)
 	s.Nil(task.WorkflowTask)
 
-	events := env.RequireHistory(s.Context(), workflowExecution)
+	events := env.RequireHistory(s, workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
