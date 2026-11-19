@@ -814,3 +814,106 @@ func TestSingleSessionBindingSurvivesRebuild(t *testing.T) {
 		})
 	}
 }
+
+/*
+TestSingleSessionInheritedByNextRun tests that an exclusive binding survives a new run of the workflow:
+ 1. A single-session worker acquires the workflow and closes the run with a continue-as-new, a failure under a retry
+    policy, or a completion under a cron schedule.
+ 2. The next run's first workflow task is delivered to the same worker's sticky queue. Without the inherited binding it
+    would go to the normal queue, where the single-session worker can no longer acquire work.
+*/
+func TestSingleSessionInheritedByNextRun(t *testing.T) {
+	t.Parallel()
+	for _, tc := range nextRunCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := testcore.NewEnv(t,
+				testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+			)
+			tv := env.Tv()
+			client := env.FrontendClient()
+			namespace := env.Namespace().String()
+			started, err := client.StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				Namespace: namespace, WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+				WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(), RetryPolicy: tc.retryPolicy, CronSchedule: tc.cronSchedule,
+				WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			})
+			require.NoError(t, err)
+			session := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+				SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+			}}
+			poller := taskpoller.New(t, client, namespace).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(),
+			})
+			_, err = poller.HandleTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{tc.command(tv)}}, nil
+			}, taskpoller.WithContext(t.Context()))
+			require.NoError(t, err)
+
+			_, err = poller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				require.NotEqual(t, started.GetRunId(), task.GetWorkflowExecution().GetRunId(), "expected the next run's task")
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+			}, taskpoller.WithTimeout(10*time.Second))
+			require.NoError(t, err)
+		})
+	}
+}
+
+/*
+TestSingleSessionInheritedBindingSurvivesRebuild tests that a continue-as-new run keeps its inherited exclusive binding
+when its mutable state is rebuilt from history:
+ 1. A single-session worker acquires the workflow and continues it as new.
+ 2. The new run's started event records the inherited binding, and the new run's mutable state is rebuilt.
+ 3. The new run's first workflow task is delivered to the same worker's sticky queue.
+*/
+func TestSingleSessionInheritedBindingSurvivesRebuild(t *testing.T) {
+	t.Parallel()
+	env := testcore.NewEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+	tv := env.Tv()
+	client := env.FrontendClient()
+	namespace := env.Namespace().String()
+	_, err := client.StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace: namespace, WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+		WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+		WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	require.NoError(t, err)
+	stableIdentity := tv.StickyTaskQueue().GetName()
+	session := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: stableIdentity},
+	}}
+	poller := taskpoller.New(t, client, namespace).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(),
+	})
+	_, err = poller.HandleTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{continueAsNewCmd(tv.WorkflowType(), tv.TaskQueue())}}, nil
+	}, taskpoller.WithContext(t.Context()))
+	require.NoError(t, err)
+
+	described, err := client.DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: namespace, Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+	})
+	require.NoError(t, err)
+	newRun := described.GetWorkflowExecutionInfo().GetExecution()
+	history := env.SdkClient().GetWorkflowHistory(t.Context(), newRun.GetWorkflowId(), newRun.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	startedEvent, err := history.Next()
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: stableIdentity}},
+		startedEvent.GetWorkflowExecutionStartedEventAttributes().GetInheritedSessionInfo())
+	_, err = env.AdminClient().RebuildMutableState(t.Context(), &adminservice.RebuildMutableStateRequest{
+		Namespace: namespace, Execution: newRun,
+	})
+	require.NoError(t, err)
+
+	_, err = poller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Equal(t, newRun.GetRunId(), task.GetWorkflowExecution().GetRunId())
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}, taskpoller.WithTimeout(10*time.Second))
+	require.NoError(t, err)
+}

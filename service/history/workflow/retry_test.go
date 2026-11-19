@@ -14,6 +14,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/number"
@@ -55,7 +57,7 @@ func (s *mutableStateSuite) TestSetupNewWorkflowForRetryPropagatesNexusSerializa
 	newMutableState := NewMutableState(s.mockShard, s.mockEventsCache, s.logger,
 		s.namespaceEntry, tests.WorkflowID, newRunID, time.Now().UTC())
 	err = SetupNewWorkflowForRetryOrCron(
-		context.Background(), s.mutableState, newMutableState, newRunID,
+		context.Background(), s.mutableState, newMutableState, nil, newRunID,
 		startEvent.GetWorkflowExecutionStartedEventAttributes(), nil, nil, nil,
 		time.Second, enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY,
 	)
@@ -63,6 +65,48 @@ func (s *mutableStateSuite) TestSetupNewWorkflowForRetryPropagatesNexusSerializa
 	s.Require().NotNil(newRunStartEvent)
 	protorequire.ProtoEqual(s.T(), serializationContext,
 		newRunStartEvent.GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext())
+}
+
+/*
+TestSetupNewWorkflowForRetryInheritsSessionBinding tests that a retry or cron run keeps the session's worker:
+ 1. The previous run is bound to worker X; its binding is taken before the run times out, and the timeout clears it.
+ 2. The next run inherits the binding, sticky queue and timeout, and the closed run stays unbound.
+*/
+func (s *mutableStateSuite) TestSetupNewWorkflowForRetryInheritsSessionBinding() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	startEvent, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:       &commonpb.WorkflowType{Name: "workflow"},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout: durationpb.New(time.Hour),
+			},
+		},
+	)
+	s.Require().NoError(err)
+	s.mutableState.bindNonExclusiveWorker("X", "k", durationpb.New(7*time.Second))
+	newRunID := "00000000-0000-4000-8000-000000000002"
+	sessionInfo := s.mutableState.SessionInfo()
+	s.Require().NoError(TimeoutWorkflow(s.mutableState, enumspb.RETRY_STATE_IN_PROGRESS, newRunID))
+
+	newMutableState := NewMutableState(s.mockShard, s.mockEventsCache, s.logger,
+		s.namespaceEntry, tests.WorkflowID, newRunID, time.Now().UTC())
+	err = SetupNewWorkflowForRetryOrCron(
+		context.Background(), s.mutableState, newMutableState, sessionInfo, newRunID,
+		startEvent.GetWorkflowExecutionStartedEventAttributes(), nil, nil, nil,
+		time.Second, enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY,
+	)
+
+	s.Require().NoError(err)
+	protorequire.ProtoEqual(s.T(), &persistencespb.SessionState{
+		BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"},
+	}, newMutableState.GetExecutionInfo().GetSessionState())
+	s.Equal("X", newMutableState.GetExecutionInfo().GetStickyTaskQueue())
+	s.Equal(defaultSessionStickyScheduleToStartTimeout, newMutableState.GetExecutionInfo().GetStickyScheduleToStartTimeout().AsDuration())
+	s.Empty(s.mutableState.SessionWorkerQueue(), "the closed run stays unbound")
+	s.False(s.mutableState.IsStickyTaskQueueSet())
 }
 
 func Test_NonRetriableErrors(t *testing.T) {

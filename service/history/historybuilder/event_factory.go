@@ -88,6 +88,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		TimeSkippingConfig:                  req.GetTimeSkippingConfig(),
 		TimeSkippingStatePropagation:        request.GetTimeSkippingStatePropagation(),
 		PropagatedNexusSerializationContext: req.GetPropagatedNexusSerializationContext(),
+		InheritedSessionInfo:                request.GetInheritedSessionInfo(),
 	}
 
 	parentInfo := request.ParentExecutionInfo

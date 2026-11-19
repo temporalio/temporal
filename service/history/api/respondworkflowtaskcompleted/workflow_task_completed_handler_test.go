@@ -301,6 +301,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
 		tc.ms.EXPECT().IsWorkflowExecutionRunning().AnyTimes().Return(true)
 		tc.ms.EXPECT().GetCronBackoffDuration().AnyTimes().Return(backoff.NoBackoff)
+		tc.ms.EXPECT().SessionInfo().AnyTimes().Return(nil)
 
 		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
 		require.Error(t, err)
