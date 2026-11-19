@@ -815,28 +815,17 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
-	// Ordinary sticky queues require recent pollers; assigned sessions accept offline backlog.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
+	// Session context permits loading a sticky partition even if there are no pollers, since session workflow tasks
+	// should be spooled to the backlog
+	sessionDirective := addRequest.GetSessionDirective()
+	exclusiveSession := sessionDirective.GetIsExclusiveWorkerAssigned()
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky || sessionDirective != nil, loadCauseTask)
 	if err != nil {
 		return "", false, err
 	}
-	if sticky && !stickyWorkerAvailable(pm) {
-		// TODO(Shivam): Carry exclusive-session context from History so the first lookup can
-		// load the partition directly without this separate metadata read.
-		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
-		if err != nil {
+	if sticky && !exclusiveSession {
+		if err := e.checkBoundWorker(ctx, pm, sessionDirective); err != nil {
 			return "", false, err
-		}
-		if !assigned {
-			// TODO (Shivam) -- Accept backlog even in the case of non-exclusive sessions.
-			return "", false, serviceerrors.NewStickyWorkerUnavailable()
-		}
-		if pm == nil {
-			// if this sticky task queue partition is dealing with an assigned session, we load it's partition manager.
-			pm, _, err = e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
-			if err != nil {
-				return "", false, err
-			}
 		}
 	}
 
@@ -4016,6 +4005,57 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
+}
+
+// checkBoundWorker returns StickyWorkerUnavailable when the worker that owns this sticky queue is dead, so History
+// sends the task to the normal queue instead. The worker counts as alive if it polled the queue recently, or if it
+// still appears in the in-memory heartbeat cache. History names the worker in the session directive, so the lookup
+// works even after this partition was unloaded or moved. Only used for workflows that are not exclusively bound to a
+// worker.
+func (e *matchingEngineImpl) checkBoundWorker(
+	ctx context.Context,
+	pm taskQueuePartitionManager,
+	sessionDirective *taskqueuespb.TaskSessionDirective,
+) error {
+	if stickyWorkerAvailable(pm) {
+		return nil
+	}
+	available, err := e.boundWorkerAvailable(ctx, pm, sessionDirective.GetBoundWorkerInfo().GetInstanceKey())
+	if err != nil {
+		return err
+	}
+	if !available {
+		return serviceerrors.NewStickyWorkerUnavailable()
+	}
+	return nil
+}
+
+// boundWorkerAvailable reports whether the worker that owns this sticky queue is alive according to its heartbeats.
+// It is only consulted for non-exclusive bindings with no recent poller: exclusive bindings never fall back to the
+// normal queue, so their tasks wait for their worker instead.
+func (e *matchingEngineImpl) boundWorkerAvailable(ctx context.Context, pm taskQueuePartitionManager, workerInstanceKey string) (bool, error) {
+	if pm == nil || workerInstanceKey == "" {
+		return false, nil
+	}
+
+	// TODO (Shivam): Cache worker heartbeat lookups to reduce # of RPC trips
+	_, err := e.matchingRawClient.DescribeWorker(ctx, &matchingservice.DescribeWorkerRequest{
+		NamespaceId: pm.Namespace().ID().String(),
+		Request: &workflowservice.DescribeWorkerRequest{
+			Namespace:         pm.Namespace().Name().String(),
+			WorkerInstanceKey: workerInstanceKey,
+		},
+	})
+	// A missing registry namespace means no heartbeat observations, not a deleted Temporal namespace.
+	// Treat it as an unavailable worker so History can fall back to the normal queue.
+	_, namespaceMissing := errors.AsType[*serviceerror.NamespaceNotFound](err)
+	if err != nil && !common.IsNotFoundError(err) && !namespaceMissing {
+		return false, err
+	}
+
+	// TODO (Shivam): Recheck the sticky partition and worker identity after the RPC to avoid acting on stale heartbeat results
+	// since this race can happen
+	return err == nil, nil
 }
 
 func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp, updateIdentity string) *taskqueuepb.RateLimitConfig {

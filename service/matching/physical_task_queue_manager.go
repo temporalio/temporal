@@ -90,7 +90,8 @@ type (
 		taskValidator                   taskValidator
 		deploymentRegistrationCh        chan struct{}
 		deploymentVersionMonitorRunning atomic.Bool
-		pollerScalingRateLimiter        quotas.RateLimiter
+
+		pollerScalingRateLimiter quotas.RateLimiter
 
 		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
