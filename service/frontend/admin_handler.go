@@ -36,7 +36,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
-	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/workflow"
@@ -118,9 +117,6 @@ type (
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
-		timeSource                 clock.TimeSource
-		chasmVisibilityManager     chasm.VisibilityManager
-		chasmNsReplClient          namespacereplicationpb.NamespaceReplicationServiceClient
 		repairPolicy               nsreplication.RepairPolicy
 		schedulerClient            schedulerpb.SchedulerServiceClient
 		metricsHandler             metrics.Handler
@@ -157,8 +153,6 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
-		ChasmVisibilityManager              chasm.VisibilityManager
-		ChasmNsReplClient                   namespacereplicationpb.NamespaceReplicationServiceClient
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		RepairPolicy                        nsreplication.RepairPolicy
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
@@ -219,9 +213,6 @@ func NewAdminHandler(
 		taskCategoryRegistry:       args.CategoryRegistry,
 		matchingClient:             args.matchingClient,
 		chasmRegistry:              args.ChasmRegistry,
-		timeSource:                 args.TimeSource,
-		chasmVisibilityManager:     args.ChasmVisibilityManager,
-		chasmNsReplClient:          args.ChasmNsReplClient,
 		repairPolicy:               args.RepairPolicy,
 		schedulerClient:            args.SchedulerClient,
 		metricsHandler:             args.MetricsHandler,
@@ -2082,7 +2073,6 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		Name: request.GetNamespace(),
 		ID:   request.GetId(),
 	}
-	observedAt := adh.timeSource.Now()
 	resp, err := adh.persistenceMetadataManager.GetNamespace(ctx, req)
 	if err != nil {
 		return nil, err
@@ -2092,7 +2082,6 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 	replicationConfig := resp.Namespace.GetReplicationConfig()
 
 	nsResponse := &adminservice.GetNamespaceResponse{
-		ObservationTime: timestamppb.New(observedAt),
 		Info: &namespacepb.NamespaceInfo{
 			Name:        info.Name,
 			State:       info.State,

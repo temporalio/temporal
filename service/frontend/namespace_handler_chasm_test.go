@@ -176,7 +176,6 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 }
 
 type captureNamespaceReplicationClient struct {
-	namespacereplicationpb.NamespaceReplicationServiceClient
 	request  *namespacereplicationpb.TriggerNamespaceMutationRequest
 	requests chan *namespacereplicationpb.TriggerNamespaceMutationRequest
 }
@@ -194,7 +193,6 @@ func (c *captureNamespaceReplicationClient) TriggerNamespaceMutation(
 }
 
 type blockingNamespaceReplicationClient struct {
-	namespacereplicationpb.NamespaceReplicationServiceClient
 	started   chan context.Context
 	release   chan struct{}
 	completed chan struct{}
@@ -487,14 +485,6 @@ func (c failingNamespaceReplicationClient) TriggerNamespaceMutation(
 	*namespacereplicationpb.TriggerNamespaceMutationRequest,
 	...grpc.CallOption,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
-	return nil, c.err
-}
-
-func (c failingNamespaceReplicationClient) ReconcileNamespaceMutation(
-	context.Context,
-	*namespacereplicationpb.ReconcileNamespaceMutationRequest,
-	...grpc.CallOption,
-) (*namespacereplicationpb.ReconcileNamespaceMutationResponse, error) {
 	return nil, c.err
 }
 

@@ -215,8 +215,6 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		chasmRegistry,
-		nil, // CHASM visibility manager
-		nil, // CHASM repair client
 		nsreplication.NewNoopDataMerger(),
 		nil, // repair policy
 		nil, // schedulerClient - not needed for most admin handler tests
@@ -1345,9 +1343,6 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
-	sourceClock := clock.NewEventTimeSource()
-	sourceClock.Update(time.Unix(100, 0))
-	s.handler.timeSource = sourceClock
 	namespaceID := "someId"
 	restoreInfo := &persistencespb.NamespaceRestoreInfo{
 		RestoreId:   "restore-id",
@@ -1382,10 +1377,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	}
 	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: namespaceID,
-	}).DoAndReturn(func(context.Context, *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
-		sourceClock.Update(time.Unix(200, 0))
-		return nsResponse, nil
-	})
+	}).Return(nsResponse, nil)
 	resp, err := s.handler.GetNamespace(context.Background(), &adminservice.GetNamespaceRequest{
 		Attributes: &adminservice.GetNamespaceRequest_Id{
 			Id: namespaceID,
@@ -1393,7 +1385,6 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
-	s.Equal(time.Unix(100, 0).UTC(), resp.GetObservationTime().AsTime())
 	protorequire.ProtoEqual(s.T(), restoreInfo, resp.GetRestoreInfo())
 }
 
@@ -1503,10 +1494,6 @@ func (s *adminHandlerSuite) TestGetNamespace_ReturnsReplicatedFields() {
 		RestoreInfo:       transmitted.RestoreInfo,
 	}
 	expected.Info.Id = transmitted.Id
-	// The observation time records when the server read the namespace; it is
-	// not namespace state.
-	s.NotNil(resp.GetObservationTime())
-	expected.ObservationTime = resp.GetObservationTime()
 	s.ProtoEqual(expected, resp)
 }
 

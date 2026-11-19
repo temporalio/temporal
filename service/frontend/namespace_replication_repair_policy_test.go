@@ -3,23 +3,18 @@ package frontend
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // refusingRepairPolicy refuses namespaces whose data carries the given key and
@@ -128,37 +123,6 @@ func TestNamespaceRepairPolicyLeavesUndecodablePayloadToPeer(t *testing.T) {
 	require.Empty(t, policy.calls)
 }
 
-func TestNamespaceRepairPolicyRefusesReconcile(t *testing.T) {
-	t.Parallel()
-	ctrl := gomock.NewController(t)
-	metadata := persistence.NewMockMetadataManager(ctrl)
-	clusters := cluster.NewMockMetadata(ctrl)
-	clusters.EXPECT().GetCurrentClusterName().Return("cluster-a")
-	metadata.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "namespace-id"}).Return(&persistence.GetNamespaceResponse{
-		IsGlobalNamespace: true,
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments", State: enumspb.NAMESPACE_STATE_REGISTERED,
-				Data: map[string]string{"membership": "elsewhere"}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "cluster-a", Clusters: []string{"cluster-a", "cluster-b"}},
-		},
-	}, nil)
-	policy := &refusingRepairPolicy{key: "membership"}
-	// No visibility listing or CHASM reconcile is expected after the refusal.
-	handler := &AdminHandler{logger: log.NewNoopLogger(), persistenceMetadataManager: metadata, clusterMetadata: clusters,
-		chasmVisibilityManager: chasm.NewMockVisibilityManager(ctrl), chasmNsReplClient: &testNamespaceReplicationRepairClient{},
-		repairPolicy: policy.policy()}
-	response, err := handler.ReconcileNamespaceMutationComponents(t.Context(), &adminservice.ReconcileNamespaceMutationComponentsRequest{
-		NamespaceId: "namespace-id", RepairId: "repair-id", Reason: "repair", CutoffTime: timestamppb.New(time.Unix(10, 0)),
-		VerifiedConfigVersion: wrapperspb.Int64(0), VerifiedFailoverVersion: wrapperspb.Int64(0),
-		AuthoritativePeerClusters: []string{"cluster-b"}, VerifiedPeerClusters: []string{"cluster-b"},
-	})
-	var refused *serviceerror.FailedPrecondition
-	require.ErrorAs(t, err, &refused)
-	require.ErrorContains(t, err, "repair does not support this namespace")
-	require.Nil(t, response)
-	require.Equal(t, []string{"namespace-id/payments"}, policy.calls)
-}
-
 func TestNamespaceRepairPolicyReportedByGetNamespace(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -184,7 +148,7 @@ func TestNamespaceRepairPolicyReportedByGetNamespace(t *testing.T) {
 					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "cluster-a", Clusters: []string{"cluster-a", "cluster-b"}},
 				},
 			}, nil)
-			handler := &AdminHandler{logger: log.NewNoopLogger(), persistenceMetadataManager: metadata, timeSource: clock.NewRealTimeSource()}
+			handler := &AdminHandler{logger: log.NewNoopLogger(), persistenceMetadataManager: metadata}
 			if !tc.noPolicy {
 				handler.repairPolicy = (&refusingRepairPolicy{key: "membership"}).policy()
 			}

@@ -261,18 +261,6 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
-  // ReconcileNamespaceMutationComponents closes outstanding CHASM peer deliveries
-  // after namespace data has been repaired and verified by the caller. It updates
-  // component state only; it does not repair namespace metadata. Call the active
-  // source cluster with the verified source versions, replica set, and cutoff.
-  // Current peers must be verified before their deliveries can be closed. Removed
-  // peers' deliveries are abandoned without inspecting or updating those peers.
-  // Each call processes one visibility page and returns per-execution results.
-  // Visibility is eventually consistent; repeat discovery to find delayed records.
-  rpc ReconcileNamespaceMutationComponents(ReconcileNamespaceMutationComponentsRequest) returns (ReconcileNamespaceMutationComponentsResponse) {
-    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-  }
-
   rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }

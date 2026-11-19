@@ -32,7 +32,6 @@ import (
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const (
@@ -4249,9 +4248,6 @@ type GetNamespaceResponse struct {
 	FailoverHistory   []*v111.FailoverStatus           `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3" json:"failover_history,omitempty"`
 	IsGlobalNamespace bool                             `protobuf:"varint,9,opt,name=is_global_namespace,json=isGlobalNamespace,proto3" json:"is_global_namespace,omitempty"`
 	RestoreInfo       *v12.NamespaceRestoreInfo        `protobuf:"bytes,10,opt,name=restore_info,json=restoreInfo,proto3" json:"restore_info,omitempty"`
-	// Server time captured before reading this snapshot. Repair uses this as a
-	// conservative reconciliation cutoff instead of the operator's clock.
-	ObservationTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=observation_time,json=observationTime,proto3" json:"observation_time,omitempty"`
 	// The serving cluster's view of this namespace for operator verify and
 	// repair. Unset when the cluster has nothing to report.
 	RepairScope   *NamespaceRepairScope `protobuf:"bytes,12,opt,name=repair_scope,json=repairScope,proto3" json:"repair_scope,omitempty"`
@@ -4341,13 +4337,6 @@ func (x *GetNamespaceResponse) GetIsGlobalNamespace() bool {
 func (x *GetNamespaceResponse) GetRestoreInfo() *v12.NamespaceRestoreInfo {
 	if x != nil {
 		return x.RestoreInfo
-	}
-	return nil
-}
-
-func (x *GetNamespaceResponse) GetObservationTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ObservationTime
 	}
 	return nil
 }
@@ -6779,7 +6768,7 @@ type NamespaceMutationAttribution struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Selects operator-repair handling when set to ORIGIN_OPERATOR_REPAIR.
 	Origin NamespaceMutationAttribution_Origin `protobuf:"varint,1,opt,name=origin,proto3,enum=temporal.server.api.adminservice.v1.NamespaceMutationAttribution_Origin" json:"origin,omitempty"`
-	// Identifier correlating metadata writes and component reconciliation for one repair.
+	// Identifier correlating the metadata writes of one repair.
 	RepairId string `protobuf:"bytes,2,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
 	// Operator-provided explanation recorded in repair events.
 	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
@@ -6838,360 +6827,6 @@ func (x *NamespaceMutationAttribution) GetReason() string {
 	return ""
 }
 
-// ReconcileNamespaceMutationComponentsRequest scopes component reconciliation to
-// the namespace state covered by the caller's final repair verification.
-type ReconcileNamespaceMutationComponentsRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// ID of the repaired namespace, whose components run in temporal-system.
-	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Identifier correlating this reconciliation with the repair's metadata writes.
-	RepairId string `protobuf:"bytes,2,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
-	// Operator-provided explanation persisted on reconciled peer deliveries.
-	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	// Includes only mutations whose successful local phase resolved at or before this time.
-	// Versions establish snapshot coverage; this cutoff limits operator scope.
-	CutoffTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=cutoff_time,json=cutoffTime,proto3" json:"cutoff_time,omitempty"`
-	// Current source replica set excluding the source cluster. Peers outside this
-	// set have their pending deliveries abandoned and may retain stale membership.
-	AuthoritativePeerClusters []string `protobuf:"bytes,5,rep,name=authoritative_peer_clusters,json=authoritativePeerClusters,proto3" json:"authoritative_peer_clusters,omitempty"`
-	// Subset of authoritative_peer_clusters verified after repair. Other current
-	// peers retain their pending deliveries. The caller performs this verification.
-	VerifiedPeerClusters []string `protobuf:"bytes,6,rep,name=verified_peer_clusters,json=verifiedPeerClusters,proto3" json:"verified_peer_clusters,omitempty"`
-	// Maximum visibility records to process. Defaults to 100 and is capped at 100.
-	PageSize int32 `protobuf:"varint,7,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	// Token from the previous response; other request fields must remain unchanged.
-	NextPageToken []byte `protobuf:"bytes,8,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	// Source config version covered by final verification; presence is significant even when zero.
-	// The source must still have this version, and newer mutations are ineligible.
-	VerifiedConfigVersion *wrapperspb.Int64Value `protobuf:"bytes,9,opt,name=verified_config_version,json=verifiedConfigVersion,proto3" json:"verified_config_version,omitempty"`
-	// Source failover version covered by final verification; presence is significant even when zero.
-	// The source must still have this version, and newer mutations are ineligible.
-	VerifiedFailoverVersion *wrapperspb.Int64Value `protobuf:"bytes,10,opt,name=verified_failover_version,json=verifiedFailoverVersion,proto3" json:"verified_failover_version,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) Reset() {
-	*x = ReconcileNamespaceMutationComponentsRequest{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[107]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReconcileNamespaceMutationComponentsRequest) ProtoMessage() {}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[107]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReconcileNamespaceMutationComponentsRequest.ProtoReflect.Descriptor instead.
-func (*ReconcileNamespaceMutationComponentsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{107}
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetNamespaceId() string {
-	if x != nil {
-		return x.NamespaceId
-	}
-	return ""
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetRepairId() string {
-	if x != nil {
-		return x.RepairId
-	}
-	return ""
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetCutoffTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CutoffTime
-	}
-	return nil
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetAuthoritativePeerClusters() []string {
-	if x != nil {
-		return x.AuthoritativePeerClusters
-	}
-	return nil
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetVerifiedPeerClusters() []string {
-	if x != nil {
-		return x.VerifiedPeerClusters
-	}
-	return nil
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetNextPageToken() []byte {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return nil
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetVerifiedConfigVersion() *wrapperspb.Int64Value {
-	if x != nil {
-		return x.VerifiedConfigVersion
-	}
-	return nil
-}
-
-func (x *ReconcileNamespaceMutationComponentsRequest) GetVerifiedFailoverVersion() *wrapperspb.Int64Value {
-	if x != nil {
-		return x.VerifiedFailoverVersion
-	}
-	return nil
-}
-
-type ReconcileNamespaceMutationComponentsResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Results for the visibility records processed by this call. One execution's
-	// error does not roll back successful reconciliation of other executions.
-	Components []*NamespaceMutationComponentReconciliation `protobuf:"bytes,1,rep,name=components,proto3" json:"components,omitempty"`
-	// Token for the next visibility page. Empty means this scan has no more pages,
-	// not that all running components have reached visibility.
-	NextPageToken []byte `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReconcileNamespaceMutationComponentsResponse) Reset() {
-	*x = ReconcileNamespaceMutationComponentsResponse{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[108]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReconcileNamespaceMutationComponentsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReconcileNamespaceMutationComponentsResponse) ProtoMessage() {}
-
-func (x *ReconcileNamespaceMutationComponentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[108]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReconcileNamespaceMutationComponentsResponse.ProtoReflect.Descriptor instead.
-func (*ReconcileNamespaceMutationComponentsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{108}
-}
-
-func (x *ReconcileNamespaceMutationComponentsResponse) GetComponents() []*NamespaceMutationComponentReconciliation {
-	if x != nil {
-		return x.Components
-	}
-	return nil
-}
-
-func (x *ReconcileNamespaceMutationComponentsResponse) GetNextPageToken() []byte {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return nil
-}
-
-type NamespaceMutationComponentReconciliation struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Business ID of the discovered namespace-mutation execution.
-	BusinessId string `protobuf:"bytes,1,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
-	// Exact execution run inspected or reconciled.
-	RunId string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// The running component passed reconciliation guards, or was already completed.
-	// Eligibility does not mean every pending peer was verified and closed.
-	Eligible bool `protobuf:"varint,3,opt,name=eligible,proto3" json:"eligible,omitempty"`
-	// Explanation when the component did not pass reconciliation guards.
-	IneligibleReason string `protobuf:"bytes,4,opt,name=ineligible_reason,json=ineligibleReason,proto3" json:"ineligible_reason,omitempty"`
-	// All peers are terminal and the component is completed, including an already completed run.
-	Completed bool `protobuf:"varint,5,opt,name=completed,proto3" json:"completed,omitempty"`
-	// Per-peer dispositions. Existing terminal delivery outcomes are preserved.
-	Peers []*NamespaceMutationPeerReconciliation `protobuf:"bytes,6,rep,name=peers,proto3" json:"peers,omitempty"`
-	// Failure inspecting or reconciling this execution. Other fields do not establish
-	// eligibility or completion when this field is set.
-	Error         string `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *NamespaceMutationComponentReconciliation) Reset() {
-	*x = NamespaceMutationComponentReconciliation{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[109]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NamespaceMutationComponentReconciliation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NamespaceMutationComponentReconciliation) ProtoMessage() {}
-
-func (x *NamespaceMutationComponentReconciliation) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[109]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NamespaceMutationComponentReconciliation.ProtoReflect.Descriptor instead.
-func (*NamespaceMutationComponentReconciliation) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{109}
-}
-
-func (x *NamespaceMutationComponentReconciliation) GetBusinessId() string {
-	if x != nil {
-		return x.BusinessId
-	}
-	return ""
-}
-
-func (x *NamespaceMutationComponentReconciliation) GetRunId() string {
-	if x != nil {
-		return x.RunId
-	}
-	return ""
-}
-
-func (x *NamespaceMutationComponentReconciliation) GetEligible() bool {
-	if x != nil {
-		return x.Eligible
-	}
-	return false
-}
-
-func (x *NamespaceMutationComponentReconciliation) GetIneligibleReason() string {
-	if x != nil {
-		return x.IneligibleReason
-	}
-	return ""
-}
-
-func (x *NamespaceMutationComponentReconciliation) GetCompleted() bool {
-	if x != nil {
-		return x.Completed
-	}
-	return false
-}
-
-func (x *NamespaceMutationComponentReconciliation) GetPeers() []*NamespaceMutationPeerReconciliation {
-	if x != nil {
-		return x.Peers
-	}
-	return nil
-}
-
-func (x *NamespaceMutationComponentReconciliation) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
-}
-
-type NamespaceMutationPeerReconciliation struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Destination cluster of the delivery.
-	TargetCluster string `protobuf:"bytes,1,opt,name=target_cluster,json=targetCluster,proto3" json:"target_cluster,omitempty"`
-	// Whether reconciliation closed, preserved, or left the delivery unverified.
-	Outcome v14.NamespaceReconciliationOutcome `protobuf:"varint,2,opt,name=outcome,proto3,enum=temporal.server.api.enums.v1.NamespaceReconciliationOutcome" json:"outcome,omitempty"`
-	// Why a delivery was manually closed. Also returned on retries for a peer that
-	// was manually reconciled previously; unspecified for other terminal outcomes.
-	Basis         v14.ManualReconciliationBasis `protobuf:"varint,3,opt,name=basis,proto3,enum=temporal.server.api.enums.v1.ManualReconciliationBasis" json:"basis,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *NamespaceMutationPeerReconciliation) Reset() {
-	*x = NamespaceMutationPeerReconciliation{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[110]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NamespaceMutationPeerReconciliation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NamespaceMutationPeerReconciliation) ProtoMessage() {}
-
-func (x *NamespaceMutationPeerReconciliation) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[110]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NamespaceMutationPeerReconciliation.ProtoReflect.Descriptor instead.
-func (*NamespaceMutationPeerReconciliation) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{110}
-}
-
-func (x *NamespaceMutationPeerReconciliation) GetTargetCluster() string {
-	if x != nil {
-		return x.TargetCluster
-	}
-	return ""
-}
-
-func (x *NamespaceMutationPeerReconciliation) GetOutcome() v14.NamespaceReconciliationOutcome {
-	if x != nil {
-		return x.Outcome
-	}
-	return v14.NamespaceReconciliationOutcome(0)
-}
-
-func (x *NamespaceMutationPeerReconciliation) GetBasis() v14.ManualReconciliationBasis {
-	if x != nil {
-		return x.Basis
-	}
-	return v14.ManualReconciliationBasis(0)
-}
-
 type AddTasksRequest_Task struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CategoryId    int32                  `protobuf:"varint,1,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`
@@ -7202,7 +6837,7 @@ type AddTasksRequest_Task struct {
 
 func (x *AddTasksRequest_Task) Reset() {
 	*x = AddTasksRequest_Task{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[118]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7214,7 +6849,7 @@ func (x *AddTasksRequest_Task) String() string {
 func (*AddTasksRequest_Task) ProtoMessage() {}
 
 func (x *AddTasksRequest_Task) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[118]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7255,7 +6890,7 @@ type ListQueuesResponse_QueueInfo struct {
 
 func (x *ListQueuesResponse_QueueInfo) Reset() {
 	*x = ListQueuesResponse_QueueInfo{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[119]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7267,7 +6902,7 @@ func (x *ListQueuesResponse_QueueInfo) String() string {
 func (*ListQueuesResponse_QueueInfo) ProtoMessage() {}
 
 func (x *ListQueuesResponse_QueueInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[119]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7316,7 +6951,7 @@ type CountExecutionsResponse_AggregationGroup struct {
 
 func (x *CountExecutionsResponse_AggregationGroup) Reset() {
 	*x = CountExecutionsResponse_AggregationGroup{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[121]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7328,7 +6963,7 @@ func (x *CountExecutionsResponse_AggregationGroup) String() string {
 func (*CountExecutionsResponse_AggregationGroup) ProtoMessage() {}
 
 func (x *CountExecutionsResponse_AggregationGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[121]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7362,7 +6997,7 @@ var File_temporal_server_api_adminservice_v1_request_response_proto protoreflect
 
 const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/api/adminservice/v1/request_response.proto\x12#temporal.server.api.adminservice.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/wrappers.proto\x1a$temporal/api/common/v1/message.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\"temporal/api/enums/v1/common.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a'temporal/api/namespace/v1/message.proto\x1a)temporal/api/replication/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a%temporal/api/version/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a1temporal/server/api/adminservice/v1/message.proto\x1a,temporal/server/api/cluster/v1/message.proto\x1a'temporal/server/api/common/v1/dlq.proto\x1a*temporal/server/api/enums/v1/cluster.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a&temporal/server/api/enums/v1/dlq.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a+temporal/server/api/health/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/namespace/v1/message.proto\x1a9temporal/server/api/persistence/v1/cluster_metadata.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a.temporal/server/api/persistence/v1/tasks.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a0temporal/server/api/replication/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x83\x01\n" +
+	":temporal/server/api/adminservice/v1/request_response.proto\x12#temporal.server.api.adminservice.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\"temporal/api/enums/v1/common.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a'temporal/api/namespace/v1/message.proto\x1a)temporal/api/replication/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a%temporal/api/version/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a1temporal/server/api/adminservice/v1/message.proto\x1a,temporal/server/api/cluster/v1/message.proto\x1a'temporal/server/api/common/v1/dlq.proto\x1a*temporal/server/api/enums/v1/cluster.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a&temporal/server/api/enums/v1/dlq.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a+temporal/server/api/health/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/namespace/v1/message.proto\x1a9temporal/server/api/persistence/v1/cluster_metadata.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a.temporal/server/api/persistence/v1/tasks.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a0temporal/server/api/replication/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x83\x01\n" +
 	"\x1aRebuildMutableStateRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\x1d\n" +
@@ -7675,7 +7310,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\tnamespace\x18\x01 \x01(\tH\x00R\tnamespace\x12\x10\n" +
 	"\x02id\x18\x02 \x01(\tH\x00R\x02idB\f\n" +
 	"\n" +
-	"attributes\"\xdc\x05\n" +
+	"attributes\"\x95\x05\n" +
 	"\x14GetNamespaceResponse\x12<\n" +
 	"\x04info\x18\x03 \x01(\v2(.temporal.api.namespace.v1.NamespaceInfoR\x04info\x12B\n" +
 	"\x06config\x18\x04 \x01(\v2*.temporal.api.namespace.v1.NamespaceConfigR\x06config\x12f\n" +
@@ -7685,8 +7320,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x10failover_history\x18\b \x03(\v2+.temporal.api.replication.v1.FailoverStatusR\x0ffailoverHistory\x12.\n" +
 	"\x13is_global_namespace\x18\t \x01(\bR\x11isGlobalNamespace\x12[\n" +
 	"\frestore_info\x18\n" +
-	" \x01(\v28.temporal.server.api.persistence.v1.NamespaceRestoreInfoR\vrestoreInfo\x12E\n" +
-	"\x10observation_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0fobservationTime\x12\\\n" +
+	" \x01(\v28.temporal.server.api.persistence.v1.NamespaceRestoreInfoR\vrestoreInfo\x12\\\n" +
 	"\frepair_scope\x18\f \x01(\v29.temporal.server.api.adminservice.v1.NamespaceRepairScopeR\vrepairScope\"=\n" +
 	"\x14NamespaceRepairScope\x12%\n" +
 	"\x0erefusal_reason\x18\x01 \x01(\tR\rrefusalReason\"\xb9\x01\n" +
@@ -7870,38 +7504,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x06reason\x18\x03 \x01(\tR\x06reason\"<\n" +
 	"\x06Origin\x12\x16\n" +
 	"\x12ORIGIN_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16ORIGIN_OPERATOR_REPAIR\x10\x01\"\xab\x04\n" +
-	"+ReconcileNamespaceMutationComponentsRequest\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1b\n" +
-	"\trepair_id\x18\x02 \x01(\tR\brepairId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\x12;\n" +
-	"\vcutoff_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"cutoffTime\x12>\n" +
-	"\x1bauthoritative_peer_clusters\x18\x05 \x03(\tR\x19authoritativePeerClusters\x124\n" +
-	"\x16verified_peer_clusters\x18\x06 \x03(\tR\x14verifiedPeerClusters\x12\x1b\n" +
-	"\tpage_size\x18\a \x01(\x05R\bpageSize\x12&\n" +
-	"\x0fnext_page_token\x18\b \x01(\fR\rnextPageToken\x12S\n" +
-	"\x17verified_config_version\x18\t \x01(\v2\x1b.google.protobuf.Int64ValueR\x15verifiedConfigVersion\x12W\n" +
-	"\x19verified_failover_version\x18\n" +
-	" \x01(\v2\x1b.google.protobuf.Int64ValueR\x17verifiedFailoverVersion\"\xc5\x01\n" +
-	",ReconcileNamespaceMutationComponentsResponse\x12m\n" +
-	"\n" +
-	"components\x18\x01 \x03(\v2M.temporal.server.api.adminservice.v1.NamespaceMutationComponentReconciliationR\n" +
-	"components\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\xbf\x02\n" +
-	"(NamespaceMutationComponentReconciliation\x12\x1f\n" +
-	"\vbusiness_id\x18\x01 \x01(\tR\n" +
-	"businessId\x12\x15\n" +
-	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x1a\n" +
-	"\beligible\x18\x03 \x01(\bR\beligible\x12+\n" +
-	"\x11ineligible_reason\x18\x04 \x01(\tR\x10ineligibleReason\x12\x1c\n" +
-	"\tcompleted\x18\x05 \x01(\bR\tcompleted\x12^\n" +
-	"\x05peers\x18\x06 \x03(\v2H.temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliationR\x05peers\x12\x14\n" +
-	"\x05error\x18\a \x01(\tR\x05error\"\xf3\x01\n" +
-	"#NamespaceMutationPeerReconciliation\x12%\n" +
-	"\x0etarget_cluster\x18\x01 \x01(\tR\rtargetCluster\x12V\n" +
-	"\aoutcome\x18\x02 \x01(\x0e2<.temporal.server.api.enums.v1.NamespaceReconciliationOutcomeR\aoutcome\x12M\n" +
-	"\x05basis\x18\x03 \x01(\x0e27.temporal.server.api.enums.v1.ManualReconciliationBasisR\x05basisB8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
+	"\x16ORIGIN_OPERATOR_REPAIR\x10\x01B8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
 
 var (
 	file_temporal_server_api_adminservice_v1_request_response_proto_rawDescOnce sync.Once
@@ -7916,311 +7519,296 @@ func file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP
 }
 
 var file_temporal_server_api_adminservice_v1_request_response_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 122)
+var file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 118)
 var file_temporal_server_api_adminservice_v1_request_response_proto_goTypes = []any{
-	(ApplyNamespaceMutationResponse_Outcome)(0),          // 0: temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.Outcome
-	(MigrateScheduleRequest_SchedulerTarget)(0),          // 1: temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
-	(NamespaceMutationAttribution_Origin)(0),             // 2: temporal.server.api.adminservice.v1.NamespaceMutationAttribution.Origin
-	(*RebuildMutableStateRequest)(nil),                   // 3: temporal.server.api.adminservice.v1.RebuildMutableStateRequest
-	(*RebuildMutableStateResponse)(nil),                  // 4: temporal.server.api.adminservice.v1.RebuildMutableStateResponse
-	(*ImportWorkflowExecutionRequest)(nil),               // 5: temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest
-	(*ImportWorkflowExecutionResponse)(nil),              // 6: temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse
-	(*DescribeMutableStateRequest)(nil),                  // 7: temporal.server.api.adminservice.v1.DescribeMutableStateRequest
-	(*DescribeMutableStateResponse)(nil),                 // 8: temporal.server.api.adminservice.v1.DescribeMutableStateResponse
-	(*DescribeHistoryHostRequest)(nil),                   // 9: temporal.server.api.adminservice.v1.DescribeHistoryHostRequest
-	(*DescribeHistoryHostResponse)(nil),                  // 10: temporal.server.api.adminservice.v1.DescribeHistoryHostResponse
-	(*CloseShardRequest)(nil),                            // 11: temporal.server.api.adminservice.v1.CloseShardRequest
-	(*CloseShardResponse)(nil),                           // 12: temporal.server.api.adminservice.v1.CloseShardResponse
-	(*GetShardRequest)(nil),                              // 13: temporal.server.api.adminservice.v1.GetShardRequest
-	(*GetShardResponse)(nil),                             // 14: temporal.server.api.adminservice.v1.GetShardResponse
-	(*ListHistoryTasksRequest)(nil),                      // 15: temporal.server.api.adminservice.v1.ListHistoryTasksRequest
-	(*ListHistoryTasksResponse)(nil),                     // 16: temporal.server.api.adminservice.v1.ListHistoryTasksResponse
-	(*Task)(nil),                                         // 17: temporal.server.api.adminservice.v1.Task
-	(*RemoveTaskRequest)(nil),                            // 18: temporal.server.api.adminservice.v1.RemoveTaskRequest
-	(*RemoveTaskResponse)(nil),                           // 19: temporal.server.api.adminservice.v1.RemoveTaskResponse
-	(*GetWorkflowExecutionRawHistoryV2Request)(nil),      // 20: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request
-	(*GetWorkflowExecutionRawHistoryV2Response)(nil),     // 21: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
-	(*GetWorkflowExecutionRawHistoryRequest)(nil),        // 22: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest
-	(*GetWorkflowExecutionRawHistoryResponse)(nil),       // 23: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
-	(*GetReplicationMessagesRequest)(nil),                // 24: temporal.server.api.adminservice.v1.GetReplicationMessagesRequest
-	(*GetReplicationMessagesResponse)(nil),               // 25: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse
-	(*GetNamespaceReplicationMessagesRequest)(nil),       // 26: temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesRequest
-	(*GetNamespaceReplicationMessagesResponse)(nil),      // 27: temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse
-	(*ApplyNamespaceMutationRequest)(nil),                // 28: temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest
-	(*ApplyNamespaceMutationResponse)(nil),               // 29: temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse
-	(*GetDLQReplicationMessagesRequest)(nil),             // 30: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesRequest
-	(*GetDLQReplicationMessagesResponse)(nil),            // 31: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse
-	(*ReapplyEventsRequest)(nil),                         // 32: temporal.server.api.adminservice.v1.ReapplyEventsRequest
-	(*ReapplyEventsResponse)(nil),                        // 33: temporal.server.api.adminservice.v1.ReapplyEventsResponse
-	(*AddSearchAttributesRequest)(nil),                   // 34: temporal.server.api.adminservice.v1.AddSearchAttributesRequest
-	(*AddSearchAttributesResponse)(nil),                  // 35: temporal.server.api.adminservice.v1.AddSearchAttributesResponse
-	(*RemoveSearchAttributesRequest)(nil),                // 36: temporal.server.api.adminservice.v1.RemoveSearchAttributesRequest
-	(*RemoveSearchAttributesResponse)(nil),               // 37: temporal.server.api.adminservice.v1.RemoveSearchAttributesResponse
-	(*GetSearchAttributesRequest)(nil),                   // 38: temporal.server.api.adminservice.v1.GetSearchAttributesRequest
-	(*GetSearchAttributesResponse)(nil),                  // 39: temporal.server.api.adminservice.v1.GetSearchAttributesResponse
-	(*DescribeClusterRequest)(nil),                       // 40: temporal.server.api.adminservice.v1.DescribeClusterRequest
-	(*DescribeClusterResponse)(nil),                      // 41: temporal.server.api.adminservice.v1.DescribeClusterResponse
-	(*ListClustersRequest)(nil),                          // 42: temporal.server.api.adminservice.v1.ListClustersRequest
-	(*ListClustersResponse)(nil),                         // 43: temporal.server.api.adminservice.v1.ListClustersResponse
-	(*AddOrUpdateRemoteClusterRequest)(nil),              // 44: temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterRequest
-	(*AddOrUpdateRemoteClusterResponse)(nil),             // 45: temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterResponse
-	(*RemoveRemoteClusterRequest)(nil),                   // 46: temporal.server.api.adminservice.v1.RemoveRemoteClusterRequest
-	(*RemoveRemoteClusterResponse)(nil),                  // 47: temporal.server.api.adminservice.v1.RemoveRemoteClusterResponse
-	(*ListClusterMembersRequest)(nil),                    // 48: temporal.server.api.adminservice.v1.ListClusterMembersRequest
-	(*ListClusterMembersResponse)(nil),                   // 49: temporal.server.api.adminservice.v1.ListClusterMembersResponse
-	(*GetDLQMessagesRequest)(nil),                        // 50: temporal.server.api.adminservice.v1.GetDLQMessagesRequest
-	(*GetDLQMessagesResponse)(nil),                       // 51: temporal.server.api.adminservice.v1.GetDLQMessagesResponse
-	(*PurgeDLQMessagesRequest)(nil),                      // 52: temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest
-	(*PurgeDLQMessagesResponse)(nil),                     // 53: temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse
-	(*MergeDLQMessagesRequest)(nil),                      // 54: temporal.server.api.adminservice.v1.MergeDLQMessagesRequest
-	(*MergeDLQMessagesResponse)(nil),                     // 55: temporal.server.api.adminservice.v1.MergeDLQMessagesResponse
-	(*RefreshWorkflowTasksRequest)(nil),                  // 56: temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
-	(*RefreshWorkflowTasksResponse)(nil),                 // 57: temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse
-	(*ResendReplicationTasksRequest)(nil),                // 58: temporal.server.api.adminservice.v1.ResendReplicationTasksRequest
-	(*ResendReplicationTasksResponse)(nil),               // 59: temporal.server.api.adminservice.v1.ResendReplicationTasksResponse
-	(*GetTaskQueueTasksRequest)(nil),                     // 60: temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest
-	(*GetTaskQueueTasksResponse)(nil),                    // 61: temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse
-	(*DeleteWorkflowExecutionRequest)(nil),               // 62: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
-	(*DeleteWorkflowExecutionResponse)(nil),              // 63: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
-	(*StreamWorkflowReplicationMessagesRequest)(nil),     // 64: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest
-	(*StreamWorkflowReplicationMessagesResponse)(nil),    // 65: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse
-	(*GetNamespaceRequest)(nil),                          // 66: temporal.server.api.adminservice.v1.GetNamespaceRequest
-	(*GetNamespaceResponse)(nil),                         // 67: temporal.server.api.adminservice.v1.GetNamespaceResponse
-	(*NamespaceRepairScope)(nil),                         // 68: temporal.server.api.adminservice.v1.NamespaceRepairScope
-	(*GetRemoteClusterNamespaceRequest)(nil),             // 69: temporal.server.api.adminservice.v1.GetRemoteClusterNamespaceRequest
-	(*GetRemoteClusterNamespaceResponse)(nil),            // 70: temporal.server.api.adminservice.v1.GetRemoteClusterNamespaceResponse
-	(*ApplyRemoteClusterNamespaceRepairRequest)(nil),     // 71: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairRequest
-	(*ApplyRemoteClusterNamespaceRepairResponse)(nil),    // 72: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairResponse
-	(*GetDLQTasksRequest)(nil),                           // 73: temporal.server.api.adminservice.v1.GetDLQTasksRequest
-	(*GetDLQTasksResponse)(nil),                          // 74: temporal.server.api.adminservice.v1.GetDLQTasksResponse
-	(*PurgeDLQTasksRequest)(nil),                         // 75: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest
-	(*PurgeDLQTasksResponse)(nil),                        // 76: temporal.server.api.adminservice.v1.PurgeDLQTasksResponse
-	(*DLQJobToken)(nil),                                  // 77: temporal.server.api.adminservice.v1.DLQJobToken
-	(*MergeDLQTasksRequest)(nil),                         // 78: temporal.server.api.adminservice.v1.MergeDLQTasksRequest
-	(*MergeDLQTasksResponse)(nil),                        // 79: temporal.server.api.adminservice.v1.MergeDLQTasksResponse
-	(*DescribeDLQJobRequest)(nil),                        // 80: temporal.server.api.adminservice.v1.DescribeDLQJobRequest
-	(*DescribeDLQJobResponse)(nil),                       // 81: temporal.server.api.adminservice.v1.DescribeDLQJobResponse
-	(*CancelDLQJobRequest)(nil),                          // 82: temporal.server.api.adminservice.v1.CancelDLQJobRequest
-	(*CancelDLQJobResponse)(nil),                         // 83: temporal.server.api.adminservice.v1.CancelDLQJobResponse
-	(*AddTasksRequest)(nil),                              // 84: temporal.server.api.adminservice.v1.AddTasksRequest
-	(*AddTasksResponse)(nil),                             // 85: temporal.server.api.adminservice.v1.AddTasksResponse
-	(*ListQueuesRequest)(nil),                            // 86: temporal.server.api.adminservice.v1.ListQueuesRequest
-	(*ListQueuesResponse)(nil),                           // 87: temporal.server.api.adminservice.v1.ListQueuesResponse
-	(*DeepHealthCheckRequest)(nil),                       // 88: temporal.server.api.adminservice.v1.DeepHealthCheckRequest
-	(*DeepHealthCheckResponse)(nil),                      // 89: temporal.server.api.adminservice.v1.DeepHealthCheckResponse
-	(*SyncWorkflowStateRequest)(nil),                     // 90: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest
-	(*SyncWorkflowStateResponse)(nil),                    // 91: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse
-	(*GenerateLastHistoryReplicationTasksRequest)(nil),   // 92: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest
-	(*GenerateLastHistoryReplicationTasksResponse)(nil),  // 93: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse
-	(*DescribeTaskQueuePartitionRequest)(nil),            // 94: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest
-	(*DescribeTaskQueuePartitionResponse)(nil),           // 95: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse
-	(*ForceUnloadTaskQueuePartitionRequest)(nil),         // 96: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest
-	(*ForceUnloadTaskQueuePartitionResponse)(nil),        // 97: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse
-	(*GetTaskQueueUserDataRequest)(nil),                  // 98: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest
-	(*GetTaskQueueUserDataResponse)(nil),                 // 99: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse
-	(*StartAdminBatchOperationRequest)(nil),              // 100: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest
-	(*StartAdminBatchOperationResponse)(nil),             // 101: temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse
-	(*BatchOperationRefreshTasks)(nil),                   // 102: temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
-	(*MigrateScheduleRequest)(nil),                       // 103: temporal.server.api.adminservice.v1.MigrateScheduleRequest
-	(*MigrateScheduleResponse)(nil),                      // 104: temporal.server.api.adminservice.v1.MigrateScheduleResponse
-	(*ListExecutionsRequest)(nil),                        // 105: temporal.server.api.adminservice.v1.ListExecutionsRequest
-	(*ListExecutionsResponse)(nil),                       // 106: temporal.server.api.adminservice.v1.ListExecutionsResponse
-	(*CountExecutionsRequest)(nil),                       // 107: temporal.server.api.adminservice.v1.CountExecutionsRequest
-	(*CountExecutionsResponse)(nil),                      // 108: temporal.server.api.adminservice.v1.CountExecutionsResponse
-	(*NamespaceMutationAttribution)(nil),                 // 109: temporal.server.api.adminservice.v1.NamespaceMutationAttribution
-	(*ReconcileNamespaceMutationComponentsRequest)(nil),  // 110: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest
-	(*ReconcileNamespaceMutationComponentsResponse)(nil), // 111: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsResponse
-	(*NamespaceMutationComponentReconciliation)(nil),     // 112: temporal.server.api.adminservice.v1.NamespaceMutationComponentReconciliation
-	(*NamespaceMutationPeerReconciliation)(nil),          // 113: temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation
-	nil,                                  // 114: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
-	nil,                                  // 115: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry
-	nil,                                  // 116: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry
-	nil,                                  // 117: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry
-	nil,                                  // 118: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.MappingEntry
-	nil,                                  // 119: temporal.server.api.adminservice.v1.DescribeClusterResponse.SupportedClientsEntry
-	nil,                                  // 120: temporal.server.api.adminservice.v1.DescribeClusterResponse.TagsEntry
-	(*AddTasksRequest_Task)(nil),         // 121: temporal.server.api.adminservice.v1.AddTasksRequest.Task
-	(*ListQueuesResponse_QueueInfo)(nil), // 122: temporal.server.api.adminservice.v1.ListQueuesResponse.QueueInfo
-	nil,                                  // 123: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
-	(*CountExecutionsResponse_AggregationGroup)(nil), // 124: temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup
-	(*v1.WorkflowExecution)(nil),                     // 125: temporal.api.common.v1.WorkflowExecution
-	(*v1.DataBlob)(nil),                              // 126: temporal.api.common.v1.DataBlob
-	(*v11.VersionHistory)(nil),                       // 127: temporal.server.api.history.v1.VersionHistory
-	(*v12.WorkflowMutableState)(nil),                 // 128: temporal.server.api.persistence.v1.WorkflowMutableState
-	(*v12.StorageUsage)(nil),                         // 129: temporal.server.api.persistence.v1.StorageUsage
-	(*v13.NamespaceCacheInfo)(nil),                   // 130: temporal.server.api.namespace.v1.NamespaceCacheInfo
-	(*v12.ShardInfo)(nil),                            // 131: temporal.server.api.persistence.v1.ShardInfo
-	(*v11.TaskRange)(nil),                            // 132: temporal.server.api.history.v1.TaskRange
-	(v14.TaskType)(0),                                // 133: temporal.server.api.enums.v1.TaskType
-	(*timestamppb.Timestamp)(nil),                    // 134: google.protobuf.Timestamp
-	(*v15.ReplicationToken)(nil),                     // 135: temporal.server.api.replication.v1.ReplicationToken
-	(*v15.ReplicationMessages)(nil),                  // 136: temporal.server.api.replication.v1.ReplicationMessages
-	(*v15.NamespaceTaskAttributes)(nil),              // 137: temporal.server.api.replication.v1.NamespaceTaskAttributes
-	(*v15.ReplicationTaskInfo)(nil),                  // 138: temporal.server.api.replication.v1.ReplicationTaskInfo
-	(*v15.ReplicationTask)(nil),                      // 139: temporal.server.api.replication.v1.ReplicationTask
-	(*v17.WorkflowExecutionInfo)(nil),                // 140: temporal.api.workflow.v1.WorkflowExecutionInfo
-	(*v18.MembershipInfo)(nil),                       // 141: temporal.server.api.cluster.v1.MembershipInfo
-	(*v19.VersionInfo)(nil),                          // 142: temporal.api.version.v1.VersionInfo
-	(*v12.ClusterMetadata)(nil),                      // 143: temporal.server.api.persistence.v1.ClusterMetadata
-	(*durationpb.Duration)(nil),                      // 144: google.protobuf.Duration
-	(v14.ClusterMemberRole)(0),                       // 145: temporal.server.api.enums.v1.ClusterMemberRole
-	(*v18.ClusterMember)(nil),                        // 146: temporal.server.api.cluster.v1.ClusterMember
-	(v14.DeadLetterQueueType)(0),                     // 147: temporal.server.api.enums.v1.DeadLetterQueueType
-	(v16.TaskQueueType)(0),                           // 148: temporal.api.enums.v1.TaskQueueType
-	(*v12.AllocatedTaskInfo)(nil),                    // 149: temporal.server.api.persistence.v1.AllocatedTaskInfo
-	(*v15.SyncReplicationState)(nil),                 // 150: temporal.server.api.replication.v1.SyncReplicationState
-	(*v15.WorkflowReplicationMessages)(nil),          // 151: temporal.server.api.replication.v1.WorkflowReplicationMessages
-	(*v110.NamespaceInfo)(nil),                       // 152: temporal.api.namespace.v1.NamespaceInfo
-	(*v110.NamespaceConfig)(nil),                     // 153: temporal.api.namespace.v1.NamespaceConfig
-	(*v111.NamespaceReplicationConfig)(nil),          // 154: temporal.api.replication.v1.NamespaceReplicationConfig
-	(*v111.FailoverStatus)(nil),                      // 155: temporal.api.replication.v1.FailoverStatus
-	(*v12.NamespaceRestoreInfo)(nil),                 // 156: temporal.server.api.persistence.v1.NamespaceRestoreInfo
-	(*v112.HistoryDLQKey)(nil),                       // 157: temporal.server.api.common.v1.HistoryDLQKey
-	(*v112.HistoryDLQTask)(nil),                      // 158: temporal.server.api.common.v1.HistoryDLQTask
-	(*v112.HistoryDLQTaskMetadata)(nil),              // 159: temporal.server.api.common.v1.HistoryDLQTaskMetadata
-	(v14.DLQOperationType)(0),                        // 160: temporal.server.api.enums.v1.DLQOperationType
-	(v14.DLQOperationState)(0),                       // 161: temporal.server.api.enums.v1.DLQOperationState
-	(v14.HealthState)(0),                             // 162: temporal.server.api.enums.v1.HealthState
-	(*v113.ServiceHealthDetail)(nil),                 // 163: temporal.server.api.health.v1.ServiceHealthDetail
-	(*v12.VersionedTransition)(nil),                  // 164: temporal.server.api.persistence.v1.VersionedTransition
-	(*v11.VersionHistories)(nil),                     // 165: temporal.server.api.history.v1.VersionHistories
-	(*v15.VersionedTransitionArtifact)(nil),          // 166: temporal.server.api.replication.v1.VersionedTransitionArtifact
-	(*v114.TaskQueuePartition)(nil),                  // 167: temporal.server.api.taskqueue.v1.TaskQueuePartition
-	(*v115.TaskQueueVersionSelection)(nil),           // 168: temporal.api.taskqueue.v1.TaskQueueVersionSelection
-	(*v114.PartitionScaleInfo)(nil),                  // 169: temporal.server.api.taskqueue.v1.PartitionScaleInfo
-	(*v12.TaskQueueTypeUserData)(nil),                // 170: temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	(v16.BatchOperationType)(0),                      // 171: temporal.api.enums.v1.BatchOperationType
-	(*VisibilityExecutionInfo)(nil),                  // 172: temporal.server.api.adminservice.v1.VisibilityExecutionInfo
-	(*wrapperspb.Int64Value)(nil),                    // 173: google.protobuf.Int64Value
-	(v14.NamespaceReconciliationOutcome)(0),          // 174: temporal.server.api.enums.v1.NamespaceReconciliationOutcome
-	(v14.ManualReconciliationBasis)(0),               // 175: temporal.server.api.enums.v1.ManualReconciliationBasis
-	(v16.IndexedValueType)(0),                        // 176: temporal.api.enums.v1.IndexedValueType
-	(*v114.TaskQueueVersionInfoInternal)(nil),        // 177: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
-	(*v1.Payload)(nil),                               // 178: temporal.api.common.v1.Payload
+	(ApplyNamespaceMutationResponse_Outcome)(0),         // 0: temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.Outcome
+	(MigrateScheduleRequest_SchedulerTarget)(0),         // 1: temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
+	(NamespaceMutationAttribution_Origin)(0),            // 2: temporal.server.api.adminservice.v1.NamespaceMutationAttribution.Origin
+	(*RebuildMutableStateRequest)(nil),                  // 3: temporal.server.api.adminservice.v1.RebuildMutableStateRequest
+	(*RebuildMutableStateResponse)(nil),                 // 4: temporal.server.api.adminservice.v1.RebuildMutableStateResponse
+	(*ImportWorkflowExecutionRequest)(nil),              // 5: temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest
+	(*ImportWorkflowExecutionResponse)(nil),             // 6: temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse
+	(*DescribeMutableStateRequest)(nil),                 // 7: temporal.server.api.adminservice.v1.DescribeMutableStateRequest
+	(*DescribeMutableStateResponse)(nil),                // 8: temporal.server.api.adminservice.v1.DescribeMutableStateResponse
+	(*DescribeHistoryHostRequest)(nil),                  // 9: temporal.server.api.adminservice.v1.DescribeHistoryHostRequest
+	(*DescribeHistoryHostResponse)(nil),                 // 10: temporal.server.api.adminservice.v1.DescribeHistoryHostResponse
+	(*CloseShardRequest)(nil),                           // 11: temporal.server.api.adminservice.v1.CloseShardRequest
+	(*CloseShardResponse)(nil),                          // 12: temporal.server.api.adminservice.v1.CloseShardResponse
+	(*GetShardRequest)(nil),                             // 13: temporal.server.api.adminservice.v1.GetShardRequest
+	(*GetShardResponse)(nil),                            // 14: temporal.server.api.adminservice.v1.GetShardResponse
+	(*ListHistoryTasksRequest)(nil),                     // 15: temporal.server.api.adminservice.v1.ListHistoryTasksRequest
+	(*ListHistoryTasksResponse)(nil),                    // 16: temporal.server.api.adminservice.v1.ListHistoryTasksResponse
+	(*Task)(nil),                                        // 17: temporal.server.api.adminservice.v1.Task
+	(*RemoveTaskRequest)(nil),                           // 18: temporal.server.api.adminservice.v1.RemoveTaskRequest
+	(*RemoveTaskResponse)(nil),                          // 19: temporal.server.api.adminservice.v1.RemoveTaskResponse
+	(*GetWorkflowExecutionRawHistoryV2Request)(nil),     // 20: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request
+	(*GetWorkflowExecutionRawHistoryV2Response)(nil),    // 21: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	(*GetWorkflowExecutionRawHistoryRequest)(nil),       // 22: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest
+	(*GetWorkflowExecutionRawHistoryResponse)(nil),      // 23: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
+	(*GetReplicationMessagesRequest)(nil),               // 24: temporal.server.api.adminservice.v1.GetReplicationMessagesRequest
+	(*GetReplicationMessagesResponse)(nil),              // 25: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse
+	(*GetNamespaceReplicationMessagesRequest)(nil),      // 26: temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesRequest
+	(*GetNamespaceReplicationMessagesResponse)(nil),     // 27: temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse
+	(*ApplyNamespaceMutationRequest)(nil),               // 28: temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest
+	(*ApplyNamespaceMutationResponse)(nil),              // 29: temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse
+	(*GetDLQReplicationMessagesRequest)(nil),            // 30: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesRequest
+	(*GetDLQReplicationMessagesResponse)(nil),           // 31: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse
+	(*ReapplyEventsRequest)(nil),                        // 32: temporal.server.api.adminservice.v1.ReapplyEventsRequest
+	(*ReapplyEventsResponse)(nil),                       // 33: temporal.server.api.adminservice.v1.ReapplyEventsResponse
+	(*AddSearchAttributesRequest)(nil),                  // 34: temporal.server.api.adminservice.v1.AddSearchAttributesRequest
+	(*AddSearchAttributesResponse)(nil),                 // 35: temporal.server.api.adminservice.v1.AddSearchAttributesResponse
+	(*RemoveSearchAttributesRequest)(nil),               // 36: temporal.server.api.adminservice.v1.RemoveSearchAttributesRequest
+	(*RemoveSearchAttributesResponse)(nil),              // 37: temporal.server.api.adminservice.v1.RemoveSearchAttributesResponse
+	(*GetSearchAttributesRequest)(nil),                  // 38: temporal.server.api.adminservice.v1.GetSearchAttributesRequest
+	(*GetSearchAttributesResponse)(nil),                 // 39: temporal.server.api.adminservice.v1.GetSearchAttributesResponse
+	(*DescribeClusterRequest)(nil),                      // 40: temporal.server.api.adminservice.v1.DescribeClusterRequest
+	(*DescribeClusterResponse)(nil),                     // 41: temporal.server.api.adminservice.v1.DescribeClusterResponse
+	(*ListClustersRequest)(nil),                         // 42: temporal.server.api.adminservice.v1.ListClustersRequest
+	(*ListClustersResponse)(nil),                        // 43: temporal.server.api.adminservice.v1.ListClustersResponse
+	(*AddOrUpdateRemoteClusterRequest)(nil),             // 44: temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterRequest
+	(*AddOrUpdateRemoteClusterResponse)(nil),            // 45: temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterResponse
+	(*RemoveRemoteClusterRequest)(nil),                  // 46: temporal.server.api.adminservice.v1.RemoveRemoteClusterRequest
+	(*RemoveRemoteClusterResponse)(nil),                 // 47: temporal.server.api.adminservice.v1.RemoveRemoteClusterResponse
+	(*ListClusterMembersRequest)(nil),                   // 48: temporal.server.api.adminservice.v1.ListClusterMembersRequest
+	(*ListClusterMembersResponse)(nil),                  // 49: temporal.server.api.adminservice.v1.ListClusterMembersResponse
+	(*GetDLQMessagesRequest)(nil),                       // 50: temporal.server.api.adminservice.v1.GetDLQMessagesRequest
+	(*GetDLQMessagesResponse)(nil),                      // 51: temporal.server.api.adminservice.v1.GetDLQMessagesResponse
+	(*PurgeDLQMessagesRequest)(nil),                     // 52: temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest
+	(*PurgeDLQMessagesResponse)(nil),                    // 53: temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse
+	(*MergeDLQMessagesRequest)(nil),                     // 54: temporal.server.api.adminservice.v1.MergeDLQMessagesRequest
+	(*MergeDLQMessagesResponse)(nil),                    // 55: temporal.server.api.adminservice.v1.MergeDLQMessagesResponse
+	(*RefreshWorkflowTasksRequest)(nil),                 // 56: temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
+	(*RefreshWorkflowTasksResponse)(nil),                // 57: temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse
+	(*ResendReplicationTasksRequest)(nil),               // 58: temporal.server.api.adminservice.v1.ResendReplicationTasksRequest
+	(*ResendReplicationTasksResponse)(nil),              // 59: temporal.server.api.adminservice.v1.ResendReplicationTasksResponse
+	(*GetTaskQueueTasksRequest)(nil),                    // 60: temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest
+	(*GetTaskQueueTasksResponse)(nil),                   // 61: temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse
+	(*DeleteWorkflowExecutionRequest)(nil),              // 62: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
+	(*DeleteWorkflowExecutionResponse)(nil),             // 63: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
+	(*StreamWorkflowReplicationMessagesRequest)(nil),    // 64: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest
+	(*StreamWorkflowReplicationMessagesResponse)(nil),   // 65: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse
+	(*GetNamespaceRequest)(nil),                         // 66: temporal.server.api.adminservice.v1.GetNamespaceRequest
+	(*GetNamespaceResponse)(nil),                        // 67: temporal.server.api.adminservice.v1.GetNamespaceResponse
+	(*NamespaceRepairScope)(nil),                        // 68: temporal.server.api.adminservice.v1.NamespaceRepairScope
+	(*GetRemoteClusterNamespaceRequest)(nil),            // 69: temporal.server.api.adminservice.v1.GetRemoteClusterNamespaceRequest
+	(*GetRemoteClusterNamespaceResponse)(nil),           // 70: temporal.server.api.adminservice.v1.GetRemoteClusterNamespaceResponse
+	(*ApplyRemoteClusterNamespaceRepairRequest)(nil),    // 71: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairRequest
+	(*ApplyRemoteClusterNamespaceRepairResponse)(nil),   // 72: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairResponse
+	(*GetDLQTasksRequest)(nil),                          // 73: temporal.server.api.adminservice.v1.GetDLQTasksRequest
+	(*GetDLQTasksResponse)(nil),                         // 74: temporal.server.api.adminservice.v1.GetDLQTasksResponse
+	(*PurgeDLQTasksRequest)(nil),                        // 75: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest
+	(*PurgeDLQTasksResponse)(nil),                       // 76: temporal.server.api.adminservice.v1.PurgeDLQTasksResponse
+	(*DLQJobToken)(nil),                                 // 77: temporal.server.api.adminservice.v1.DLQJobToken
+	(*MergeDLQTasksRequest)(nil),                        // 78: temporal.server.api.adminservice.v1.MergeDLQTasksRequest
+	(*MergeDLQTasksResponse)(nil),                       // 79: temporal.server.api.adminservice.v1.MergeDLQTasksResponse
+	(*DescribeDLQJobRequest)(nil),                       // 80: temporal.server.api.adminservice.v1.DescribeDLQJobRequest
+	(*DescribeDLQJobResponse)(nil),                      // 81: temporal.server.api.adminservice.v1.DescribeDLQJobResponse
+	(*CancelDLQJobRequest)(nil),                         // 82: temporal.server.api.adminservice.v1.CancelDLQJobRequest
+	(*CancelDLQJobResponse)(nil),                        // 83: temporal.server.api.adminservice.v1.CancelDLQJobResponse
+	(*AddTasksRequest)(nil),                             // 84: temporal.server.api.adminservice.v1.AddTasksRequest
+	(*AddTasksResponse)(nil),                            // 85: temporal.server.api.adminservice.v1.AddTasksResponse
+	(*ListQueuesRequest)(nil),                           // 86: temporal.server.api.adminservice.v1.ListQueuesRequest
+	(*ListQueuesResponse)(nil),                          // 87: temporal.server.api.adminservice.v1.ListQueuesResponse
+	(*DeepHealthCheckRequest)(nil),                      // 88: temporal.server.api.adminservice.v1.DeepHealthCheckRequest
+	(*DeepHealthCheckResponse)(nil),                     // 89: temporal.server.api.adminservice.v1.DeepHealthCheckResponse
+	(*SyncWorkflowStateRequest)(nil),                    // 90: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest
+	(*SyncWorkflowStateResponse)(nil),                   // 91: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse
+	(*GenerateLastHistoryReplicationTasksRequest)(nil),  // 92: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest
+	(*GenerateLastHistoryReplicationTasksResponse)(nil), // 93: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse
+	(*DescribeTaskQueuePartitionRequest)(nil),           // 94: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest
+	(*DescribeTaskQueuePartitionResponse)(nil),          // 95: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse
+	(*ForceUnloadTaskQueuePartitionRequest)(nil),        // 96: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest
+	(*ForceUnloadTaskQueuePartitionResponse)(nil),       // 97: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse
+	(*GetTaskQueueUserDataRequest)(nil),                 // 98: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest
+	(*GetTaskQueueUserDataResponse)(nil),                // 99: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse
+	(*StartAdminBatchOperationRequest)(nil),             // 100: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest
+	(*StartAdminBatchOperationResponse)(nil),            // 101: temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse
+	(*BatchOperationRefreshTasks)(nil),                  // 102: temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
+	(*MigrateScheduleRequest)(nil),                      // 103: temporal.server.api.adminservice.v1.MigrateScheduleRequest
+	(*MigrateScheduleResponse)(nil),                     // 104: temporal.server.api.adminservice.v1.MigrateScheduleResponse
+	(*ListExecutionsRequest)(nil),                       // 105: temporal.server.api.adminservice.v1.ListExecutionsRequest
+	(*ListExecutionsResponse)(nil),                      // 106: temporal.server.api.adminservice.v1.ListExecutionsResponse
+	(*CountExecutionsRequest)(nil),                      // 107: temporal.server.api.adminservice.v1.CountExecutionsRequest
+	(*CountExecutionsResponse)(nil),                     // 108: temporal.server.api.adminservice.v1.CountExecutionsResponse
+	(*NamespaceMutationAttribution)(nil),                // 109: temporal.server.api.adminservice.v1.NamespaceMutationAttribution
+	nil,                                                 // 110: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
+	nil,                                                 // 111: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry
+	nil,                                                 // 112: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry
+	nil,                                                 // 113: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry
+	nil,                                                 // 114: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.MappingEntry
+	nil,                                                 // 115: temporal.server.api.adminservice.v1.DescribeClusterResponse.SupportedClientsEntry
+	nil,                                                 // 116: temporal.server.api.adminservice.v1.DescribeClusterResponse.TagsEntry
+	(*AddTasksRequest_Task)(nil),                        // 117: temporal.server.api.adminservice.v1.AddTasksRequest.Task
+	(*ListQueuesResponse_QueueInfo)(nil),                // 118: temporal.server.api.adminservice.v1.ListQueuesResponse.QueueInfo
+	nil,                                                 // 119: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
+	(*CountExecutionsResponse_AggregationGroup)(nil),    // 120: temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup
+	(*v1.WorkflowExecution)(nil),                        // 121: temporal.api.common.v1.WorkflowExecution
+	(*v1.DataBlob)(nil),                                 // 122: temporal.api.common.v1.DataBlob
+	(*v11.VersionHistory)(nil),                          // 123: temporal.server.api.history.v1.VersionHistory
+	(*v12.WorkflowMutableState)(nil),                    // 124: temporal.server.api.persistence.v1.WorkflowMutableState
+	(*v12.StorageUsage)(nil),                            // 125: temporal.server.api.persistence.v1.StorageUsage
+	(*v13.NamespaceCacheInfo)(nil),                      // 126: temporal.server.api.namespace.v1.NamespaceCacheInfo
+	(*v12.ShardInfo)(nil),                               // 127: temporal.server.api.persistence.v1.ShardInfo
+	(*v11.TaskRange)(nil),                               // 128: temporal.server.api.history.v1.TaskRange
+	(v14.TaskType)(0),                                   // 129: temporal.server.api.enums.v1.TaskType
+	(*timestamppb.Timestamp)(nil),                       // 130: google.protobuf.Timestamp
+	(*v15.ReplicationToken)(nil),                        // 131: temporal.server.api.replication.v1.ReplicationToken
+	(*v15.ReplicationMessages)(nil),                     // 132: temporal.server.api.replication.v1.ReplicationMessages
+	(*v15.NamespaceTaskAttributes)(nil),                 // 133: temporal.server.api.replication.v1.NamespaceTaskAttributes
+	(*v15.ReplicationTaskInfo)(nil),                     // 134: temporal.server.api.replication.v1.ReplicationTaskInfo
+	(*v15.ReplicationTask)(nil),                         // 135: temporal.server.api.replication.v1.ReplicationTask
+	(*v17.WorkflowExecutionInfo)(nil),                   // 136: temporal.api.workflow.v1.WorkflowExecutionInfo
+	(*v18.MembershipInfo)(nil),                          // 137: temporal.server.api.cluster.v1.MembershipInfo
+	(*v19.VersionInfo)(nil),                             // 138: temporal.api.version.v1.VersionInfo
+	(*v12.ClusterMetadata)(nil),                         // 139: temporal.server.api.persistence.v1.ClusterMetadata
+	(*durationpb.Duration)(nil),                         // 140: google.protobuf.Duration
+	(v14.ClusterMemberRole)(0),                          // 141: temporal.server.api.enums.v1.ClusterMemberRole
+	(*v18.ClusterMember)(nil),                           // 142: temporal.server.api.cluster.v1.ClusterMember
+	(v14.DeadLetterQueueType)(0),                        // 143: temporal.server.api.enums.v1.DeadLetterQueueType
+	(v16.TaskQueueType)(0),                              // 144: temporal.api.enums.v1.TaskQueueType
+	(*v12.AllocatedTaskInfo)(nil),                       // 145: temporal.server.api.persistence.v1.AllocatedTaskInfo
+	(*v15.SyncReplicationState)(nil),                    // 146: temporal.server.api.replication.v1.SyncReplicationState
+	(*v15.WorkflowReplicationMessages)(nil),             // 147: temporal.server.api.replication.v1.WorkflowReplicationMessages
+	(*v110.NamespaceInfo)(nil),                          // 148: temporal.api.namespace.v1.NamespaceInfo
+	(*v110.NamespaceConfig)(nil),                        // 149: temporal.api.namespace.v1.NamespaceConfig
+	(*v111.NamespaceReplicationConfig)(nil),             // 150: temporal.api.replication.v1.NamespaceReplicationConfig
+	(*v111.FailoverStatus)(nil),                         // 151: temporal.api.replication.v1.FailoverStatus
+	(*v12.NamespaceRestoreInfo)(nil),                    // 152: temporal.server.api.persistence.v1.NamespaceRestoreInfo
+	(*v112.HistoryDLQKey)(nil),                          // 153: temporal.server.api.common.v1.HistoryDLQKey
+	(*v112.HistoryDLQTask)(nil),                         // 154: temporal.server.api.common.v1.HistoryDLQTask
+	(*v112.HistoryDLQTaskMetadata)(nil),                 // 155: temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	(v14.DLQOperationType)(0),                           // 156: temporal.server.api.enums.v1.DLQOperationType
+	(v14.DLQOperationState)(0),                          // 157: temporal.server.api.enums.v1.DLQOperationState
+	(v14.HealthState)(0),                                // 158: temporal.server.api.enums.v1.HealthState
+	(*v113.ServiceHealthDetail)(nil),                    // 159: temporal.server.api.health.v1.ServiceHealthDetail
+	(*v12.VersionedTransition)(nil),                     // 160: temporal.server.api.persistence.v1.VersionedTransition
+	(*v11.VersionHistories)(nil),                        // 161: temporal.server.api.history.v1.VersionHistories
+	(*v15.VersionedTransitionArtifact)(nil),             // 162: temporal.server.api.replication.v1.VersionedTransitionArtifact
+	(*v114.TaskQueuePartition)(nil),                     // 163: temporal.server.api.taskqueue.v1.TaskQueuePartition
+	(*v115.TaskQueueVersionSelection)(nil),              // 164: temporal.api.taskqueue.v1.TaskQueueVersionSelection
+	(*v114.PartitionScaleInfo)(nil),                     // 165: temporal.server.api.taskqueue.v1.PartitionScaleInfo
+	(*v12.TaskQueueTypeUserData)(nil),                   // 166: temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	(v16.BatchOperationType)(0),                         // 167: temporal.api.enums.v1.BatchOperationType
+	(*VisibilityExecutionInfo)(nil),                     // 168: temporal.server.api.adminservice.v1.VisibilityExecutionInfo
+	(v16.IndexedValueType)(0),                           // 169: temporal.api.enums.v1.IndexedValueType
+	(*v114.TaskQueueVersionInfoInternal)(nil),           // 170: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
+	(*v1.Payload)(nil),                                  // 171: temporal.api.common.v1.Payload
 }
 var file_temporal_server_api_adminservice_v1_request_response_proto_depIdxs = []int32{
-	125, // 0: temporal.server.api.adminservice.v1.RebuildMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	125, // 1: temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	126, // 2: temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest.history_batches:type_name -> temporal.api.common.v1.DataBlob
-	127, // 3: temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	125, // 4: temporal.server.api.adminservice.v1.DescribeMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	128, // 5: temporal.server.api.adminservice.v1.DescribeMutableStateResponse.cache_mutable_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
-	128, // 6: temporal.server.api.adminservice.v1.DescribeMutableStateResponse.database_mutable_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
-	129, // 7: temporal.server.api.adminservice.v1.DescribeMutableStateResponse.current_storage_usage:type_name -> temporal.server.api.persistence.v1.StorageUsage
-	125, // 8: temporal.server.api.adminservice.v1.DescribeHistoryHostRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	130, // 9: temporal.server.api.adminservice.v1.DescribeHistoryHostResponse.namespace_cache:type_name -> temporal.server.api.namespace.v1.NamespaceCacheInfo
-	131, // 10: temporal.server.api.adminservice.v1.GetShardResponse.shard_info:type_name -> temporal.server.api.persistence.v1.ShardInfo
-	132, // 11: temporal.server.api.adminservice.v1.ListHistoryTasksRequest.task_range:type_name -> temporal.server.api.history.v1.TaskRange
+	121, // 0: temporal.server.api.adminservice.v1.RebuildMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	121, // 1: temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	122, // 2: temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest.history_batches:type_name -> temporal.api.common.v1.DataBlob
+	123, // 3: temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	121, // 4: temporal.server.api.adminservice.v1.DescribeMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	124, // 5: temporal.server.api.adminservice.v1.DescribeMutableStateResponse.cache_mutable_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
+	124, // 6: temporal.server.api.adminservice.v1.DescribeMutableStateResponse.database_mutable_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
+	125, // 7: temporal.server.api.adminservice.v1.DescribeMutableStateResponse.current_storage_usage:type_name -> temporal.server.api.persistence.v1.StorageUsage
+	121, // 8: temporal.server.api.adminservice.v1.DescribeHistoryHostRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	126, // 9: temporal.server.api.adminservice.v1.DescribeHistoryHostResponse.namespace_cache:type_name -> temporal.server.api.namespace.v1.NamespaceCacheInfo
+	127, // 10: temporal.server.api.adminservice.v1.GetShardResponse.shard_info:type_name -> temporal.server.api.persistence.v1.ShardInfo
+	128, // 11: temporal.server.api.adminservice.v1.ListHistoryTasksRequest.task_range:type_name -> temporal.server.api.history.v1.TaskRange
 	17,  // 12: temporal.server.api.adminservice.v1.ListHistoryTasksResponse.tasks:type_name -> temporal.server.api.adminservice.v1.Task
-	133, // 13: temporal.server.api.adminservice.v1.Task.task_type:type_name -> temporal.server.api.enums.v1.TaskType
-	134, // 14: temporal.server.api.adminservice.v1.Task.fire_time:type_name -> google.protobuf.Timestamp
-	134, // 15: temporal.server.api.adminservice.v1.RemoveTaskRequest.visibility_time:type_name -> google.protobuf.Timestamp
-	125, // 16: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	126, // 17: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response.history_batches:type_name -> temporal.api.common.v1.DataBlob
-	127, // 18: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	125, // 19: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	126, // 20: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse.history_batches:type_name -> temporal.api.common.v1.DataBlob
-	127, // 21: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	135, // 22: temporal.server.api.adminservice.v1.GetReplicationMessagesRequest.tokens:type_name -> temporal.server.api.replication.v1.ReplicationToken
-	114, // 23: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.shard_messages:type_name -> temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
-	136, // 24: temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse.messages:type_name -> temporal.server.api.replication.v1.ReplicationMessages
-	137, // 25: temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest.namespace_task:type_name -> temporal.server.api.replication.v1.NamespaceTaskAttributes
+	129, // 13: temporal.server.api.adminservice.v1.Task.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	130, // 14: temporal.server.api.adminservice.v1.Task.fire_time:type_name -> google.protobuf.Timestamp
+	130, // 15: temporal.server.api.adminservice.v1.RemoveTaskRequest.visibility_time:type_name -> google.protobuf.Timestamp
+	121, // 16: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	122, // 17: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response.history_batches:type_name -> temporal.api.common.v1.DataBlob
+	123, // 18: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	121, // 19: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	122, // 20: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse.history_batches:type_name -> temporal.api.common.v1.DataBlob
+	123, // 21: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	131, // 22: temporal.server.api.adminservice.v1.GetReplicationMessagesRequest.tokens:type_name -> temporal.server.api.replication.v1.ReplicationToken
+	110, // 23: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.shard_messages:type_name -> temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
+	132, // 24: temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse.messages:type_name -> temporal.server.api.replication.v1.ReplicationMessages
+	133, // 25: temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest.namespace_task:type_name -> temporal.server.api.replication.v1.NamespaceTaskAttributes
 	109, // 26: temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest.attribution:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationAttribution
 	0,   // 27: temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.outcome:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.Outcome
-	138, // 28: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesRequest.task_infos:type_name -> temporal.server.api.replication.v1.ReplicationTaskInfo
-	139, // 29: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
-	125, // 30: temporal.server.api.adminservice.v1.ReapplyEventsRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	126, // 31: temporal.server.api.adminservice.v1.ReapplyEventsRequest.events:type_name -> temporal.api.common.v1.DataBlob
-	115, // 32: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.search_attributes:type_name -> temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry
-	116, // 33: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.custom_attributes:type_name -> temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry
-	117, // 34: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.system_attributes:type_name -> temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry
-	118, // 35: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.mapping:type_name -> temporal.server.api.adminservice.v1.GetSearchAttributesResponse.MappingEntry
-	140, // 36: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.add_workflow_execution_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionInfo
-	119, // 37: temporal.server.api.adminservice.v1.DescribeClusterResponse.supported_clients:type_name -> temporal.server.api.adminservice.v1.DescribeClusterResponse.SupportedClientsEntry
-	141, // 38: temporal.server.api.adminservice.v1.DescribeClusterResponse.membership_info:type_name -> temporal.server.api.cluster.v1.MembershipInfo
-	142, // 39: temporal.server.api.adminservice.v1.DescribeClusterResponse.version_info:type_name -> temporal.api.version.v1.VersionInfo
-	120, // 40: temporal.server.api.adminservice.v1.DescribeClusterResponse.tags:type_name -> temporal.server.api.adminservice.v1.DescribeClusterResponse.TagsEntry
-	143, // 41: temporal.server.api.adminservice.v1.ListClustersResponse.clusters:type_name -> temporal.server.api.persistence.v1.ClusterMetadata
-	144, // 42: temporal.server.api.adminservice.v1.ListClusterMembersRequest.last_heartbeat_within:type_name -> google.protobuf.Duration
-	145, // 43: temporal.server.api.adminservice.v1.ListClusterMembersRequest.role:type_name -> temporal.server.api.enums.v1.ClusterMemberRole
-	134, // 44: temporal.server.api.adminservice.v1.ListClusterMembersRequest.session_started_after_time:type_name -> google.protobuf.Timestamp
-	146, // 45: temporal.server.api.adminservice.v1.ListClusterMembersResponse.active_members:type_name -> temporal.server.api.cluster.v1.ClusterMember
-	147, // 46: temporal.server.api.adminservice.v1.GetDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
-	147, // 47: temporal.server.api.adminservice.v1.GetDLQMessagesResponse.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
-	139, // 48: temporal.server.api.adminservice.v1.GetDLQMessagesResponse.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
-	138, // 49: temporal.server.api.adminservice.v1.GetDLQMessagesResponse.replication_tasks_info:type_name -> temporal.server.api.replication.v1.ReplicationTaskInfo
-	147, // 50: temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
-	147, // 51: temporal.server.api.adminservice.v1.MergeDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
-	125, // 52: temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	148, // 53: temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	149, // 54: temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse.tasks:type_name -> temporal.server.api.persistence.v1.AllocatedTaskInfo
-	125, // 55: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	150, // 56: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest.sync_replication_state:type_name -> temporal.server.api.replication.v1.SyncReplicationState
-	151, // 57: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse.messages:type_name -> temporal.server.api.replication.v1.WorkflowReplicationMessages
-	152, // 58: temporal.server.api.adminservice.v1.GetNamespaceResponse.info:type_name -> temporal.api.namespace.v1.NamespaceInfo
-	153, // 59: temporal.server.api.adminservice.v1.GetNamespaceResponse.config:type_name -> temporal.api.namespace.v1.NamespaceConfig
-	154, // 60: temporal.server.api.adminservice.v1.GetNamespaceResponse.replication_config:type_name -> temporal.api.replication.v1.NamespaceReplicationConfig
-	155, // 61: temporal.server.api.adminservice.v1.GetNamespaceResponse.failover_history:type_name -> temporal.api.replication.v1.FailoverStatus
-	156, // 62: temporal.server.api.adminservice.v1.GetNamespaceResponse.restore_info:type_name -> temporal.server.api.persistence.v1.NamespaceRestoreInfo
-	134, // 63: temporal.server.api.adminservice.v1.GetNamespaceResponse.observation_time:type_name -> google.protobuf.Timestamp
-	68,  // 64: temporal.server.api.adminservice.v1.GetNamespaceResponse.repair_scope:type_name -> temporal.server.api.adminservice.v1.NamespaceRepairScope
-	67,  // 65: temporal.server.api.adminservice.v1.GetRemoteClusterNamespaceResponse.namespace:type_name -> temporal.server.api.adminservice.v1.GetNamespaceResponse
-	28,  // 66: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairRequest.mutation:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest
-	29,  // 67: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairResponse.response:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse
-	157, // 68: temporal.server.api.adminservice.v1.GetDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	158, // 69: temporal.server.api.adminservice.v1.GetDLQTasksResponse.dlq_tasks:type_name -> temporal.server.api.common.v1.HistoryDLQTask
-	157, // 70: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	159, // 71: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
-	157, // 72: temporal.server.api.adminservice.v1.MergeDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	159, // 73: temporal.server.api.adminservice.v1.MergeDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
-	157, // 74: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	160, // 75: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.operation_type:type_name -> temporal.server.api.enums.v1.DLQOperationType
-	161, // 76: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.operation_state:type_name -> temporal.server.api.enums.v1.DLQOperationState
-	134, // 77: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.start_time:type_name -> google.protobuf.Timestamp
-	134, // 78: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.end_time:type_name -> google.protobuf.Timestamp
-	121, // 79: temporal.server.api.adminservice.v1.AddTasksRequest.tasks:type_name -> temporal.server.api.adminservice.v1.AddTasksRequest.Task
-	122, // 80: temporal.server.api.adminservice.v1.ListQueuesResponse.queues:type_name -> temporal.server.api.adminservice.v1.ListQueuesResponse.QueueInfo
-	162, // 81: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.state:type_name -> temporal.server.api.enums.v1.HealthState
-	163, // 82: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.services:type_name -> temporal.server.api.health.v1.ServiceHealthDetail
-	162, // 83: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
-	125, // 84: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	164, // 85: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	165, // 86: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	166, // 87: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
-	125, // 88: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	167, // 89: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	168, // 90: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.build_ids:type_name -> temporal.api.taskqueue.v1.TaskQueueVersionSelection
-	123, // 91: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.versions_info_internal:type_name -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
-	169, // 92: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.scale_info:type_name -> temporal.server.api.taskqueue.v1.PartitionScaleInfo
-	167, // 93: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	148, // 94: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	170, // 95: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	125, // 96: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.executions:type_name -> temporal.api.common.v1.WorkflowExecution
-	102, // 97: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
-	171, // 98: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.delegation_operation:type_name -> temporal.api.enums.v1.BatchOperationType
-	1,   // 99: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
-	172, // 100: temporal.server.api.adminservice.v1.ListExecutionsResponse.executions:type_name -> temporal.server.api.adminservice.v1.VisibilityExecutionInfo
-	124, // 101: temporal.server.api.adminservice.v1.CountExecutionsResponse.groups:type_name -> temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup
-	2,   // 102: temporal.server.api.adminservice.v1.NamespaceMutationAttribution.origin:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationAttribution.Origin
-	134, // 103: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.cutoff_time:type_name -> google.protobuf.Timestamp
-	173, // 104: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.verified_config_version:type_name -> google.protobuf.Int64Value
-	173, // 105: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.verified_failover_version:type_name -> google.protobuf.Int64Value
-	112, // 106: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsResponse.components:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationComponentReconciliation
-	113, // 107: temporal.server.api.adminservice.v1.NamespaceMutationComponentReconciliation.peers:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation
-	174, // 108: temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation.outcome:type_name -> temporal.server.api.enums.v1.NamespaceReconciliationOutcome
-	175, // 109: temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation.basis:type_name -> temporal.server.api.enums.v1.ManualReconciliationBasis
-	136, // 110: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
-	176, // 111: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	176, // 112: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	176, // 113: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	126, // 114: temporal.server.api.adminservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
-	177, // 115: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
-	178, // 116: temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup.group_values:type_name -> temporal.api.common.v1.Payload
-	117, // [117:117] is the sub-list for method output_type
-	117, // [117:117] is the sub-list for method input_type
-	117, // [117:117] is the sub-list for extension type_name
-	117, // [117:117] is the sub-list for extension extendee
-	0,   // [0:117] is the sub-list for field type_name
+	134, // 28: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesRequest.task_infos:type_name -> temporal.server.api.replication.v1.ReplicationTaskInfo
+	135, // 29: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
+	121, // 30: temporal.server.api.adminservice.v1.ReapplyEventsRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	122, // 31: temporal.server.api.adminservice.v1.ReapplyEventsRequest.events:type_name -> temporal.api.common.v1.DataBlob
+	111, // 32: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.search_attributes:type_name -> temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry
+	112, // 33: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.custom_attributes:type_name -> temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry
+	113, // 34: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.system_attributes:type_name -> temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry
+	114, // 35: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.mapping:type_name -> temporal.server.api.adminservice.v1.GetSearchAttributesResponse.MappingEntry
+	136, // 36: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.add_workflow_execution_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionInfo
+	115, // 37: temporal.server.api.adminservice.v1.DescribeClusterResponse.supported_clients:type_name -> temporal.server.api.adminservice.v1.DescribeClusterResponse.SupportedClientsEntry
+	137, // 38: temporal.server.api.adminservice.v1.DescribeClusterResponse.membership_info:type_name -> temporal.server.api.cluster.v1.MembershipInfo
+	138, // 39: temporal.server.api.adminservice.v1.DescribeClusterResponse.version_info:type_name -> temporal.api.version.v1.VersionInfo
+	116, // 40: temporal.server.api.adminservice.v1.DescribeClusterResponse.tags:type_name -> temporal.server.api.adminservice.v1.DescribeClusterResponse.TagsEntry
+	139, // 41: temporal.server.api.adminservice.v1.ListClustersResponse.clusters:type_name -> temporal.server.api.persistence.v1.ClusterMetadata
+	140, // 42: temporal.server.api.adminservice.v1.ListClusterMembersRequest.last_heartbeat_within:type_name -> google.protobuf.Duration
+	141, // 43: temporal.server.api.adminservice.v1.ListClusterMembersRequest.role:type_name -> temporal.server.api.enums.v1.ClusterMemberRole
+	130, // 44: temporal.server.api.adminservice.v1.ListClusterMembersRequest.session_started_after_time:type_name -> google.protobuf.Timestamp
+	142, // 45: temporal.server.api.adminservice.v1.ListClusterMembersResponse.active_members:type_name -> temporal.server.api.cluster.v1.ClusterMember
+	143, // 46: temporal.server.api.adminservice.v1.GetDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
+	143, // 47: temporal.server.api.adminservice.v1.GetDLQMessagesResponse.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
+	135, // 48: temporal.server.api.adminservice.v1.GetDLQMessagesResponse.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
+	134, // 49: temporal.server.api.adminservice.v1.GetDLQMessagesResponse.replication_tasks_info:type_name -> temporal.server.api.replication.v1.ReplicationTaskInfo
+	143, // 50: temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
+	143, // 51: temporal.server.api.adminservice.v1.MergeDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
+	121, // 52: temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	144, // 53: temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	145, // 54: temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse.tasks:type_name -> temporal.server.api.persistence.v1.AllocatedTaskInfo
+	121, // 55: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	146, // 56: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest.sync_replication_state:type_name -> temporal.server.api.replication.v1.SyncReplicationState
+	147, // 57: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse.messages:type_name -> temporal.server.api.replication.v1.WorkflowReplicationMessages
+	148, // 58: temporal.server.api.adminservice.v1.GetNamespaceResponse.info:type_name -> temporal.api.namespace.v1.NamespaceInfo
+	149, // 59: temporal.server.api.adminservice.v1.GetNamespaceResponse.config:type_name -> temporal.api.namespace.v1.NamespaceConfig
+	150, // 60: temporal.server.api.adminservice.v1.GetNamespaceResponse.replication_config:type_name -> temporal.api.replication.v1.NamespaceReplicationConfig
+	151, // 61: temporal.server.api.adminservice.v1.GetNamespaceResponse.failover_history:type_name -> temporal.api.replication.v1.FailoverStatus
+	152, // 62: temporal.server.api.adminservice.v1.GetNamespaceResponse.restore_info:type_name -> temporal.server.api.persistence.v1.NamespaceRestoreInfo
+	68,  // 63: temporal.server.api.adminservice.v1.GetNamespaceResponse.repair_scope:type_name -> temporal.server.api.adminservice.v1.NamespaceRepairScope
+	67,  // 64: temporal.server.api.adminservice.v1.GetRemoteClusterNamespaceResponse.namespace:type_name -> temporal.server.api.adminservice.v1.GetNamespaceResponse
+	28,  // 65: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairRequest.mutation:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest
+	29,  // 66: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairResponse.response:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse
+	153, // 67: temporal.server.api.adminservice.v1.GetDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	154, // 68: temporal.server.api.adminservice.v1.GetDLQTasksResponse.dlq_tasks:type_name -> temporal.server.api.common.v1.HistoryDLQTask
+	153, // 69: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	155, // 70: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	153, // 71: temporal.server.api.adminservice.v1.MergeDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	155, // 72: temporal.server.api.adminservice.v1.MergeDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	153, // 73: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	156, // 74: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.operation_type:type_name -> temporal.server.api.enums.v1.DLQOperationType
+	157, // 75: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.operation_state:type_name -> temporal.server.api.enums.v1.DLQOperationState
+	130, // 76: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.start_time:type_name -> google.protobuf.Timestamp
+	130, // 77: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.end_time:type_name -> google.protobuf.Timestamp
+	117, // 78: temporal.server.api.adminservice.v1.AddTasksRequest.tasks:type_name -> temporal.server.api.adminservice.v1.AddTasksRequest.Task
+	118, // 79: temporal.server.api.adminservice.v1.ListQueuesResponse.queues:type_name -> temporal.server.api.adminservice.v1.ListQueuesResponse.QueueInfo
+	158, // 80: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.state:type_name -> temporal.server.api.enums.v1.HealthState
+	159, // 81: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.services:type_name -> temporal.server.api.health.v1.ServiceHealthDetail
+	158, // 82: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
+	121, // 83: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	160, // 84: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	161, // 85: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	162, // 86: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
+	121, // 87: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	163, // 88: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	164, // 89: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.build_ids:type_name -> temporal.api.taskqueue.v1.TaskQueueVersionSelection
+	119, // 90: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.versions_info_internal:type_name -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
+	165, // 91: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.scale_info:type_name -> temporal.server.api.taskqueue.v1.PartitionScaleInfo
+	163, // 92: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	144, // 93: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	166, // 94: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	121, // 95: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.executions:type_name -> temporal.api.common.v1.WorkflowExecution
+	102, // 96: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
+	167, // 97: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.delegation_operation:type_name -> temporal.api.enums.v1.BatchOperationType
+	1,   // 98: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
+	168, // 99: temporal.server.api.adminservice.v1.ListExecutionsResponse.executions:type_name -> temporal.server.api.adminservice.v1.VisibilityExecutionInfo
+	120, // 100: temporal.server.api.adminservice.v1.CountExecutionsResponse.groups:type_name -> temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup
+	2,   // 101: temporal.server.api.adminservice.v1.NamespaceMutationAttribution.origin:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationAttribution.Origin
+	132, // 102: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
+	169, // 103: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	169, // 104: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	169, // 105: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	122, // 106: temporal.server.api.adminservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
+	170, // 107: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
+	171, // 108: temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup.group_values:type_name -> temporal.api.common.v1.Payload
+	109, // [109:109] is the sub-list for method output_type
+	109, // [109:109] is the sub-list for method input_type
+	109, // [109:109] is the sub-list for extension type_name
+	109, // [109:109] is the sub-list for extension extendee
+	0,   // [0:109] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_adminservice_v1_request_response_proto_init() }
@@ -8253,7 +7841,7 @@ func file_temporal_server_api_adminservice_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc), len(file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   122,
+			NumMessages:   118,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

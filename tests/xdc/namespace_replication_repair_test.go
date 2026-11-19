@@ -13,10 +13,8 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairPreservesLocalConfigAndRejectsCollision() {
@@ -86,11 +84,6 @@ func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairWithoutPeerTransp
 	s.Require().NoError(err)
 	failed := s.receiveObservedApply(ctx, name)
 	s.Require().Error(failed.err)
-	snapshot, err := active.AdminClient().GetNamespace(ctx, &adminservice.GetNamespaceRequest{
-		Attributes: &adminservice.GetNamespaceRequest_Namespace{Namespace: name},
-	})
-	s.Require().NoError(err)
-	s.Require().NotNil(snapshot.GetObservationTime())
 	task := s.decodeNamespaceTask(failed.request)
 	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_UPDATE
 	payload, err := nsreplication.MarshalNamespaceTask(task)
@@ -104,26 +97,6 @@ func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairWithoutPeerTransp
 	s.Require().NoError(err)
 	s.Require().Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED, response.GetOutcome())
 	s.requirePersistedNamespace(ctx, standby, name)
-	await.RequireTrue(s.T(), func() bool {
-		result, reconcileErr := active.AdminClient().ReconcileNamespaceMutationComponents(ctx, &adminservice.ReconcileNamespaceMutationComponentsRequest{
-			VerifiedConfigVersion: wrapperspb.Int64(snapshot.GetConfigVersion()), VerifiedFailoverVersion: wrapperspb.Int64(snapshot.GetFailoverVersion()),
-			NamespaceId: snapshot.GetInfo().GetId(), RepairId: "xdc-repair", Reason: "peer transport unavailable",
-			CutoffTime: snapshot.GetObservationTime(), AuthoritativePeerClusters: []string{standby.ClusterName()}, VerifiedPeerClusters: []string{standby.ClusterName()},
-		})
-		if reconcileErr != nil {
-			return false
-		}
-		for _, component := range result.GetComponents() {
-			if component.GetBusinessId() == failed.request.GetComponentBusinessId() && component.GetCompleted() {
-				for _, peer := range component.GetPeers() {
-					if peer.GetTargetCluster() == standby.ClusterName() && peer.GetOutcome() == enumsspb.NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED {
-						return true
-					}
-				}
-			}
-		}
-		return false
-	}, replicationWaitTime, replicationCheckInterval)
 }
 
 // TestOperatorRepairThroughSourceRelay repairs a peer that CHASM delivery could

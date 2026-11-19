@@ -50,7 +50,7 @@ func newShadowCompletionRecord(c *NamespaceMutationComponent, completedAt time.T
 	if started := c.GetStartedAt(); started != nil && started.CheckValid() == nil {
 		record.startedAt = started.AsTime()
 	}
-	// Summarize errors before mismatches before manual reconciliation before matches.
+	// Summarize errors before mismatches before matches, independent of map order.
 	// Per-peer outcomes and counts retain mismatches even when the summary is error.
 	for name, peer := range c.GetPeerApply() {
 		outcome := peer.GetOutcome()
@@ -58,12 +58,10 @@ func newShadowCompletionRecord(c *NamespaceMutationComponent, completedAt time.T
 		record.peerAttemptCounts[name] = peer.GetAttemptCount()
 		record.peerOutcomeCounts[outcome.String()]++
 		record.peerAttemptCount += peer.GetAttemptCount()
-		if outcome == namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH && record.outcome != "error" {
+		if outcome == namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH && record.outcome == "match" {
 			record.outcome = "mismatch"
-		} else if outcome == namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED && record.outcome == "match" {
-			record.outcome = "manually_reconciled"
 		} else if outcome != namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH &&
-			outcome != namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH && outcome != namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED {
+			outcome != namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH {
 			record.outcome = "error"
 		}
 	}

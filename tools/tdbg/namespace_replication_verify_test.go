@@ -1414,7 +1414,6 @@ func testNamespaceResponse(
 			{FailoverTime: timestamppb.New(time.Unix(20, 0)), FailoverVersion: failoverVersion},
 		},
 		IsGlobalNamespace: true,
-		ObservationTime:   timestamppb.New(time.Unix(102, 0)),
 	}
 }
 
@@ -1438,10 +1437,9 @@ func (namespaceReplicationErrorWriter) Write([]byte) (int, error) {
 
 type testNamespaceReplicationAdminClient struct {
 	adminservice.AdminServiceClient
-	describeClusterFn                      func() (*adminservice.DescribeClusterResponse, error)
-	getNamespaceFn                         func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error)
-	applyNamespaceMutationFn               func(*adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error)
-	reconcileNamespaceMutationComponentsFn func(*adminservice.ReconcileNamespaceMutationComponentsRequest) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error)
+	describeClusterFn        func() (*adminservice.DescribeClusterResponse, error)
+	getNamespaceFn           func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error)
+	applyNamespaceMutationFn func(*adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error)
 	// remoteClusterNamespaceFn and remoteClusterRepairFn override the relays;
 	// otherwise peers serve them.
 	remoteClusterNamespaceFn func(*adminservice.GetRemoteClusterNamespaceRequest) (*adminservice.GetRemoteClusterNamespaceResponse, error)
@@ -1455,14 +1453,6 @@ func (c *testNamespaceReplicationAdminClient) ApplyNamespaceMutation(
 	_ ...grpc.CallOption,
 ) (*adminservice.ApplyNamespaceMutationResponse, error) {
 	return c.applyNamespaceMutationFn(request)
-}
-
-func (c *testNamespaceReplicationAdminClient) ReconcileNamespaceMutationComponents(
-	_ context.Context,
-	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
-	_ ...grpc.CallOption,
-) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
-	return c.reconcileNamespaceMutationComponentsFn(request)
 }
 
 // relayPeer mirrors the server relays' routing: an unknown peer and a peer

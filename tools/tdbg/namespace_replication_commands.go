@@ -58,8 +58,7 @@ func newNamespaceReplicationCommands(
 				{
 					Name:  "repair",
 					Usage: "Plan or execute guarded namespace replication repair",
-					Description: "Repairs current replicas and reconciles eligible historical CHASM deliveries. " +
-						"SUCCEEDED does not imply former replicas were synchronized; deliveries to removed peers are abandoned without inspecting or updating them. " +
+					Description: "Repairs current replicas. SUCCEEDED does not imply former replicas were synchronized. " +
 						"Select the namespace as for verify, with --namespace or --namespace-id; a name is resolved once on the source, and the repair acts on that namespace ID. " +
 						"Run it against the namespace's active cluster, whose frontend reads and writes peers.",
 					Flags: []cli.Flag{
@@ -74,11 +73,7 @@ func newNamespaceReplicationCommands(
 						},
 						&cli.StringFlag{
 							Name:  FlagReason,
-							Usage: "Operator reason recorded with every repair write and reconciliation",
-						},
-						&cli.StringFlag{
-							Name:  FlagReconcileBefore,
-							Usage: "Only reconcile CHASM local applies resolved at or before this RFC3339 timestamp",
+							Usage: "Operator reason recorded with every repair write",
 						},
 						&cli.BoolFlag{
 							Name:  FlagExecute,
@@ -112,15 +107,6 @@ func repairNamespaceReplication(
 	verifyRequest, err := namespaceReplicationVerifyRequestFromCLI(c)
 	if err != nil {
 		return cli.Exit(err.Error(), 2)
-	}
-	var reconcileBefore *time.Time
-	if value := strings.TrimSpace(c.String(FlagReconcileBefore)); value != "" {
-		parsed, err := time.Parse(time.RFC3339Nano, value)
-		if err != nil {
-			return cli.Exit(fmt.Sprintf("invalid --%s: %v", FlagReconcileBefore, err), 2)
-		}
-		parsed = parsed.UTC()
-		reconcileBefore = &parsed
 	}
 	reason := strings.TrimSpace(c.String(FlagReason))
 	if c.Bool(FlagExecute) && reason == "" {
@@ -179,11 +165,10 @@ func repairNamespaceReplication(
 	}
 	repairer := &namespaceReplicationRepairer{verifier: verifier, client: client, rpcTimeout: rpcTimeout}
 	result, executeErr := repairer.Execute(c.Context, namespaceReplicationRepairExecutionRequest{
-		VerifyRequest:   verifyRequest,
-		Observation:     observation,
-		Plan:            plan,
-		Reason:          reason,
-		ReconcileBefore: reconcileBefore,
+		VerifyRequest: verifyRequest,
+		Observation:   observation,
+		Plan:          plan,
+		Reason:        reason,
 	})
 	if printErr := printNamespaceReplicationRepairExecution(c, result); printErr != nil {
 		executeErr = errors.Join(executeErr, printErr)
@@ -279,12 +264,11 @@ func printNamespaceReplicationRepairExecution(
 	}
 	_, err := fmt.Fprintf(
 		c.App.Writer,
-		"Status: %s\nRepair ID: %s\nNamespace: %s (%s)\nEffective reconciliation cutoff: %s\n",
+		"Status: %s\nRepair ID: %s\nNamespace: %s (%s)\n",
 		result.Status,
 		result.Plan.RepairID,
 		result.Plan.NamespaceName,
 		result.Plan.NamespaceID,
-		result.EffectiveCutoff.Format(time.RFC3339Nano),
 	)
 	if err != nil {
 		return err
@@ -314,55 +298,7 @@ func printNamespaceReplicationRepairExecution(
 	for _, target := range result.Targets {
 		rows = append(rows, namespaceReplicationRepairExecutionTableRow(target))
 	}
-	if err := printTable(rows, c.App.Writer); err != nil {
-		return err
-	}
-	return printNamespaceReplicationComponentReconciliation(c, result)
-}
-
-func printNamespaceReplicationComponentReconciliation(c *cli.Context, result *namespaceReplicationRepairExecutionResult) error {
-	for _, warning := range result.Warnings {
-		if _, err := fmt.Fprintf(c.App.Writer, "Warning: %s\n", warning); err != nil {
-			return err
-		}
-	}
-	if result.ComponentReconciliationError != "" {
-		if _, err := fmt.Fprintf(c.App.Writer, "Component reconciliation incomplete: %s\n", result.ComponentReconciliationError); err != nil {
-			return err
-		}
-	}
-	if result.ComponentReconciliation == nil {
-		return nil
-	}
-	if _, err := fmt.Fprintln(c.App.Writer, result.ComponentDiscoveryNote); err != nil {
-		return err
-	}
-	if len(result.ComponentReconciliation.GetComponents()) == 0 {
-		if result.ComponentReconciliationError != "" {
-			return nil
-		}
-		_, err := fmt.Fprintln(c.App.Writer, "Component reconciliation: no running components found in visibility")
-		return err
-	}
-	if _, err := fmt.Fprintln(c.App.Writer, "Component reconciliation:"); err != nil {
-		return err
-	}
-	var componentRows []any
-	for _, component := range result.ComponentReconciliation.GetComponents() {
-		row := namespaceReplicationComponentRepairTableRow{
-			BusinessID: component.GetBusinessId(), RunID: component.GetRunId(), Eligible: component.GetEligible(), Completed: component.GetCompleted(),
-			IneligibleReason: component.GetIneligibleReason(), Error: component.GetError(),
-		}
-		if len(component.GetPeers()) == 0 {
-			componentRows = append(componentRows, row)
-			continue
-		}
-		for _, peer := range component.GetPeers() {
-			row.Peer, row.Outcome, row.Basis = peer.GetTargetCluster(), peer.GetOutcome().String(), peer.GetBasis().String()
-			componentRows = append(componentRows, row)
-		}
-	}
-	return printTable(componentRows, c.App.Writer)
+	return printTable(rows, c.App.Writer)
 }
 
 type namespaceReplicationRepairExecutionTableRow struct {
@@ -371,18 +307,6 @@ type namespaceReplicationRepairExecutionTableRow struct {
 	Outcome  string
 	Readback bool
 	Error    string
-}
-
-type namespaceReplicationComponentRepairTableRow struct {
-	BusinessID       string
-	RunID            string
-	Eligible         bool
-	Completed        bool
-	Peer             string
-	Outcome          string
-	Basis            string
-	IneligibleReason string
-	Error            string
 }
 
 func verifyNamespaceReplication(

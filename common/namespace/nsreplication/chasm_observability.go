@@ -19,7 +19,6 @@ const (
 	CHASMApplyStageComponent  = "component"
 	CHASMReplicationTransport = "chasm"
 
-	CHASMApplyOutcomeManuallyReconciled    = "manually_reconciled"
 	CHASMApplyOutcomeApplied               = "applied"
 	CHASMApplyOutcomeCreated               = "created"
 	CHASMApplyOutcomeDuplicate             = "duplicate"
@@ -130,15 +129,12 @@ func EmitCHASMAuthoritativeApply(
 }
 
 // chasmAuthoritativePhase keeps processed for receiver observations, matching
-// legacy receivers. Source-side local, peer and component observations use
-// their own phases so they are not counted as receiver processing.
+// legacy receivers. Source-side local and component observations use their own
+// phases so they are not counted as receiver processing.
 func chasmAuthoritativePhase(stage string) wideevents.NamespaceReplicationPhase {
 	switch stage {
 	case CHASMApplyStageLocal:
 		return wideevents.NamespaceReplicationLocalApply
-	case CHASMApplyStagePeer:
-		// Manual reconciliation closes peer deliveries, so it shares their phase.
-		return wideevents.NamespaceReplicationPeerDelivery
 	case CHASMApplyStageComponent:
 		return wideevents.NamespaceReplicationCompleted
 	default:

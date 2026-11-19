@@ -3,69 +3,38 @@ package tdbg
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const (
-	namespaceReplicationRepairExecutionSucceeded     = "SUCCEEDED"
-	namespaceReplicationRepairExecutionFailed        = "FAILED"
-	namespaceReplicationRepairReconciliationPageSize = 25
+	namespaceReplicationRepairExecutionSucceeded = "SUCCEEDED"
+	namespaceReplicationRepairExecutionFailed    = "FAILED"
 )
 
 type namespaceReplicationRepairExecutionRequest struct {
-	VerifyRequest   namespaceReplicationVerifyRequest
-	Observation     *namespaceReplicationObservation
-	Plan            *namespaceReplicationRepairPlan
-	Reason          string
-	ReconcileBefore *time.Time
+	VerifyRequest namespaceReplicationVerifyRequest
+	Observation   *namespaceReplicationObservation
+	Plan          *namespaceReplicationRepairPlan
+	Reason        string
 }
 
 type namespaceReplicationRepairExecutionResult struct {
-	ComponentReconciliationError string                                                     `json:"component_reconciliation_error,omitempty"`
-	Plan                         *namespaceReplicationRepairPlan                            `json:"plan"`
-	Status                       string                                                     `json:"status"`
-	StatusDetail                 string                                                     `json:"status_detail,omitempty"`
-	EffectiveCutoff              time.Time                                                  `json:"effective_cutoff"`
-	Source                       namespaceReplicationRepairApplyResult                      `json:"source"`
-	Targets                      []namespaceReplicationRepairApplyResult                    `json:"targets,omitempty"`
-	FinalVerification            *namespaceReplicationVerificationResult                    `json:"final_verification,omitempty"`
-	ComponentReconciliation      *adminservice.ReconcileNamespaceMutationComponentsResponse `json:"component_reconciliation,omitempty"`
-	ComponentDiscoveryNote       string                                                     `json:"component_discovery_note,omitempty"`
-	Warnings                     []string                                                   `json:"warnings,omitempty"`
-}
-
-// MarshalJSON retains the CLI's field names while rendering protobuf enum values
-// with their symbolic names instead of their numeric values.
-func (result namespaceReplicationRepairExecutionResult) MarshalJSON() ([]byte, error) {
-	type executionResultJSON namespaceReplicationRepairExecutionResult
-	var reconciliation json.RawMessage
-	if result.ComponentReconciliation != nil {
-		data, err := (protojson.MarshalOptions{UseProtoNames: true}).Marshal(result.ComponentReconciliation)
-		if err != nil {
-			return nil, err
-		}
-		reconciliation = data
-	}
-	return json.Marshal(struct {
-		*executionResultJSON
-		ComponentReconciliation json.RawMessage `json:"component_reconciliation,omitempty"`
-	}{(*executionResultJSON)(&result), reconciliation})
+	Plan              *namespaceReplicationRepairPlan         `json:"plan"`
+	Status            string                                  `json:"status"`
+	StatusDetail      string                                  `json:"status_detail,omitempty"`
+	Source            namespaceReplicationRepairApplyResult   `json:"source"`
+	Targets           []namespaceReplicationRepairApplyResult `json:"targets,omitempty"`
+	FinalVerification *namespaceReplicationVerificationResult `json:"final_verification,omitempty"`
 }
 
 type namespaceReplicationRepairApplyResult struct {
@@ -162,12 +131,6 @@ func (r *namespaceReplicationRepairer) Execute(
 		return result, err
 	}
 
-	effectiveCutoff, err := effectiveRepairCutoff(request.ReconcileBefore, request.Observation.sourceSnapshot.GetObservationTime())
-	if err != nil {
-		return result, err
-	}
-	result.EffectiveCutoff = effectiveCutoff
-
 	frozenSource, err := r.freezeRepairSource(ctx, request)
 	if err != nil {
 		return result, err
@@ -184,20 +147,8 @@ func (r *namespaceReplicationRepairer) Execute(
 	if finalObservation != nil {
 		result.FinalVerification = finalObservation.result
 	}
-	reconciliation, reconcileErr := r.reconcileRepairComponents(
-		ctx,
-		request,
-		effectiveCutoff,
-		finalObservation,
-	)
-	result.ComponentReconciliation = reconciliation
-	result.Warnings = namespaceReplicationRepairWarnings(reconciliation)
-	if reconcileErr != nil {
-		result.ComponentReconciliationError = reconcileErr.Error()
-	}
-	result.ComponentDiscoveryNote = "Component reconciliation covers executions currently visible; rerun to catch delayed visibility records."
 
-	failures := namespaceReplicationRepairFailures(result, finalObservation, finalErr, reconciliation, reconcileErr)
+	failures := namespaceReplicationRepairFailures(result, finalObservation, finalErr)
 	if len(failures) != 0 {
 		result.StatusDetail = errors.Join(failures...).Error()
 		return result, errors.New(result.StatusDetail)
@@ -205,25 +156,6 @@ func (r *namespaceReplicationRepairer) Execute(
 	result.Status = namespaceReplicationRepairExecutionSucceeded
 	result.StatusDetail = "Current replicas verified; success does not imply former replicas were synchronized."
 	return result, nil
-}
-
-func namespaceReplicationRepairWarnings(response *adminservice.ReconcileNamespaceMutationComponentsResponse) []string {
-	var removedPeers []string
-	for _, component := range response.GetComponents() {
-		for _, peer := range component.GetPeers() {
-			if peer.GetBasis() == enumsspb.MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP {
-				removedPeers = append(removedPeers, peer.GetTargetCluster())
-			}
-		}
-	}
-	if len(removedPeers) == 0 {
-		return nil
-	}
-	slices.Sort(removedPeers)
-	return []string{fmt.Sprintf(
-		"Deliveries to removed peers were abandoned: %s. These peers were not inspected or updated and may retain stale namespace membership.",
-		strings.Join(slices.Compact(removedPeers), ", "),
-	)}
 }
 
 func validateNamespaceReplicationRepairExecution(request namespaceReplicationRepairExecutionRequest) error {
@@ -235,20 +167,6 @@ func validateNamespaceReplicationRepairExecution(request namespaceReplicationRep
 		return errors.New("repair execution requires an executable frozen plan")
 	}
 	return nil
-}
-
-func effectiveRepairCutoff(requested *time.Time, observedAt *timestamppb.Timestamp) (time.Time, error) {
-	if observedAt == nil || observedAt.CheckValid() != nil {
-		return time.Time{}, errors.New("source must support a server-timed namespace observation for repair")
-	}
-	automatic := observedAt.AsTime()
-	if requested == nil {
-		return automatic, nil
-	}
-	if requested.After(automatic) {
-		return time.Time{}, errors.New("--reconcile-before cannot be later than the automatic repair cutoff")
-	}
-	return requested.UTC(), nil
 }
 
 func (r *namespaceReplicationRepairer) freezeRepairSource(
@@ -318,63 +236,10 @@ func (r *namespaceReplicationRepairer) applyRepairTargets(
 	return results
 }
 
-func (r *namespaceReplicationRepairer) reconcileRepairComponents(
-	ctx context.Context,
-	request namespaceReplicationRepairExecutionRequest,
-	cutoff time.Time,
-	finalObservation *namespaceReplicationObservation,
-) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
-	result := &adminservice.ReconcileNamespaceMutationComponentsResponse{}
-	if finalObservation == nil || !finalObservation.sourceStable || finalObservation.sourceSnapshot == nil {
-		return result, errors.New("component reconciliation requires a stable final source observation")
-	}
-	verifiedPeers := verifiedRepairPeers(finalObservation)
-	seenPageTokens := make(map[string]struct{})
-	requestRPC := &adminservice.ReconcileNamespaceMutationComponentsRequest{
-		NamespaceId:               request.Plan.NamespaceID,
-		RepairId:                  request.Plan.RepairID,
-		Reason:                    request.Reason,
-		CutoffTime:                timestamppb.New(cutoff),
-		AuthoritativePeerClusters: authoritativeRepairPeers(request.Observation.result),
-		VerifiedPeerClusters:      verifiedPeers,
-		PageSize:                  namespaceReplicationRepairReconciliationPageSize,
-		VerifiedConfigVersion:     wrapperspb.Int64(finalObservation.sourceSnapshot.GetConfigVersion()),
-		VerifiedFailoverVersion:   wrapperspb.Int64(finalObservation.sourceSnapshot.GetFailoverVersion()),
-	}
-	for {
-		page, err := namespaceReplicationRPCCall(
-			ctx,
-			r.rpcTimeout,
-			func(rpcCtx context.Context) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
-				return r.client.ReconcileNamespaceMutationComponents(rpcCtx, requestRPC)
-			},
-		)
-		if err != nil {
-			return result, err
-		}
-		if page == nil {
-			return result, errors.New("component reconciliation returned no response")
-		}
-		result.Components = append(result.Components, page.GetComponents()...)
-		nextPageToken := page.GetNextPageToken()
-		if len(nextPageToken) == 0 {
-			return result, nil
-		}
-		tokenKey := string(nextPageToken)
-		if _, duplicate := seenPageTokens[tokenKey]; duplicate {
-			return result, errors.New("component reconciliation returned a repeated next-page token")
-		}
-		seenPageTokens[tokenKey] = struct{}{}
-		requestRPC.NextPageToken = nextPageToken
-	}
-}
-
 func namespaceReplicationRepairFailures(
 	result *namespaceReplicationRepairExecutionResult,
 	finalObservation *namespaceReplicationObservation,
 	finalErr error,
-	reconciliation *adminservice.ReconcileNamespaceMutationComponentsResponse,
-	reconcileErr error,
 ) []error {
 	var failures []error
 	for _, target := range result.Targets {
@@ -386,19 +251,6 @@ func namespaceReplicationRepairFailures(
 		failures = append(failures, fmt.Errorf("final verification: %w", finalErr))
 	} else if finalObservation == nil || finalObservation.result.Status != namespaceReplicationStatusHealthy {
 		failures = append(failures, errors.New("final verification is not healthy"))
-	}
-	if reconcileErr != nil {
-		failures = append(failures, fmt.Errorf("component reconciliation: %w", reconcileErr))
-	}
-	for _, component := range reconciliation.GetComponents() {
-		if component.GetError() != "" {
-			failures = append(failures, fmt.Errorf(
-				"component %s/%s: %s",
-				component.GetBusinessId(),
-				component.GetRunId(),
-				component.GetError(),
-			))
-		}
 	}
 	return failures
 }
@@ -557,31 +409,4 @@ func validateNamespaceRepairReadback(
 		return fmt.Errorf("failover version readback is %d, expected %d", actual.GetFailoverVersion(), expected.GetFailoverVersion())
 	}
 	return nil
-}
-
-func authoritativeRepairPeers(result *namespaceReplicationVerificationResult) []string {
-	peers := make([]string, 0, len(result.ExpectedClusters)-1)
-	for _, cluster := range result.ExpectedClusters {
-		if cluster != result.SourceCluster {
-			peers = append(peers, cluster)
-		}
-	}
-	slices.Sort(peers)
-	return peers
-}
-
-func verifiedRepairPeers(observation *namespaceReplicationObservation) []string {
-	sourceVersion := observation.sourceSnapshot.GetConfigVersion()
-	var peers []string
-	for _, cluster := range observation.result.Clusters {
-		if cluster.Role == namespaceReplicationRoleSource || cluster.Presence != namespaceReplicationPresencePresent ||
-			cluster.ConfigVersion == nil || *cluster.ConfigVersion > sourceVersion ||
-			cluster.ConfigMatch != namespaceReplicationMatchMatch ||
-			namespaceReplicationFailoverBlocks(&cluster, observation.sourceSnapshot.GetFailoverVersion()) {
-			continue
-		}
-		peers = append(peers, cluster.Cluster)
-	}
-	slices.Sort(peers)
-	return peers
 }

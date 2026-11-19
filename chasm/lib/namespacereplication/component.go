@@ -171,8 +171,7 @@ func (c *NamespaceMutationComponent) allPeersTerminal() bool {
 			namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
 			namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE,
 			namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED,
-			namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
-			namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED:
+			namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL:
 			// terminal
 		default:
 			return false
