@@ -64,9 +64,9 @@ type batchProcessorConfig struct {
 	heartbeatTimeout  time.Duration
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
-	// initialTargetExecutions holds an explicit list of activity target
-	// executions to process, set instead of initialExecutions when the request
-	// targets activity executions directly rather than via a visibility query.
+	// initialTargetExecutions holds an explicit list of target executions to
+	// process, set instead of initialExecutions when the request targets
+	// executions directly rather than via a visibility query.
 	initialTargetExecutions []*commonpb.Execution
 }
 
@@ -81,11 +81,12 @@ type batchWorkerProcessor func(
 	logger log.Logger,
 )
 
-// page represents a page of workflow executions to be processed
+// page represents a page of executions to be processed
 type page struct {
 	// executionInfos holds workflow executions for workflow batch operations;
-	// targetExecutionInfo holds activity executions for activity batch
-	// operations (terminate/cancel/delete activities). Exactly one is populated.
+	// targetExecutionInfo holds non-workflow executions for batch operations
+	// that target them (e.g. terminate/cancel/delete activities). Exactly one
+	// is populated.
 	executionInfos      []*workflowpb.WorkflowExecutionInfo
 	targetExecutionInfo []*commonpb.Execution
 	submittedCount      int
@@ -101,10 +102,10 @@ func (p *page) hasNext() bool {
 	return len(p.nextPageToken) > 0
 }
 
-// length returns the number of executions in this page. For activity batch
-// operations the executions are held in targetExecutionInfo; for all other
-// batch types they are held in executionInfos. Only one of the two is ever
-// populated for a given page.
+// length returns the number of executions in this page. For batch operations
+// targeting non-workflow executions they are held in targetExecutionInfo; for
+// workflow batch types they are held in executionInfos. Only one of the two is
+// ever populated for a given page.
 func (p *page) length() int {
 	if len(p.targetExecutionInfo) > 0 {
 		return len(p.targetExecutionInfo)
@@ -172,51 +173,36 @@ func fetchPage(
 		}, nil
 	}
 
-	// Terminate/Cancel/Delete Activities batch types operate on activity executions,
-	// so they are listed via ListActivityExecutions; all other batch types list workflow executions.
+	// Workflow executions are listed via ListWorkflow; other target executions
+	// are listed via their own visibility API.
 	var executionInfos []*workflowpb.WorkflowExecutionInfo
 	var targetExecutionInfo []*commonpb.Execution
 	var nextPageToken []byte
-	if isActivityBatchType(config.batchType) {
-		resp, err := sdkClient.WorkflowService().ListActivityExecutions(ctx,
-			&workflowservice.ListActivityExecutionsRequest{
-				Namespace:     config.targetNamespace,
-				PageSize:      int32(pageSize),
-				NextPageToken: pageToken,
-				Query:         config.adjustedQuery,
-			})
-		if err != nil {
-			if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
-				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
-			}
-			return nil, err
-		}
-
-		targetExecutionInfo = make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
-		for _, activityExecution := range resp.GetExecutions() {
-			targetExecutionInfo = append(targetExecutionInfo, &commonpb.Execution{
-				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
-				BusinessId: activityExecution.GetActivityId(),
-				RunId:      activityExecution.GetRunId(),
-			})
-		}
-		nextPageToken = resp.NextPageToken
-	} else {
-		resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+	var err error
+	switch executionType := targetExecutionType(config.batchType); executionType {
+	case enumspb.EXECUTION_TYPE_ACTIVITY:
+		targetExecutionInfo, nextPageToken, err = listActivityExecutions(ctx, sdkClient, config, pageToken)
+	case enumspb.EXECUTION_TYPE_WORKFLOW:
+		var resp *workflowservice.ListWorkflowExecutionsResponse
+		resp, err = sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			PageSize:      int32(pageSize),
 			NextPageToken: pageToken,
 			Query:         config.adjustedQuery,
 		})
-		if err != nil {
-			if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
-				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
-			}
-			return nil, err
+		if err == nil {
+			executionInfos = make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
+			executionInfos = append(executionInfos, resp.Executions...)
+			nextPageToken = resp.NextPageToken
 		}
-
-		executionInfos = make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
-		executionInfos = append(executionInfos, resp.Executions...)
-		nextPageToken = resp.NextPageToken
+	default:
+		err = temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("unsupported target execution type %v", executionType), "UnsupportedTargetExecutionType", nil)
+	}
+	if err != nil {
+		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+		}
+		return nil, err
 	}
 
 	return &page{
@@ -225,6 +211,36 @@ func fetchPage(
 		nextPageToken:       nextPageToken,
 		pageNumber:          pageNumber,
 	}, nil
+}
+
+// listActivityExecutions lists a page of standalone activity executions as
+// target executions.
+func listActivityExecutions(
+	ctx context.Context,
+	sdkClient sdkclient.Client,
+	config batchProcessorConfig,
+	pageToken []byte,
+) ([]*commonpb.Execution, []byte, error) {
+	resp, err := sdkClient.WorkflowService().ListActivityExecutions(ctx,
+		&workflowservice.ListActivityExecutionsRequest{
+			Namespace:     config.targetNamespace,
+			PageSize:      int32(pageSize),
+			NextPageToken: pageToken,
+			Query:         config.adjustedQuery,
+		})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	executions := make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
+	for _, activityExecution := range resp.GetExecutions() {
+		executions = append(executions, &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+			BusinessId: activityExecution.GetActivityId(),
+			RunId:      activityExecution.GetRunId(),
+		})
+	}
+	return executions, resp.GetNextPageToken(), nil
 }
 
 // heartbeatInterval returns 1/4th fraction of the activity's heartbeat timeout.
@@ -265,7 +281,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	// Initialize the first p from initial executions or fetch from query
 	var p *page
 	if len(config.initialTargetExecutions) > 0 {
-		if isActivityBatchType(config.batchType) {
+		if targetExecutionType(config.batchType) != enumspb.EXECUTION_TYPE_WORKFLOW {
 			p = &page{
 				targetExecutionInfo: config.initialTargetExecutions,
 				nextPageToken:       config.initialPageToken,
@@ -291,11 +307,11 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			}
 		}
 	} else if len(config.initialExecutions) > 0 {
-		if isActivityBatchType(config.batchType) {
+		if executionType := targetExecutionType(config.batchType); executionType != enumspb.EXECUTION_TYPE_WORKFLOW {
 			targetExecutions := make([]*commonpb.Execution, 0, len(config.initialExecutions))
 			for _, exec := range config.initialExecutions {
 				targetExecutions = append(targetExecutions, &commonpb.Execution{
-					Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+					Type:       executionType,
 					BusinessId: exec.GetWorkflowId(),
 					RunId:      exec.GetRunId(),
 				})
@@ -480,9 +496,8 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		if len(visibilityQuery) > 0 {
 			var count int64
 			var err error
-			if isActivityBatchType(batchParams.BatchType) {
-				// Activity batch types operate on activity executions, which are
-				// counted via CountActivityExecutions rather than CountWorkflow.
+			switch executionType := targetExecutionType(batchParams.BatchType); executionType {
+			case enumspb.EXECUTION_TYPE_ACTIVITY:
 				var resp *workflowservice.CountActivityExecutionsResponse
 				resp, err = sdkClientForTargetNS.WorkflowService().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
 					Namespace: targetNS,
@@ -491,7 +506,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 				if err == nil {
 					count = resp.GetCount()
 				}
-			} else {
+			case enumspb.EXECUTION_TYPE_WORKFLOW:
 				var resp *workflowservice.CountWorkflowExecutionsResponse
 				resp, err = sdkClientForTargetNS.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 					Query: visibilityQuery,
@@ -499,6 +514,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 				if err == nil {
 					count = resp.GetCount()
 				}
+			default:
+				err = temporal.NewNonRetryableApplicationError(
+					fmt.Sprintf("unsupported target execution type %v", executionType), "UnsupportedTargetExecutionType", nil)
 			}
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -1053,9 +1071,9 @@ func processTask(
 	return nil
 }
 
-// processTargetTask is the activity-execution counterpart of processTask,
-// used by the terminate/cancel/delete activity batch operations whose tasks
-// carry an activity target execution rather than a workflow execution.
+// processTargetTask is the counterpart of processTask for batch operations
+// whose tasks carry a non-workflow target execution rather than a workflow
+// execution.
 func processTargetTask(
 	ctx context.Context,
 	limiter quotas.RequestRateLimiter,
@@ -1069,27 +1087,13 @@ func processTargetTask(
 
 	err = procFn(task.targetExecution)
 	if err != nil {
-		// NotFound means the activity is not running or already deleted
+		// NotFound means the target execution is not running or already deleted
 		if !common.IsNotFoundError(err) {
 			return err
 		}
 	}
 
 	return nil
-}
-
-// isActivityBatchType reports whether the batch operation type operates on
-// activity executions (listed via ListActivityExecutions) rather than workflow
-// executions.
-func isActivityBatchType(batchType enumspb.BatchOperationType) bool {
-	switch batchType {
-	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
-		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
-		enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
-		return true
-	default:
-		return false
-	}
 }
 
 func isDone(ctx context.Context) bool {
