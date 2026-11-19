@@ -40,6 +40,12 @@ func Run[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {
 	parallelsuite.Run(t, s, args...)
 }
 
+// RunExclusive runs a top-level suite sequentially with respect to other tests in the package.
+func RunExclusive[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {
+	t.Helper()
+	parallelsuite.RunExclusive(t, s, args...)
+}
+
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
 func RunLegacySequential[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {

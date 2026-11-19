@@ -182,7 +182,18 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 //
 // The suite must embed [Suite] and have no other fields.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, true, args...)
+	run(t, s, true, true, args...)
+}
+
+// RunExclusive runs the suite and its subtests sequentially with respect to
+// other tests in the package. Call it from a top-level test without calling
+// t.Parallel.
+func RunExclusive[T TestingSuite](t *testing.T, s T, args ...any) {
+	if strings.Contains(t.Name(), "/") {
+		//nolint:forbidigo // Panics are fine in testing code.
+		panic("parallelsuite.RunExclusive: requires a top-level test")
+	}
+	run(t, s, false, false, args...)
 }
 
 // RunLegacySequential behaves like [Run] but does not mark test methods as parallel.
@@ -190,10 +201,10 @@ func Run[T TestingSuite](t *testing.T, s T, args ...any) {
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
 func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, false, args...)
+	run(t, s, true, false, args...)
 }
 
-func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
+func run[T TestingSuite](t *testing.T, s T, suiteParallel, methodsParallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
@@ -221,7 +232,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 		argVals[i] = reflect.ValueOf(a)
 	}
 
-	s.initSuite(t, true, nil, nil)
+	s.initSuite(t, suiteParallel, nil, nil)
 	if initializer, ok := any(s).(AssertionsInitializer); ok {
 		initializer.InitAssertions()
 	}

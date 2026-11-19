@@ -3,6 +3,7 @@ package parallelsuite
 import (
 	"context"
 	"flag"
+	"os"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -20,6 +21,33 @@ func (s *validSuite) TestA() {
 	ch := make(chan int, 1)
 	s.Snd(ch, 42)
 	s.Equal(42, s.Rcv(ch))
+}
+
+type exclusiveSuite struct{ Suite[*exclusiveSuite] }
+
+func (s *exclusiveSuite) TestEnvironment(key string) {
+	s.T().Setenv(key, "method")
+	s.Run("child", func(s *exclusiveSuite) {
+		s.Equal("method", os.Getenv(key))
+		s.T().Setenv(key, "child")
+	})
+}
+
+func TestRunExclusive(t *testing.T) {
+	const key = "TESTX_EXCLUSIVE_SUITE"
+	t.Setenv(key, "parent")
+
+	RunExclusive(t, &exclusiveSuite{}, key)
+
+	require.Equal(t, "parent", os.Getenv(key))
+}
+
+func TestRunExclusiveRejectsSubtest(t *testing.T) {
+	t.Run("child", func(t *testing.T) {
+		require.PanicsWithValue(t, "parallelsuite.RunExclusive: requires a top-level test", func() {
+			RunExclusive(t, &exclusiveSuite{}, "TESTX_EXCLUSIVE_SUITE")
+		})
+	})
 }
 
 type validWithArgsSuite struct{ Suite[*validWithArgsSuite] }
