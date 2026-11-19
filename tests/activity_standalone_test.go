@@ -178,7 +178,7 @@ func (s *standaloneActivityTestSuite) TestPrincipalAttributionIsPersistedAndDesc
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		activityID,
-		env.HistoryShardCount(),
+		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 	loadLastAttempt := func() *activitystatepb.ActivityAttemptState {
 		persistedExecution, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
