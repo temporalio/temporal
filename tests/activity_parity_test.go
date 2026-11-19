@@ -1197,8 +1197,8 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 					restored := a.describe(t).GetInfo()
 					protorequire.ProtoEqual(t, before.GetHandoffOptions(), restored.GetHandoffOptions())
 					require.Equal(t, before.GetAttempt(), restored.GetAttempt())
-					require.Equal(t, before.GetAwaitingCompletion(), restored.GetAwaitingCompletion())
-					protorequire.ProtoEqual(t, before.GetAsyncHandoffTime(), restored.GetAsyncHandoffTime())
+					require.Equal(t, before.GetHandedOff(), restored.GetHandedOff())
+					protorequire.ProtoEqual(t, before.GetHandoffTime(), restored.GetHandoffTime())
 
 					// Complete using the original worker token after every presence and policy change.
 					_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{

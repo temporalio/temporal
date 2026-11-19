@@ -122,12 +122,3 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		WorkflowAsyncHandoffEnabled:               WorkflowAsyncHandoffEnabled.Get(dc),
 	}
 }
-
-// linkValidatorProvider builds the linkValidator from dynamic config.
-func linkValidatorProvider(dc *dynamicconfig.Collection) *linkValidator {
-	return newLinkValidator(
-		dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
-		dynamicconfig.MaxLinksPerComponent.Get(dc),
-		dynamicconfig.FrontendLinkMaxSize.Get(dc),
-	)
-}

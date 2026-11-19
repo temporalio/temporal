@@ -237,7 +237,7 @@ func (a *saaHandle) observedState(t require.TestingT) activityState {
 	case enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED:
 		return activityState{
 			runState: info.GetRunState(), attempt: info.GetAttempt(),
-			handoffAttempt: info.GetHandoffAttempt(), awaitingCompletion: info.GetAwaitingCompletion(),
+			handoffAttempt: info.GetHandoffAttempt(), awaitingCompletion: info.GetHandedOff(),
 		}
 	default:
 		return activityState{closed: true}
@@ -247,9 +247,9 @@ func (a *saaHandle) observedState(t require.TestingT) activityState {
 func (a *saaHandle) handoffInfo(t require.TestingT) activityHandoffInfo {
 	info := a.describe(t).GetInfo()
 	return activityHandoffInfo{
-		handoffTime:            info.GetAsyncHandoffTime(),
+		handoffTime:            info.GetHandoffTime(),
 		options:                info.GetHandoffOptions(),
-		awaitingCompletion:     info.GetAwaitingCompletion(),
+		awaitingCompletion:     info.GetHandedOff(),
 		startToCloseTimeout:    info.GetStartToCloseTimeout().AsDuration(),
 		scheduleToCloseTimeout: info.GetScheduleToCloseTimeout().AsDuration(),
 	}

@@ -717,8 +717,8 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityAsyncHandoff)
-	s.False(resp.NamespaceInfo.Capabilities.WorkflowActivityAsyncHandoff)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityHandoff)
+	s.False(resp.NamespaceInfo.Capabilities.WorkflowActivityHandoff)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
@@ -2702,9 +2702,9 @@ func (s *namespaceHandlerCommonSuite) TestAsyncHandoffCapabilities() {
 			s.config.Activity.StandaloneAsyncHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.handoff)
 			s.config.Activity.WorkflowAsyncHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.workflow)
 			info, _, _, _ := s.handler.createResponse(&persistencespb.NamespaceInfo{Name: "namespace"}, &persistencespb.NamespaceConfig{}, &persistencespb.NamespaceReplicationConfig{})
-			s.Equal(test.standalone && test.handoff, info.GetCapabilities().GetStandaloneActivityAsyncHandoff())
+			s.Equal(test.standalone && test.handoff, info.GetCapabilities().GetStandaloneActivityHandoff())
 			// The workflow switch is reserved until its handoff handler is implemented.
-			s.False(info.GetCapabilities().GetWorkflowActivityAsyncHandoff())
+			s.False(info.GetCapabilities().GetWorkflowActivityHandoff())
 		})
 	}
 }

@@ -318,11 +318,11 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 				wantCount = 2
 			}
 			require.Equal(t, tc.wantState, info.GetRunState())
-			require.Equal(t, tc.wantAwaiting, info.GetAwaitingCompletion())
+			require.Equal(t, tc.wantAwaiting, info.GetHandedOff())
 			require.EqualValues(t, 3, info.GetAttempt())
 			require.Equal(t, wantCount, info.GetHandoffAttempt())
 			protorequire.ProtoEqual(t, tc.options, info.GetHandoffOptions())
-			protorequire.ProtoEqual(t, handoffTime, info.GetAsyncHandoffTime())
+			protorequire.ProtoEqual(t, handoffTime, info.GetHandoffTime())
 		})
 	}
 }

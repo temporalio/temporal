@@ -15755,7 +15755,7 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 		}
 		response, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
 		require.NoError(t, err)
-		require.True(t, response.GetInfo().GetAwaitingCompletion())
+		require.True(t, response.GetInfo().GetHandedOff())
 
 		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
