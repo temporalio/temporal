@@ -2316,7 +2316,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	historyEvents := env.GetHistory(s.Context(), env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})

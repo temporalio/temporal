@@ -499,16 +499,16 @@ func (e *TestEnv) ReadHistory(
 	}
 }
 
-func (e *TestEnv) GetHistoryFunc(ctx context.Context, nsName string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+func (e *TestEnv) GetHistoryFunc(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
 		e.t.Helper()
 		return e.GetHistory(ctx, nsName, execution)
 	}
 }
 
-func (e *TestEnv) GetHistory(ctx context.Context, nsName string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (e *TestEnv) GetHistory(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	e.t.Helper()
-	events, err := e.ReadHistory(ctx, namespace.Name(nsName), execution)
+	events, err := e.ReadHistory(ctx, nsName, execution)
 	require.NoError(e.t, err)
 	return events
 }
