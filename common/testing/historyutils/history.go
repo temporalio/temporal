@@ -38,7 +38,19 @@ func (u HistoryUtils) RequireHistory(s scope, execution *commonpb.WorkflowExecut
 	if helper, ok := t.(interface{ Helper() }); ok {
 		helper.Helper()
 	}
-	events, err := u.readHistory(s.Context(), execution)
+	return u.RequireHistoryWithT(s.Context(), t, execution)
+}
+
+// RequireHistoryWithT reads history using ctx and reports errors to t.
+func (u HistoryUtils) RequireHistoryWithT(
+	ctx context.Context,
+	t require.TestingT,
+	execution *commonpb.WorkflowExecution,
+) []*historypb.HistoryEvent {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+	events, err := u.readHistory(ctx, execution)
 	require.NoError(t, err)
 	return events
 }
