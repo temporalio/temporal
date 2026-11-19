@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -210,17 +209,17 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 				updateResult <- callErr
 			}()
 
-			await.Require(s.Context(), s.T(), func(t *await.T) {
+			s.Await(func(s *WorkflowHeartbeatNotificationMetricsSuite) {
 				for _, metric := range []string{
 					metrics.WorkflowHeartbeatNotificationBufferedInput.Name(),
 					metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name(),
 				} {
 					recordings := capture.Metric(metric)
-					require.Len(t, recordings, 1)
-					require.Equal(t, int64(1), recordings[0].Value)
-					require.Equal(t, "UpdateAdmitted", recordings[0].Tags["event_type"])
-					require.Equal(t, metrics.WorkflowContextScope, recordings[0].Tags["operation"])
-					require.Equal(t, env.Namespace().String(), recordings[0].Tags["namespace"])
+					s.Len(recordings, 1)
+					s.Equal(int64(1), recordings[0].Value)
+					s.Equal("UpdateAdmitted", recordings[0].Tags["event_type"])
+					s.Equal(metrics.WorkflowContextScope, recordings[0].Tags["operation"])
+					s.Equal(env.Namespace().String(), recordings[0].Tags["namespace"])
 				}
 			}, 10*time.Second, 100*time.Millisecond)
 
@@ -231,19 +230,19 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 				RequestId:         uuid.NewString(),
 			})
 			s.NoError(err)
-			await.Require(s.Context(), s.T(), func(t *await.T) {
+			s.Await(func(s *WorkflowHeartbeatNotificationMetricsSuite) {
 				buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 				counts := make(map[string]int64, len(buffered))
 				for _, recording := range buffered {
 					counts[recording.Tags["event_type"]] += recording.Value.(int64)
 				}
-				require.Equal(t, map[string]int64{
+				s.Equal(map[string]int64{
 					"UpdateAdmitted":            1,
 					"WorkflowExecutionSignaled": 1,
 				}, counts)
 				first := capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
-				require.Len(t, first, 1)
-				require.Equal(t, "UpdateAdmitted", first[0].Tags["event_type"])
+				s.Len(first, 1)
+				s.Equal("UpdateAdmitted", first[0].Tags["event_type"])
 			}, 10*time.Second, 100*time.Millisecond)
 
 			_, err = env.TaskPoller().HandleWorkflowTask(tv, currentTask,
@@ -300,13 +299,13 @@ func (s *WorkflowHeartbeatNotificationMetricsSuite) TestWorkflowHeartbeatNotific
 	s.NoError(err)
 	s.NotNil(resp.GetWorkflowTask())
 
-	await.Require(s.Context(), s.T(), func(t *await.T) {
+	s.Await(func(s *WorkflowHeartbeatNotificationMetricsSuite) {
 		buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
-		require.Len(t, buffered, 1)
-		require.Equal(t, "TimerFired", buffered[0].Tags["event_type"])
+		s.Len(buffered, 1)
+		s.Equal("TimerFired", buffered[0].Tags["event_type"])
 		first := capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
-		require.Len(t, first, 1)
-		require.Equal(t, "TimerFired", first[0].Tags["event_type"])
+		s.Len(first, 1)
+		s.Equal("TimerFired", first[0].Tags["event_type"])
 	}, 10*time.Second, 100*time.Millisecond)
 
 	_, err = env.TaskPoller().HandleWorkflowTask(tv, resp.GetWorkflowTask(),

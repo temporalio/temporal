@@ -81,7 +81,7 @@ func (s *PartitionScalingSuite) TestPartitionScaling_Up() {
 	await.RequireTrue(s.T(), scalerBacklogAtLeast(env, env.Tv(), 5, 0, 1), 15*time.Second, time.Second)
 
 	s.T().Log("check that 2,3 have no tasks (leave 4,5 unloaded)")
-	env.True(scalerBacklogEmpty(env, env.Tv(), 2, 3)())
+	s.True(scalerBacklogEmpty(env, env.Tv(), 2, 3)())
 
 	s.T().Log("set to 6 partitions using scaler")
 	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
@@ -148,7 +148,7 @@ func (s *PartitionScalingSuite) TestPartitionScaling_Down() {
 	// if we don't poll all 6. So we have to look at metrics.
 	pollsByPartition := scalerCountPolls(env.Tv(), capture)
 	s.T().Log("poll counts", pollsByPartition)
-	env.Len(pollsByPartition, 6)
+	s.Len(pollsByPartition, 6)
 
 	// Note that this test does not test the read count eventually drops!
 	// (i.e. polls will continue to go to 4,5 after they are drained)
@@ -225,7 +225,7 @@ func (s *PartitionScalingSuite) TestPartitionScaling_Down_FromDC() {
 	// if we don't poll all 6. So we have to look at metrics.
 	pollsByPartition := scalerCountPolls(env.Tv(), capture)
 	s.T().Log("poll counts", pollsByPartition)
-	env.Len(pollsByPartition, 6)
+	s.Len(pollsByPartition, 6)
 }
 
 func (s *PartitionScalingSuite) TestPartitionScaling_Down_AndStopPolling() {
@@ -250,12 +250,12 @@ func (s *PartitionScalingSuite) TestPartitionScaling_Down_AndStopPolling() {
 
 	var polls map[int]int
 	s.T().Log("wait for 10 successful polls on each partition")
-	await.Require(s.Context(), s.T(), func(c *await.T) {
+	s.Await(func(s *PartitionScalingSuite) {
 		polls = scalerCountPolls(env.Tv(), capture)
 		s.T().Log("polls(6)", polls)
-		require.Len(c, polls, 6)
+		s.Len(polls, 6)
 		for _, v := range polls {
-			require.GreaterOrEqual(c, v, 10)
+			s.GreaterOrEqual(v, 10)
 		}
 	}, 15*time.Second, time.Second)
 
@@ -267,12 +267,12 @@ func (s *PartitionScalingSuite) TestPartitionScaling_Down_AndStopPolling() {
 
 	// initially, polls should continue going to all 6, but new tasks should go to only 3
 	// eventually, the three will report that they are drained, and then new polls should only go to 3.
-	await.Require(s.Context(), s.T(), func(c *await.T) {
+	s.Await(func(s *PartitionScalingSuite) {
 		polls2 := scalerCountPolls(env.Tv(), capture)
 		diff := scalerSubtractPollCounts(polls2, polls)
 		polls = polls2
 		s.T().Log("polls(3)", diff)
-		require.Len(c, diff, 3)
+		s.Len(diff, 3)
 	}, 15*time.Second, time.Second)
 }
 
@@ -360,8 +360,8 @@ func (s *PartitionScalingSuite) TestPartitionScaling_Disable_ToFewerPartitions()
 	s.T().Log("check that polls went to partition 0 only")
 	pollsByPartition := scalerCountPolls(env.Tv(), capture)
 	s.T().Log("poll counts", pollsByPartition)
-	env.Len(pollsByPartition, 1)
-	env.Contains(pollsByPartition, 0)
+	s.Len(pollsByPartition, 1)
+	s.Contains(pollsByPartition, 0)
 }
 
 // TestPartitionScaling_Disable_ToMorePartitions is the inverse of FewerPartitions: the scaler
@@ -408,7 +408,7 @@ func (s *PartitionScalingSuite) TestPartitionScaling_Disable_ToMorePartitions() 
 	// polls reached 1,2,3 directly. Check metrics for that.
 	pollsByPartition := scalerCountPolls(env.Tv(), capture)
 	s.T().Log("poll counts", pollsByPartition)
-	env.Len(pollsByPartition, 4)
+	s.Len(pollsByPartition, 4)
 }
 
 func scalerBackgroundTasks(s testcore.Env, tv *testvars.TestVars, rate float32) func() {
