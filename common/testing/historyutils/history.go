@@ -19,53 +19,32 @@ func New(client workflowservice.WorkflowServiceClient, nsName namespace.Name) Hi
 	return HistoryUtils{client: client, nsName: nsName}
 }
 
-type Scope interface {
+type scope interface {
 	Context() context.Context
 	AssertionT() require.TestingT
 }
 
-type contextScope struct {
-	ctx context.Context
-	t   require.TestingT
-}
-
-// WithContext binds a context to a test's assertion handle.
-func WithContext(ctx context.Context, t require.TestingT) Scope {
-	return contextScope{ctx: ctx, t: t}
-}
-
-func (s contextScope) Context() context.Context {
-	return s.ctx
-}
-
-func (s contextScope) AssertionT() require.TestingT {
-	return s.t
-}
-
-func (u HistoryUtils) RequireHistoryFunc(scope Scope, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+func (u HistoryUtils) RequireHistoryFunc(s scope, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
-		if helper, ok := scope.AssertionT().(interface{ Helper() }); ok {
+		if helper, ok := s.AssertionT().(interface{ Helper() }); ok {
 			helper.Helper()
 		}
-		return u.RequireHistory(scope, execution)
+		return u.RequireHistory(s, execution)
 	}
 }
 
-func (u HistoryUtils) RequireHistory(scope Scope, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	t := scope.AssertionT()
+func (u HistoryUtils) RequireHistory(s scope, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	t := s.AssertionT()
 	if helper, ok := t.(interface{ Helper() }); ok {
 		helper.Helper()
 	}
-	events, err := u.readHistory(scope.Context(), execution)
+	events, err := u.readHistory(s.Context(), execution)
 	require.NoError(t, err)
 	return events
 }
 
 // readHistory reads every page of workflow history using ctx.
-func (u HistoryUtils) readHistory(
-	ctx context.Context,
-	execution *commonpb.WorkflowExecution,
-) ([]*historypb.HistoryEvent, error) {
+func (u HistoryUtils) readHistory(ctx context.Context, execution *commonpb.WorkflowExecution) ([]*historypb.HistoryEvent, error) {
 	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       u.nsName.String(),
 		Execution:       execution,
