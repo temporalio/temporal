@@ -2,7 +2,6 @@ package historyutils
 
 import (
 	"context"
-	"testing"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -12,31 +11,58 @@ import (
 )
 
 type HistoryUtils struct {
-	t      testing.TB
 	client workflowservice.WorkflowServiceClient
 	nsName namespace.Name
 }
 
-func New(t testing.TB, client workflowservice.WorkflowServiceClient, nsName namespace.Name) HistoryUtils {
-	return HistoryUtils{t: t, client: client, nsName: nsName}
+func New(client workflowservice.WorkflowServiceClient, nsName namespace.Name) HistoryUtils {
+	return HistoryUtils{client: client, nsName: nsName}
 }
 
-func (u HistoryUtils) RequireHistoryFunc(ctx context.Context, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+type Scope interface {
+	Context() context.Context
+	AssertionT() require.TestingT
+}
+
+type contextScope struct {
+	ctx context.Context
+	t   require.TestingT
+}
+
+// WithContext binds a context to a test's assertion handle.
+func WithContext(ctx context.Context, t require.TestingT) Scope {
+	return contextScope{ctx: ctx, t: t}
+}
+
+func (s contextScope) Context() context.Context {
+	return s.ctx
+}
+
+func (s contextScope) AssertionT() require.TestingT {
+	return s.t
+}
+
+func (u HistoryUtils) RequireHistoryFunc(scope Scope, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
-		u.t.Helper()
-		return u.RequireHistory(ctx, execution)
+		if helper, ok := scope.AssertionT().(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		return u.RequireHistory(scope, execution)
 	}
 }
 
-func (u HistoryUtils) RequireHistory(ctx context.Context, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	u.t.Helper()
-	events, err := u.ReadHistory(ctx, execution)
-	require.NoError(u.t, err)
+func (u HistoryUtils) RequireHistory(scope Scope, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	t := scope.AssertionT()
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+	events, err := u.readHistory(scope.Context(), execution)
+	require.NoError(t, err)
 	return events
 }
 
-// ReadHistory reads every page of workflow history using ctx.
-func (u HistoryUtils) ReadHistory(
+// readHistory reads every page of workflow history using ctx.
+func (u HistoryUtils) readHistory(
 	ctx context.Context,
 	execution *commonpb.WorkflowExecution,
 ) ([]*historypb.HistoryEvent, error) {

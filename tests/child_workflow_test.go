@@ -1236,7 +1236,7 @@ func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked
 	s.ErrorAs(err, &invalidArgument)
 
 	// Verify workflow task failed
-	historyEvents := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	})
