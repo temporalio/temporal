@@ -45,7 +45,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		tv.WorkflowID(),
-		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+		env.HistoryShardCount(),
 	)
 	execMgr := env.GetTestCluster().TestBase().ExecutionManager
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
@@ -99,7 +99,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfWorkflowAfterReset() {
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		tv.WorkflowID(),
-		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+		env.HistoryShardCount(),
 	)
 	execMgr := env.GetTestCluster().TestBase().ExecutionManager
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())

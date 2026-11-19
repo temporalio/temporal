@@ -3,16 +3,13 @@ package golangci
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/golangci/plugin-module-register/register"
 	"go.temporal.io/testx/parallelsuitelint"
 	"golang.org/x/tools/go/analysis"
 )
 
-type plugin struct {
-	AllowNonParallelsuiteTests []string `json:"allow-non-parallelsuite-tests"`
-}
+type plugin struct{}
 
 func init() {
 	register.Plugin("parallelsuitelint", newPlugin)
@@ -26,12 +23,8 @@ func newPlugin(raw any) (register.LinterPlugin, error) {
 	return &settings, nil
 }
 
-func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
-	analyzer := parallelsuitelint.New()
-	if err := analyzer.Flags.Set("allow-non-parallelsuite-tests", strings.Join(p.AllowNonParallelsuiteTests, ",")); err != nil {
-		return nil, fmt.Errorf("configuring adoption exclusions: %w", err)
-	}
-	return []*analysis.Analyzer{analyzer}, nil
+func (*plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
+	return []*analysis.Analyzer{parallelsuitelint.New()}, nil
 }
 
 func (*plugin) GetLoadMode() string {
