@@ -512,14 +512,14 @@ func TestBuildNamespaceReplicationRepairTaskPreservesTargetLocalDataAndFailover(
 		11,
 		20,
 	)
-	source.Info.Data = map[string]string{"shared": "source", "mcn.local": "source-local"}
+	source.Info.Data = map[string]string{"shared": "source", "cell.local": "source-local"}
 	target := proto.CloneOf(source)
-	target.Info.Data = map[string]string{"shared": "old", "mcn.local": "target-local"}
+	target.Info.Data = map[string]string{"shared": "old", "cell.local": "target-local"}
 	target.ReplicationConfig.ActiveClusterName = "cluster-b"
 	target.FailoverVersion = 19
 	target.FailoverHistory[0].FailoverVersion = 19
 	sourceBefore, targetBefore := proto.CloneOf(source), proto.CloneOf(target)
-	ignored := map[string]struct{}{"mcn.local": {}}
+	ignored := map[string]struct{}{"cell.local": {}}
 
 	task, err := buildNamespaceReplicationRepairTask(
 		source,
@@ -528,8 +528,8 @@ func TestBuildNamespaceReplicationRepairTaskPreservesTargetLocalDataAndFailover(
 	)
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{
-		"shared":    "source",
-		"mcn.local": "target-local",
+		"shared":     "source",
+		"cell.local": "target-local",
 	}, task.GetInfo().GetData())
 	require.Equal(t, "cluster-b", task.GetReplicationConfig().GetActiveClusterName())
 	require.Equal(t, int64(19), task.GetFailoverVersion())
