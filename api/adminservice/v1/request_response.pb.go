@@ -4249,7 +4249,8 @@ type GetNamespaceResponse struct {
 	IsGlobalNamespace bool                             `protobuf:"varint,9,opt,name=is_global_namespace,json=isGlobalNamespace,proto3" json:"is_global_namespace,omitempty"`
 	RestoreInfo       *v12.NamespaceRestoreInfo        `protobuf:"bytes,10,opt,name=restore_info,json=restoreInfo,proto3" json:"restore_info,omitempty"`
 	// The serving cluster's view of this namespace for operator verify and
-	// repair. Unset when the cluster has nothing to report.
+	// repair. Always set by servers that support operator repair; tools treat a
+	// cluster that leaves it unset as one that cannot accept repair writes.
 	RepairScope   *NamespaceRepairScope `protobuf:"bytes,11,opt,name=repair_scope,json=repairScope,proto3" json:"repair_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

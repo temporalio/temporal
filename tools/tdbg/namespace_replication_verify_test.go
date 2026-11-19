@@ -1414,6 +1414,8 @@ func testNamespaceResponse(
 			{FailoverTime: timestamppb.New(time.Unix(20, 0)), FailoverVersion: failoverVersion},
 		},
 		IsGlobalNamespace: true,
+		// Servers that support operator repair always report a repair scope.
+		RepairScope: &adminservice.NamespaceRepairScope{},
 	}
 }
 

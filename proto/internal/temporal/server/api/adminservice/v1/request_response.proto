@@ -511,7 +511,8 @@ message GetNamespaceResponse {
   bool is_global_namespace = 9;
   temporal.server.api.persistence.v1.NamespaceRestoreInfo restore_info = 10;
   // The serving cluster's view of this namespace for operator verify and
-  // repair. Unset when the cluster has nothing to report.
+  // repair. Always set by servers that support operator repair; tools treat a
+  // cluster that leaves it unset as one that cannot accept repair writes.
   NamespaceRepairScope repair_scope = 11;
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -101,7 +102,7 @@ func planNamespaceReplicationRepair(
 			Cluster:              cluster.Cluster,
 			Presence:             cluster.Presence,
 			CurrentConfigVersion: cluster.ConfigVersion,
-			Action:               namespaceRepairTargetAction(cluster),
+			Action:               namespaceRepairTargetAction(cluster, plan.ProposedSourceConfigVersion),
 		})
 	}
 	slices.SortFunc(plan.Clusters, func(left, right namespaceReplicationClusterRepairPlan) int {
@@ -117,7 +118,38 @@ func planNamespaceReplicationRepair(
 	) {
 		plan.Status = namespaceReplicationRepairStatusPlanned
 	}
+	if plan.Status == namespaceReplicationRepairStatusPlanned {
+		if unsupported := clustersWithoutRepairSupport(observation, plan); len(unsupported) != 0 {
+			plan.Status = namespaceReplicationRepairStatusBlocked
+			plan.StatusDetail = fmt.Sprintf(
+				"%s must be upgraded to a server version that supports operator repair before repairing",
+				strings.Join(unsupported, ", "),
+			)
+		}
+	}
 	return plan, nil
+}
+
+// clustersWithoutRepairSupport lists the clusters repair would write that do
+// not report a repair scope, which every server supporting operator repair
+// does. An older server would apply a repair write as ordinary replication and
+// drop receiver-local configuration, and an older source has no write relay.
+// Creating a missing replica is allowed: it has no local configuration to lose.
+func clustersWithoutRepairSupport(
+	observation *namespaceReplicationObservation,
+	plan *namespaceReplicationRepairPlan,
+) []string {
+	var unsupported []string
+	if observation.sourceSnapshot.GetRepairScope() == nil {
+		unsupported = append(unsupported, plan.SourceCluster)
+	}
+	for _, cluster := range plan.Clusters {
+		if cluster.Action == namespaceReplicationRepairActionApplySource &&
+			observation.targetSnapshots[cluster.Cluster].GetRepairScope() == nil {
+			unsupported = append(unsupported, cluster.Cluster)
+		}
+	}
+	return unsupported
 }
 
 type namespaceRepairVersionPlan struct {
@@ -149,14 +181,21 @@ func inspectNamespaceRepairVersions(
 
 func namespaceRepairTargetAction(
 	cluster namespaceReplicationClusterVerification,
+	repairConfigVersion int64,
 ) string {
 	if cluster.Presence == namespaceReplicationPresenceMissing {
 		return namespaceReplicationRepairActionCreate
 	}
-	if cluster.Presence != namespaceReplicationPresencePresent || cluster.ConfigMatch == namespaceReplicationMatchMatch {
+	if cluster.Presence != namespaceReplicationPresencePresent {
 		return namespaceReplicationRepairActionNone
 	}
-	return namespaceReplicationRepairActionApplySource
+	// A peer below the repair version is rewritten even when it matches: an
+	// older delivery still queued for it could otherwise overwrite it later.
+	if cluster.ConfigMatch != namespaceReplicationMatchMatch ||
+		(cluster.ConfigVersion != nil && *cluster.ConfigVersion < repairConfigVersion) {
+		return namespaceReplicationRepairActionApplySource
+	}
+	return namespaceReplicationRepairActionNone
 }
 
 func buildNamespaceReplicationRepairTask(

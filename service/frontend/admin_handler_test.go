@@ -1492,6 +1492,7 @@ func (s *adminHandlerSuite) TestGetNamespace_ReturnsReplicatedFields() {
 		FailoverHistory:   transmitted.FailoverHistory,
 		IsGlobalNamespace: true,
 		RestoreInfo:       transmitted.RestoreInfo,
+		RepairScope:       &adminservice.NamespaceRepairScope{},
 	}
 	expected.Info.Id = transmitted.Id
 	s.ProtoEqual(expected, resp)

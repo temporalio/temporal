@@ -158,8 +158,10 @@ func TestNamespaceRepairPolicyReportedByGetNamespace(t *testing.T) {
 			// GetNamespace serves other callers, so a refusal is reported, not returned.
 			require.NoError(t, err)
 			require.Equal(t, "payments", response.GetInfo().GetName())
+			// The scope is always set, so repair can tell this server from an older one.
+			require.NotNil(t, response.GetRepairScope())
 			if tc.wantReason == "" {
-				require.Nil(t, response.GetRepairScope())
+				require.Empty(t, response.GetRepairScope().GetRefusalReason())
 				return
 			}
 			require.Contains(t, response.GetRepairScope().GetRefusalReason(), tc.wantReason)

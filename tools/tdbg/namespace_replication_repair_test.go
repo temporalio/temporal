@@ -1163,3 +1163,136 @@ func TestNamespaceReplicationRepairCommandExecuteOutput(t *testing.T) {
 		})
 	}
 }
+
+// A matching peer below the repair version is rewritten to it. Otherwise an
+// older delivery still queued for that peer could overwrite it after repair.
+func TestRepairRewritesMatchingPeersBelowRepairVersion(t *testing.T) {
+	t.Parallel()
+	// The scenario from review: source v5, divergent peer v9, matching peer v5.
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b", "cluster-c"}, 5, 20)
+	divergent := proto.CloneOf(source)
+	divergent.Info.Description = "divergent"
+	divergent.ConfigVersion = 9
+	matching := proto.CloneOf(source)
+	clients := map[string]*testNamespaceReplicationAdminClient{
+		"source":    testNamespaceReplicationSourceClient(source),
+		"cluster-b": testNamespaceReplicationTargetClient("cluster-b", divergent),
+		"cluster-c": testNamespaceReplicationTargetClient("cluster-c", matching),
+	}
+	writes := map[string]int{}
+	for name, snapshot := range map[string]*adminservice.GetNamespaceResponse{"source": source, "cluster-b": divergent, "cluster-c": matching} {
+		clients[name].applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+			writes[name]++
+			applyRepairTaskToSnapshot(snapshot, decodeNamespaceRepairTask(t, request))
+			return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+		}
+	}
+	verifier := testNamespaceReplicationVerifierWithClients(nil, clients)
+	verifyRequest := testNamespaceReplicationVerifyRequest()
+	observation, err := verifier.observe(t.Context(), verifyRequest)
+	require.NoError(t, err)
+	plan, err := planNamespaceReplicationRepair(observation, "repair-id", time.Unix(101, 0))
+	require.NoError(t, err)
+	require.Equal(t, int64(10), plan.ProposedSourceConfigVersion)
+	require.Equal(t, namespaceReplicationRepairActionPrepareSource, plan.SourceAction)
+	actions := map[string]string{}
+	for _, cluster := range plan.Clusters {
+		actions[cluster.Cluster] = cluster.Action
+	}
+	require.Equal(t, map[string]string{
+		"cluster-b": namespaceReplicationRepairActionApplySource,
+		"cluster-c": namespaceReplicationRepairActionApplySource,
+	}, actions)
+
+	result, err := testRepairerFor(verifier).Execute(t.Context(), namespaceReplicationRepairExecutionRequest{
+		VerifyRequest: verifyRequest, Observation: observation, Plan: plan, Reason: "repair test",
+	})
+	require.NoError(t, err)
+	require.Equal(t, namespaceReplicationRepairExecutionSucceeded, result.Status)
+	require.Equal(t, 1, writes["cluster-c"])
+	for _, snapshot := range []*adminservice.GetNamespaceResponse{source, divergent, matching} {
+		require.Equal(t, int64(10), snapshot.GetConfigVersion())
+		require.Equal(t, "description", snapshot.GetInfo().GetDescription())
+	}
+}
+
+func TestRepairTargetActionFollowsRepairVersion(t *testing.T) {
+	t.Parallel()
+	version := func(v int64) *int64 { return &v }
+	for _, test := range []struct {
+		name          string
+		cluster       namespaceReplicationClusterVerification
+		repairVersion int64
+		want          string
+	}{
+		{name: "missing", cluster: namespaceReplicationClusterVerification{Presence: namespaceReplicationPresenceMissing}, repairVersion: 10,
+			want: namespaceReplicationRepairActionCreate},
+		{name: "unavailable", cluster: namespaceReplicationClusterVerification{Presence: namespaceReplicationPresenceUnavailable}, repairVersion: 10,
+			want: namespaceReplicationRepairActionNone},
+		{name: "matching at repair version", cluster: namespaceReplicationClusterVerification{
+			Presence: namespaceReplicationPresencePresent, ConfigMatch: namespaceReplicationMatchMatch, ConfigVersion: version(10),
+		}, repairVersion: 10, want: namespaceReplicationRepairActionNone},
+		{name: "matching below repair version", cluster: namespaceReplicationClusterVerification{
+			Presence: namespaceReplicationPresencePresent, ConfigMatch: namespaceReplicationMatchMatch, ConfigVersion: version(7),
+		}, repairVersion: 10, want: namespaceReplicationRepairActionApplySource},
+		{name: "divergent at repair version", cluster: namespaceReplicationClusterVerification{
+			Presence: namespaceReplicationPresencePresent, ConfigMatch: namespaceReplicationMatchMismatch, ConfigVersion: version(10),
+		}, repairVersion: 10, want: namespaceReplicationRepairActionApplySource},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, namespaceRepairTargetAction(test.cluster, test.repairVersion))
+		})
+	}
+}
+
+// Repair writes only to clusters that report a repair scope. An older server
+// would apply the write as ordinary replication and drop receiver-local config.
+func TestRepairPlanBlocksClustersWithoutRepairSupport(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name          string
+		sourceOld     bool
+		targetOld     bool
+		targetMissing bool
+		targetMatches bool
+		wantStatus    string
+		wantDetail    string
+	}{
+		{name: "older source", sourceOld: true, wantStatus: namespaceReplicationRepairStatusBlocked, wantDetail: "cluster-a must be upgraded"},
+		{name: "older target to update", targetOld: true, wantStatus: namespaceReplicationRepairStatusBlocked, wantDetail: "cluster-b must be upgraded"},
+		// A missing replica has no local configuration to lose.
+		{name: "older cluster missing the namespace", targetOld: true, targetMissing: true, wantStatus: namespaceReplicationRepairStatusPlanned},
+		// Nothing is written, so nothing needs repair support.
+		{name: "older clusters with nothing to repair", sourceOld: true, targetOld: true, targetMatches: true, wantStatus: namespaceReplicationRepairStatusNoChanges},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			target := proto.CloneOf(source)
+			if !test.targetMatches {
+				target.Info.Description = "divergent"
+				target.ConfigVersion = 9
+			}
+			if test.sourceOld {
+				source.RepairScope = nil
+			}
+			if test.targetOld {
+				target.RepairScope = nil
+			}
+			targets := map[string]*testNamespaceReplicationAdminClient{}
+			if !test.targetMissing {
+				targets["cluster-b"] = testNamespaceReplicationTargetClient("cluster-b", target)
+			} else {
+				targets["cluster-b"] = testNamespaceReplicationTargetClient("cluster-b", nil)
+			}
+			verifier := testNamespaceReplicationVerifierWithClients(source, targets)
+			observation, err := verifier.observe(t.Context(), testNamespaceReplicationVerifyRequest())
+			require.NoError(t, err)
+			plan, err := planNamespaceReplicationRepair(observation, "repair-id", time.Unix(101, 0))
+			require.NoError(t, err)
+			require.Equal(t, test.wantStatus, plan.Status, plan.StatusDetail)
+			require.Contains(t, plan.StatusDetail, test.wantDetail)
+		})
+	}
+}
