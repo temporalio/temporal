@@ -117,7 +117,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 	for _, api := range pauseAPIs() {
 		s.Run(api.name, func(s *ActivityAPIPauseSuite) {
 
-			s.RunSequential("AfterWorkflowCompleted", func(s *ActivityAPIPauseSuite) {
+			s.Run("AfterWorkflowCompleted", func(s *ActivityAPIPauseSuite) {
 				env := testcore.NewEnv(s.T())
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
@@ -136,7 +136,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				s.ErrorContains(err, "workflow execution already completed")
 			})
 
-			s.RunSequential("WhileRunning", func(s *ActivityAPIPauseSuite) {
+			s.Run("WhileRunning", func(s *ActivityAPIPauseSuite) {
 				env := testcore.NewEnv(s.T())
 
 				initialRetryInterval := 1 * time.Second
@@ -255,7 +255,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				s.NoError(err)
 			})
 
-			s.RunSequential("IncreaseAttemptsOnFailure", func(s *ActivityAPIPauseSuite) {
+			s.Run("IncreaseAttemptsOnFailure", func(s *ActivityAPIPauseSuite) {
 				/*
 				 * 1. Run an activity that runs forever
 				 * 2. Pause the activity
@@ -378,7 +378,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				s.NoError(err)
 			})
 
-			s.RunSequential("WhileWaiting", func(s *ActivityAPIPauseSuite) {
+			s.Run("WhileWaiting", func(s *ActivityAPIPauseSuite) {
 				// In this case, pause happens when activity is in retry state.
 				// Make sure that activity is paused and then unpaused.
 				// Also check that activity will not be retried while unpaused.
@@ -474,7 +474,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				s.NoError(err)
 			})
 
-			s.RunSequential("WhileRetryNoWait", func(s *ActivityAPIPauseSuite) {
+			s.Run("WhileRetryNoWait", func(s *ActivityAPIPauseSuite) {
 				// In this case, pause can happen when activity is in retry state.
 				// Make sure that activity is paused and then unpaused.
 				// Also tests noWait flag.
@@ -554,7 +554,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				s.NoError(err)
 			})
 
-			s.RunSequential("WithReset", func(s *ActivityAPIPauseSuite) {
+			s.Run("WithReset", func(s *ActivityAPIPauseSuite) {
 				// pause/unpause the activity with reset option and noWait flag
 				if api.unpauseResettingAttempts == nil {
 					s.T().Skip("this API has no reset_attempts flag on unpause; Reset is the operation that restarts attempts")
@@ -660,7 +660,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				s.NoError(err)
 			})
 
-			s.RunSequential("WhilePaused", func(s *ActivityAPIPauseSuite) {
+			s.Run("WhilePaused", func(s *ActivityAPIPauseSuite) {
 				env := testcore.NewEnv(s.T())
 
 				initialRetryInterval := 1 * time.Second
@@ -786,7 +786,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				s.NoError(err)
 			})
 
-			s.RunSequential("SameRequestID_IsIdempotent", func(s *ActivityAPIPauseSuite) {
+			s.Run("SameRequestID_IsIdempotent", func(s *ActivityAPIPauseSuite) {
 				// Pausing an already-paused activity with the same request ID must succeed (no-op).
 				env := testcore.NewEnv(s.T())
 
@@ -848,7 +848,7 @@ func (s *ActivityAPIPauseSuite) TestClient() {
 				s.NoError(api.pause(ctx, env, workflowRun.GetID(), "activity-id", "identity", "reason", "my-pause-request-id"))
 			})
 
-			s.RunSequential("UpdateOptionsResetUnpause", func(s *ActivityAPIPauseSuite) {
+			s.Run("UpdateOptionsResetUnpause", func(s *ActivityAPIPauseSuite) {
 				// End-to-end test: pause → update-options → reset → unpause all work together.
 				// Verifies that the updated options persist through a reset and that the activity
 				// completes at attempt 1 with the new options after unpause.
