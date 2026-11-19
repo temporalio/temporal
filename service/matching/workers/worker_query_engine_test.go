@@ -221,6 +221,45 @@ func TestActivityInfoMatchEvaluator_SupportedFields(t *testing.T) {
 	}
 }
 
+func TestWorkerQueryEngine_StringValueWithSpecialCharacters(t *testing.T) {
+	hb := &workerpb.WorkerHeartbeat{
+		WorkerIdentity: `o'brien "main" C:\workers`,
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedMatch bool
+	}{
+		{
+			name:          "equal",
+			query:         `WorkerIdentity = 'o''brien "main" C:\\workers'`,
+			expectedMatch: true,
+		},
+		{
+			name:          "not equal",
+			query:         `WorkerIdentity != 'o''brien "main" C:\\workers'`,
+			expectedMatch: false,
+		},
+		{
+			name:          "starts_with",
+			query:         `WorkerIdentity STARTS_WITH 'o\'brien "main"'`,
+			expectedMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, err := newWorkerQueryEngine("nsID", tt.query)
+			require.NoError(t, err)
+
+			match, err := engine.EvaluateWorker(hb)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedMatch, match)
+		})
+	}
+}
+
 func TestActivityInfoMatchEvaluator_SupportedTimeFields(t *testing.T) {
 	startTimeStr := "2023-10-26T14:30:00Z"
 	beforeTimeStr := "2023-10-26T13:00:00Z"
