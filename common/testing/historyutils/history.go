@@ -44,10 +44,7 @@ func (u HistoryUtils) RequireHistory(s scope, execution *commonpb.WorkflowExecut
 }
 
 // RequireHistoryWithT reads history using t's test context.
-func (u HistoryUtils) RequireHistoryWithT(
-	t *testing.T,
-	execution *commonpb.WorkflowExecution,
-) []*historypb.HistoryEvent {
+func (u HistoryUtils) RequireHistoryWithT(t *testing.T, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	t.Helper()
 	return u.requireHistory(testcontext.For(t), t, execution)
 }
