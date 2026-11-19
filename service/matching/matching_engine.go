@@ -3092,6 +3092,7 @@ pollLoop:
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
+			pollerPoolInfo:            request.PollerPoolInfo,
 		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {

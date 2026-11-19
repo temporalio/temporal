@@ -290,6 +290,7 @@ func ForwardPollWithTarget(
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
+				PollerPoolInfo:            pollMetadata.pollerPoolInfo,
 				// Namespace is ignored here.
 			},
 			ForwardedSource: source.RpcName(),
