@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/historyutils"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protodiff"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -1033,7 +1034,7 @@ func TestScheduleV1ActionDelayMetrics(t *testing.T) {
 
 	closeTime := func(action *schedulepb.ScheduleActionResult) time.Time {
 		t.Helper()
-		events := s.RequireHistory(ctx, action.GetStartWorkflowResult())
+		events := s.RequireHistory(historyutils.WithContext(ctx, t), action.GetStartWorkflowResult())
 		require.NotEmpty(t, events)
 		lastEvent := events[len(events)-1]
 		require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
@@ -2599,7 +2600,7 @@ func (s *ScheduleCHASMSuite) TestScheduledWorkflowContinueAsNewCompletion() {
 	// continued-as-new run (latest) and the original run it continued from. The header (callback
 	// token) must be identical, confirming the callback was propagated intact across continue-as-new.
 	s.NotEmpty(completedWFID)
-	canHist := env.RequireHistory(ctx, &commonpb.WorkflowExecution{WorkflowId: completedWFID})
+	canHist := env.RequireHistory(parallelsuite.WithContext(ctx, s), &commonpb.WorkflowExecution{WorkflowId: completedWFID})
 	canCB := getCompletionCallback(canHist)
 	s.NotNil(canCB, "continued-as-new run must carry the completion callback")
 
@@ -2612,7 +2613,7 @@ func (s *ScheduleCHASMSuite) TestScheduledWorkflowContinueAsNewCompletion() {
 	}
 	s.NotEmpty(continuedFromRunID, "completed action should have continued-as-new")
 
-	origHist := env.RequireHistory(ctx, &commonpb.WorkflowExecution{WorkflowId: completedWFID, RunId: continuedFromRunID})
+	origHist := env.RequireHistory(parallelsuite.WithContext(ctx, s), &commonpb.WorkflowExecution{WorkflowId: completedWFID, RunId: continuedFromRunID})
 	origCB := getCompletionCallback(origHist)
 	s.NotNil(origCB, "original run must carry the completion callback")
 	s.Equal(origCB.GetNexus().GetHeader(), canCB.GetNexus().GetHeader(), "completion callback must be propagated intact across continue-as-new")
@@ -3523,7 +3524,7 @@ func testScheduledWorkflowDoubleReset(s *ScheduleCHASMSuite, enableCHASMCallback
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		env.RequireHistoryFunc(ctx, wfExec),
+		env.RequireHistoryFunc(parallelsuite.WithContext(ctx, s), wfExec),
 		5*time.Second,
 		10*time.Millisecond,
 	)
@@ -3703,7 +3704,7 @@ func testScheduledWorkflowResetAndContinueAsNew(s *ScheduleCHASMSuite, resetFirs
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-			env.RequireHistoryFunc(ctx, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID}),
+			env.RequireHistoryFunc(parallelsuite.WithContext(ctx, s), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID}),
 			5*time.Second,
 			10*time.Millisecond,
 		)
@@ -3834,7 +3835,7 @@ func testResetWithAdditionalCallback(s *ScheduleCHASMSuite, enableCHASMCallbacks
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		env.RequireHistoryFunc(ctx, wfExec),
+		env.RequireHistoryFunc(parallelsuite.WithContext(ctx, s), wfExec),
 		5*time.Second,
 		10*time.Millisecond,
 	)
@@ -3870,7 +3871,7 @@ func testResetWithAdditionalCallback(s *ScheduleCHASMSuite, enableCHASMCallbacks
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted
 		5 WorkflowExecutionOptionsUpdated`,
-		env.RequireHistoryFunc(ctx, wfExec),
+		env.RequireHistoryFunc(parallelsuite.WithContext(ctx, s), wfExec),
 		5*time.Second,
 		10*time.Millisecond,
 	)
@@ -4925,7 +4926,7 @@ func (s *ScheduleV1Suite) TestRefresh() {
 	s.NoError(err)
 	s.Len(describeResp.Info.RunningWorkflows, 1)
 
-	events1 := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	events1 := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
 	expectedHistory := `
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -4950,7 +4951,7 @@ func (s *ScheduleV1Suite) TestRefresh() {
 	// now it has timed out, but the scheduler hasn't noticed yet. we can prove it by checking
 	// its history.
 
-	events2 := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	events2 := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
 	s.EqualHistoryEvents(expectedHistory, events2)
 
 	// when we describe we'll force a refresh and see it timed out
@@ -5134,7 +5135,7 @@ func (s *ScheduleV1Suite) TestNextTimeCache() {
 
 	// there should be only four side effects for 13 runs, and only two mentioning "Next"
 	// (cache refills)
-	events := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
 	var sideEffects, nextTimeSideEffects int
 	for _, e := range events {
 		if marker := e.GetMarkerRecordedEventAttributes(); marker.GetMarkerName() == "SideEffect" {
