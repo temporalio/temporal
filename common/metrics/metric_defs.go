@@ -1331,6 +1331,10 @@ var (
 		"dlq_message_count",
 		WithDescription("The number of messages currently in DLQ."),
 	)
+	HistoryDLQCorruptEntry = NewCounterDef(
+		"history_dlq_corrupt_entry",
+		WithDescription("Observations of retained corrupt history DLQ entries, including repeated scans and retries."),
+	)
 	DataLossCounter = NewCounterDef(
 		"data_loss_errors",
 		WithDescription("Total number of data loss errors encountered. This is a high cardinality metrics that has namespace, workflowID and runID tags."+
