@@ -89,6 +89,12 @@ func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 
 func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv {
 	t.Helper()
+	// CHASM scheduler creation defaults to on. Pin new schedules to V1 unless a
+	// test opts into V2 via the chasm-scheduler experiment header or an explicit
+	// EnableCHASMSchedulerCreation override (later overrides win).
+	opts = append([]testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
+	}, opts...)
 	opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}))
 	env := testcore.NewEnv(t, opts...)
 	t.Cleanup(func() {
