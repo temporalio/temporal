@@ -473,7 +473,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 	lastRelevantRunID := currentDeploymentRunID()
 	for runID := firstRelevantRunID; ; {
 		var nextRunID string
-		for _, event := range env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		for _, event := range env.GetHistory(env.Namespace(), &commonpb.WorkflowExecution{
 			WorkflowId: deploymentWorkflowID,
 			RunId:      runID,
 		}) {
