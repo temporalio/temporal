@@ -2868,7 +2868,7 @@ func (s *VersioningIntegSuite) waitForWorkflowTaskFailedCause(
 	cause enumspb.WorkflowTaskFailedCause,
 ) {
 	s.Await(func(s *VersioningIntegSuite) {
-		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		events := env.GetHistory(s.Context(), env.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 			RunId:      run.GetRunID(),
 		})
