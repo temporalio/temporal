@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/grpc/codes"
@@ -933,6 +934,58 @@ func TestRepairRequiresMatchingReadbackAfterStaleSuccess(t *testing.T) {
 			}, task, &result)
 			require.ErrorContains(t, err, test.wantError)
 			require.False(t, result.Readback)
+		})
+	}
+}
+
+func TestRepairCarriesSourceRestoreInfo(t *testing.T) {
+	t.Parallel()
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 11, 20)
+	source.RestoreInfo = &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: "cluster-a",
+		State:       enumspb.NAMESPACE_RESTORE_STATE_COMPLETED,
+		StartTime:   timestamppb.New(time.Unix(30, 0)),
+		CloseTime:   timestamppb.New(time.Unix(40, 0)),
+	}
+	target := proto.CloneOf(source)
+	target.RestoreInfo = nil
+	task, err := buildNamespaceReplicationRepairTask(source, target, nil)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, source.GetRestoreInfo(), task.GetRestoreInfo())
+
+	for _, test := range []struct {
+		name      string
+		mutate    func(*adminservice.GetNamespaceResponse)
+		wantError string
+	}{
+		{name: "matching"},
+		{name: "different restore state", mutate: func(r *adminservice.GetNamespaceResponse) {
+			r.RestoreInfo.State = enumspb.NAMESPACE_RESTORE_STATE_FAILED
+		}, wantError: "config readback"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			actual := proto.CloneOf(source)
+			if test.mutate != nil {
+				test.mutate(actual)
+			}
+			client := testNamespaceReplicationTargetClient("cluster-b", actual)
+			client.applyNamespaceMutationFn = func(*adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+				return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+			}
+			r := testRepairerFor(testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b": client}))
+			result := namespaceReplicationRepairApplyResult{Action: namespaceReplicationRepairActionApplySource}
+			_, err := r.applyRepairAndReadback(t.Context(), peerRepairEndpoint{repairer: r, cluster: "cluster-b"}, namespaceReplicationRepairExecutionRequest{
+				Plan: &namespaceReplicationRepairPlan{SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
+			}, task, &result)
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				require.False(t, result.Readback)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, result.Readback)
 		})
 	}
 }

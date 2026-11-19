@@ -530,7 +530,7 @@ func validateNamespaceRepairReadback(
 ) error {
 	expectedSnapshot := &adminservice.GetNamespaceResponse{
 		Info: proto.CloneOf(expected.GetInfo()), Config: expected.GetConfig(), ReplicationConfig: expected.GetReplicationConfig(),
-		FailoverHistory: expected.GetFailoverHistory(), IsGlobalNamespace: true,
+		FailoverHistory: expected.GetFailoverHistory(), RestoreInfo: expected.GetRestoreInfo(), IsGlobalNamespace: true,
 	}
 	expectedSnapshot.Info.Id = expected.GetId()
 	expectedConfigProjection, expectedFailoverProjection, err := namespaceReplicationProjections(expectedSnapshot, dataKeysToIgnore)
