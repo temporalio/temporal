@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/testing/historyutils"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -290,7 +289,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	// Wait for the workflow task timeout to actually fire before polling for stage 5
 	// With 10s timeout, poll for up to 15s to ensure timeout has occurred
 	s.Await(func(s *TransientTaskSuite) {
-		events, err := historyutils.ReadHistory(s.Context(), env.FrontendClient(), env.Namespace(), workflowExecution)
+		events, err := env.ReadHistory(s.Context(), workflowExecution)
 		s.NoError(err)
 		// Look for WorkflowTaskTimedOut event (should be event 21)
 		s.True(hasEventType(events, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT),
@@ -309,7 +308,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 		sawFieldsFlat = append(sawFieldsFlat, f.size, f.suggest)
 	}
 
-	allEvents := env.GetHistory(s.Context(), env.Namespace(), workflowExecution)
+	allEvents := env.GetHistory(s.Context(), workflowExecution)
 	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
