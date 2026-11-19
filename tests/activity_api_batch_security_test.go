@@ -84,7 +84,7 @@ func (s *ActivityAPIBatchSecurityTestSuite) TestScheduleActivityOnPerNSTQ_Blocke
 	s.Contains(err.Error(), "internal per-namespace task queue")
 
 	// Verify a WorkflowTaskFailed event was recorded with the correct cause.
-	historyEvents := env.GetHistory(env.Namespace(), &commonpb.WorkflowExecution{
+	historyEvents := env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
