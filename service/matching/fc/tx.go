@@ -46,10 +46,8 @@ const (
 )
 
 // Check checks and consumes local tokens for each limiter.
-// // ReadinessState gets the readiness state of a limiter. If it's blocked and cb is not nil,
-// // cb.OnReady will be called once when the state of the limiter transitions to ready. If it is
-// // ready, the callback will be removed from the limiter
-// TODO(fc): comment more here
+// If it's not ready and a callback was passed to NewTx, the callback will be registered to be
+// called when the limiter may be ready. If it is ready, a registered callback will be removed.
 func (tx *Tx) Check() (retErr error) {
 	if tx == nil {
 		return nil // no limiters
