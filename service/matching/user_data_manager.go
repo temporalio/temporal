@@ -169,6 +169,10 @@ func newUserDataManager(
 }
 
 func (m *userDataManagerImpl) Start() {
+	if !m.partition.SupportsUserData() {
+		m.setUserDataState(userDataEnabled, nil)
+		return
+	}
 	if m.store != nil {
 		m.goroGroup.Go(m.loadUserData)
 	} else {

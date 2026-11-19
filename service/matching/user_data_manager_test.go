@@ -83,6 +83,30 @@ func createUserDataManager(
 	)
 }
 
+// Worker-command queues must not fetch user data and load normal workflow partitions.
+func TestUserDataWorkerCommandsSkipFetch(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	tqCfg := defaultTqmTestOpts(controller)
+	partition := tqid.UnsafeTaskQueueFamily(defaultNamespaceId, "temporal-sys/worker-commands/worker").
+		TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
+	tqCfg.dbq = UnversionedQueueKey(partition)
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).Times(0)
+	m := createUserDataManager(t, controller, tqCfg)
+	t.Cleanup(func() {
+		m.Stop()
+		m.goroGroup.Wait()
+	})
+
+	m.Start()
+
+	userData, _, err := m.GetUserData()
+	require.NoError(t, err)
+	require.Nil(t, userData)
+	require.NoError(t, m.WaitUntilInitialized(t.Context()))
+}
+
 func TestUserData_LoadOnInit(t *testing.T) {
 	t.Parallel()
 

@@ -95,6 +95,7 @@ func TestWorkerCommandsPartitionProperties(t *testing.T) {
 	require.Equal(t, 24*time.Hour, p.PersistenceTTL())
 	require.False(t, p.SupportsFairness())
 	require.False(t, p.SupportsVersioning())
+	require.False(t, p.SupportsUserData())
 	require.False(t, p.SupportsPartitions())
 	require.Equal(t, "__worker_commands__", p.MetricTag(false))
 }
