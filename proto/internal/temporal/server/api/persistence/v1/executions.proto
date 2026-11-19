@@ -85,6 +85,9 @@ message WorkflowExecutionInfo {
   google.protobuf.Duration workflow_task_timeout = 25;
   int32 workflow_task_attempt = 26;
   google.protobuf.Timestamp workflow_task_started_time = 27;
+  // The shard clock in the started Workflow Task's token, so History can rebuild the same token.
+  // Nil means it is unknown, e.g. the state came from history events, which don't carry it.
+  temporal.server.api.clock.v1.VectorClock workflow_task_started_clock = 119;
   // Worker control task queue of the worker that started the current Workflow Task. Set only when that
   // worker supports workflow heartbeat notifications.
   string workflow_task_worker_control_queue = 120;

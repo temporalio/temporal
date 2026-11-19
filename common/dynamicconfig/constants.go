@@ -2961,6 +2961,11 @@ the number of children greater than or equal to this threshold`,
 		false,
 		`EnableWorkflowTaskStampIncrementOnFailure controls whether the workflow task stamp is incremented when a workflow task fails and is rescheduled`,
 	)
+	EnableWorkflowTaskStartedClock = NewGlobalBoolSetting(
+		"history.enableWorkflowTaskStartedClock",
+		false,
+		`EnableWorkflowTaskStartedClock controls whether the shard clock in a started workflow task's token is stored in mutable state, so the token can be rebuilt`,
+	)
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
 		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
 		10,
