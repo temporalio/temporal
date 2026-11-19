@@ -2001,7 +2001,9 @@ func (s *ScheduleMigrationIsolatedSuite) TestScheduleMigrationDeferredWithRunnin
 
 	// Turn the gate on; auto-migration now proceeds even with the workflow running.
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
-	await.Requiref(ctx, s.T(), func(at *await.T) { require.True(at, v1Migrated(at.Context())) }, 15*time.Second, 500*time.Millisecond,
+	s.Awaitf(func(s *ScheduleMigrationIsolatedSuite) {
+		s.True(v1Migrated(s.Context()))
+	}, 15*time.Second, 500*time.Millisecond,
 		"migration should proceed once the gate allows running workflows")
 
 	// The V2 schedule should now exist.
