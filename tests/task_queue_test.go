@@ -1053,8 +1053,6 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *TaskQueu
 
 func testTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, minLatency time.Duration) {
 	s.T().Helper()
-	ctx := s.Context()
-	tv := env.Tv()
 
 	capture := env.StartNamespaceMetricCapture()
 
@@ -1063,7 +1061,7 @@ func testTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, ex
 
 	// Poll and handle the workflow task: schedule an activity.
 	go func() {
-		_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv,
+		_, err := env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{
 					Commands: []*commandpb.Command{
@@ -1072,8 +1070,8 @@ func testTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, ex
 							Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
 								ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 									ActivityId:             "act-1",
-									ActivityType:           tv.ActivityType(),
-									TaskQueue:              tv.TaskQueue(),
+									ActivityType:           env.Tv().ActivityType(),
+									TaskQueue:              env.Tv().TaskQueue(),
 									ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 								},
 							},
@@ -1087,10 +1085,10 @@ func testTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, ex
 
 	// Poll and handle the activity task.
 	go func() {
-		_, err := env.TaskPoller().PollAndHandleActivityTask(tv,
+		_, err := env.TaskPoller().PollAndHandleActivityTask(env.Tv(),
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				return &workflowservice.RespondActivityTaskCompletedRequest{
-					Result: tv.Any().Payloads(),
+					Result: env.Tv().Any().Payloads(),
 				}, nil
 			},
 		)
@@ -1108,7 +1106,7 @@ func testTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, ex
 				s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: env.NamespaceID().String(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-						TaskQueue:     tv.TaskQueue().GetName(),
+						TaskQueue:     env.Tv().TaskQueue().GetName(),
 						TaskQueueType: tqType,
 					},
 					Versions:      &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
@@ -1126,12 +1124,12 @@ func testTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, ex
 	}
 
 	// Start a workflow to generate a workflow task.
-	_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:    env.Namespace().String(),
-		WorkflowId:   tv.WorkflowID(),
-		WorkflowType: tv.WorkflowType(),
-		TaskQueue:    tv.TaskQueue(),
-		Identity:     tv.ClientIdentity(),
+		WorkflowId:   env.Tv().WorkflowID(),
+		WorkflowType: env.Tv().WorkflowType(),
+		TaskQueue:    env.Tv().TaskQueue(),
+		Identity:     env.Tv().ClientIdentity(),
 		Priority: &commonpb.Priority{
 			PriorityKey: 2,
 		},
@@ -1141,7 +1139,7 @@ func testTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, ex
 	s.NoError(s.Rcv(workflowTaskErr))
 	s.NoError(s.Rcv(activityTaskErr))
 	// Filter recordings for our specific task queue to avoid interference from other activity.
-	tqName := tv.TaskQueue().GetName()
+	tqName := env.Tv().TaskQueue().GetName()
 	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {
 		return rec.Tags["taskqueue"] == tqName
 	})
@@ -1202,18 +1200,16 @@ func testTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, ex
 
 func testNexusTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 	s.T().Helper()
-	ctx := s.Context()
-	tv := env.Tv()
 
 	// Create a nexus endpoint targeting our task queue.
-	_, err := env.GetTestCluster().OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+	_, err := env.GetTestCluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: "nexus-" + uuid.New().String(),
 			Target: &nexuspb.EndpointTarget{
 				Variant: &nexuspb.EndpointTarget_Worker_{
 					Worker: &nexuspb.EndpointTarget_Worker{
 						Namespace: env.Namespace().String(),
-						TaskQueue: tv.TaskQueue().GetName(),
+						TaskQueue: env.Tv().TaskQueue().GetName(),
 					},
 				},
 			},
@@ -1227,7 +1223,7 @@ func testNexusTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 
 	// Start nexus task poller goroutine.
 	go func() {
-		_, err := env.TaskPoller().PollNexusTask(&workflowservice.PollNexusTaskQueueRequest{}).HandleTask(tv,
+		_, err := env.TaskPoller().PollNexusTask(&workflowservice.PollNexusTaskQueueRequest{}).HandleTask(env.Tv(),
 			func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
 				return &workflowservice.RespondNexusTaskCompletedRequest{}, nil
 			},
@@ -1241,7 +1237,7 @@ func testNexusTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: env.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     tv.TaskQueue().GetName(),
+					TaskQueue:     env.Tv().TaskQueue().GetName(),
 					TaskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS,
 				},
 				Versions:      &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
@@ -1259,7 +1255,7 @@ func testNexusTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 
 	// Build the DispatchNexusTask request. When forwarding is expected, target
 	// partition 11 directly via the RPC name so the child partition forwards to root.
-	tqName := tv.TaskQueue().GetName()
+	tqName := env.Tv().TaskQueue().GetName()
 	dispatchTQName := tqName
 	if expectedForwarded == "true" {
 		tqFamily, tqErr := tqid.NewTaskQueueFamily(env.NamespaceID().String(), tqName)
@@ -1268,7 +1264,7 @@ func testNexusTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 		dispatchTQName = nexusTQ.NormalPartition(11).RpcName()
 	}
 
-	_, err = env.GetTestCluster().MatchingClient().DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
+	_, err = env.GetTestCluster().MatchingClient().DispatchNexusTask(s.Context(), &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: env.NamespaceID().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: dispatchTQName,
@@ -1279,8 +1275,8 @@ func testNexusTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 			},
 			Variant: &nexuspb.Request_StartOperation{
 				StartOperation: &nexuspb.StartOperationRequest{
-					Service:   tv.Any().String(),
-					Operation: tv.Any().String(),
+					Service:   env.Tv().Any().String(),
+					Operation: env.Tv().Any().String(),
 				},
 			},
 		},
@@ -1321,14 +1317,12 @@ func testNexusTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 
 func testQueryTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 	s.T().Helper()
-	ctx := s.Context()
-	tv := env.Tv()
 
 	wftDone := make(chan error, 1)
 
 	// Poll and handle the initial workflow task to get the workflow running.
 	go func() {
-		_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv,
+		_, err := env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 			},
@@ -1342,7 +1336,7 @@ func testQueryTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: env.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     tv.TaskQueue().GetName(),
+					TaskQueue:     env.Tv().TaskQueue().GetName(),
 					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				},
 				Versions:      &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
@@ -1359,12 +1353,12 @@ func testQueryTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 	}, 10*time.Second, 50*time.Millisecond, "pollers did not arrive at root partition")
 
 	// Start workflow and wait for the initial WFT to be handled.
-	_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:    env.Namespace().String(),
-		WorkflowId:   tv.WorkflowID(),
-		WorkflowType: tv.WorkflowType(),
-		TaskQueue:    tv.TaskQueue(),
-		Identity:     tv.ClientIdentity(),
+		WorkflowId:   env.Tv().WorkflowID(),
+		WorkflowType: env.Tv().WorkflowType(),
+		TaskQueue:    env.Tv().TaskQueue(),
+		Identity:     env.Tv().ClientIdentity(),
 		Priority: &commonpb.Priority{
 			PriorityKey: 2,
 		},
@@ -1380,7 +1374,7 @@ func testQueryTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 	// Start query poller goroutine.
 	go func() {
 		_, err := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{}).
-			HandleLegacyQuery(tv,
+			HandleLegacyQuery(env.Tv(),
 				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
 					return &workflowservice.RespondQueryTaskCompletedRequest{
 						CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
@@ -1397,7 +1391,7 @@ func testQueryTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: env.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     tv.TaskQueue().GetName(),
+					TaskQueue:     env.Tv().TaskQueue().GetName(),
 					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				},
 				Versions:      &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
@@ -1414,16 +1408,16 @@ func testQueryTaskDispatchLatencyEmitted(s *TaskQueueSuite, env *testcore.TestEn
 	}, 10*time.Second, 50*time.Millisecond, "query poller did not arrive at root partition")
 
 	// Issue the query.
-	_, err = env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+	_, err = env.FrontendClient().QueryWorkflow(s.Context(), &workflowservice.QueryWorkflowRequest{
 		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+		Execution: &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID()},
 		Query:     &querypb.WorkflowQuery{QueryType: "test-query"},
 	})
 	s.NoError(err)
 
 	s.NoError(s.Rcv(queryDone))
 	// Filter recordings for our specific task queue.
-	tqName := tv.TaskQueue().GetName()
+	tqName := env.Tv().TaskQueue().GetName()
 	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {
 		return rec.Tags["taskqueue"] == tqName
 	})
