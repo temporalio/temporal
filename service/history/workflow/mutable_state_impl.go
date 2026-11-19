@@ -1565,9 +1565,10 @@ func (ms *MutableStateImpl) ClearStickyTaskQueueUnlessPartOfSession() bool {
 }
 
 // UpdateNonExclusiveWorkerBinding gives the workflow a non-exclusive binding to the worker that starts its workflow
-// task, and reports whether the binding changed. instanceKey is the starting worker's instance key.
-// previousWorkerQueue and previousStickyTimeout are captured before the start cleared stickiness. Any change of
-// binding reschedules pending session activities so they follow the worker.
+// task or one of its session activities, and reports whether the binding changed. instanceKey is the starting
+// worker's instance key. previousWorkerQueue and previousStickyTimeout are captured before the start cleared
+// stickiness. Any change of binding reschedules the pending workflow task and pending session activities so they
+// follow the worker.
 func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	options *sessionpb.WorkerSessionOptions,
 	instanceKey string,
@@ -1601,6 +1602,11 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	default:
 		// First bind, rebind after an unbind, or move to a new worker.
 		ms.bindNonExclusiveWorker(workerQueue, instanceKey, previousStickyTimeout)
+	}
+	// A workflow task start leaves nothing to reschedule here: its own task is already started. An activity start
+	// must not leave a copy of the pending workflow task on the previous worker, where it could move the session back.
+	if err := ms.reschedulePendingWorkflowTask(); err != nil {
+		return false, err
 	}
 	return true, ms.reschedulePendingActivities(activityRescheduleForSessionMove, 0)
 }
