@@ -68,6 +68,9 @@ enum TaskType {
 
   // A timer task that fires when an elapsed-duration time-skipping bound is reached.
   TASK_TYPE_TIMESKIPPING_TIMER = 36;
+
+  // An in-memory timer task that runs due tasks added by speculative CHASM transitions.
+  TASK_TYPE_CHASM_SPECULATIVE_TASK_WAKEUP = 37;
 }
 
 // TaskPriority is only used for replication task as of May 2024

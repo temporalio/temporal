@@ -68,6 +68,20 @@ func (m *MockShardContext) EXPECT() *MockShardContextMockRecorder {
 	return m.recorder
 }
 
+// AddSpeculativeChasmTaskWakeup mocks base method.
+func (m *MockShardContext) AddSpeculativeChasmTaskWakeup(task *tasks.ChasmSpeculativeTaskWakeupTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSpeculativeChasmTaskWakeup", task)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSpeculativeChasmTaskWakeup indicates an expected call of AddSpeculativeChasmTaskWakeup.
+func (mr *MockShardContextMockRecorder) AddSpeculativeChasmTaskWakeup(task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpeculativeChasmTaskWakeup", reflect.TypeOf((*MockShardContext)(nil).AddSpeculativeChasmTaskWakeup), task)
+}
+
 // AddSpeculativeWorkflowTaskTimeoutTask mocks base method.
 func (m *MockShardContext) AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error {
 	m.ctrl.T.Helper()
@@ -942,6 +956,20 @@ func NewMockControllableContext(ctrl *gomock.Controller) *MockControllableContex
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockControllableContext) EXPECT() *MockControllableContextMockRecorder {
 	return m.recorder
+}
+
+// AddSpeculativeChasmTaskWakeup mocks base method.
+func (m *MockControllableContext) AddSpeculativeChasmTaskWakeup(task *tasks.ChasmSpeculativeTaskWakeupTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSpeculativeChasmTaskWakeup", task)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSpeculativeChasmTaskWakeup indicates an expected call of AddSpeculativeChasmTaskWakeup.
+func (mr *MockControllableContextMockRecorder) AddSpeculativeChasmTaskWakeup(task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpeculativeChasmTaskWakeup", reflect.TypeOf((*MockControllableContext)(nil).AddSpeculativeChasmTaskWakeup), task)
 }
 
 // AddSpeculativeWorkflowTaskTimeoutTask mocks base method.

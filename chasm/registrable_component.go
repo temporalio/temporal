@@ -32,6 +32,19 @@ type (
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
 		contextValues map[any]any
+
+		speculativeOptions SpeculativeOptions
+	}
+
+	// SpeculativeOptions configures how an execution handles [WithSpeculative] transitions.
+	SpeculativeOptions struct {
+		// EnableTasks runs tasks added by a speculative transition from memory.
+		//
+		// Tasks run this way are best effort:
+		//   - They are lost with the cached execution.
+		//   - A failed side-effect task is retried once, then dropped.
+		//   - A task may run more than once.
+		EnableTasks bool
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -78,6 +91,19 @@ func WithDetached() RegistrableComponentOption {
 // IsDetached returns true if the component type is registered as detached.
 func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
+}
+
+// WithSpeculativeOptions sets how executions of this archetype handle speculative transitions. It
+// only has an effect on a component registered as the root of an execution.
+func WithSpeculativeOptions(options SpeculativeOptions) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.speculativeOptions = options
+	}
+}
+
+// SpeculativeOptions returns the options registered with [WithSpeculativeOptions].
+func (rc *RegistrableComponent) SpeculativeOptions() SpeculativeOptions {
+	return rc.speculativeOptions
 }
 
 // WithRecordPrincipals records, on the root component, the principal of the caller that

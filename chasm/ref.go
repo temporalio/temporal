@@ -54,6 +54,10 @@ type ComponentRef struct {
 	componentPath      []string
 	componentInitialVT *persistencespb.VersionedTransition
 
+	// inMemoryNode identifies a component that may not be persisted yet. When set, the ref
+	// resolves only while this node is still at componentPath.
+	inMemoryNode *Node
+
 	validationFn func(NodeBackend, Context, Component, *Registry) error
 }
 

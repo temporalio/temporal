@@ -279,6 +279,11 @@ func (b *readOnlyNodeBackend) AddTasks(...tasks.Task) {
 	b.unsupported("AddTasks")
 }
 
+func (b *readOnlyNodeBackend) AddSpeculativeTaskWakeup(time.Time) (*tasks.ChasmSpeculativeTaskWakeupTask, error) {
+	b.unsupported("AddSpeculativeTaskWakeup")
+	return nil, nil
+}
+
 func (b *readOnlyNodeBackend) DeletePhysicalCHASMPureTasks(time.Time) {
 	b.unsupported("DeletePhysicalCHASMPureTasks")
 }

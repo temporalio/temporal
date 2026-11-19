@@ -180,6 +180,7 @@ type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struc
 //     waiter can see state that is later lost.
 //   - Immediate pure tasks run. Other tasks added by the transition are created when it is persisted.
 //   - Ref returns ErrSpeculativeComponentRef for a component the transition created until it is persisted.
+//     UpdateComponent on such a component returns a nil ref.
 //   - Replication ignores states
 //
 // TODO: Add option to support all task.

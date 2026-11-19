@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -2861,4 +2862,198 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(resp.ExecutionErr,
 		"dedup branch must fire under accumulated skip via ToPhysicalTimeWithCurrentTimeSkippingOffset(heartbeatTimeoutVis); without it the executor would short-circuit with errNoTimerFired")
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) newChasmSpeculativeWakeupTest() (
+	*timerQueueActiveTaskExecutor,
+	*wcache.MockCache,
+	*tasks.ChasmSpeculativeTaskWakeupTask,
+) {
+	wakeup := &tasks.ChasmSpeculativeTaskWakeupTask{
+		WorkflowKey:         definition.NewWorkflowKey(s.namespaceID.String(), tests.WorkflowKey.WorkflowID, tests.WorkflowKey.RunID),
+		VisibilityTimestamp: s.now,
+		ArchetypeID:         tests.ArchetypeID,
+	}
+	mockCache := wcache.NewMockCache(s.controller)
+	//nolint:revive // unchecked-type-assertion
+	executor := newTimerQueueActiveTaskExecutor(
+		s.mockShard,
+		mockCache,
+		nil,
+		s.mockShard.GetLogger(),
+		metrics.NoopMetricsHandler,
+		s.config,
+		nil,
+		s.mockChasmEngine,
+	).(*timerQueueActiveTaskExecutor)
+	return executor, mockCache, wakeup
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) expectChasmSpeculativeWakeupLoad(
+	mockCache *wcache.MockCache,
+	wfCtx historyi.WorkflowContext,
+) *gomock.Call {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowKey.WorkflowID,
+		RunId:      tests.WorkflowKey.RunID,
+	}
+	return mockCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, locks.PriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmSpeculativeWakeup_NotCached() {
+	executor, mockCache, wakeup := s.newChasmSpeculativeWakeupTest()
+	// A context with no mutable state means the execution is not cached; nothing is loaded.
+	wfCtx := workflow.NewContext(
+		s.config,
+		wakeup.WorkflowKey,
+		tests.ArchetypeID,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetThrottledLogger(),
+		metrics.NoopMetricsHandler,
+		nil,
+		testhooks.TestHooks{},
+	)
+	s.expectChasmSpeculativeWakeupLoad(mockCache, wfCtx).Times(1)
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+	s.Nil(wfCtx.MutableState)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmSpeculativeWakeup_NamespaceNotActive() {
+	executor, _, wakeup := s.newChasmSpeculativeWakeupTest()
+	// The mock cache has no expectations, so loading the execution fails the test.
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(s.namespaceID).Return(tests.GlobalStandbyNamespaceEntry, nil).Times(1)
+	executor.registry = registry
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmSpeculativeWakeup_NothingDue() {
+	executor, mockCache, wakeup := s.newChasmSpeculativeWakeupTest()
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).Times(1)
+	s.expectChasmSpeculativeWakeupLoad(mockCache, wfCtx).Times(1)
+
+	chasmTree.EXPECT().RunSpeculativeTaskWakeup(gomock.Any(), wakeup, s.now).Return(chasm.SpeculativeWakeupResult{}, nil)
+	chasmTree.EXPECT().ArmSpeculativeTaskWakeup().Return(nil)
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmSpeculativeWakeup_RunsPureAndSideEffect() {
+	executor, mockCache, wakeup := s.newChasmSpeculativeWakeupTest()
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).Times(1)
+	s.expectChasmSpeculativeWakeupLoad(mockCache, wfCtx).Times(1)
+
+	sideEffectTask := chasm.SpeculativeTask{}
+	gomock.InOrder(
+		chasmTree.EXPECT().RunSpeculativeTaskWakeup(gomock.Any(), wakeup, s.now).Return(chasm.SpeculativeWakeupResult{
+			SideEffectTasks: []chasm.SpeculativeTask{sideEffectTask},
+			PureTasksRan:    true,
+			Decision:        chasm.TransitionDecision{NotifyPollers: true},
+		}, nil),
+		ms.EXPECT().ValidateChasmSpeculativeTransition().Return(nil),
+		s.mockChasmEngine.EXPECT().NotifyExecution(chasm.ExecutionKey{
+			NamespaceID: wakeup.NamespaceID,
+			BusinessID:  wakeup.WorkflowID,
+			RunID:       wakeup.RunID,
+		}),
+		chasmTree.EXPECT().ArmSpeculativeTaskWakeup().Return(nil),
+		chasmTree.EXPECT().ExecuteSpeculativeSideEffectTask(gomock.Any(), gomock.Any(), sideEffectTask, gomock.Any()).Return(nil),
+	)
+	// The pure task's changes stay in memory.
+	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any()).Times(0)
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmSpeculativeWakeup_PersistNow() {
+	executor, mockCache, wakeup := s.newChasmSpeculativeWakeupTest()
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).Times(1)
+	s.expectChasmSpeculativeWakeupLoad(mockCache, wfCtx).Times(1)
+
+	chasmTree.EXPECT().RunSpeculativeTaskWakeup(gomock.Any(), wakeup, s.now).Return(chasm.SpeculativeWakeupResult{
+		PureTasksRan: true,
+		Decision:     chasm.TransitionDecision{PersistNow: true, NotifyPollers: true},
+	}, nil)
+	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.mockShard).Return(nil).Times(1)
+	chasmTree.EXPECT().ArmSpeculativeTaskWakeup().Return(nil)
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmSpeculativeWakeup_RequeuesFailedSideEffect() {
+	executor, mockCache, wakeup := s.newChasmSpeculativeWakeupTest()
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).Times(2)
+	s.expectChasmSpeculativeWakeupLoad(mockCache, wfCtx).Times(2)
+
+	sideEffectTask := chasm.SpeculativeTask{}
+	gomock.InOrder(
+		chasmTree.EXPECT().RunSpeculativeTaskWakeup(gomock.Any(), wakeup, s.now).Return(chasm.SpeculativeWakeupResult{
+			SideEffectTasks: []chasm.SpeculativeTask{sideEffectTask},
+		}, nil),
+		chasmTree.EXPECT().ArmSpeculativeTaskWakeup().Return(nil),
+		chasmTree.EXPECT().ExecuteSpeculativeSideEffectTask(gomock.Any(), gomock.Any(), sideEffectTask, gomock.Any()).
+			Return(errors.New("handler failed")),
+		chasmTree.EXPECT().RequeueSpeculativeTask(sideEffectTask, s.now.Add(chasmSpeculativeTaskRetryDelay)).Return(true),
+		chasmTree.EXPECT().ArmSpeculativeTaskWakeup().Return(nil),
+	)
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmSpeculativeWakeup_DropsFailedSideEffectAfterReload() {
+	executor, mockCache, wakeup := s.newChasmSpeculativeWakeupTest()
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	reloadedTree := historyi.NewMockChasmTree(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	reloadedMS := historyi.NewMockMutableState(s.controller)
+	reloadedMS.EXPECT().ChasmTree().Return(reloadedTree).AnyTimes()
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	gomock.InOrder(
+		wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil),
+		wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(reloadedMS, nil),
+	)
+	s.expectChasmSpeculativeWakeupLoad(mockCache, wfCtx).Times(2)
+
+	chasmTree.EXPECT().RunSpeculativeTaskWakeup(gomock.Any(), wakeup, s.now).Return(chasm.SpeculativeWakeupResult{
+		SideEffectTasks: []chasm.SpeculativeTask{{}},
+	}, nil)
+	chasmTree.EXPECT().ArmSpeculativeTaskWakeup().Return(nil)
+	chasmTree.EXPECT().ExecuteSpeculativeSideEffectTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(errors.New("handler failed"))
+	// The reloaded tree has none of the taken tasks, so nothing is requeued or armed on it.
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
 }

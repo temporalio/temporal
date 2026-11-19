@@ -109,6 +109,31 @@ func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 	return nil
 }
 
+func (*noopChasmTree) RunSpeculativeTaskWakeup(
+	context.Context,
+	*tasks.ChasmSpeculativeTaskWakeupTask,
+	time.Time,
+) (chasm.SpeculativeWakeupResult, error) {
+	return chasm.SpeculativeWakeupResult{}, nil
+}
+
+func (*noopChasmTree) ArmSpeculativeTaskWakeup() error {
+	return nil
+}
+
+func (*noopChasmTree) ExecuteSpeculativeSideEffectTask(
+	context.Context,
+	chasm.ExecutionKey,
+	chasm.SpeculativeTask,
+	func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+) error {
+	return nil
+}
+
+func (*noopChasmTree) RequeueSpeculativeTask(chasm.SpeculativeTask, time.Time) bool {
+	return false
+}
+
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,

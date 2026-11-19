@@ -66,6 +66,11 @@ type chasmEngineSuite struct {
 	archetypeID    chasm.ArchetypeID
 
 	engine *ChasmEngine
+
+	sideEffectTaskHandler *testSideEffectTaskHandler
+	childTaskHandler      *testChildTaskHandler
+	// speculativeWakeups records wake-ups sent to the history engine.
+	speculativeWakeups []*tasks.ChasmSpeculativeTaskWakeupTask
 }
 
 func TestChasmEngineSuite(t *testing.T) {
@@ -118,7 +123,12 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.registry = chasm.NewRegistry(s.mockShard.GetLogger())
-	err = s.registry.Register(&testChasmLibrary{})
+	s.sideEffectTaskHandler = &testSideEffectTaskHandler{}
+	s.childTaskHandler = &testChildTaskHandler{}
+	err = s.registry.Register(&testChasmLibrary{
+		sideEffectTaskHandler: s.sideEffectTaskHandler,
+		childTaskHandler:      s.childTaskHandler,
+	})
 	s.NoError(err)
 	s.mockShard.SetChasmRegistry(s.registry)
 
@@ -127,7 +137,14 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.True(ok)
 
 	s.mockShard.SetEngineForTesting(s.mockEngine)
-	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.speculativeWakeups = nil
+	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).Do(func(byCategory map[tasks.Category][]tasks.Task) {
+		for _, task := range byCategory[tasks.CategoryMemoryTimer] {
+			if wakeup, ok := task.(*tasks.ChasmSpeculativeTaskWakeupTask); ok {
+				s.speculativeWakeups = append(s.speculativeWakeups, wakeup)
+			}
+		}
+	}).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
 	s.engine = newChasmEngine(
@@ -1677,6 +1694,104 @@ func (s *chasmEngineSuite) TestUpdateComponent_Speculative_TasksDeferredToNextWr
 	s.Len(chasmTasks, 1)
 }
 
+func (s *chasmEngineSuite) addSideEffectTaskSpeculatively(ref chasm.ComponentRef, data string) {
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			ctx.AddTask(component, chasm.TaskAttributes{}, &commonpb.Payload{Data: []byte(data)})
+			return nil
+		}, chasm.WithSpeculative())
+	s.NoError(err)
+}
+
+func (s *chasmEngineSuite) runSpeculativeWakeup(wakeup *tasks.ChasmSpeculativeTaskWakeupTask) {
+	//nolint:revive // unchecked-type-assertion
+	executor := newTimerQueueActiveTaskExecutor(
+		s.mockShard,
+		s.executionCache,
+		nil,
+		s.mockShard.GetLogger(),
+		metrics.NoopMetricsHandler,
+		s.config,
+		nil,
+		s.engine,
+	).(*timerQueueActiveTaskExecutor)
+	s.NoError(executor.executeChasmSpeculativeTaskWakeup(context.Background(), wakeup))
+}
+
+func (s *chasmEngineSuite) TestSpeculativeUpdate_ArmsWakeupForOptedInComponent() {
+	ref := s.loadRunningTestExecution(1)
+
+	s.addSideEffectTaskSpeculatively(ref, "speculative")
+
+	s.Require().Len(s.speculativeWakeups, 1)
+	wakeup := (s.speculativeWakeups)[0]
+	s.Equal(ref.BusinessID, wakeup.WorkflowID)
+	s.Equal(ref.RunID, wakeup.RunID)
+	s.Equal(s.archetypeID, chasm.ArchetypeID(wakeup.ArchetypeID))
+	s.NotZero(wakeup.TaskID)
+}
+
+func (s *chasmEngineSuite) TestSpeculativeUpdate_NoWakeupWithoutOptIn() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	ref := chasm.NewComponentRef[*testComponentNoMetadata](chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	})
+	noOptInTypeID, ok := s.registry.ComponentIDFor(&testComponentNoMetadata{})
+	s.True(ok)
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+			state := s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil)
+			state.ChasmNodes[""].Metadata.GetComponentAttributes().TypeId = noOptInTypeID
+			return &persistence.GetWorkflowExecutionResponse{State: state}, nil
+		}).Times(1)
+
+	s.addSideEffectTaskSpeculatively(ref, "speculative")
+
+	s.Empty(s.speculativeWakeups)
+}
+
+func (s *chasmEngineSuite) TestSpeculativeUpdate_WakeupRunsSideEffect() {
+	ref := s.loadRunningTestExecution(1)
+	s.addSideEffectTaskSpeculatively(ref, "speculative")
+	s.Require().Len(s.speculativeWakeups, 1)
+
+	var executed []string
+	s.sideEffectTaskHandler.executeFn = func(ctx context.Context, taskRef chasm.ComponentRef, payload *commonpb.Payload) error {
+		executed = append(executed, string(payload.Data))
+		// The in-memory ref resolves through the engine without the execution lock held.
+		return s.engine.ReadComponent(ctx, taskRef, func(chasm.Context, chasm.Component) error { return nil })
+	}
+
+	s.runSpeculativeWakeup((s.speculativeWakeups)[0])
+	s.Equal([]string{"speculative"}, executed)
+
+	// The task was taken; firing the same wake-up again runs nothing.
+	s.runSpeculativeWakeup((s.speculativeWakeups)[0])
+	s.Equal([]string{"speculative"}, executed)
+}
+
+func (s *chasmEngineSuite) TestSpeculativeUpdate_NormalWriteThenStaleWakeup() {
+	ref := s.loadRunningTestExecution(1)
+	s.addSideEffectTaskSpeculatively(ref, "speculative")
+	s.Require().Len(s.speculativeWakeups, 1)
+
+	// A normal write persists the speculative task as a regular CHASM task.
+	s.expectPersistedActivityInfo(ref, &persistencespb.ActivityInfo{})
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		func(chasm.MutableContext, chasm.Component) error { return nil })
+	s.NoError(err)
+
+	s.sideEffectTaskHandler.executeFn = func(context.Context, chasm.ComponentRef, *commonpb.Payload) error {
+		s.Fail("persisted task must not also run from memory")
+		return nil
+	}
+	s.runSpeculativeWakeup((s.speculativeWakeups)[0])
+}
+
 func (s *chasmEngineSuite) TestUpdateComponent_Speculative_RefUsable() {
 	ref := s.loadRunningTestExecution(1)
 
@@ -1695,6 +1810,45 @@ func (s *chasmEngineSuite) TestUpdateComponent_Speculative_RefUsable() {
 	s.NoError(err)
 	s.Equal("a", persisted.ActivityId)
 	s.Equal("b", persisted.TaskQueue)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_UnsavedChildNilRef() {
+	ref := s.loadRunningTestExecution(1)
+
+	// A speculative transition creates a child with a side-effect task.
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			child := &testChildComponent{ActivityInfo: &persistencespb.ActivityInfo{}}
+			component.(*testComponent).Child = chasm.NewComponentField(ctx, child)
+			ctx.AddTask(child, chasm.TaskAttributes{}, &commonpb.Memo{})
+			return nil
+		}, chasm.WithSpeculative())
+	s.NoError(err)
+	s.Require().Len(s.speculativeWakeups, 1)
+
+	// The task updates its own unsaved child through the in-memory ref.
+	var executed int
+	var childRef []byte
+	var updateErr error
+	s.childTaskHandler.executeFn = func(ctx context.Context, taskRef chasm.ComponentRef) error {
+		executed++
+		childRef, updateErr = s.engine.UpdateComponent(ctx, taskRef,
+			func(_ chasm.MutableContext, component chasm.Component) error {
+				component.(*testChildComponent).ActivityInfo.ActivityId = "updated"
+				return nil
+			}, chasm.WithSpeculative())
+		return updateErr
+	}
+	s.runSpeculativeWakeup(s.speculativeWakeups[0])
+
+	s.NoError(updateErr)
+	s.Nil(childRef)
+	s.Equal(1, executed)
+	s.NoError(s.engine.ReadComponent(context.Background(), ref, func(ctx chasm.Context, component chasm.Component) error {
+		child := component.(*testComponent).Child.Get(ctx)
+		s.Equal("updated", child.ActivityInfo.GetActivityId())
+		return nil
+	}))
 }
 
 func (s *chasmEngineSuite) TestUpdateComponent_Speculative_CloseIsPersisted() {
@@ -3766,6 +3920,17 @@ type testComponent struct {
 	chasm.UnimplementedComponent
 
 	ActivityInfo *persistencespb.ActivityInfo
+	Child        chasm.Field[*testChildComponent]
+}
+
+type testChildComponent struct {
+	chasm.UnimplementedComponent
+
+	ActivityInfo *persistencespb.ActivityInfo
+}
+
+func (c *testChildComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
 }
 
 func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
@@ -3838,6 +4003,9 @@ func newTestComponentStateBlob(info *persistencespb.ActivityInfo) *commonpb.Data
 
 type testChasmLibrary struct {
 	chasm.UnimplementedLibrary
+
+	sideEffectTaskHandler *testSideEffectTaskHandler
+	childTaskHandler      *testChildTaskHandler
 }
 
 func (l *testChasmLibrary) Name() string {
@@ -3848,26 +4016,63 @@ func (l *testChasmLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*testComponent]("test_component",
 			chasm.WithSearchAttributes(testComponentPausedSearchAttribute),
-			chasm.WithRecordPrincipals()),
+			chasm.WithRecordPrincipals(),
+			chasm.WithSpeculativeOptions(chasm.SpeculativeOptions{EnableTasks: true})),
 		chasm.NewRegistrableComponent[*testComponentNoMetadata]("test_component_no_metadata"),
+		chasm.NewRegistrableComponent[*testChildComponent]("test_child_component"),
 	}
 }
 
 func (l *testChasmLibrary) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
-		chasm.NewRegistrableSideEffectTask("test_side_effect", &testSideEffectTaskHandler{}),
+		chasm.NewRegistrableSideEffectTask("test_side_effect", l.sideEffectTaskHandler),
+		chasm.NewRegistrableSideEffectTask("test_child_side_effect", l.childTaskHandler),
 	}
 }
 
 type testSideEffectTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*commonpb.Payload]
+
+	// executeFn, when set, runs in Execute.
+	executeFn func(context.Context, chasm.ComponentRef, *commonpb.Payload) error
 }
 
 func (h *testSideEffectTaskHandler) Validate(chasm.Context, *testComponent, chasm.TaskInvocation, *commonpb.Payload) (bool, error) {
 	return true, nil
 }
 
-func (h *testSideEffectTaskHandler) Execute(context.Context, chasm.ComponentRef, chasm.TaskAttributes, *commonpb.Payload) error {
+func (h *testSideEffectTaskHandler) Execute(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	_ chasm.TaskAttributes,
+	payload *commonpb.Payload,
+) error {
+	if h.executeFn != nil {
+		return h.executeFn(ctx, ref, payload)
+	}
+	return nil
+}
+
+type testChildTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*commonpb.Memo]
+
+	// executeFn, when set, runs in Execute.
+	executeFn func(context.Context, chasm.ComponentRef) error
+}
+
+func (h *testChildTaskHandler) Validate(chasm.Context, *testChildComponent, chasm.TaskInvocation, *commonpb.Memo) (bool, error) {
+	return true, nil
+}
+
+func (h *testChildTaskHandler) Execute(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	_ chasm.TaskAttributes,
+	_ *commonpb.Memo,
+) error {
+	if h.executeFn != nil {
+		return h.executeFn(ctx, ref)
+	}
 	return nil
 }
 
