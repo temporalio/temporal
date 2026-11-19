@@ -7,9 +7,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -651,6 +653,62 @@ func (s *subscriptionSuite) TestSubscriptionGlobal() {
 	// no update should be delivered
 	time.Sleep(10 * time.Millisecond)
 	s.Empty(vals, "should not deliver update")
+}
+
+func (s *subscriptionSuite) TestSubscriptionDeliveryOrder() {
+	for _, tc := range []struct {
+		name    string
+		setting interface {
+			Key() dynamicconfig.Key
+			Subscribe(*dynamicconfig.Collection) dynamicconfig.TypedSubscribable[int]
+		}
+	}{
+		{
+			name:    "regular default",
+			setting: dynamicconfig.NewGlobalIntSetting("deliveryOrder", 0, ""),
+		},
+		{
+			name: "constrained default",
+			setting: dynamicconfig.NewGlobalIntSettingWithConstrainedDefault(
+				"deliveryOrderConstrained",
+				[]dynamicconfig.TypedConstrainedValue[int]{{Value: 0}},
+				"",
+			),
+		},
+	} {
+		s.Run(tc.name, func() {
+			synctest.Test(s.T(), func(t *testing.T) {
+				const updates = 8
+				release := make(chan struct{})
+				vals := make(chan int, updates)
+				_, cancel := tc.setting.Subscribe(s.cln)(func(v int) {
+					if v == 1 {
+						<-release
+					}
+					vals <- v
+				})
+				defer cancel()
+
+				key := tc.setting.Key().String()
+				s.client.SetValue(key, 1)
+				synctest.Wait() // The first callback is blocked.
+
+				for v := 2; v <= updates; v++ {
+					s.client.SetValue(key, v)
+				}
+				synctest.Wait()
+				close(release)
+				synctest.Wait()
+
+				close(vals)
+				var observed []int
+				for v := range vals {
+					observed = append(observed, v)
+				}
+				require.Equal(t, []int{1, updates}, observed)
+			})
+		})
+	}
 }
 
 func (s *subscriptionSuite) TestSubscriptionGlobal_DoesNotCallUnchanged() {
