@@ -23,7 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/retrypolicy"
-	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/testx/await"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -354,8 +354,6 @@ func (a *activityDriverState) driverState() *activityDriverState {
 // drivenActivity is what the shared event driver needs from either implementation.
 type drivenActivity interface {
 	driverState() *activityDriverState
-	// testContext returns the driver's current test context, fetched fresh per
-	// call rather than cached, so a later timeout extension is visible.
 	testContext() context.Context
 	pollForTask(require.TestingT, time.Duration) *workflowservice.PollActivityTaskQueueResponse
 	awaitDispatchDelay(testing.TB, model.Event)
