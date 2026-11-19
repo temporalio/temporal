@@ -127,7 +127,7 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster := env.GetTestCluster()
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
-	cluster.OverrideDynamicConfig(s.T(), activity.StandaloneAsyncHandoffEnabled, nsValues(true))
+	cluster.OverrideDynamicConfig(s.T(), activity.StandaloneHandoffEnabled, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
@@ -15699,7 +15699,7 @@ func (env *standaloneActivityEnv) pollWorkerCommand(
 	return &executeReq
 }
 
-func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
+func (s *standaloneActivityTestSuite) TestHandoff() {
 	s.Run("DisableHandoffAfterRecording", func(s *standaloneActivityTestSuite) {
 		env := s.newTestEnv()
 		t := s.T()
@@ -15728,7 +15728,7 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
 		require.NoError(t, err)
 
-		env.OverrideDynamicConfig(activity.StandaloneAsyncHandoffEnabled, false)
+		env.OverrideDynamicConfig(activity.StandaloneHandoffEnabled, false)
 
 		// Disabled admission rejects opted-in Start requests before deduplication or USE_EXISTING.
 		for _, testCase := range []struct {
@@ -15769,7 +15769,7 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, response.GetInfo().GetStatus())
 	})
 
-	// TODO remove when WFA async handoff is supported
+	// TODO remove when WFA handoff is supported
 	s.Run("RejectWorkflowActivityHandoff", func(s *standaloneActivityTestSuite) {
 		env := s.newTestEnv()
 		t := s.T()
@@ -15796,7 +15796,7 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 		require.NoError(t, err)
 
 		// The flag cannot enable updates until the workflow activity path persists handoff options.
-		env.OverrideDynamicConfig(activity.WorkflowAsyncHandoffEnabled, true)
+		env.OverrideDynamicConfig(activity.WorkflowHandoffEnabled, true)
 
 		// Neither workflow update API may opt an activity into the standalone-only feature.
 		for _, path := range []string{"handoff_options", "handoffOptions.heartbeatTimeout"} {

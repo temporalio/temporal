@@ -728,7 +728,7 @@ func (a *Activity) applyUnpaused(
 // It handles both active attempts and start-to-close expiry during handoff retry backoff or queue wait.
 func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
-	nextActivityAttempt, nextHandoffAttempt, err := nextRetryCounts(a.GetHandoffOptions() != nil, event.retryType, attempt.GetCount(), attempt.GetAsyncHandoffState().GetCount())
+	nextActivityAttempt, nextHandoffAttempt, err := nextRetryCounts(a.GetHandoffOptions() != nil, event.retryType, attempt.GetCount(), attempt.GetHandoffState().GetCount())
 	if err != nil {
 		return err
 	}
@@ -737,7 +737,7 @@ func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event reschedule
 	attempt.Stamp++
 	attempt.PendingRetryType = event.retryType
 	if a.GetHandoffOptions() != nil {
-		attempt.AsyncHandoffState.Count = nextHandoffAttempt
+		attempt.HandoffState.Count = nextHandoffAttempt
 	}
 
 	return a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false)

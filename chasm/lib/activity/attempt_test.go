@@ -435,11 +435,11 @@ func TestHandoffRetryPolicySelection(t *testing.T) {
 			expected.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{Failure: event.failure, Time: expected.CompleteTime}
 			if testCase.expectedType == activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY {
 				expected.Count++
-				expected.AsyncHandoffState.Count = 1
-				expected.AsyncHandoffState.StartToCloseStartedTime = nil
-				expected.AsyncHandoffState.StartToCloseStamp++
+				expected.HandoffState.Count = 1
+				expected.HandoffState.StartToCloseStartedTime = nil
+				expected.HandoffState.StartToCloseStamp++
 			} else {
-				expected.AsyncHandoffState.Count++
+				expected.HandoffState.Count++
 			}
 
 			expected.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
@@ -634,7 +634,7 @@ func TestHandoffRetryOperatorPrecedence(t *testing.T) {
 			if testCase.expectedStatus == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 				// A pending reset still applies to a non-retryable failure.
 				require.EqualValues(t, 1, a.LastAttempt.Get(ctx).GetCount())
-				require.Nil(t, a.LastAttempt.Get(ctx).GetAsyncHandoffState().GetStartToCloseStartedTime())
+				require.Nil(t, a.LastAttempt.Get(ctx).GetHandoffState().GetStartToCloseStartedTime())
 				require.NotEmpty(t, ctx.Tasks)
 			} else {
 				// Exhausting retries leaves the pause request pending.
@@ -681,7 +681,7 @@ func newHandoffRetryTestActivity(t *testing.T) (*Activity, *chasm.MockMutableCon
 			Stamp:        7,
 			StartedStamp: 7,
 			StartedTime:  timestamppb.New(defaultTime),
-			AsyncHandoffState: &activitypb.ActivityAttemptState_AsyncHandoffState{
+			HandoffState: &activitypb.ActivityAttemptState_HandoffState{
 				Count:                   2,
 				StartToCloseStartedTime: timestamppb.New(defaultTime),
 				StartToCloseStamp:       4,

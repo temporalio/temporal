@@ -14,13 +14,13 @@ var (
 		`Toggles standalone activity functionality on the server.`,
 	)
 
-	StandaloneAsyncHandoffEnabled = dynamicconfig.NewNamespaceBoolSetting(
+	StandaloneHandoffEnabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.standaloneAsyncHandoffEnabled",
 		false,
 		`Enables standalone activity handoff reporting and handoff options.`,
 	)
 
-	WorkflowAsyncHandoffEnabled = dynamicconfig.NewNamespaceBoolSetting(
+	WorkflowHandoffEnabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.workflowAsyncHandoffEnabled",
 		false,
 		`Enables workflow activity handoff reporting and handoff options.`,
@@ -91,10 +91,10 @@ type Config struct {
 	MaxUserMetadataDetailsSize                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataSummarySize                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
-	StandaloneAsyncHandoffEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	StandaloneHandoffEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	StartDelayEnabled                         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowAsyncHandoffEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowHandoffEnabled                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -116,9 +116,9 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxUserMetadataDetailsSize:                dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
-		StandaloneAsyncHandoffEnabled:             StandaloneAsyncHandoffEnabled.Get(dc),
+		StandaloneHandoffEnabled:                  StandaloneHandoffEnabled.Get(dc),
 		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
 		VisibilityMaxPageSize:                     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		WorkflowAsyncHandoffEnabled:               WorkflowAsyncHandoffEnabled.Get(dc),
+		WorkflowHandoffEnabled:                    WorkflowHandoffEnabled.Get(dc),
 	}
 }

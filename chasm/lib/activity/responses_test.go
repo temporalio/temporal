@@ -118,11 +118,11 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 			Priority:               priority,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
-			Count:             1,
-			AsyncHandoffState: &activitypb.ActivityAttemptState_AsyncHandoffState{Count: 1},
-			StartRequestId:    "request-id",
-			StartedTime:       startedTime,
-			DispatchTime:      dispatchTime,
+			Count:          1,
+			HandoffState:   &activitypb.ActivityAttemptState_HandoffState{Count: 1},
+			StartRequestId: "request-id",
+			StartedTime:    startedTime,
+			DispatchTime:   dispatchTime,
 		}),
 		LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{Details: heartbeatDetails}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
@@ -152,7 +152,7 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	heartbeatTimeout.Seconds++
 	retryPolicy.MaximumAttempts++
 	handoffOptions.StartToHandoffTimeout.Seconds++
-	activity.LastAttempt.Get(ctx).AsyncHandoffState.Count++
+	activity.LastAttempt.Get(ctx).HandoffState.Count++
 	priority.PriorityKey++
 	propagatedNexusSerializationContext.Endpoint = "changed-endpoint"
 
@@ -295,7 +295,7 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 			}
 			attempt := &activitypb.ActivityAttemptState{Count: 3}
 			if tc.options != nil || tc.awaiting {
-				attempt.AsyncHandoffState = &activitypb.ActivityAttemptState_AsyncHandoffState{Count: 2}
+				attempt.HandoffState = &activitypb.ActivityAttemptState_HandoffState{Count: 2}
 			}
 
 			a := &Activity{
@@ -303,7 +303,7 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 					Status:             tc.status,
 					ResetShouldPause:   tc.keepPaused,
 					AwaitingCompletion: tc.awaiting,
-					AsyncHandoffTime:   handoffTime,
+					HandoffTime:        handoffTime,
 					HandoffOptions:     tc.options,
 					ScheduleTime:       timestamppb.New(defaultTime),
 				},

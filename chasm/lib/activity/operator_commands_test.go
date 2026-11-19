@@ -794,7 +794,7 @@ func TestHandoffTimeoutUpdates(t *testing.T) {
 			a.HeartbeatTimeout = durationpb.New(30 * time.Second)
 			a.AwaitingCompletion = testCase.handedOff
 			if testCase.handedOff {
-				a.AsyncHandoffTime = timestamppb.New(defaultTime.Add(20 * time.Second))
+				a.HandoffTime = timestamppb.New(defaultTime.Add(20 * time.Second))
 				ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime.Add(40 * time.Second) }
 			}
 
@@ -807,7 +807,7 @@ func TestHandoffTimeoutUpdates(t *testing.T) {
 			before := common.CloneProto(attempt)
 			heartbeatStartedAt := before.GetStartedTime().AsTime()
 			if testCase.handedOff {
-				heartbeatStartedAt = a.GetAsyncHandoffTime().AsTime()
+				heartbeatStartedAt = a.GetHandoffTime().AsTime()
 			}
 
 			ctx.Tasks = nil
@@ -835,10 +835,10 @@ func TestHandoffTimeoutUpdates(t *testing.T) {
 			require.NotNil(t, response.GetFrontendResponse().GetActivityOptions().GetHandoffOptions())
 			protorequire.ProtoEqual(t, expectedRetryPolicy, a.GetHandoffOptions().GetRetryPolicy())
 			require.Equal(t, before.GetCount(), attempt.GetCount())
-			require.Equal(t, before.GetAsyncHandoffState().GetCount(), attempt.GetAsyncHandoffState().GetCount())
-			protorequire.ProtoEqual(t, before.GetAsyncHandoffState().GetStartToCloseStartedTime(), attempt.GetAsyncHandoffState().GetStartToCloseStartedTime())
+			require.Equal(t, before.GetHandoffState().GetCount(), attempt.GetHandoffState().GetCount())
+			protorequire.ProtoEqual(t, before.GetHandoffState().GetStartToCloseStartedTime(), attempt.GetHandoffState().GetStartToCloseStartedTime())
 			require.Equal(t, before.GetStartedStamp(), attempt.GetStartedStamp())
-			require.Equal(t, before.GetAsyncHandoffState().GetStartToCloseStamp()+1, attempt.GetAsyncHandoffState().GetStartToCloseStamp())
+			require.Equal(t, before.GetHandoffState().GetStartToCloseStamp()+1, attempt.GetHandoffState().GetStartToCloseStamp())
 
 			var budget, heartbeat, phase time.Time
 			for _, task := range ctx.Tasks {
@@ -855,7 +855,7 @@ func TestHandoffTimeoutUpdates(t *testing.T) {
 			}
 
 			if testCase.expectedBudget > 0 {
-				require.Equal(t, before.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime().Add(testCase.expectedBudget), budget)
+				require.Equal(t, before.GetHandoffState().GetStartToCloseStartedTime().AsTime().Add(testCase.expectedBudget), budget)
 			} else {
 				require.True(t, budget.IsZero())
 			}
@@ -880,7 +880,7 @@ func TestHandoffTimeoutUpdates(t *testing.T) {
 				require.False(t, valid, "the old delivery generation must not enforce edited phase timeouts")
 			}
 
-			valid, err := newHandoffStartToCloseTimeoutTaskHandler().Validate(ctx, a, chasm.TaskInvocation{}, &activitypb.HandoffStartToCloseTimeoutTask{Stamp: before.GetAsyncHandoffState().GetStartToCloseStamp()})
+			valid, err := newHandoffStartToCloseTimeoutTaskHandler().Validate(ctx, a, chasm.TaskInvocation{}, &activitypb.HandoffStartToCloseTimeoutTask{Stamp: before.GetHandoffState().GetStartToCloseStamp()})
 			require.NoError(t, err)
 			require.False(t, valid)
 		})
@@ -909,7 +909,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			options: &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{}},
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.HandoffOptions = nil
-				a.LastAttempt.Get(ctx).AsyncHandoffState = nil
+				a.LastAttempt.Get(ctx).HandoffState = nil
 			},
 		},
 		{
@@ -917,9 +917,9 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			options: &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{StartToHandoffTimeout: durationpb.New(5 * time.Second), HandoffToCloseTimeout: durationpb.New(120 * time.Second)}},
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.HandoffOptions = nil
-				a.LastAttempt.Get(ctx).AsyncHandoffState = nil
+				a.LastAttempt.Get(ctx).HandoffState = nil
 				a.AwaitingCompletion = true
-				a.AsyncHandoffTime = timestamppb.New(defaultTime.Add(10 * time.Second))
+				a.HandoffTime = timestamppb.New(defaultTime.Add(10 * time.Second))
 				ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime.Add(60 * time.Second) }
 			},
 		},
@@ -931,7 +931,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 				a.LastAttempt.Get(ctx).StartedTime = timestamppb.New(defaultTime.Add(5 * time.Second))
 				a.HeartbeatTimeout = durationpb.New(20 * time.Second)
 				a.AwaitingCompletion = true
-				a.AsyncHandoffTime = timestamppb.New(defaultTime.Add(7 * time.Second))
+				a.HandoffTime = timestamppb.New(defaultTime.Add(7 * time.Second))
 			},
 		},
 
@@ -949,8 +949,8 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
 				attempt := a.LastAttempt.Get(ctx)
-				attempt.AsyncHandoffState.Count = 1
-				attempt.AsyncHandoffState.StartToCloseStartedTime = nil
+				attempt.HandoffState.Count = 1
+				attempt.HandoffState.StartToCloseStartedTime = nil
 				attempt.PendingRetryType = activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY
 				attempt.CurrentRetryInterval = durationpb.New(time.Second)
 			},
@@ -959,7 +959,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			name: "missing running clock rejects update atomically", paths: []string{"handoff_options"}, invalidState: true,
 			options: &apiactivitypb.ActivityOptions{},
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
-				a.LastAttempt.Get(ctx).AsyncHandoffState.StartToCloseStartedTime = nil
+				a.LastAttempt.Get(ctx).HandoffState.StartToCloseStartedTime = nil
 			},
 		},
 		{
@@ -968,7 +968,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			setup: func(a *Activity, _ *chasm.MockMutableContext) {
 				a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
 				a.AwaitingCompletion = true
-				a.AsyncHandoffTime = timestamppb.New(defaultTime.Add(time.Second))
+				a.HandoffTime = timestamppb.New(defaultTime.Add(time.Second))
 			},
 		},
 		{
@@ -976,9 +976,9 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			options: &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{}},
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
-				a.AsyncHandoffTime = timestamppb.New(defaultTime.Add(time.Second))
+				a.HandoffTime = timestamppb.New(defaultTime.Add(time.Second))
 				a.HandoffOptions = nil
-				a.LastAttempt.Get(ctx).AsyncHandoffState = nil
+				a.LastAttempt.Get(ctx).HandoffState = nil
 			},
 		},
 		{
@@ -987,7 +987,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
 				a.HandoffOptions = nil
-				a.LastAttempt.Get(ctx).AsyncHandoffState = nil
+				a.LastAttempt.Get(ctx).HandoffState = nil
 			},
 		},
 		{
@@ -1002,8 +1002,8 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			options: &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{}},
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.HandoffOptions = nil
-				a.LastAttempt.Get(ctx).AsyncHandoffState = nil
-				activityContextFromChasm(ctx).config.StandaloneAsyncHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+				a.LastAttempt.Get(ctx).HandoffState = nil
+				activityContextFromChasm(ctx).config.StandaloneHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 			},
 		},
 	} {
@@ -1012,7 +1012,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 
 			a, ctx := newHandoffRetryTestActivity(t)
 			config := activityContextFromChasm(ctx).config
-			config.StandaloneAsyncHandoffEnabled = func(namespaceName string) bool { return namespaceName == testNamespaceEntry().Name().String() }
+			config.StandaloneHandoffEnabled = func(namespaceName string) bool { return namespaceName == testNamespaceEntry().Name().String() }
 			config.DefaultActivityRetryPolicy = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(retrypolicy.DefaultDefaultRetrySettings)
 			testCase.setup(a, ctx)
 			beforeState := common.CloneProto(a.ActivityState)
@@ -1041,11 +1041,11 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			attempt := a.LastAttempt.Get(ctx)
 			require.Equal(t, beforeAttempt.GetCount(), attempt.GetCount())
 			require.Equal(t, beforeAttempt.GetStartedStamp(), attempt.GetStartedStamp())
-			require.Equal(t, testCase.expectedHandoffCount, attempt.GetAsyncHandoffState().GetCount())
+			require.Equal(t, testCase.expectedHandoffCount, attempt.GetHandoffState().GetCount())
 			if testCase.expectedStartedAt.IsZero() {
-				require.Nil(t, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime())
+				require.Nil(t, attempt.GetHandoffState().GetStartToCloseStartedTime())
 			} else {
-				require.Equal(t, testCase.expectedStartedAt, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime())
+				require.Equal(t, testCase.expectedStartedAt, attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime())
 			}
 
 			if !a.hasAttemptInProgress() {
@@ -1059,7 +1059,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			}
 
 			require.Equal(t, testCase.expectedCompletion, a.GetAwaitingCompletion())
-			protorequire.ProtoEqual(t, beforeState.GetAsyncHandoffTime(), a.GetAsyncHandoffTime())
+			protorequire.ProtoEqual(t, beforeState.GetHandoffTime(), a.GetHandoffTime())
 			protorequire.ProtoEqual(t, beforeState.GetOriginalOptions(), a.GetOriginalOptions())
 
 			if !testCase.expectedStartToCloseTimer.IsZero() {
@@ -1145,11 +1145,11 @@ func TestUpdateOptionsRetryScheduling(t *testing.T) {
 					policy := a.RetryPolicy
 					if retryCase.retryType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
 						attempt.Count = 1 // A handoff retry need not advance the activity attempt.
-						attempt.AsyncHandoffState.StartToCloseStartedTime = nil
+						attempt.HandoffState.StartToCloseStartedTime = nil
 						policy = a.HandoffOptions.RetryPolicy
 					} else {
 						a.HandoffOptions = nil
-						attempt.AsyncHandoffState = nil
+						attempt.HandoffState = nil
 					}
 					policy.InitialInterval = durationpb.New(testCase.pendingInterval)
 					policy.MaximumInterval = durationpb.New(2 * time.Hour)
@@ -1247,7 +1247,7 @@ func TestHandoffRetryOptionsUpdate(t *testing.T) {
 
 			a, ctx := newHandoffRetryTestActivity(t)
 			config := activityContextFromChasm(ctx).config
-			config.StandaloneAsyncHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+			config.StandaloneHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 			config.DefaultActivityRetryPolicy = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(retrypolicy.DefaultDefaultRetrySettings)
 			if testCase.preserveUnlimited {
 				a.HandoffOptions.RetryPolicy.MaximumAttempts = 0
@@ -1259,7 +1259,7 @@ func TestHandoffRetryOptionsUpdate(t *testing.T) {
 			a.HandoffOptions.RetryPolicy.MaximumInterval = durationpb.New(time.Hour)
 			a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
 			attempt := a.LastAttempt.Get(ctx)
-			attempt.AsyncHandoffState.Count = 4
+			attempt.HandoffState.Count = 4
 			attempt.PendingRetryType = activitypb.ACTIVITY_RETRY_TYPE_HANDOFF
 			attempt.CurrentRetryInterval = durationpb.New(40 * time.Second)
 			attempt.CurrentRetryIntervalSource = testCase.source
@@ -1285,7 +1285,7 @@ func TestHandoffRetryOptionsUpdate(t *testing.T) {
 
 			if testCase.removeAndReadd && !testCase.editAtReadd {
 				update(&apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{}}, "handoff_options")
-				require.EqualValues(t, 1, attempt.GetAsyncHandoffState().GetCount())
+				require.EqualValues(t, 1, attempt.GetHandoffState().GetCount())
 				require.Equal(t, 40*time.Second, attempt.GetCurrentRetryInterval().AsDuration())
 			}
 
@@ -1348,8 +1348,8 @@ func TestHandoffRetryOptionsUpdate(t *testing.T) {
 			require.EqualValues(t, 3, attempt.GetCount())
 			require.EqualValues(t, 7, attempt.GetStartedStamp())
 			if testCase.removeAndReadd {
-				require.EqualValues(t, 1, attempt.GetAsyncHandoffState().GetCount())
-				require.Nil(t, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime())
+				require.EqualValues(t, 1, attempt.GetHandoffState().GetCount())
+				require.Nil(t, attempt.GetHandoffState().GetStartToCloseStartedTime())
 			}
 		})
 	}
@@ -1380,9 +1380,9 @@ func TestHandoffOptionsRestorationAdmission(t *testing.T) {
 				HandoffOptions:         common.CloneProto(a.GetHandoffOptions()),
 			}
 			a.HandoffOptions = nil
-			a.LastAttempt.Get(ctx).AsyncHandoffState = nil
+			a.LastAttempt.Get(ctx).HandoffState = nil
 			config := activityContextFromChasm(ctx).config
-			config.StandaloneAsyncHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(testCase.enabled)
+			config.StandaloneHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(testCase.enabled)
 			if testCase.waiting {
 				a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
 				if testCase.keepPaused {
@@ -1408,7 +1408,7 @@ func TestHandoffOptionsRestorationAdmission(t *testing.T) {
 			require.NoError(t, err)
 			if !testCase.waiting {
 				require.True(t, a.GetResetRestoreOptions())
-				config.StandaloneAsyncHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+				config.StandaloneHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 				_, err = a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "worker yielded"}})
 				require.NoError(t, err)
 			}
@@ -1420,8 +1420,8 @@ func TestHandoffOptionsRestorationAdmission(t *testing.T) {
 			require.Equal(t, expectedStatus, a.GetStatus())
 			require.False(t, a.GetResetRestoreOptions())
 			require.NotNil(t, a.GetHandoffOptions())
-			require.EqualValues(t, 1, a.LastAttempt.Get(ctx).GetAsyncHandoffState().GetCount())
-			require.Nil(t, a.LastAttempt.Get(ctx).GetAsyncHandoffState().GetStartToCloseStartedTime())
+			require.EqualValues(t, 1, a.LastAttempt.Get(ctx).GetHandoffState().GetCount())
+			require.Nil(t, a.LastAttempt.Get(ctx).GetHandoffState().GetStartToCloseStartedTime())
 		})
 	}
 
@@ -1431,10 +1431,10 @@ func TestHandoffOptionsRestorationAdmission(t *testing.T) {
 
 		a, ctx := newHandoffRetryTestActivity(t)
 		config := activityContextFromChasm(ctx).config
-		config.StandaloneAsyncHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		config.StandaloneHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 		config.DefaultActivityRetryPolicy = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(retrypolicy.DefaultDefaultRetrySettings)
 		a.HandoffOptions = nil
-		a.LastAttempt.Get(ctx).AsyncHandoffState = nil
+		a.LastAttempt.Get(ctx).HandoffState = nil
 		a.OriginalOptions = &apiactivitypb.ActivityOptions{
 			TaskQueue:           common.CloneProto(a.GetTaskQueue()),
 			StartToCloseTimeout: common.CloneProto(a.GetStartToCloseTimeout()),
@@ -1453,7 +1453,7 @@ func TestHandoffOptionsRestorationAdmission(t *testing.T) {
 		_, err = a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "worker yielded"}})
 		require.NoError(t, err)
 		require.Nil(t, a.GetHandoffOptions())
-		config.StandaloneAsyncHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+		config.StandaloneHandoffEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 		before := common.CloneProto(a.ActivityState)
 		beforeAttempt := common.CloneProto(a.LastAttempt.Get(ctx))
 		ctx.Tasks = nil

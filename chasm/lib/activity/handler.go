@@ -685,7 +685,7 @@ func (h *handler) RespondActivityTaskHandoff(
 
 	// TODO: Implement workflow activity handoff.
 	if len(token.GetComponentRef()) == 0 {
-		return nil, serviceerror.NewUnimplemented("workflow activity async handoff is not supported")
+		return nil, serviceerror.NewUnimplemented("workflow activity handoff is not supported")
 	}
 
 	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(req.GetNamespaceId()))
@@ -694,8 +694,8 @@ func (h *handler) RespondActivityTaskHandoff(
 	}
 
 	namespaceName := ns.Name().String()
-	if !h.config.Enabled(namespaceName) || !h.config.StandaloneAsyncHandoffEnabled(namespaceName) {
-		return nil, serviceerror.NewUnimplemented("standalone activity async handoff is disabled")
+	if !h.config.Enabled(namespaceName) || !h.config.StandaloneHandoffEnabled(namespaceName) {
+		return nil, serviceerror.NewUnimplemented("standalone activity handoff is disabled")
 	}
 
 	result, _, err := chasm.UpdateComponent(ctx, token.GetComponentRef(), (*Activity).HandleHandoff,
@@ -705,7 +705,7 @@ func (h *handler) RespondActivityTaskHandoff(
 	}
 
 	if result.NewlyRecorded {
-		metrics.ActivityAsyncHandoff.With(result.MetricsHandler).Record(1)
+		metrics.ActivityHandoff.With(result.MetricsHandler).Record(1)
 	}
 
 	return &activitypb.RespondActivityTaskHandoffResponse{FrontendResponse: result.Response}, nil

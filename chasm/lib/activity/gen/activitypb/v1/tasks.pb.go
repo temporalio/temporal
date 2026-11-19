@@ -534,7 +534,7 @@ func (*CancelCommand) Descriptor() ([]byte, []int) {
 
 type HandoffStartToCloseTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Copied from ActivityAttemptState.AsyncHandoffState.start_to_close_stamp.
+	// Copied from ActivityAttemptState.HandoffState.start_to_close_stamp.
 	// Used to reject stale timers after activity retries, resets, or timeout updates.
 	// Handoff retries preserve this stamp and the original start-to-close deadline.
 	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`

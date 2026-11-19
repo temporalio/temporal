@@ -52,7 +52,7 @@ func newActivityParityEnv(t *testing.T, opts ...testcore.TestOption) *testcore.T
 	cluster := env.GetTestCluster()
 	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
-	cluster.OverrideDynamicConfig(t, activity.StandaloneAsyncHandoffEnabled, nsValues(true))
+	cluster.OverrideDynamicConfig(t, activity.StandaloneHandoffEnabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableActivityEagerExecution, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableEagerStart, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
@@ -1119,11 +1119,11 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 
 // Handoff lifecycle tests use raw task RPCs so they do not depend on SDK handoff support.
 // WFA branches are placeholders until workflow activity handoff is implemented.
-func (s *activityParityTestSuite) TestAsyncHandoff() {
+func (s *activityParityTestSuite) TestHandoff() {
 	// Presence changes preserve the current task token and phase. Original options remain restorable.
 	s.Run("LiveOptions", func(s *activityParityTestSuite) {
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-			s.T().Skip("TODO: workflow activity async handoff support")
+			s.T().Skip("TODO: workflow activity handoff support")
 		})
 
 		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1168,7 +1168,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 					require.NotNil(t, response.GetActivityOptions().GetHandoffOptions().GetRetryPolicy())
 
 					// Existing executions remain editable after disablement, including nested policy replacement.
-					env.GetTestCluster().OverrideDynamicConfig(t, activity.StandaloneAsyncHandoffEnabled, []dynamicconfig.ConstrainedValue{{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: false}})
+					env.GetTestCluster().OverrideDynamicConfig(t, activity.StandaloneHandoffEnabled, []dynamicconfig.ConstrainedValue{{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: false}})
 					_, err = update(&activitypb.ActivityOptions{HandoffOptions: &activitypb.HandoffOptions{
 						HeartbeatTimeout: durationpb.New(time.Minute),
 						RetryPolicy:      &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), MaximumAttempts: 3},
@@ -1186,7 +1186,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 					require.Nil(t, a.describe(t).GetInfo().GetHandoffOptions())
 
-					env.GetTestCluster().OverrideDynamicConfig(t, activity.StandaloneAsyncHandoffEnabled, []dynamicconfig.ConstrainedValue{{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true}})
+					env.GetTestCluster().OverrideDynamicConfig(t, activity.StandaloneHandoffEnabled, []dynamicconfig.ConstrainedValue{{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true}})
 					_, err = update(&activitypb.ActivityOptions{HandoffOptions: options}, "handoff_options")
 					require.NoError(t, err)
 					_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
@@ -1214,7 +1214,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 	// Verify policy selection through frontend validation, merging, persistence and Describe.
 	s.Run("RetryPolicyUpdatesWhileWaiting", func(s *activityParityTestSuite) {
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-			s.T().Skip("TODO: workflow activity async handoff support")
+			s.T().Skip("TODO: workflow activity handoff support")
 		})
 
 		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1376,7 +1376,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		}
 
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-			s.T().Skip("TODO: workflow activity async handoff support")
+			s.T().Skip("TODO: workflow activity handoff support")
 		})
 
 		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1522,7 +1522,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		} {
 			s.Run(testCase.name, func(s *activityParityTestSuite) {
 				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-					s.T().Skip("TODO: workflow activity async handoff support")
+					s.T().Skip("TODO: workflow activity handoff support")
 				})
 
 				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1580,7 +1580,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 				}
 
 				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-					s.T().Skip("TODO: workflow activity async handoff support")
+					s.T().Skip("TODO: workflow activity handoff support")
 				})
 
 				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1657,7 +1657,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		}
 
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-			s.T().Skip("TODO: workflow activity async handoff support")
+			s.T().Skip("TODO: workflow activity handoff support")
 		})
 
 		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1714,7 +1714,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 				}
 
 				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-					s.T().Skip("TODO: workflow activity async handoff support")
+					s.T().Skip("TODO: workflow activity handoff support")
 				})
 
 				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1796,7 +1796,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		}
 
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-			s.T().Skip("TODO: workflow activity async handoff support")
+			s.T().Skip("TODO: workflow activity handoff support")
 		})
 
 		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1908,7 +1908,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 				}
 
 				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-					s.T().Skip("TODO: workflow activity async handoff support")
+					s.T().Skip("TODO: workflow activity handoff support")
 				})
 
 				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -1955,7 +1955,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		}
 
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-			s.T().Skip("TODO: workflow activity async handoff support")
+			s.T().Skip("TODO: workflow activity handoff support")
 		})
 
 		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -2026,7 +2026,7 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 				}
 
 				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-					s.T().Skip("TODO: workflow activity async handoff support")
+					s.T().Skip("TODO: workflow activity handoff support")
 				})
 
 				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {

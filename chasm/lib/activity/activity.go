@@ -295,7 +295,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 
 	var handoffAttempt int32
 	if a.GetHandoffOptions() != nil {
-		handoffAttempt = attempt.GetAsyncHandoffState().GetCount()
+		handoffAttempt = attempt.GetHandoffState().GetCount()
 	}
 
 	return &historyservice.RecordActivityTaskStartedResponse{
@@ -697,7 +697,7 @@ func (a *Activity) HandleHandoff(
 	}
 
 	a.AwaitingCompletion = true
-	a.AsyncHandoffTime = timestamppb.New(ctx.Now(a))
+	a.HandoffTime = timestamppb.New(ctx.Now(a))
 
 	if a.GetHandoffOptions() != nil {
 		// Retire submission timers without invalidating the current token or carried budget.
@@ -715,7 +715,7 @@ func (a *Activity) HandleHandoff(
 
 func (a *Activity) clearHandoffState() {
 	a.AwaitingCompletion = false
-	a.AsyncHandoffTime = nil
+	a.HandoffTime = nil
 }
 
 // isActivityTaskStampValid matches the token against StartedStamp, which stays fixed through handoff

@@ -340,7 +340,7 @@ func (h *handoffStartToCloseTimeoutTaskHandler) Validate(ctx chasm.Context, a *A
 		return false, nil
 	}
 
-	state := a.LastAttempt.Get(ctx).GetAsyncHandoffState()
+	state := a.LastAttempt.Get(ctx).GetHandoffState()
 	if task.GetStamp() != state.GetStartToCloseStamp() {
 		return false, nil
 	}

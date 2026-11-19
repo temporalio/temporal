@@ -305,7 +305,7 @@ func (s *StandaloneActivityStateReplicationSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableChasm.Key():                         true,
 		activity.Enabled.Key():                                  true,
-		activity.StandaloneAsyncHandoffEnabled.Key():            true,
+		activity.StandaloneHandoffEnabled.Key():                 true,
 		activity.EnableStandaloneActivityOperatorCommands.Key(): true,
 	}
 	s.setupSuite(testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding}))
@@ -320,7 +320,7 @@ func (s *StandaloneActivityStateReplicationSuite) TearDownSuite() {
 }
 
 // Failover must preserve live option changes, accepted handoff and pending retry state.
-func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
+func (s *StandaloneActivityStateReplicationSuite) TestHandoffFailover() {
 	for _, testCase := range []struct {
 		name                   string
 		handoffRetry           bool

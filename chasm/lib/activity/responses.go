@@ -63,7 +63,7 @@ func (a *Activity) eagerActivityTaskData(
 
 	var handoffAttempt int32
 	if a.GetHandoffOptions() != nil {
-		handoffAttempt = attempt.GetAsyncHandoffState().GetCount()
+		handoffAttempt = attempt.GetHandoffState().GetCount()
 	}
 
 	// This data is used to construct the eager response after the transaction has completed, so
@@ -237,7 +237,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		ActivityId:                          key.BusinessID,
 		ActivityType:                        a.GetActivityType(),
 		HandoffOptions:                      a.GetHandoffOptions(),
-		HandoffTime:                         a.GetAsyncHandoffTime(),
+		HandoffTime:                         a.GetHandoffTime(),
 		Attempt:                             attempt.GetCount(),
 		HandedOff:                           a.hasAttemptInProgress() && a.GetAwaitingCompletion(),
 		CanceledReason:                      a.CancelState.GetReason(),
@@ -280,7 +280,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		UserMetadata:                        a.effectiveUserMetadata(ctx),
 	}
 	if a.GetHandoffOptions() != nil {
-		info.HandoffAttempt = attempt.GetAsyncHandoffState().GetCount()
+		info.HandoffAttempt = attempt.GetHandoffState().GetCount()
 	}
 	if request.GetIncludeHeartbeatDetails() {
 		info.HeartbeatDetails = heartbeat.GetDetails()

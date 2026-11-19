@@ -455,8 +455,8 @@ func (a *Activity) handleReset(
 		}
 
 		if a.GetHandoffOptions() == nil && a.GetOriginalOptions().GetHandoffOptions() != nil &&
-			!activityContextFromChasm(ctx).config.StandaloneAsyncHandoffEnabled(ctx.NamespaceEntry().Name().String()) {
-			return nil, serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
+			!activityContextFromChasm(ctx).config.StandaloneHandoffEnabled(ctx.NamespaceEntry().Name().String()) {
+			return nil, serviceerror.NewInvalidArgument("handoff is not enabled for this namespace")
 		}
 	}
 
@@ -665,8 +665,8 @@ func (a *Activity) applyActivityOptionsUpdate(
 
 	// Check new opt-in admission before changing execution state.
 	willHaveHandoffOptions := options.GetHandoffOptions() != nil
-	if !hadHandoffOptions && willHaveHandoffOptions && !activityContextFromChasm(ctx).config.StandaloneAsyncHandoffEnabled(ctx.NamespaceEntry().Name().String()) {
-		return serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
+	if !hadHandoffOptions && willHaveHandoffOptions && !activityContextFromChasm(ctx).config.StandaloneHandoffEnabled(ctx.NamespaceEntry().Name().String()) {
+		return serviceerror.NewInvalidArgument("handoff is not enabled for this namespace")
 	}
 
 	if err := a.applyRetryAndHandoffStateUpdate(ctx, options, req.GetRestoreOriginal(), updateFields, handoffPolicyUpdated); err != nil {
@@ -717,11 +717,11 @@ func (a *Activity) applyRetryAndHandoffStateUpdate(
 		a.clearStartToCloseState(ctx)
 	}
 
-	if willHaveHandoffOptions && attempt.AsyncHandoffState == nil {
-		attempt.AsyncHandoffState = &activitypb.ActivityAttemptState_AsyncHandoffState{}
+	if willHaveHandoffOptions && attempt.HandoffState == nil {
+		attempt.HandoffState = &activitypb.ActivityAttemptState_HandoffState{}
 	}
 
-	if state := attempt.GetAsyncHandoffState(); state != nil {
+	if state := attempt.GetHandoffState(); state != nil {
 		state.Count = handoffAttempt
 		state.StartToCloseStartedTime = nil
 		if !startToCloseStartedAt.IsZero() {
@@ -754,13 +754,13 @@ func (a *Activity) handoffStateForOptionsUpdate(ctx chasm.Context, willHaveHando
 		return 0, time.Time{}, nil
 	}
 
-	state := attempt.GetAsyncHandoffState()
+	state := attempt.GetHandoffState()
 	deliveryActive := a.hasAttemptInProgress()
 	paused := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
 	taskStartedAt := timestamp.TimeValue(attempt.GetStartedTime())
 	startToCloseStartedAt := timestamp.TimeValue(state.GetStartToCloseStartedTime())
 
-	if a.GetAwaitingCompletion() && (!deliveryActive || timestamp.TimeValue(a.GetAsyncHandoffTime()).IsZero()) {
+	if a.GetAwaitingCompletion() && (!deliveryActive || timestamp.TimeValue(a.GetHandoffTime()).IsZero()) {
 		return 0, time.Time{}, serviceerror.NewInternal("activity completion phase has no active delivery or handoff time")
 	}
 

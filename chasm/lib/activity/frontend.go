@@ -399,8 +399,8 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		req.RequestEagerExecution = false
 	}
 
-	if req.GetHandoffOptions() != nil && !h.config.StandaloneAsyncHandoffEnabled(req.GetNamespace()) {
-		return nil, serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
+	if req.GetHandoffOptions() != nil && !h.config.StandaloneHandoffEnabled(req.GetNamespace()) {
+		return nil, serviceerror.NewInvalidArgument("handoff is not enabled for this namespace")
 	}
 
 	opts := activityOptionsFromStartRequest(req)
@@ -576,7 +576,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 		util.FieldMaskHasPathOrSubPath(util.ParseFieldMask(req.GetUpdateMask()), "handoffOptions")
 	// Workflow activity updates do not yet persist handoff options, regardless of the feature flag.
 	if updatesWorkflowHandoffOptions {
-		return nil, serviceerror.NewInvalidArgument("async handoff options are not supported for workflow activities")
+		return nil, serviceerror.NewInvalidArgument("handoff options are not supported for workflow activities")
 	}
 
 	if err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(

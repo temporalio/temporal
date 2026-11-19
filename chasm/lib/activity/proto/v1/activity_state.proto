@@ -176,7 +176,7 @@ message ActivityState {
 
   // Last accepted handoff time. Retained through ordinary retry backoff and terminal closure;
   // cleared on applied reset or the next worker pickup.
-  google.protobuf.Timestamp async_handoff_time = 27;
+  google.protobuf.Timestamp handoff_time = 27;
 
   // Present when the activity uses separate handoff and external-completion timeout/retry settings.
   temporal.api.activity.v1.HandoffOptions handoff_options = 28;
@@ -305,7 +305,7 @@ message ActivityAttemptState {
   // Set when the attempt starts. Used to build the task token for worker commands.
   bytes component_ref = 17;
 
-  message AsyncHandoffState {
+  message HandoffState {
     // Handoff attempt within the current activity attempt. Defaults to zero when options are absent.
     int32 count = 1;
 
@@ -323,7 +323,7 @@ message ActivityAttemptState {
 
   // State for handoff retries and their shared start-to-close window.
   // Retained when handoff options are removed.
-  AsyncHandoffState async_handoff_state = 19;
+  HandoffState handoff_state = 19;
 }
 
 message ActivityHeartbeatState {

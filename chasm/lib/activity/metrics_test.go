@@ -152,7 +152,7 @@ func TestHandoffMetrics(t *testing.T) {
 			}
 
 			if test.alreadyRecorded {
-				activity.AsyncHandoffTime = timestamppb.New(defaultTime)
+				activity.HandoffTime = timestamppb.New(defaultTime)
 			}
 
 			controller := gomock.NewController(t)
@@ -160,8 +160,8 @@ func TestHandoffMetrics(t *testing.T) {
 			registry := namespace.NewMockRegistry(controller)
 			registry.EXPECT().GetNamespaceByID(ns.ID()).Return(ns, nil)
 			h := &handler{namespaceRegistry: registry, config: &Config{
-				Enabled:                       dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-				StandaloneAsyncHandoffEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				Enabled:                  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				StandaloneHandoffEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 			}}
 
 			ref, err := (&persistencespb.ChasmComponentRef{
@@ -200,7 +200,7 @@ func TestHandoffMetrics(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			recordings := capture.SnapshotMetric(metrics.ActivityAsyncHandoff.Name())
+			recordings := capture.SnapshotMetric(metrics.ActivityHandoff.Name())
 			require.Len(t, recordings, test.expectedMetricCount)
 			if test.expectedMetricCount > 0 {
 				require.Equal(t, int64(1), recordings[0].Value)

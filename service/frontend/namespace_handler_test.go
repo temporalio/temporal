@@ -2687,7 +2687,7 @@ func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
 	}
 }
 
-func (s *namespaceHandlerCommonSuite) TestAsyncHandoffCapabilities() {
+func (s *namespaceHandlerCommonSuite) TestHandoffCapabilities() {
 	for _, test := range []struct {
 		name                          string
 		standalone, handoff, workflow bool
@@ -2699,8 +2699,8 @@ func (s *namespaceHandlerCommonSuite) TestAsyncHandoffCapabilities() {
 	} {
 		s.Run(test.name, func() {
 			s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(test.standalone)
-			s.config.Activity.StandaloneAsyncHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.handoff)
-			s.config.Activity.WorkflowAsyncHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.workflow)
+			s.config.Activity.StandaloneHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.handoff)
+			s.config.Activity.WorkflowHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.workflow)
 			info, _, _, _ := s.handler.createResponse(&persistencespb.NamespaceInfo{Name: "namespace"}, &persistencespb.NamespaceConfig{}, &persistencespb.NamespaceReplicationConfig{})
 			s.Equal(test.standalone && test.handoff, info.GetCapabilities().GetStandaloneActivityHandoff())
 			// The workflow switch is reserved until its handoff handler is implemented.

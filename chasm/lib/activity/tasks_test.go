@@ -522,11 +522,11 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 		attempt := a.LastAttempt.Get(ctx)
 		attempt.Count = 1
 		initialAttempt := attempt.GetCount()
-		startToCloseDeadline := attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime().Add(a.GetStartToCloseTimeout().AsDuration())
+		startToCloseDeadline := attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime().Add(a.GetStartToCloseTimeout().AsDuration())
 		activityRetryInterval := a.GetRetryPolicy().GetInitialInterval().AsDuration()
 		scheduleToStartTimeout := a.GetScheduleToStartTimeout().AsDuration()
 		failure := &failurepb.Failure{Message: "submission failed"}
-		oldBudget := &activitypb.HandoffStartToCloseTimeoutTask{Stamp: attempt.GetAsyncHandoffState().GetStartToCloseStamp()}
+		oldBudget := &activitypb.HandoffStartToCloseTimeoutTask{Stamp: attempt.GetHandoffState().GetStartToCloseStamp()}
 		retryInterval := 90 * time.Second
 
 		state, err := a.tryReschedule(ctx, retryEvent{overridingRetryInterval: retryInterval, failure: failure})
@@ -551,9 +551,9 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 		require.NoError(t, handler.Execute(ctx, a, attrs, oldBudget))
 		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, a.GetStatus())
 		require.Equal(t, initialAttempt+1, attempt.GetCount())
-		require.EqualValues(t, 1, attempt.GetAsyncHandoffState().GetCount())
+		require.EqualValues(t, 1, attempt.GetHandoffState().GetCount())
 		require.Equal(t, activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY, attempt.GetPendingRetryType())
-		require.Nil(t, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime())
+		require.Nil(t, attempt.GetHandoffState().GetStartToCloseStartedTime())
 		expectedDispatchTime := now.Add(activityRetryInterval)
 		require.Equal(t, expectedDispatchTime, attempt.GetDispatchTime().AsTime())
 		require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, attempt.GetLastFailureDetails().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
@@ -621,7 +621,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, result.NewlyRecorded)
 				protorequire.ProtoEqual(t, payloads.EncodeString("external-job"), a.lastHeartbeatDetails(ctx))
-				require.Equal(t, before.GetAsyncHandoffState().GetStartToCloseStamp(), a.LastAttempt.Get(ctx).GetAsyncHandoffState().GetStartToCloseStamp())
+				require.Equal(t, before.GetHandoffState().GetStartToCloseStamp(), a.LastAttempt.Get(ctx).GetHandoffState().GetStartToCloseStamp())
 				require.Equal(t, []chasm.MockTask{
 					{Component: a, Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(handoffToCloseTimeout)}, Payload: &activitypb.HandoffToCloseTimeoutTask{Stamp: before.GetStamp() + 1}},
 					{Component: a, Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(postHandoffHeartbeatTimeout)}, Payload: &activitypb.HeartbeatTimeoutTask{Stamp: before.GetStamp() + 1}},
@@ -719,7 +719,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 				prior := &failurepb.Failure{Message: "prior failure"}
 				attempt := a.LastAttempt.Get(ctx)
 				attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{Failure: prior}
-				beforeMain, beforeHandoff := attempt.GetCount(), attempt.GetAsyncHandoffState().GetCount()
+				beforeMain, beforeHandoff := attempt.GetCount(), attempt.GetHandoffState().GetCount()
 				a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{Details: payloads.EncodeString("progress")})
 
 				require.NoError(t, a.handleTimeout(ctx, timeoutType))
@@ -734,9 +734,9 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 				require.Equal(t, expectedType, failure.GetTimeoutFailureInfo().GetTimeoutType())
 				protorequire.ProtoEqual(t, prior, failure.GetCause())
 				protorequire.ProtoEqual(t, payloads.EncodeString("progress"), failure.GetTimeoutFailureInfo().GetLastHeartbeatDetails())
-				require.Equal(t, [2]int32{beforeMain, beforeHandoff}, [2]int32{attempt.GetCount(), attempt.GetAsyncHandoffState().GetCount()})
+				require.Equal(t, [2]int32{beforeMain, beforeHandoff}, [2]int32{attempt.GetCount(), attempt.GetHandoffState().GetCount()})
 				require.False(t, a.GetAwaitingCompletion())
-				require.Nil(t, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime())
+				require.Nil(t, attempt.GetHandoffState().GetStartToCloseStartedTime())
 				require.Empty(t, ctx.Tasks)
 			})
 		}
@@ -779,7 +779,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 		require.False(t, valid)
 		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, a.GetStatus())
 		require.Equal(t, initialAttempt+1, attempt.GetCount())
-		require.EqualValues(t, 1, attempt.GetAsyncHandoffState().GetCount())
+		require.EqualValues(t, 1, attempt.GetHandoffState().GetCount())
 		require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, attempt.GetLastFailureDetails().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 	})
 
@@ -831,7 +831,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 			{name: "missing pickup", mutate: func(a *Activity, ctx chasm.Context) { a.LastAttempt.Get(ctx).StartedTime = nil }},
 			{name: "missing handoff anchor", mutate: func(a *Activity, _ chasm.Context) { a.AwaitingCompletion = true }},
 			{name: "missing budget anchor", mutate: func(a *Activity, ctx chasm.Context) {
-				a.LastAttempt.Get(ctx).AsyncHandoffState.StartToCloseStartedTime = nil
+				a.LastAttempt.Get(ctx).HandoffState.StartToCloseStartedTime = nil
 			}},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
@@ -839,7 +839,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 
 				a, ctx := newHandoffRetryTestActivity(t)
 				testCase.mutate(a, ctx)
-				_, err := newHandoffStartToCloseTimeoutTaskHandler().Validate(ctx, a, chasm.TaskInvocation{}, &activitypb.HandoffStartToCloseTimeoutTask{Stamp: a.LastAttempt.Get(ctx).GetAsyncHandoffState().GetStartToCloseStamp()})
+				_, err := newHandoffStartToCloseTimeoutTaskHandler().Validate(ctx, a, chasm.TaskInvocation{}, &activitypb.HandoffStartToCloseTimeoutTask{Stamp: a.LastAttempt.Get(ctx).GetHandoffState().GetStartToCloseStamp()})
 				require.ErrorAs(t, err, new(*serviceerror.Internal))
 				require.Empty(t, ctx.Tasks)
 			})

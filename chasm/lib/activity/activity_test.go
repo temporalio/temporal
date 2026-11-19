@@ -1473,7 +1473,7 @@ func TestHandleHandoff(t *testing.T) {
 			_, err = act.HandleHandoff(ctx, input)
 			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 			require.False(t, act.GetAwaitingCompletion())
-			require.Nil(t, act.GetAsyncHandoffTime())
+			require.Nil(t, act.GetHandoffTime())
 
 			// A valid task token records handoff without changing the status or activity attempt.
 			input.Request.NamespaceId = "namespace-id"
@@ -1481,7 +1481,7 @@ func TestHandleHandoff(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, result.NewlyRecorded)
 			require.True(t, act.GetAwaitingCompletion())
-			require.Equal(t, defaultTime, act.GetAsyncHandoffTime().AsTime())
+			require.Equal(t, defaultTime, act.GetHandoffTime().AsTime())
 			require.Equal(t, test.status, act.GetStatus())
 			require.Empty(t, ctx.Tasks, "reporting alone must not restart legacy timers")
 			require.EqualValues(t, 2, act.LastAttempt.Get(ctx).GetCount())
@@ -1491,7 +1491,7 @@ func TestHandleHandoff(t *testing.T) {
 			result, err = act.HandleHandoff(ctx, input)
 			require.NoError(t, err)
 			require.False(t, result.NewlyRecorded)
-			require.Equal(t, defaultTime, act.GetAsyncHandoffTime().AsTime())
+			require.Equal(t, defaultTime, act.GetHandoffTime().AsTime())
 
 			// A stale task token is rejected even when handoff is already recorded.
 			input.Token.ActivityAttemptStamp--
@@ -1553,7 +1553,7 @@ func TestHandleHandoffRejectsInvalidTask(t *testing.T) {
 			require.ErrorAs(t, err, new(*serviceerror.NotFound))
 			require.Nil(t, result)
 			require.False(t, act.GetAwaitingCompletion())
-			require.Nil(t, act.GetAsyncHandoffTime())
+			require.Nil(t, act.GetHandoffTime())
 		})
 	}
 }

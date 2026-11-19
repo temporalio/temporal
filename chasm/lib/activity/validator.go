@@ -50,7 +50,7 @@ func ValidateAndNormalizeStandaloneActivity(
 
 	if options.GetHandoffOptions() != nil {
 		// TODO: Reuse shared handoff timeout validation for opted-in workflow activities when WFA
-		// async handoff is supported, preserving workflow-specific limits.
+		// handoff is supported, preserving workflow-specific limits.
 		defaults := getDefaultActivityRetrySettings(namespaceName.String())
 		return validateAndNormalizeHandoffOptions(options, &defaults)
 	}

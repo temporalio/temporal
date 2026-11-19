@@ -217,7 +217,7 @@ func (a *Activity) retryTypeForFailure() activitypb.ActivityRetryType {
 func (a *Activity) retryPolicyAndCount(ctx chasm.Context, retryType activitypb.ActivityRetryType) (*commonpb.RetryPolicy, int32) {
 	attempt := a.LastAttempt.Get(ctx)
 	if retryType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
-		return a.GetHandoffOptions().GetRetryPolicy(), attempt.GetAsyncHandoffState().GetCount()
+		return a.GetHandoffOptions().GetRetryPolicy(), attempt.GetHandoffState().GetCount()
 	}
 
 	return a.GetRetryPolicy(), attempt.GetCount()
@@ -238,7 +238,7 @@ func (a *Activity) tryReschedule(ctx chasm.MutableContext, event retryEvent) (en
 
 	startToCloseExpiredWhileScheduled := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
 		event.serverTimeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE && a.GetHandoffOptions() != nil &&
-		a.LastAttempt.Get(ctx).GetAsyncHandoffState().GetStartToCloseStartedTime() != nil
+		a.LastAttempt.Get(ctx).GetHandoffState().GetStartToCloseStartedTime() != nil
 	if !a.hasAttemptInProgress() && !startToCloseExpiredWhileScheduled {
 		return enumspb.RETRY_STATE_UNSPECIFIED, serviceerror.NewInternal("activity retry has no active attempt")
 	}
@@ -424,7 +424,7 @@ func (a *Activity) issueAttemptTimers(ctx chasm.MutableContext, attempt *activit
 
 func (a *Activity) handoffDeadlines(ctx chasm.Context, deliveryActive bool) (handoffDeadlines, error) {
 	attempt := a.LastAttempt.Get(ctx)
-	state := attempt.GetAsyncHandoffState()
+	state := attempt.GetHandoffState()
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	options := a.GetHandoffOptions()
 
@@ -436,7 +436,7 @@ func (a *Activity) handoffDeadlines(ctx chasm.Context, deliveryActive bool) (han
 		PostHandoffHeartbeatTimeout: a.GetHeartbeatTimeout().AsDuration(),
 		TaskStartedAt:               timestamp.TimeValue(attempt.GetStartedTime()),
 		StartToCloseStartedAt:       timestamp.TimeValue(state.GetStartToCloseStartedTime()),
-		HandoffAt:                   timestamp.TimeValue(a.GetAsyncHandoffTime()),
+		HandoffAt:                   timestamp.TimeValue(a.GetHandoffTime()),
 		LastHeartbeatAt:             timestamp.TimeValue(heartbeat.GetRecordedTime()),
 		DeliveryActive:              deliveryActive,
 		AwaitingCompletion:          a.GetAwaitingCompletion(),
@@ -450,7 +450,7 @@ func (a *Activity) issueHandoffTimers(ctx chasm.MutableContext, issueStartToClos
 	}
 
 	attempt := a.LastAttempt.Get(ctx)
-	state := attempt.GetAsyncHandoffState()
+	state := attempt.GetHandoffState()
 	if issueStartToCloseTimer && state.GetStartToCloseStartedTime() != nil {
 		state.StartToCloseStamp++
 
@@ -475,7 +475,7 @@ func (a *Activity) issueHandoffTimers(ctx chasm.MutableContext, issueStartToClos
 }
 
 func (a *Activity) clearStartToCloseState(ctx chasm.MutableContext) {
-	if state := a.LastAttempt.Get(ctx).GetAsyncHandoffState(); state != nil {
+	if state := a.LastAttempt.Get(ctx).GetHandoffState(); state != nil {
 		state.StartToCloseStartedTime = nil
 		state.StartToCloseStamp++
 	}
@@ -490,7 +490,7 @@ func (a *Activity) startAttemptTimers(ctx chasm.MutableContext, attempt *activit
 		return a.issueAttemptTimers(ctx, attempt)
 	}
 
-	state := attempt.GetAsyncHandoffState()
+	state := attempt.GetHandoffState()
 	if state == nil || state.GetCount() <= 0 {
 		return serviceerror.NewInternal("activity handoff attempt is not initialized")
 	}
@@ -508,15 +508,15 @@ func (a *Activity) resetHandoffAttempt(ctx chasm.MutableContext) {
 	a.clearStartToCloseState(ctx)
 	attempt.PendingRetryType = activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
 	if a.GetHandoffOptions() != nil {
-		if attempt.AsyncHandoffState == nil {
-			attempt.AsyncHandoffState = &activitypb.ActivityAttemptState_AsyncHandoffState{}
+		if attempt.HandoffState == nil {
+			attempt.HandoffState = &activitypb.ActivityAttemptState_HandoffState{}
 		}
 
-		attempt.AsyncHandoffState.Count = 1
-	} else if attempt.AsyncHandoffState != nil {
+		attempt.HandoffState.Count = 1
+	} else if attempt.HandoffState != nil {
 		// Reset only the counter; keep the stamp so future start-to-close timers bump it instead of
 		// reusing an old value.
-		attempt.AsyncHandoffState.Count = 0
+		attempt.HandoffState.Count = 0
 	}
 }
 
@@ -623,7 +623,7 @@ func nextRetryCounts(optionsPresent bool, typ activitypb.ActivityRetryType, acti
 		return activityAttempt + 1, 0, nil
 	case activitypb.ACTIVITY_RETRY_TYPE_HANDOFF:
 		if !optionsPresent {
-			return 0, 0, serviceerror.NewInternal("handoff retry requires async handoff options")
+			return 0, 0, serviceerror.NewInternal("handoff retry requires handoff options")
 		}
 
 		if handoffAttempt == math.MaxInt32 {
@@ -636,7 +636,7 @@ func nextRetryCounts(optionsPresent bool, typ activitypb.ActivityRetryType, acti
 	}
 }
 
-// handoffDeadlineInput describes timeouts affected by async handoff. The caller calculates schedule-to-start
+// handoffDeadlineInput describes timeouts affected by handoff. The caller calculates schedule-to-start
 // and schedule-to-close separately because their scheduling rules are unchanged by handoff.
 type handoffDeadlineInput struct {
 	StartToCloseTimeout, StartToHandoffTimeout, HandoffToCloseTimeout time.Duration

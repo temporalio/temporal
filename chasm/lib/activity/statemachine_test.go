@@ -460,7 +460,7 @@ func TestTransitionRescheduled(t *testing.T) {
 
 				attempt := a.LastAttempt.Get(ctx)
 				attempt.Count = testCase.activityAttempt
-				attempt.AsyncHandoffState.Count = testCase.handoffAttempt
+				attempt.HandoffState.Count = testCase.handoffAttempt
 				beforeState := common.CloneProto(a.ActivityState)
 				beforeAttempt := common.CloneProto(attempt)
 
@@ -1515,16 +1515,16 @@ func TestHandoffLifecycle(t *testing.T) {
 					Status:             test.status,
 					AwaitingCompletion: test.awaitingCompletion,
 					ResetShouldPause:   test.keepPaused,
-					AsyncHandoffTime:   handoffTime,
+					HandoffTime:        handoffTime,
 				},
 				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
 			}
 			require.NoError(t, test.apply(a, ctx))
 			require.False(t, a.GetAwaitingCompletion())
 			if test.retainTime {
-				require.Same(t, handoffTime, a.GetAsyncHandoffTime())
+				require.Same(t, handoffTime, a.GetHandoffTime())
 			} else {
-				require.Nil(t, a.GetAsyncHandoffTime())
+				require.Nil(t, a.GetHandoffTime())
 			}
 		})
 	}
@@ -1566,13 +1566,13 @@ func TestHandoffStartClocks(t *testing.T) {
 					a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
 					attempt.Count = 1
 					attempt.Stamp = 1
-					attempt.AsyncHandoffState = &activitypb.ActivityAttemptState_AsyncHandoffState{Count: 1}
+					attempt.HandoffState = &activitypb.ActivityAttemptState_HandoffState{Count: 1}
 					require.NoError(t, TransitionStarted.Apply(a, ctx, &historyservice.RecordActivityTaskStartedRequest{RequestId: "start", Stamp: 1}))
 				}
 
 				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, a.GetStatus())
-				require.Equal(t, now, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime())
-				require.EqualValues(t, 1, attempt.GetAsyncHandoffState().GetStartToCloseStamp())
+				require.Equal(t, now, attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime())
+				require.EqualValues(t, 1, attempt.GetHandoffState().GetStartToCloseStamp())
 
 				expected := []chasm.MockTask{}
 				if testCase.value.AsDuration() > 0 {
@@ -1584,7 +1584,7 @@ func TestHandoffStartClocks(t *testing.T) {
 
 				// A later handoff retry pickup preserves the first pickup's start-to-close clock.
 				pickupTime := now
-				startToCloseStamp := attempt.GetAsyncHandoffState().GetStartToCloseStamp()
+				startToCloseStamp := attempt.GetHandoffState().GetStartToCloseStamp()
 				now = now.Add(10 * time.Second)
 				retryState, err := a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "handoff failed"}})
 				require.NoError(t, err)
@@ -1596,8 +1596,8 @@ func TestHandoffStartClocks(t *testing.T) {
 					RequestId: "retry-start", Stamp: attempt.GetStamp(),
 				}))
 				require.Equal(t, now, attempt.GetStartedTime().AsTime())
-				require.Equal(t, pickupTime, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime())
-				require.Equal(t, startToCloseStamp, attempt.GetAsyncHandoffState().GetStartToCloseStamp())
+				require.Equal(t, pickupTime, attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime())
+				require.Equal(t, startToCloseStamp, attempt.GetHandoffState().GetStartToCloseStamp())
 				require.Equal(t, []chasm.MockTask{
 					{Component: a, Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(startToHandoffTimeout)}, Payload: &activitypb.StartToHandoffTimeoutTask{Stamp: attempt.GetStamp()}},
 				}, ctx.Tasks)
@@ -1620,7 +1620,7 @@ func TestHandoffStartClocks(t *testing.T) {
 					ctx.Tasks = nil
 					require.NoError(t, a.reissueRunningAttemptTimers(ctx, attempt))
 					require.Equal(t, pickupTime.Add(updatedTimeout), ctx.Tasks[0].Attributes.ScheduledTime)
-					require.Equal(t, &activitypb.HandoffStartToCloseTimeoutTask{Stamp: before.GetAsyncHandoffState().GetStartToCloseStamp() + 1}, ctx.Tasks[0].Payload)
+					require.Equal(t, &activitypb.HandoffStartToCloseTimeoutTask{Stamp: before.GetHandoffState().GetStartToCloseStamp() + 1}, ctx.Tasks[0].Payload)
 					require.Equal(t, before.GetStartedStamp(), attempt.GetStartedStamp())
 				}
 			})
@@ -1638,8 +1638,8 @@ func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
 	now := ctx.Now(a)
 	ctx.HandleNow = func(chasm.Component) time.Time { return now }
 	attempt := a.LastAttempt.Get(ctx)
-	originalStart := attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime()
-	originalStamp := attempt.GetAsyncHandoffState().GetStartToCloseStamp()
+	originalStart := attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime()
+	originalStamp := attempt.GetHandoffState().GetStartToCloseStamp()
 
 	_, err := a.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{FrontendRequest: &workflowservice.PauseActivityExecutionRequest{}})
 	require.NoError(t, err)
@@ -1647,7 +1647,7 @@ func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
 	_, err = a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "submission failed"}})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, a.GetStatus())
-	require.Nil(t, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime())
+	require.Nil(t, attempt.GetHandoffState().GetStartToCloseStartedTime())
 
 	// Unpause after the old timeout would have expired; pickup must get the full new window.
 	now = originalStart.Add(2 * a.GetStartToCloseTimeout().AsDuration())
@@ -1660,8 +1660,8 @@ func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{Namespace: "test-namespace"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, now, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime())
-	require.Greater(t, attempt.GetAsyncHandoffState().GetStartToCloseStamp(), originalStamp)
+	require.Equal(t, now, attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime())
+	require.Greater(t, attempt.GetHandoffState().GetStartToCloseStamp(), originalStamp)
 	require.Equal(t, now.Add(a.GetStartToCloseTimeout().AsDuration()), ctx.Tasks[0].Attributes.ScheduledTime)
 	require.IsType(t, &activitypb.HandoffStartToCloseTimeoutTask{}, ctx.Tasks[0].Payload)
 }
