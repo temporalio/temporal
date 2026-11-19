@@ -45,7 +45,7 @@ const (
 	dropDatabaseQuery                 = "DROP DATABASE IF EXISTS %v"
 	terminateDatabaseConnectionsQuery = `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`
 
-	listTablesQuery = "select table_name from information_schema.tables where table_schema='public'"
+	listTablesQuery = "select table_name from information_schema.tables where table_schema = current_schema()"
 
 	dropTableQuery = "DROP TABLE %v"
 )
