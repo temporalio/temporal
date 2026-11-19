@@ -252,15 +252,15 @@ func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
 	for _, tc := range []struct {
-		name             string
-		session          bool
-		missingPlacement bool
-		bound            bool
+		name           string
+		session        bool
+		droppedSession bool
+		bound          bool
 	}{
 		{name: "regular activity with sticky workflow"},
 		{name: "workflow-session activity", session: true},
 		{name: "single-session activity", session: true, bound: true},
-		{name: "workflow-session activity awaiting placement", session: true, missingPlacement: true},
+		{name: "workflow-session activity after the session was dropped", session: true, droppedSession: true},
 	} {
 		s.Run(tc.name, func() {
 			execution := &commonpb.WorkflowExecution{
@@ -302,11 +302,18 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			if tc.session {
 				ai.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
-			if !tc.missingPlacement {
-				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			switch {
+			case tc.bound:
+				mutableState.BindExclusiveWorker("sticky-worker", "")
+			case tc.droppedSession:
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+			case tc.session:
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}}
+			default:
+				// A regular activity of a sticky workflow without a session.
 			}
-			if tc.bound {
-				mutableState.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}})
+			if !tc.droppedSession {
+				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 			}
 
 			transferTask := &tasks.ActivityTask{
@@ -324,23 +331,17 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 
 			persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-			if !tc.missingPlacement {
-				request := s.createAddActivityTaskRequest(transferTask, ai)
-				if tc.session {
-					request.TaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
-				}
-				if tc.bound {
-					request.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}, IsExclusiveWorkerAssigned: true}
-				}
-				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
+			request := s.createAddActivityTaskRequest(transferTask, ai)
+			if tc.session && !tc.droppedSession {
+				request.TaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 			}
+			if tc.session && !tc.droppedSession {
+				request.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}, IsExclusiveWorkerAssigned: tc.bound}
+			}
+			s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 			resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-			if tc.missingPlacement {
-				s.Require().ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
-			} else {
-				s.Require().NoError(resp.ExecutionErr)
-			}
+			s.Require().NoError(resp.ExecutionErr)
 		})
 	}
 }

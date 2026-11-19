@@ -12,8 +12,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -132,6 +130,11 @@ func Invoke(
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
 			currentTaskQueue := mutableState.CurrentTaskQueue()
 			pollerTaskQueue := req.PollRequest.TaskQueue
+
+			// The clear below also clears the non-exclusive binding; we need to save these values so that we can
+			// understand if this workflow is dispatched as a session or not.
+			previousStickyTimeout := executionInfo.GetStickyScheduleToStartTimeout()
+			previousWorkerQueue := sessionState.GetBoundWorkerInfo().GetWorkerQueue()
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
 				currentTaskQueue.GetName() != pollerTaskQueue.GetName() {
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
@@ -192,13 +195,10 @@ func Invoke(
 			newSingleSessionBinding := singleSession != nil && !sessionState.GetExclusiveWorker()
 			if newSingleSessionBinding {
 				// Bind after the task start is accepted so both changes commit in the same transaction.
-				mutableState.SetSessionState(&persistencespb.SessionState{
-					ExclusiveWorker: true,
-					BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{
-						WorkerQueue: stableIdentity,
-						InstanceKey: req.PollRequest.GetWorkerInstanceKey(),
-					},
-				})
+				mutableState.BindExclusiveWorker(stableIdentity, req.PollRequest.GetWorkerInstanceKey())
+				// TODO (Shivam): A single-session worker can acquire a workflow that already has a non-exclusive binding.
+				// Its session activities stay queued at the previously bound worker. Decide how exclusive and non-exclusive
+				// workers on one task queue interact (reschedule, reject the acquisition, or keep unsupported).
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
@@ -265,6 +265,23 @@ func Invoke(
 			)
 			if err != nil {
 				return nil, err
+			}
+
+			// Runs after the deployment transition, which clears stickiness, so the session follows this worker. It
+			// also runs after the response is built: a worker that polled the normal queue has nothing cached and
+			// must receive full history, even though the restored sticky queue now points at it.
+			bindingUpdated, err := mutableState.UpdateNonExclusiveWorkerBinding(
+				req.PollRequest.GetSessionOptions(),
+				req.PollRequest.GetWorkerInstanceKey(),
+				previousWorkerQueue,
+				previousStickyTimeout,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if bindingUpdated {
+				// A speculative task that binds, moves, or drops a session must be persisted.
+				updateAction.Noop = false
 			}
 
 			return updateAction, nil

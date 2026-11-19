@@ -55,6 +55,7 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -1559,7 +1560,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestinati
 			_, _, token := s.createSentUpdate(tv, wfContext)
 			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
 			s.Require().NoError(err)
-			ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}})
+			ms.BindExclusiveWorker("S", "")
 			request := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token, Identity: "worker"}
 			if destination == "other" {
 				request.StickyAttributes = tv.StickyExecutionAttributes(time.Second)
@@ -1577,6 +1578,62 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestinati
 			s.True(ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker())
 			s.Equal("S", ms.GetExecutionInfo().GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
 			s.Equal("S", ms.GetExecutionInfo().GetStickyTaskQueue())
+		})
+	}
+}
+
+/*
+TestNonExclusiveBindingSurvivesCompletion tests that a completion never moves or drops a non-exclusive binding:
+ 1. Start a workflow task with the session and sticky queue on worker queue X.
+ 2. Complete it with matching sticky attributes, without sticky attributes,
+    or as a heartbeat that exceeds the workflow task heartbeat timeout.
+ 3. The bound worker and sticky queue stay X; only the worker's reported timeout is taken.
+*/
+func (s *WorkflowTaskCompletedHandlerSuite) TestNonExclusiveBindingSurvivesCompletion() {
+	for _, tc := range []struct {
+		name              string
+		stickyName        string
+		heartbeatTimedOut bool
+		wantTimeout       time.Duration
+	}{
+		{name: "matching sticky attributes", stickyName: "X", wantTimeout: 3 * time.Second},
+		{name: "no sticky attributes", wantTimeout: time.Minute},
+		{name: "heartbeat timeout", stickyName: "X", heartbeatTimedOut: true, wantTimeout: 3 * time.Second},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).AnyTimes()
+			wfContext, token := s.createStartedWorkflowWithStartedWFT(tv)
+			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
+			s.Require().NoError(err)
+			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}
+			ms.SetStickyTaskQueue("X", durationpb.New(time.Minute))
+			request := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token, Identity: "worker"}
+			if tc.stickyName != "" {
+				request.StickyAttributes = tv.StickyExecutionAttributes(3 * time.Second)
+				request.StickyAttributes.WorkerTaskQueue.Name = tc.stickyName
+			}
+			if tc.heartbeatTimedOut {
+				request.ForceCreateNewWorkflowTask = true
+				original := s.workflowTaskCompletedHandler.config.WorkflowTaskHeartbeatTimeout
+				s.workflowTaskCompletedHandler.config.WorkflowTaskHeartbeatTimeout = func(string) time.Duration { return 0 }
+				defer func() { s.workflowTaskCompletedHandler.config.WorkflowTaskHeartbeatTimeout = original }()
+			}
+
+			_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(), CompleteRequest: request,
+			})
+
+			if tc.heartbeatTimedOut {
+				s.ErrorContains(err, "workflow task heartbeat timeout")
+			} else {
+				s.Require().NoError(err)
+			}
+			s.Equal("X", ms.GetExecutionInfo().GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
+			s.Equal("X", ms.GetExecutionInfo().GetStickyTaskQueue())
+			s.Equal(tc.wantTimeout, ms.GetExecutionInfo().GetStickyScheduleToStartTimeout().AsDuration())
 		})
 	}
 }

@@ -21,6 +21,7 @@ import (
 	failure "go.temporal.io/api/failure/v1"
 	history "go.temporal.io/api/history/v1"
 	nexus "go.temporal.io/api/nexus/v1"
+	session "go.temporal.io/api/session/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	update "go.temporal.io/api/update/v1"
 	worker "go.temporal.io/api/worker/v1"
@@ -1721,6 +1722,18 @@ func (mr *MockMutableStateMockRecorder) AttachRequestID(requestID, eventType, ev
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachRequestID", reflect.TypeOf((*MockMutableState)(nil).AttachRequestID), requestID, eventType, eventID)
 }
 
+// BindExclusiveWorker mocks base method.
+func (m *MockMutableState) BindExclusiveWorker(stableIdentity, instanceKey string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "BindExclusiveWorker", stableIdentity, instanceKey)
+}
+
+// BindExclusiveWorker indicates an expected call of BindExclusiveWorker.
+func (mr *MockMutableStateMockRecorder) BindExclusiveWorker(stableIdentity, instanceKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindExclusiveWorker", reflect.TypeOf((*MockMutableState)(nil).BindExclusiveWorker), stableIdentity, instanceKey)
+}
+
 // ChasmEnabled mocks base method.
 func (m *MockMutableState) ChasmEnabled() bool {
 	m.ctrl.T.Helper()
@@ -1833,6 +1846,20 @@ func (m *MockMutableState) ClearStickyTaskQueue() {
 func (mr *MockMutableStateMockRecorder) ClearStickyTaskQueue() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyTaskQueue", reflect.TypeOf((*MockMutableState)(nil).ClearStickyTaskQueue))
+}
+
+// ClearStickyTaskQueueUnlessPartOfSession mocks base method.
+func (m *MockMutableState) ClearStickyTaskQueueUnlessPartOfSession() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearStickyTaskQueueUnlessPartOfSession")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ClearStickyTaskQueueUnlessPartOfSession indicates an expected call of ClearStickyTaskQueueUnlessPartOfSession.
+func (mr *MockMutableStateMockRecorder) ClearStickyTaskQueueUnlessPartOfSession() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyTaskQueueUnlessPartOfSession", reflect.TypeOf((*MockMutableState)(nil).ClearStickyTaskQueueUnlessPartOfSession))
 }
 
 // ClearTransientWorkflowTask mocks base method.
@@ -3554,6 +3581,20 @@ func (mr *MockMutableStateMockRecorder) RetryActivity(ai, arg1 any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, arg1)
 }
 
+// SessionWorkerQueue mocks base method.
+func (m *MockMutableState) SessionWorkerQueue() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SessionWorkerQueue")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// SessionWorkerQueue indicates an expected call of SessionWorkerQueue.
+func (mr *MockMutableStateMockRecorder) SessionWorkerQueue() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SessionWorkerQueue", reflect.TypeOf((*MockMutableState)(nil).SessionWorkerQueue))
+}
+
 // SetBaseWorkflow mocks base method.
 func (m *MockMutableState) SetBaseWorkflow(baseRunID string, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion int64) {
 	m.ctrl.T.Helper()
@@ -3640,18 +3681,6 @@ func (m *MockMutableState) SetReplayEventBatchID(batchID int64) {
 func (mr *MockMutableStateMockRecorder) SetReplayEventBatchID(batchID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReplayEventBatchID", reflect.TypeOf((*MockMutableState)(nil).SetReplayEventBatchID), batchID)
-}
-
-// SetSessionState mocks base method.
-func (m *MockMutableState) SetSessionState(state *persistence.SessionState) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetSessionState", state)
-}
-
-// SetSessionState indicates an expected call of SetSessionState.
-func (mr *MockMutableStateMockRecorder) SetSessionState(state any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSessionState", reflect.TypeOf((*MockMutableState)(nil).SetSessionState), state)
 }
 
 // SetSpeculativeWorkflowTaskTimeoutTask mocks base method.
@@ -3934,6 +3963,21 @@ func (m *MockMutableState) UpdateLastRunningClock(arg0 []*persistence0.WorkflowE
 func (mr *MockMutableStateMockRecorder) UpdateLastRunningClock(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastRunningClock", reflect.TypeOf((*MockMutableState)(nil).UpdateLastRunningClock), arg0)
+}
+
+// UpdateNonExclusiveWorkerBinding mocks base method.
+func (m *MockMutableState) UpdateNonExclusiveWorkerBinding(options *session.WorkerSessionOptions, instanceKey, previousWorkerQueue string, previousStickyTimeout *durationpb.Duration) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNonExclusiveWorkerBinding", options, instanceKey, previousWorkerQueue, previousStickyTimeout)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNonExclusiveWorkerBinding indicates an expected call of UpdateNonExclusiveWorkerBinding.
+func (mr *MockMutableStateMockRecorder) UpdateNonExclusiveWorkerBinding(options, instanceKey, previousWorkerQueue, previousStickyTimeout any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNonExclusiveWorkerBinding", reflect.TypeOf((*MockMutableState)(nil).UpdateNonExclusiveWorkerBinding), options, instanceKey, previousWorkerQueue, previousStickyTimeout)
 }
 
 // UpdateResetRunID mocks base method.

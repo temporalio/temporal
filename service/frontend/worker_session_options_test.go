@@ -18,9 +18,17 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 		options        *sessionpb.WorkerSessionOptions
 		singleSession  bool
 		stableIdentity string
+		multiSession   bool
+		workerAddress  string
 		noInstanceKey  bool
 		invalid        bool
 	}{
+		{name: "multi session on sticky queue", kind: enumspb.TASK_QUEUE_KIND_STICKY, multiSession: true, workerAddress: "queue"},
+		{name: "multi session on normal queue", kind: enumspb.TASK_QUEUE_KIND_NORMAL, multiSession: true, workerAddress: "sticky-queue"},
+		{name: "empty worker address", kind: enumspb.TASK_QUEUE_KIND_NORMAL, multiSession: true, invalid: true},
+		{name: "multi session without worker instance key", kind: enumspb.TASK_QUEUE_KIND_NORMAL, multiSession: true, workerAddress: "sticky-queue", noInstanceKey: true, invalid: true},
+		{name: "sticky queue differs from worker address", kind: enumspb.TASK_QUEUE_KIND_STICKY, multiSession: true, workerAddress: "other", invalid: true},
+		{name: "worker address is the normal queue", kind: enumspb.TASK_QUEUE_KIND_NORMAL, multiSession: true, workerAddress: "queue", invalid: true},
 		{name: "regular poll", kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		{name: "ordinary sticky poll", kind: enumspb.TASK_QUEUE_KIND_STICKY},
 		{name: "empty options on sticky poll", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: &sessionpb.WorkerSessionOptions{}},
@@ -37,6 +45,11 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 			if tc.singleSession {
 				options = &sessionpb.WorkerSessionOptions{
 					Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tc.stableIdentity}},
+				}
+			}
+			if tc.multiSession {
+				options = &sessionpb.WorkerSessionOptions{
+					Admission: &sessionpb.WorkerSessionOptions_MultiSession{MultiSession: &sessionpb.MultiSessionOptions{WorkerAddress: tc.workerAddress}},
 				}
 			}
 			instanceKey := "worker-instance-key"

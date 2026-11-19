@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -239,11 +240,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_PendingW
 	s.processPendingActivityTask(true, false)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_PendingWorkflowSessionWithoutPlacement() {
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_PendingWorkflowSessionAfterUnbind() {
 	s.processPendingActivityTask(true, true)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) processPendingActivityTask(useSession, missingPlacement bool) {
+func (s *transferQueueStandbyTaskExecutorSuite) processPendingActivityTask(useSession, sessionDropped bool) {
 	s.T().Helper()
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -281,10 +282,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) processPendingActivityTask(useSe
 	expectedTaskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	if useSession {
 		activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
-		if !missingPlacement {
+		if sessionDropped {
+			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+		} else {
+			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}}
 			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 		}
-		expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 	}
 
 	now := time.Now().UTC()
@@ -307,10 +311,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) processPendingActivityTask(useSe
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	if missingPlacement {
-		s.ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
-		return
-	}
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// resend history post action

@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
@@ -1924,11 +1926,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	s.processPendingActivityRetryTimer(true, false)
 }
 
-func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PendingWorkflowSessionWithoutPlacement() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PendingWorkflowSessionAfterUnbind() {
 	s.processPendingActivityRetryTimer(true, true)
 }
 
-func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(useSession, missingPlacement bool) {
+func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(useSession, sessionDropped bool) {
 	s.T().Helper()
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1967,10 +1969,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 	expectedTaskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	if useSession {
 		activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
-		if !missingPlacement {
+		if sessionDropped {
+			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+		} else {
+			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}}
 			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 		}
-		expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 	}
 
 	timerSequence := workflow.NewTimerSequence(mutableState)
@@ -2002,10 +2007,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	if missingPlacement {
-		s.ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
-		return
-	}
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// resend history post action
@@ -2016,17 +2017,22 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 
 	// push to matching post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
+	var sessionDirective *taskqueuespb.TaskSessionDirective
+	if expectedTaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		sessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: expectedTaskQueue.GetName()}}
+	}
 	s.mockMatchingClient.EXPECT().AddActivityTask(
 		gomock.Any(),
-		&matchingservice.AddActivityTaskRequest{
+		protomock.Eq(&matchingservice.AddActivityTaskRequest{
 			NamespaceId:            s.namespaceID.String(),
 			Execution:              execution,
 			TaskQueue:              expectedTaskQueue,
+			SessionDirective:       sessionDirective,
 			ScheduledEventId:       scheduledEvent.EventId,
 			ScheduleToStartTimeout: durationpb.New(timerTimeout),
 			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
 			VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
-		},
+		}),
 		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 

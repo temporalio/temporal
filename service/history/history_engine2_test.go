@@ -890,7 +890,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 
 			ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
 			if name == "replacement" {
-				ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}})
+				ms.BindExclusiveWorker("S", "")
 			}
 			wfMs := workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -5213,4 +5213,83 @@ func (m *createWorkflowExecutionRequestMatcher) Matches(x any) bool {
 
 func (m *createWorkflowExecutionRequestMatcher) String() string {
 	return "CreateWorkflowExecutionRequest match condition"
+}
+
+/*
+TestRecordWorkflowTaskStartedBindsMultiSessionWorker tests a workflow task start by a multi-session worker:
+ 1. Start from the normal queue, either for a workflow with no binding or one bound to worker X.
+ 2. The worker gets full history (sticky execution disabled), since a worker coming from the normal queue has
+    nothing cached, even though the start binds the workflow to it.
+ 3. The persisted state binds the workflow to the polling worker, with the sticky queue mirroring it and the
+    previous sticky schedule-to-start timeout (or the default) carried over.
+*/
+func (s *engine2Suite) TestRecordWorkflowTaskStartedBindsMultiSessionWorker() {
+	for _, tc := range []struct {
+		name          string
+		boundTo       string
+		stickyTimeout time.Duration
+		wantTimeout   time.Duration
+	}{
+		{name: "first bind", wantTimeout: 5 * time.Second},
+		{name: "move from a dead worker", boundTo: "worker-x-sticky", stickyTimeout: 7 * time.Second, wantTimeout: 7 * time.Second},
+	} {
+		s.Run(tc.name, func() {
+			s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
+				HistoryEvents: []*historypb.HistoryEvent{
+					{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+					{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+					{EventId: 3, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+				},
+				NextPageToken: []byte{},
+				Size:          3,
+			}, nil).AnyTimes()
+			s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+			s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+				Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+
+			we := &commonpb.WorkflowExecution{WorkflowId: "wId-" + tc.name, RunId: tests.RunID}
+			tl := "testTaskQueue"
+			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
+				we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "identity")
+			if tc.boundTo != "" {
+				ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: tc.boundTo}}
+				ms.GetExecutionInfo().StickyTaskQueue = tc.boundTo
+				ms.GetExecutionInfo().StickyScheduleToStartTimeout = durationpb.New(tc.stickyTimeout)
+			}
+			wt := addWorkflowTaskScheduledEvent(ms)
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
+			var persisted *persistencespb.WorkflowExecutionInfo
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+					persisted = request.UpdateWorkflowMutation.ExecutionInfo
+					return tests.UpdateWorkflowExecutionResponse, nil
+				})
+
+			response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
+				NamespaceId:       tests.NamespaceID.String(),
+				WorkflowExecution: we,
+				ScheduledEventId:  wt.ScheduledEventID,
+				RequestId:         "reqId",
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					TaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Identity:  "worker-y",
+					SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
+						MultiSession: &sessionpb.MultiSessionOptions{WorkerAddress: "worker-y-sticky"},
+					}},
+					WorkerInstanceKey: "worker-y-instance",
+				},
+			})
+
+			s.Require().NoError(err)
+			s.False(response.GetStickyExecutionEnabled(), "a worker coming from the normal queue needs full history")
+			s.Require().NotNil(persisted)
+			s.Equal("worker-y-sticky", persisted.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
+			s.Equal("worker-y-instance", persisted.GetSessionState().GetBoundWorkerInfo().GetInstanceKey())
+			s.False(persisted.GetSessionState().GetExclusiveWorker())
+			s.Equal("worker-y-sticky", persisted.GetStickyTaskQueue())
+			s.Equal(tc.wantTimeout, persisted.GetStickyScheduleToStartTimeout().AsDuration())
+		})
+	}
 }
