@@ -1,13 +1,16 @@
 package testcore
 
 import (
+	"context"
 	"sync"
 	"testing"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testlogger"
+	"google.golang.org/grpc/codes"
 )
 
 type TestEnvSuite struct {
@@ -16,6 +19,15 @@ type TestEnvSuite struct {
 
 func TestTestEnvSuite(t *testing.T) {
 	parallelsuite.Run(t, &TestEnvSuite{})
+}
+
+func (s *TestEnvSuite) TestReadHistoryReturnsCancellation() {
+	env := NewEnv(s.T())
+	ctx, cancel := context.WithCancel(s.Context())
+	cancel()
+
+	_, err := env.ReadHistory(ctx, env.Namespace(), env.Tv().WorkflowExecution())
+	s.Equal(codes.Canceled, serviceerror.ToStatus(err).Code())
 }
 
 func (s *TestEnvSuite) TestDedicatedClusterGuard_NoErrorWithoutExplicitRequest() {
