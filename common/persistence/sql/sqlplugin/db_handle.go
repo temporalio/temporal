@@ -94,8 +94,11 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 	metrics.PersistenceSessionRefreshAttempts.With(h.metrics).Record(1)
 
 	now := h.timeSource.Now()
-	lastRefresh := h.lastRefresh
-	if now.Sub(lastRefresh) < sessionRefreshMinInternal {
+	// The time source follows the wall clock, which can step backwards (NTP correction, VM
+	// restore). A negative elapsed time says nothing about how recent the last refresh was, so
+	// it must not throttle: the refresh would stay blocked for as long as the clock stepped back.
+	elapsed := now.Sub(h.lastRefresh)
+	if elapsed >= 0 && elapsed < sessionRefreshMinInternal {
 		h.logger.Warn("sql handle: did not refresh database connection pool because the last refresh was too close",
 			tag.Duration("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := h.metrics.WithTags(metrics.FailureTag("throttle"))
