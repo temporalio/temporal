@@ -37,8 +37,8 @@ func ActivityTaskQueue(ms historyi.MutableState, ai *persistencespb.ActivityInfo
 	}
 	workerQueue := ms.SessionWorkerQueue()
 	if workerQueue == "" {
-		// the activity says it's in the session, but the workflow has no location right now; we return the normal queue
-		// in this case
+		// The activity was scheduled with the intent of binding to a worker where the workflow was bound. However,
+		// at this instant, the workflow is not bound to a single worker. Thus, we dispatch the activity to the normal queue.
 		return normalQueue
 	}
 	return &taskqueuepb.TaskQueue{Name: workerQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: ai.TaskQueue}

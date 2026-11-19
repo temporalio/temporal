@@ -1603,10 +1603,9 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	return true, ms.reschedulePendingActivities(activityRescheduleForSessionMove, 0)
 }
 
-// unbindNonExclusiveWorker clears the workflow's non-exclusive binding and the sticky queue mirroring it. SessionState stays
-// present, so the workflow's session activities are still accepted and route to the normal queue.
+// unbindNonExclusiveWorker clears the workflow's non-exclusive binding and the sticky queue mirroring it.
 func (ms *MutableStateImpl) unbindNonExclusiveWorker() {
-	ms.setSessionState(&persistencespb.SessionState{})
+	ms.setSessionState(nil)
 }
 
 // bindNonExclusiveWorker is setSessionState plus a real sticky schedule-to-start timeout for a non-exclusive binding.
