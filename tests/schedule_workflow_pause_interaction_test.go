@@ -525,7 +525,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 			4 WorkflowTaskCompleted`,
 			func() []*historypb.HistoryEvent {
 				t.Helper()
-				return s.RequireHistoryWithT(testcontext.For(t), t, firstRun)
+				return s.RequireHistoryWithT(t, firstRun)
 			},
 			10*time.Second,
 			250*time.Millisecond,
