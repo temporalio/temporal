@@ -2,12 +2,14 @@ package historyutils
 
 import (
 	"context"
+	"testing"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 type HistoryUtils struct {
@@ -38,15 +40,16 @@ func (u HistoryUtils) RequireHistory(s scope, execution *commonpb.WorkflowExecut
 	if helper, ok := t.(interface{ Helper() }); ok {
 		helper.Helper()
 	}
-	return u.RequireHistoryWithT(s.Context(), t, execution)
+	return u.requireHistory(s.Context(), t, execution)
 }
 
-// RequireHistoryWithT reads history using ctx and reports errors to t.
-func (u HistoryUtils) RequireHistoryWithT(
-	ctx context.Context,
-	t require.TestingT,
-	execution *commonpb.WorkflowExecution,
-) []*historypb.HistoryEvent {
+// RequireHistoryWithT reads history using t's test context.
+func (u HistoryUtils) RequireHistoryWithT(t *testing.T, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	t.Helper()
+	return u.requireHistory(testcontext.For(t), t, execution)
+}
+
+func (u HistoryUtils) requireHistory(ctx context.Context, t require.TestingT, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	if helper, ok := t.(interface{ Helper() }); ok {
 		helper.Helper()
 	}

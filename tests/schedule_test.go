@@ -1033,7 +1033,7 @@ func TestScheduleV1ActionDelayMetrics(t *testing.T) {
 
 	closeTime := func(action *schedulepb.ScheduleActionResult) time.Time {
 		t.Helper()
-		events := s.RequireHistoryWithT(ctx, t, action.GetStartWorkflowResult())
+		events := s.RequireHistoryWithT(t, action.GetStartWorkflowResult())
 		require.NotEmpty(t, events)
 		lastEvent := events[len(events)-1]
 		require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
