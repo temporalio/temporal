@@ -515,6 +515,13 @@ func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
 
+// Values for resourceExhaustedOriginTag. Local means a limiter in the recording service rejected the
+// request. Downstream means the error came from elsewhere, for example a service that was called.
+var (
+	ResourceExhaustedOriginLocalTag      = Tag{Key: resourceExhaustedOriginTag, Value: "local"}
+	ResourceExhaustedOriginDownstreamTag = Tag{Key: resourceExhaustedOriginTag, Value: "downstream"}
+)
+
 func ConcurrencyLimitGroupTag(value string) Tag {
 	if len(value) == 0 {
 		value = "not_applicable"

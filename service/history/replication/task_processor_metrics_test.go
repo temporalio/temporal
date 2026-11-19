@@ -25,10 +25,11 @@ func TestTaskProcessorResourceExhaustedMetrics(t *testing.T) {
 				Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			},
 			tags: map[string]string{
-				"operation":                "HistoryReplicationTask",
-				"resource_exhausted_cause": "ConcurrentLimit",
-				"resource_exhausted_scope": "Namespace",
-				"concurrency_limit_group":  "not_applicable",
+				"operation":                 "HistoryReplicationTask",
+				"resource_exhausted_cause":  "ConcurrentLimit",
+				"resource_exhausted_scope":  "Namespace",
+				"concurrency_limit_group":   "not_applicable",
+				"resource_exhausted_origin": "downstream",
 			},
 		},
 		{
@@ -38,10 +39,11 @@ func TestTaskProcessorResourceExhaustedMetrics(t *testing.T) {
 				Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
 			},
 			tags: map[string]string{
-				"operation":                "HistoryReplicationTask",
-				"resource_exhausted_cause": "RpsLimit",
-				"resource_exhausted_scope": "System",
-				"concurrency_limit_group":  "not_applicable",
+				"operation":                 "HistoryReplicationTask",
+				"resource_exhausted_cause":  "RpsLimit",
+				"resource_exhausted_scope":  "System",
+				"concurrency_limit_group":   "not_applicable",
+				"resource_exhausted_origin": "downstream",
 			},
 		},
 	} {
