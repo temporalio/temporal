@@ -60,24 +60,30 @@ func TestForceTerminateWorkflowRecordsMetric(t *testing.T) {
 	require.Equal(t, string(chasm.ExecutionForceTerminationReasonEventBatchSizeExceedsLimit), recordings[0].Tags["reason"])
 }
 
-// TestTaskSessionDirective keeps the request context tied to the actual bound sticky destination.
+// TestTaskSessionDirective names the bound worker (queue and instance key) only on pushes to that worker's sticky queue.
 func TestTaskSessionDirective(t *testing.T) {
 	t.Parallel()
+	worker := &taskqueuespb.BoundWorkerInfo{WorkerQueue: "worker", InstanceKey: "key"}
+	sticky := &taskqueuepb.TaskQueue{Name: "worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	exclusive := &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: worker}
 	for _, tc := range []struct {
-		name     string
-		bound    bool
-		queue    *taskqueuepb.TaskQueue
-		expected *taskqueuespb.TaskSessionDirective
+		name         string
+		sessionState *persistencespb.SessionState
+		queue        *taskqueuepb.TaskQueue
+		expected     *taskqueuespb.TaskSessionDirective
 	}{
-		{name: "bound sticky", bound: true, queue: &taskqueuepb.TaskQueue{Name: "worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY}, expected: &taskqueuespb.TaskSessionDirective{WorkerQueue: "worker", IsExclusiveWorkerAssigned: true}},
-		{name: "unbound sticky", queue: &taskqueuepb.TaskQueue{Name: "worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY}},
-		{name: "normal fallback", bound: true, queue: &taskqueuepb.TaskQueue{Name: "normal", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}},
-		{name: "empty destination", bound: true, queue: &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_STICKY}},
-		{name: "missing destination", bound: true},
+		{name: "exclusive binding", sessionState: exclusive, queue: sticky,
+			expected: &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: worker, IsExclusiveWorkerAssigned: true}},
+		{name: "unbound sticky", queue: sticky},
+		{name: "another worker's sticky queue", sessionState: exclusive,
+			queue: &taskqueuepb.TaskQueue{Name: "other", Kind: enumspb.TASK_QUEUE_KIND_STICKY}},
+		{name: "normal fallback", sessionState: exclusive,
+			queue: &taskqueuepb.TaskQueue{Name: "normal", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}},
+		{name: "missing destination", sessionState: exclusive},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			protorequire.ProtoEqual(t, tc.expected, TaskSessionDirective(tc.bound, tc.queue))
+			protorequire.ProtoEqual(t, tc.expected, TaskSessionDirective(tc.sessionState, tc.queue))
 		})
 	}
 }

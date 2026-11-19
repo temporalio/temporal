@@ -813,7 +813,7 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(
 ) {
 	var singleSessionOptions hooks.SingleSessionOptions
 	if sessionDirective.GetIsExclusiveWorkerAssigned() {
-		singleSessionOptions.WorkerStableIdentity = sessionDirective.GetWorkerQueue()
+		singleSessionOptions.WorkerStableIdentity = sessionDirective.GetBoundWorkerInfo().GetWorkerQueue()
 	}
 	for _, l := range pm.taskHooks {
 		hookOutcome := syncMatchOutcomeToHook(outcome)

@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
@@ -96,7 +97,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx context.Context,
 	task *tasks.ActivityTask,
 	taskQueue *taskqueuepb.TaskQueue,
-	singleSessionBound bool,
+	sessionState *persistencespb.SessionState,
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
@@ -109,7 +110,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			RunId:      task.RunID,
 		},
 		TaskQueue:              taskQueue,
-		SessionDirective:       workflow.TaskSessionDirective(singleSessionBound, taskQueue),
+		SessionDirective:       workflow.TaskSessionDirective(sessionState, taskQueue),
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
@@ -151,7 +152,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	ctx context.Context,
 	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
-	singleSessionBound bool,
+	sessionState *persistencespb.SessionState,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
@@ -168,7 +169,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 			RunId:      task.RunID,
 		},
 		TaskQueue:              taskqueue,
-		SessionDirective:       workflow.TaskSessionDirective(singleSessionBound, taskqueue),
+		SessionDirective:       workflow.TaskSessionDirective(sessionState, taskqueue),
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: sst,
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),

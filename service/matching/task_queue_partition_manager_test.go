@@ -2335,7 +2335,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
 				options = hooks.SingleSessionOptions{}
 			}
 			sessionDirective := &taskqueuespb.TaskSessionDirective{
-				WorkerQueue: tv.StickyTaskQueue().GetName(), IsExclusiveWorkerAssigned: !tc.general,
+				BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: tv.StickyTaskQueue().GetName()}, IsExclusiveWorkerAssigned: !tc.general,
 			}
 			directive := &taskqueuespb.TaskVersionDirective{
 				Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
@@ -2751,7 +2751,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_ReportsSingle
 			defer cancel()
 
 			req := newTestQueryWorkflowRequest(nil)
-			req.SessionDirective = &taskqueuespb.TaskSessionDirective{WorkerQueue: "session", IsExclusiveWorkerAssigned: assigned}
+			req.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "session"}, IsExclusiveWorkerAssigned: assigned}
 			done := make(chan struct{})
 			go func() {
 				defer close(done)

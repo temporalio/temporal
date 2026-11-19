@@ -788,7 +788,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 			RunId:      activityTask.RunID,
 		},
 		TaskQueue:              pushActivityInfo.taskQueue,
-		SessionDirective:       workflow.TaskSessionDirective(pushActivityInfo.singleSessionBound, pushActivityInfo.taskQueue),
+		SessionDirective:       workflow.TaskSessionDirective(pushActivityInfo.sessionState, pushActivityInfo.taskQueue),
 		ScheduledEventId:       activityTask.EventID,
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),

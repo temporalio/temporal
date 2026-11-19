@@ -280,7 +280,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		// since it could be sent to the DLQ. Ensure that this is not the case.
 		return err
 	}
-	singleSessionBound := mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker()
+	sessionState := common.CloneProto(mutableState.GetExecutionInfo().GetSessionState())
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, ai)
 	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority)
@@ -292,7 +292,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	// NOTE (Shivam): Consider the case for general session activity tasks where in if the worker has
 	// changed between this, does this task correctly go to the new worker?
-	return t.pushActivity(ctx, task, taskQueue, singleSessionBound, timeout, directive, priority, historyi.TransactionPolicyActive)
+	return t.pushActivity(ctx, task, taskQueue, sessionState, timeout, directive, priority, historyi.TransactionPolicyActive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -336,7 +336,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	taskQueue, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
 
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
-	singleSessionBound := mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker()
+	sessionState := common.CloneProto(mutableState.GetExecutionInfo().GetSessionState())
 
 	directive := MakeDirectiveForWorkflowTask(mutableState)
 	priority := mutableState.GetExecutionInfo().Priority
@@ -350,7 +350,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		ctx,
 		transferTask,
 		taskQueue,
-		singleSessionBound,
+		sessionState,
 		scheduleToStartTimeout.AsDuration(),
 		directive,
 		priority,
@@ -376,7 +376,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 			ctx,
 			transferTask,
 			taskQueue,
-			singleSessionBound,
+			sessionState,
 			scheduleToStartTimeout.AsDuration(),
 			directive,
 			priority,
