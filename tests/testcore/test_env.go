@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -392,18 +391,6 @@ func (e *TestEnv) GetTestClusterConfig() *TestClusterConfig {
 	return e.functionalTestBase.testClusterConfig
 }
 
-func (e *TestEnv) HistoryShardCount() int32 {
-	return e.functionalTestBase.testClusterConfig.HistoryConfig.NumHistoryShards
-}
-
-func (e *TestEnv) PersistenceStoreType() string {
-	return e.functionalTestBase.testClusterConfig.Persistence.StoreType
-}
-
-func (e *TestEnv) ElasticsearchConfig() *esconfig.Config {
-	return e.functionalTestBase.testClusterConfig.ESConfig
-}
-
 func (e *TestEnv) FrontendClient() workflowservice.WorkflowServiceClient {
 	return e.cluster.FrontendClient()
 }
@@ -437,34 +424,6 @@ func (e *TestEnv) RegisterNamespace(
 	visibilityArchivalURI string,
 ) (namespace.ID, error) {
 	return e.functionalTestBase.RegisterNamespace(ctx, nsName, retentionDays, archivalState, historyArchivalURI, visibilityArchivalURI)
-}
-
-func (e *TestEnv) GetHistoryFunc(nsName namespace.Name, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
-	return func() []*historypb.HistoryEvent {
-		historyResponse, err := e.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:       nsName.String(),
-			Execution:       execution,
-			MaximumPageSize: 5, // Use small page size to force pagination code path
-		})
-		require.NoError(e.t, err)
-
-		events := historyResponse.History.Events
-		for historyResponse.NextPageToken != nil {
-			historyResponse, err = e.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace:     nsName.String(),
-				Execution:     execution,
-				NextPageToken: historyResponse.NextPageToken,
-			})
-			require.NoError(e.t, err)
-			events = append(events, historyResponse.History.Events...)
-		}
-
-		return events
-	}
-}
-
-func (e *TestEnv) GetHistory(nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	return e.GetHistoryFunc(nsName, execution)()
 }
 
 func (e *TestEnv) SendSignal(nsName namespace.Name, execution *commonpb.WorkflowExecution, signalName string,
@@ -549,6 +508,46 @@ func (e *TestEnv) T() *testing.T {
 
 func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
+}
+
+// ReadHistory reads every page of workflow history using ctx.
+func (e *TestEnv) ReadHistory(
+	ctx context.Context,
+	nsName namespace.Name,
+	execution *commonpb.WorkflowExecution,
+) ([]*historypb.HistoryEvent, error) {
+	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:       nsName.String(),
+		Execution:       execution,
+		MaximumPageSize: 5, // Use small page size to force pagination code path
+	}
+	var events []*historypb.HistoryEvent
+	for {
+		response, err := e.FrontendClient().GetWorkflowExecutionHistory(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, response.GetHistory().GetEvents()...)
+		request.NextPageToken = response.GetNextPageToken()
+		if len(request.NextPageToken) == 0 {
+			return events, nil
+		}
+		request.MaximumPageSize = 0
+	}
+}
+
+func (e *TestEnv) GetHistoryFunc(nsName namespace.Name, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+	return func() []*historypb.HistoryEvent {
+		e.t.Helper()
+		return e.GetHistory(nsName, execution)
+	}
+}
+
+func (e *TestEnv) GetHistory(nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	e.t.Helper()
+	events, err := e.ReadHistory(NewContext(), nsName, execution)
+	require.NoError(e.t, err)
+	return events
 }
 
 // InjectRequestFault registers a pre-handler gRPC fault injection scoped to this test's namespace.
@@ -786,7 +785,7 @@ func (e *TestEnv) CloseShard(namespaceID string, workflowID string) {
 		e.t.Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	e.dedicatedGuard.record("shard closed")
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, e.HistoryShardCount())
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, e.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 	_, err := e.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
 		ShardId: shardID,
 	})

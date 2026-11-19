@@ -286,22 +286,14 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	env.Logger.Info("PollAndProcessWorkflowTask (drop)", tag.Error(err))
 	s.NoError(err)
 
-	sdkClient := env.SdkClient()
 	// Wait for the workflow task timeout to actually fire before polling for stage 5
 	// With 10s timeout, poll for up to 15s to ensure timeout has occurred
 	s.Await(func(s *TransientTaskSuite) {
-		events := sdkClient.GetWorkflowHistory(s.Context(), workflowExecution.WorkflowId, workflowExecution.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		events, err := env.ReadHistory(s.Context(), env.Namespace(), workflowExecution)
+		s.NoError(err)
 		// Look for WorkflowTaskTimedOut event (should be event 21)
-		timedOutFound := false
-		for events.HasNext() {
-			event, err := events.Next()
-			s.NoError(err)
-			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
-				timedOutFound = true
-				break
-			}
-		}
-		s.True(timedOutFound, "Expected WorkflowTaskTimedOut event not found in history")
+		s.True(hasEventType(events, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT),
+			"Expected WorkflowTaskTimedOut event not found in history")
 	}, 15*time.Second, 500*time.Millisecond)
 
 	// stage 5: process task after timeout and complete workflow
