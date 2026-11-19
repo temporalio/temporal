@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
@@ -294,7 +295,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 			addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 			var expectedSessionState *persistencespb.SessionState
 			if exclusiveWorker {
-				expectedSessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
+				expectedSessionState = &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
 				ms.SetSessionState(common.CloneProto(expectedSessionState))
 			}
 			wfMs := workflow.TestCloneToProto(ctx, ms)
@@ -311,7 +312,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 			s.Equal(tests.RunID, response.GetFirstExecutionRunId())
 			protorequire.ProtoEqual(s.T(), expectedSessionState, response.GetSessionState())
 			if exclusiveWorker {
-				response.GetSessionState().WorkerQueue = "other"
+				response.GetSessionState().BoundWorkerInfo = &taskqueuespb.BoundWorkerInfo{WorkerQueue: "other"}
 				response, err = s.historyEngine.GetMutableState(ctx, request)
 				s.Require().NoError(err)
 				protorequire.ProtoEqual(s.T(), expectedSessionState, response.GetSessionState())
@@ -762,7 +763,7 @@ func (s *engineSuite) TestSingleSessionQueryDoesNotFallback() {
 			started := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "foo", "worker")
 			addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, started.GetEventId(), "worker")
 			ms.SetStickyTaskQueue("S", nil)
-			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
+			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(t.Context(), ms)}, nil)
 

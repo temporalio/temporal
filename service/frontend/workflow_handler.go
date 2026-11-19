@@ -1159,7 +1159,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue()); err != nil {
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey()); err != nil {
 		return nil, err
 	}
 	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
@@ -1421,7 +1421,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue()); err != nil {
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey()); err != nil {
 		return nil, err
 	}
 	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
@@ -8048,7 +8048,7 @@ func (wh *WorkflowHandler) checkExclusiveWorkerSessionsEnabled(namespaceName str
 	return nil
 }
 
-func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQueue *taskqueuepb.TaskQueue) error {
+func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQueue *taskqueuepb.TaskQueue, workerInstanceKey string) error {
 	if options == nil {
 		return nil
 	}
@@ -8062,6 +8062,10 @@ func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQ
 		}
 		if taskQueue.GetName() != stableIdentity {
 			return serviceerror.NewInvalidArgument("single-session sticky queue must match stable identity")
+		}
+		if workerInstanceKey == "" {
+			// A session binding records the worker's instance key; Matching looks the worker up by it in its heartbeat registry.
+			return serviceerror.NewInvalidArgument("session worker instance key is required")
 		}
 	}
 	return nil
