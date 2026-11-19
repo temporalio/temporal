@@ -4250,7 +4250,7 @@ type GetNamespaceResponse struct {
 	RestoreInfo       *v12.NamespaceRestoreInfo        `protobuf:"bytes,10,opt,name=restore_info,json=restoreInfo,proto3" json:"restore_info,omitempty"`
 	// The serving cluster's view of this namespace for operator verify and
 	// repair. Unset when the cluster has nothing to report.
-	RepairScope   *NamespaceRepairScope `protobuf:"bytes,12,opt,name=repair_scope,json=repairScope,proto3" json:"repair_scope,omitempty"`
+	RepairScope   *NamespaceRepairScope `protobuf:"bytes,11,opt,name=repair_scope,json=repairScope,proto3" json:"repair_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7321,7 +7321,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x13is_global_namespace\x18\t \x01(\bR\x11isGlobalNamespace\x12[\n" +
 	"\frestore_info\x18\n" +
 	" \x01(\v28.temporal.server.api.persistence.v1.NamespaceRestoreInfoR\vrestoreInfo\x12\\\n" +
-	"\frepair_scope\x18\f \x01(\v29.temporal.server.api.adminservice.v1.NamespaceRepairScopeR\vrepairScope\"=\n" +
+	"\frepair_scope\x18\v \x01(\v29.temporal.server.api.adminservice.v1.NamespaceRepairScopeR\vrepairScope\"=\n" +
 	"\x14NamespaceRepairScope\x12%\n" +
 	"\x0erefusal_reason\x18\x01 \x01(\tR\rrefusalReason\"\xb9\x01\n" +
 	" GetRemoteClusterNamespaceRequest\x12!\n" +
