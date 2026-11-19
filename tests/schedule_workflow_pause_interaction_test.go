@@ -523,7 +523,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-			s.GetHistoryFunc(s.Namespace().String(), firstRun),
+			s.GetHistoryFunc(s.Namespace(), firstRun),
 			10*time.Second,
 			250*time.Millisecond,
 		)
