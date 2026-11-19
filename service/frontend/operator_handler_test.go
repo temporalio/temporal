@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"testing"
 	"time"
 
@@ -28,9 +29,11 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.uber.org/mock/gomock"
+	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 )
@@ -173,7 +176,6 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
-				Namespace: testNamespace,
 			},
 			storeNames:                []string{esconfig.PersistenceName},
 			indexName:                 testIndexName,
@@ -190,7 +192,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 
 			saTypeMap := searchattribute.TestNameTypeMap()
 			if len(tc.storeNames) > 0 && tc.storeNames[0] == esconfig.PersistenceName {
-				saTypeMap = searchattribute.TestNameTypeMap()
+				saTypeMap = searchattribute.TestEsNameTypeMap()
 			}
 
 			if tc.getSearchAttributesCalled {
@@ -200,26 +202,19 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 			}
 
 			if tc.addInternalSuccess {
-				// Mock the frontend client calls for getNamespaceInfo and updateNamespaceAliases
-				s.mockResource.ClientFactory.EXPECT().
-					NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-					Return(nil, s.mockResource.GetFrontendClient(), nil).
-					AnyTimes()
-				s.mockResource.FrontendClient.EXPECT().
-					DescribeNamespace(
+				s.mockResource.VisibilityManager.EXPECT().
+					AddSearchAttributes(
 						gomock.Any(),
-						&workflowservice.DescribeNamespaceRequest{Namespace: testNamespace},
+						&manager.AddSearchAttributesRequest{SearchAttributes: tc.request.SearchAttributes},
 					).
-					Return(&workflowservice.DescribeNamespaceResponse{
-						Config: &namespacepb.NamespaceConfig{
-							CustomSearchAttributeAliases: searchattribute.TestAliases,
-						},
-					}, nil).
-					AnyTimes()
-				s.mockResource.FrontendClient.EXPECT().
-					UpdateNamespace(gomock.Any(), gomock.Any()).
-					Return(&workflowservice.UpdateNamespaceResponse{}, nil).
-					AnyTimes()
+					Return(nil)
+				s.mockResource.SearchAttributesManager.EXPECT().
+					SaveSearchAttributes(
+						gomock.Any(),
+						tc.indexName,
+						gomock.Any(),
+					).
+					Return(nil)
 			}
 
 			_, err := s.handler.AddSearchAttributes(ctx, tc.request)
@@ -266,6 +261,19 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 			addVisManager1Err: errors.New("mock error add vis manager 1"),
 			expectedErrMsg:    "mock error add vis manager 1",
 		},
+		{
+			name: "fail: failed to add search attributes to visibility manager 2",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+				Namespace: testNamespace,
+			},
+			addVisManager1:    true,
+			addVisManager2:    true,
+			addVisManager2Err: errors.New("mock error add vis manager 2"),
+			expectedErrMsg:    "mock error add vis manager 2",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -299,34 +307,19 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 				AnyTimes()
 
 			if tc.addVisManager1 {
-				// Mock the frontend client calls for getNamespaceInfo and updateNamespaceAliases
-				s.mockResource.ClientFactory.EXPECT().
-					NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-					Return(nil, s.mockResource.GetFrontendClient(), nil).
-					AnyTimes()
-				s.mockResource.FrontendClient.EXPECT().
-					DescribeNamespace(
-						gomock.Any(),
-						&workflowservice.DescribeNamespaceRequest{Namespace: testNamespace},
-					).
-					Return(&workflowservice.DescribeNamespaceResponse{
-						Config: &namespacepb.NamespaceConfig{
-							CustomSearchAttributeAliases: searchattribute.TestAliases,
-						},
-					}, nil).
-					AnyTimes()
-				s.mockResource.FrontendClient.EXPECT().
-					UpdateNamespace(gomock.Any(), gomock.Any()).
-					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addVisManager1Err).
-					AnyTimes()
+				mockVisManager1.EXPECT().AddSearchAttributes(
+					gomock.Any(),
+					&manager.AddSearchAttributesRequest{SearchAttributes: tc.request.SearchAttributes},
+				).Return(nil)
+				s.mockResource.SearchAttributesManager.EXPECT().
+					SaveSearchAttributes(gomock.Any(), testIndexName1, gomock.Any()).
+					Return(tc.addVisManager1Err)
 			}
 
-			if tc.addVisManager2 && !tc.addVisManager1 {
-				// Only set up frontend mocks if visManager1 didn't already set them up
+			if tc.addVisManager2 {
 				s.mockResource.ClientFactory.EXPECT().
 					NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-					Return(nil, s.mockResource.GetFrontendClient(), nil).
-					AnyTimes()
+					Return(nil, s.mockResource.GetFrontendClient(), nil)
 				s.mockResource.FrontendClient.EXPECT().
 					DescribeNamespace(
 						gomock.Any(),
@@ -339,12 +332,10 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 							},
 						},
 						nil,
-					).
-					AnyTimes()
+					)
 				s.mockResource.FrontendClient.EXPECT().
 					UpdateNamespace(gomock.Any(), gomock.Any()).
-					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addVisManager2Err).
-					AnyTimes()
+					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addVisManager2Err)
 			}
 
 			_, err := s.handler.AddSearchAttributes(ctx, tc.request)
@@ -365,8 +356,11 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 		storeName              string
 		indexName              string
 		getSearchAttributesErr error
-		addCalled              bool
-		addErr                 error
+		addEsCalled            bool
+		addEsSchemaErr         error
+		addEsMetadataErr       error
+		addSQLCalled           bool
+		addSQLErr              error
 		expectedErrMsg         string
 	}{
 		{
@@ -387,13 +381,25 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
-				Namespace: testNamespace,
 			},
 			storeName:      esconfig.PersistenceName,
 			indexName:      testIndexName,
-			addCalled:      true,
-			addErr:         errors.New("mock error add es schema"),
+			addEsCalled:    true,
+			addEsSchemaErr: errors.New("mock error add es schema"),
 			expectedErrMsg: "mock error add es schema",
+		},
+		{
+			name: "fail: cannot save search attributes",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+			},
+			storeName:        esconfig.PersistenceName,
+			indexName:        testIndexName,
+			addEsCalled:      true,
+			addEsMetadataErr: errors.New("mock error add es metadata"),
+			expectedErrMsg:   "mock error add es metadata",
 		},
 		{
 			name: "success: add search attributes to elasticsearch visibility",
@@ -401,11 +407,10 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
-				Namespace: testNamespace,
 			},
 			storeName:      esconfig.PersistenceName,
 			indexName:      testIndexName,
-			addCalled:      true,
+			addEsCalled:    true,
 			expectedErrMsg: "",
 		},
 		{
@@ -418,8 +423,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 			},
 			storeName:      mysql.PluginName,
 			indexName:      testIndexName,
-			addCalled:      true,
-			addErr:         errors.New("mock error add sql mapping"),
+			addSQLCalled:   true,
+			addSQLErr:      errors.New("mock error add sql mapping"),
 			expectedErrMsg: "mock error add sql mapping",
 		},
 		{
@@ -432,7 +437,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 			},
 			storeName:      mysql.PluginName,
 			indexName:      testIndexName,
-			addCalled:      true,
+			addSQLCalled:   true,
 			expectedErrMsg: "",
 		},
 	}
@@ -441,35 +446,52 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 		s.Run(tc.name, func() {
 			saTypeMap := searchattribute.TestNameTypeMap()
 			if tc.storeName == esconfig.PersistenceName {
-				saTypeMap = searchattribute.TestNameTypeMap()
+				saTypeMap = searchattribute.TestEsNameTypeMap()
 			}
 
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(tc.indexName, true).
 				Return(saTypeMap, tc.getSearchAttributesErr)
+			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{tc.storeName})
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(tc.indexName)
 
-			if tc.addCalled {
-				// Mock the frontend client calls for getNamespaceInfo and updateNamespaceAliases
+			if tc.addEsCalled {
+				s.mockResource.VisibilityManager.EXPECT().AddSearchAttributes(
+					gomock.Any(),
+					&manager.AddSearchAttributesRequest{SearchAttributes: tc.request.SearchAttributes},
+				).Return(tc.addEsSchemaErr)
+
+				if tc.addEsSchemaErr == nil {
+					expectedNewCustomSearchAttributes := util.CloneMapNonNil(saTypeMap.Custom())
+					maps.Copy(expectedNewCustomSearchAttributes, tc.request.SearchAttributes)
+					s.mockResource.SearchAttributesManager.EXPECT().
+						SaveSearchAttributes(gomock.Any(), tc.indexName, expectedNewCustomSearchAttributes).
+						Return(tc.addEsMetadataErr)
+				}
+			}
+
+			if tc.addSQLCalled {
 				s.mockResource.ClientFactory.EXPECT().
 					NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-					Return(nil, s.mockResource.GetFrontendClient(), nil).
-					AnyTimes()
+					Return(nil, s.mockResource.GetFrontendClient(), nil)
+
 				s.mockResource.FrontendClient.EXPECT().
 					DescribeNamespace(
 						gomock.Any(),
 						&workflowservice.DescribeNamespaceRequest{Namespace: testNamespace},
 					).
-					Return(&workflowservice.DescribeNamespaceResponse{
-						Config: &namespacepb.NamespaceConfig{
-							CustomSearchAttributeAliases: searchattribute.TestAliases,
+					Return(
+						&workflowservice.DescribeNamespaceResponse{
+							Config: &namespacepb.NamespaceConfig{
+								CustomSearchAttributeAliases: searchattribute.TestAliases,
+							},
 						},
-					}, nil).
-					AnyTimes()
+						nil,
+					)
+
 				s.mockResource.FrontendClient.EXPECT().
 					UpdateNamespace(gomock.Any(), gomock.Any()).
-					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addErr).
-					AnyTimes()
+					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addSQLErr)
 			}
 
 			err := s.handler.addSearchAttributesInternal(ctx, tc.request, s.mockResource.VisibilityManager)
@@ -482,10 +504,343 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 	}
 }
 
-func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
+func (s *operatorHandlerSuite) Test_AddSearchAttributesElasticsearch() {
+	ctx := context.Background()
+	testCases := []struct {
+		name                  string
+		request               *operatorservice.AddSearchAttributesRequest
+		passValidation        bool
+		customAttributesToAdd map[string]enumspb.IndexedValueType
+		addEsSchemaErr        error
+		addEsMetadataErr      error
+		expectedErrMsg        string
+	}{
+		{
+			name: "success",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+			},
+			passValidation: true,
+			customAttributesToAdd: map[string]enumspb.IndexedValueType{
+				"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			expectedErrMsg: "",
+		},
+		{
+			name: "success: search attribute already exists",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+			},
+			expectedErrMsg: "",
+		},
+		{
+			name: "success: mix new and already exists search attributes",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr":         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+			},
+			passValidation: true,
+			customAttributesToAdd: map[string]enumspb.IndexedValueType{
+				"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			expectedErrMsg: "",
+		},
+
+		{
+			name: "fail: cannot add elasticsearch schema",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+			},
+			passValidation: true,
+			customAttributesToAdd: map[string]enumspb.IndexedValueType{
+				"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			addEsSchemaErr: errors.New("mock error add es schema"),
+			expectedErrMsg: fmt.Sprintf(
+				errUnableToSaveSearchAttributesMessage,
+				errors.New("mock error add es schema"),
+			),
+		},
+		{
+			name: "fail: cannot save search attributes metadata",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+			},
+			passValidation: true,
+			customAttributesToAdd: map[string]enumspb.IndexedValueType{
+				"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			addEsMetadataErr: errors.New("mock error save metadata"),
+			expectedErrMsg: fmt.Sprintf(
+				errUnableToSaveSearchAttributesMessage,
+				errors.New("mock error save metadata"),
+			),
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			saTypeMap := searchattribute.TestEsNameTypeMap()
+			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
+			s.mockResource.SearchAttributesManager.EXPECT().
+				GetSearchAttributes(testIndexName, true).
+				Return(saTypeMap, nil)
+
+			if tc.passValidation {
+				s.mockResource.VisibilityManager.EXPECT().AddSearchAttributes(
+					gomock.Any(),
+					&manager.AddSearchAttributesRequest{SearchAttributes: tc.customAttributesToAdd},
+				).Return(tc.addEsSchemaErr)
+
+				if tc.addEsSchemaErr == nil {
+					expectedNewCustomSearchAttributes := util.CloneMapNonNil(saTypeMap.Custom())
+					maps.Copy(expectedNewCustomSearchAttributes, tc.customAttributesToAdd)
+					s.mockResource.SearchAttributesManager.EXPECT().
+						SaveSearchAttributes(gomock.Any(), testIndexName, expectedNewCustomSearchAttributes).
+						Return(tc.addEsMetadataErr)
+				}
+			}
+
+			err := s.handler.addSearchAttributesElasticsearch(
+				ctx,
+				tc.request,
+				s.mockResource.VisibilityManager,
+			)
+			if tc.expectedErrMsg == "" {
+				s.NoError(err)
+			} else {
+				s.ErrorContains(err, tc.expectedErrMsg)
+			}
+		})
+	}
+}
+
+func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
+	ctx := context.Background()
+	testCases := []struct {
+		name                        string
+		request                     *operatorservice.AddSearchAttributesRequest
+		customSearchAttributesToAdd []string
+		getFrontendClientErr        error
+		describeNamespaceCalled     bool
+		describeNamespaceErr        error
+		updateNamespaceCalled       bool
+		updateNamespaceErr          error
+		expectedErrMsg              string
+	}{
+		{
+			name: "success",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+				Namespace: testNamespace,
+			},
+			customSearchAttributesToAdd: []string{"CustomAttr"},
+			describeNamespaceCalled:     true,
+			updateNamespaceCalled:       true,
+			expectedErrMsg:              "",
+		},
+		{
+			name: "success: search attribute already exists",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+				Namespace: testNamespace,
+			},
+			describeNamespaceCalled: true,
+			expectedErrMsg:          "",
+		},
+		{
+			name: "success: mix new and already exists search attributes",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr":         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+				Namespace: testNamespace,
+			},
+			customSearchAttributesToAdd: []string{"CustomAttr"},
+			describeNamespaceCalled:     true,
+			updateNamespaceCalled:       true,
+			expectedErrMsg:              "",
+		},
+
+		{
+			name: "fail: cannot get frontend client",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+				Namespace: testNamespace,
+			},
+			getFrontendClientErr: errors.New("mock error get frontend client"),
+			expectedErrMsg:       "mock error get frontend client",
+		},
+		{
+			name: "fail: namespace not set in request",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+			},
+			expectedErrMsg: errNamespaceNotSet.Error(),
+		},
+		{
+			name: "fail: cannot describe namespace",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+				Namespace: testNamespace,
+			},
+			describeNamespaceCalled: true,
+			describeNamespaceErr:    errors.New("mock error describe namespace"),
+			expectedErrMsg:          fmt.Sprintf(errUnableToGetNamespaceInfoMessage, testNamespace, "mock error describe namespace"),
+		},
+		{
+			name: "fail: too many search attributes",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					// there is already one keyword search attribute defined in TestNameTypeMap
+					"CustomAttr1": enumspb.INDEXED_VALUE_TYPE_INT,
+					"CustomAttr2": enumspb.INDEXED_VALUE_TYPE_INT,
+					"CustomAttr3": enumspb.INDEXED_VALUE_TYPE_INT,
+					"CustomAttr4": enumspb.INDEXED_VALUE_TYPE_INT,
+				},
+				Namespace: testNamespace,
+			},
+			describeNamespaceCalled: true,
+			expectedErrMsg: fmt.Sprintf(
+				errTooManySearchAttributesMessage,
+				3,
+				enumspb.INDEXED_VALUE_TYPE_INT,
+			),
+		},
+		{
+			name: "fail: cannot update namespace",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+				Namespace: testNamespace,
+			},
+			customSearchAttributesToAdd: []string{"CustomAttr"},
+			describeNamespaceCalled:     true,
+			updateNamespaceCalled:       true,
+			updateNamespaceErr:          errors.New("mock error update namespace"),
+			expectedErrMsg: fmt.Sprintf(
+				errUnableToSaveSearchAttributesMessage,
+				"mock error update namespace",
+			),
+		},
+		{
+			name: "fail: update namespace race condition",
+			request: &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+				Namespace: testNamespace,
+			},
+			customSearchAttributesToAdd: []string{"CustomAttr"},
+			describeNamespaceCalled:     true,
+			updateNamespaceCalled:       true,
+			updateNamespaceErr:          errCustomSearchAttributeFieldAlreadyAllocated,
+			expectedErrMsg:              errRaceConditionAddingSearchAttributes.Error(),
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			saTypeMap := searchattribute.TestNameTypeMap()
+			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
+			s.mockResource.SearchAttributesManager.EXPECT().
+				GetSearchAttributes(testIndexName, true).
+				Return(saTypeMap, nil)
+
+			s.mockResource.ClientFactory.EXPECT().
+				NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
+				Return(nil, s.mockResource.GetFrontendClient(), tc.getFrontendClientErr)
+
+			if tc.describeNamespaceCalled {
+				s.mockResource.FrontendClient.EXPECT().
+					DescribeNamespace(
+						gomock.Any(),
+						&workflowservice.DescribeNamespaceRequest{Namespace: testNamespace},
+					).
+					Return(
+						&workflowservice.DescribeNamespaceResponse{
+							Config: &namespacepb.NamespaceConfig{CustomSearchAttributeAliases: searchattribute.TestAliases},
+						},
+						tc.describeNamespaceErr,
+					)
+			}
+
+			if tc.updateNamespaceCalled {
+				s.mockResource.FrontendClient.EXPECT().
+					UpdateNamespace(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(
+						ctx context.Context,
+						r *workflowservice.UpdateNamespaceRequest,
+						opts ...any,
+					) (*workflowservice.UpdateNamespaceResponse, error) {
+						s.Len(r.Config.CustomSearchAttributeAliases, len(tc.customSearchAttributesToAdd))
+						aliases := expmaps.Values(r.Config.CustomSearchAttributeAliases)
+						for _, saName := range tc.customSearchAttributesToAdd {
+							s.Contains(aliases, saName)
+						}
+						return &workflowservice.UpdateNamespaceResponse{}, tc.updateNamespaceErr
+					})
+			}
+
+			err := s.handler.addSearchAttributesSQL(
+				ctx,
+				tc.request,
+				s.mockResource.VisibilityManager,
+			)
+			if tc.expectedErrMsg == "" {
+				s.NoError(err)
+			} else {
+				s.ErrorContains(err, tc.expectedErrMsg)
+			}
+		})
+	}
+}
+
+func (s *operatorHandlerSuite) Test_ListSearchAttributes_Elasticsearch() {
 	handler := s.handler
 	ctx := context.Background()
 
+	// Configure Elasticsearch: add advanced visibility store config with index name.
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(esconfig.PersistenceName).Return(true)
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestEsNameTypeMap(), nil)
+	resp, err := handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
+	s.Require().NoError(err)
+	s.NotNil(resp)
+
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.NameTypeMap{}, errors.New("random error"))
+	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
+	s.Require().Error(err)
+	s.Nil(resp)
+}
+
+func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
+	handler := s.handler
+	ctx := context.Background()
+
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(esconfig.PersistenceName).Return(false)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.ClientFactory.EXPECT().
 		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
@@ -510,12 +865,6 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 	)
 	s.NoError(err)
 	s.NotNil(resp)
-	expected := searchattribute.TestNameTypeMap().Custom()
-	for field, alias := range searchattribute.TestAliases {
-		expected[alias] = expected[field]
-		delete(expected, field)
-	}
-	s.Equal(expected, resp.CustomAttributes)
 
 	s.mockResource.SearchAttributesManager.EXPECT().
 		GetSearchAttributes(testIndexName, true).
@@ -525,37 +874,75 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 	s.Nil(resp)
 }
 
-func (s *operatorHandlerSuite) Test_ListSearchAttributes_FallsBackToFieldNamesWhenNamespaceAliasesAreStale() {
-	handler := s.handler
+func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_Elasticsearch() {
 	ctx := context.Background()
 
-	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
-	s.mockResource.ClientFactory.EXPECT().
-		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-		Return(nil, s.mockResource.GetFrontendClient(), nil).
-		AnyTimes()
-	s.mockResource.FrontendClient.EXPECT().
-		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
-		Return(
-			&workflowservice.DescribeNamespaceResponse{
-				Config: &namespacepb.NamespaceConfig{CustomSearchAttributeAliases: map[string]string{}},
+	type test struct {
+		Name       string
+		Request    *operatorservice.RemoveSearchAttributesRequest
+		SaveCalled bool
+		Expected   error
+	}
+	testCases := []test{
+		{
+			Name: "success",
+			Request: &operatorservice.RemoveSearchAttributesRequest{
+				SearchAttributes: []string{
+					"CustomKeywordField",
+				},
 			},
-			nil,
-		)
-	s.mockResource.SearchAttributesManager.EXPECT().
-		GetSearchAttributes(testIndexName, true).
-		Return(searchattribute.TestNameTypeMap(), nil)
+			SaveCalled: true,
+		},
+		{
+			Name: "reserved search attribute",
+			Request: &operatorservice.RemoveSearchAttributesRequest{
+				SearchAttributes: []string{
+					"WorkflowId",
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Unable to remove non-custom search attributes: WorkflowId."},
+		},
+		{
+			Name: "search attribute not found",
+			Request: &operatorservice.RemoveSearchAttributesRequest{
+				SearchAttributes: []string{
+					"ProductId",
+				},
+			},
+		},
+	}
 
-	resp, err := handler.ListSearchAttributes(
-		ctx,
-		&operatorservice.ListSearchAttributesRequest{Namespace: testNamespace},
-	)
-	s.Require().NoError(err)
-	s.NotNil(resp)
-	s.Equal(searchattribute.TestNameTypeMap().Custom(), resp.CustomAttributes)
+	for _, testCase := range testCases {
+		s.Run(testCase.Name, func() {
+			saTypeMap := searchattribute.TestEsNameTypeMap()
+			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
+			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
+			s.mockResource.SearchAttributesManager.EXPECT().
+				GetSearchAttributes(testIndexName, true).
+				Return(saTypeMap, nil)
+
+			if testCase.SaveCalled {
+				expectedNewCustomSA := maps.Clone(saTypeMap.Custom())
+				for _, sa := range testCase.Request.SearchAttributes {
+					delete(expectedNewCustomSA, sa)
+				}
+				s.mockResource.SearchAttributesManager.EXPECT().
+					SaveSearchAttributes(gomock.Any(), testIndexName, expectedNewCustomSA).
+					Return(nil)
+			}
+
+			resp, err := s.handler.RemoveSearchAttributes(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			if testCase.Expected != nil {
+				s.Nil(resp)
+			} else {
+				s.NotNil(resp)
+			}
+		})
+	}
 }
 
-func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
+func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_SQL() {
 	ctx := context.Background()
 
 	type test struct {
@@ -598,15 +985,14 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 
 	for _, testCase := range testCases {
 		s.Run(testCase.Name, func() {
-			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{mysql.PluginName}).AnyTimes()
-			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
+			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{mysql.PluginName})
+			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName, true).
 				Return(searchattribute.TestNameTypeMap(), nil)
 			s.mockResource.ClientFactory.EXPECT().
 				NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-				Return(nil, s.mockResource.GetFrontendClient(), nil).
-				AnyTimes()
+				Return(nil, s.mockResource.GetFrontendClient(), nil)
 			s.mockResource.FrontendClient.EXPECT().
 				DescribeNamespace(
 					gomock.Any(),

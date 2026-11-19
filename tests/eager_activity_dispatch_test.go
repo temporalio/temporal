@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -136,7 +135,7 @@ func (s *EagerActivityDispatchSuite) TestEagerActivityFallsBackWhenBacklogExists
 	s.NoError(err)
 	s.Empty(response.GetActivityTasks())
 
-	await.RequireTruef(s.T(), func() bool {
+	s.AwaitTruef(func() bool {
 		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tvBacklogged.TaskQueue(),

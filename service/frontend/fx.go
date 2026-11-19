@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	"context"
 	"fmt"
 	"net"
 
@@ -158,7 +157,6 @@ var Module = fx.Options(
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Invoke(backfillSearchAttributeMappings),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
 	chasmnexus.FrontendModule,
@@ -1220,30 +1218,4 @@ func NexusEndpointClientProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
-}
-
-// backfillSearchAttributeMappings backfills namespace custom search attribute
-// aliases from cluster metadata with identity mappings during frontend initialization.
-// Only runs when Elasticsearch visibility is configured; updates go through the namespace handler.
-func backfillSearchAttributeMappings(
-	cfg *config.Config,
-	clusterMetadata cluster.Metadata,
-	metadataManager persistence.MetadataManager,
-	clusterMetadataManager persistence.ClusterMetadataManager,
-	handler Handler,
-	logger log.Logger,
-) error {
-	visDataStore := cfg.Persistence.GetVisibilityStoreConfig()
-	if visDataStore.Elasticsearch == nil {
-		return nil
-	}
-	return initializeSearchAttributeMappings(
-		context.Background(),
-		metadataManager,
-		clusterMetadataManager,
-		clusterMetadata.GetCurrentClusterName(),
-		visDataStore.GetIndexName(),
-		handler,
-		logger,
-	)
 }

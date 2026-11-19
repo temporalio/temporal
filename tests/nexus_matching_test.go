@@ -29,8 +29,8 @@ func TestNexusMatchingTestSuite(t *testing.T) {
 }
 
 func (s *NexusMatchingTestSuite) TestDispatchNexusTaskWithMatchingBehaviors() {
-	runWithMatchingBehaviors(s.T(), nil, func(env *testcore.TestEnv, b testcore.MatchingBehavior) {
-		dispatchAndCompleteNexusTask(s.T(), env, b.ForceTaskForward, b.ForcePollForward)
+	runWithMatchingBehaviors(s.T(), nil, func(t *testing.T, env *testcore.TestEnv, b testcore.MatchingBehavior) {
+		dispatchAndCompleteNexusTask(t, env, b.ForceTaskForward, b.ForcePollForward)
 	})
 }
 

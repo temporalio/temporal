@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -28,8 +29,10 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -1020,8 +1023,8 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
 	s.testTaskDispatchLatencyMetric(testNexusTaskDispatchLatencyEmitted)
 }
 
-func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
-	runWithMatchingBehaviors(s.T(), nil, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
+func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(t *testing.T, s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
+	runWithMatchingBehaviors(s.T(), nil, func(t *testing.T, s *testcore.TestEnv, b testcore.MatchingBehavior) {
 
 		// When task forwarding is forced, inject a delay so we can verify
 		// the latency metric captures forwarding time.
@@ -1047,16 +1050,19 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore
 			expectedSource = "DbBacklog"
 		}
 
-		scenario(s, expectedForwarded, expectedSource, expectedPartitionID, forwardDelay)
+		scenario(t, s, expectedForwarded, expectedSource, expectedPartitionID, forwardDelay)
 	})
 }
 
-func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, minLatency time.Duration) {
-	tv := testvars.New(s.T())
+func testTaskDispatchLatencyEmitted(t *testing.T, s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, minLatency time.Duration) {
+	t.Helper()
+	ctx := testcontext.For(t)
+	tv := testvars.New(t)
 
 	capture := s.StartNamespaceMetricCapture()
 
-	activityStarted := make(chan struct{})
+	workflowTaskErr := make(chan error, 1)
+	activityTaskErr := make(chan error, 1)
 
 	// Poll and handle the workflow task: schedule an activity.
 	go func() {
@@ -1079,20 +1085,19 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 				}, nil
 			},
 		)
-		s.NoError(err)
+		workflowTaskErr <- err
 	}()
 
 	// Poll and handle the activity task.
 	go func() {
 		_, err := s.TaskPoller().PollAndHandleActivityTask(tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				activityStarted <- struct{}{}
 				return &workflowservice.RespondActivityTaskCompletedRequest{
 					Result: tv.Any().Payloads(),
 				}, nil
 			},
 		)
-		s.NoError(err)
+		activityTaskErr <- err
 	}()
 
 	// Wait for pollers to arrive at root partition 0 for both task queue types
@@ -1101,9 +1106,9 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	} {
-		s.Eventually(func() bool {
+		await.Requiref(ctx, t, func(t *await.T) {
 			resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-				s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+				t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: s.NamespaceID().String(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 						TaskQueue:     tv.TaskQueue().GetName(),
@@ -1113,20 +1118,18 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 					ReportPollers: true,
 				},
 			)
-			if err != nil {
-				return false
-			}
+			require.NoError(t, err)
 			for _, vi := range resp.GetVersionsInfoInternal() {
 				if len(vi.GetPhysicalTaskQueueInfo().GetPollers()) > 0 {
-					return true
+					return
 				}
 			}
-			return false
+			require.FailNow(t, "no pollers reported")
 		}, 10*time.Second, 50*time.Millisecond, "pollers did not arrive at root partition")
 	}
 
 	// Start a workflow to generate a workflow task.
-	_, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
@@ -1136,15 +1139,16 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 			PriorityKey: 2,
 		},
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
-	<-activityStarted
+	require.NoError(t, await.Rcv(t, workflowTaskErr))
+	require.NoError(t, await.Rcv(t, activityTaskErr))
 	// Filter recordings for our specific task queue to avoid interference from other activity.
 	tqName := tv.TaskQueue().GetName()
 	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {
 		return rec.Tags["taskqueue"] == tqName
 	})
-	s.NotEmpty(recordings, "expected task_dispatch_latency metric to be recorded")
+	require.NotEmpty(t, recordings, "expected task_dispatch_latency metric to be recorded")
 
 	// Verify no redundant emissions: expect exactly one recording per task type
 	// (1 workflow task + 1 activity task). The metric is emitted only at the partition
@@ -1153,37 +1157,37 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	var workflowCount, activityCount int
 	for _, rec := range recordings {
 		latency, ok := rec.Value.(time.Duration)
-		s.True(ok, "expected metric value to be time.Duration")
-		s.Greater(latency, time.Duration(0), "expected positive dispatch latency")
+		require.True(t, ok, "expected metric value to be time.Duration")
+		require.Greater(t, latency, time.Duration(0), "expected positive dispatch latency")
 		if minLatency > 0 {
-			s.GreaterOrEqual(latency, minLatency, "expected dispatch latency to include forwarding delay")
+			require.GreaterOrEqual(t, latency, minLatency, "expected dispatch latency to include forwarding delay")
 		}
 
 		// Validate source tag.
 		source := rec.Tags["source"]
-		s.True(
+		require.True(t,
 			source == "History" || source == "DbBacklog",
 			"unexpected source tag value: %s", source,
 		)
 		if expectedSource != "" {
-			s.Equal(expectedSource, source, "unexpected source tag")
+			require.Equal(t, expectedSource, source, "unexpected source tag")
 		}
 
 		// Validate forwarded tag.
-		s.Equal(expectedForwarded, rec.Tags["forwarded"], "unexpected forwarded tag")
+		require.Equal(t, expectedForwarded, rec.Tags["forwarded"], "unexpected forwarded tag")
 
 		// Validate taskqueue tag (breakdown enabled by default).
-		s.Equal(tqName, rec.Tags["taskqueue"], "unexpected taskqueue tag")
+		require.Equal(t, tqName, rec.Tags["taskqueue"], "unexpected taskqueue tag")
 
 		// Validate partition tag: poll is always served at root partition 0.
-		s.Equal(expectedPartitionID, rec.Tags["partition"], "unexpected partition tag")
+		require.Equal(t, expectedPartitionID, rec.Tags["partition"], "unexpected partition tag")
 
 		// Validate worker_version tag matches the deployment options passed to the poll.
 		// With BreakdownMetricsByBuildID enabled (default), the tag is "deploymentName:buildId".
-		s.Equal("__unversioned__", rec.Tags["worker_version"], "unexpected worker_version tag")
+		require.Equal(t, "__unversioned__", rec.Tags["worker_version"], "unexpected worker_version tag")
 
 		// Validate task_priority tag is present (empty string for default priority).
-		s.Equal("2", rec.Tags["task_priority"], "unexpected task_priority tag")
+		require.Equal(t, "2", rec.Tags["task_priority"], "unexpected task_priority tag")
 
 		switch rec.Tags["task_type"] {
 		case "Workflow":
@@ -1191,19 +1195,21 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 		case "Activity":
 			activityCount++
 		default:
-			s.Failf("unexpected task_type", "got %s", rec.Tags["task_type"])
+			require.Failf(t, "unexpected task_type", "got %s", rec.Tags["task_type"])
 		}
 	}
 
-	s.Equal(1, workflowCount, "expected exactly 1 task_dispatch_latency recording for workflow task")
-	s.Equal(1, activityCount, "expected exactly 1 task_dispatch_latency recording for activity task")
+	require.Equal(t, 1, workflowCount, "expected exactly 1 task_dispatch_latency recording for workflow task")
+	require.Equal(t, 1, activityCount, "expected exactly 1 task_dispatch_latency recording for activity task")
 }
 
-func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
-	tv := testvars.New(s.T())
+func testNexusTaskDispatchLatencyEmitted(t *testing.T, s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
+	t.Helper()
+	ctx := testcontext.For(t)
+	tv := testvars.New(t)
 
 	// Create a nexus endpoint targeting our task queue.
-	_, err := s.GetTestCluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+	_, err := s.GetTestCluster().OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: "nexus-" + uuid.New().String(),
 			Target: &nexuspb.EndpointTarget{
@@ -1216,27 +1222,26 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 			},
 		},
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	capture := s.StartNamespaceMetricCapture()
 
-	nexusDone := make(chan struct{})
+	nexusDone := make(chan error, 1)
 
 	// Start nexus task poller goroutine.
 	go func() {
 		_, err := s.TaskPoller().PollNexusTask(&workflowservice.PollNexusTaskQueueRequest{}).HandleTask(tv,
 			func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
-				close(nexusDone)
 				return &workflowservice.RespondNexusTaskCompletedRequest{}, nil
 			},
 		)
-		s.NoError(err)
+		nexusDone <- err
 	}()
 
 	// Wait for nexus poller to arrive at root partition before dispatching.
-	s.Eventually(func() bool {
+	await.Requiref(ctx, t, func(t *await.T) {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+			t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tv.TaskQueue().GetName(),
@@ -1246,15 +1251,13 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 				ReportPollers: true,
 			},
 		)
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		for _, vi := range resp.GetVersionsInfoInternal() {
 			if len(vi.GetPhysicalTaskQueueInfo().GetPollers()) > 0 {
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(t, "no pollers reported")
 	}, 10*time.Second, 50*time.Millisecond, "nexus poller did not arrive at root partition")
 
 	// Build the DispatchNexusTask request. When forwarding is expected, target
@@ -1263,12 +1266,12 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	dispatchTQName := tqName
 	if expectedForwarded == "true" {
 		tqFamily, tqErr := tqid.NewTaskQueueFamily(s.NamespaceID().String(), tqName)
-		s.NoError(tqErr)
+		require.NoError(t, tqErr)
 		nexusTQ := tqFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS)
 		dispatchTQName = nexusTQ.NormalPartition(11).RpcName()
 	}
 
-	_, err = s.GetTestCluster().MatchingClient().DispatchNexusTask(s.Context(), &matchingservice.DispatchNexusTaskRequest{
+	_, err = s.GetTestCluster().MatchingClient().DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: s.NamespaceID().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: dispatchTQName,
@@ -1285,44 +1288,46 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 			},
 		},
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
-	<-nexusDone
+	require.NoError(t, await.Rcv(t, nexusDone))
 	// Filter recordings for our specific task queue.
 	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {
 		return rec.Tags["taskqueue"] == tqName
 	})
-	s.NotEmpty(recordings, "expected task_dispatch_latency metric for nexus task")
+	require.NotEmpty(t, recordings, "expected task_dispatch_latency metric for nexus task")
 
 	var nexusCount int
 	for _, rec := range recordings {
 		latency, ok := rec.Value.(time.Duration)
-		s.True(ok, "expected metric value to be time.Duration")
-		s.Greater(latency, time.Duration(0), "expected positive dispatch latency")
+		require.True(t, ok, "expected metric value to be time.Duration")
+		require.Greater(t, latency, time.Duration(0), "expected positive dispatch latency")
 		if minLatency > 0 {
-			s.GreaterOrEqual(latency, minLatency, "expected dispatch latency to include forwarding delay")
+			require.GreaterOrEqual(t, latency, minLatency, "expected dispatch latency to include forwarding delay")
 		}
 
-		s.Equal("Nexus", rec.Tags["task_type"], "expected Nexus task_type")
+		require.Equal(t, "Nexus", rec.Tags["task_type"], "expected Nexus task_type")
 
 		// Nexus tasks are always sync-matched (source is History).
-		s.Equal("History", rec.Tags["source"], "unexpected source tag for nexus")
+		require.Equal(t, "History", rec.Tags["source"], "unexpected source tag for nexus")
 
-		s.Equal(expectedForwarded, rec.Tags["forwarded"], "unexpected forwarded tag")
-		s.Equal(tqName, rec.Tags["taskqueue"], "unexpected taskqueue tag")
-		s.Equal(expectedPartitionID, rec.Tags["partition"], "unexpected partition tag")
-		s.Equal("__unversioned__", rec.Tags["worker_version"], "unexpected worker_version tag")
-		s.Empty(rec.Tags["task_priority"], "expected empty task_priority for nexus (no priority support)")
+		require.Equal(t, expectedForwarded, rec.Tags["forwarded"], "unexpected forwarded tag")
+		require.Equal(t, tqName, rec.Tags["taskqueue"], "unexpected taskqueue tag")
+		require.Equal(t, expectedPartitionID, rec.Tags["partition"], "unexpected partition tag")
+		require.Equal(t, "__unversioned__", rec.Tags["worker_version"], "unexpected worker_version tag")
+		require.Empty(t, rec.Tags["task_priority"], "expected empty task_priority for nexus (no priority support)")
 		nexusCount++
 	}
 
-	s.Equal(1, nexusCount, "expected exactly 1 task_dispatch_latency recording for nexus task")
+	require.Equal(t, 1, nexusCount, "expected exactly 1 task_dispatch_latency recording for nexus task")
 }
 
-func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
-	tv := testvars.New(s.T())
+func testQueryTaskDispatchLatencyEmitted(t *testing.T, s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
+	t.Helper()
+	ctx := testcontext.For(t)
+	tv := testvars.New(t)
 
-	wftDone := make(chan struct{})
+	wftDone := make(chan error, 1)
 
 	// Poll and handle the initial workflow task to get the workflow running.
 	go func() {
@@ -1331,14 +1336,13 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 			},
 		)
-		s.NoError(err)
-		close(wftDone)
+		wftDone <- err
 	}()
 
 	// Wait for poller to arrive at root partition before starting workflow.
-	s.Eventually(func() bool {
+	await.Requiref(ctx, t, func(t *await.T) {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+			t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tv.TaskQueue().GetName(),
@@ -1348,19 +1352,17 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 				ReportPollers: true,
 			},
 		)
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		for _, vi := range resp.GetVersionsInfoInternal() {
 			if len(vi.GetPhysicalTaskQueueInfo().GetPollers()) > 0 {
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(t, "no pollers reported")
 	}, 10*time.Second, 50*time.Millisecond, "pollers did not arrive at root partition")
 
 	// Start workflow and wait for the initial WFT to be handled.
-	_, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
@@ -1370,13 +1372,13 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 			PriorityKey: 2,
 		},
 	})
-	s.NoError(err)
-	<-wftDone
+	require.NoError(t, err)
+	require.NoError(t, await.Rcv(t, wftDone))
 
 	// Now start metric capture (after WFT so only query metric is captured).
 	capture := s.StartNamespaceMetricCapture()
 
-	queryDone := make(chan struct{})
+	queryDone := make(chan error, 1)
 
 	// Start query poller goroutine.
 	go func() {
@@ -1389,14 +1391,13 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 					}, nil
 				},
 			)
-		s.NoError(err)
-		close(queryDone)
+		queryDone <- err
 	}()
 
 	// Wait for query poller to arrive before issuing query.
-	s.Eventually(func() bool {
+	await.Requiref(ctx, t, func(t *await.T) {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+			t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tv.TaskQueue().GetName(),
@@ -1406,57 +1407,55 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 				ReportPollers: true,
 			},
 		)
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		for _, vi := range resp.GetVersionsInfoInternal() {
 			if len(vi.GetPhysicalTaskQueueInfo().GetPollers()) > 0 {
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(t, "no pollers reported")
 	}, 10*time.Second, 50*time.Millisecond, "query poller did not arrive at root partition")
 
 	// Issue the query.
-	_, err = s.FrontendClient().QueryWorkflow(s.Context(), &workflowservice.QueryWorkflowRequest{
+	_, err = s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 		Query:     &querypb.WorkflowQuery{QueryType: "test-query"},
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
-	<-queryDone
+	require.NoError(t, await.Rcv(t, queryDone))
 	// Filter recordings for our specific task queue.
 	tqName := tv.TaskQueue().GetName()
 	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {
 		return rec.Tags["taskqueue"] == tqName
 	})
-	s.NotEmpty(recordings, "expected task_dispatch_latency metric for query task")
+	require.NotEmpty(t, recordings, "expected task_dispatch_latency metric for query task")
 
 	var queryCount int
 	for _, rec := range recordings {
 		latency, ok := rec.Value.(time.Duration)
-		s.True(ok, "expected metric value to be time.Duration")
-		s.Greater(latency, time.Duration(0), "expected positive dispatch latency")
+		require.True(t, ok, "expected metric value to be time.Duration")
+		require.Greater(t, latency, time.Duration(0), "expected positive dispatch latency")
 		if minLatency > 0 {
-			s.GreaterOrEqual(latency, minLatency, "expected dispatch latency to include forwarding delay")
+			require.GreaterOrEqual(t, latency, minLatency, "expected dispatch latency to include forwarding delay")
 		}
 
 		// Query tasks are dispatched through the workflow task queue.
-		s.Equal("Workflow", rec.Tags["task_type"], "expected Workflow task_type for query")
+		require.Equal(t, "Workflow", rec.Tags["task_type"], "expected Workflow task_type for query")
 
 		// Queries are always sync-matched (source is History).
-		s.Equal("History", rec.Tags["source"], "unexpected source tag for query")
+		require.Equal(t, "History", rec.Tags["source"], "unexpected source tag for query")
 
-		s.Equal(expectedForwarded, rec.Tags["forwarded"], "unexpected forwarded tag")
-		s.Equal(tqName, rec.Tags["taskqueue"], "unexpected taskqueue tag")
-		s.Equal(expectedPartitionID, rec.Tags["partition"], "unexpected partition tag")
-		s.Equal("__unversioned__", rec.Tags["worker_version"], "unexpected worker_version tag")
-		s.Equal("2", rec.Tags["task_priority"], "expected empty task_priority for query (default priority)")
+		require.Equal(t, expectedForwarded, rec.Tags["forwarded"], "unexpected forwarded tag")
+		require.Equal(t, tqName, rec.Tags["taskqueue"], "unexpected taskqueue tag")
+		require.Equal(t, expectedPartitionID, rec.Tags["partition"], "unexpected partition tag")
+		require.Equal(t, "__unversioned__", rec.Tags["worker_version"], "unexpected worker_version tag")
+		require.Equal(t, "2", rec.Tags["task_priority"], "expected empty task_priority for query (default priority)")
 		queryCount++
 	}
 
-	s.Equal(1, queryCount, "expected exactly 1 task_dispatch_latency recording for query task")
+	require.Equal(t, 1, queryCount, "expected exactly 1 task_dispatch_latency recording for query task")
 }
 
 func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
