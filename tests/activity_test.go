@@ -484,7 +484,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.Equal(1, activityExecutedCount)
 
 	// go over history and verify that the activity task scheduled event has header on it
-	events := env.GetHistory(s.Context(), &commonpb.WorkflowExecution{
+	events := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -683,7 +683,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		env.Logger.Info("Processing workflow task:", tag.Counter(i))
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithRetries(1))
 		if err != nil {
-			s.PrintHistoryEvents(env.GetHistory(s.Context(), &commonpb.WorkflowExecution{
+			s.PrintHistoryEvents(env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{
 				WorkflowId: tv.WorkflowID(),
 				RunId:      we.GetRunId(),
 			}))
@@ -1583,6 +1583,6 @@ func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
 	s.ErrorAs(activityError, &applicationErr)
 	s.Equal("non-retryable-error", applicationErr.Message())
 
-	history := env.GetHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
+	history := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
 	s.ContainsHistory(`ActivityTaskFailed`, &historypb.History{Events: history})
 }
