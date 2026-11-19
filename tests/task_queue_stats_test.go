@@ -1551,8 +1551,10 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 		require.Len(t, resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {
-			// Both the workflow and activity entries share tqName, and the response order is not
-			// deterministic, so we must match on both name and type.
+			// The response has two entries named tqName: one WORKFLOW, one ACTIVITY. The server
+			// builds this list by iterating over a Go map, which is unordered, so either entry can
+			// come first. Matching on name alone would pick whichever is first, and we could end up
+			// checking the wrong entry's stats. Match on type as well to get the right one.
 			if info.Name == tqName && info.Type == tqType {
 				label := "DescribeWorkerDeploymentVersion[" + tqType.String() + "]"
 				validateTaskQueueStats(require.New(t), label, info.Stats, expectation)
