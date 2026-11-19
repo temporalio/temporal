@@ -9,9 +9,11 @@ import (
 	"go.temporal.io/server/chasm"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/streambatcher"
 )
 
 type batchKey struct {
@@ -40,6 +42,7 @@ type Handler struct {
 	logger         log.Logger
 	longPollOpts   dynamicconfig.TypedPropertyFn[WaitLongPollOptions]
 	reserveTimeout dynamicconfig.DurationPropertyFn
+	batchers       *streambatcher.KeyedBatcher[batchKey, batchReq, batchRes]
 }
 
 func NewHandler(
@@ -51,6 +54,11 @@ func NewHandler(
 		longPollOpts:   WaitLongPoll.Get(dc),
 		reserveTimeout: ReserveTimeout.Get(dc),
 	}
+	h.batchers = streambatcher.NewKeyedBatcherWithPerItemResults(
+		h.applyBatch,
+		ServerBatcherOptions.Get(dc)(),
+		clock.NewRealTimeSource(),
+	)
 	return h
 }
 
@@ -231,11 +239,13 @@ func makeBatchResults(
 func (h *Handler) Batch(ctx context.Context, req *fcpb.ConcurrencyServiceBatchRequest) (retRes *fcpb.ConcurrencyServiceBatchResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 
-	results := h.applyBatch(batchKey{
+	res, err := h.batchers.Add(ctx, batchKey{
 		namespaceID: req.GetNamespaceId(),
 		key:         req.GetKey(),
-	}, []batchReq{{ctx: ctx, req: req}})
-	res := results[0]
+	}, batchReq{ctx: ctx, req: req})
+	if err != nil {
+		return nil, err
+	}
 	if res.res == nil && res.err == nil {
 		res.err = serviceerror.NewInternal("nil response")
 	}

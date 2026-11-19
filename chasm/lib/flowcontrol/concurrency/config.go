@@ -4,6 +4,20 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/streambatcher"
+)
+
+var defaultServerBatcherOptions = streambatcher.BatcherOptions{
+	MaxItems:      100,
+	MinDelay:      5 * time.Millisecond,
+	MaxDelay:      10 * time.Millisecond,
+	IdleTime:      time.Minute,
+	ClearInterval: time.Hour,
+}
+var ServerBatcherOptions = dynamicconfig.NewGlobalTypedSetting(
+	"flowcontrol.concurrency.serverBatcher",
+	defaultServerBatcherOptions,
+	`Batcher options for concurrency limiter requests on server. Requires server restart.`,
 )
 
 type WaitLongPollOptions struct {
