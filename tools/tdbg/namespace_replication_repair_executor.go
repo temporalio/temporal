@@ -1,11 +1,10 @@
 package tdbg
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"slices"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -38,11 +37,11 @@ type namespaceReplicationRepairExecutionResult struct {
 }
 
 type namespaceReplicationRepairApplyResult struct {
-	Cluster  string `json:"cluster"`
-	Action   string `json:"action"`
-	Outcome  string `json:"outcome,omitempty"`
-	Readback bool   `json:"readback_verified"`
-	Error    string `json:"error,omitempty"`
+	Cluster          string `json:"cluster"`
+	Action           string `json:"action"`
+	Outcome          string `json:"outcome,omitempty"`
+	ReadbackVerified bool   `json:"readback_verified"`
+	Error            string `json:"error,omitempty"`
 }
 
 type namespaceReplicationRepairer struct {
@@ -131,17 +130,22 @@ func (r *namespaceReplicationRepairer) Execute(
 		return result, err
 	}
 
-	frozenSource, err := r.freezeRepairSource(ctx, request)
+	source, err := r.recheckRepairSource(ctx, request)
 	if err != nil {
 		return result, err
 	}
 
-	preparedSource, err := r.prepareRepairSource(ctx, request, frozenSource, &result.Source)
+	preparedSource, err := r.prepareRepairSource(ctx, request, source, &result.Source)
 	if err != nil {
 		return result, err
 	}
 
-	result.Targets = r.applyRepairTargets(ctx, request, preparedSource)
+	// The plan lists clusters by name, so results keep that order.
+	for _, clusterPlan := range request.Plan.Clusters {
+		if clusterPlan.Action != namespaceReplicationRepairActionNone {
+			result.Targets = append(result.Targets, r.repairTarget(ctx, request, preparedSource, clusterPlan))
+		}
+	}
 
 	finalObservation, finalErr := r.verifier.observe(ctx, request.VerifyRequest)
 	if finalObservation != nil {
@@ -169,42 +173,42 @@ func validateNamespaceReplicationRepairExecution(request namespaceReplicationRep
 	return nil
 }
 
-func (r *namespaceReplicationRepairer) freezeRepairSource(
+func (r *namespaceReplicationRepairer) recheckRepairSource(
 	ctx context.Context,
 	request namespaceReplicationRepairExecutionRequest,
 ) (*adminservice.GetNamespaceResponse, error) {
-	frozen, err := r.verifier.reader.SourceNamespaceByID(ctx, request.Plan.NamespaceID)
+	source, err := r.verifier.reader.SourceNamespaceByID(ctx, request.Plan.NamespaceID)
 	if err != nil {
-		return nil, fmt.Errorf("freeze source namespace: %w", err)
+		return nil, fmt.Errorf("recheck source namespace: %w", err)
 	}
 	equal, err := namespaceReplicationSnapshotsEqual(
 		request.Observation.sourceSnapshot,
-		frozen,
+		source,
 		r.verifier.dataKeysToIgnore,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("compare frozen source namespace: %w", err)
+		return nil, fmt.Errorf("compare source namespace with the planned snapshot: %w", err)
 	}
 	if !equal {
 		return nil, errors.New("source namespace changed after repair planning")
 	}
-	return frozen, nil
+	return source, nil
 }
 
 func (r *namespaceReplicationRepairer) prepareRepairSource(
 	ctx context.Context,
 	request namespaceReplicationRepairExecutionRequest,
-	frozen *adminservice.GetNamespaceResponse,
+	source *adminservice.GetNamespaceResponse,
 	result *namespaceReplicationRepairApplyResult,
 ) (*adminservice.GetNamespaceResponse, error) {
 	if request.Plan.SourceAction != namespaceReplicationRepairActionPrepareSource {
 		result.Outcome = namespaceReplicationRepairActionNone
-		result.Readback = true
-		return frozen, nil
+		result.ReadbackVerified = true
+		return source, nil
 	}
 	task, err := buildNamespaceReplicationRepairTask(
-		frozen,
-		frozen,
+		source,
+		source,
 		r.verifier.dataKeysToIgnore,
 	)
 	if err != nil {
@@ -217,23 +221,6 @@ func (r *namespaceReplicationRepairer) prepareRepairSource(
 		return nil, fmt.Errorf("prepare source: %w", err)
 	}
 	return prepared, nil
-}
-
-func (r *namespaceReplicationRepairer) applyRepairTargets(
-	ctx context.Context,
-	request namespaceReplicationRepairExecutionRequest,
-	preparedSource *adminservice.GetNamespaceResponse,
-) []namespaceReplicationRepairApplyResult {
-	var results []namespaceReplicationRepairApplyResult
-	for _, clusterPlan := range request.Plan.Clusters {
-		if clusterPlan.Action != namespaceReplicationRepairActionNone {
-			results = append(results, r.applyTargetRepair(ctx, request, preparedSource, clusterPlan))
-		}
-	}
-	slices.SortFunc(results, func(left, right namespaceReplicationRepairApplyResult) int {
-		return cmp.Compare(left.Cluster, right.Cluster)
-	})
-	return results
 }
 
 func namespaceReplicationRepairFailures(
@@ -255,7 +242,7 @@ func namespaceReplicationRepairFailures(
 	return failures
 }
 
-func (r *namespaceReplicationRepairer) applyTargetRepair(
+func (r *namespaceReplicationRepairer) repairTarget(
 	ctx context.Context,
 	request namespaceReplicationRepairExecutionRequest,
 	preparedSource *adminservice.GetNamespaceResponse,
@@ -315,7 +302,7 @@ func (r *namespaceReplicationRepairer) applyRepairAndReadback(
 	if err != nil {
 		return nil, err
 	}
-	result.Outcome = outcome.String()
+	result.Outcome = strings.TrimPrefix(adminservice.ApplyNamespaceMutationResponse_Outcome_name[int32(outcome)], "OUTCOME_")
 	// Receiver retries can report a no-op after a committed write. Accept that
 	// response only when readback proves the requested state and exact versions.
 	if !acceptableNamespaceRepairOutcome(result.Action, outcome) {
@@ -328,7 +315,7 @@ func (r *namespaceReplicationRepairer) applyRepairAndReadback(
 	if err := validateNamespaceRepairReadback(task, actual, r.verifier.dataKeysToIgnore); err != nil {
 		return nil, err
 	}
-	result.Readback = true
+	result.ReadbackVerified = true
 	return actual, nil
 }
 

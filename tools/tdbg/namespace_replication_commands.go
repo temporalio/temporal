@@ -289,11 +289,11 @@ func printNamespaceReplicationRepairExecution(
 		}
 	}
 	rows := []any{namespaceReplicationRepairExecutionTableRow{
-		Cluster:  result.Source.Cluster,
-		Action:   result.Source.Action,
-		Outcome:  result.Source.Outcome,
-		Readback: result.Source.Readback,
-		Error:    result.Source.Error,
+		Cluster:          result.Source.Cluster,
+		Action:           result.Source.Action,
+		Outcome:          result.Source.Outcome,
+		ReadbackVerified: result.Source.ReadbackVerified,
+		Error:            result.Source.Error,
 	}}
 	for _, target := range result.Targets {
 		rows = append(rows, namespaceReplicationRepairExecutionTableRow(target))
@@ -302,11 +302,11 @@ func printNamespaceReplicationRepairExecution(
 }
 
 type namespaceReplicationRepairExecutionTableRow struct {
-	Cluster  string
-	Action   string
-	Outcome  string
-	Readback bool
-	Error    string
+	Cluster          string
+	Action           string
+	Outcome          string
+	ReadbackVerified bool
+	Error            string
 }
 
 func verifyNamespaceReplication(

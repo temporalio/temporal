@@ -696,7 +696,7 @@ func TestRepairRequiresMatchingReadbackAfterStaleSuccess(t *testing.T) {
 				Plan: &namespaceReplicationRepairPlan{SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
 			}, task, &result)
 			require.ErrorContains(t, err, test.wantError)
-			require.False(t, result.Readback)
+			require.False(t, result.ReadbackVerified)
 		})
 	}
 }
@@ -744,11 +744,11 @@ func TestRepairCarriesSourceRestoreInfo(t *testing.T) {
 			}, task, &result)
 			if test.wantError != "" {
 				require.ErrorContains(t, err, test.wantError)
-				require.False(t, result.Readback)
+				require.False(t, result.ReadbackVerified)
 				return
 			}
 			require.NoError(t, err)
-			require.True(t, result.Readback)
+			require.True(t, result.ReadbackVerified)
 		})
 	}
 }
@@ -807,12 +807,12 @@ func TestRepairCreateRejectsNameCollisionAfterPlanning(t *testing.T) {
 		return nil, nil
 	}
 	r := testRepairerFor(testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b": client}))
-	result := r.applyTargetRepair(t.Context(), namespaceReplicationRepairExecutionRequest{
+	result := r.repairTarget(t.Context(), namespaceReplicationRepairExecutionRequest{
 		Observation: &namespaceReplicationObservation{},
 		Plan:        &namespaceReplicationRepairPlan{NamespaceID: "namespace-id", SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
 	}, source, namespaceReplicationClusterRepairPlan{Cluster: "cluster-b", Action: namespaceReplicationRepairActionCreate})
 	require.Contains(t, result.Error, "namespace name appeared")
-	require.False(t, result.Readback)
+	require.False(t, result.ReadbackVerified)
 }
 
 func TestRepairRefreshesTargetBeforeWriting(t *testing.T) {
@@ -842,7 +842,7 @@ func TestRepairRefreshesTargetBeforeWriting(t *testing.T) {
 			verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b": client})
 			verifier.dataKeysToIgnore = map[string]struct{}{"local-key": {}}
 			r := testRepairerFor(verifier)
-			result := r.applyTargetRepair(t.Context(), namespaceReplicationRepairExecutionRequest{
+			result := r.repairTarget(t.Context(), namespaceReplicationRepairExecutionRequest{
 				Observation: &namespaceReplicationObservation{targetSnapshots: map[string]*adminservice.GetNamespaceResponse{"cluster-b": frozen}},
 				Plan:        &namespaceReplicationRepairPlan{NamespaceID: "namespace-id", SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
 			}, source, namespaceReplicationClusterRepairPlan{Cluster: "cluster-b", Action: namespaceReplicationRepairActionApplySource})
@@ -851,7 +851,7 @@ func TestRepairRefreshesTargetBeforeWriting(t *testing.T) {
 				require.Contains(t, result.Error, "changed after planning")
 			} else {
 				require.Empty(t, result.Error)
-				require.True(t, result.Readback)
+				require.True(t, result.ReadbackVerified)
 			}
 		})
 	}
@@ -1013,7 +1013,7 @@ func TestNamespaceReplicationRepairerReportsPartialFailure(t *testing.T) {
 			if test.wantTargetWrite {
 				require.Len(t, result.Targets, 1)
 				require.Contains(t, result.Targets[0].Error, "peer write failed")
-				require.False(t, result.Targets[0].Readback)
+				require.False(t, result.Targets[0].ReadbackVerified)
 				require.NotNil(t, result.FinalVerification)
 				require.Equal(t, namespaceReplicationStatusRepairRequired, result.FinalVerification.Status)
 			}
@@ -1062,12 +1062,12 @@ func TestRepairTargetChecksAfterPlanning(t *testing.T) {
 				return nil, nil
 			}
 			r := testRepairerFor(testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b": client}))
-			result := r.applyTargetRepair(t.Context(), namespaceReplicationRepairExecutionRequest{
+			result := r.repairTarget(t.Context(), namespaceReplicationRepairExecutionRequest{
 				Observation: &namespaceReplicationObservation{targetSnapshots: map[string]*adminservice.GetNamespaceResponse{"cluster-b": proto.CloneOf(source)}},
 				Plan:        &namespaceReplicationRepairPlan{NamespaceID: "namespace-id", SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
 			}, source, namespaceReplicationClusterRepairPlan{Cluster: "cluster-b", Action: test.action})
 			require.Contains(t, result.Error, test.wantError)
-			require.False(t, result.Readback)
+			require.False(t, result.ReadbackVerified)
 		})
 	}
 }
@@ -1145,7 +1145,11 @@ func TestNamespaceReplicationRepairCommandExecuteOutput(t *testing.T) {
 				require.NoError(t, json.Unmarshal(output.Bytes(), &result), output.String())
 				require.Equal(t, test.wantStatus, result.Status)
 				require.Len(t, result.Targets, 1)
-				require.Equal(t, !test.targetFails, result.Targets[0].Readback)
+				require.Equal(t, !test.targetFails, result.Targets[0].ReadbackVerified)
+				if !test.targetFails {
+					// Outcomes print like the CLI's other values, not as Go enum names.
+					require.Equal(t, "APPLIED", result.Targets[0].Outcome)
+				}
 				wantVerification := namespaceReplicationStatusHealthy
 				if test.targetFails {
 					wantVerification = namespaceReplicationStatusRepairRequired

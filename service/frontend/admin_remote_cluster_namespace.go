@@ -49,7 +49,7 @@ func (adh *AdminHandler) GetRemoteClusterNamespace(
 	default:
 		return nil, serviceerror.NewInvalidArgument("exactly one of namespace name or ID is required")
 	}
-	remoteClient, err := adh.verifiedRemoteClusterAdminClient(ctx, clusterName)
+	remoteClient, err := adh.getVerifiedRemoteAdminClient(ctx, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (adh *AdminHandler) ApplyRemoteClusterNamespaceRepair(
 			return nil, err
 		}
 	}
-	remoteClient, err := adh.verifiedRemoteClusterAdminClient(ctx, clusterName)
+	remoteClient, err := adh.getVerifiedRemoteAdminClient(ctx, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -116,11 +116,11 @@ func (adh *AdminHandler) ApplyRemoteClusterNamespaceRepair(
 	}, nil
 }
 
-// verifiedRemoteClusterAdminClient returns an admin client for a connected
+// getVerifiedRemoteAdminClient returns an admin client for a connected
 // remote cluster after confirming that the cluster at its address identifies
 // itself by the requested name. Eligibility depends on the connection, not on
 // replication streams, so relays still work while replication is paused.
-func (adh *AdminHandler) verifiedRemoteClusterAdminClient(
+func (adh *AdminHandler) getVerifiedRemoteAdminClient(
 	ctx context.Context,
 	clusterName string,
 ) (adminservice.AdminServiceClient, error) {

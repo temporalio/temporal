@@ -35,7 +35,7 @@ func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
 		Duration:            time.Since(startTime),
 		Error:               applyErr,
 	}
-	applyNamespaceMutationAttribution(request, &observation)
+	tagOperatorRepairObservation(request, &observation)
 	nsreplication.RecordCHASMAuthoritativeApply(adh.metricsHandler, observation)
 	// The executor emits successful receiver outcomes, including no-ops,
 	// with pre-mutation state and persistence requests when applicable.
@@ -62,7 +62,7 @@ func (adh *AdminHandler) withAuthoritativeNamespaceMutationEvent(
 		ComponentBusinessID: request.GetComponentBusinessId(),
 		ComponentRunID:      request.GetComponentRunId(),
 	}
-	applyNamespaceMutationAttribution(request, &observation)
+	tagOperatorRepairObservation(request, &observation)
 	eventData, ok := nsreplication.CHASMAuthoritativeApplyEventData(observation)
 	if !ok {
 		return ctx
@@ -92,7 +92,7 @@ func authoritativeReceiveOutcome(outcome nsreplication.ApplyOutcome) string {
 	}
 }
 
-func applyNamespaceMutationAttribution(
+func tagOperatorRepairObservation(
 	request *adminservice.ApplyNamespaceMutationRequest,
 	observation *nsreplication.CHASMAuthoritativeApplyObservation,
 ) {
