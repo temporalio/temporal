@@ -47,6 +47,11 @@ func (e *sessionMoveEnv) stickyQueue(worker string) *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{Name: e.tv.TaskQueue().GetName() + "-sticky-" + worker, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: e.tv.TaskQueue().GetName()}
 }
 
+// instanceKey is the worker process's instance key, which Matching uses to look up its heartbeats.
+func (e *sessionMoveEnv) instanceKey(worker string) string {
+	return e.tv.WorkerInstanceKey() + "-" + worker
+}
+
 func (e *sessionMoveEnv) stickyAttributes(worker string, scheduleToStart time.Duration) *taskqueuepb.StickyExecutionAttributes {
 	return &taskqueuepb.StickyExecutionAttributes{WorkerTaskQueue: e.stickyQueue(worker), ScheduleToStartTimeout: durationpb.New(scheduleToStart)}
 }
@@ -61,6 +66,7 @@ func (e *sessionMoveEnv) pollWorkflowTask(
 	request := &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: queue, Identity: "worker-" + worker}
 	if worker != "" {
 		request.SessionOptions = multiSessionWorkerOptions(e.stickyQueue(worker).GetName())
+		request.WorkerInstanceKey = e.instanceKey(worker)
 	}
 	_, err := e.poller.PollWorkflowTask(request).HandleTask(e.tv, handler, taskpoller.WithTimeout(timeout))
 	return err

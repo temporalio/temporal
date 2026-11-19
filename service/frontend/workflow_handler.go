@@ -8053,6 +8053,10 @@ func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQ
 		return nil
 	}
 	sticky := taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY
+	if options.GetAdmission() != nil && workerInstanceKey == "" {
+		// A session binding records the worker's instance key; Matching looks the worker up by it in its heartbeat registry.
+		return serviceerror.NewInvalidArgument("session worker instance key is required")
+	}
 	switch admission := options.GetAdmission().(type) {
 	case *sessionpb.WorkerSessionOptions_MultiSession:
 		// Sent on both normal and sticky polls.
@@ -8081,10 +8085,6 @@ func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQ
 		}
 		if taskQueue.GetName() != stableIdentity {
 			return serviceerror.NewInvalidArgument("single-session sticky queue must match stable identity")
-		}
-		if workerInstanceKey == "" {
-			// A session binding records the worker's instance key; Matching looks the worker up by it in its heartbeat registry.
-			return serviceerror.NewInvalidArgument("session worker instance key is required")
 		}
 	default:
 		// Options without an admission mode are only accepted on sticky polls.

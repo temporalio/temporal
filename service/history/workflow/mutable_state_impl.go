@@ -1565,10 +1565,12 @@ func (ms *MutableStateImpl) ClearStickyTaskQueueUnlessPartOfSession() bool {
 }
 
 // UpdateNonExclusiveWorkerBinding gives the workflow a non-exclusive binding to the worker that starts its workflow
-// task, and reports whether the binding changed. previousWorkerQueue and previousStickyTimeout are captured before the
-// start cleared stickiness. Any change of binding reschedules pending session activities so they follow the worker.
+// task, and reports whether the binding changed. instanceKey is the starting worker's instance key.
+// previousWorkerQueue and previousStickyTimeout are captured before the start cleared stickiness. Any change of
+// binding reschedules pending session activities so they follow the worker.
 func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	options *sessionpb.WorkerSessionOptions,
+	instanceKey string,
 	previousWorkerQueue string,
 	previousStickyTimeout *durationpb.Duration,
 ) (bool, error) {
@@ -1594,11 +1596,11 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 		// Restore: the bound worker picked the task up from the normal queue. Its session activities
 		// are already queued there, so nothing is rescheduled. Note: We know that the task is picked from the
 		// normal queue because RecordWorkflowTaskStarted cleared the sticky queue when the start came from it.
-		ms.bindNonExclusiveWorker(workerQueue, previousStickyTimeout)
+		ms.bindNonExclusiveWorker(workerQueue, instanceKey, previousStickyTimeout)
 		return true, nil
 	default:
 		// First bind, rebind after an unbind, or move to a new worker.
-		ms.bindNonExclusiveWorker(workerQueue, previousStickyTimeout)
+		ms.bindNonExclusiveWorker(workerQueue, instanceKey, previousStickyTimeout)
 	}
 	return true, ms.reschedulePendingActivities(activityRescheduleForSessionMove, 0)
 }
@@ -1609,8 +1611,8 @@ func (ms *MutableStateImpl) unbindNonExclusiveWorker() {
 }
 
 // bindNonExclusiveWorker is setSessionState plus a real sticky schedule-to-start timeout for a non-exclusive binding.
-func (ms *MutableStateImpl) bindNonExclusiveWorker(workerQueue string, previousStickyTimeout *durationpb.Duration) {
-	ms.setSessionState(&persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: workerQueue}})
+func (ms *MutableStateImpl) bindNonExclusiveWorker(workerQueue string, instanceKey string, previousStickyTimeout *durationpb.Duration) {
+	ms.setSessionState(&persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: workerQueue, InstanceKey: instanceKey}})
 	stickyTimeout := previousStickyTimeout
 	if stickyTimeout.AsDuration() <= 0 {
 		stickyTimeout = durationpb.New(defaultSessionStickyScheduleToStartTimeout)

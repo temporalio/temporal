@@ -249,7 +249,7 @@ type (
 		// its workflow task. previousWorkerQueue and previousStickyTimeout must be read before this start changed stickiness
 		// (ClearStickyTaskQueue or a deployment transition clears the binding); passing current values misreads a move as a
 		// restore. Call it after the response is built, so a worker coming from the normal queue gets full history.
-		UpdateNonExclusiveWorkerBinding(options *sessionpb.WorkerSessionOptions, previousWorkerQueue string, previousStickyTimeout *durationpb.Duration) (bool, error)
+		UpdateNonExclusiveWorkerBinding(options *sessionpb.WorkerSessionOptions, instanceKey string, previousWorkerQueue string, previousStickyTimeout *durationpb.Duration) (bool, error)
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 
 		IsWorkflowExecutionRunning() bool

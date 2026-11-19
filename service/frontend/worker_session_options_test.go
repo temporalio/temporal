@@ -26,6 +26,7 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 		{name: "multi session on sticky queue", kind: enumspb.TASK_QUEUE_KIND_STICKY, multiSession: true, workerAddress: "queue"},
 		{name: "multi session on normal queue", kind: enumspb.TASK_QUEUE_KIND_NORMAL, multiSession: true, workerAddress: "sticky-queue"},
 		{name: "empty worker address", kind: enumspb.TASK_QUEUE_KIND_NORMAL, multiSession: true, invalid: true},
+		{name: "multi session without worker instance key", kind: enumspb.TASK_QUEUE_KIND_NORMAL, multiSession: true, workerAddress: "sticky-queue", noInstanceKey: true, invalid: true},
 		{name: "sticky queue differs from worker address", kind: enumspb.TASK_QUEUE_KIND_STICKY, multiSession: true, workerAddress: "other", invalid: true},
 		{name: "worker address is the normal queue", kind: enumspb.TASK_QUEUE_KIND_NORMAL, multiSession: true, workerAddress: "queue", invalid: true},
 		{name: "regular poll", kind: enumspb.TASK_QUEUE_KIND_NORMAL},

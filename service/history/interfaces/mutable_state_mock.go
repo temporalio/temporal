@@ -3966,18 +3966,18 @@ func (mr *MockMutableStateMockRecorder) UpdateLastRunningClock(arg0 any) *gomock
 }
 
 // UpdateNonExclusiveWorkerBinding mocks base method.
-func (m *MockMutableState) UpdateNonExclusiveWorkerBinding(options *session.WorkerSessionOptions, previousWorkerQueue string, previousStickyTimeout *durationpb.Duration) (bool, error) {
+func (m *MockMutableState) UpdateNonExclusiveWorkerBinding(options *session.WorkerSessionOptions, instanceKey, previousWorkerQueue string, previousStickyTimeout *durationpb.Duration) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNonExclusiveWorkerBinding", options, previousWorkerQueue, previousStickyTimeout)
+	ret := m.ctrl.Call(m, "UpdateNonExclusiveWorkerBinding", options, instanceKey, previousWorkerQueue, previousStickyTimeout)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateNonExclusiveWorkerBinding indicates an expected call of UpdateNonExclusiveWorkerBinding.
-func (mr *MockMutableStateMockRecorder) UpdateNonExclusiveWorkerBinding(options, previousWorkerQueue, previousStickyTimeout any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) UpdateNonExclusiveWorkerBinding(options, instanceKey, previousWorkerQueue, previousStickyTimeout any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNonExclusiveWorkerBinding", reflect.TypeOf((*MockMutableState)(nil).UpdateNonExclusiveWorkerBinding), options, previousWorkerQueue, previousStickyTimeout)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNonExclusiveWorkerBinding", reflect.TypeOf((*MockMutableState)(nil).UpdateNonExclusiveWorkerBinding), options, instanceKey, previousWorkerQueue, previousStickyTimeout)
 }
 
 // UpdateResetRunID mocks base method.

@@ -11044,15 +11044,19 @@ func (s *mutableStateSuite) TestReschedulePendingActivitiesForSessionMove_Nothin
 /*
 TestUpdateNonExclusiveWorkerBinding tests how a workflow task start changes a non-exclusive binding:
  1. Set the session state and sticky queue the workflow had, and the location captured before the start.
- 2. Apply the starting poller's session options, with one ready session activity pending.
- 3. A location change sets the location and its sticky mirror and reschedules the activity; a restart from the
-    normal queue by the same worker only restores the sticky queue; everything else changes nothing.
+ 2. Apply the starting poller's session options and instance key, with one ready session activity pending.
+ 3. A location change sets the location (with the poller's instance key) and its sticky mirror and reschedules the
+    activity; a restart from the normal queue by the same worker only restores the sticky queue; everything else
+    changes nothing.
 */
 func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 	multiSession := func(address string) *sessionpb.WorkerSessionOptions {
 		return &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
 			MultiSession: &sessionpb.MultiSessionOptions{WorkerAddress: address},
 		}}
+	}
+	bound := func(queue string, instanceKey string) *persistencespb.SessionState {
+		return &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: queue, InstanceKey: instanceKey}}
 	}
 	previousTimeout := durationpb.New(7 * time.Second)
 	for _, tc := range []struct {
@@ -11070,17 +11074,17 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 	}{
 		{name: "never a session"},
 		{name: "first bind uses default timeout", options: multiSession("X"),
-			wantUpdated: true, wantSessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}, wantSticky: "X",
+			wantUpdated: true, wantSessionState: bound("X", "k1"), wantSticky: "X",
 			wantStickyTimeout: defaultSessionStickyScheduleToStartTimeout, wantReschedule: true},
-		{name: "same worker on its sticky queue", options: multiSession("X"), sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}},
+		{name: "same worker on its sticky queue", options: multiSession("X"), sessionState: bound("X", "k1"),
 			stickyTaskQueue: "X", previousWorkerQueue: "X", previousTimeout: previousTimeout,
-			wantSessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}, wantSticky: "X", wantStickyTimeout: 7 * time.Second},
+			wantSessionState: bound("X", "k1"), wantSticky: "X", wantStickyTimeout: 7 * time.Second},
 		{name: "same worker from normal queue restores sticky", options: multiSession("X"), sessionState: &persistencespb.SessionState{},
 			previousWorkerQueue: "X", previousTimeout: previousTimeout,
-			wantUpdated: true, wantSessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}, wantSticky: "X", wantStickyTimeout: 7 * time.Second},
+			wantUpdated: true, wantSessionState: bound("X", "k1"), wantSticky: "X", wantStickyTimeout: 7 * time.Second},
 		{name: "move carries previous timeout", options: multiSession("Y"), sessionState: &persistencespb.SessionState{},
 			previousWorkerQueue: "X", previousTimeout: previousTimeout,
-			wantUpdated: true, wantSessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "Y"}}, wantSticky: "Y", wantStickyTimeout: 7 * time.Second, wantReschedule: true},
+			wantUpdated: true, wantSessionState: bound("Y", "k1"), wantSticky: "Y", wantStickyTimeout: 7 * time.Second, wantReschedule: true},
 		{name: "non-session worker drops the session", sessionState: &persistencespb.SessionState{}, previousWorkerQueue: "X",
 			wantUpdated: true, wantReschedule: true},
 		{name: "exclusive session is untouched", options: multiSession("Y"), sessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}},
@@ -11098,7 +11102,7 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 			activity := s.addSessionTestActivity(10, true)
 			stampBefore := activity.Stamp
 
-			updated, err := s.mutableState.UpdateNonExclusiveWorkerBinding(tc.options, tc.previousWorkerQueue, tc.previousTimeout)
+			updated, err := s.mutableState.UpdateNonExclusiveWorkerBinding(tc.options, "k1", tc.previousWorkerQueue, tc.previousTimeout)
 
 			s.Require().NoError(err)
 			s.Equal(tc.wantUpdated, updated)

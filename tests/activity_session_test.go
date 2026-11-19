@@ -89,7 +89,7 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	require.NoError(t, err)
 	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
+		SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()), WorkerInstanceKey: tv.WorkerInstanceKey(),
 	}).HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		var commands []*commandpb.Command
 		for _, useSession := range []bool{false, true} {
@@ -200,6 +200,7 @@ func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.V
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 		TaskQueue:         tv.TaskQueue(),
 		SessionOptions:    multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
+		WorkerInstanceKey: tv.WorkerInstanceKey(),
 	}).HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		response := env.respondWftWithActivities(tv, tv, true, behavior, "session-activity")
 		response.Commands[0].GetScheduleActivityTaskCommandAttributes().SessionOptions = &sessionpb.ActivitySessionOptions{

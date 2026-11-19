@@ -272,6 +272,7 @@ func Invoke(
 			// must receive full history, even though the restored sticky queue now points at it.
 			bindingUpdated, err := mutableState.UpdateNonExclusiveWorkerBinding(
 				req.PollRequest.GetSessionOptions(),
+				req.PollRequest.GetWorkerInstanceKey(),
 				previousWorkerQueue,
 				previousStickyTimeout,
 			)

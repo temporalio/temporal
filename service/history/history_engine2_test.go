@@ -5278,6 +5278,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedBindsMultiSessionWorker() {
 					SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
 						MultiSession: &sessionpb.MultiSessionOptions{WorkerAddress: "worker-y-sticky"},
 					}},
+					WorkerInstanceKey: "worker-y-instance",
 				},
 			})
 
@@ -5285,6 +5286,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedBindsMultiSessionWorker() {
 			s.False(response.GetStickyExecutionEnabled(), "a worker coming from the normal queue needs full history")
 			s.Require().NotNil(persisted)
 			s.Equal("worker-y-sticky", persisted.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
+			s.Equal("worker-y-instance", persisted.GetSessionState().GetBoundWorkerInfo().GetInstanceKey())
 			s.False(persisted.GetSessionState().GetExclusiveWorker())
 			s.Equal("worker-y-sticky", persisted.GetStickyTaskQueue())
 			s.Equal(tc.wantTimeout, persisted.GetStickyScheduleToStartTimeout().AsDuration())
