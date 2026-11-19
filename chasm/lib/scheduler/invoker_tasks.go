@@ -433,8 +433,10 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 				logger.Info("failed to start workflow", tag.Error(err))
 
 				// Don't count "already started" for the error metric or retry, as it is most likely
-				// due to misconfiguration.
-				if !isAlreadyStartedError(err) {
+				// due to misconfiguration. Don't count "busy workflow" for the error metric either:
+				// it means the user is starting the same workflow ID too often, e.g. by triggering
+				// the schedule several times in the same second.
+				if !isAlreadyStartedError(err) && !isBusyWorkflowError(err) {
 					metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Record(1)
 				}
 
@@ -828,6 +830,11 @@ func (h *InvokerExecuteTaskHandler) getRateLimiterPermission() (delay time.Durat
 func isAlreadyStartedError(err error) bool {
 	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
 	return errors.As(err, &expectedErr)
+}
+
+func isBusyWorkflowError(err error) bool {
+	var expectedErr *serviceerror.ResourceExhausted
+	return errors.As(err, &expectedErr) && expectedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW
 }
 
 func isRateLimitedError(err error) (time.Duration, bool) {
