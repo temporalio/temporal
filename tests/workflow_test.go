@@ -80,7 +80,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		)
 
 		// Validate the default value for WorkflowTaskTimeoutSeconds
-		historyEvents := env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{
+		historyEvents := env.GetHistory(s.Context(), &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.RunId,
 		})
@@ -668,7 +668,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 			historyEvents := env.GetHistory(
 				s.Context(),
-				env.Namespace(),
 				&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
 			)
 			s.EqualHistoryEvents(
@@ -711,7 +710,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 				s.ErrorContains(err1, tc.ErrMessage)
 				historyEvents = env.GetHistory(
 					s.Context(),
-					env.Namespace(),
 					&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
 				)
 				s.EqualHistoryEvents(
@@ -744,7 +742,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 			historyEvents = env.GetHistory(
 				s.Context(),
-				env.Namespace(),
 				&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
 			)
 			s.EqualHistoryEvents(
@@ -870,7 +867,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 	historyEvents := env.GetHistory(
 		s.Context(),
-		env.Namespace(),
 		&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
 	)
 	s.EqualHistoryEvents(
@@ -907,7 +903,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	// History events must be the same as before.
 	historyEvents = env.GetHistory(
 		s.Context(),
-		env.Namespace(),
 		&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
 	)
 	s.EqualHistoryEvents(
@@ -1002,7 +997,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	// Since OnConflictOptions is nil, no history event is added.
 	historyEvents := env.GetHistory(
 		s.Context(),
-		env.Namespace(),
 		&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
 	)
 	s.EqualHistoryEvents(
@@ -1039,7 +1033,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 	historyEvents = env.GetHistory(
 		s.Context(),
-		env.Namespace(),
 		&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
 	)
 	s.EqualHistoryEvents(
@@ -1385,7 +1378,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for range 10 {
-		historyEvents = env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{
+		historyEvents = env.GetHistory(s.Context(), &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
 		})
@@ -1488,7 +1481,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 	})
 	s.NoError(err)
 
-	historyEvents := env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{
+	historyEvents := env.GetHistory(s.Context(), &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      we.RunId,
 	})
@@ -1773,7 +1766,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 				tag.Error(err))
 		}
 		if err != nil {
-			s.PrintHistoryEventsCompact(env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{
+			s.PrintHistoryEventsCompact(env.GetHistory(s.Context(), &commonpb.WorkflowExecution{
 				WorkflowId: tv.WorkflowID(),
 				RunId:      we.RunId,
 			}))
@@ -1879,7 +1872,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	for i := 1; i <= maximumAttempts; i++ {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.NoError(err)
-		events := env.GetHistory(s.Context(), env.Namespace(), executions[i-1])
+		events := env.GetHistory(s.Context(), executions[i-1])
 		if i == maximumAttempts {
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"Attempt":%d}
@@ -1911,7 +1904,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 
 	// Check run id links
 	for i := range maximumAttempts {
-		events := env.GetHistory(s.Context(), env.Namespace(), executions[i])
+		events := env.GetHistory(s.Context(), executions[i])
 		switch i {
 		case 0:
 			s.EqualHistoryEvents(fmt.Sprintf(`
@@ -2030,7 +2023,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events := env.GetHistory(s.Context(), env.Namespace(), executions[0])
+	events := env.GetHistory(s.Context(), executions[0])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":1}
   2 WorkflowTaskScheduled
@@ -2040,7 +2033,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = env.GetHistory(s.Context(), env.Namespace(), executions[1])
+	events = env.GetHistory(s.Context(), executions[1])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":2}
   2 WorkflowTaskScheduled
@@ -2050,7 +2043,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = env.GetHistory(s.Context(), env.Namespace(), executions[2])
+	events = env.GetHistory(s.Context(), executions[2])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":3}
   2 WorkflowTaskScheduled
@@ -2097,7 +2090,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = env.GetHistory(s.Context(), env.Namespace(), executions[0])
+	events = env.GetHistory(s.Context(), executions[0])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":1}
   2 WorkflowTaskScheduled
@@ -2479,7 +2472,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId_After
 	})
 	s.NoError(err)
 
-	events := env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: originalRunID})
+	events := env.GetHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: originalRunID})
 	for _, ev := range events {
 		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 			firstWTCompletedEventID = ev.GetEventId()
