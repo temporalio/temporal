@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
@@ -861,7 +862,13 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			updatedWorkflowMutation = request.UpdateWorkflowMutation
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
 
 	// load mutable state such that it already exists in memory when respond workflow task is called
 	// this enables us to set query registry on it
@@ -882,6 +889,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 	loadedMS.(*workflow.MutableStateImpl).QueryRegistry = qr
 	release(nil)
 
+	limiters := []*taskqueuespb.LimiterRef{{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "limiter-1"}}
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
@@ -893,6 +901,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 			},
 			Identity: identity,
 		},
+		Limiters: limiters,
 	})
 
 	s.Nil(err)
@@ -906,6 +915,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		id3: {},
 	}
 	s.Equal(expectedQueryMap, response.Queries)
+	s.ProtoElementsMatch(limiters, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskLimiters)
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistory() {
@@ -1067,7 +1077,13 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			updatedWorkflowMutation = request.UpdateWorkflowMutation
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
 
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
@@ -1083,6 +1099,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		workflowTaskCompletedEvent.GetEventId(),
 		gomock.Any(),
 	).Return(scheduledEvent, nil)
+	limiters := []*taskqueuespb.LimiterRef{{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "limiter-1"}}
 	response, err := s.historyEngine.RecordActivityTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
@@ -1094,11 +1111,13 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 			},
 			Identity: identity,
 		},
+		Limiters: limiters,
 	})
 	s.Nil(err)
 	s.NotNil(response)
 	s.Equal(scheduledEvent, response.ScheduledEvent)
 	s.NotNil(response.Clock, "Clock must be set for shard staleness check")
+	s.ProtoElementsMatch(limiters, updatedWorkflowMutation.UpsertActivityInfos[scheduledEvent.GetEventId()].Limiters)
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedDuplicateRequest() {

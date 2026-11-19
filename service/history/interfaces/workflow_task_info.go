@@ -6,6 +6,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -66,6 +67,8 @@ type WorkflowTaskInfo struct {
 	// and used to delete them when the workflow task completes.
 	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
+
+	Limiters []*taskqueuespb.LimiterRef
 
 	// Incrementing Stamp will invalidate the existing transfer/matching workflow task.
 	// Incrementing Stamp will ensure that the standby clusters reschedule the transfer tasks properly.

@@ -3,6 +3,7 @@ package recordworkflowtaskstarted
 import (
 	"context"
 	"errors"
+	"slices"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	commontaskqueue "go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -160,6 +162,7 @@ func Invoke(
 				return nil, err
 			}
 
+			mutableState.GetExecutionInfo().WorkflowTaskLimiters = req.GetLimiters()
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
@@ -178,10 +181,8 @@ func Invoke(
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-				// A speculative workflow task can remain in memory only if starting it did not
-				// produce changes that need to be persisted. Otherwise, closing the transaction
-				// converts it to a normal workflow task and persists all of the changes.
-				updateAction.Noop = !mutableState.IsDirty()
+				// Persist dirty state and limiter refs so a history restart cannot lose the release obligation.
+				updateAction.Noop = !mutableState.IsDirty() && !slices.ContainsFunc(req.GetLimiters(), commontaskqueue.NeedsRelease)
 			} else {
 				// Start the deployment transition here only for a normal WFT. For a speculative WFT,
 				// even when dirty mutable state causes the start to be persisted, the transition can

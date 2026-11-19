@@ -18,6 +18,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	commonclock "go.temporal.io/server/common/clock"
@@ -26,7 +27,9 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -65,6 +68,7 @@ func TestClearActivityStartedState(t *testing.T) {
 		RequestId:      "req-1",
 		StartedTime:    timestamppb.Now(),
 		StartedClock:   &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 99},
+		Limiters:       []*taskqueuespb.LimiterRef{{Key: "limiter-1"}},
 		// Fields that should NOT be cleared.
 		ScheduledEventId: 7,
 		ActivityId:       "activity-1",
@@ -78,6 +82,7 @@ func TestClearActivityStartedState(t *testing.T) {
 	require.Empty(t, ai.RequestId)
 	require.Nil(t, ai.StartedTime)
 	require.Nil(t, ai.StartedClock)
+	require.Nil(t, ai.Limiters)
 	// Verify non-started fields are untouched.
 	require.Equal(t, int64(7), ai.ScheduledEventId)
 	require.Equal(t, "activity-1", ai.ActivityId)
@@ -203,6 +208,13 @@ func (s *retryActivitySuite) TestRetryActivity_should_clear_per_attempt_fields()
 	// Set per-attempt fields that should be cleared on retry.
 	s.activity.StartedClock = &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
 	s.activity.StartedTime = timestamppb.Now()
+	limiters := []*taskqueuespb.LimiterRef{{
+		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+		Key:         "limiter-key",
+		SlotId:      uuid.NewString(),
+	}}
+	s.activity.Limiters = limiters
+	s.mutableState.PopTasks()
 
 	_, err := s.mutableState.RetryActivity(s.activity, s.failure)
 	s.Require().NoError(err)
@@ -210,6 +222,12 @@ func (s *retryActivitySuite) TestRetryActivity_should_clear_per_attempt_fields()
 	s.Nil(s.activity.StartedClock, "StartedClock should be cleared on retry")
 	s.Nil(s.activity.StartedTime, "StartedTime should be cleared on retry")
 	s.Equal(common.EmptyEventID, s.activity.StartedEventId, "StartedEventId should be reset to EmptyEventID")
+	s.mutableState.closeTransactionGenerateReleaseLimiterTask(historyi.TransactionPolicyActive)
+	transferTasks := s.mutableState.PopTasks()[tasks.CategoryTransfer]
+	s.Require().Len(transferTasks, 1)
+	releaseTask, ok := transferTasks[0].(*tasks.ReleaseLimiterTask)
+	s.Require().True(ok)
+	s.Equal(limiters, releaseTask.Limiters)
 }
 
 // TestRetryActivity_should_be_scheduled_when_next_retry_delay_is_set asserts that the activity is retried after NextRetryDelay period specified in the application failure.
