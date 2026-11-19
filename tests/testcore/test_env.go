@@ -473,8 +473,8 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
-// ReadHistory reads every page of workflow history using ctx.
-func (e *TestEnv) ReadHistory(
+// readHistory reads every page of workflow history using ctx.
+func (e *TestEnv) readHistory(
 	ctx context.Context,
 	nsName namespace.Name,
 	execution *commonpb.WorkflowExecution,
@@ -508,7 +508,7 @@ func (e *TestEnv) GetHistoryFunc(ctx context.Context, nsName namespace.Name, exe
 
 func (e *TestEnv) GetHistory(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	e.t.Helper()
-	events, err := e.ReadHistory(ctx, nsName, execution)
+	events, err := e.readHistory(ctx, nsName, execution)
 	require.NoError(e.t, err)
 	return events
 }
