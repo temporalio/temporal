@@ -183,8 +183,8 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached() {
 // Do NOT override MatchingNumTaskqueueReadPartitions/WritePartitions inside the subtest.
 func (s *TaskQueueStatsSuite) TestVersioningSuite() {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
-		s.T().Run(behavior.Name()+"Suite", func(t *testing.T) { //nolint:testifylint // nested parallelsuite.Run needs raw *testing.T
-			parallelsuite.RunLegacySequential(t, &TaskQueueStatsVersionSuite{}, behavior) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+		s.RunSequential(behavior.Name()+"Suite", func(s *TaskQueueStatsSuite) { //nolint:testifylint // nested parallelsuite.Run needs raw *testing.T
+			parallelsuite.RunLegacySequential(s.T(), &TaskQueueStatsVersionSuite{}, behavior) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 		})
 	}
 }

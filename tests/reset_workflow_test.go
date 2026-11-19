@@ -549,61 +549,61 @@ type resetTest struct {
 }
 
 //nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
-func (t *resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
+func (s *resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
 	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
 		RequestId:         uuid.NewString(),
-		Namespace:         t.env.Namespace().String(),
-		WorkflowExecution: t.tv.WorkflowExecution(),
-		SignalName:        t.tv.HandlerName(),
-		Input:             t.tv.Any().Payloads(),
-		Identity:          t.tv.WorkerIdentity(),
+		Namespace:         s.env.Namespace().String(),
+		WorkflowExecution: s.tv.WorkflowExecution(),
+		SignalName:        s.tv.HandlerName(),
+		Input:             s.tv.Any().Payloads(),
+		Identity:          s.tv.WorkerIdentity(),
 	}
-	_, err := t.env.FrontendClient().SignalWorkflowExecution(t.Context(), signalRequest)
-	t.NoError(err)
+	_, err := s.env.FrontendClient().SignalWorkflowExecution(s.Context(), signalRequest)
+	s.NoError(err)
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
-	t.NoError(err)
+	s.NoError(err)
 }
 
 //nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
-func (t *resetTest) sendUpdateAndProcessWFT(tv *testvars.TestVars, poller *testcore.TaskPoller) {
-	sendUpdateNoErrorWaitPolicyAccepted(t.env, tv)
+func (s *resetTest) sendUpdateAndProcessWFT(tv *testvars.TestVars, poller *testcore.TaskPoller) {
+	sendUpdateNoErrorWaitPolicyAccepted(s.env, tv)
 	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
 	// required for the update request to return.
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
-	t.NoError(err)
+	s.NoError(err)
 }
 
-func (t *resetTest) sendStartWorkflowRequestWithOptions(
+func (s *resetTest) sendStartWorkflowRequestWithOptions(
 	tv *testvars.TestVars,
 	optsFn ...func(request *workflowservice.StartWorkflowExecutionRequest),
 ) *workflowservice.StartWorkflowExecutionResponse {
-	request := startWorkflowRequest(t.env, tv)
+	request := startWorkflowRequest(s.env, tv)
 	for _, fn := range optsFn {
 		fn(request)
 	}
-	resp, err := t.env.FrontendClient().StartWorkflowExecution(t.Context(), request)
-	t.NoError(err)
+	resp, err := s.env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
 	return resp
 }
 
-func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+func (s *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
 
 	// Increment WFT counter here; messageHandler is invoked prior to wftHandler
-	t.wftCounter++
+	s.wftCounter++
 
 	// There's an initial empty WFT; then come `totalUpdates` updates, followed by `totalSignals` signals, each in a
 	// separate WFT. We must accept the updates, but otherwise respond with empty messages.
-	if t.wftCounter == t.totalUpdates+t.totalSignals+1 {
-		t.messagesCompleted = true
+	if s.wftCounter == s.totalUpdates+s.totalSignals+1 {
+		s.messagesCompleted = true
 	}
-	if t.wftCounter > t.totalSignals+1 {
-		updateID := t.wftCounter - t.totalSignals - 1
-		tv := t.tv.WithUpdateIDNumber(updateID).WithMessageIDNumber(updateID)
+	if s.wftCounter > s.totalSignals+1 {
+		updateID := s.wftCounter - s.totalSignals - 1
+		tv := s.tv.WithUpdateIDNumber(updateID).WithMessageIDNumber(updateID)
 		return []*protocolpb.Message{
 			{
 				Id:                 tv.MessageID() + "_update-accepted",
 				ProtocolInstanceId: tv.UpdateID(),
-				Body: protoutils.MarshalAny(t.T(), &updatepb.Acceptance{
+				Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 					AcceptedRequestMessageId:         "fake-request-message-id",
 					AcceptedRequestSequencingEventId: int64(-1),
 				}),
@@ -614,14 +614,14 @@ func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueRespo
 
 }
 
-func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+func (s *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	var commands []*commandpb.Command
 
 	// There's an initial empty WFT; then come `totalSignals` signals, followed by `totalUpdates` updates, each in
 	// a separate WFT. We must send COMPLETE_WORKFLOW_EXECUTION in the final WFT.
-	if t.wftCounter > t.totalSignals+1 {
-		updateID := t.wftCounter - t.totalSignals - 1
-		tv := t.tv.WithMessageIDNumber(updateID)
+	if s.wftCounter > s.totalSignals+1 {
+		updateID := s.wftCounter - s.totalSignals - 1
+		tv := s.tv.WithMessageIDNumber(updateID)
 		commands = append(commands, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
@@ -629,13 +629,13 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 			}},
 		})
 	}
-	if t.wftCounter == t.totalSignals+t.totalUpdates+1 {
-		t.commandsCompleted = true
+	if s.wftCounter == s.totalSignals+s.totalUpdates+1 {
+		s.commandsCompleted = true
 		commands = append(commands, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: t.tv.Any().Payloads(),
+					Result: s.tv.Any().Payloads(),
 				},
 			},
 		})
@@ -643,69 +643,69 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 	return commands, nil
 }
 
-func (t *resetTest) reset(eventId int64) string {
-	resp, err := t.env.FrontendClient().ResetWorkflowExecution(t.Context(), &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 t.env.Namespace().String(),
-		WorkflowExecution:         t.tv.WorkflowExecution(),
+func (s *resetTest) reset(eventID int64) string {
+	resp, err := s.env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.env.Namespace().String(),
+		WorkflowExecution:         s.tv.WorkflowExecution(),
 		Reason:                    "reset execution from test",
-		WorkflowTaskFinishEventId: eventId,
+		WorkflowTaskFinishEventId: eventID,
 		RequestId:                 uuid.NewString(),
-		ResetReapplyType:          t.reapplyType,
-		ResetReapplyExcludeTypes:  t.reapplyExcludeTypes,
+		ResetReapplyType:          s.reapplyType, //nolint:staticcheck // SA1019: exercises the legacy reset reapply option.
+		ResetReapplyExcludeTypes:  s.reapplyExcludeTypes,
 	})
-	t.NoError(err)
+	s.NoError(err)
 	return resp.RunId
 }
 
-func (t *resetTest) run() {
-	t.totalSignals = 2
-	t.totalUpdates = 2
-	runID := mustStartWorkflow(t.env, t.tv)
+func (s *resetTest) run() {
+	s.totalSignals = 2
+	s.totalUpdates = 2
+	runID := mustStartWorkflow(s.env, s.tv)
 
 	poller := &testcore.TaskPoller{
-		Client:              t.env.FrontendClient(),
-		Namespace:           t.env.Namespace().String(),
-		TaskQueue:           t.tv.TaskQueue(),
-		Identity:            t.tv.WorkerIdentity(),
-		WorkflowTaskHandler: t.wftHandler,
-		MessageHandler:      t.messageHandler,
-		Logger:              t.env.Logger,
-		T:                   t.T(),
+		Client:              s.env.FrontendClient(),
+		Namespace:           s.env.Namespace().String(),
+		TaskQueue:           s.tv.TaskQueue(),
+		Identity:            s.tv.WorkerIdentity(),
+		WorkflowTaskHandler: s.wftHandler,
+		MessageHandler:      s.messageHandler,
+		Logger:              s.env.Logger,
+		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
-	t.NoError(err)
+	s.NoError(err)
 
-	t.EqualHistoryEvents(`
+	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-`, t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution()))
+`, s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution()))
 
 	// Trying to start workflow with same WorkflowID will attach the RequestID to the existing workflow.
 	onConflictOptions := &workflowpb.OnConflictOptions{AttachRequestId: true}
-	resp := t.sendStartWorkflowRequestWithOptions(
-		t.tv,
+	resp := s.sendStartWorkflowRequestWithOptions(
+		s.tv,
 		func(request *workflowservice.StartWorkflowExecutionRequest) {
 			request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 			request.OnConflictOptions = onConflictOptions
 		},
 	)
-	t.Equal(runID, resp.RunId)
-	requireNotStartedButRunning(t.T(), resp)
+	s.Equal(runID, resp.RunId)
+	requireNotStartedButRunning(s.T(), resp)
 
-	for i := 1; i <= t.totalSignals; i++ {
-		t.sendSignalAndProcessWFT(poller)
+	for i := 1; i <= s.totalSignals; i++ {
+		s.sendSignalAndProcessWFT(poller)
 	}
-	for i := 1; i <= t.totalUpdates; i++ {
-		t.sendUpdateAndProcessWFT(t.tv.WithUpdateIDNumber(i), poller)
+	for i := 1; i <= s.totalUpdates; i++ {
+		s.sendUpdateAndProcessWFT(s.tv.WithUpdateIDNumber(i), poller)
 	}
-	t.True(t.commandsCompleted)
-	t.True(t.messagesCompleted)
+	s.True(s.commandsCompleted)
+	s.True(s.messagesCompleted)
 
-	events := t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution())
-	t.EqualHistoryEvents(`
+	events := s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
@@ -738,14 +738,14 @@ func (t *resetTest) run() {
 			break
 		}
 	}
-	t.NotEmpty(attachedRequestID)
+	s.NotEmpty(attachedRequestID)
 
-	resetToEventId := int64(4)
-	newRunId := t.reset(resetToEventId)
-	t.tv = t.tv.WithRunID(newRunId)
-	events = t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution())
+	resetToEventID := int64(4)
+	newRunID := s.reset(resetToEventID)
+	s.tv = s.tv.WithRunID(newRunID)
+	events = s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
 
-	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(t.reapplyExcludeTypes, t.reapplyType)
+	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(s.reapplyExcludeTypes, s.reapplyType)
 	_, noSignals := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
 	_, noUpdates := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
 
@@ -793,13 +793,13 @@ func (t *resetTest) run() {
   9 WorkflowExecutionUpdateAdmitted
  10 WorkflowTaskScheduled`
 	}
-	t.EqualHistoryEvents(expectedHistory, events)
+	s.EqualHistoryEvents(expectedHistory, events)
 
 	if signals && updates {
-		resetToEventId := int64(4)
-		newRunId = t.reset(resetToEventId)
-		t.tv = t.tv.WithRunID(newRunId)
-		events = t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution())
+		resetToEventID := int64(4)
+		newRunID = s.reset(resetToEventID)
+		s.tv = s.tv.WithRunID(newRunID)
+		events = s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
 		expectedHistory = `
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -811,24 +811,24 @@ func (t *resetTest) run() {
   8 WorkflowExecutionUpdateAdmitted
   9 WorkflowExecutionUpdateAdmitted
  10 WorkflowTaskScheduled`
-		t.EqualHistoryEvents(expectedHistory, events)
+		s.EqualHistoryEvents(expectedHistory, events)
 	}
 
 	// Send another start workflow with the same RequestID that got attached to verify it's deduped.
-	resp = t.sendStartWorkflowRequestWithOptions(
-		t.tv,
+	resp = s.sendStartWorkflowRequestWithOptions(
+		s.tv,
 		func(request *workflowservice.StartWorkflowExecutionRequest) {
 			request.RequestId = attachedRequestID
 			request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 			request.OnConflictOptions = onConflictOptions
 		},
 	)
-	t.Equal(newRunId, resp.RunId)
-	requireNotStartedButRunning(t.T(), resp)
+	s.Equal(newRunID, resp.RunId)
+	requireNotStartedButRunning(s.T(), resp)
 
 	// History events must be the same.
-	events = t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution())
-	t.EqualHistoryEvents(expectedHistory, events)
+	events = s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
+	s.EqualHistoryEvents(expectedHistory, events)
 }
 
 func (s *ResetWorkflowTestSuite) TestBufferedSignalIsReappliedOnReset() {

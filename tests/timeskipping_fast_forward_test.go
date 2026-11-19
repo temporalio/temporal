@@ -401,7 +401,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 	go func() {
 		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 			Namespace:         env.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 			FastForwardId:     "ff-id",
 		})
 		resultCh <- pollResult{resp, pollErr}
@@ -446,7 +446,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 	// entering the notifier wait.
 	resp2, err := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 		FastForwardId:     "ff-id",
 	})
 	s.NoError(err)
@@ -466,8 +466,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 
 // TestFastForward_PollWakesAcrossContinueAsNew proves the subscription really spans a chain of
 // runs. The notification key carries no RunID, so a poll that parks while run 1 is alive must be
-// woken by run 2's fast-forward completion after continue-as-new — even though the poll named
-// run 1 explicitly. This exercises two things together: the propagated fast-forward target keeps
+// woken by run 2's fast-forward completion after continue-as-new. The poll omits RunID.
+// This exercises two things together: the propagated fast-forward target keeps
 // the same id across the chain, and the publisher on run 2 lands on the key run 1's waiter holds.
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesAcrossContinueAsNew() {
 	env := testcore.NewEnv(s.T())
@@ -508,7 +508,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesAcross
 	go func() {
 		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 			Namespace:         env.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: run1ID},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 			FastForwardId:     ffID,
 		})
 		resultCh <- pollResult{resp, pollErr}
@@ -549,7 +549,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesAcross
 	}
 
 	// An empty WFT drives run 2 idle, so its close-tx skip advances to the inherited target and
-	// completes the fast-forward. The publisher is run 2; the waiter subscribed naming run 1.
+	// completes the fast-forward. The publisher is run 2; the waiter subscribed during run 1.
 	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	})
@@ -700,7 +700,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWork
 	go func() {
 		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 			Namespace:         env.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 			FastForwardId:     "ff-id",
 		})
 		resultCh <- pollResult{resp, pollErr}
@@ -743,7 +743,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWork
 	// short-circuit (the run is closed with no continuation).
 	resp2, err := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 		FastForwardId:     "ff-id",
 	})
 	s.NoError(err)

@@ -1053,7 +1053,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	select {
 	case activityTask = <-activityStartedCh:
 	case result := <-activityPollResultCh:
-		s.Require().NoError(result.err)
+		s.NoError(result.err)
 		s.FailNow("activity poll completed before the activity started")
 	case <-ctx.Done():
 		s.FailNowf("activity poll did not start before the test context ended", "error: %v", ctx.Err())
@@ -1071,16 +1071,16 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		Input:      nil,
 		Identity:   identity,
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	scheduleActivity = false
 	requestCancellation = true
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Require().NoError(err)
+	s.NoError(err)
 	continueActivity()
 
 	result := s.Rcv(activityPollResultCh)
-	s.Require().NoError(result.err)
+	s.NoError(result.err)
 	s.True(result.canceled, "Activity was not cancelled.")
 	env.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }

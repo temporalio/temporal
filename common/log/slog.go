@@ -53,16 +53,18 @@ func (h *handler) Handle(_ context.Context, record slog.Record) error {
 	})
 	// Not capturing the log location and stack trace here. We seem to not need this functionality since our zapLogger
 	// adds the logging-call-at tag.
-	switch record.Level {
-	case slog.LevelDebug:
-		h.logger.Debug(record.Message, tags...)
-	case slog.LevelInfo:
-		h.logger.Info(record.Message, tags...)
-	case slog.LevelWarn:
-		h.logger.Warn(record.Message, tags...)
-	case slog.LevelError:
+	// Map by range, matching convertSlogToZapLevel, which Enabled uses. slog levels are ints and
+	// the API permits values between the named constants, so an exact-match switch would admit
+	// such a record in Enabled and then silently drop it here.
+	switch {
+	case record.Level >= slog.LevelError:
 		h.logger.Error(record.Message, tags...)
+	case record.Level >= slog.LevelWarn:
+		h.logger.Warn(record.Message, tags...)
+	case record.Level >= slog.LevelInfo:
+		h.logger.Info(record.Message, tags...)
 	default:
+		h.logger.Debug(record.Message, tags...)
 	}
 	return nil
 }

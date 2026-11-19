@@ -152,3 +152,16 @@ Report concrete findings at all four severity levels: `nit`, `small`, `med`, and
 Prefer a small number of high-confidence findings.
 Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
 Report concrete `nit` and `small` findings selectively, and consolidate related symptoms into a single comment that addresses the root issue.
+
+## Additional Review Instructions
+
+### Time Skipping
+
+- Verify that workflow or mutable-state logic uses `ms.Now()` instead of
+  `shard.Now()` when it needs the execution's current time.
+- Check comparisons between execution timestamps and history-task
+  timestamps. Verify that both use the same clock, with conversion
+  between virtual time and wall-clock time when needed.
+- For CHASM components, `chasmCtx.Now()` already handles virtual time.
+  Check paths that interact directly with mutable state or history tasks
+  for missing or duplicate time conversions.

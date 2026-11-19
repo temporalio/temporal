@@ -55,10 +55,11 @@ func TestNamespaceReplicationMissingPayloadEvent(t *testing.T) {
 
 func TestNamespaceReplicationTaskContext(t *testing.T) {
 	task := namespaceReplicationTaskForTest()
+	sourceTaskID := int64(17)
 	want := NamespaceReplicationTaskContext{
 		SourceCluster: "cluster-a",
 		TargetCluster: "cluster-b",
-		SourceTaskID:  17,
+		SourceTaskID:  &sourceTaskID,
 		AttemptCount:  2,
 		EventData:     namespaceReplicationEventDataForTest(t, task),
 	}

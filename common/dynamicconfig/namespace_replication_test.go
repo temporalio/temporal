@@ -19,7 +19,7 @@ func TestNamespaceReplicationTransportMode(t *testing.T) {
 		{name: "legacy", value: "legacy", valid: true, want: "legacy"},
 		{name: "shadow", value: "shadow", valid: true, want: "shadow"},
 		{name: "unknown", value: "unknown", want: "legacy"},
-		{name: "authoritative not enabled", value: "chasm", want: "legacy"},
+		{name: "chasm", value: "chasm", valid: true, want: "chasm"},
 		{name: "non-string", value: 1, want: "legacy"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

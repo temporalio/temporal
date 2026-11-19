@@ -248,6 +248,38 @@ func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
 	s.NotEqual(WorkflowArchetypeID, rootNode.ArchetypeID())
 }
 
+func (s *nodeSuite) TestSetRootComponent_SyncsStructureChangedBeforeClose() {
+	rootNode, err := s.newTestTree(nil)
+	s.NoError(err)
+	ctx := NewMutableContext(context.Background(), rootNode)
+
+	rootComponent := &TestComponent{
+		SubComponent1: NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "sub-component-1"},
+		}),
+	}
+	s.NoError(rootNode.SetRootComponent(rootComponent))
+	// Sub-components created with the root are nodes before the transaction closes.
+	s.Contains(rootNode.children, "SubComponent1")
+
+	// Change the root's structure after SetRootComponent through the component held by the caller,
+	// as the updateFn of UpdateWithStartExecution does.
+	rootComponent.SubComponents = Map[string, *TestSubComponent1]{
+		"added": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "added"},
+		}),
+	}
+
+	mutations, err := rootNode.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "SubComponent1")
+	addedNode, ok := rootNode.findNode([]string{"SubComponents", "added"})
+	s.Require().True(ok, "sub-component added after SetRootComponent must be a node")
+	addedPath, err := s.nodePathEncoder.Encode(addedNode, nil)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, addedPath, "sub-component added after SetRootComponent must be persisted")
+}
+
 func (s *nodeSuite) TestInitSerializedNode_TypeData() {
 	node := newNode(s.nodeBase(), nil, "")
 	node.initSerializedNode(fieldTypeData)
@@ -545,6 +577,12 @@ func (s *nodeSuite) TestPointerAttributes() {
 		SubComponent11: NewComponentField(nil, sc11),
 	}
 
+	ifaceSC1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{
+			RunId: "workflow_id_iface",
+		},
+	}
+
 	s.Run("Sync and serialize component with ancestor pointer", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
 		rootNode, err := s.newTestTree(nilSerializedNodes)
@@ -555,7 +593,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootComponent := &TestComponent{
 			MSPointer:                    NewMSPointer(s.nodeBackend),
 			SubComponent1:                NewComponentField(nil, sc1),
-			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
+			SubComponentInterfacePointer: NewComponentField[Component](nil, ifaceSC1),
 		}
 
 		// sc11 points to root (grandparent) -- an ancestor pointer.
@@ -608,7 +646,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		sc1ptr, ok := ifacePtr.(*TestSubComponent1)
 		s.True(ok)
-		s.ProtoEqual(sc1ptr.SubComponent1Data, sc1.SubComponent1Data)
+		s.ProtoEqual(sc1ptr.SubComponent1Data, ifaceSC1.SubComponent1Data)
 	})
 
 	s.Run("Clear ancestor pointer by setting it to the empty field", func() {
@@ -4265,6 +4303,203 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
+// cleanTestComponentTree returns a test tree with its creation transaction already closed, and a
+// counter of NextTransitionCount calls made after that.
+func (s *nodeSuite) cleanTestComponentTree() (*Node, *int) {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	transitionCountCalls := 0
+	s.nodeBackend.HandleNextTransitionCount = func() int64 {
+		transitionCountCalls++
+		return 2
+	}
+	return root, &transitionCountCalls
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_KeepsMutation() {
+	root, transitionCountCalls := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: "speculative"}
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.True(root.IsDirty())
+	s.Zero(*transitionCountCalls)
+
+	mutations, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "")
+	s.Positive(*transitionCountCalls)
+}
+
+func (s *nodeSuite) TestRef_SpeculativeComponent() {
+	root, _ := s.cleanTestComponentTree()
+	savedTransitionCount := int64(1)
+	s.nodeBackend.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
+		return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: savedTransitionCount}
+	}
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+	testComponent.SubComponent2 = NewComponentField(mutableContext, &TestSubComponent2{
+		SubComponent2Data: &protoMessageType{CreateRequestId: "speculative"},
+	})
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	// Components persisted before the speculative transition keep their refs.
+	_, err = root.Ref(testComponent)
+	s.NoError(err)
+	_, err = root.Ref(testComponent.SubComponent1.Get(mutableContext))
+	s.NoError(err)
+
+	speculativeChild := testComponent.SubComponent2.Get(mutableContext)
+	_, err = root.Ref(speculativeChild)
+	s.ErrorIs(err, ErrSpeculativeComponentRef)
+
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	savedTransitionCount = 2
+	_, err = root.Ref(speculativeChild)
+	s.NoError(err)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_PendingUntilActiveClose() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 5 }
+	_, pending := root.SpeculativeTransitionFailoverVersion()
+	s.False(pending)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: "speculative"}
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+
+	version, pending := root.SpeculativeTransitionFailoverVersion()
+	s.True(pending)
+	s.Equal(int64(5), version)
+
+	// A passive close is rejected and leaves the speculative changes in place.
+	_, err = root.CloseTransaction(context.Background(), false)
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+	_, pending = root.SpeculativeTransitionFailoverVersion()
+	s.True(pending)
+	s.True(root.IsDirty())
+
+	mutations, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutations.UpdatedNodes, "")
+	_, pending = root.SpeculativeTransitionFailoverVersion()
+	s.False(pending)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_RunsImmediatePureTasks() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	mutableContext.AddTask(component, taskAttributes, &TestPureTask{Data: []byte("immediate")})
+
+	executionCount := 0
+	// Times(1) also checks the real close does not run the task again.
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Execute(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).
+		DoAndReturn(func(MutableContext, any, TaskAttributes, *TestPureTask) error {
+			executionCount++
+			return nil
+		}).Times(1)
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Equal(1, executionCount)
+
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_SyncsNewSubComponent() {
+	root, _ := s.cleanTestComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).SubComponent2 = NewComponentField(mutableContext, &TestSubComponent2{
+		SubComponent2Data: &protoMessageType{CreateRequestId: "sub2"},
+	})
+	s.NotContains(root.children, "SubComponent2")
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Contains(root.children, "SubComponent2")
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Contains(root.children, "SubComponent2")
+}
+
+func (s *nodeSuite) TestSpeculativeTransitionDecision() {
+	s.useStatefulExecutionState()
+	node := s.testComponentTree()
+	_, err := node.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	chasmCtx := NewMutableContext(context.Background(), node)
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	s.NoError(err)
+
+	// A transition that leaves the execution running stays speculative and notifies pollers.
+	tc.(*TestComponent).ComponentData.CreateRequestId = "updated"
+	decision, err := node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.Equal(TransitionDecision{PersistNow: false, NotifyPollers: true}, decision)
+
+	// A transition that closes the execution must be persisted.
+	tc.(*TestComponent).Complete(chasmCtx)
+	decision, err = node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.True(decision.PersistNow)
+}
+
+func (s *nodeSuite) TestSpeculativeTransitionDecision_Terminated() {
+	s.useStatefulExecutionState()
+	node := s.testComponentTree()
+	_, err := node.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	node.terminated = true
+	decision, err := node.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.True(decision.PersistNow)
+}
+
+func (s *nodeSuite) TestApplySpeculativeTransition_KeepsNewTasks() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.TasksByCategory = nil
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	mutableContext.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("deferred")})
+
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+	s.Empty(s.nodeBackend.TasksByCategory)
+
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTransfer], 1)
+}
+
 func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	root := s.testComponentTree()
 
@@ -5638,6 +5873,426 @@ func (s *nodeSuite) TestCloseTransaction_PersistsAcrossTransactions() {
 	s.Equal([]*commonpb.Link{link}, got)
 	s.Equal([]*commonpb.Link{link}, ctx2.Links(c2))
 	s.ProtoEqual(md, ctx2.UserMetadata(c2))
+}
+
+func (s *nodeSuite) TestCloseTransaction_ReplacedComponentDeletesSubtree() {
+	root := s.testComponentTree()
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "SubComponent1/SubComponent11")
+	s.Contains(mutation.UpdatedNodes, "SubComponent1/SubData11")
+
+	// The replacement doesn't have SubComponent11, so it must be deleted. SubData11 is rewritten, not deleted.
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponent1 = NewComponentField(ctx, &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{RunId: "replacement"},
+		SubData11:         NewDataField(ctx, &protoMessageType{RunId: "replacement-data"}),
+	})
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Equal(map[string]struct{}{"SubComponent1/SubComponent11": {}}, mutation.DeletedNodes)
+	s.Contains(mutation.UpdatedNodes, "SubComponent1")
+	s.Contains(mutation.UpdatedNodes, "SubComponent1/SubData11")
+	_, ok := root.findNode([]string{"SubComponent1", "SubComponent11"})
+	s.False(ok)
+}
+
+func (s *nodeSuite) TestCloseTransaction_RejectsComponentAttachedTwice() {
+	const (
+		alreadyAttached = "component is already attached to the tree"
+		notAtFieldPath  = "field holds a node that isn't at the field's path"
+	)
+	tl, ok := s.logger.(*testlogger.TestLogger)
+	s.Require().True(ok)
+	tl.Expect(testlogger.Error, alreadyAttached)
+	tl.Expect(testlogger.Error, notAtFieldPath)
+
+	testCases := []struct {
+		name        string
+		mutate      func(ctx MutableContext, c *TestComponent)
+		expectedErr string
+	}{
+		{
+			name: "attached component wrapped by a new field at the same path",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponent1 = NewComponentField(ctx, c.SubComponent1.Get(ctx))
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "attached component wrapped by a new field at another path",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k": NewComponentField(ctx, c.SubComponent1.Get(ctx)),
+				}
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "attached component moved to another field",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k": NewComponentField(ctx, c.SubComponent1.Get(ctx)),
+				}
+				c.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "new component wrapped by fields at two paths",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				sub := &TestSubComponent1{SubComponent1Data: &protoMessageType{RunId: "new"}}
+				c.SubComponent1 = NewComponentField(ctx, sub)
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k": NewComponentField(ctx, sub),
+				}
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "new component field assigned to two paths",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				field := NewComponentField(ctx, &TestSubComponent1{SubComponent1Data: &protoMessageType{RunId: "new"}})
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k1": field,
+					"k2": field,
+				}
+			},
+			expectedErr: alreadyAttached,
+		},
+		{
+			name: "attached component field copied to another path",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponents = Map[string, *TestSubComponent1]{
+					"k": c.SubComponent1,
+				}
+			},
+			expectedErr: notAtFieldPath,
+		},
+		{
+			name: "attached data field copied to another path",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubData1 = c.SubComponent1.Get(ctx).SubData11
+			},
+			expectedErr: notAtFieldPath,
+		},
+		{
+			name: "attached field moved into the component that replaces its parent",
+			mutate: func(ctx MutableContext, c *TestComponent) {
+				c.SubComponent1 = NewComponentField(ctx, &TestSubComponent1{
+					SubComponent11: c.SubComponent1.Get(ctx).SubComponent11,
+				})
+			},
+			expectedErr: notAtFieldPath,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			root := s.testComponentTree()
+			_, err := root.CloseTransaction(context.Background(), true)
+			s.NoError(err)
+
+			s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+			ctx := NewMutableContext(context.Background(), root)
+			c, err := root.Component(ctx, ComponentRef{})
+			s.NoError(err)
+			tc.mutate(ctx, c.(*TestComponent))
+			_, err = root.CloseTransaction(context.Background(), true)
+			var internalErr *serviceerror.Internal
+			s.ErrorAs(err, &internalErr)
+			s.ErrorContains(err, tc.expectedErr)
+		})
+	}
+}
+
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+
+	// An ephemeral item in a map that wasn't persisted before: neither the item, its subtree, nor the map is persisted.
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	tc := c.(*TestComponent)
+	tc.SubComponents = Map[string, *TestSubComponent1]{
+		"ephemeral": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "ephemeral"},
+			SubComponent11: NewComponentField(ctx, &TestSubComponent11{
+				SubComponent11Data: &protoMessageType{RunId: "ephemeral-child"},
+			}),
+		}, ComponentFieldEphemeral()),
+	}
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.assertNoSubComponentsPaths(mutation.UpdatedNodes)
+	s.assertNoSubComponentsPaths(mutation.DeletedNodes)
+	s.assertNoSubComponentsPaths(root.Snapshot(nil).Nodes)
+	childNode, ok := root.findNode([]string{"SubComponents", "ephemeral", "SubComponent11"})
+	s.True(ok)
+	s.True(childNode.ephemeral)
+
+	// Mutating the ephemeral item and setting request links on it doesn't persist it either. Adding a durable item
+	// persists the map along with the durable item.
+	nextTC = 3
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+	}}
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	tc = c.(*TestComponent)
+	ephemeral := tc.SubComponents["ephemeral"].Get(ctx)
+	ephemeral.SubComponent1Data.RunId = "ephemeral-updated"
+	s.NoError(ctx.SetRequestLinks(ephemeral, "req", []*commonpb.Link{link}))
+	tc.SubComponents["durable"] = NewComponentField(ctx, &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{RunId: "durable"},
+	})
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "SubComponents")
+	s.Contains(mutation.UpdatedNodes, "SubComponents/durable")
+	s.NotContains(mutation.UpdatedNodes, "SubComponents/ephemeral")
+	s.NotContains(mutation.UpdatedNodes, "SubComponents/ephemeral/SubComponent11")
+	s.NotContains(root.Snapshot(nil).Nodes, "SubComponents/ephemeral")
+
+	// The ephemeral item keeps its in-memory state across transactions.
+	readCtx := NewContext(context.Background(), root)
+	c, err = root.Component(readCtx, ComponentRef{})
+	s.NoError(err)
+	ephemeral = c.(*TestComponent).SubComponents["ephemeral"].Get(readCtx)
+	s.Equal("ephemeral-updated", ephemeral.SubComponent1Data.GetRunId())
+	links, err := readCtx.RequestLinks(ephemeral, "req")
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{link}, links)
+
+	// Removing the ephemeral item leaves no tombstones, removing the durable item does.
+	nextTC = 4
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	delete(c.(*TestComponent).SubComponents, "ephemeral")
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.assertNoSubComponentsPaths(mutation.DeletedNodes)
+
+	nextTC = 5
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	delete(c.(*TestComponent).SubComponents, "durable")
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Equal(map[string]struct{}{"SubComponents": {}, "SubComponents/durable": {}}, mutation.DeletedNodes)
+}
+
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RemovedBeforePersisting() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"ephemeral": NewComponentField(ctx, &TestSubComponent1{}, ComponentFieldEphemeral()),
+	}
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	// Emptying the map removes the never-persisted collection without a tombstone.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = nil
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.assertNoSubComponentsPaths(mutation.DeletedNodes)
+	_, ok := root.findNode([]string{"SubComponents"})
+	s.False(ok)
+}
+
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_ReplacesDurable() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"k": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "durable"},
+			SubComponent11: NewComponentField(ctx, &TestSubComponent11{
+				SubComponent11Data: &protoMessageType{RunId: "durable-child"},
+			}),
+		}),
+	}
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "SubComponents/k")
+	s.Contains(mutation.UpdatedNodes, "SubComponents/k/SubComponent11")
+
+	// Replacing the durable item with an ephemeral one deletes the durable item and its subtree.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents["k"] = NewComponentField(ctx, &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{RunId: "ephemeral"},
+	}, ComponentFieldEphemeral())
+	mutation, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Equal(map[string]struct{}{"SubComponents/k": {}, "SubComponents/k/SubComponent11": {}}, mutation.DeletedNodes)
+	s.NotContains(mutation.UpdatedNodes, "SubComponents/k")
+	s.NotContains(root.Snapshot(nil).Nodes, "SubComponents/k")
+	node, ok := root.findNode([]string{"SubComponents", "k"})
+	s.True(ok)
+	s.True(node.ephemeral)
+	s.Empty(node.children)
+}
+
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RejectsDurableDataPointer() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+
+	// Pointers within the ephemeral subtree are allowed.
+	data := &protoMessageType{RunId: "ephemeral-data"}
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"ephemeral": NewComponentField(ctx, &TestSubComponent1{
+			SubData11: NewDataField(ctx, data),
+		}, ComponentFieldEphemeral()),
+		"ephemeral-pointer": NewComponentField(ctx, &TestSubComponent1{
+			SubData11: DataPointerTo(ctx, data),
+		}, ComponentFieldEphemeral()),
+	}
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.assertNoSubComponentsPaths(mutation.UpdatedNodes)
+
+	// A durable pointer to ephemeral data would dangle once the mutable state is reloaded.
+	tl, ok := s.logger.(*testlogger.TestLogger)
+	s.Require().True(ok)
+	tl.Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")
+
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents["durable"] = NewComponentField(ctx, &TestSubComponent1{
+		SubData11: DataPointerTo(ctx, data),
+	})
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.ErrorContains(err, "targets ephemeral data")
+}
+
+func (s *nodeSuite) TestCloseTransaction_EphemeralComponent_RejectsTasks() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	tl, ok := s.logger.(*testlogger.TestLogger)
+	s.Require().True(ok)
+	tl.Expect(testlogger.Error, "tasks can't be added to ephemeral components")
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	ephemeral := &TestSubComponent1{SubComponent1Data: &protoMessageType{}}
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"ephemeral": NewComponentField(ctx, ephemeral, ComponentFieldEphemeral()),
+	}
+	ctx.AddTask(ephemeral, TaskAttributes{}, &TestSideEffectTask{Data: []byte("task")})
+	_, err = root.CloseTransaction(context.Background(), true)
+	var internalErr *serviceerror.Internal
+	s.ErrorAs(err, &internalErr)
+}
+
+func (s *nodeSuite) TestApplyMutation_ReplacesEphemeralNode() {
+	target := s.testComponentTree()
+	mutation, err := target.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	persistedNodes := common.CloneProtoMap(mutation.UpdatedNodes)
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), target)
+	c, err := target.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"k": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "ephemeral"},
+			SubComponent11:    NewComponentField(ctx, &TestSubComponent11{SubComponent11Data: &protoMessageType{}}),
+		}, ComponentFieldEphemeral()),
+		"other": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "ephemeral-other"},
+		}, ComponentFieldEphemeral()),
+	}
+	_, err = target.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+
+	// The source cluster doesn't have the ephemeral items and creates a durable item at the same path.
+	source, err := s.newTestTree(persistedNodes)
+	s.NoError(err)
+	ctx = NewMutableContext(context.Background(), source)
+	c, err = source.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	c.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
+		"k": NewComponentField(ctx, &TestSubComponent1{
+			SubComponent1Data: &protoMessageType{RunId: "durable"},
+		}),
+	}
+	mutation, err = source.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "SubComponents/k")
+
+	// The durable item replaces the ephemeral one and its subtree, while other ephemeral items are kept.
+	s.NoError(target.ApplyMutation(mutation))
+	node, ok := target.findNode([]string{"SubComponents", "k"})
+	s.True(ok)
+	s.False(node.ephemeral)
+	s.Empty(node.children)
+
+	readCtx := NewContext(context.Background(), target)
+	c, err = target.Component(readCtx, ComponentRef{})
+	s.NoError(err)
+	subComponents := c.(*TestComponent).SubComponents
+	s.Equal("durable", subComponents["k"].Get(readCtx).SubComponent1Data.GetRunId())
+	s.Equal("ephemeral-other", subComponents["other"].Get(readCtx).SubComponent1Data.GetRunId())
+}
+
+func (s *nodeSuite) assertNoSubComponentsPaths(nodes any) {
+	var paths []string
+	switch nodes := nodes.(type) {
+	case map[string]*persistencespb.ChasmNode:
+		paths = slices.Collect(maps.Keys(nodes))
+	case map[string]struct{}:
+		paths = slices.Collect(maps.Keys(nodes))
+	default:
+		s.FailNow("unexpected type", "%T", nodes)
+	}
+	for _, path := range paths {
+		s.False(strings.HasPrefix(path, "SubComponents"), "unexpected path %q", path)
+	}
 }
 
 // TestSetUserMetadata_NilClearsPersistedValue verifies that SetUserMetadata

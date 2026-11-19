@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -138,8 +139,10 @@ var Module = fx.Options(
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(CallbackValidatorProvider),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
+	fx.Provide(NamespaceMutationTaskExecutorProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
@@ -884,6 +887,7 @@ func AdminHandlerProvider(
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
+	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -917,7 +921,33 @@ func AdminHandlerProvider(
 		taskCategoryRegistry,
 		matchingClient,
 	}
-	return NewAdminHandler(args, namespaceDLQHandler)
+	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)
+}
+
+func NamespaceMutationTaskExecutorProvider(
+	configuration *Config,
+	clusterMetadata cluster.Metadata,
+	persistenceMetadataManager persistence.MetadataManager,
+	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
+	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
+	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
+) nsreplication.MutationTaskExecutor {
+	return nsreplication.NewMutationTaskExecutor(
+		clusterMetadata.GetCurrentClusterName(),
+		persistenceMetadataManager,
+		namespaceDataMerger,
+		namespaceAdmitter,
+		logger,
+		testHooks,
+		nsreplication.WithNamespaceReplicationMetrics(metricsHandler),
+		nsreplication.WithNamespaceReplicationLifecycleEvents(
+			eventLogger,
+			configuration.EmitNamespaceLifecycleEvents,
+		),
+	)
 }
 
 // NamespaceDLQHandlerProvider provides the default namespace DLQ message handler.
@@ -1034,6 +1064,7 @@ func HandlerProvider(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
 	callbackValidator callbacks.Validator,
+	linkValidator links.Validator,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
@@ -1048,6 +1079,7 @@ func HandlerProvider(
 
 	wfHandler := NewWorkflowHandler(
 		callbackValidator,
+		linkValidator,
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
@@ -1083,6 +1115,7 @@ func HandlerProvider(
 			chasmworkflow.NewConfig(dc),
 			saMapperProvider,
 			saValidator,
+			linkValidator,
 		),
 		chasmNsReplClient,
 		metricsHandler,

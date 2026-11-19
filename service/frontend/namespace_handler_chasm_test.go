@@ -2,10 +2,12 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -25,8 +27,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -36,7 +40,7 @@ import (
 
 func TestNamespaceMutationTransportRouting(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{dynamicconfig.NamespaceReplicationTransportModeLegacy, dynamicconfig.NamespaceReplicationTransportModeShadow, "unknown"} {
+	for _, mode := range []string{dynamicconfig.NamespaceReplicationTransportModeLegacy, dynamicconfig.NamespaceReplicationTransportModeShadow, dynamicconfig.NamespaceReplicationTransportModeCHASM, "unknown"} {
 		for _, tc := range []struct {
 			name       string
 			create     bool
@@ -56,6 +60,10 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 			{name: "create publish failure", create: true, publishErr: serviceerror.NewUnavailable("publish failed")},
 			{name: "update publish failure", publishErr: serviceerror.NewUnavailable("publish failed")},
 		} {
+			authoritative := mode == dynamicconfig.NamespaceReplicationTransportModeCHASM
+			if authoritative && (tc.writeErr != nil || tc.publishErr != nil) {
+				continue // Metadata writes and legacy publication are bypassed in CHASM mode.
+			}
 			t.Run(mode+"/"+tc.name, func(t *testing.T) {
 				t.Parallel()
 				ctrl := gomock.NewController(t)
@@ -82,7 +90,9 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 				var err error
 				if tc.create {
 					metadata.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("ns"))
-					write = metadata.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{ID: "namespace-id"}, tc.writeErr)
+					if !authoritative {
+						write = metadata.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{ID: "namespace-id"}, tc.writeErr)
+					}
 				} else {
 					existingClusters := []string{"cell-a", "cell-b"}
 					if tc.promote {
@@ -96,12 +106,12 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 							ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "cell-a", Clusters: existingClusters},
 						}, IsGlobalNamespace: !tc.promote,
 					}, nil)
-					if !tc.noop {
+					if !tc.noop && !authoritative {
 						write = metadata.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(tc.writeErr)
 					}
 				}
 				var legacyTask *replicationspb.NamespaceTaskAttributes
-				if tc.writeErr == nil {
+				if tc.writeErr == nil && !authoritative {
 					publish := queue.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
 						func(_ context.Context, task *replicationspb.ReplicationTask) error {
 							legacyTask = task.GetNamespaceTaskAttributes()
@@ -134,7 +144,17 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 				} else {
 					require.ErrorIs(t, err, tc.publishErr)
 				}
-				if mode == dynamicconfig.NamespaceReplicationTransportModeShadow && err == nil {
+				if authoritative {
+					mutation := await.Rcv(t, client.requests).GetMutation()
+					require.False(t, mutation.GetShadow())
+					require.Equal(t, tc.noop, mutation.GetReplicateOnly())
+					require.Empty(t, mutation.GetShadowLegacyTaskPayload())
+					require.Equal(t, []string{"cell-b"}, mutation.GetPeerCells())
+					require.True(t, mutation.GetIsGlobalNamespace())
+					if tc.removePeer {
+						require.Equal(t, []string{"cell-a"}, mutation.GetNamespaceDetail().GetReplicationConfig().GetClusters())
+					}
+				} else if mode == dynamicconfig.NamespaceReplicationTransportModeShadow && err == nil {
 					mutation := await.Rcv(t, client.requests).GetMutation()
 					require.Equal(t, []string{"cell-b"}, mutation.GetPeerCells())
 					if tc.removePeer {
@@ -156,6 +176,7 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 }
 
 type captureNamespaceReplicationClient struct {
+	request  *namespacereplicationpb.TriggerNamespaceMutationRequest
 	requests chan *namespacereplicationpb.TriggerNamespaceMutationRequest
 }
 
@@ -164,7 +185,10 @@ func (c *captureNamespaceReplicationClient) TriggerNamespaceMutation(
 	request *namespacereplicationpb.TriggerNamespaceMutationRequest,
 	_ ...grpc.CallOption,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
-	c.requests <- request
+	c.request = request
+	if c.requests != nil {
+		c.requests <- request
+	}
 	return &namespacereplicationpb.TriggerNamespaceMutationResponse{}, nil
 }
 
@@ -270,6 +294,21 @@ func TestInvokeShadowNamespaceMutationSkipsWhenLegacyWouldNotReplicate(t *testin
 	}
 }
 
+func namespaceReplicationEventDetails(t *testing.T, record otellog.Record) map[string]any {
+	t.Helper()
+	require.Equal(t, wideevents.NamespaceLifecycleEventName, record.EventName())
+	attributes := make(map[string]string)
+	record.WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Value.Kind() == otellog.KindString {
+			attributes[kv.Key] = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	require.NoError(t, json.Unmarshal([]byte(attributes["details"]), &details))
+	return details
+}
+
 func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
@@ -371,8 +410,8 @@ func TestEffectiveNamespaceReplicationTransportMode(t *testing.T) {
 	}{
 		{name: "legacy", configured: dynamicconfig.NamespaceReplicationTransportModeLegacy, want: namespaceReplicationTransportLegacy},
 		{name: "shadow", configured: dynamicconfig.NamespaceReplicationTransportModeShadow, want: namespaceReplicationTransportShadow},
+		{name: "chasm", configured: dynamicconfig.NamespaceReplicationTransportModeCHASM, want: namespaceReplicationTransportCHASM},
 		{name: "unknown falls back to legacy", configured: "unknown", want: namespaceReplicationTransportLegacy},
-		{name: "unsupported chasm falls back to legacy", configured: "chasm", want: namespaceReplicationTransportLegacy},
 	}
 
 	for _, tc := range testCases {
@@ -392,13 +431,10 @@ func TestEffectiveNamespaceReplicationTransportMode(t *testing.T) {
 	}
 }
 
-func TestTriggerNamespaceMutationIsShadow(t *testing.T) {
+func TestTriggerNamespaceMutationModes(t *testing.T) {
 	t.Parallel()
-	controller := gomock.NewController(t)
-	clusterMetadata := cluster.NewMockMetadata(controller)
-	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
+	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 3)}
 	handler := &namespaceHandler{
-		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
 	}
 	detail := &persistencespb.NamespaceDetail{
@@ -407,20 +443,90 @@ func TestTriggerNamespaceMutationIsShadow(t *testing.T) {
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
 	}
 
-	_, err := handler.triggerNamespaceMutation(
-		t.Context(),
-		enumsspb.NAMESPACE_OPERATION_UPDATE,
-		detail,
-		7,
-		nil,
-		true,
-		"business-id",
-		[]byte("legacy-reference"),
-	)
-	require.NoError(t, err)
-	request := <-client.requests
-	require.True(t, request.GetMutation().GetShadow())
-	require.True(t, request.GetMutation().GetIsGlobalNamespace())
+	for _, tc := range []struct {
+		name              string
+		wantShadow        bool
+		wantReplicateOnly bool
+	}{
+		{name: "authoritative"},
+		{name: "shadow", wantShadow: true},
+		{name: "replicate only", wantReplicateOnly: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := handler.triggerNamespaceMutation(t.Context(), "namespace-id:mutation-id", &namespacereplicationpb.NamespaceMutation{
+				Operation:               enumsspb.NAMESPACE_OPERATION_UPDATE,
+				NamespaceDetail:         detail,
+				ExpectedVersion:         7,
+				PeerCells:               []string{"cell-b"},
+				IsGlobalNamespace:       true,
+				Shadow:                  tc.wantShadow,
+				ReplicateOnly:           tc.wantReplicateOnly,
+				ShadowLegacyTaskPayload: []byte("legacy-reference"),
+			})
+			require.NoError(t, err)
+			request := <-client.requests
+			require.Equal(t, "namespace-id", request.GetNamespaceId())
+			require.Equal(t, primitives.SystemNamespaceID, request.GetSystemNamespaceId())
+			require.Equal(t, int64(7), request.GetMutation().GetExpectedVersion())
+			require.Equal(t, "namespace-id:mutation-id", request.GetBusinessId())
+			require.Equal(t, []string{"cell-b"}, request.GetMutation().GetPeerCells())
+			require.Equal(t, tc.wantShadow, request.GetMutation().GetShadow())
+			require.Equal(t, tc.wantReplicateOnly, request.GetMutation().GetReplicateOnly())
+			require.Equal(t, []byte("legacy-reference"), request.GetMutation().GetShadowLegacyTaskPayload())
+			require.True(t, request.GetMutation().GetIsGlobalNamespace())
+		})
+	}
+}
+
+type failingNamespaceReplicationClient struct{ err error }
+
+func (c failingNamespaceReplicationClient) TriggerNamespaceMutation(
+	context.Context,
+	*namespacereplicationpb.TriggerNamespaceMutationRequest,
+	...grpc.CallOption,
+) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
+	return nil, c.err
+}
+
+func TestTriggerNamespaceMutationLogsAuthoritativeFailure(t *testing.T) {
+	t.Parallel()
+	const message = "namespace replication authoritative trigger RPC did not complete"
+	for _, shadow := range []bool{false, true} {
+		name := "authoritative"
+		if shadow {
+			name = "shadow"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
+			triggerErr := context.DeadlineExceeded
+			handler := &namespaceHandler{logger: logger, chasmNsReplClient: failingNamespaceReplicationClient{err: triggerErr}}
+			err := handler.triggerNamespaceMutation(t.Context(), "namespace-id:mutation-id", &namespacereplicationpb.NamespaceMutation{
+				Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
+				NamespaceDetail:   &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}},
+				IsGlobalNamespace: true,
+				Shadow:            shadow,
+			})
+			require.ErrorIs(t, err, triggerErr)
+			if shadow {
+				// The shadow caller logs its own background trigger failure.
+				for _, record := range capture.Snapshot() {
+					require.NotEqual(t, message, record.Message)
+				}
+				return
+			}
+			capture.RequireContains(t, testlogger.CapturedLogPattern{
+				Level:   testlogger.Warn,
+				Message: message,
+				Tags: map[string]any{
+					"wf-namespace-id": "namespace-id",
+					"business_id":     "namespace-id:mutation-id",
+					"operation":       enumsspb.NAMESPACE_OPERATION_UPDATE.String(),
+				},
+			})
+		})
+	}
 }
 
 func TestPeerCellsFromClusters(t *testing.T) {

@@ -314,14 +314,9 @@ func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
 	task := queue.Remove()
 
 	operation := func() (retErr error) {
-		var executePanic error
-		defer func() {
-			if executePanic != nil {
-				retErr = executePanic
-				shouldRetry = false // do not retry if panic
-			}
-		}()
-		defer log.CapturePanic(s.logger, &executePanic)
+		defer log.CapturePanicWithHook(s.logger, &retErr, func(error) {
+			shouldRetry = false // do not retry if panic
+		})
 
 		if err := task.Execute(); err != nil {
 			return task.HandleErr(err)

@@ -73,26 +73,57 @@ func (p WorkerConfigPayload) Attributes() []log.KeyValue {
 // omitted when the source message is absent, distinguishing "not reported"
 // from an actual zero value.
 type WorkerTaskTypeStats struct {
-	TotalSlots                 *int32 `json:"total_slots,omitempty"`
-	UsedSlots                  *int32 `json:"used_slots,omitempty"`
-	CurrentPollers             *int32 `json:"current_pollers,omitempty"`
-	CurrentStickyPollers       *int32 `json:"current_sticky_pollers,omitempty"`
-	TotalProcessedTasks        *int32 `json:"total_processed_tasks,omitempty"`
-	TotalFailedTasks           *int32 `json:"total_failed_tasks,omitempty"`
-	LastIntervalProcessedTasks *int32 `json:"last_interval_processed_tasks,omitempty"`
-	LastIntervalFailureTasks   *int32 `json:"last_interval_failure_tasks,omitempty"`
+	TotalSlots *int32
+	UsedSlots  *int32
+	// Current number of in-flight pollers.
+	CurrentPollers *int32
+	// Desired number of pollers.
+	TargetPollers *int32
+	// Current number of in-flight sticky pollers.
+	CurrentStickyPollers *int32
+	// Desired number of sticky pollers.
+	TargetStickyPollers *int32
+	TotalProcessedTasks *int32
+	TotalFailedTasks    *int32
+}
+
+// appendAttributes adds one attribute per reported stat, prefixed with the
+// task type (e.g. workflow_used_slots).
+func (s WorkerTaskTypeStats) appendAttributes(attrs []log.KeyValue, taskType string) []log.KeyValue {
+	appendStat := func(name string, v *int32) {
+		if v != nil {
+			attrs = append(attrs, log.Int64(taskType+"_"+name, int64(*v)))
+		}
+	}
+	appendStat("total_slots", s.TotalSlots)
+	appendStat("used_slots", s.UsedSlots)
+	appendStat("current_pollers", s.CurrentPollers)
+	appendStat("target_pollers", s.TargetPollers)
+	appendStat("current_sticky_pollers", s.CurrentStickyPollers)
+	appendStat("target_sticky_pollers", s.TargetStickyPollers)
+	appendStat("total_processed_tasks", s.TotalProcessedTasks)
+	appendStat("total_failed_tasks", s.TotalFailedTasks)
+	return attrs
 }
 
 // WorkerMetricsPayload is a point-in-time snapshot of a worker's metrics.
+// Stats are flat attributes, one per task type and stat, so each one can be
+// stored and queried as its own typed column.
 // Tip: to aggregate for a task queue, take the latest row per worker and
 // sum. Handle unknown total_slots (-1) separately.
 type WorkerMetricsPayload struct {
 	Namespace         string
 	TaskQueue         string
 	WorkerInstanceKey string
-	TaskTypeStats     map[string]WorkerTaskTypeStats
-	// Details holds additional metrics not covered by the fields above
-	// (e.g., sticky_cache_size, sticky_cache_hit, sticky_cache_miss).
+	Workflow          WorkerTaskTypeStats
+	Activity          WorkerTaskTypeStats
+	Nexus             WorkerTaskTypeStats
+	LocalActivity     WorkerTaskTypeStats
+	StickyCacheSize   int32
+	StickyCacheHit    int32
+	StickyCacheMiss   int32
+	// Details holds additional metrics not covered by the fields above.
+	// Empty today; reserved for future extensibility without schema changes.
 	Details map[string]any
 }
 
@@ -104,9 +135,15 @@ func (p WorkerMetricsPayload) Attributes() []log.KeyValue {
 		log.String("task_queue", p.TaskQueue),
 		log.String("worker_instance_key", p.WorkerInstanceKey),
 	}
-	if len(p.TaskTypeStats) > 0 {
-		attrs = append(attrs, jsonAttr("task_type_stats", p.TaskTypeStats))
-	}
+	attrs = p.Workflow.appendAttributes(attrs, "workflow")
+	attrs = p.Activity.appendAttributes(attrs, "activity")
+	attrs = p.Nexus.appendAttributes(attrs, "nexus")
+	attrs = p.LocalActivity.appendAttributes(attrs, "local_activity")
+	attrs = append(attrs,
+		log.Int64("sticky_cache_size", int64(p.StickyCacheSize)),
+		log.Int64("sticky_cache_hit", int64(p.StickyCacheHit)),
+		log.Int64("sticky_cache_miss", int64(p.StickyCacheMiss)),
+	)
 	if len(p.Details) > 0 {
 		attrs = append(attrs, jsonAttr("details", p.Details))
 	}

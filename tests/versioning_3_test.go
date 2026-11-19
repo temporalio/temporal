@@ -1266,22 +1266,22 @@ func (s *Versioning3Suite) TestEagerActivityWithMatchingGrant() {
 
 	poller, response := env.pollWftAndHandle(s, tv, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.Require().NotNil(task)
+			s.NotNil(task)
 			completion := env.respondWftWithActivities(tv, tv, true, vbUnpinned, "eager")
 			completion.Commands[0].GetScheduleActivityTaskCommandAttributes().RequestEagerExecution = true
 			return completion, nil
 		})
 
-	s.Require().Len(response.GetActivityTasks(), 1)
+	s.Len(response.GetActivityTasks(), 1)
 	eagerActivity := response.GetActivityTasks()[0]
 	s.Equal("eager", eagerActivity.GetActivityId())
 
 	_, err := poller.HandleActivityTask(tv, eagerActivity, taskpoller.CompleteActivityTask(tv))
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	env.pollWftAndHandle(s, tv, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.Require().NotNil(task)
+			s.NotNil(task)
 			return env.respondCompleteWorkflow(tv, vbUnpinned), nil
 		})
 }

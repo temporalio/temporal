@@ -6,6 +6,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/sony/gobreaker"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -50,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/callbacks"
 	hsmnexusoperations "go.temporal.io/server/service/history/hsm/nexusoperations"
 	hsmnexusworkflow "go.temporal.io/server/service/history/hsm/nexusoperations/workflow"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -75,7 +78,9 @@ var Module = fx.Options(
 	chasmtests.Module,
 	fx.Provide(CallbackDestinationBlockedProvider),
 	fx.Provide(CallbackValidatorProvider),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(NexusOperationDestinationBlockedProvider),
+	fx.Provide(NexusOperationDestinationThrottledProvider),
 	fx.Provide(fcpb.NewConcurrencyServiceLayeredClient),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
@@ -168,6 +173,18 @@ func NexusOperationDestinationBlockedProvider(
 	}
 }
 
+func NexusOperationDestinationThrottledProvider(
+	throttleState *queues.ThrottleState,
+) chasmnexus.DestinationThrottledFn {
+	return func(namespaceName namespace.Name, destination string) bool {
+		return throttleState.IsThrottled(queues.ThrottleKey{
+			Cause:         enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+			NamespaceName: namespaceName,
+			Destination:   destination,
+		})
+	}
+}
+
 // CallbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
 func CallbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (commoncallbacks.Validator, error) {
@@ -228,6 +245,7 @@ func HandlerProvider(args NewHandlerArgs, lc fx.Lifecycle) (*Handler, error) {
 		archivalMetadata:             args.ArchivalMetadata,
 		hostInfoProvider:             args.HostInfoProvider,
 		controller:                   args.ShardController,
+		workflowCache:                args.WorkflowCache,
 		eventNotifier:                args.EventNotifier,
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
 		taskQueueManager:             args.TaskQueueManager,
@@ -577,11 +595,14 @@ func WorkflowResendSchedulerProvider(
 }
 
 func ReplicationProgressCacheProvider(
+	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 	logger log.Logger,
 	handler metrics.Handler,
 ) replication.ProgressCache {
-	return replication.NewProgressCache(serviceConfig, logger, handler)
+	c := replication.NewProgressCache(serviceConfig, logger, handler)
+	lc.Append(fx.StartStopHook(c.Start, c.Stop))
+	return c
 }
 
 func VersionMembershipCacheProvider(
