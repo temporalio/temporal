@@ -122,7 +122,10 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{StickyAttributes: tv.StickyExecutionAttributes(time.Minute), Commands: commands}, nil
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
-	stickyPoller := poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{TaskQueue: tv.StickyTaskQueue()})
+	stickyPoller := poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
+		WorkerInstanceKey: tv.WorkerInstanceKey(),
+	})
 	_, err = stickyPoller.HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		require.Equal(t, "session-activity", task.ActivityId)
 		require.Equal(t, int32(1), task.Attempt)
