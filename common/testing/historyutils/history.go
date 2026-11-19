@@ -21,14 +21,14 @@ func New(t testing.TB, client workflowservice.WorkflowServiceClient, nsName name
 	return HistoryUtils{t: t, client: client, nsName: nsName}
 }
 
-func (u HistoryUtils) GetHistoryFunc(ctx context.Context, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+func (u HistoryUtils) RequireHistoryFunc(ctx context.Context, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
 		u.t.Helper()
-		return u.GetHistory(ctx, execution)
+		return u.RequireHistory(ctx, execution)
 	}
 }
 
-func (u HistoryUtils) GetHistory(ctx context.Context, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (u HistoryUtils) RequireHistory(ctx context.Context, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	u.t.Helper()
 	events, err := u.ReadHistory(ctx, execution)
 	require.NoError(u.t, err)
