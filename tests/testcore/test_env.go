@@ -66,9 +66,11 @@ type Env interface {
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
 
+type HistoryReader = historyrequire.Reader
+
 type TestEnv struct {
 	*functionalTestBase
-	historyrequire.Reader
+	HistoryReader
 
 	// Shadows functionalTestBase.Assertions with a per-test instance bound to
 	// this TestEnv's own *testing.T, avoiding data races when parallel tests
@@ -337,7 +339,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	frontendClient := cluster.FrontendClient()
 	env := &TestEnv{
 		functionalTestBase: base,
-		Reader:             historyrequire.NewReader(frontendClient, ns),
+		HistoryReader:      historyrequire.NewReader(frontendClient, ns),
 		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
