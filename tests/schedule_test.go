@@ -58,16 +58,6 @@ import (
 // contextFactory wraps a base context for CHASM vs V1 differences.
 type contextFactory func(context.Context) context.Context
 
-// scheduleHistoryScope binds a context to a test's assertion handle.
-type scheduleHistoryScope struct {
-	ctx context.Context
-	t   *testing.T
-}
-
-func (s scheduleHistoryScope) Context() context.Context { return s.ctx }
-
-func (s scheduleHistoryScope) AssertionT() require.TestingT { return s.t }
-
 var (
 	chasmContextFactory contextFactory = func(ctx context.Context) context.Context {
 		return metadata.NewOutgoingContext(ctx, metadata.Pairs(
@@ -1043,7 +1033,7 @@ func TestScheduleV1ActionDelayMetrics(t *testing.T) {
 
 	closeTime := func(action *schedulepb.ScheduleActionResult) time.Time {
 		t.Helper()
-		events := s.RequireHistory(scheduleHistoryScope{ctx: ctx, t: t}, action.GetStartWorkflowResult())
+		events := s.RequireHistoryWithT(ctx, t, action.GetStartWorkflowResult())
 		require.NotEmpty(t, events)
 		lastEvent := events[len(events)-1]
 		require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
