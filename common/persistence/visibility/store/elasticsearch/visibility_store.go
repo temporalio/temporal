@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -37,6 +38,8 @@ import (
 )
 
 const (
+	preallocatedFieldMappingsCheckTimeout = time.Minute
+
 	delimiter = "~"
 
 	// paginationDatetimeFormat is a copy from time.RFC3339Nano, but always writes
@@ -156,7 +159,7 @@ func NewVisibilityStore(
 		processor.Start()
 		processorAckTimeout = processorConfig.ESProcessorAckTimeout
 	}
-	return &VisibilityStore{
+	s := &VisibilityStore{
 		esClient:                       esClient,
 		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
@@ -169,7 +172,69 @@ func NewVisibilityStore(
 		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
 		logger:                         logger,
-	}, nil
+	}
+	if processorConfig != nil {
+		// Only the writers check, so that each cluster reports it once per history host
+		// instead of once per service.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), preallocatedFieldMappingsCheckTimeout)
+			defer cancel()
+			s.checkPreallocatedFieldMappings(ctx)
+		}()
+	}
+	return s, nil
+}
+
+// checkPreallocatedFieldMappings reports pre-allocated custom search attribute fields (eg:
+// Keyword01) that are defined in cluster metadata but not mapped in the Elasticsearch index.
+// Values of unmapped fields are stored but not indexed (the index mapping is not dynamic), so
+// queries on their aliases silently return nothing until the schema upgrade is run.
+func (s *VisibilityStore) checkPreallocatedFieldMappings(ctx context.Context) {
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		s.logger.Warn("Unable to check Elasticsearch mappings of pre-allocated custom search attributes.",
+			tag.ESIndex(s.index), tag.Error(err))
+		return
+	}
+	var preallocatedFields []string
+	for name, valueType := range saTypeMap.Custom() {
+		if sadefs.IsPreallocatedCSAFieldName(name, valueType) {
+			preallocatedFields = append(preallocatedFields, name)
+		}
+	}
+	if len(preallocatedFields) == 0 {
+		return
+	}
+
+	mapping, err := s.esClient.GetMapping(ctx, s.index)
+	if err != nil {
+		s.logger.Warn("Unable to check Elasticsearch mappings of pre-allocated custom search attributes.",
+			tag.ESIndex(s.index), tag.Error(err))
+		return
+	}
+	if len(mapping) == 0 {
+		// The mapping is keyed by the concrete index name, so it is empty when the configured
+		// index is an alias. The fields can't be checked in that case.
+		return
+	}
+
+	var missingFields []string
+	for _, field := range preallocatedFields {
+		if _, ok := mapping[field]; !ok {
+			missingFields = append(missingFields, field)
+		}
+	}
+	metrics.ElasticsearchMissingPreallocatedFieldMappings.With(s.metricsHandler).Record(float64(len(missingFields)))
+	if len(missingFields) == 0 {
+		return
+	}
+	slices.Sort(missingFields)
+	s.logger.Error(
+		"Elasticsearch visibility index does not map pre-allocated custom search attribute fields. "+
+			"Run the Elasticsearch visibility schema upgrade, otherwise values of these fields are not indexed.",
+		tag.ESIndex(s.index),
+		tag.NewStringsTag("missing-fields", missingFields),
+	)
 }
 
 func (s *VisibilityStore) Close() {

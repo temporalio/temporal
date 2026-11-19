@@ -58,28 +58,37 @@ func (*NoopMapper) GetFieldName(alias string, _ string) (string, error) {
 	return alias, nil
 }
 
+// GetAlias returns the alias of fieldName. A legacy custom search attribute (registered
+// through cluster metadata) always maps to itself, and a namespace alias that has the same
+// name as a legacy custom search attribute is ignored, so both directions stay consistent
+// with GetFieldName.
 func (m *backCompMapper) GetAlias(fieldName string, namespaceName string) (string, error) {
-	alias, firstErr := m.mapper.GetAlias(fieldName, namespaceName)
-	if firstErr != nil {
-		if !m.isLegacyCustomSearchAttribute(fieldName) {
-			return "", firstErr
-		}
-		// this is a custom search attribute registered through cluster metadata.
+	if m.isLegacyCustomSearchAttribute(fieldName) {
 		return fieldName, nil
+	}
+	alias, err := m.mapper.GetAlias(fieldName, namespaceName)
+	if err != nil {
+		return "", err
+	}
+	if m.isLegacyCustomSearchAttribute(alias) {
+		return "", serviceerror.NewInvalidArgumentf(
+			"search attribute field %s is aliased to %s, which is already a cluster-level custom search attribute",
+			fieldName,
+			alias,
+		)
 	}
 	return alias, nil
 }
 
+// GetFieldName returns the field name of alias. A legacy custom search attribute (registered
+// through cluster metadata) takes precedence over a namespace alias with the same name: its
+// existing documents are stored under its own name, so resolving it through a namespace alias
+// (eg: one left over from a SQL visibility store) would hide them.
 func (m *backCompMapper) GetFieldName(alias string, namespaceName string) (string, error) {
-	fieldName, firstErr := m.mapper.GetFieldName(alias, namespaceName)
-	if firstErr != nil {
-		if !m.isLegacyCustomSearchAttribute(alias) {
-			return "", firstErr
-		}
-		// this is a custom search attribute registered through cluster metadata.
+	if m.isLegacyCustomSearchAttribute(alias) {
 		return alias, nil
 	}
-	return fieldName, nil
+	return m.mapper.GetFieldName(alias, namespaceName)
 }
 
 func (m *backCompMapper) isLegacyCustomSearchAttribute(name string) bool {
@@ -124,14 +133,23 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 }
 
 func legacyCustomSearchAttributes(nameTypeMap NameTypeMap) NameTypeMap {
-	legacyCustomSearchAttributes := make(map[string]enumspb.IndexedValueType)
-	for name, valueType := range nameTypeMap.Custom() {
+	return NewNameTypeMap(WithoutPreallocatedFields(nameTypeMap.Custom()))
+}
+
+// WithoutPreallocatedFields returns a copy of the custom search attributes without the
+// pre-allocated custom search attribute fields (eg: Keyword01), which are only usable through
+// a namespace alias.
+func WithoutPreallocatedFields(
+	customSearchAttributes map[string]enumspb.IndexedValueType,
+) map[string]enumspb.IndexedValueType {
+	result := make(map[string]enumspb.IndexedValueType, len(customSearchAttributes))
+	for name, valueType := range customSearchAttributes {
 		if sadefs.IsPreallocatedCSAFieldName(name, valueType) {
 			continue
 		}
-		legacyCustomSearchAttributes[name] = valueType
+		result[name] = valueType
 	}
-	return NewNameTypeMap(legacyCustomSearchAttributes)
+	return result
 }
 
 // AliasFields returns SearchAttributes struct where each custom search attribute name is replaced with alias.

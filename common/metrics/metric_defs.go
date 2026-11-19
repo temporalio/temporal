@@ -1670,6 +1670,10 @@ var (
 	ElasticsearchBulkProcessorBulkSize                = NewDimensionlessHistogramDef("elasticsearch_bulk_processor_bulk_size")
 	ElasticsearchBulkProcessorBulkResquestTookLatency = NewTimerDef("elasticsearch_bulk_processor_bulk_request_took_latency")
 	ElasticsearchDocumentParseFailuresCount           = NewCounterDef("elasticsearch_document_parse_failures_counter")
+	ElasticsearchMissingPreallocatedFieldMappings     = NewGaugeDef(
+		"elasticsearch_missing_preallocated_field_mappings",
+		WithDescription("Number of pre-allocated custom search attribute fields defined in cluster metadata that the Elasticsearch visibility index does not map. Run the Elasticsearch visibility schema upgrade when non-zero."),
+	)
 	ElasticsearchDocumentGenerateFailuresCount        = NewCounterDef("elasticsearch_document_generate_failures_counter")
 	ElasticsearchCustomOrderByClauseCount             = NewCounterDef("elasticsearch_custom_order_by_clause_counter")
 	CatchUpReadyShardCountGauge                       = NewGaugeDef("catchup_ready_shard_count")
