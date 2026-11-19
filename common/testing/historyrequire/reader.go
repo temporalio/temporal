@@ -1,4 +1,4 @@
-package historyutils
+package historyrequire
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 )
 
-type HistoryUtils struct {
+type Reader struct {
 	client workflowservice.WorkflowServiceClient
 	nsName namespace.Name
 }
 
-func New(client workflowservice.WorkflowServiceClient, nsName namespace.Name) HistoryUtils {
-	return HistoryUtils{client: client, nsName: nsName}
+func NewReader(client workflowservice.WorkflowServiceClient, nsName namespace.Name) Reader {
+	return Reader{client: client, nsName: nsName}
 }
 
 type scope interface {
@@ -26,31 +26,31 @@ type scope interface {
 	AssertionT() require.TestingT
 }
 
-func (u HistoryUtils) RequireHistoryFunc(s scope, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+func (u Reader) RequireHistoryFunc(s scope, execution *commonpb.WorkflowExecution) HistoryEventsReader {
 	return func() []*historypb.HistoryEvent {
-		if helper, ok := s.AssertionT().(interface{ Helper() }); ok {
+		if helper, ok := s.AssertionT().(helper); ok {
 			helper.Helper()
 		}
 		return u.RequireHistory(s, execution)
 	}
 }
 
-func (u HistoryUtils) RequireHistory(s scope, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (u Reader) RequireHistory(s scope, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	t := s.AssertionT()
-	if helper, ok := t.(interface{ Helper() }); ok {
+	if helper, ok := t.(helper); ok {
 		helper.Helper()
 	}
 	return u.requireHistory(s.Context(), t, execution)
 }
 
 // RequireHistoryWithT reads history using t's test context.
-func (u HistoryUtils) RequireHistoryWithT(t *testing.T, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (u Reader) RequireHistoryWithT(t *testing.T, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	t.Helper()
 	return u.requireHistory(testcontext.For(t), t, execution)
 }
 
-func (u HistoryUtils) requireHistory(ctx context.Context, t require.TestingT, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	if helper, ok := t.(interface{ Helper() }); ok {
+func (u Reader) requireHistory(ctx context.Context, t require.TestingT, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	if helper, ok := t.(helper); ok {
 		helper.Helper()
 	}
 	events, err := u.readHistory(ctx, execution)
@@ -59,7 +59,7 @@ func (u HistoryUtils) requireHistory(ctx context.Context, t require.TestingT, ex
 }
 
 // readHistory reads every page of workflow history using ctx.
-func (u HistoryUtils) readHistory(ctx context.Context, execution *commonpb.WorkflowExecution) ([]*historypb.HistoryEvent, error) {
+func (u Reader) readHistory(ctx context.Context, execution *commonpb.WorkflowExecution) ([]*historypb.HistoryEvent, error) {
 	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       u.nsName.String(),
 		Execution:       execution,
