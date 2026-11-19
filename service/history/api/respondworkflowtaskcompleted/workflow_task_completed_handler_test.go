@@ -710,10 +710,39 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 			granted: []bool{true, false},
 		},
 		{
-			name:     "matching error",
-			response: nil,
-			err:      errors.New("matching unavailable"),
-			granted:  []bool{true, true},
+			name:    "deadline exceeded",
+			err:     serviceerror.NewDeadlineExceeded("deadline exceeded"),
+			granted: []bool{true, true},
+		},
+		{
+			name:    "context deadline exceeded",
+			err:     context.DeadlineExceeded,
+			granted: []bool{true, true},
+		},
+		{
+			name:    "canceled",
+			err:     serviceerror.NewCanceled("canceled"),
+			granted: []bool{true, true},
+		},
+		{
+			name:    "unavailable",
+			err:     serviceerror.NewUnavailable("matching unavailable"),
+			granted: []bool{true, true},
+		},
+		{
+			name:    "unimplemented",
+			err:     serviceerror.NewUnimplemented("unknown method GrantEagerDispatch"),
+			granted: []bool{true, true},
+		},
+		{
+			name:    "resource exhausted",
+			err:     &serviceerror.ResourceExhausted{Message: "matching rate limit exceeded"},
+			granted: []bool{false, false},
+		},
+		{
+			name:    "invalid argument",
+			err:     serviceerror.NewInvalidArgument("invalid deployment version"),
+			granted: []bool{false, false},
 		},
 		{
 			name:     "missing response item",
@@ -1030,7 +1059,7 @@ func TestHandleEagerActivityCandidatesDispatchCheckDisabled(t *testing.T) {
 	require.Len(t, mutations, 1)
 }
 
-func TestHandleEagerActivityCandidatesMatchingError(t *testing.T) {
+func TestHandleEagerActivityCandidatesGrantUnanswered(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -1062,7 +1091,7 @@ func TestHandleEagerActivityCandidatesMatchingError(t *testing.T) {
 	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "run-id"})
 	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "workflow-type"})
 	shardCtx.EXPECT().NewVectorClock().Return(clock, nil)
-	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(nil, errors.New("matching unavailable"))
+	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewDeadlineExceeded("deadline exceeded"))
 
 	handler := &workflowTaskCompletedHandler{
 		identity:        "worker",
@@ -1095,11 +1124,16 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 	testCases := []struct {
 		name        string
 		response    *matchingservice.GrantEagerDispatchResponse
+		matchingErr error
 		generateErr error
 	}{
 		{
 			name:     "denied",
 			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{{}}},
+		},
+		{
+			name:        "matching error",
+			matchingErr: &serviceerror.ResourceExhausted{Message: "matching rate limit exceeded"},
 		},
 		{
 			name:     "malformed response",
@@ -1130,7 +1164,7 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 			ms.EXPECT().GetActivityInfo(activityInfo.GetScheduledEventId()).Return(activityInfo, true)
 			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
 			ms.EXPECT().GenerateActivityTask(int64(11)).Return(test.generateErr)
-			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(test.response, nil)
+			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(test.response, test.matchingErr)
 
 			handler := &workflowTaskCompletedHandler{
 				mutableState:            ms,
