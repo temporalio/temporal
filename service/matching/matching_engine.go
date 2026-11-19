@@ -876,9 +876,16 @@ func (e *matchingEngineImpl) AddActivityTask(
 	if err != nil {
 		return "", false, err
 	}
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
+	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	sessionDirective := addRequest.GetSessionDirective()
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky || sessionDirective != nil, loadCauseTask)
 	if err != nil {
 		return "", false, err
+	}
+	if sticky && !sessionDirective.GetIsExclusiveWorkerAssigned() {
+		if err := e.checkBoundWorker(ctx, pm, sessionDirective); err != nil {
+			return "", false, err
+		}
 	}
 
 	var expirationTime *timestamppb.Timestamp
