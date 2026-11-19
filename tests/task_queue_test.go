@@ -1057,7 +1057,7 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(t *testing.
 func testTaskDispatchLatencyEmitted(t *testing.T, s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, minLatency time.Duration) {
 	t.Helper()
 	ctx := testcontext.For(t)
-	tv := testvars.New(t)
+	tv := s.Tv()
 
 	capture := s.StartNamespaceMetricCapture()
 
@@ -1206,7 +1206,7 @@ func testTaskDispatchLatencyEmitted(t *testing.T, s *testcore.TestEnv, expectedF
 func testNexusTaskDispatchLatencyEmitted(t *testing.T, s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 	t.Helper()
 	ctx := testcontext.For(t)
-	tv := testvars.New(t)
+	tv := s.Tv()
 
 	// Create a nexus endpoint targeting our task queue.
 	_, err := s.GetTestCluster().OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
@@ -1325,7 +1325,7 @@ func testNexusTaskDispatchLatencyEmitted(t *testing.T, s *testcore.TestEnv, expe
 func testQueryTaskDispatchLatencyEmitted(t *testing.T, s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 	t.Helper()
 	ctx := testcontext.For(t)
-	tv := testvars.New(t)
+	tv := s.Tv()
 
 	wftDone := make(chan error, 1)
 
