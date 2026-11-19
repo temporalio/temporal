@@ -31,29 +31,6 @@ type AssertionsInitializer interface {
 	InitAssertions()
 }
 
-// Scope provides the context and test handles for a test or await attempt.
-// It is useful for test helpers.
-type Scope interface {
-	Context() context.Context
-	TB() testing.TB
-	Require() *require.Assertions
-	AssertionT() require.TestingT
-}
-
-type contextScope struct {
-	Scope
-	ctx context.Context
-}
-
-// WithContext returns a scope that uses ctx and delegates assertions to scope.
-func WithContext(ctx context.Context, scope Scope) Scope {
-	return contextScope{Scope: scope, ctx: ctx}
-}
-
-func (s contextScope) Context() context.Context {
-	return s.ctx
-}
-
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
 //
 // It enforces a strict rule: a test method (or subtest) must either use assertions
