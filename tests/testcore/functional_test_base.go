@@ -206,10 +206,6 @@ func (s *functionalTestBase) GetTestCluster() *TestCluster {
 	return s.testCluster
 }
 
-func (s *functionalTestBase) GetTestClusterConfig() *TestClusterConfig {
-	return s.testClusterConfig
-}
-
 func (s *functionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
 	return s.testCluster.FrontendClient()
 }
