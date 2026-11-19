@@ -19,6 +19,7 @@ import (
 	adminservice "go.temporal.io/server/api/adminservice/v1"
 	clock "go.temporal.io/server/api/clock/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
+	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
 	workflow "go.temporal.io/server/chasm/lib/workflow"
@@ -483,6 +484,21 @@ func (m *MockShardContext) GetHistoryClient() historyservice.HistoryServiceClien
 func (mr *MockShardContextMockRecorder) GetHistoryClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockShardContext)(nil).GetHistoryClient))
+}
+
+// GetMatchingClient mocks base method.
+func (m *MockShardContext) GetMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMatchingClient")
+	ret0, _ := ret[0].(matchingservice.MatchingServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMatchingClient indicates an expected call of GetMatchingClient.
+func (mr *MockShardContextMockRecorder) GetMatchingClient() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingClient", reflect.TypeOf((*MockShardContext)(nil).GetMatchingClient))
 }
 
 // GetHistoryTasks mocks base method.
@@ -1371,6 +1387,21 @@ func (m *MockControllableContext) GetHistoryClient() historyservice.HistoryServi
 func (mr *MockControllableContextMockRecorder) GetHistoryClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryClient))
+}
+
+// GetMatchingClient mocks base method.
+func (m *MockControllableContext) GetMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMatchingClient")
+	ret0, _ := ret[0].(matchingservice.MatchingServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMatchingClient indicates an expected call of GetMatchingClient.
+func (mr *MockControllableContextMockRecorder) GetMatchingClient() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingClient", reflect.TypeOf((*MockControllableContext)(nil).GetMatchingClient))
 }
 
 // GetHistoryTasks mocks base method.

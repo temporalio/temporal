@@ -1,11 +1,24 @@
 package workflow
 
 import (
+	"context"
+
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/workercommands"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"google.golang.org/protobuf/proto"
 )
 
 // WorkflowHeartbeatNotificationUpdateAdmittedMetricTag is a dummy event type: admitting an Update writes no history
@@ -69,6 +82,7 @@ func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool 
 // handleWorkflowHeartbeatNotification handles buffered events waiting for the next Workflow Task to reach the worker.
 // Admitted Updates can also trigger WHN while waiting for that task, through the Update path.
 func (c *ContextImpl) handleWorkflowHeartbeatNotification(
+	ctx context.Context,
 	shardCtx historyi.ShardContext,
 	newBufferedEvents []*historypb.HistoryEvent,
 ) {
@@ -106,17 +120,110 @@ func (c *ContextImpl) handleWorkflowHeartbeatNotification(
 		}
 	}
 	if firstBufferedInput {
-		SendWorkflowHeartbeatNotification(shardCtx, namespaceName, c.workflowKey.WorkflowID)
+		notification, err := PrepareWorkflowHeartbeatNotification(c.MutableState, filteredNewBufferedEventTypes[0])
+		if err != nil {
+			c.logger.Warn("Unable to prepare workflow heartbeat notification", tag.Error(err))
+		} else {
+			SendWorkflowHeartbeatNotification(ctx, shardCtx, notification)
+		}
 	}
 }
 
-// SendWorkflowHeartbeatNotification applies the workflow-sticky rollout before notifying the worker.
-// Callers must first verify that an eligible input is waiting behind the started Workflow Task.
-func SendWorkflowHeartbeatNotification(shardCtx historyi.ShardContext, namespaceName, workflowID string) {
-	if !isWorkflowHeartbeatNotificationInputEnabled(shardCtx, namespaceName, workflowID) {
+type WorkflowHeartbeatNotification struct {
+	workflowKey   definition.WorkflowKey
+	namespaceName string
+	controlQueue  string
+	taskToken     []byte
+	// inputEventTypeName is a history event name or UPDATE_ADMITTED for an admitted Update.
+	inputEventTypeName string
+}
+
+// PrepareWorkflowHeartbeatNotification snapshots the started task while the workflow lease is held.
+// It returns nil if the worker didn't register a control queue or the task token can't be rebuilt.
+func PrepareWorkflowHeartbeatNotification(ms historyi.MutableState, inputEventTypeName string) (*WorkflowHeartbeatNotification, error) {
+	info := ms.GetExecutionInfo()
+	controlQueue := info.GetWorkflowTaskWorkerControlQueue()
+	if controlQueue == "" {
+		return nil, nil
+	}
+	key := ms.GetWorkflowKey()
+	taskToken := NewStartedWorkflowTaskToken(key, info)
+	if taskToken == nil {
+		return nil, nil
+	}
+	token, err := tasktoken.NewSerializer().Serialize(taskToken)
+	if err != nil {
+		return nil, err
+	}
+	return &WorkflowHeartbeatNotification{
+		workflowKey:        key,
+		namespaceName:      ms.GetNamespaceEntry().Name().String(),
+		controlQueue:       controlQueue,
+		taskToken:          token,
+		inputEventTypeName: inputEventTypeName,
+	}, nil
+}
+
+// SendWorkflowHeartbeatNotification attempts an in-memory dispatch after the input transaction succeeds.
+func SendWorkflowHeartbeatNotification(
+	ctx context.Context,
+	shardCtx historyi.ShardContext,
+	notification *WorkflowHeartbeatNotification,
+) {
+	if notification == nil || !isWorkflowHeartbeatNotificationInputEnabled(shardCtx, notification.namespaceName, notification.workflowKey.WorkflowID) {
 		return
 	}
-	// TODO(whn): Dispatch to the worker holding the started Workflow Task.
+	go func() {
+		matchingClient, err := shardCtx.GetMatchingClient()
+		if err != nil {
+			shardCtx.GetLogger().Warn("Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
+			return
+		}
+		command := &workerpb.WorkerCommand{Type: &workerpb.WorkerCommand_WorkflowHeartbeatNotification{
+			WorkflowHeartbeatNotification: &workerpb.WorkflowHeartbeatNotificationCommand{
+				TaskToken: notification.taskToken,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: notification.workflowKey.WorkflowID,
+					RunId:      notification.workflowKey.RunID,
+				},
+			},
+		}}
+		requestData, err := proto.Marshal(&workerservicepb.ExecuteCommandsRequest{Commands: []*workerpb.WorkerCommand{command}})
+		if err != nil {
+			shardCtx.GetLogger().Warn("Unable to encode workflow heartbeat notification", tag.Error(err))
+			return
+		}
+		matchCtx, matchCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
+		)
+		defer matchCancel()
+		_, err = matchingClient.DispatchNexusTask(matchCtx, &matchingservice.DispatchNexusTaskRequest{
+			NamespaceId: notification.workflowKey.NamespaceID,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: notification.controlQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			},
+			Request: &nexuspb.Request{
+				Header: map[string]string{},
+				Variant: &nexuspb.Request_StartOperation{StartOperation: &nexuspb.StartOperationRequest{
+					Service:   workercommands.ServiceName,
+					Operation: workercommands.OperationName,
+					Payload: &commonpb.Payload{
+						Metadata: map[string][]byte{"encoding": []byte("binary/protobuf")},
+						Data:     requestData,
+					},
+				}},
+			},
+		})
+		if err != nil {
+			shardCtx.GetLogger().Warn("Unable to dispatch workflow heartbeat notification",
+				tag.WorkflowNamespace(notification.namespaceName),
+				tag.WorkflowID(notification.workflowKey.WorkflowID),
+				tag.WorkflowRunID(notification.workflowKey.RunID),
+				tag.Error(err))
+		}
+	}()
 }
 
 // hasPendingUpdateForWorkflowHeartbeatNotification checks for unsent Updates in the existing, current-version Registry.
