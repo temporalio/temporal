@@ -2121,6 +2121,11 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
 		RestoreInfo:       info.GetRestoreInfo(),
 	}
+	// Report a refusal instead of failing the read: GetNamespace serves other
+	// callers, and verify and repair stop on the reason.
+	if err := adh.checkNamespaceRepairPolicy(ctx, info.GetId(), info.GetName(), info.GetData()); err != nil {
+		nsResponse.RepairScope = &adminservice.NamespaceRepairScope{RefusalReason: err.Error()}
+	}
 	return nsResponse, nil
 }
 

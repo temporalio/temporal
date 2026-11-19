@@ -355,6 +355,11 @@ func (v *namespaceReplicationVerifier) observe(
 		return observation, nil
 	}
 
+	if err := namespaceRepairRefusal(result.SourceCluster, source); err != nil {
+		blockNamespaceReplicationVerification(result, err)
+		return observation, nil
+	}
+
 	configProjection, failoverProjection, err := namespaceReplicationProjections(source, v.dataKeysToIgnore)
 	if err != nil {
 		blockNamespaceReplicationVerification(result, fmt.Errorf("source namespace cannot be compared: %w", err))
@@ -409,6 +414,10 @@ func (v *namespaceReplicationVerifier) observe(
 			// Every peer read would fail the same way; say what to fix instead
 			// of reporting each replica as unavailable.
 			blockNamespaceReplicationVerification(result, errNamespaceReplicationRelayUnsupported)
+			return observation, nil
+		}
+		if err := namespaceRepairRefusal(cluster, target); err != nil {
+			blockNamespaceReplicationVerification(result, err)
 			return observation, nil
 		}
 	}
@@ -957,6 +966,17 @@ func namespaceReplicationFailoverBlocks(
 	return (cluster.FailoverMatch != namespaceReplicationMatchMatch &&
 		!cluster.initialHistoryMissing) ||
 		(cluster.FailoverVersion != nil && *cluster.FailoverVersion > sourceFailoverVersion)
+}
+
+// namespaceRepairRefusal reports a cluster's refusal to have this namespace
+// verified or repaired. The cluster's deployment decides which namespaces
+// these tools support; a refusal from any replica stops them.
+func namespaceRepairRefusal(cluster string, response *adminservice.GetNamespaceResponse) error {
+	reason := response.GetRepairScope().GetRefusalReason()
+	if reason == "" {
+		return nil
+	}
+	return fmt.Errorf("cluster %q does not support verifying or repairing this namespace: %s", cluster, reason)
 }
 
 func blockNamespaceReplicationVerification(

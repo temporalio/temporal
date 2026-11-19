@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"testing"
@@ -769,6 +770,42 @@ func TestNamespaceReplicationVerifierUnavailableTargetBlocksRepair(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
 	require.Equal(t, namespaceReplicationPresenceUnavailable, result.Clusters[1].Presence)
+}
+
+func TestNamespaceReplicationVerifierStopsOnRepairRefusal(t *testing.T) {
+	t.Parallel()
+	refusal := &adminservice.NamespaceRepairScope{RefusalReason: "membership is kept elsewhere"}
+	for _, test := range []struct {
+		name         string
+		refuseSource bool
+		wantCluster  string
+		wantClusters int
+	}{
+		// A source refusal stops before any replica is read.
+		{name: "source", refuseSource: true, wantCluster: "cluster-a", wantClusters: 0},
+		{name: "peer", wantCluster: "cluster-b", wantClusters: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			target := proto.CloneOf(source)
+			if test.refuseSource {
+				source.RepairScope = refusal
+			} else {
+				target.RepairScope = refusal
+			}
+			verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{
+				"cluster-b": testNamespaceReplicationTargetClient("cluster-b", target),
+			})
+
+			result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
+			require.NoError(t, err)
+			require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
+			require.Contains(t, result.StatusDetail, fmt.Sprintf("cluster %q", test.wantCluster))
+			require.Contains(t, result.StatusDetail, refusal.GetRefusalReason())
+			require.Len(t, result.Clusters, test.wantClusters)
+		})
+	}
 }
 
 func TestNamespaceReplicationVerifierSourceMovementIsInconclusive(t *testing.T) {

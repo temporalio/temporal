@@ -30,14 +30,22 @@ import (
 )
 
 func TestNamespaceRepairInvalidSourceReturnsBlockedJSON(t *testing.T) {
-	for _, state := range []string{"inactive", "handover"} {
-		t.Run(state, func(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		mutate     func(*adminservice.GetNamespaceResponse)
+		wantDetail string
+	}{
+		{name: "inactive", mutate: func(r *adminservice.GetNamespaceResponse) { r.ReplicationConfig.ActiveClusterName = "cluster-b" }},
+		{name: "handover", mutate: func(r *adminservice.GetNamespaceResponse) {
+			r.ReplicationConfig.State = enumspb.REPLICATION_STATE_HANDOVER
+		}},
+		{name: "refused", mutate: func(r *adminservice.GetNamespaceResponse) {
+			r.RepairScope = &adminservice.NamespaceRepairScope{RefusalReason: "membership is kept elsewhere"}
+		}, wantDetail: "membership is kept elsewhere"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
-			if state == "inactive" {
-				source.ReplicationConfig.ActiveClusterName = "cluster-b"
-			} else {
-				source.ReplicationConfig.State = enumspb.REPLICATION_STATE_HANDOVER
-			}
+			test.mutate(source)
 			factory := &testNamespaceReplicationCLIClientFactory{
 				clients: map[string]*testNamespaceReplicationAdminClient{"source": testNamespaceReplicationSourceClient(source)},
 			}
@@ -50,6 +58,7 @@ func TestNamespaceRepairInvalidSourceReturnsBlockedJSON(t *testing.T) {
 			require.NoError(t, json.Unmarshal(output.Bytes(), &result))
 			require.Equal(t, namespaceReplicationRepairStatusBlocked, result.Status)
 			require.NotEmpty(t, result.StatusDetail)
+			require.Contains(t, result.StatusDetail, test.wantDetail)
 			require.Equal(t, namespaceReplicationRepairActionNone, result.SourceAction)
 		})
 	}

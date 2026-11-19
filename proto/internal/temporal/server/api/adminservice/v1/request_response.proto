@@ -515,6 +515,17 @@ message GetNamespaceResponse {
   // Server time captured before reading this snapshot. Repair uses this as a
   // conservative reconciliation cutoff instead of the operator's clock.
   google.protobuf.Timestamp observation_time = 11;
+  // The serving cluster's view of this namespace for operator verify and
+  // repair. Unset when the cluster has nothing to report.
+  NamespaceRepairScope repair_scope = 12;
+}
+
+// NamespaceRepairScope is what operator verify and repair tooling must know
+// about a namespace beyond its replicated fields.
+message NamespaceRepairScope {
+  // Set when this deployment does not support verifying or repairing the
+  // namespace. Tools stop and report it instead of comparing or writing.
+  string refusal_reason = 1;
 }
 
 message GetRemoteClusterNamespaceRequest {
