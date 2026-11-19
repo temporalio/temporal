@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
+	matchinghooks "go.temporal.io/server/service/matching/hooks"
 )
 
 // HistoryPassiveReplicationTestHook defines the test-only seams used to replace an
@@ -27,6 +28,7 @@ type HistoryPassiveReplicationTestHook interface {
 // Test hook keys with their return type and scope.
 // Try to avoid global scope as it requires a dedicated test cluster.
 var (
+	MatchingTaskHookFactory                     = newKey[matchinghooks.TaskHookFactory, namespace.ID]()
 	MatchingDisableSyncMatch                    = newKey[bool, namespace.ID]()
 	MatchingLBForceReadPartition                = newKey[int, namespace.ID]()
 	MatchingLBForceWritePartition               = newKey[int, namespace.ID]()

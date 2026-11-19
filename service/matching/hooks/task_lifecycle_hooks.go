@@ -41,6 +41,14 @@ type (
 		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 		IsSyncMatch       bool // Deprecated: use SyncMatchOutcome instead.
 		SyncMatchOutcome  SyncMatchOutcome
+		// SingleSessionOptions.WorkerStableIdentity is only set when the task belongs to an already-bound single session.
+		SingleSessionOptions SingleSessionOptions
+	}
+
+	// SingleSessionOptions describes the single session a task is bound to, as seen from the task.
+	SingleSessionOptions struct {
+		// Stable identity of the session's worker, so hooks can wake that same worker.
+		WorkerStableIdentity string
 	}
 
 	TaskHookFactory interface {

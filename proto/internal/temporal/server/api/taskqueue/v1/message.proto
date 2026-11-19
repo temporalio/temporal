@@ -26,6 +26,14 @@ message BoundWorkerInfo {
   string instance_key = 2;
 }
 
+// TaskSessionDirective describes the workflow session placement associated with a task.
+message TaskSessionDirective {
+  // The worker the task's workflow is bound to.
+  BoundWorkerInfo bound_worker_info = 1;
+  // Whether the workflow is assigned to an exclusive worker, even if matching has not recorded that assignment yet.
+  bool is_exclusive_worker_assigned = 2;
+}
+
 // TaskVersionDirective controls how matching should direct a task.
 message TaskVersionDirective {
   // Default (if build_id is not present) is "unversioned":

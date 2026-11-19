@@ -58,6 +58,7 @@ func (c *clientImpl) doAddActivityTask(
 			Stamp:                  request.Stamp,
 			Priority:               request.Priority,
 			ComponentRef:           request.ComponentRef,
+			SessionDirective:       request.SessionDirective,
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
@@ -114,6 +115,7 @@ func (c *clientImpl) doAddWorkflowTask(
 			ForwardInfo:            request.ForwardInfo,
 			Priority:               request.Priority,
 			Stamp:                  request.Stamp,
+			SessionDirective:       request.SessionDirective,
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
@@ -903,6 +905,7 @@ func (c *clientImpl) doQueryWorkflow(
 			VersionDirective: request.VersionDirective,
 			ForwardInfo:      request.ForwardInfo,
 			Priority:         request.Priority,
+			SessionDirective: request.SessionDirective,
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
