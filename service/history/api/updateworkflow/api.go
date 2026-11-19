@@ -115,12 +115,13 @@ func (u *Updater) Invoke(
 	return u.OnSuccess(ctx)
 }
 
-func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string) {
+func (u *Updater) handleWorkflowHeartbeatNotification(namespaceName string) {
 
 	if !u.bufferedForWorkflowHeartbeatNotification {
 		return
 	}
 
+	// The rollout setting controls WHN dispatch, while these metrics count all admitted Updates buffered behind a task.
 	handler := u.shardCtx.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.WorkflowContextScope),
 		metrics.NamespaceTag(namespaceName),
@@ -130,6 +131,7 @@ func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string)
 
 	if u.firstBufferedForWorkflowHeartbeatNotification {
 		metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
+		workflow.SendWorkflowHeartbeatNotification(u.shardCtx, namespaceName, u.wfKey.WorkflowID)
 	}
 }
 
@@ -430,7 +432,7 @@ func (u *Updater) OnSuccess(
 	namespaceName := ns.Name().String()
 
 	// WHN should be before the long polling
-	u.emitWorkflowHeartbeatNotificationMetrics(namespaceName)
+	u.handleWorkflowHeartbeatNotification(namespaceName)
 	if u.newUpdateWithNexusContext {
 		metrics.NexusWorkflowUpdateWithContext.With(u.shardCtx.GetMetricsHandler()).Record(1, metrics.NamespaceTag(namespaceName))
 	}
