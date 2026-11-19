@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/historyutils"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -522,7 +523,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-			s.RequireHistoryFunc(testcontext.For(t), firstRun),
+			s.RequireHistoryFunc(historyutils.WithContext(testcontext.For(t), t), firstRun),
 			10*time.Second,
 			250*time.Millisecond,
 		)

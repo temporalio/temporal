@@ -290,7 +290,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	// Wait for the workflow task timeout to actually fire before polling for stage 5
 	// With 10s timeout, poll for up to 15s to ensure timeout has occurred
 	env.EventuallyWithT(func(c *assert.CollectT) {
-		events := env.RequireHistory(s.Context(), workflowExecution)
+		events := env.RequireHistory(s, workflowExecution)
 		// Look for WorkflowTaskTimedOut event (should be event 21)
 		timedOutFound := false
 		for _, event := range events {
@@ -314,7 +314,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 		sawFieldsFlat = append(sawFieldsFlat, f.size, f.suggest)
 	}
 
-	allEvents := env.RequireHistory(s.Context(), workflowExecution)
+	allEvents := env.RequireHistory(s, workflowExecution)
 	env.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
