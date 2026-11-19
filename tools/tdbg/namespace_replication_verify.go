@@ -110,8 +110,8 @@ type namespaceReplicationObservation struct {
 	sourceSnapshot  *adminservice.GetNamespaceResponse
 	targetSnapshots map[string]*adminservice.GetNamespaceResponse
 	// sourceStable is set only after the final source read matches the source
-	// snapshot used to compare targets. Repair must not reconcile CHASM peers
-	// from a partial observation whose authority may have moved mid-scan.
+	// snapshot used to compare targets. Repair must not write from a partial
+	// observation whose authority may have moved mid-scan.
 	sourceStable bool
 }
 

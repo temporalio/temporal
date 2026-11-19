@@ -477,6 +477,13 @@ func TestBuildNamespaceReplicationRepairTaskPreservesTargetLocalDataAndFailover(
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"shared": "source"}, missingTask.GetInfo().GetData())
 
+	// A source without data still keeps the target's own value for an ignored key.
+	dataless := proto.CloneOf(source)
+	dataless.Info.Data = nil
+	datalessTask, err := buildNamespaceReplicationRepairTask(dataless, target, ignored)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"cell.local": "target-local"}, datalessTask.GetInfo().GetData())
+
 	sourceTask, err := buildNamespaceReplicationRepairTask(
 		source,
 		source,
@@ -660,6 +667,7 @@ func TestRepairRequiresMatchingReadbackAfterStaleSuccess(t *testing.T) {
 		{name: "wrong config", mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Description = "other" }, wantError: "config readback"},
 		{name: "wrong config version", mutate: func(r *adminservice.GetNamespaceResponse) { r.ConfigVersion++ }, wantError: "config version readback"},
 		{name: "wrong failover version", mutate: func(r *adminservice.GetNamespaceResponse) { r.FailoverVersion++ }, wantError: "failover version readback"},
+		{name: "failover state moved", mutate: func(r *adminservice.GetNamespaceResponse) { r.ReplicationConfig.ActiveClusterName = "cluster-b" }, wantError: "failover readback changed"},
 		// The read-back by ID rejects another namespace before comparing config.
 		{name: "wrong identity", mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Id = "other-id" }, wantError: "response has a different namespace ID"},
 		{name: "not global", mutate: func(r *adminservice.GetNamespaceResponse) { r.IsGlobalNamespace = false }, wantError: "not global"},
@@ -931,6 +939,223 @@ func TestPeerRepairEndpointWritesThroughRelay(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
+		})
+	}
+}
+
+// Repair reports what it changed even when part of it fails, and only calls the
+// run SUCCEEDED once every write is read back and final verification is healthy.
+func TestNamespaceReplicationRepairerReportsPartialFailure(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name            string
+		sourceFails     bool
+		targetFails     bool
+		wantSourceError bool
+		wantTargetWrite bool
+		wantDetail      []string
+	}{
+		{
+			name:            "target write fails",
+			targetFails:     true,
+			wantTargetWrite: true,
+			wantDetail:      []string{"target cluster-b:", "final verification is not healthy"},
+		},
+		{
+			// The source is prepared first; when that fails no target is written.
+			name:            "source prepare fails",
+			sourceFails:     true,
+			wantSourceError: true,
+			wantDetail:      []string{"prepare source"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			target := proto.CloneOf(source)
+			target.Info.Description = "divergent"
+			target.ConfigVersion = 10
+			sourceClient := testNamespaceReplicationSourceClient(source)
+			targetClient := testNamespaceReplicationTargetClient("cluster-b", target)
+			sourceClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+				if test.sourceFails {
+					return nil, serviceerror.NewUnavailable("source write failed")
+				}
+				applyRepairTaskToSnapshot(source, decodeNamespaceRepairTask(t, request))
+				return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+			}
+			targetWrites := 0
+			targetClient.applyNamespaceMutationFn = func(*adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+				targetWrites++
+				if test.targetFails {
+					return nil, serviceerror.NewUnavailable("peer write failed")
+				}
+				return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+			}
+			verifier := testNamespaceReplicationVerifierWithClients(nil, map[string]*testNamespaceReplicationAdminClient{
+				"source":    sourceClient,
+				"cluster-b": targetClient,
+			})
+			verifyRequest := testNamespaceReplicationVerifyRequest()
+			observation, err := verifier.observe(t.Context(), verifyRequest)
+			require.NoError(t, err)
+			plan, err := planNamespaceReplicationRepair(observation, "repair-id", time.Unix(101, 0))
+			require.NoError(t, err)
+			require.Equal(t, namespaceReplicationRepairActionPrepareSource, plan.SourceAction)
+
+			result, err := testRepairerFor(verifier).Execute(t.Context(), namespaceReplicationRepairExecutionRequest{
+				VerifyRequest: verifyRequest, Observation: observation, Plan: plan, Reason: "repair test",
+			})
+			require.Error(t, err)
+			require.Equal(t, namespaceReplicationRepairExecutionFailed, result.Status)
+			require.Equal(t, test.wantSourceError, result.Source.Error != "")
+			require.Equal(t, test.wantTargetWrite, targetWrites > 0)
+			if test.wantTargetWrite {
+				require.Len(t, result.Targets, 1)
+				require.Contains(t, result.Targets[0].Error, "peer write failed")
+				require.False(t, result.Targets[0].Readback)
+				require.NotNil(t, result.FinalVerification)
+				require.Equal(t, namespaceReplicationStatusRepairRequired, result.FinalVerification.Status)
+			}
+			for _, detail := range test.wantDetail {
+				require.Contains(t, err.Error(), detail)
+			}
+			require.Equal(t, "divergent", target.GetInfo().GetDescription())
+		})
+	}
+}
+
+func TestRepairTargetChecksAfterPlanning(t *testing.T) {
+	t.Parallel()
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 11, 20)
+	for _, test := range []struct {
+		name      string
+		action    string
+		readByID  func() (*adminservice.GetNamespaceResponse, error)
+		wantError string
+	}{
+		{
+			name:   "missing replica appeared",
+			action: namespaceReplicationRepairActionCreate,
+			readByID: func() (*adminservice.GetNamespaceResponse, error) {
+				return proto.CloneOf(source), nil
+			},
+			wantError: "target appeared or could not be checked after planning",
+		},
+		{
+			name:   "target unreadable",
+			action: namespaceReplicationRepairActionApplySource,
+			readByID: func() (*adminservice.GetNamespaceResponse, error) {
+				return nil, serviceerror.NewUnavailable("peer down")
+			},
+			wantError: "refresh target",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			client := testNamespaceReplicationTargetClient("cluster-b", nil)
+			client.getNamespaceFn = func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+				return test.readByID()
+			}
+			client.applyNamespaceMutationFn = func(*adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+				t.Fatal("repair must not write after the target check fails")
+				return nil, nil
+			}
+			r := testRepairerFor(testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b": client}))
+			result := r.applyTargetRepair(t.Context(), namespaceReplicationRepairExecutionRequest{
+				Observation: &namespaceReplicationObservation{targetSnapshots: map[string]*adminservice.GetNamespaceResponse{"cluster-b": proto.CloneOf(source)}},
+				Plan:        &namespaceReplicationRepairPlan{NamespaceID: "namespace-id", SourceCluster: "cluster-a", RepairID: "repair-id"}, Reason: "repair",
+			}, source, namespaceReplicationClusterRepairPlan{Cluster: "cluster-b", Action: test.action})
+			require.Contains(t, result.Error, test.wantError)
+			require.False(t, result.Readback)
+		})
+	}
+}
+
+// Executed repairs print one result in the requested format, and a failed run
+// still prints what was written before exiting non-zero. These CLI tests run
+// sequentially: running a urfave/cli app mutates tdbg's shared global flags.
+func TestNamespaceReplicationRepairCommandExecuteOutput(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		json        bool
+		omitReason  bool
+		targetFails bool
+		wantStatus  string
+		wantWrites  bool
+	}{
+		{name: "json success", json: true, wantStatus: namespaceReplicationRepairExecutionSucceeded, wantWrites: true},
+		{name: "json failure", json: true, targetFails: true, wantStatus: namespaceReplicationRepairExecutionFailed, wantWrites: true},
+		{name: "table failure", targetFails: true, wantStatus: namespaceReplicationRepairExecutionFailed, wantWrites: true},
+		{name: "reason required", omitReason: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			target := proto.CloneOf(source)
+			target.Info.Description = "divergent"
+			target.ConfigVersion = 9
+			sourceClient := testNamespaceReplicationSourceClient(source)
+			targetClient := testNamespaceReplicationTargetClient("cluster-b", target)
+			writes := 0
+			targetClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+				writes++
+				if test.targetFails {
+					return nil, serviceerror.NewUnavailable("peer write failed")
+				}
+				applyRepairTaskToSnapshot(target, decodeNamespaceRepairTask(t, request))
+				return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+			}
+			factory := &testNamespaceReplicationCLIClientFactory{
+				clients: map[string]*testNamespaceReplicationAdminClient{"source": sourceClient, "cluster-b": targetClient},
+			}
+			app, output := testNamespaceReplicationCLIApp(factory)
+			args := []string{"tdbg", "--yes", "namespace", "replication", "repair", "--namespace-id", "namespace-id", "--execute"}
+			if !test.omitReason {
+				args = append(args, "--reason", "operator test")
+			}
+			if test.json {
+				args = append(args, "--print-json")
+			}
+
+			err := app.Run(args)
+			require.Equal(t, test.wantWrites, writes > 0)
+			if test.omitReason {
+				var exit cli.ExitCoder
+				require.ErrorAs(t, err, &exit)
+				require.Equal(t, 2, exit.ExitCode())
+				require.ErrorContains(t, err, "--reason is required")
+				return
+			}
+			if test.targetFails {
+				var exit cli.ExitCoder
+				require.ErrorAs(t, err, &exit)
+				require.Equal(t, 2, exit.ExitCode())
+				require.ErrorContains(t, err, "peer write failed")
+			} else {
+				require.NoError(t, err)
+			}
+			if test.json {
+				var result struct {
+					Status            string `json:"status"`
+					Targets           []namespaceReplicationRepairApplyResult
+					FinalVerification struct {
+						Status string `json:"status"`
+					} `json:"final_verification"`
+				}
+				require.NoError(t, json.Unmarshal(output.Bytes(), &result), output.String())
+				require.Equal(t, test.wantStatus, result.Status)
+				require.Len(t, result.Targets, 1)
+				require.Equal(t, !test.targetFails, result.Targets[0].Readback)
+				wantVerification := namespaceReplicationStatusHealthy
+				if test.targetFails {
+					wantVerification = namespaceReplicationStatusRepairRequired
+				}
+				require.Equal(t, wantVerification, result.FinalVerification.Status)
+				return
+			}
+			require.Contains(t, output.String(), "Status: "+test.wantStatus)
+			require.Contains(t, output.String(), "Final verification: "+namespaceReplicationStatusRepairRequired)
+			require.Contains(t, output.String(), "peer write failed")
 		})
 	}
 }

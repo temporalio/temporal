@@ -97,6 +97,21 @@ func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairWithoutPeerTransp
 	s.Require().NoError(err)
 	s.Require().Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED, response.GetOutcome())
 	s.requirePersistedNamespace(ctx, standby, name)
+
+	// Once delivery recovers, the pending CHASM delivery lands on the repaired
+	// peer as a terminal no-op, so nothing has to close it by hand.
+	s.failApplyRequests.Store(false)
+	for {
+		observed := s.receiveObservedApply(ctx, name)
+		if observed.request.GetComponentBusinessId() != failed.request.GetComponentBusinessId() || observed.err != nil {
+			continue
+		}
+		s.Require().Contains([]adminservice.ApplyNamespaceMutationResponse_Outcome{
+			adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE,
+			adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE,
+		}, observed.response.GetOutcome())
+		break
+	}
 }
 
 // TestOperatorRepairThroughSourceRelay repairs a peer that CHASM delivery could
