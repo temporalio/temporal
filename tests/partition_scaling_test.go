@@ -72,7 +72,7 @@ func TestPartitionScaling_Up(t *testing.T) {
 	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1), 15*time.Second, time.Second)
 
 	t.Log("check that 2,3 have no tasks (leave 4,5 unloaded)")
-	s.True(scalerBacklogEmpty(s, s.Tv(), 2, 3)())
+	require.True(t, scalerBacklogEmpty(s, s.Tv(), 2, 3)())
 
 	t.Log("set to 6 partitions using scaler")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
@@ -139,7 +139,7 @@ func TestPartitionScaling_Down(t *testing.T) {
 	// if we don't poll all 6. So we have to look at metrics.
 	pollsByPartition := scalerCountPolls(s.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
-	s.Len(pollsByPartition, 6)
+	require.Len(t, pollsByPartition, 6)
 
 	// Note that this test does not test the read count eventually drops!
 	// (i.e. polls will continue to go to 4,5 after they are drained)
@@ -216,7 +216,7 @@ func TestPartitionScaling_Down_FromDC(t *testing.T) {
 	// if we don't poll all 6. So we have to look at metrics.
 	pollsByPartition := scalerCountPolls(s.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
-	s.Len(pollsByPartition, 6)
+	require.Len(t, pollsByPartition, 6)
 }
 
 func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
@@ -351,8 +351,8 @@ func TestPartitionScaling_Disable_ToFewerPartitions(t *testing.T) {
 	t.Log("check that polls went to partition 0 only")
 	pollsByPartition := scalerCountPolls(s.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
-	s.Len(pollsByPartition, 1)
-	s.Contains(pollsByPartition, 0)
+	require.Len(t, pollsByPartition, 1)
+	require.Contains(t, pollsByPartition, 0)
 }
 
 // TestPartitionScaling_Disable_ToMorePartitions is the inverse of FewerPartitions: the scaler
@@ -399,7 +399,7 @@ func TestPartitionScaling_Disable_ToMorePartitions(t *testing.T) {
 	// polls reached 1,2,3 directly. Check metrics for that.
 	pollsByPartition := scalerCountPolls(s.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
-	s.Len(pollsByPartition, 4)
+	require.Len(t, pollsByPartition, 4)
 }
 
 func scalerBackgroundTasks(s testcore.Env, tv *testvars.TestVars, rate float32) func() {

@@ -165,7 +165,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 
 				description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 				require.NoError(t, err)
-				s.Len(description.PendingActivities, 1)
+				require.Len(t, description.PendingActivities, 1)
 
 				select {
 				case activityUpdated <- struct{}{}:
@@ -248,13 +248,13 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				var out string
 				err = workflowRun.Get(ctx, &out)
 				var activityError *temporal.ActivityError
-				s.ErrorAs(err, &activityError)
+				require.ErrorAs(t, err, &activityError)
 				// SCHEDULE_TO_CLOSE timeout now returns RETRY_STATE_TIMEOUT instead of RETRY_STATE_NON_RETRYABLE_FAILURE
-				s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
+				require.Equal(t, enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 				var timeoutError *temporal.TimeoutError
-				s.ErrorAs(activityError, &timeoutError)
-				s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
-				s.Equal(int32(1), startedActivityCount.Load())
+				require.ErrorAs(t, activityError, &timeoutError)
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
+				require.Equal(t, int32(1), startedActivityCount.Load())
 			})
 
 			t.Run("TestActivityUpdateApi_ChangeScheduleToCloseAndRetry", func(t *testing.T) {
@@ -316,9 +316,9 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				)
 				require.NoError(t, err)
 				// check that the update was successful
-				s.Equal(int64(newScheduleToCloseTimeout.Seconds()), respOpts.ScheduleToCloseTimeout.GetSeconds())
+				require.Equal(t, int64(newScheduleToCloseTimeout.Seconds()), respOpts.ScheduleToCloseTimeout.GetSeconds())
 				// check that field we didn't update is the same
-				s.Equal(int64(scheduleToCloseTimeout.Seconds()), respOpts.StartToCloseTimeout.GetSeconds())
+				require.Equal(t, int64(scheduleToCloseTimeout.Seconds()), respOpts.StartToCloseTimeout.GetSeconds())
 
 				// now activity should succeed
 				await.Require(t.Context(), t, func(t *await.T) {
@@ -511,7 +511,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
 		})
 		require.NoError(t, err)
-		s.NotNil(resp)
+		require.NotNil(t, resp)
 
 		select {
 		case activityUpdated <- struct{}{}:
@@ -574,7 +574,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout"}},
 		})
 		require.NoError(t, err)
-		s.NotNil(resp)
+		require.NotNil(t, resp)
 
 		await.Require(t.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -586,12 +586,12 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 		var out string
 		err = workflowRun.Get(ctx, &out)
 		var activityError *temporal.ActivityError
-		s.ErrorAs(err, &activityError)
-		s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
+		require.ErrorAs(t, err, &activityError)
+		require.Equal(t, enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 		var timeoutError *temporal.TimeoutError
-		s.ErrorAs(activityError, &timeoutError)
-		s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
-		s.Equal(int32(1), startedActivityCount.Load())
+		require.ErrorAs(t, activityError, &timeoutError)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
+		require.Equal(t, int32(1), startedActivityCount.Load())
 	})
 
 	t.Run("ChangeScheduleToCloseAndRetry", func(t *testing.T) {
@@ -639,9 +639,9 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
 		})
 		require.NoError(t, err)
-		s.NotNil(resp)
-		s.Equal(int64(newScheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().ScheduleToCloseTimeout.GetSeconds())
-		s.Equal(int64(scheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().StartToCloseTimeout.GetSeconds())
+		require.NotNil(t, resp)
+		require.Equal(t, int64(newScheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().ScheduleToCloseTimeout.GetSeconds())
+		require.Equal(t, int64(scheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().StartToCloseTimeout.GetSeconds())
 
 		await.Require(t.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -704,7 +704,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}},
 		})
 		require.NoError(t, err)
-		s.NotNil(resp)
+		require.NotNil(t, resp)
 
 		await.Require(t.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -722,7 +722,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			RestoreOriginal: true,
 		})
 		require.NoError(t, err)
-		s.NotNil(resp)
+		require.NotNil(t, resp)
 
 		await.Require(t.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -746,7 +746,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
 		})
 		require.NoError(t, err)
-		s.NotNil(resp)
+		require.NotNil(t, resp)
 
 		select {
 		case activityUpdated <- struct{}{}:

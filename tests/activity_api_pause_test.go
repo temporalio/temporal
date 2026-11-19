@@ -219,8 +219,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 				description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 				require.NoError(t, err)
-				s.Len(description.PendingActivities, 1)
-				s.True(description.PendingActivities[0].Paused)
+				require.Len(t, description.PendingActivities, 1)
+				require.True(t, description.PendingActivities[0].Paused)
 
 				// wait long enough for activity to retry if pause is not working
 				// Note: because activity is retried we expect the attempts to be incremented
@@ -230,15 +230,15 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// make sure activity is not completed, and was not retried
 				description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 				require.NoError(t, err)
-				s.Len(description.PendingActivities, 1)
-				s.True(description.PendingActivities[0].Paused)
-				s.Equal(int32(2), description.PendingActivities[0].Attempt)
-				s.NotNil(description.PendingActivities[0].LastFailure)
-				s.Equal(activityErr.Error(), description.PendingActivities[0].LastFailure.Message)
-				s.NotNil(description.PendingActivities[0].PauseInfo)
-				s.NotNil(description.PendingActivities[0].PauseInfo.GetManual())
-				s.Equal(testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
-				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
+				require.Len(t, description.PendingActivities, 1)
+				require.True(t, description.PendingActivities[0].Paused)
+				require.Equal(t, int32(2), description.PendingActivities[0].Attempt)
+				require.NotNil(t, description.PendingActivities[0].LastFailure)
+				require.Equal(t, activityErr.Error(), description.PendingActivities[0].LastFailure.Message)
+				require.NotNil(t, description.PendingActivities[0].PauseInfo)
+				require.NotNil(t, description.PendingActivities[0].PauseInfo.GetManual())
+				require.Equal(t, testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
+				require.Equal(t, testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
 				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", ""))
@@ -446,13 +446,13 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// make sure activity is not completed, and was not retried
 				description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 				require.NoError(t, err)
-				s.Len(description.PendingActivities, 1)
-				s.True(description.PendingActivities[0].Paused)
-				s.Equal(int32(2), description.PendingActivities[0].Attempt)
-				s.NotNil(description.PendingActivities[0].PauseInfo)
-				s.NotNil(description.PendingActivities[0].PauseInfo.GetManual())
-				s.Equal(testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
-				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
+				require.Len(t, description.PendingActivities, 1)
+				require.True(t, description.PendingActivities[0].Paused)
+				require.Equal(t, int32(2), description.PendingActivities[0].Attempt)
+				require.NotNil(t, description.PendingActivities[0].PauseInfo)
+				require.NotNil(t, description.PendingActivities[0].PauseInfo.GetManual())
+				require.Equal(t, testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
+				require.Equal(t, testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
 				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", ""))
@@ -735,7 +735,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// non-empty request ID here is guaranteed to differ.
 				err = api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, testRequestID+"-2")
 				var failedPreconditionErr *serviceerror.FailedPrecondition
-				s.ErrorAs(err, &failedPreconditionErr)
+				require.ErrorAs(t, err, &failedPreconditionErr)
 
 				// unblock the activity
 				activityPausedCn <- struct{}{}
@@ -750,8 +750,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 				description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 				require.NoError(t, err)
-				s.Len(description.PendingActivities, 1)
-				s.True(description.PendingActivities[0].Paused)
+				require.Len(t, description.PendingActivities, 1)
+				require.True(t, description.PendingActivities[0].Paused)
 
 				// wait long enough for activity to retry if pause is not working
 				// Note: because activity is retried we expect the attempts to be incremented
@@ -761,15 +761,15 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// make sure activity is not completed, and was not retried
 				description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 				require.NoError(t, err)
-				s.Len(description.PendingActivities, 1)
-				s.True(description.PendingActivities[0].Paused)
-				s.Equal(int32(2), description.PendingActivities[0].Attempt)
-				s.NotNil(description.PendingActivities[0].LastFailure)
-				s.Equal(activityErr.Error(), description.PendingActivities[0].LastFailure.Message)
-				s.NotNil(description.PendingActivities[0].PauseInfo)
-				s.NotNil(description.PendingActivities[0].PauseInfo.GetManual())
-				s.Equal(testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
-				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
+				require.Len(t, description.PendingActivities, 1)
+				require.True(t, description.PendingActivities[0].Paused)
+				require.Equal(t, int32(2), description.PendingActivities[0].Attempt)
+				require.NotNil(t, description.PendingActivities[0].LastFailure)
+				require.Equal(t, activityErr.Error(), description.PendingActivities[0].LastFailure.Message)
+				require.NotNil(t, description.PendingActivities[0].PauseInfo)
+				require.NotNil(t, description.PendingActivities[0].PauseInfo.GetManual())
+				require.Equal(t, testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
+				require.Equal(t, testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
 				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", ""))

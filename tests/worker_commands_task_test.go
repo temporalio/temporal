@@ -662,9 +662,9 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	env.NotEmpty(wftResp.GetActivityTasks(), "Expected eager activity task in WFT completion response")
+	require.NotEmpty(t, wftResp.GetActivityTasks(), "Expected eager activity task in WFT completion response")
 	eagerActivityTaskToken := wftResp.GetActivityTasks()[0].TaskToken
-	env.NotEmpty(eagerActivityTaskToken, "Expected task token from eager activity")
+	require.NotEmpty(t, eagerActivityTaskToken, "Expected task token from eager activity")
 	t.Log("Activity eagerly dispatched")
 
 	// Request workflow cancellation
@@ -723,17 +723,17 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 
 	// Verify the cancel command
 	startOp := nexusPollResp.Request.GetStartOperation()
-	env.NotNil(startOp)
-	env.Equal("temporal.api.nexusservices.workerservice.v1.WorkerService", startOp.Service)
-	env.Equal("ExecuteCommands", startOp.Operation)
+	require.NotNil(t, startOp)
+	require.Equal(t, "temporal.api.nexusservices.workerservice.v1.WorkerService", startOp.Service)
+	require.Equal(t, "ExecuteCommands", startOp.Operation)
 
 	var executeReq workerservicepb.ExecuteCommandsRequest
 	err = payload.Decode(startOp.Payload, &executeReq)
 	require.NoError(t, err)
-	env.Len(executeReq.Commands, 1)
+	require.Len(t, executeReq.Commands, 1)
 	cancelCmd := executeReq.Commands[0].GetCancelActivity()
-	env.NotNil(cancelCmd, "Expected CancelActivity command")
-	env.Equal(eagerActivityTaskToken, cancelCmd.TaskToken,
+	require.NotNil(t, cancelCmd, "Expected CancelActivity command")
+	require.Equal(t, eagerActivityTaskToken, cancelCmd.TaskToken,
 		"Cancel command task token must match the eager activity's task token")
 	t.Log("SUCCESS: Received cancel command on control queue for eagerly dispatched activity")
 }

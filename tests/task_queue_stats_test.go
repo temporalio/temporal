@@ -873,7 +873,7 @@ func (s *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(sets in
 
 	// poll all workflow tasks and enqueue one activity task for each workflow
 	totalAct := s.enqueueActivitiesForEachWorkflow(sets, tqName)
-	s.Equal(total, totalAct, "should have enqueued the same number of activities as workflows")
+	require.Equal(s.tb, total, totalAct, "should have enqueued the same number of activities as workflows")
 
 	// verify workflow dispatch rate and activity add rate
 	if sets > 0 {
@@ -1201,7 +1201,7 @@ func (s *taskQueueStatsContext) enqueueWorkflows(sets int, tqName string) int {
 				}
 
 				_, err := s.FrontendClient().StartWorkflowExecution(s.ctx, request)
-				s.NoError(err)
+				require.NoError(s.tb, err)
 
 				total++
 			}
@@ -1289,7 +1289,7 @@ func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqNam
 				}
 
 				resp, err := s.FrontendClient().PollWorkflowTaskQueue(s.ctx, pollReq)
-				s.NoError(err)
+				require.NoError(s.tb, err)
 				if resp == nil || resp.GetAttempt() < 1 {
 					continue
 				}
@@ -1320,7 +1320,7 @@ func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqNam
 				}
 
 				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(s.ctx, respondReq)
-				s.NoError(err)
+				require.NoError(s.tb, err)
 
 				i++
 				total++
@@ -1347,7 +1347,7 @@ func (s *taskQueueStatsContext) pollActivities(count int, tqName string) {
 		resp, err := s.FrontendClient().PollActivityTaskQueue(
 			s.ctx, pollReq,
 		)
-		s.NoError(err)
+		require.NoError(s.tb, err)
 		if resp == nil || resp.GetAttempt() < 1 {
 			continue // poll again on empty responses
 		}
@@ -1433,11 +1433,11 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 
 	// test stats are not reported by default (and therefore also not cached)
 	resp, err := s.FrontendClient().DescribeTaskQueue(s.Context(), req)
-	s.NoError(err)
-	s.NotNil(resp)
-	s.Nil(resp.Stats, "stats should not be reported by default")
+	require.NoError(s.tb, err)
+	require.NotNil(s.tb, resp)
+	require.Nil(s.tb, resp.Stats, "stats should not be reported by default")
 	//nolint:staticcheck // SA1019 deprecated
-	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
+	require.Nil(s.tb, resp.TaskQueueStatus, "status should not be reported by default")
 
 	await.Require(s.Context(), s.tb, func(t *await.T) {
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
@@ -1488,11 +1488,11 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 
 	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
 		resp, err := s.FrontendClient().DescribeTaskQueue(s.Context(), req)
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Nil(resp.Stats, "stats should not be reported by default")
+		require.NoError(s.tb, err)
+		require.NotNil(s.tb, resp)
+		require.Nil(s.tb, resp.Stats, "stats should not be reported by default")
 		//nolint:staticcheck // SA1019 deprecated
-		s.Nil(resp.TaskQueueStatus, "status should not be reported")
+		require.Nil(s.tb, resp.TaskQueueStatus, "status should not be reported")
 	}
 
 	await.Require(s.Context(), s.tb, func(t *await.T) {
@@ -1538,10 +1538,10 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 
 	// test stats are not reported by default (and therefore also not cached)
 	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), req)
-	s.NoError(err)
-	s.NotNil(resp)
+	require.NoError(s.tb, err)
+	require.NotNil(s.tb, resp)
 	for _, info := range resp.VersionTaskQueues {
-		s.Nil(info.Stats, "stats should not be reported by default")
+		require.Nil(s.tb, info.Stats, "stats should not be reported by default")
 	}
 
 	await.Require(s.Context(), s.tb, func(t *await.T) {
