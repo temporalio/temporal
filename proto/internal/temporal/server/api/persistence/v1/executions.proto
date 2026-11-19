@@ -85,6 +85,9 @@ message WorkflowExecutionInfo {
   google.protobuf.Duration workflow_task_timeout = 25;
   int32 workflow_task_attempt = 26;
   google.protobuf.Timestamp workflow_task_started_time = 27;
+  // Worker control task queue of the worker that started the current Workflow Task. Set only when that
+  // worker supports workflow heartbeat notifications.
+  string workflow_task_worker_control_queue = 120;
   google.protobuf.Timestamp workflow_task_scheduled_time = 28;
   google.protobuf.Timestamp workflow_task_original_scheduled_time = 30;
   string workflow_task_request_id = 31;
