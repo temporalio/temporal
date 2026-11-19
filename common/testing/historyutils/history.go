@@ -11,26 +11,26 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-type Reader struct {
+type HistoryUtils struct {
 	t      testing.TB
 	client workflowservice.WorkflowServiceClient
 }
 
-func NewReader(t testing.TB, client workflowservice.WorkflowServiceClient) Reader {
-	return Reader{t: t, client: client}
+func New(t testing.TB, client workflowservice.WorkflowServiceClient) HistoryUtils {
+	return HistoryUtils{t: t, client: client}
 }
 
-func (r Reader) GetHistoryFunc(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+func (u HistoryUtils) GetHistoryFunc(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
-		r.t.Helper()
-		return r.GetHistory(ctx, nsName, execution)
+		u.t.Helper()
+		return u.GetHistory(ctx, nsName, execution)
 	}
 }
 
-func (r Reader) GetHistory(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	r.t.Helper()
-	events, err := ReadHistory(ctx, r.client, nsName, execution)
-	require.NoError(r.t, err)
+func (u HistoryUtils) GetHistory(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	u.t.Helper()
+	events, err := ReadHistory(ctx, u.client, nsName, execution)
+	require.NoError(u.t, err)
 	return events
 }
 
