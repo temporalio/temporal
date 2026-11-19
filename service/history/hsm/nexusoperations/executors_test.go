@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/resource"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -306,6 +307,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, "namespace-name", failedCount[0].Tags["namespace"])
 				require.Equal(t, "endpoint", failedCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", failedCount[0].Tags["workflowType"])
+				require.Equal(t, "operation_error", failedCount[0].Tags["reason"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationCancelCount.Name()])
 				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
@@ -398,6 +400,47 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "internal server error", op.LastAttemptFailure.Message)
 				require.Empty(t, events)
+			},
+		},
+		{
+			name:           "non-retryable handler error",
+			requestTimeout: time.Hour,
+			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad request")
+			},
+			expectedMetricOutcome: "handler-error:BAD_REQUEST",
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.Len(t, events, 1)
+				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				require.Equal(t, string(nexus.HandlerErrorTypeBadRequest), failure.GetNexusHandlerFailureInfo().GetType())
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
+				require.Len(t, failedCount, 1)
+				require.Equal(t, "handler_error", failedCount[0].Tags["reason"])
+			},
+		},
+		{
+			name:           "sync failed caused by handler error",
+			requestTimeout: time.Hour,
+			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return nil, &nexus.OperationError{
+					State:   nexus.OperationStateFailed,
+					Message: "operation failed from handler",
+					Cause:   nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"),
+				}
+			},
+			expectedMetricOutcome: "operation-unsuccessful:failed",
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.Len(t, events, 1)
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				// The handler reported the operation as failed; the handler error is only its cause.
+				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
+				require.Len(t, failedCount, 1)
+				require.Equal(t, "operation_error", failedCount[0].Tags["reason"])
 			},
 		},
 		{
@@ -542,6 +585,11 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, string(nexus.HandlerErrorTypeNotFound), failure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "endpoint not registered", failure.Message)
 			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
+				require.Len(t, failedCount, 1)
+				require.Equal(t, "handler_error", failedCount[0].Tags["reason"])
+			},
 		},
 		{
 			name:                 "endpoint not found on command processing",
@@ -599,6 +647,11 @@ func TestProcessInvocationTask(t *testing.T) {
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetApplicationFailureInfo())
 				require.Equal(t, "invalid operation token: length exceeds allowed limit (11/10)", failure.Message)
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
+				require.Len(t, failedCount, 1)
+				require.Equal(t, "caller_error", failedCount[0].Tags["reason"])
 			},
 		},
 	}
@@ -701,6 +754,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				},
 			}
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				Config: &nexusoperations.Config{
 					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
@@ -711,6 +765,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
+					EnableOutboundTaskThrottleController: dynamicconfig.GetBoolPropertyFn(false),
 				},
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
@@ -856,6 +911,7 @@ func TestProcessTimeoutTaskDoesNotEmitMetricWhenDeletionFails(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+		LinkValidator:  test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 		MetricsHandler: captureHandler,
 		Config:         &nexusoperations.Config{},
 	}))
@@ -928,6 +984,7 @@ func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
 			defer captureHandler.StopCapture(capture)
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator:  test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				MetricsHandler: captureHandler,
 				Config:         config,
 			}))
@@ -1330,6 +1387,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			}
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				Config: &nexusoperations.Config{
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
@@ -1338,6 +1396,7 @@ func TestProcessCancelationTask(t *testing.T) {
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
+					EnableOutboundTaskThrottleController: dynamicconfig.GetBoolPropertyFn(false),
 				},
 				NamespaceRegistry: namespaceRegistry,
 				MetricsHandler:    metricsHandler,
@@ -1410,6 +1469,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+		LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 		Config: &nexusoperations.Config{
 			RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 			UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
@@ -1618,6 +1678,7 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 			chasmRegistry := tc.setupChasmRegistry(t)
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				Config: &nexusoperations.Config{
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
@@ -1626,6 +1687,7 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
+					EnableOutboundTaskThrottleController: dynamicconfig.GetBoolPropertyFn(false),
 				},
 				NamespaceRegistry: namespaceRegistry,
 				MetricsHandler:    metricsHandler,
@@ -1928,6 +1990,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				require.Equal(t, "namespace-name", failedCount[0].Tags["namespace"])
 				require.Equal(t, commonnexus.SystemEndpoint, failedCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", failedCount[0].Tags["workflowType"])
+				require.Equal(t, "operation_error", failedCount[0].Tags["reason"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 			},
 		},
@@ -2040,6 +2103,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 			chasmRegistry := tc.setupChasmRegistry(t)
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				Config: &nexusoperations.Config{
 					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 					MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
@@ -2051,6 +2115,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
+					EnableOutboundTaskThrottleController: dynamicconfig.GetBoolPropertyFn(false),
 				},
 				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
@@ -2094,5 +2159,124 @@ func TestOutboundTasksTaggedAsCallerOutbound(t *testing.T) {
 			StateMachineTask: tasks.StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: taskType}},
 		}
 		require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound, taskType)
+	}
+}
+
+func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{"start", "cancel"} {
+		for _, tc := range []struct {
+			name              string
+			outboundEnabled   bool
+			controllerEnabled bool
+		}{
+			{"outbound disabled", false, true},
+			{"controller disabled", true, false},
+			{"enabled", true, true},
+		} {
+			t.Run(fmt.Sprintf("%s %s", method, tc.name), func(t *testing.T) {
+				t.Parallel()
+				enabled := tc.outboundEnabled && tc.controllerEnabled
+				resourceErr := &serviceerror.ResourceExhausted{
+					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+					Message: "caller rate limit exceeded",
+				}
+				registry := newRegistry(t)
+				event := mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{})
+				backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
+				node := newOperationNode(t, backend, event)
+				operation, err := hsm.MachineData[nexusoperations.Operation](node)
+				require.NoError(t, err)
+				var task hsm.Task = nexusoperations.InvocationTask{EndpointName: "endpoint"}
+				if method == "cancel" {
+					_, err = nexusoperations.TransitionStarted.Apply(operation, nexusoperations.EventStarted{
+						Time: time.Now(), Attributes: &historypb.NexusOperationStartedEventAttributes{OperationToken: "token"}, Node: node,
+					})
+					require.NoError(t, err)
+					_, err = operation.Cancel(node, time.Now(), 0)
+					require.NoError(t, err)
+					node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
+					require.NoError(t, err)
+					task = nexusoperations.CancelationTask{EndpointName: "endpoint"}
+				}
+				endpoint := &persistencespb.NexusEndpointEntry{
+					Id: "endpoint-id",
+					Endpoint: &persistencespb.NexusEndpoint{Spec: &persistencespb.NexusEndpointSpec{
+						Name: "endpoint",
+						Target: &persistencespb.NexusEndpointTarget{Variant: &persistencespb.NexusEndpointTarget_Worker_{
+							Worker: &persistencespb.NexusEndpointTarget_Worker{NamespaceId: "handler-ns"},
+						}},
+					}},
+				}
+				namespaces := namespace.NewMockRegistry(gomock.NewController(t))
+				namespaces.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
+					namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "caller"}, nil, false, nil, 0), nil,
+				)
+				require.NoError(t, nexusoperations.RegisterExecutor(registry, nexusoperations.TaskExecutorOptions{
+					Config: &nexusoperations.Config{
+						CallbackURLTemplate:                  dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+						RequestTimeout:                       dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
+						MinRequestTimeout:                    dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+						MaxOperationTokenLength:              dynamicconfig.GetIntPropertyFnFilteredByNamespace(100),
+						PayloadSizeLimit:                     dynamicconfig.GetIntPropertyFnFilteredByNamespace(1024),
+						UseNewFailureWireFormat:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+						RecordCancelRequestCompletionEvents:  dynamicconfig.GetBoolPropertyFn(true),
+						RetryPolicy:                          func() backoff.RetryPolicy { return backoff.NewExponentialRetryPolicy(time.Second) },
+						EnableOutboundTaskThrottleController: dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled),
+						TaskThrottleControllerSettings:       dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled}),
+					},
+					NamespaceRegistry:      namespaces,
+					CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
+					MetricsHandler:         metrics.NoopMetricsHandler,
+					Logger:                 log.NewNoopLogger(),
+					EndpointRegistry: nexustest.FakeEndpointRegistry{
+						OnGetByID: func(context.Context, string) (*persistencespb.NexusEndpointEntry, error) { return endpoint, nil },
+					},
+					ClientProvider: func(context.Context, string, *persistencespb.NexusEndpointEntry, string) (*nexusrpc.HTTPClient, error) {
+						return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
+							BaseURL: "http://nexus.test", Service: "service", Serializer: commonnexus.PayloadSerializer,
+							HTTPCaller: func(*http.Request) (*http.Response, error) {
+								return nil, commonnexus.ConvertGRPCError(resourceErr, true)
+							},
+						})
+					},
+				}))
+				err = registry.ExecuteImmediateTask(t.Context(), fakeEnv{node: node}, hsm.Ref{
+					WorkflowKey:     definition.NewWorkflowKey("ns-id", "workflow", "run"),
+					StateMachineRef: &persistencespb.StateMachineRef{},
+				}, task)
+				if enabled {
+					require.Equal(t, resourceErr, err)
+				} else {
+					var destinationDown *queueserrors.DestinationDownError
+					require.ErrorAs(t, err, &destinationDown)
+					require.NoError(t, destinationDown.Unwrap())
+				}
+				if method == "start" {
+					if enabled {
+						require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, operation.State())
+						require.Nil(t, operation.NextAttemptScheduleTime)
+						require.Nil(t, operation.LastAttemptFailure)
+					} else {
+						require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, operation.State())
+						require.NotNil(t, operation.NextAttemptScheduleTime)
+						require.Equal(t, string(nexus.HandlerErrorTypeResourceExhausted), operation.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
+					}
+				} else {
+					cancellation, err := hsm.MachineData[nexusoperations.Cancelation](node)
+					require.NoError(t, err)
+					if enabled {
+						require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, cancellation.State())
+						require.Nil(t, cancellation.NextAttemptScheduleTime)
+						require.Nil(t, cancellation.LastAttemptFailure)
+					} else {
+						require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, cancellation.State())
+						require.NotNil(t, cancellation.NextAttemptScheduleTime)
+						require.Equal(t, string(nexus.HandlerErrorTypeResourceExhausted), cancellation.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
+					}
+				}
+			})
+		}
 	}
 }

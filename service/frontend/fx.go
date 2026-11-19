@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -28,6 +29,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -139,6 +141,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(CallbackValidatorProvider),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(NamespaceMutationTaskExecutorProvider),
@@ -156,6 +159,7 @@ var Module = fx.Options(
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(backfillSearchAttributeMappings),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
 	chasmnexus.FrontendModule,
@@ -1069,6 +1073,7 @@ func HandlerProvider(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
 	callbackValidator callbacks.Validator,
+	linkValidator links.Validator,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
@@ -1083,6 +1088,7 @@ func HandlerProvider(
 
 	wfHandler := NewWorkflowHandler(
 		callbackValidator,
+		linkValidator,
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
@@ -1118,6 +1124,7 @@ func HandlerProvider(
 			chasmworkflow.NewConfig(dc),
 			saMapperProvider,
 			saValidator,
+			linkValidator,
 		),
 		chasmNsReplClient,
 		metricsHandler,
@@ -1220,4 +1227,30 @@ func NexusEndpointClientProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+// backfillSearchAttributeMappings backfills namespace custom search attribute
+// aliases from cluster metadata with identity mappings during frontend initialization.
+// Only runs when Elasticsearch visibility is configured; updates go through the namespace handler.
+func backfillSearchAttributeMappings(
+	cfg *config.Config,
+	clusterMetadata cluster.Metadata,
+	metadataManager persistence.MetadataManager,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	handler Handler,
+	logger log.Logger,
+) error {
+	visDataStore := cfg.Persistence.GetVisibilityStoreConfig()
+	if visDataStore.Elasticsearch == nil {
+		return nil
+	}
+	return initializeSearchAttributeMappings(
+		context.Background(),
+		metadataManager,
+		clusterMetadataManager,
+		clusterMetadata.GetCurrentClusterName(),
+		visDataStore.GetIndexName(),
+		handler,
+		logger,
+	)
 }

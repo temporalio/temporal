@@ -91,10 +91,11 @@ var DefaultDynamicRateLimitingParams = DynamicRateLimitingParams{
 	RateMultiMax:         1.0,
 }
 
-// TaskThrottleControllerSettings tunes the host level pacing of history task retries that
-// were refused by a namespace APS or persistence rate limiter. One budget is kept per
-// (cause, namespace); its admitted rate moves multiplicatively, down by Beta when a control
-// window loses more than LossThreshold and up by IncreaseRatio when it does not.
+// TaskThrottleControllerSettings tunes host level pacing for history task retries
+// refused by namespace APS, persistence, or remote Nexus caller limits.
+// One budget is kept per (cause, namespace), with the destination added for remote
+// Nexus caller limits. Its admitted rate moves multiplicatively, down by Beta when
+// a control window loses more than LossThreshold and up by IncreaseRatio otherwise.
 type TaskThrottleControllerSettings struct {
 	// Enabled toggles the controller.
 	Enabled bool

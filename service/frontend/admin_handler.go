@@ -2119,6 +2119,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		FailoverVersion:   resp.Namespace.GetFailoverVersion(),
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
+		RestoreInfo:       info.GetRestoreInfo(),
 	}
 	return nsResponse, nil
 }

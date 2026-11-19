@@ -126,7 +126,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedByQuery(chasmEnabled bo
 			}
 			s.Equal("handler-status", result)
 
-			s.Require().Len(links, 1)
+			s.Len(links, 1)
 			protorequire.ProtoEqual(s.T(), &commonpb.Link{
 				Variant: &commonpb.Link_Workflow_{Workflow: &commonpb.Link_Workflow{
 					Namespace:  env.Namespace().String(),

@@ -16,6 +16,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace/nsreplication"
@@ -714,6 +715,7 @@ func namespaceReplicationProjections(
 				return &replicationpb.ClusterReplicationConfig{ClusterName: name}
 			}),
 		},
+		RestoreInfo: proto.CloneOf(response.GetRestoreInfo()),
 	}
 	var failoverHistory []*replicationpb.FailoverStatus
 	for _, status := range response.GetFailoverHistory() {
@@ -811,6 +813,7 @@ func namespaceReplicationDifferences(
 	) {
 		differences = append(differences, "replication.clusters")
 	}
+	differences = append(differences, namespaceReplicationRestoreDifferences(expectedConfig.GetRestoreInfo(), actualConfig.GetRestoreInfo())...)
 	if expectedFailover.GetReplicationConfig().GetActiveClusterName() != actualFailover.GetReplicationConfig().GetActiveClusterName() {
 		differences = append(differences, "replication.active_cluster")
 	}
@@ -825,6 +828,29 @@ func namespaceReplicationDifferences(
 		},
 	) {
 		differences = append(differences, "replication.failover_history")
+	}
+	return differences
+}
+
+func namespaceReplicationRestoreDifferences(expected, actual *persistencespb.NamespaceRestoreInfo) []string {
+	if (expected == nil) != (actual == nil) {
+		return []string{"restore_info"}
+	}
+	var differences []string
+	if expected.GetRestoreId() != actual.GetRestoreId() {
+		differences = append(differences, "restore_info.restore_id")
+	}
+	if expected.GetHostCluster() != actual.GetHostCluster() {
+		differences = append(differences, "restore_info.host_cluster")
+	}
+	if expected.GetState() != actual.GetState() {
+		differences = append(differences, "restore_info.state")
+	}
+	if !proto.Equal(expected.GetStartTime(), actual.GetStartTime()) {
+		differences = append(differences, "restore_info.start_time")
+	}
+	if !proto.Equal(expected.GetCloseTime(), actual.GetCloseTime()) {
+		differences = append(differences, "restore_info.close_time")
 	}
 	return differences
 }

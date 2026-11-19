@@ -4248,9 +4248,10 @@ type GetNamespaceResponse struct {
 	FailoverVersion   int64                            `protobuf:"varint,7,opt,name=failover_version,json=failoverVersion,proto3" json:"failover_version,omitempty"`
 	FailoverHistory   []*v111.FailoverStatus           `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3" json:"failover_history,omitempty"`
 	IsGlobalNamespace bool                             `protobuf:"varint,9,opt,name=is_global_namespace,json=isGlobalNamespace,proto3" json:"is_global_namespace,omitempty"`
+	RestoreInfo       *v12.NamespaceRestoreInfo        `protobuf:"bytes,10,opt,name=restore_info,json=restoreInfo,proto3" json:"restore_info,omitempty"`
 	// Server time captured before reading this snapshot. Repair uses this as a
 	// conservative reconciliation cutoff instead of the operator's clock.
-	ObservationTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=observation_time,json=observationTime,proto3" json:"observation_time,omitempty"`
+	ObservationTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=observation_time,json=observationTime,proto3" json:"observation_time,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -4332,6 +4333,13 @@ func (x *GetNamespaceResponse) GetIsGlobalNamespace() bool {
 		return x.IsGlobalNamespace
 	}
 	return false
+}
+
+func (x *GetNamespaceResponse) GetRestoreInfo() *v12.NamespaceRestoreInfo {
+	if x != nil {
+		return x.RestoreInfo
+	}
+	return nil
 }
 
 func (x *GetNamespaceResponse) GetObservationTime() *timestamppb.Timestamp {
@@ -7296,7 +7304,7 @@ var File_temporal_server_api_adminservice_v1_request_response_proto protoreflect
 
 const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/api/adminservice/v1/request_response.proto\x12#temporal.server.api.adminservice.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/wrappers.proto\x1a$temporal/api/common/v1/message.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\"temporal/api/enums/v1/common.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a'temporal/api/namespace/v1/message.proto\x1a)temporal/api/replication/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a%temporal/api/version/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a1temporal/server/api/adminservice/v1/message.proto\x1a,temporal/server/api/cluster/v1/message.proto\x1a'temporal/server/api/common/v1/dlq.proto\x1a*temporal/server/api/enums/v1/cluster.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a&temporal/server/api/enums/v1/dlq.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a+temporal/server/api/health/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/namespace/v1/message.proto\x1a9temporal/server/api/persistence/v1/cluster_metadata.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a.temporal/server/api/persistence/v1/tasks.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a0temporal/server/api/replication/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x83\x01\n" +
+	":temporal/server/api/adminservice/v1/request_response.proto\x12#temporal.server.api.adminservice.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/wrappers.proto\x1a$temporal/api/common/v1/message.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\"temporal/api/enums/v1/common.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a'temporal/api/namespace/v1/message.proto\x1a)temporal/api/replication/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a%temporal/api/version/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a1temporal/server/api/adminservice/v1/message.proto\x1a,temporal/server/api/cluster/v1/message.proto\x1a'temporal/server/api/common/v1/dlq.proto\x1a*temporal/server/api/enums/v1/cluster.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a&temporal/server/api/enums/v1/dlq.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a+temporal/server/api/health/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/namespace/v1/message.proto\x1a9temporal/server/api/persistence/v1/cluster_metadata.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a.temporal/server/api/persistence/v1/tasks.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a0temporal/server/api/replication/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x83\x01\n" +
 	"\x1aRebuildMutableStateRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\x1d\n" +
@@ -7609,7 +7617,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\tnamespace\x18\x01 \x01(\tH\x00R\tnamespace\x12\x10\n" +
 	"\x02id\x18\x02 \x01(\tH\x00R\x02idB\f\n" +
 	"\n" +
-	"attributes\"\xa1\x04\n" +
+	"attributes\"\xfe\x04\n" +
 	"\x14GetNamespaceResponse\x12<\n" +
 	"\x04info\x18\x03 \x01(\v2(.temporal.api.namespace.v1.NamespaceInfoR\x04info\x12B\n" +
 	"\x06config\x18\x04 \x01(\v2*.temporal.api.namespace.v1.NamespaceConfigR\x06config\x12f\n" +
@@ -7617,9 +7625,10 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x0econfig_version\x18\x06 \x01(\x03R\rconfigVersion\x12)\n" +
 	"\x10failover_version\x18\a \x01(\x03R\x0ffailoverVersion\x12V\n" +
 	"\x10failover_history\x18\b \x03(\v2+.temporal.api.replication.v1.FailoverStatusR\x0ffailoverHistory\x12.\n" +
-	"\x13is_global_namespace\x18\t \x01(\bR\x11isGlobalNamespace\x12E\n" +
-	"\x10observation_time\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\x0fobservationTime\"\xb9\x01\n" +
+	"\x13is_global_namespace\x18\t \x01(\bR\x11isGlobalNamespace\x12[\n" +
+	"\frestore_info\x18\n" +
+	" \x01(\v28.temporal.server.api.persistence.v1.NamespaceRestoreInfoR\vrestoreInfo\x12E\n" +
+	"\x10observation_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0fobservationTime\"\xb9\x01\n" +
 	" GetRemoteClusterNamespaceRequest\x12!\n" +
 	"\fcluster_name\x18\x01 \x01(\tR\vclusterName\x124\n" +
 	"\x15remote_namespace_name\x18\x02 \x01(\tH\x00R\x13remoteNamespaceName\x120\n" +
@@ -8003,28 +8012,29 @@ var file_temporal_server_api_adminservice_v1_request_response_proto_goTypes = []
 	(*v110.NamespaceConfig)(nil),                     // 152: temporal.api.namespace.v1.NamespaceConfig
 	(*v111.NamespaceReplicationConfig)(nil),          // 153: temporal.api.replication.v1.NamespaceReplicationConfig
 	(*v111.FailoverStatus)(nil),                      // 154: temporal.api.replication.v1.FailoverStatus
-	(*v112.HistoryDLQKey)(nil),                       // 155: temporal.server.api.common.v1.HistoryDLQKey
-	(*v112.HistoryDLQTask)(nil),                      // 156: temporal.server.api.common.v1.HistoryDLQTask
-	(*v112.HistoryDLQTaskMetadata)(nil),              // 157: temporal.server.api.common.v1.HistoryDLQTaskMetadata
-	(v14.DLQOperationType)(0),                        // 158: temporal.server.api.enums.v1.DLQOperationType
-	(v14.DLQOperationState)(0),                       // 159: temporal.server.api.enums.v1.DLQOperationState
-	(v14.HealthState)(0),                             // 160: temporal.server.api.enums.v1.HealthState
-	(*v113.ServiceHealthDetail)(nil),                 // 161: temporal.server.api.health.v1.ServiceHealthDetail
-	(*v12.VersionedTransition)(nil),                  // 162: temporal.server.api.persistence.v1.VersionedTransition
-	(*v11.VersionHistories)(nil),                     // 163: temporal.server.api.history.v1.VersionHistories
-	(*v15.VersionedTransitionArtifact)(nil),          // 164: temporal.server.api.replication.v1.VersionedTransitionArtifact
-	(*v114.TaskQueuePartition)(nil),                  // 165: temporal.server.api.taskqueue.v1.TaskQueuePartition
-	(*v115.TaskQueueVersionSelection)(nil),           // 166: temporal.api.taskqueue.v1.TaskQueueVersionSelection
-	(*v114.PartitionScaleInfo)(nil),                  // 167: temporal.server.api.taskqueue.v1.PartitionScaleInfo
-	(*v12.TaskQueueTypeUserData)(nil),                // 168: temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	(v16.BatchOperationType)(0),                      // 169: temporal.api.enums.v1.BatchOperationType
-	(*VisibilityExecutionInfo)(nil),                  // 170: temporal.server.api.adminservice.v1.VisibilityExecutionInfo
-	(*wrapperspb.Int64Value)(nil),                    // 171: google.protobuf.Int64Value
-	(v14.NamespaceReconciliationOutcome)(0),          // 172: temporal.server.api.enums.v1.NamespaceReconciliationOutcome
-	(v14.ManualReconciliationBasis)(0),               // 173: temporal.server.api.enums.v1.ManualReconciliationBasis
-	(v16.IndexedValueType)(0),                        // 174: temporal.api.enums.v1.IndexedValueType
-	(*v114.TaskQueueVersionInfoInternal)(nil),        // 175: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
-	(*v1.Payload)(nil),                               // 176: temporal.api.common.v1.Payload
+	(*v12.NamespaceRestoreInfo)(nil),                 // 155: temporal.server.api.persistence.v1.NamespaceRestoreInfo
+	(*v112.HistoryDLQKey)(nil),                       // 156: temporal.server.api.common.v1.HistoryDLQKey
+	(*v112.HistoryDLQTask)(nil),                      // 157: temporal.server.api.common.v1.HistoryDLQTask
+	(*v112.HistoryDLQTaskMetadata)(nil),              // 158: temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	(v14.DLQOperationType)(0),                        // 159: temporal.server.api.enums.v1.DLQOperationType
+	(v14.DLQOperationState)(0),                       // 160: temporal.server.api.enums.v1.DLQOperationState
+	(v14.HealthState)(0),                             // 161: temporal.server.api.enums.v1.HealthState
+	(*v113.ServiceHealthDetail)(nil),                 // 162: temporal.server.api.health.v1.ServiceHealthDetail
+	(*v12.VersionedTransition)(nil),                  // 163: temporal.server.api.persistence.v1.VersionedTransition
+	(*v11.VersionHistories)(nil),                     // 164: temporal.server.api.history.v1.VersionHistories
+	(*v15.VersionedTransitionArtifact)(nil),          // 165: temporal.server.api.replication.v1.VersionedTransitionArtifact
+	(*v114.TaskQueuePartition)(nil),                  // 166: temporal.server.api.taskqueue.v1.TaskQueuePartition
+	(*v115.TaskQueueVersionSelection)(nil),           // 167: temporal.api.taskqueue.v1.TaskQueueVersionSelection
+	(*v114.PartitionScaleInfo)(nil),                  // 168: temporal.server.api.taskqueue.v1.PartitionScaleInfo
+	(*v12.TaskQueueTypeUserData)(nil),                // 169: temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	(v16.BatchOperationType)(0),                      // 170: temporal.api.enums.v1.BatchOperationType
+	(*VisibilityExecutionInfo)(nil),                  // 171: temporal.server.api.adminservice.v1.VisibilityExecutionInfo
+	(*wrapperspb.Int64Value)(nil),                    // 172: google.protobuf.Int64Value
+	(v14.NamespaceReconciliationOutcome)(0),          // 173: temporal.server.api.enums.v1.NamespaceReconciliationOutcome
+	(v14.ManualReconciliationBasis)(0),               // 174: temporal.server.api.enums.v1.ManualReconciliationBasis
+	(v16.IndexedValueType)(0),                        // 175: temporal.api.enums.v1.IndexedValueType
+	(*v114.TaskQueueVersionInfoInternal)(nil),        // 176: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
+	(*v1.Payload)(nil),                               // 177: temporal.api.common.v1.Payload
 }
 var file_temporal_server_api_adminservice_v1_request_response_proto_depIdxs = []int32{
 	124, // 0: temporal.server.api.adminservice.v1.RebuildMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
@@ -8089,64 +8099,65 @@ var file_temporal_server_api_adminservice_v1_request_response_proto_depIdxs = []
 	152, // 59: temporal.server.api.adminservice.v1.GetNamespaceResponse.config:type_name -> temporal.api.namespace.v1.NamespaceConfig
 	153, // 60: temporal.server.api.adminservice.v1.GetNamespaceResponse.replication_config:type_name -> temporal.api.replication.v1.NamespaceReplicationConfig
 	154, // 61: temporal.server.api.adminservice.v1.GetNamespaceResponse.failover_history:type_name -> temporal.api.replication.v1.FailoverStatus
-	133, // 62: temporal.server.api.adminservice.v1.GetNamespaceResponse.observation_time:type_name -> google.protobuf.Timestamp
-	67,  // 63: temporal.server.api.adminservice.v1.GetRemoteClusterNamespaceResponse.namespace:type_name -> temporal.server.api.adminservice.v1.GetNamespaceResponse
-	28,  // 64: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairRequest.mutation:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest
-	29,  // 65: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairResponse.response:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse
-	155, // 66: temporal.server.api.adminservice.v1.GetDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	156, // 67: temporal.server.api.adminservice.v1.GetDLQTasksResponse.dlq_tasks:type_name -> temporal.server.api.common.v1.HistoryDLQTask
-	155, // 68: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	157, // 69: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
-	155, // 70: temporal.server.api.adminservice.v1.MergeDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	157, // 71: temporal.server.api.adminservice.v1.MergeDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
-	155, // 72: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	158, // 73: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.operation_type:type_name -> temporal.server.api.enums.v1.DLQOperationType
-	159, // 74: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.operation_state:type_name -> temporal.server.api.enums.v1.DLQOperationState
-	133, // 75: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.start_time:type_name -> google.protobuf.Timestamp
-	133, // 76: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.end_time:type_name -> google.protobuf.Timestamp
-	120, // 77: temporal.server.api.adminservice.v1.AddTasksRequest.tasks:type_name -> temporal.server.api.adminservice.v1.AddTasksRequest.Task
-	121, // 78: temporal.server.api.adminservice.v1.ListQueuesResponse.queues:type_name -> temporal.server.api.adminservice.v1.ListQueuesResponse.QueueInfo
-	160, // 79: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.state:type_name -> temporal.server.api.enums.v1.HealthState
-	161, // 80: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.services:type_name -> temporal.server.api.health.v1.ServiceHealthDetail
-	160, // 81: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
-	124, // 82: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	162, // 83: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	163, // 84: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	164, // 85: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
-	124, // 86: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	165, // 87: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	166, // 88: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.build_ids:type_name -> temporal.api.taskqueue.v1.TaskQueueVersionSelection
-	122, // 89: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.versions_info_internal:type_name -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
-	167, // 90: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.scale_info:type_name -> temporal.server.api.taskqueue.v1.PartitionScaleInfo
-	165, // 91: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	147, // 92: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	168, // 93: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	124, // 94: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.executions:type_name -> temporal.api.common.v1.WorkflowExecution
-	101, // 95: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
-	169, // 96: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.delegation_operation:type_name -> temporal.api.enums.v1.BatchOperationType
-	1,   // 97: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
-	170, // 98: temporal.server.api.adminservice.v1.ListExecutionsResponse.executions:type_name -> temporal.server.api.adminservice.v1.VisibilityExecutionInfo
-	123, // 99: temporal.server.api.adminservice.v1.CountExecutionsResponse.groups:type_name -> temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup
-	2,   // 100: temporal.server.api.adminservice.v1.NamespaceMutationAttribution.origin:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationAttribution.Origin
-	133, // 101: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.cutoff_time:type_name -> google.protobuf.Timestamp
-	171, // 102: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.verified_config_version:type_name -> google.protobuf.Int64Value
-	171, // 103: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.verified_failover_version:type_name -> google.protobuf.Int64Value
-	111, // 104: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsResponse.components:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationComponentReconciliation
-	112, // 105: temporal.server.api.adminservice.v1.NamespaceMutationComponentReconciliation.peers:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation
-	172, // 106: temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation.outcome:type_name -> temporal.server.api.enums.v1.NamespaceReconciliationOutcome
-	173, // 107: temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation.basis:type_name -> temporal.server.api.enums.v1.ManualReconciliationBasis
-	135, // 108: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
-	174, // 109: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	174, // 110: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	174, // 111: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	125, // 112: temporal.server.api.adminservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
-	175, // 113: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
-	176, // 114: temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup.group_values:type_name -> temporal.api.common.v1.Payload
-	115, // [115:115] is the sub-list for method output_type
-	115, // [115:115] is the sub-list for method input_type
-	115, // [115:115] is the sub-list for extension type_name
-	115, // [115:115] is the sub-list for extension extendee
-	0,   // [0:115] is the sub-list for field type_name
+	155, // 62: temporal.server.api.adminservice.v1.GetNamespaceResponse.restore_info:type_name -> temporal.server.api.persistence.v1.NamespaceRestoreInfo
+	133, // 63: temporal.server.api.adminservice.v1.GetNamespaceResponse.observation_time:type_name -> google.protobuf.Timestamp
+	67,  // 64: temporal.server.api.adminservice.v1.GetRemoteClusterNamespaceResponse.namespace:type_name -> temporal.server.api.adminservice.v1.GetNamespaceResponse
+	28,  // 65: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairRequest.mutation:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationRequest
+	29,  // 66: temporal.server.api.adminservice.v1.ApplyRemoteClusterNamespaceRepairResponse.response:type_name -> temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse
+	156, // 67: temporal.server.api.adminservice.v1.GetDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	157, // 68: temporal.server.api.adminservice.v1.GetDLQTasksResponse.dlq_tasks:type_name -> temporal.server.api.common.v1.HistoryDLQTask
+	156, // 69: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	158, // 70: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	156, // 71: temporal.server.api.adminservice.v1.MergeDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	158, // 72: temporal.server.api.adminservice.v1.MergeDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	156, // 73: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	159, // 74: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.operation_type:type_name -> temporal.server.api.enums.v1.DLQOperationType
+	160, // 75: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.operation_state:type_name -> temporal.server.api.enums.v1.DLQOperationState
+	133, // 76: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.start_time:type_name -> google.protobuf.Timestamp
+	133, // 77: temporal.server.api.adminservice.v1.DescribeDLQJobResponse.end_time:type_name -> google.protobuf.Timestamp
+	120, // 78: temporal.server.api.adminservice.v1.AddTasksRequest.tasks:type_name -> temporal.server.api.adminservice.v1.AddTasksRequest.Task
+	121, // 79: temporal.server.api.adminservice.v1.ListQueuesResponse.queues:type_name -> temporal.server.api.adminservice.v1.ListQueuesResponse.QueueInfo
+	161, // 80: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.state:type_name -> temporal.server.api.enums.v1.HealthState
+	162, // 81: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.services:type_name -> temporal.server.api.health.v1.ServiceHealthDetail
+	161, // 82: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
+	124, // 83: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	163, // 84: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	164, // 85: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	165, // 86: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
+	124, // 87: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	166, // 88: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	167, // 89: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.build_ids:type_name -> temporal.api.taskqueue.v1.TaskQueueVersionSelection
+	122, // 90: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.versions_info_internal:type_name -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
+	168, // 91: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.scale_info:type_name -> temporal.server.api.taskqueue.v1.PartitionScaleInfo
+	166, // 92: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	147, // 93: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	169, // 94: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	124, // 95: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.executions:type_name -> temporal.api.common.v1.WorkflowExecution
+	101, // 96: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
+	170, // 97: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.delegation_operation:type_name -> temporal.api.enums.v1.BatchOperationType
+	1,   // 98: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
+	171, // 99: temporal.server.api.adminservice.v1.ListExecutionsResponse.executions:type_name -> temporal.server.api.adminservice.v1.VisibilityExecutionInfo
+	123, // 100: temporal.server.api.adminservice.v1.CountExecutionsResponse.groups:type_name -> temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup
+	2,   // 101: temporal.server.api.adminservice.v1.NamespaceMutationAttribution.origin:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationAttribution.Origin
+	133, // 102: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.cutoff_time:type_name -> google.protobuf.Timestamp
+	172, // 103: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.verified_config_version:type_name -> google.protobuf.Int64Value
+	172, // 104: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsRequest.verified_failover_version:type_name -> google.protobuf.Int64Value
+	111, // 105: temporal.server.api.adminservice.v1.ReconcileNamespaceMutationComponentsResponse.components:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationComponentReconciliation
+	112, // 106: temporal.server.api.adminservice.v1.NamespaceMutationComponentReconciliation.peers:type_name -> temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation
+	173, // 107: temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation.outcome:type_name -> temporal.server.api.enums.v1.NamespaceReconciliationOutcome
+	174, // 108: temporal.server.api.adminservice.v1.NamespaceMutationPeerReconciliation.basis:type_name -> temporal.server.api.enums.v1.ManualReconciliationBasis
+	135, // 109: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
+	175, // 110: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	175, // 111: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	175, // 112: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	125, // 113: temporal.server.api.adminservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
+	176, // 114: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
+	177, // 115: temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup.group_values:type_name -> temporal.api.common.v1.Payload
+	116, // [116:116] is the sub-list for method output_type
+	116, // [116:116] is the sub-list for method input_type
+	116, // [116:116] is the sub-list for extension type_name
+	116, // [116:116] is the sub-list for extension extendee
+	0,   // [0:116] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_adminservice_v1_request_response_proto_init() }
