@@ -1774,7 +1774,7 @@ type ApplyNamespaceMutationRequest struct {
 	RemovedPeer bool `protobuf:"varint,10,opt,name=removed_peer,json=removedPeer,proto3" json:"removed_peer,omitempty"`
 	// Cluster the source addressed this delivery to. A receiver rejects a delivery
 	// whose target_cluster names another cluster. Unset by older sources.
-	TargetCluster string `protobuf:"bytes,11,opt,name=target_cluster,json=targetCluster,proto3" json:"target_cluster,omitempty"`
+	TargetCluster string `protobuf:"bytes,12,opt,name=target_cluster,json=targetCluster,proto3" json:"target_cluster,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6682,7 +6682,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x1ashadow_legacy_task_payload\x18\t \x01(\fR\x17shadowLegacyTaskPayload\x12!\n" +
 	"\fremoved_peer\x18\n" +
 	" \x01(\bR\vremovedPeer\x12%\n" +
-	"\x0etarget_cluster\x18\v \x01(\tR\rtargetClusterJ\x04\b\x03\x10\x04R\vfingerprint\"\xd7\x02\n" +
+	"\x0etarget_cluster\x18\f \x01(\tR\rtargetClusterJ\x04\b\x03\x10\x04R\vfingerprint\"\xd7\x02\n" +
 	"\x1eApplyNamespaceMutationResponse\x12e\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2K.temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.OutcomeR\aoutcome\"\xcd\x01\n" +
 	"\aOutcome\x12\x17\n" +

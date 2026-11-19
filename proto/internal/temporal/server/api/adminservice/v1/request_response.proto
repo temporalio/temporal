@@ -243,7 +243,7 @@ message ApplyNamespaceMutationRequest {
 
   // Cluster the source addressed this delivery to. A receiver rejects a delivery
   // whose target_cluster names another cluster. Unset by older sources.
-  string target_cluster = 11;
+  string target_cluster = 12;
 }
 
 message ApplyNamespaceMutationResponse {
