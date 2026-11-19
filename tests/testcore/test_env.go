@@ -71,7 +71,7 @@ type Env interface {
 
 type TestEnv struct {
 	functionalTestBase *functionalTestBase
-	historyutils.Reader
+	historyutils.HistoryUtils
 	updateutils.UpdateUtils
 
 	Logger log.Logger
@@ -335,7 +335,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	frontendClient := cluster.FrontendClient()
 	env := &TestEnv{
 		functionalTestBase: base,
-		Reader:             historyutils.NewReader(t, frontendClient),
+		HistoryUtils:       historyutils.New(t, frontendClient),
 		UpdateUtils:        updateutils.New(t),
 		cluster:            cluster,
 		nsName:             ns,
