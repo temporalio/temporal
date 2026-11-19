@@ -6,20 +6,23 @@ import (
 	"testing"
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
@@ -75,6 +78,11 @@ func TestPrepareWorkflowHeartbeatNotification_StartedClockUnknown(t *testing.T) 
 func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	shard := historyi.NewMockShardContext(ctrl)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	shard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
+	shard.EXPECT().GetLogger().Return(log.NewTestLogger()).AnyTimes()
 	shard.EXPECT().GetConfig().Return(&configs.Config{
 		WorkflowHeartbeatNotificationRolloutPercent:  func(string) int { return 100 },
 		WorkflowHeartbeatNotificationDispatchTimeout: func(string) time.Duration { return 500 * time.Millisecond },
@@ -101,6 +109,53 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 		}, commands.GetCommands()[0].GetWorkflowHeartbeatNotification())
 	case <-time.After(time.Second):
 		t.Fatal("workflow heartbeat notification was not dispatched")
+	}
+	await.RequireTrue(t, func() bool {
+		return len(capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationResults.Name())) == 1
+	}, time.Second, time.Millisecond)
+	results := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationResults.Name())
+	require.Equal(t, "invalid_response", results[0].Tags["outcome"])
+	require.Equal(t, "namespace-name", results[0].Tags["namespace"])
+	require.NotContains(t, results[0].Tags, "input_type")
+	require.Equal(t, "EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED", results[0].Tags["event_type"])
+	require.Len(t, capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationDeliveryLatency.Name()), 1)
+}
+
+func TestClassifyWorkflowHeartbeatNotificationResponse(t *testing.T) {
+	makeResponse := func(outcome workerpb.WorkflowHeartbeatNotificationResult_Outcome, currentTaskToken []byte) *matchingservice.DispatchNexusTaskResponse {
+		data, err := proto.Marshal(&workerservicepb.ExecuteCommandsResponse{Results: []*workerpb.WorkerCommandResult{{
+			Type: &workerpb.WorkerCommandResult_WorkflowHeartbeatNotification{
+				WorkflowHeartbeatNotification: &workerpb.WorkflowHeartbeatNotificationResult{Outcome: outcome, CurrentTaskToken: currentTaskToken},
+			},
+		}}})
+		require.NoError(t, err)
+		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
+			Response: &nexuspb.Response{Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+					SyncSuccess: &nexuspb.StartOperationResponse_Sync{Payload: &commonpb.Payload{Data: data}},
+				}},
+			}},
+		}}
+	}
+	testCases := []struct {
+		name                 string
+		response             *matchingservice.DispatchNexusTaskResponse
+		wantOutcome          string
+		wantCurrentTaskToken []byte
+	}{
+		{"accepted", makeResponse(workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_ACCEPTED, nil), "OUTCOME_ACCEPTED", nil},
+		{"token mismatch", makeResponse(workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH, []byte("current-token")), "OUTCOME_TASK_TOKEN_MISMATCH", []byte("current-token")},
+		{"no current task", makeResponse(workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH, nil), "OUTCOME_TASK_TOKEN_MISMATCH", nil},
+		{"timeout", &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{}}}, "request_timeout", nil},
+		{"worker failure", &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{Failure: &failurepb.Failure{}}}, "worker_error", nil},
+		{"missing response", nil, "invalid_response", nil},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			outcome, currentTaskToken := classifyWorkflowHeartbeatNotificationResponse(tc.response)
+			require.Equal(t, tc.wantOutcome, outcome)
+			require.Equal(t, tc.wantCurrentTaskToken, currentTaskToken)
+		})
 	}
 }
 
