@@ -65,7 +65,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTimeout() {
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for range 10 {
-		historyEvents = env.GetHistory(s.Context(), env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -283,7 +283,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
 
-	events := env.GetHistory(s.Context(), env.Namespace().String(), workflowExecution)
+	events := env.GetHistory(s.Context(), env.Namespace(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -372,7 +372,7 @@ func (s *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfIn
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on RecordMarkerCommand.", err.Error())
 
-	historyEvents := env.GetHistory(s.Context(), env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.GetHistory(s.Context(), env.Namespace(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we0.GetRunId(),
 	})

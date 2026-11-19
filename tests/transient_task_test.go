@@ -308,7 +308,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 		sawFieldsFlat = append(sawFieldsFlat, f.size, f.suggest)
 	}
 
-	allEvents := env.GetHistory(s.Context(), env.Namespace().String(), workflowExecution)
+	allEvents := env.GetHistory(s.Context(), env.Namespace(), workflowExecution)
 	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
