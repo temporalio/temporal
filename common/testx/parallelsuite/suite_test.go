@@ -45,22 +45,22 @@ func (s *exclusiveSuite) TestSetEnvironment(key, _ string) {
 	})
 }
 
-func TestRunWithPackageExclusiveMethods(t *testing.T) {
+func TestRunPackageExclusive(t *testing.T) {
 	const key = "TESTX_EXCLUSIVE_SUITE"
-	RunWithPackageExclusiveMethods(t, &exclusiveSuite{}, []string{"TestSetEnvironment"}, key, os.Getenv(key))
+	Run(t, &exclusiveSuite{}, PackageExclusive("TestSetEnvironment"), key, os.Getenv(key))
 }
 
-func TestRunWithPackageExclusiveMethodsRejectsSubtest(t *testing.T) {
+func TestRunPackageExclusiveRejectsSubtest(t *testing.T) {
 	t.Run("child", func(t *testing.T) {
-		require.PanicsWithValue(t, "parallelsuite.RunWithPackageExclusiveMethods: requires a top-level test", func() {
-			RunWithPackageExclusiveMethods(t, &exclusiveSuite{}, []string{"TestSetEnvironment"}, "TESTX_EXCLUSIVE_SUITE", "")
+		require.PanicsWithValue(t, "parallelsuite.PackageExclusive: requires a top-level test", func() {
+			Run(t, &exclusiveSuite{}, PackageExclusive("TestSetEnvironment"), "TESTX_EXCLUSIVE_SUITE", "")
 		})
 	})
 }
 
-func TestRunWithPackageExclusiveMethodsRejectsUnknownMethod(t *testing.T) {
-	require.PanicsWithValue(t, "parallelsuite.RunWithPackageExclusiveMethods: unknown test method TestMissing", func() {
-		RunWithPackageExclusiveMethods(t, &validSuite{}, []string{"TestMissing"})
+func TestRunPackageExclusiveRejectsUnknownMethod(t *testing.T) {
+	require.PanicsWithValue(t, "parallelsuite.PackageExclusive: unknown test method TestMissing", func() {
+		Run(t, &validSuite{}, PackageExclusive("TestMissing"))
 	})
 }
 

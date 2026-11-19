@@ -175,25 +175,37 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
 }
 
-// Run discovers and runs all exported Test* methods on the given suite in parallel.
-//
-// Each method gets its own fresh suite instance initialized for the subtest's
-// *testing.T. Both the suite-level test and each method subtest are marked as
-// parallel. Any sequential setup must happen before calling Run.
-//
-// The suite must embed [Suite] and have no other fields.
-func Run[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, true, nil, args...)
+// RunOption configures how [Run] schedules test methods.
+type RunOption struct {
+	exclusiveMethods []string
 }
 
-// RunWithPackageExclusiveMethods runs the named test methods and their subtests before
-// allowing the suite to run its remaining methods in parallel. Call it from a
-// top-level test without calling t.Parallel so the named methods run in isolation
-// from other tests in the package.
-func RunWithPackageExclusiveMethods[T TestingSuite](t *testing.T, s T, exclusiveMethods []string, args ...any) {
-	if strings.Contains(t.Name(), "/") {
+// PackageExclusive makes the named test methods and their subtests run in
+// isolation from other tests in the package. Their cleanup completes before
+// the rest of the suite runs in parallel. Use it with a top-level test that
+// leaves scheduling to [Run].
+func PackageExclusive(methods ...string) RunOption {
+	return RunOption{exclusiveMethods: slices.Clone(methods)}
+}
+
+// Run discovers and runs all exported Test* methods on the given suite.
+//
+// Each method gets its own fresh suite instance initialized for the subtest's
+// *testing.T. By default, the suite-level test and each method subtest are
+// marked as parallel. Any sequential setup must happen before calling Run.
+//
+// The suite must embed [Suite] and have no other fields. A [PackageExclusive]
+// option must come before any arguments passed to the test methods.
+func Run[T TestingSuite](t *testing.T, s T, args ...any) {
+	var exclusiveMethods []string
+	if len(args) > 0 {
+		if option, ok := args[0].(RunOption); ok {
+			exclusiveMethods, args = option.exclusiveMethods, args[1:]
+		}
+	}
+	if len(exclusiveMethods) > 0 && strings.Contains(t.Name(), "/") {
 		//nolint:forbidigo // Panics are fine in testing code.
-		panic("parallelsuite.RunWithPackageExclusiveMethods: requires a top-level test")
+		panic("parallelsuite.PackageExclusive: requires a top-level test")
 	}
 	run(t, s, true, exclusiveMethods, args...)
 }
@@ -226,7 +238,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, exclusiveMetho
 	for _, name := range exclusiveMethods {
 		if !slices.ContainsFunc(methods, func(method reflect.Method) bool { return method.Name == name }) {
 			//nolint:forbidigo // Panics are fine in testing code.
-			panic("parallelsuite.RunWithPackageExclusiveMethods: unknown test method " + name)
+			panic("parallelsuite.PackageExclusive: unknown test method " + name)
 		}
 	}
 

@@ -40,10 +40,9 @@ func Run[T parallelsuite.TestingSuite](t *testing.T, s T, args ...any) {
 	parallelsuite.Run(t, s, args...)
 }
 
-// RunWithPackageExclusiveMethods runs the named methods in isolation before running the rest in parallel.
-func RunWithPackageExclusiveMethods[T parallelsuite.TestingSuite](t *testing.T, s T, exclusiveMethods []string, args ...any) {
-	t.Helper()
-	parallelsuite.RunWithPackageExclusiveMethods(t, s, exclusiveMethods, args...)
+// PackageExclusive makes the named methods run in isolation from other tests in the package.
+func PackageExclusive(methods ...string) parallelsuite.RunOption {
+	return parallelsuite.PackageExclusive(methods...)
 }
 
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
