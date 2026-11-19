@@ -88,6 +88,15 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	})
 	require.NoError(t, err)
 	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
+	// A worker polls its sticky activity queue from startup; without a recent poll Matching treats it as gone.
+	_, err = poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
+		WorkerInstanceKey: tv.WorkerInstanceKey(),
+	}).HandleTask(tv, func(*workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		require.FailNow(t, "no activity task expected while registering the sticky activity poller")
+		return nil, nil
+	}, taskpoller.WithTimeout(stickyPollTimeout))
+	require.Error(t, err)
 	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()), WorkerInstanceKey: tv.WorkerInstanceKey(),
 	}).HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -113,7 +122,10 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{StickyAttributes: tv.StickyExecutionAttributes(time.Minute), Commands: commands}, nil
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
-	stickyPoller := poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{TaskQueue: tv.StickyTaskQueue()})
+	stickyPoller := poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
+		WorkerInstanceKey: tv.WorkerInstanceKey(),
+	})
 	_, err = stickyPoller.HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		require.Equal(t, "session-activity", task.ActivityId)
 		require.Equal(t, int32(1), task.Attempt)
@@ -196,7 +208,17 @@ func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.V
 	}
 
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
-	_, err := poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+	stickyActivityPoll := &workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()), WorkerInstanceKey: tv.WorkerInstanceKey(),
+	}
+	// A worker polls its sticky activity queue from startup; without a recent poll Matching treats it as gone.
+	_, err := poller.PollActivityTask(stickyActivityPoll).HandleTask(tv, func(*workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		s.FailNow("no activity task expected while registering the sticky activity poller")
+		return nil, nil
+	}, taskpoller.WithTimeout(stickyPollTimeout))
+	s.Require().Error(err)
+	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 		TaskQueue:         tv.TaskQueue(),
 		SessionOptions:    multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
@@ -222,9 +244,7 @@ func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.V
 		return
 	}
 
-	_, err = poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
-		TaskQueue: tv.StickyTaskQueue(), DeploymentOptions: tv.WorkerDeploymentOptions(true),
-	}).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+	_, err = poller.PollActivityTask(stickyActivityPoll).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		s.Require().Equal("session-activity", task.ActivityId)
 		return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
 	}, taskpoller.WithContext(s.Context()))

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -86,6 +88,19 @@ func (e *sessionMoveEnv) registerStickyPoller(worker string) {
 	require.Error(e.t, err)
 }
 
+// registerStickyActivityPoller makes a worker look alive on its sticky activity queue, as a real worker that polls
+// it from startup would. Without it, Matching treats the worker as gone and session activities fall back.
+func (e *sessionMoveEnv) registerStickyActivityPoller(worker string) {
+	_, err := e.poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: e.stickyQueue(worker), Identity: "worker-" + worker, SessionOptions: multiSessionWorkerOptions(e.stickyQueue(worker).GetName()),
+		WorkerInstanceKey: e.instanceKey(worker),
+	}).HandleTask(e.tv, func(*workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		require.FailNow(e.t, "no activity task expected while registering a sticky activity poller")
+		return nil, nil
+	}, taskpoller.WithTimeout(stickyPollTimeout))
+	require.Error(e.t, err)
+}
+
 func (e *sessionMoveEnv) pollActivityTask(queue *taskqueuepb.TaskQueue, timeout time.Duration) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	var task *workflowservice.PollActivityTaskQueueResponse
 	_, err := e.poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{TaskQueue: queue}).HandleTask(e.tv,
@@ -96,6 +111,41 @@ func (e *sessionMoveEnv) pollActivityTask(queue *taskqueuepb.TaskQueue, timeout 
 	return task, err
 }
 
+// completeActivityAs runs the session activity from queue as a session worker (worker != "") or as a worker without
+// session options, and returns its task.
+func (e *sessionMoveEnv) completeActivityAs(worker string, queue *taskqueuepb.TaskQueue) *workflowservice.PollActivityTaskQueueResponse {
+	return e.runActivityAs(worker, queue, func() (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
+	})
+}
+
+// failActivityAs is completeActivityAs with a retryable failure, so the activity backs off and retries.
+func (e *sessionMoveEnv) failActivityAs(worker string, queue *taskqueuepb.TaskQueue) *workflowservice.PollActivityTaskQueueResponse {
+	return e.runActivityAs(worker, queue, func() (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		return nil, temporal.NewApplicationError("retry", "retryable")
+	})
+}
+
+func (e *sessionMoveEnv) runActivityAs(
+	worker string,
+	queue *taskqueuepb.TaskQueue,
+	respond func() (*workflowservice.RespondActivityTaskCompletedRequest, error),
+) *workflowservice.PollActivityTaskQueueResponse {
+	request := &workflowservice.PollActivityTaskQueueRequest{TaskQueue: queue, Identity: "worker-" + worker}
+	if worker != "" {
+		request.SessionOptions = multiSessionWorkerOptions(e.stickyQueue(worker).GetName())
+		request.WorkerInstanceKey = e.instanceKey(worker)
+	}
+	var task *workflowservice.PollActivityTaskQueueResponse
+	_, err := e.poller.PollActivityTask(request).HandleTask(e.tv,
+		func(t *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			task = t
+			return respond()
+		}, taskpoller.WithTimeout(30*time.Second))
+	require.NoError(e.t, err)
+	return task
+}
+
 func (e *sessionMoveEnv) signal() {
 	_, err := e.env.FrontendClient().SignalWorkflowExecution(e.t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: e.env.Namespace().String(), WorkflowExecution: e.tv.WorkflowExecution(), SignalName: "wake", Identity: "client",
@@ -104,22 +154,35 @@ func (e *sessionMoveEnv) signal() {
 }
 
 func (e *sessionMoveEnv) scheduleSessionActivity(id string) *commandpb.Command {
+	command := e.scheduleActivity(id)
+	command.GetScheduleActivityTaskCommandAttributes().SessionOptions = &sessionpb.ActivitySessionOptions{
+		Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}},
+	}
+	return command
+}
+
+// scheduleActivity schedules an activity that is not part of the workflow session.
+func (e *sessionMoveEnv) scheduleActivity(id string) *commandpb.Command {
 	return &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId: id, ActivityType: e.tv.ActivityType(), TaskQueue: e.tv.TaskQueue(),
 			ScheduleToCloseTimeout: durationpb.New(2 * time.Minute), StartToCloseTimeout: durationpb.New(time.Minute),
-			SessionOptions: &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
 		}},
 	}
 }
 
-// bindToA starts the session on worker A from the normal queue and schedules one session activity, which is
-// dispatched to A's sticky queue. A never polls its sticky queue, so Matching considers it unavailable.
+// bindToA starts the session on worker A from the normal queue and schedules one session activity. A never polls
+// its sticky queues, so Matching considers it unavailable and the activity falls back to the normal queue.
 func (e *sessionMoveEnv) bindToA(stickyScheduleToStart time.Duration) {
+	e.bindToAWith(stickyScheduleToStart, e.scheduleSessionActivity("session-activity"))
+}
+
+// bindToAWith is bindToA with the given commands instead of the single session activity.
+func (e *sessionMoveEnv) bindToAWith(stickyScheduleToStart time.Duration, commands ...*commandpb.Command) {
 	err := e.pollWorkflowTask("A", e.tv.TaskQueue(), 30*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*commandpb.Command{e.scheduleSessionActivity("session-activity")}, StickyAttributes: e.stickyAttributes("A", stickyScheduleToStart),
+			Commands: commands, StickyAttributes: e.stickyAttributes("A", stickyScheduleToStart),
 		}, nil
 	})
 	require.NoError(e.t, err)
@@ -160,6 +223,7 @@ func TestWorkflowSessionMovesWithWorkflowTask(t *testing.T) {
 	e.bindToA(time.Second)
 
 	e.signal()
+	e.registerStickyActivityPoller("B")
 	e.completeOn("B", e.tv.TaskQueue(), 30*time.Second)
 
 	e.requireSessionActivityOn(e.stickyQueue("B"))
@@ -222,6 +286,7 @@ func TestWorkflowSessionRecoversWhenNewWorkerCrashesMidTask(t *testing.T) {
 	})
 	require.Error(t, err, "B's late failure response is rejected because its task already timed out")
 
+	e.registerStickyActivityPoller("C")
 	e.completeOn("C", e.tv.TaskQueue(), time.Minute)
 	e.requireSessionActivityOn(e.stickyQueue("C"))
 
@@ -256,6 +321,7 @@ func TestWorkflowSessionDroppedAndRebound(t *testing.T) {
 	e.completeOn("", e.tv.TaskQueue(), 30*time.Second)
 
 	e.signal()
+	e.registerStickyActivityPoller("W")
 	e.completeOn("W", e.tv.TaskQueue(), 30*time.Second)
 
 	e.requireNoActivityOn(e.tv.TaskQueue())
@@ -300,6 +366,156 @@ func TestWorkflowSessionKeepsWorkerAfterFailedUpdateTask(t *testing.T) {
 
 	err := e.pollWorkflowTask("B", e.tv.TaskQueue(), stickyPollTimeout, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.FailNow(t, "the retry after a failed update task must stay on the session worker")
+		return nil, nil
+	})
+	require.Error(t, err)
+}
+
+/*
+TestWorkflowSessionMovesWithActivity tests an activity leading a session move:
+ 1. Worker A binds the session and schedules a session activity; A is dead, so the activity falls back to the
+    normal queue.
+ 2. Session worker Y starts the activity from the normal queue, moving the session to Y.
+ 3. The workflow task that the activity's completion schedules is delivered on Y's sticky queue.
+*/
+func TestWorkflowSessionMovesWithActivity(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToA(time.Second)
+
+	e.registerStickyPoller("Y")
+	e.completeActivityAs("Y", e.tv.TaskQueue())
+
+	e.completeOn("Y", e.stickyQueue("Y"), 10*time.Second)
+}
+
+/*
+TestWorkflowSessionDroppedByActivity tests a worker without session options starting a session activity:
+ 1. Worker A binds the session; its session activity falls back to the normal queue because A never polls its
+    sticky activity queue.
+ 2. A then polls its sticky workflow queue, so it is alive for workflow tasks. This is a test device: a real worker
+    polls both sticky queues. It makes the outcomes distinguishable, since a workflow still bound to a live A would
+    get its next workflow task in A's backlog, while an unbound one gets it on the normal queue.
+ 3. A worker without session options starts the activity, which unbinds the workflow, so the workflow task its
+    completion schedules is delivered on the normal queue.
+*/
+func TestWorkflowSessionDroppedByActivity(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToA(time.Second)
+
+	e.registerStickyPoller("A")
+	e.completeActivityAs("", e.tv.TaskQueue())
+
+	e.completeOn("", e.tv.TaskQueue(), 10*time.Second)
+}
+
+/*
+TestWorkflowSessionMovesWithActivityRetry tests a retry leading a session move (no workflow task in between):
+ 1. Worker A binds the session, runs the session activity's first attempt, and fails it, so the activity backs off.
+ 2. A dies. When the retry timer fires, the retry is pushed to A's sticky queue, Matching reports A unavailable,
+    and History falls back to the normal queue.
+ 3. Session worker Y starts the retry, moving the session to Y, and the next workflow task goes to Y's sticky queue.
+*/
+func TestWorkflowSessionMovesWithActivityRetry(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToA(time.Second)
+	require.Equal(t, int32(1), e.failActivityAs("A", e.tv.TaskQueue()).GetAttempt())
+
+	e.registerStickyPoller("Y")
+	require.Equal(t, int32(2), e.completeActivityAs("Y", e.tv.TaskQueue()).GetAttempt())
+
+	e.completeOn("Y", e.stickyQueue("Y"), 10*time.Second)
+}
+
+/*
+TestWorkflowSessionActivityStaysOnLiveWorker tests the happy path of a session activity on a live bound worker:
+ 1. Worker A polls its sticky activity queue and binds the session, so the session activity is queued at A.
+ 2. Worker Y polling the normal queue never gets it, even while A has not picked it up yet.
+ 3. A starts it from its own sticky queue, which keeps the binding: the next workflow task goes to A's sticky queue.
+*/
+func TestWorkflowSessionActivityStaysOnLiveWorker(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.registerStickyActivityPoller("A")
+	e.bindToA(30 * time.Second)
+
+	e.requireNoActivityOn(e.tv.TaskQueue())
+	e.registerStickyPoller("A")
+	require.Equal(t, "session-activity", e.completeActivityAs("A", e.stickyQueue("A")).GetActivityId())
+
+	e.completeOn("A", e.stickyQueue("A"), 10*time.Second)
+}
+
+/*
+TestWorkflowSessionNotMovedByNonSessionActivity tests that only session activities move the session:
+ 1. Worker A binds the session and schedules an activity outside the session, which goes to the normal queue.
+ 2. Session worker Y starts and completes that activity.
+ 3. The binding stays on A: the workflow task the completion schedules is delivered on A's sticky queue.
+*/
+func TestWorkflowSessionNotMovedByNonSessionActivity(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToAWith(30*time.Second, e.scheduleActivity("regular-activity"))
+
+	e.registerStickyPoller("A")
+	require.Equal(t, "regular-activity", e.completeActivityAs("Y", e.tv.TaskQueue()).GetActivityId())
+
+	e.completeOn("A", e.stickyQueue("A"), 10*time.Second)
+}
+
+/*
+TestWorkflowSessionActivityMoveReschedulesAllPendingActivities tests that a move carries a batch of session work:
+ 1. Worker A binds the session and schedules 10 session activities; A is dead, so they fall back to the normal
+    queue.
+ 2. Session worker Y starts one of them, moving the session to Y.
+ 3. The other 9 are rescheduled onto Y's sticky queue in the same move, and the copies left on the normal queue
+    are obsolete.
+*/
+func TestWorkflowSessionActivityMoveReschedulesAllPendingActivities(t *testing.T) {
+	t.Parallel()
+	const activities = 10
+	e := newSessionMoveEnv(t, 10*time.Second)
+	var commands []*commandpb.Command
+	for i := range activities {
+		commands = append(commands, e.scheduleSessionActivity(fmt.Sprintf("session-activity-%d", i)))
+	}
+	e.bindToAWith(30*time.Second, commands...)
+
+	e.registerStickyActivityPoller("Y")
+	first := e.completeActivityAs("Y", e.tv.TaskQueue()).GetActivityId()
+
+	rescheduled := map[string]bool{}
+	for range activities - 1 {
+		rescheduled[e.completeActivityAs("Y", e.stickyQueue("Y")).GetActivityId()] = true
+	}
+	require.Len(t, rescheduled, activities-1)
+	require.NotContains(t, rescheduled, first)
+	e.requireNoActivityOn(e.tv.TaskQueue())
+}
+
+/*
+TestWorkflowSessionActivityMoveReschedulesPendingWorkflowTask tests that a pending workflow task follows an
+activity-led move:
+ 1. Worker A binds the session and is alive for workflow tasks; its session activity falls back to the normal queue.
+ 2. A signal schedules a workflow task, which is queued in A's sticky backlog.
+ 3. Session worker Y starts the session activity, moving the session to Y; the pending workflow task is rescheduled
+    onto Y's sticky queue, and the copy in A's backlog is obsolete.
+*/
+func TestWorkflowSessionActivityMoveReschedulesPendingWorkflowTask(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToA(30 * time.Second)
+
+	e.registerStickyPoller("A")
+	e.signal()
+	e.registerStickyPoller("Y")
+	e.completeActivityAs("Y", e.tv.TaskQueue())
+
+	e.completeOn("Y", e.stickyQueue("Y"), 10*time.Second)
+	err := e.pollWorkflowTask("A", e.stickyQueue("A"), stickyPollTimeout, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.FailNow(t, "the copy in A's backlog must be obsolete after the move")
 		return nil, nil
 	})
 	require.Error(t, err)

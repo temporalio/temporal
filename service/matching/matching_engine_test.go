@@ -7436,6 +7436,14 @@ func (s *matchingEngineSuite) testStickyActivityRouting(versioned, mismatchedDep
 	partition, err := tqid.PartitionFromProto(queue, tv.NamespaceID().String(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Require().NoError(err)
 	key := UnversionedQueueKey(partition)
+	// A recent poll keeps the sticky worker available; without it the push would fall back to the normal queue.
+	stickyManager, _, err := s.matchingEngine.getTaskQueuePartitionManager(s.T().Context(), partition, true, loadCauseUnspecified)
+	s.Require().NoError(err)
+	s.Require().NoError(stickyManager.WaitUntilInitialized(s.T().Context()))
+	_, _, err = stickyManager.PollTask(context.WithValue(s.T().Context(), identityKey, tv.WorkerIdentity()), &pollMetadata{
+		conditions: &matchingservice.PollConditions{NoWait: true},
+	})
+	s.Require().ErrorIs(err, errNoTasks)
 	_, syncMatch, err := s.matchingEngine.AddActivityTask(s.T().Context(), &matchingservice.AddActivityTaskRequest{
 		NamespaceId: tv.NamespaceID().String(), Execution: tv.WorkflowExecution(),
 		TaskQueue: queue, ScheduledEventId: 5, ScheduleToStartTimeout: durationpb.New(time.Minute), VersionDirective: directive,
@@ -7601,10 +7609,10 @@ func TestQueryWorkflowAssignedStickyReadFailure(t *testing.T) {
 	require.Empty(t, engine.partitions)
 }
 
-// TestMultiSessionTaskAdmission verifies heartbeat lookup is an additive admission path for a busy multi-session worker.
-// History names the bound worker's instance key in the session directive, so the lookup also works after the sticky
-// partition was unloaded or moved and has forgotten its pollers. Ordinary and exclusive destinations retain their
-// existing rules, and lookup failures must not become worker-death signals.
+// TestMultiSessionTaskAdmission verifies heartbeat lookup is an additive admission path for a busy multi-session worker,
+// for workflow and activity tasks alike. History names the bound worker's instance key in the session directive, so the
+// lookup also works after the sticky partition was unloaded or moved and has forgotten its pollers. Ordinary and
+// exclusive destinations retain their existing rules, and lookup failures must not become worker-death signals.
 func (s *matchingEngineSuite) TestMultiSessionTaskAdmission() {
 	for _, tc := range []struct {
 		name      string
@@ -7629,78 +7637,88 @@ func (s *matchingEngineSuite) TestMultiSessionTaskAdmission() {
 		{name: "reloaded partition, worker still heartbeating", mode: "multi-session", directive: "non-exclusive", unloaded: true, lookup: true, admitted: true},
 		{name: "reloaded partition, worker gone", mode: "multi-session", directive: "non-exclusive", unloaded: true, lookup: true, lookupErr: serviceerror.NewNotFound("worker missing")},
 	} {
-		s.Run(tc.name, func() {
-			t := s.T()
-			ctx := t.Context()
-			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
-			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
-			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
-			require.NoError(t, err)
-			require.NoError(t, pm.WaitUntilInitialized(ctx))
-			queue := pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl)
-			metadata := &pollMetadata{workerInstanceKey: tv.WorkerInstanceKey(), conditions: &matchingservice.PollConditions{NoWait: true}}
-			switch tc.mode {
-			case "multi-session":
-				metadata.sessionOptions = multiSessionOptions(tv.StickyTaskQueue().GetName())
-			case "exclusive":
-				require.NoError(t, queue.AssignExclusiveWorker())
-				metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
-					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: partition.RpcName()},
-				}}
-			default:
-				require.Equal(t, "ordinary", tc.mode)
-			}
-			pollCtx := context.WithValue(ctx, identityKey, tv.WorkerIdentity())
-			_, _, err = pm.PollTask(pollCtx, metadata)
-			require.ErrorIs(t, err, errNoTasks)
-			if !tc.recent {
-				// Poll history can disappear independently while the worker continues heartbeating.
-				queue.RemovePoller(pollerIdentity(tv.WorkerIdentity()))
-				require.False(t, stickyWorkerAvailable(pm))
-			}
-			if tc.lookup {
-				s.mockMatchingClient.EXPECT().DescribeWorker(gomock.Any(), &matchingservice.DescribeWorkerRequest{
-					NamespaceId: tv.NamespaceID().String(),
-					Request:     &workflowservice.DescribeWorkerRequest{Namespace: s.ns.Name().String(), WorkerInstanceKey: tv.WorkerInstanceKey()},
-				}).Return(&matchingservice.DescribeWorkerResponse{}, tc.lookupErr)
-			}
-
-			var sessionDirective *taskqueuespb.TaskSessionDirective
-			if tc.directive != "" {
-				worker := &taskqueuespb.BoundWorkerInfo{WorkerQueue: partition.RpcName(), InstanceKey: tv.WorkerInstanceKey()}
-				if tc.noKey {
-					worker.InstanceKey = ""
-				}
-				sessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: worker, IsExclusiveWorkerAssigned: tc.directive == "exclusive"}
-			}
-			if tc.unloaded {
-				s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)
-			}
-			_, syncMatch, err := s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
-				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
-				ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute), SessionDirective: sessionDirective,
-			})
-			if tc.unloaded {
-				current, _, loadErr := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
-				require.NoError(t, loadErr)
-				require.NotNil(t, current)
-				require.NotSame(t, pm, current)
-			}
-			require.False(t, syncMatch)
-			if tc.admitted {
+		for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+			s.Run(taskType.String()+"/"+tc.name, func() {
+				t := s.T()
+				ctx := t.Context()
+				tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+				partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+				pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
 				require.NoError(t, err)
-				require.Equal(t, 1, s.v1TaskManager.getTaskCount(queue.queue)+s.fairTaskManager.getTaskCount(queue.queue))
-			} else {
-				if _, unavailable := errors.AsType[*serviceerror.Unavailable](tc.lookupErr); unavailable {
-					require.ErrorIs(t, err, tc.lookupErr)
-				} else {
-					require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+				require.NoError(t, pm.WaitUntilInitialized(ctx))
+				queue := pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl)
+				metadata := &pollMetadata{workerInstanceKey: tv.WorkerInstanceKey(), conditions: &matchingservice.PollConditions{NoWait: true}}
+				switch tc.mode {
+				case "multi-session":
+					metadata.sessionOptions = multiSessionOptions(tv.StickyTaskQueue().GetName())
+				case "exclusive":
+					require.NoError(t, queue.AssignExclusiveWorker())
+					metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: partition.RpcName()},
+					}}
+				default:
+					require.Equal(t, "ordinary", tc.mode)
 				}
-				require.Zero(t, s.v1TaskManager.getTaskCount(queue.queue)+s.fairTaskManager.getTaskCount(queue.queue))
-			}
-			normal := newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-			require.Zero(t, s.v1TaskManager.getTaskCount(normal)+s.fairTaskManager.getTaskCount(normal))
-		})
+				pollCtx := context.WithValue(ctx, identityKey, tv.WorkerIdentity())
+				_, _, err = pm.PollTask(pollCtx, metadata)
+				require.ErrorIs(t, err, errNoTasks)
+				if !tc.recent {
+					// Poll history can disappear independently while the worker continues heartbeating.
+					queue.RemovePoller(pollerIdentity(tv.WorkerIdentity()))
+					require.False(t, stickyWorkerAvailable(pm))
+				}
+				if tc.lookup {
+					s.mockMatchingClient.EXPECT().DescribeWorker(gomock.Any(), &matchingservice.DescribeWorkerRequest{
+						NamespaceId: tv.NamespaceID().String(),
+						Request:     &workflowservice.DescribeWorkerRequest{Namespace: s.ns.Name().String(), WorkerInstanceKey: tv.WorkerInstanceKey()},
+					}).Return(&matchingservice.DescribeWorkerResponse{}, tc.lookupErr)
+				}
+
+				var sessionDirective *taskqueuespb.TaskSessionDirective
+				if tc.directive != "" {
+					worker := &taskqueuespb.BoundWorkerInfo{WorkerQueue: partition.RpcName(), InstanceKey: tv.WorkerInstanceKey()}
+					if tc.noKey {
+						worker.InstanceKey = ""
+					}
+					sessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: worker, IsExclusiveWorkerAssigned: tc.directive == "exclusive"}
+				}
+				if tc.unloaded {
+					s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)
+				}
+				var syncMatch bool
+				if taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+					_, syncMatch, err = s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+						NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+						ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute), SessionDirective: sessionDirective,
+					})
+				} else {
+					_, syncMatch, err = s.matchingEngine.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+						NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+						ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute), SessionDirective: sessionDirective,
+					})
+				}
+				if tc.unloaded {
+					current, _, loadErr := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+					require.NoError(t, loadErr)
+					require.NotNil(t, current)
+					require.NotSame(t, pm, current)
+				}
+				require.False(t, syncMatch)
+				if tc.admitted {
+					require.NoError(t, err)
+					require.Equal(t, 1, s.v1TaskManager.getTaskCount(queue.queue)+s.fairTaskManager.getTaskCount(queue.queue))
+				} else {
+					if _, unavailable := errors.AsType[*serviceerror.Unavailable](tc.lookupErr); unavailable {
+						require.ErrorIs(t, err, tc.lookupErr)
+					} else {
+						require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+					}
+					require.Zero(t, s.v1TaskManager.getTaskCount(queue.queue)+s.fairTaskManager.getTaskCount(queue.queue))
+				}
+				normal := newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().GetName(), taskType)
+				require.Zero(t, s.v1TaskManager.getTaskCount(normal)+s.fairTaskManager.getTaskCount(normal))
+			})
+		}
 	}
 }
 
