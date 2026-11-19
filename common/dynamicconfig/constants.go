@@ -872,8 +872,7 @@ Runtime requests are internal per-namespace task-queue polls, non-sticky query t
 and workflow task responses, activity task responses, activity heartbeats, and history reads for workflows whose ID
 starts with "temporal-sys-". Actions that system workflows take on customer workflows, such as scheduled starts
 and batch operations, keep using the regular namespace rate limit, as does the runtime traffic of batch operation
-workflows, whose ID is customer supplied. Clients can imitate these request shapes, so keep the internal limit
-bounded. Applies to the frontend service only; internal-frontend already separates system worker traffic.`,
+workflows, whose ID is customer supplied.`,
 	)
 	FrontendInternalPerNSMaxNamespaceRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.internalPerNSNamespaceRPS",
