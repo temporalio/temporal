@@ -382,7 +382,7 @@ func (s *ArchivalSuite) historyIsDeleted(env *archivalTestEnv, workflowInfo arch
 	shardID := common.WorkflowIDToHistoryShard(
 		env.archivalNamespaceID.String(),
 		workflowInfo.execution.WorkflowId,
-		env.HistoryShardCount(),
+		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 
 	s.Eventually(func() bool {
@@ -407,7 +407,7 @@ func (s *ArchivalSuite) historyIsDeleted(env *archivalTestEnv, workflowInfo arch
 
 func (s *ArchivalSuite) mutableStateIsDeleted(env *archivalTestEnv, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) {
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(),
-		env.HistoryShardCount())
+		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 	request := &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: namespaceID.String(),
