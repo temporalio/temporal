@@ -499,8 +499,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, err
 	}
 
-	// An unbound workflow still accepts session activities; they run from the normal queue until a
-	// multi-session worker binds the workflow again.
+	// Only a workflow task started by a multi-session worker may schedule workflow-session activities. Core
+	// enforces this in the SDK; the server mirrors it for other clients.
 	if attr.GetSessionOptions().GetWorkflowSession() != nil && executionInfo.GetSessionState() == nil {
 		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to have been started by a multi-session worker")
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
