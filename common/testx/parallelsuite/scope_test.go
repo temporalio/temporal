@@ -1,11 +1,11 @@
 package parallelsuite_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
-	"go.temporal.io/testx/await"
 	"go.temporal.io/testx/parallelsuite"
 )
 
@@ -31,6 +31,7 @@ func (s *scopeAssertionsSuite) TestSuiteHelpers() {
 }
 
 func (s *scopeAssertionsSuite) TestAwaitHelpersRetryFailedAssertions() {
+	const timeout = time.Second
 	checks := map[string]func(parallelsuite.Scope){
 		"NoError":  func(s parallelsuite.Scope) { s.NoError(errors.New("not ready")) },
 		"Equal":    func(s parallelsuite.Scope) { s.Equal("ready", "pending") },
@@ -41,17 +42,24 @@ func (s *scopeAssertionsSuite) TestAwaitHelpersRetryFailedAssertions() {
 	}
 	for name, check := range checks {
 		s.Run(name, func(s *scopeAssertionsSuite) {
+			type contextKey struct{}
+			ctx := context.WithValue(s.Context(), contextKey{}, name)
+			scope := parallelsuite.WithContext(ctx, s)
 			attempts := 0
 			completed := 0
-			await.Require(s.Context(), s.T(), func(t *await.T) {
+			parallelsuite.Await(scope, func(s parallelsuite.Scope) {
 				attempts++
-				scope := parallelsuite.WithContext(t.Context(), t)
 				if attempts == 1 {
-					check(scope)
+					check(s)
 				}
-				checkScopeAssertions(scope)
+				checkScopeAssertions(s)
+				s.Equal(name, s.Context().Value(contextKey{}))
+				deadline, ok := s.Context().Deadline()
+				s.True(ok, "await context must have a deadline")
+				remaining := time.Until(deadline)
+				s.True(remaining <= timeout, "await deadline is %v away; want at most %v", remaining, timeout)
 				completed++
-			}, time.Second, time.Millisecond)
+			}, timeout, time.Millisecond)
 			s.Equal(2, attempts)
 			s.Equal(1, completed)
 		})
