@@ -48,3 +48,6 @@
 
 # Ignoring AI agent files
 .agents/
+
+# rapid failfiles; replayed locally, never committed.
+**/testdata/rapid/
