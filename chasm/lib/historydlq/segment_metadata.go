@@ -36,6 +36,15 @@ type SegmentStats struct {
 }
 
 func (s *Segment) logCorruptEntry(ctx chasm.Context, key, operation string, err error) {
+	ctx.Logger().Error("History DLQ message could not be processed and was retained", s.corruptEntryTags(ctx, key, operation, err)...)
+	metrics.HistoryDLQCorruptEntry.With(ctx.MetricsHandler()).Record(1)
+}
+
+func (s *Segment) logPurgedCorruptEntry(ctx chasm.Context, key string, err error) {
+	ctx.Logger().Warn("History DLQ message with invalid metadata was purged", s.corruptEntryTags(ctx, key, "ResolveEntries", err)...)
+}
+
+func (s *Segment) corruptEntryTags(ctx chasm.Context, key, operation string, err error) []tag.Tag {
 	queue := s.GetQueue()
 	tags := []tag.Tag{
 		tag.TaskCategoryID(int(queue.GetTaskCategory())),
@@ -49,8 +58,7 @@ func (s *Segment) logCorruptEntry(ctx chasm.Context, key, operation string, err 
 	if ok && entry != nil && entry.EntryState != nil && entry.GetMessageId() >= 0 {
 		tags = append(tags, tag.DLQMessageID(entry.GetMessageId()))
 	}
-	ctx.Logger().Error("History DLQ message could not be processed and was retained", tags...)
-	metrics.HistoryDLQCorruptEntry.With(ctx.MetricsHandler()).Record(1)
+	return tags
 }
 
 func validateSegmentRef(ref SegmentRef) error {

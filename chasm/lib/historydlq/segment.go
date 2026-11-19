@@ -91,7 +91,7 @@ func (s *Segment) Append(ctx chasm.MutableContext, req EnqueueRequest) (appendRe
 	if err != nil {
 		return appendResult{}, err
 	}
-	entryBytes := int64(proto.Size(entry.EntryState)+len(entryKey)) + entry.GetPayloadSizeBytes() + segmentNodeReserve
+	entryBytes := entryRetainedBytes(entryKey, entry.EntryState)
 	if entryBytes > segmentRetainedBytesLimit-s.GetRetainedBytes() {
 		return appendResult{}, segmentBudgetExceededErr
 	}
@@ -107,6 +107,11 @@ func (s *Segment) Append(ctx chasm.MutableContext, req EnqueueRequest) (appendRe
 	}, nil
 }
 
+// entryRetainedBytes returns the bytes Append charges for an entry.
+func entryRetainedBytes(entryKey string, state *historydlqpb.EntryState) int64 {
+	return int64(proto.Size(state)+len(entryKey)) + state.GetPayloadSizeBytes() + segmentNodeReserve
+}
+
 func (s *Segment) ReadEntry(ctx chasm.Context, ref MessageRef) (StoredMessage, error) {
 	entry, err := s.findEntry(ctx, ref)
 	if err != nil {
@@ -119,6 +124,7 @@ func (s *Segment) ReadEntry(ctx chasm.Context, ref MessageRef) (StoredMessage, e
 }
 
 // ResolveEntry deletes an entry and its payload. Missing entries are already resolved.
+// Merging an entry with invalid metadata returns DataLoss and keeps the entry.
 func (s *Segment) ResolveEntry(ctx chasm.MutableContext, ref MessageRef, reason historydlqpb.Resolution) error {
 	result, err := s.ResolveEntries(ctx, ResolveEntriesRequest{
 		Segment:    SegmentRef{Queue: ref.Queue, BusinessID: ref.BusinessID, RunID: ref.RunID},

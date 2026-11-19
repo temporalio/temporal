@@ -77,7 +77,7 @@ func TestSegmentCorruptMetadataPagination(t *testing.T) {
 	protorequire.ProtoEqual(t, corruptState, segment.Entries[refs[2].EntryKey].Get(ctx).EntryState)
 }
 
-func TestResolveEntriesRetainsCorruptMetadata(t *testing.T) {
+func TestResolveEntriesMergeRetainsCorruptMetadata(t *testing.T) {
 	t.Parallel()
 	for _, corruption := range []string{"missing child", "missing state", "missing timestamp", "identity mismatch", "invalid message ID"} {
 		t.Run(corruption, func(t *testing.T) {
@@ -104,6 +104,7 @@ func TestResolveEntriesRetainsCorruptMetadata(t *testing.T) {
 			}
 			corruptField := segment.Entries[corruptKey]
 			request := resolutionRequest(refs[0], refs[0].EntryKey, corruptKey, refs[1].EntryKey, corruptKey, "absent")
+			request.Resolution = historydlqpb.RESOLUTION_MERGED
 			resolvedKeys := []string{refs[0].EntryKey, refs[1].EntryKey, "absent"}
 			slices.Sort(resolvedKeys)
 			want := ResolveEntriesResult{ResolvedEntryKeys: resolvedKeys, CorruptEntryKeys: []string{corruptKey}}
@@ -117,7 +118,7 @@ func TestResolveEntriesRetainsCorruptMetadata(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, want, retry)
 			require.Equal(t, retainedBytes, segment.GetRetainedBytes())
-			err = segment.ResolveEntry(ctx, refs[2], historydlqpb.RESOLUTION_PURGED)
+			err = segment.ResolveEntry(ctx, refs[2], historydlqpb.RESOLUTION_MERGED)
 			require.ErrorAs(t, err, new(*serviceerror.DataLoss))
 			require.ErrorContains(t, err, corruptKey)
 			page, err := segment.ListEntries(ctx, ListEntriesRequest{
@@ -125,6 +126,67 @@ func TestResolveEntriesRetainsCorruptMetadata(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, EntryPage{CorruptEntryKeys: []string{corruptKey}}, page)
+		})
+	}
+}
+
+func TestResolveEntriesPurgeDeletesCorruptMetadata(t *testing.T) {
+	t.Parallel()
+	for _, corruption := range []string{"missing child", "missing state", "missing timestamp", "identity mismatch", "invalid message ID"} {
+		t.Run(corruption, func(t *testing.T) {
+			t.Parallel()
+			segment, ctx, refs, emptyBytes := resolutionFixture(t)
+			corruptKey := refs[2].EntryKey
+			entry := segment.Entries[corruptKey].Get(ctx)
+			originalState := proto.Clone(entry.EntryState).(*historydlqpb.EntryState)
+			chargedBytes := entryRetainedBytes(corruptKey, originalState)
+			// Entries without metadata reclaim a lower bound, so part of their charge stays retained.
+			// Corrupt state that is still present is trusted for the reclaimed size.
+			var unreclaimedBytes int64
+			switch corruption {
+			case "missing child":
+				segment.Entries[corruptKey] = chasm.Field[*Entry]{}
+				unreclaimedBytes = chargedBytes - entryRetainedBytes(corruptKey, nil)
+			case "missing state":
+				entry.EntryState = nil
+				unreclaimedBytes = int64(proto.Size(originalState))
+			case "missing timestamp":
+				entry.EnqueuedAt = nil
+				unreclaimedBytes = chargedBytes - entryRetainedBytes(corruptKey, entry.EntryState)
+			case "identity mismatch":
+				entry.SourceTaskIdentity.TaskId++
+				unreclaimedBytes = chargedBytes - entryRetainedBytes(corruptKey, entry.EntryState)
+			case "invalid message ID":
+				entry.MessageId = -1
+				unreclaimedBytes = chargedBytes - entryRetainedBytes(corruptKey, entry.EntryState)
+			default:
+				t.Fatalf("unknown corruption: %s", corruption)
+			}
+			core, logs := observer.New(zap.WarnLevel)
+			observedCtx := corruptionTestContext{MockMutableContext: ctx, logger: log.NewZapLogger(zap.New(core))}
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			t.Cleanup(func() { handler.StopCapture(capture) })
+			ctx.HandleMetricsHandler = func() metrics.Handler { return handler }
+			request := resolutionRequest(refs[0], refs[0].EntryKey, corruptKey, refs[1].EntryKey, corruptKey, "absent")
+			resolvedKeys := []string{refs[0].EntryKey, refs[1].EntryKey, corruptKey, "absent"}
+			slices.Sort(resolvedKeys)
+			want := ResolveEntriesResult{ResolvedEntryKeys: resolvedKeys}
+			result, err := segment.ResolveEntries(observedCtx, request)
+			require.NoError(t, err)
+			require.Equal(t, want, result)
+			require.Empty(t, segment.Entries)
+			require.Equal(t, int64(-1), segment.GetMinMessageId())
+			require.Equal(t, emptyBytes+unreclaimedBytes, segment.GetRetainedBytes())
+			require.Len(t, logs.All(), 1)
+			require.Equal(t, zap.WarnLevel, logs.All()[0].Level)
+			require.Equal(t, "History DLQ message with invalid metadata was purged", logs.All()[0].Message)
+			require.Equal(t, corruptKey, logs.All()[0].ContextMap()["entry-key"])
+			require.Empty(t, capture.SnapshotMetric(metrics.HistoryDLQCorruptEntry.Name()))
+			retry, err := segment.ResolveEntries(ctx, request)
+			require.NoError(t, err)
+			require.Equal(t, want, retry)
+			require.Equal(t, emptyBytes+unreclaimedBytes, segment.GetRetainedBytes())
 		})
 	}
 }
@@ -189,6 +251,7 @@ func TestResolveEntriesLogsCorruptEntryOnce(t *testing.T) {
 			corruptKey := refs[tc.corruptIndex].EntryKey
 			segment.Entries[corruptKey] = chasm.Field[*Entry]{}
 			request := resolutionRequest(refs[0])
+			request.Resolution = historydlqpb.RESOLUTION_MERGED
 			if tc.selected {
 				request.EntryKeys = append(request.EntryKeys, corruptKey, corruptKey)
 			}
