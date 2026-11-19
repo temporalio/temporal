@@ -12,8 +12,8 @@ import (
 // event (WorkflowExecutionUpdateAdmitted is only written when reapplying on reset).
 const WorkflowHeartbeatNotificationUpdateAdmittedMetricTag = "UpdateAdmitted"
 
-// isWorkflowHeartbeatNotificationInputEnabled checks rollout.
-func isWorkflowHeartbeatNotificationInputEnabled(
+// isWorkflowHeartbeatNotificationEnabled checks rollout.
+func isWorkflowHeartbeatNotificationEnabled(
 	shardCtx historyi.ShardContext, namespaceName, workflowID string) bool {
 	config := shardCtx.GetConfig()
 	rolloutPercent := config.WorkflowHeartbeatNotificationRolloutPercent(namespaceName)
@@ -112,11 +112,12 @@ func (c *ContextImpl) handleWorkflowHeartbeatNotification(
 
 // SendWorkflowHeartbeatNotification applies the workflow-sticky rollout before notifying the worker.
 // Callers must first verify that an eligible input is waiting behind the started Workflow Task.
+// It runs on the critical path of customer-facing APIs, so it must be low latency.
 func SendWorkflowHeartbeatNotification(shardCtx historyi.ShardContext, namespaceName, workflowID string) {
-	if !isWorkflowHeartbeatNotificationInputEnabled(shardCtx, namespaceName, workflowID) {
+	if !isWorkflowHeartbeatNotificationEnabled(shardCtx, namespaceName, workflowID) {
 		return
 	}
-	// TODO(whn): Dispatch to the worker holding the started Workflow Task.
+	// TODO(whn): Dispatch asynchronously to the worker holding the started Workflow Task.
 }
 
 // hasPendingUpdateForWorkflowHeartbeatNotification checks for unsent Updates in the existing, current-version Registry.

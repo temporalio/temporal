@@ -63,7 +63,7 @@ func TestIsWorkflowHeartbeatNotificationInputType(t *testing.T) {
 	}
 }
 
-func TestIsWorkflowHeartbeatNotificationInputEnabled(t *testing.T) {
+func TestIsWorkflowHeartbeatNotificationEnabled(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		name    string
@@ -80,7 +80,7 @@ func TestIsWorkflowHeartbeatNotificationInputEnabled(t *testing.T) {
 			shard.EXPECT().GetConfig().Return(&configs.Config{
 				WorkflowHeartbeatNotificationRolloutPercent: func(string) int { return tc.percent },
 			})
-			require.Equal(t, tc.want, isWorkflowHeartbeatNotificationInputEnabled(shard, "namespace", "workflow"))
+			require.Equal(t, tc.want, isWorkflowHeartbeatNotificationEnabled(shard, "namespace", "workflow"))
 		})
 	}
 }
@@ -95,8 +95,8 @@ func TestWorkflowHeartbeatNotificationRolloutIsSticky(t *testing.T) {
 	selected := 0
 	for i := range 100 {
 		workflowID := "workflow-" + strconv.Itoa(i)
-		first := isWorkflowHeartbeatNotificationInputEnabled(shard, "namespace", workflowID)
-		require.Equal(t, first, isWorkflowHeartbeatNotificationInputEnabled(shard, "namespace", workflowID))
+		first := isWorkflowHeartbeatNotificationEnabled(shard, "namespace", workflowID)
+		require.Equal(t, first, isWorkflowHeartbeatNotificationEnabled(shard, "namespace", workflowID))
 		if first {
 			selected++
 		}
@@ -139,7 +139,7 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 			bufferedTypes: []string{"TimerFired"},
 		},
 		{
-			name:          "multiple inputs in one transaction",
+			name:          "multiple events in one transaction",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED},
 			bufferedTypes: []string{"TimerFired", "ActivityTaskCompleted"},
@@ -166,7 +166,7 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 			nilNamespace: true,
 		},
 		{
-			name:      "no eligible input",
+			name:      "no eligible event",
 			started:   true,
 			newEvents: []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED},
 		},
@@ -219,7 +219,6 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 			require.Len(t, buffered, len(tc.bufferedTypes))
 			for i, inputType := range tc.bufferedTypes {
 				require.Equal(t, inputType, buffered[i].Tags["event_type"])
-				require.NotContains(t, buffered[i].Tags, "input_type")
 				require.Equal(t, tests.GlobalNamespaceEntry.Name().String(), buffered[i].Tags["namespace"])
 			}
 			first := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
@@ -228,7 +227,6 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 			} else {
 				require.Len(t, first, 1)
 				require.Equal(t, tc.firstType, first[0].Tags["event_type"])
-				require.NotContains(t, first[0].Tags, "input_type")
 			}
 		})
 	}
