@@ -1159,7 +1159,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue()); err != nil {
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey()); err != nil {
+		return nil, err
+	}
+	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
 		return nil, err
 	}
 
@@ -1418,7 +1421,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue()); err != nil {
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey()); err != nil {
+		return nil, err
+	}
+	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
 		return nil, err
 	}
 
@@ -8035,15 +8041,32 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 	return histResp.GetResponse(), nil
 }
 
-func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQueue *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) checkExclusiveWorkerSessionsEnabled(namespaceName string, options *sessionpb.WorkerSessionOptions) error {
+	if options.GetSingleSession() != nil && !wh.config.EnableExclusiveWorkerSessions(namespaceName) {
+		return errExclusiveWorkerSessionsDisabled
+	}
+	return nil
+}
+
+func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQueue *taskqueuepb.TaskQueue, workerInstanceKey string) error {
 	if options == nil {
 		return nil
 	}
 	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
 	}
-	if options.GetAdmission() != nil {
-		return serviceerror.NewUnimplemented("Single-session isolation is not supported")
+	if singleSession := options.GetSingleSession(); singleSession != nil {
+		stableIdentity := singleSession.GetStableIdentity()
+		if stableIdentity == "" {
+			return serviceerror.NewInvalidArgument("single-session stable identity is required")
+		}
+		if taskQueue.GetName() != stableIdentity {
+			return serviceerror.NewInvalidArgument("single-session sticky queue must match stable identity")
+		}
+		if workerInstanceKey == "" {
+			// A session binding records the worker's instance key; Matching looks the worker up by it in its heartbeat registry.
+			return serviceerror.NewInvalidArgument("session worker instance key is required")
+		}
 	}
 	return nil
 }

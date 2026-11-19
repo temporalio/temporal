@@ -223,6 +223,15 @@ func ForwardPollWithTarget(
 ) (*internalTask, error) {
 	pollerID, _ := ctx.Value(pollerIDKey).(string) // nolint:revive
 	identity, _ := ctx.Value(identityKey).(string) // nolint:revive
+	forwardedSource := source.RpcName()
+	if source.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && pollMetadata.isSingleSessionAcquisitionInProgress() {
+		// Initial session acquisition from a sticky queue partition needs an empty source to enable load balanced normal read-partition selection.
+		// Non-session based sticky pollers do not need this since they are forwarded to those task queue partitions that have advertised a backlog
+		// of tasks.
+		// TODO (Shivam): This is hacky and not the best way to do this. Come back to add a new variable that denotes if we need
+		// to load balance or not while keeping forwardedSource what it is.
+		forwardedSource = ""
+	}
 
 	// nolint:exhaustive // there's a default clause
 	switch target.TaskType() {
@@ -240,8 +249,9 @@ func ForwardPollWithTarget(
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				WorkerControlTaskQueue:    pollMetadata.workerControlTaskQueue,
+				SessionOptions:            pollMetadata.sessionOptions,
 			},
-			ForwardedSource: source.RpcName(),
+			ForwardedSource: forwardedSource,
 			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
@@ -265,8 +275,9 @@ func ForwardPollWithTarget(
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				WorkerControlTaskQueue:    pollMetadata.workerControlTaskQueue,
+				SessionOptions:            pollMetadata.sessionOptions,
 			},
-			ForwardedSource: source.RpcName(),
+			ForwardedSource: forwardedSource,
 			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
@@ -290,7 +301,7 @@ func ForwardPollWithTarget(
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				// Namespace is ignored here.
 			},
-			ForwardedSource: source.RpcName(),
+			ForwardedSource: forwardedSource,
 			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {

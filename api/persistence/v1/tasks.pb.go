@@ -254,9 +254,10 @@ type TaskQueueInfo struct {
 	// can be cleared on the active table.
 	OtherHasTasks bool `protobuf:"varint,10,opt,name=other_has_tasks,json=otherHasTasks,proto3" json:"other_has_tasks,omitempty"`
 	// Dynamic partition scaling state (root only):
-	PartitionScaleState *PartitionScaleState `protobuf:"bytes,11,opt,name=partition_scale_state,json=partitionScaleState,proto3" json:"partition_scale_state,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	PartitionScaleState       *PartitionScaleState       `protobuf:"bytes,11,opt,name=partition_scale_state,json=partitionScaleState,proto3" json:"partition_scale_state,omitempty"`
+	ExclusiveWorkerAssignment *ExclusiveWorkerAssignment `protobuf:"bytes,12,opt,name=exclusive_worker_assignment,json=exclusiveWorkerAssignment,proto3" json:"exclusive_worker_assignment,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *TaskQueueInfo) Reset() {
@@ -366,6 +367,53 @@ func (x *TaskQueueInfo) GetPartitionScaleState() *PartitionScaleState {
 	return nil
 }
 
+func (x *TaskQueueInfo) GetExclusiveWorkerAssignment() *ExclusiveWorkerAssignment {
+	if x != nil {
+		return x.ExclusiveWorkerAssignment
+	}
+	return nil
+}
+
+// Presence records that an exclusive worker's sticky workflow queue has acquired a workflow.
+// Retained after workflow completion and worker replacement to prevent reuse.
+// Note: This message may grow in the recent future to include more information such as the workflowID
+// for added optimizations.
+type ExclusiveWorkerAssignment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExclusiveWorkerAssignment) Reset() {
+	*x = ExclusiveWorkerAssignment{}
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExclusiveWorkerAssignment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExclusiveWorkerAssignment) ProtoMessage() {}
+
+func (x *ExclusiveWorkerAssignment) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExclusiveWorkerAssignment.ProtoReflect.Descriptor instead.
+func (*ExclusiveWorkerAssignment) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{3}
+}
+
 type SubqueueInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Key is the information used by a splitting algorithm to decide which tasks should go in
@@ -387,7 +435,7 @@ type SubqueueInfo struct {
 
 func (x *SubqueueInfo) Reset() {
 	*x = SubqueueInfo{}
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[3]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -399,7 +447,7 @@ func (x *SubqueueInfo) String() string {
 func (*SubqueueInfo) ProtoMessage() {}
 
 func (x *SubqueueInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[3]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -412,7 +460,7 @@ func (x *SubqueueInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubqueueInfo.ProtoReflect.Descriptor instead.
 func (*SubqueueInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SubqueueInfo) GetKey() *SubqueueKey {
@@ -467,7 +515,7 @@ type FairnessKeyCount struct {
 
 func (x *FairnessKeyCount) Reset() {
 	*x = FairnessKeyCount{}
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[4]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -479,7 +527,7 @@ func (x *FairnessKeyCount) String() string {
 func (*FairnessKeyCount) ProtoMessage() {}
 
 func (x *FairnessKeyCount) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[4]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -492,7 +540,7 @@ func (x *FairnessKeyCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FairnessKeyCount.ProtoReflect.Descriptor instead.
 func (*FairnessKeyCount) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{4}
+	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *FairnessKeyCount) GetKey() string {
@@ -519,7 +567,7 @@ type SubqueueKey struct {
 
 func (x *SubqueueKey) Reset() {
 	*x = SubqueueKey{}
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[5]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -531,7 +579,7 @@ func (x *SubqueueKey) String() string {
 func (*SubqueueKey) ProtoMessage() {}
 
 func (x *SubqueueKey) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[5]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -544,7 +592,7 @@ func (x *SubqueueKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubqueueKey.ProtoReflect.Descriptor instead.
 func (*SubqueueKey) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{5}
+	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SubqueueKey) GetPriority() int32 {
@@ -586,7 +634,7 @@ type PartitionScaleState struct {
 
 func (x *PartitionScaleState) Reset() {
 	*x = PartitionScaleState{}
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[6]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +646,7 @@ func (x *PartitionScaleState) String() string {
 func (*PartitionScaleState) ProtoMessage() {}
 
 func (x *PartitionScaleState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[6]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +659,7 @@ func (x *PartitionScaleState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PartitionScaleState.ProtoReflect.Descriptor instead.
 func (*PartitionScaleState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{6}
+	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PartitionScaleState) GetTarget() int32 {
@@ -678,7 +726,7 @@ type SimplePartitionScalerState struct {
 
 func (x *SimplePartitionScalerState) Reset() {
 	*x = SimplePartitionScalerState{}
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[7]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -690,7 +738,7 @@ func (x *SimplePartitionScalerState) String() string {
 func (*SimplePartitionScalerState) ProtoMessage() {}
 
 func (x *SimplePartitionScalerState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[7]
+	mi := &file_temporal_server_api_persistence_v1_tasks_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -703,7 +751,7 @@ func (x *SimplePartitionScalerState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimplePartitionScalerState.ProtoReflect.Descriptor instead.
 func (*SimplePartitionScalerState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{7}
+	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SimplePartitionScalerState) GetAddTarget() int32 {
@@ -744,7 +792,7 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12#\n" +
-	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\"\x84\x05\n" +
+	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\"\x83\x06\n" +
 	"\rTaskQueueInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +
@@ -758,7 +806,9 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\x12&\n" +
 	"\x0fother_has_tasks\x18\n" +
 	" \x01(\bR\rotherHasTasks\x12k\n" +
-	"\x15partition_scale_state\x18\v \x01(\v27.temporal.server.api.persistence.v1.PartitionScaleStateR\x13partitionScaleState\"\xc2\x03\n" +
+	"\x15partition_scale_state\x18\v \x01(\v27.temporal.server.api.persistence.v1.PartitionScaleStateR\x13partitionScaleState\x12}\n" +
+	"\x1bexclusive_worker_assignment\x18\f \x01(\v2=.temporal.server.api.persistence.v1.ExclusiveWorkerAssignmentR\x19exclusiveWorkerAssignment\"\x1b\n" +
+	"\x19ExclusiveWorkerAssignment\"\xc2\x03\n" +
 	"\fSubqueueInfo\x12A\n" +
 	"\x03key\x18\x01 \x01(\v2/.temporal.server.api.persistence.v1.SubqueueKeyR\x03key\x12\x1b\n" +
 	"\tack_level\x18\x02 \x01(\x03R\backLevel\x12Q\n" +
@@ -798,48 +848,50 @@ func file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescData
 }
 
-var file_temporal_server_api_persistence_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_temporal_server_api_persistence_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_temporal_server_api_persistence_v1_tasks_proto_goTypes = []any{
 	(*AllocatedTaskInfo)(nil),          // 0: temporal.server.api.persistence.v1.AllocatedTaskInfo
 	(*TaskInfo)(nil),                   // 1: temporal.server.api.persistence.v1.TaskInfo
 	(*TaskQueueInfo)(nil),              // 2: temporal.server.api.persistence.v1.TaskQueueInfo
-	(*SubqueueInfo)(nil),               // 3: temporal.server.api.persistence.v1.SubqueueInfo
-	(*FairnessKeyCount)(nil),           // 4: temporal.server.api.persistence.v1.FairnessKeyCount
-	(*SubqueueKey)(nil),                // 5: temporal.server.api.persistence.v1.SubqueueKey
-	(*PartitionScaleState)(nil),        // 6: temporal.server.api.persistence.v1.PartitionScaleState
-	(*SimplePartitionScalerState)(nil), // 7: temporal.server.api.persistence.v1.SimplePartitionScalerState
-	(*timestamppb.Timestamp)(nil),      // 8: google.protobuf.Timestamp
-	(*v1.VectorClock)(nil),             // 9: temporal.server.api.clock.v1.VectorClock
-	(*v11.TaskVersionDirective)(nil),   // 10: temporal.server.api.taskqueue.v1.TaskVersionDirective
-	(*v12.Priority)(nil),               // 11: temporal.api.common.v1.Priority
-	(v13.TaskQueueType)(0),             // 12: temporal.api.enums.v1.TaskQueueType
-	(v13.TaskQueueKind)(0),             // 13: temporal.api.enums.v1.TaskQueueKind
-	(*v11.FairLevel)(nil),              // 14: temporal.server.api.taskqueue.v1.FairLevel
-	(*anypb.Any)(nil),                  // 15: google.protobuf.Any
+	(*ExclusiveWorkerAssignment)(nil),  // 3: temporal.server.api.persistence.v1.ExclusiveWorkerAssignment
+	(*SubqueueInfo)(nil),               // 4: temporal.server.api.persistence.v1.SubqueueInfo
+	(*FairnessKeyCount)(nil),           // 5: temporal.server.api.persistence.v1.FairnessKeyCount
+	(*SubqueueKey)(nil),                // 6: temporal.server.api.persistence.v1.SubqueueKey
+	(*PartitionScaleState)(nil),        // 7: temporal.server.api.persistence.v1.PartitionScaleState
+	(*SimplePartitionScalerState)(nil), // 8: temporal.server.api.persistence.v1.SimplePartitionScalerState
+	(*timestamppb.Timestamp)(nil),      // 9: google.protobuf.Timestamp
+	(*v1.VectorClock)(nil),             // 10: temporal.server.api.clock.v1.VectorClock
+	(*v11.TaskVersionDirective)(nil),   // 11: temporal.server.api.taskqueue.v1.TaskVersionDirective
+	(*v12.Priority)(nil),               // 12: temporal.api.common.v1.Priority
+	(v13.TaskQueueType)(0),             // 13: temporal.api.enums.v1.TaskQueueType
+	(v13.TaskQueueKind)(0),             // 14: temporal.api.enums.v1.TaskQueueKind
+	(*v11.FairLevel)(nil),              // 15: temporal.server.api.taskqueue.v1.FairLevel
+	(*anypb.Any)(nil),                  // 16: google.protobuf.Any
 }
 var file_temporal_server_api_persistence_v1_tasks_proto_depIdxs = []int32{
 	1,  // 0: temporal.server.api.persistence.v1.AllocatedTaskInfo.data:type_name -> temporal.server.api.persistence.v1.TaskInfo
-	8,  // 1: temporal.server.api.persistence.v1.TaskInfo.create_time:type_name -> google.protobuf.Timestamp
-	8,  // 2: temporal.server.api.persistence.v1.TaskInfo.expiry_time:type_name -> google.protobuf.Timestamp
-	9,  // 3: temporal.server.api.persistence.v1.TaskInfo.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	10, // 4: temporal.server.api.persistence.v1.TaskInfo.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	11, // 5: temporal.server.api.persistence.v1.TaskInfo.priority:type_name -> temporal.api.common.v1.Priority
-	12, // 6: temporal.server.api.persistence.v1.TaskQueueInfo.task_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	13, // 7: temporal.server.api.persistence.v1.TaskQueueInfo.kind:type_name -> temporal.api.enums.v1.TaskQueueKind
-	8,  // 8: temporal.server.api.persistence.v1.TaskQueueInfo.expiry_time:type_name -> google.protobuf.Timestamp
-	8,  // 9: temporal.server.api.persistence.v1.TaskQueueInfo.last_update_time:type_name -> google.protobuf.Timestamp
-	3,  // 10: temporal.server.api.persistence.v1.TaskQueueInfo.subqueues:type_name -> temporal.server.api.persistence.v1.SubqueueInfo
-	6,  // 11: temporal.server.api.persistence.v1.TaskQueueInfo.partition_scale_state:type_name -> temporal.server.api.persistence.v1.PartitionScaleState
-	5,  // 12: temporal.server.api.persistence.v1.SubqueueInfo.key:type_name -> temporal.server.api.persistence.v1.SubqueueKey
-	14, // 13: temporal.server.api.persistence.v1.SubqueueInfo.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
-	14, // 14: temporal.server.api.persistence.v1.SubqueueInfo.fair_max_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
-	4,  // 15: temporal.server.api.persistence.v1.SubqueueInfo.top_k_fairness_counts:type_name -> temporal.server.api.persistence.v1.FairnessKeyCount
-	15, // 16: temporal.server.api.persistence.v1.PartitionScaleState.private_scaler_state:type_name -> google.protobuf.Any
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	9,  // 1: temporal.server.api.persistence.v1.TaskInfo.create_time:type_name -> google.protobuf.Timestamp
+	9,  // 2: temporal.server.api.persistence.v1.TaskInfo.expiry_time:type_name -> google.protobuf.Timestamp
+	10, // 3: temporal.server.api.persistence.v1.TaskInfo.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	11, // 4: temporal.server.api.persistence.v1.TaskInfo.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	12, // 5: temporal.server.api.persistence.v1.TaskInfo.priority:type_name -> temporal.api.common.v1.Priority
+	13, // 6: temporal.server.api.persistence.v1.TaskQueueInfo.task_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	14, // 7: temporal.server.api.persistence.v1.TaskQueueInfo.kind:type_name -> temporal.api.enums.v1.TaskQueueKind
+	9,  // 8: temporal.server.api.persistence.v1.TaskQueueInfo.expiry_time:type_name -> google.protobuf.Timestamp
+	9,  // 9: temporal.server.api.persistence.v1.TaskQueueInfo.last_update_time:type_name -> google.protobuf.Timestamp
+	4,  // 10: temporal.server.api.persistence.v1.TaskQueueInfo.subqueues:type_name -> temporal.server.api.persistence.v1.SubqueueInfo
+	7,  // 11: temporal.server.api.persistence.v1.TaskQueueInfo.partition_scale_state:type_name -> temporal.server.api.persistence.v1.PartitionScaleState
+	3,  // 12: temporal.server.api.persistence.v1.TaskQueueInfo.exclusive_worker_assignment:type_name -> temporal.server.api.persistence.v1.ExclusiveWorkerAssignment
+	6,  // 13: temporal.server.api.persistence.v1.SubqueueInfo.key:type_name -> temporal.server.api.persistence.v1.SubqueueKey
+	15, // 14: temporal.server.api.persistence.v1.SubqueueInfo.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
+	15, // 15: temporal.server.api.persistence.v1.SubqueueInfo.fair_max_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
+	5,  // 16: temporal.server.api.persistence.v1.SubqueueInfo.top_k_fairness_counts:type_name -> temporal.server.api.persistence.v1.FairnessKeyCount
+	16, // 17: temporal.server.api.persistence.v1.PartitionScaleState.private_scaler_state:type_name -> google.protobuf.Any
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_tasks_proto_init() }
@@ -853,7 +905,7 @@ func file_temporal_server_api_persistence_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_tasks_proto_rawDesc), len(file_temporal_server_api_persistence_v1_tasks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

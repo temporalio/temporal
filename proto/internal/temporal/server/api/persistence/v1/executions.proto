@@ -27,6 +27,7 @@ import "temporal/server/api/persistence/v1/chasm.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/update.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
@@ -332,6 +333,17 @@ message WorkflowExecutionInfo {
   // never reads or sets it. The value describes the local copy of the record, so it is not
   // replicated, and applying a replicated snapshot or mutation keeps the local value.
   bytes persistence_metadata = 118;
+
+  // Session binding retained for the lifetime of this workflow execution.
+  SessionState session_state = 119;
+}
+
+// Note: This is experimental and could change in the near future.
+message SessionState {
+  // Whether this session is mapped strongly to an individual worker. Exclusive sessions also remain at their assigned address.
+  bool exclusive_worker = 1;
+  // The worker the workflow is bound to. Its worker queue is mirrored by WorkflowExecutionInfo.sticky_task_queue.
+  temporal.server.api.taskqueue.v1.BoundWorkerInfo bound_worker_info = 2;
 }
 
 message TimeSkippingInfo {
