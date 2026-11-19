@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -387,8 +388,16 @@ func (e *TestEnv) GetTestCluster() *TestCluster {
 	return e.cluster
 }
 
-func (e *TestEnv) GetTestClusterConfig() *TestClusterConfig {
-	return e.functionalTestBase.GetTestClusterConfig()
+func (e *TestEnv) HistoryShardCount() int32 {
+	return e.functionalTestBase.testClusterConfig.HistoryConfig.NumHistoryShards
+}
+
+func (e *TestEnv) PersistenceStoreType() string {
+	return e.functionalTestBase.testClusterConfig.Persistence.StoreType
+}
+
+func (e *TestEnv) ElasticsearchConfig() *esconfig.Config {
+	return e.functionalTestBase.testClusterConfig.ESConfig
 }
 
 func (e *TestEnv) FrontendClient() workflowservice.WorkflowServiceClient {
@@ -773,7 +782,7 @@ func (e *TestEnv) CloseShard(namespaceID string, workflowID string) {
 		e.t.Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	e.dedicatedGuard.record("shard closed")
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, e.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, e.HistoryShardCount())
 	_, err := e.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
 		ShardId: shardID,
 	})

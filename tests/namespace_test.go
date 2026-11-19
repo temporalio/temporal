@@ -322,7 +322,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 		shardID := common.WorkflowIDToHistoryShard(
 			nsID,
 			execution.GetWorkflowId(),
-			env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+			env.HistoryShardCount(),
 		)
 
 		err = env.GetTestCluster().ExecutionManager().DeleteWorkflowExecution(s.Context(), &persistence.DeleteWorkflowExecutionRequest{

@@ -92,7 +92,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			shouldSkip.Store(false)
 			blob, err := serialization.NewSerializer().SerializeTask(task)
 			s.NoError(err)
-			shardID := tasks.GetShardIDForTask(task, int(env.GetTestClusterConfig().HistoryConfig.NumHistoryShards))
+			shardID := tasks.GetShardIDForTask(task, int(env.HistoryShardCount()))
 			request := &adminservice.AddTasksRequest{
 				ShardId: int32(shardID),
 				Tasks: []*adminservice.AddTasksRequest_Task{
