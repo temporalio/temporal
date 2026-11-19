@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/historyutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -67,6 +68,7 @@ type Env interface {
 
 type TestEnv struct {
 	*functionalTestBase
+	historyutils.Reader
 
 	// Shadows functionalTestBase.Assertions with a per-test instance bound to
 	// this TestEnv's own *testing.T, avoiding data races when parallel tests
@@ -332,14 +334,16 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// allows, now that setup is done.
 	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
 
+	frontendClient := cluster.FrontendClient()
 	env := &TestEnv{
 		functionalTestBase: base,
+		Reader:             historyutils.NewReader(t, frontendClient),
 		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
 		nsID:               nsID,
 		Logger:             base.Logger,
-		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
+		taskPoller:         taskpoller.New(t, frontendClient, ns.String()),
 		t:                  t,
 		tv:                 tv,
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
