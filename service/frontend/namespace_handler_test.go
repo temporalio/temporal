@@ -33,8 +33,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
-	vismanager "go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/wideevents"
@@ -56,9 +54,7 @@ type (
 
 		maxBadBinaryCount       int
 		mockMetadataMgr         *persistence.MockMetadataManager
-		mockClusterMetadataMgr  *persistence.MockClusterMetadataManager
 		mockClusterMetadata     *cluster.MockMetadata
-		mockVisibilityMgr       *vismanager.MockVisibilityManager
 		mockProducer            *persistence.MockNamespaceReplicationQueue
 		mockNamespaceReplicator nsreplication.Replicator
 		archivalMetadata        archiver.ArchivalMetadata
@@ -97,10 +93,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.maxBadBinaryCount = 10
 	s.mockMetadataMgr = persistence.NewMockMetadataManager(s.controller)
-	s.mockClusterMetadataMgr = persistence.NewMockClusterMetadataManager(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
-	s.mockVisibilityMgr = vismanager.NewMockVisibilityManager(s.controller)
-	s.mockVisibilityMgr.EXPECT().HasStoreName(esconfig.PersistenceName).Return(false).AnyTimes()
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockNamespaceReplicator = nsreplication.NewReplicator(
 		s.mockProducer,
@@ -129,8 +122,6 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
-		s.mockClusterMetadataMgr,
-		s.mockVisibilityMgr,
 		s.fakeClock,
 		s.config,
 		nil,
@@ -871,84 +862,6 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithTwoCluster() {
 		})
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	_, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
-	s.NoError(err)
-}
-
-func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_BackfillsIdentityAliasesForElasticsearch() {
-	const namespaceName = "namespace-to-register"
-	const clusterName = "cluster1"
-	const indexName = "visibility-index"
-	retention := durationpb.New(10 * 24 * time.Hour)
-	registerRequest := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespaceName,
-		Description:                      namespaceName,
-		WorkflowExecutionRetentionPeriod: retention,
-		IsGlobalNamespace:                true,
-	}
-
-	mockVisibilityMgr := vismanager.NewMockVisibilityManager(s.controller)
-	mockVisibilityMgr.EXPECT().HasStoreName(esconfig.PersistenceName).Return(true)
-	mockVisibilityMgr.EXPECT().GetIndexName().Return(indexName)
-
-	handler := newNamespaceHandler(
-		log.NewNoopLogger(),
-		wideevents.NoopLogger(),
-		s.mockMetadataMgr,
-		namespace.NewMockRegistry(s.controller),
-		s.mockClusterMetadata,
-		s.mockNamespaceReplicator,
-		s.archivalMetadata,
-		s.mockArchiverProvider,
-		s.mockClusterMetadataMgr,
-		mockVisibilityMgr,
-		s.fakeClock,
-		s.config,
-		nil,
-		metrics.NoopMetricsHandler,
-	)
-
-	s.mockClusterMetadataMgr.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(
-		&persistence.GetClusterMetadataResponse{
-			ClusterMetadata: &persistencespb.ClusterMetadata{
-				IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
-					indexName: {
-						CustomSearchAttributes: map[string]enumspb.IndexedValueType{
-							"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-							"Keyword01":          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-							"CustomIntField":     enumspb.INDEXED_VALUE_TYPE_INT,
-						},
-					},
-				},
-			},
-		},
-		nil,
-	)
-	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
-	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
-		clusterName: {
-			Enabled:                true,
-			InitialFailoverVersion: 1,
-		},
-	}).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetNextFailoverVersion(clusterName, int64(0)).Return(int64(1))
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NamespaceNotFound{})
-	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
-			s.Equal(
-				map[string]string{
-					"CustomKeywordField": "CustomKeywordField",
-					"CustomIntField":     "CustomIntField",
-				},
-				request.Namespace.Config.CustomSearchAttributeAliases,
-			)
-			return &persistence.CreateNamespaceResponse{}, nil
-		},
-	)
-	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(0)
-
-	_, err := handler.RegisterNamespace(context.Background(), registerRequest)
 	s.NoError(err)
 }
 

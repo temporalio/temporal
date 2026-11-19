@@ -205,7 +205,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 				&commonpb.WorkflowExecution{WorkflowId: replacementRun.GetID(), RunId: replacementRun.GetRunID()},
 			)
 			startedEvent := s.RequireHistoryEvent(handlerHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
-			s.Require().Len(startedEvent.GetLinks(), 1)
+			s.Len(startedEvent.GetLinks(), 1)
 			protorequire.ProtoEqual(s.T(), signaledEvent.GetLinks()[0], startedEvent.GetLinks()[0]) // Both should point back to the caller - SANO or workflow event.
 			s.NoError(env.SdkClient().SignalWorkflow(ctx, replacementRun.GetID(), replacementRun.GetRunID(), finishSignalName, nil))
 			s.NoError(replacementRun.Get(ctx, nil))
@@ -293,7 +293,7 @@ func (s *NexusWorkflowTestSuite) assertSignalBackwardLink(env *NexusTestEnv, cal
 			},
 		}
 	}
-	s.Require().Len(signaledEvent.GetLinks(), 1)
+	s.Len(signaledEvent.GetLinks(), 1)
 	protorequire.ProtoEqual(s.T(), backwardLink, signaledEvent.GetLinks()[0])
 }
 
@@ -345,7 +345,7 @@ func (s *NexusWorkflowTestSuite) assertSignalForwardLink(ctx context.Context, en
 		s.Await(func(s *NexusWorkflowTestSuite) {
 			descResp := env.describeNexusOperation(ctx, s.T(), caller.operationID)
 			s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
-			s.Require().Len(descResp.GetInfo().GetLinks(), 1)
+			s.Len(descResp.GetInfo().GetLinks(), 1)
 			protorequire.ProtoEqual(s.T(), wantLink, descResp.GetInfo().GetLinks()[0])
 		}, 5*time.Second, 100*time.Millisecond)
 		return
@@ -353,7 +353,7 @@ func (s *NexusWorkflowTestSuite) assertSignalForwardLink(ctx context.Context, en
 	s.NoError(caller.workflowRun.Get(ctx, nil))
 	callerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()})
 	completedEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
-	s.Require().Len(completedEvent.GetLinks(), 1)
+	s.Len(completedEvent.GetLinks(), 1)
 	protorequire.ProtoEqual(s.T(), wantLink, completedEvent.GetLinks()[0])
 }
 
@@ -364,7 +364,7 @@ func (s *NexusWorkflowTestSuite) signalRunID(ctx context.Context, env *NexusTest
 		s.Await(func(s *NexusWorkflowTestSuite) {
 			descResp := env.describeNexusOperation(ctx, s.T(), caller.operationID)
 			s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
-			s.Require().Len(descResp.GetInfo().GetLinks(), 1)
+			s.Len(descResp.GetInfo().GetLinks(), 1)
 			runID = descResp.GetInfo().GetLinks()[0].GetWorkflowEvent().GetRunId()
 			s.NotEmpty(runID)
 		}, 5*time.Second, 100*time.Millisecond)
@@ -381,11 +381,11 @@ func (s *NexusWorkflowTestSuite) handlerSignalEvent(env *NexusTestEnv, handlerRu
 	var signaledEvent *historypb.HistoryEvent
 	for _, event := range handlerHistory {
 		if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == signalRequestID {
-			s.Require().Nil(signaledEvent, "expected exactly one signal event for request ID %q", signalRequestID)
+			s.Nil(signaledEvent, "expected exactly one signal event for request ID %q", signalRequestID)
 			signaledEvent = event
 		}
 	}
-	s.Require().NotNil(signaledEvent, "no signal event for request ID %q", signalRequestID)
+	s.NotNil(signaledEvent, "no signal event for request ID %q", signalRequestID)
 	return signaledEvent
 }
 

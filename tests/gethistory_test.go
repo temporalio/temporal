@@ -802,7 +802,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 
 	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
 	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	startMultiBatchWorkflow(s.Context(), s.Require(), env)
 
@@ -816,8 +816,8 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
 		},
 	)
-	s.Require().NoError(err)
-	s.Require().NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
+	s.NoError(err)
+	s.NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
 
 	// Replayed against the other namespace. No run ID is sent, so nothing in the request itself
 	// refers to the workflow whose history the token points at.
@@ -851,7 +851,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFro
 
 	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
 	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	startMultiBatchWorkflow(s.Context(), s.Require(), env)
 
@@ -863,8 +863,8 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFro
 			MaximumPageSize: 1,
 		},
 	)
-	s.Require().NoError(err)
-	s.Require().NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
+	s.NoError(err)
+	s.NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
 
 	resp, err := env.FrontendClient().GetWorkflowExecutionHistoryReverse(
 		s.Context(),

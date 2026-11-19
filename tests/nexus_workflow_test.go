@@ -3063,7 +3063,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	s.Equal("details", details)
 
 	handlerRequestID := s.Rcv(handlerRequestIDs)
-	s.Require().NotEmpty(handlerRequestID)
+	s.NotEmpty(handlerRequestID)
 
 	// The attempt tag is off by one between implementations: HSM's task carries the count of
 	// *completed* attempts, CHASM's is 1-based.
@@ -3636,7 +3636,7 @@ func (s *NexusWorkflowTestSuite) TestResetRemovesRetainedTimedOutOperations(chas
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: timeoutTask.TaskToken, Identity: "test",
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	events := env.GetHistory(env.Namespace().String(), execution)
 	var resetID int64
 	for _, event := range events {
@@ -3644,19 +3644,19 @@ func (s *NexusWorkflowTestSuite) TestResetRemovesRetainedTimedOutOperations(chas
 			resetID = event.GetEventId()
 		}
 	}
-	s.Require().Positive(resetID)
-	s.Require().NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "try-schedule", nil))
+	s.Positive(resetID)
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "try-schedule", nil))
 	nextTask := poll()
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: nextTask.TaskToken, Identity: "test", Commands: []*commandpb.Command{command()},
 	})
-	s.Require().ErrorContains(err, "PendingNexusOperationsLimitExceeded")
+	s.ErrorContains(err, "PendingNexusOperationsLimitExceeded")
 	restoreTimeoutCleanup()
 	reset, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "recover retained timed out operations",
 		RequestId: uuid.NewString(), WorkflowTaskFinishEventId: resetID,
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	resetExecution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: reset.GetRunId()}
 	resetHistory := env.GetHistory(env.Namespace().String(), resetExecution)
 	timeoutCount := 0
@@ -3665,22 +3665,22 @@ func (s *NexusWorkflowTestSuite) TestResetRemovesRetainedTimedOutOperations(chas
 			timeoutCount++
 		}
 	}
-	s.Require().Equal(3, timeoutCount)
+	s.Equal(3, timeoutCount)
 	desc, err = env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: env.Namespace().String(), Execution: resetExecution, Archetype: chasm.WorkflowArchetype,
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	s.Empty(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById())
 	retry := poll()
-	s.Require().Equal(reset.GetRunId(), retry.GetWorkflowExecution().GetRunId())
+	s.Equal(reset.GetRunId(), retry.GetWorkflowExecution().GetRunId())
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: retry.TaskToken, Identity: "test", Commands: []*commandpb.Command{command()},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	desc, err = env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: env.Namespace().String(), Execution: resetExecution, Archetype: chasm.WorkflowArchetype,
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	s.Len(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), 1)
 }
 

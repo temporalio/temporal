@@ -256,7 +256,7 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
 	s.NoError(err)
 	dbState := adminDescResp.GetDatabaseMutableState()
 	requestIDsNode, ok := dbState.GetChasmNodes()["__chasm_requestIDs"]
-	s.Require().True(ok)
+	s.True(ok)
 	requestIDs := &persistencespb.ChasmRequestIDs{}
 	s.NoError(serialization.Decode(requestIDsNode.GetData(), requestIDs))
 	s.ElementsMatch([]string{requestID1, requestID2, startRequestID}, slices.Collect(maps.Keys(requestIDs.GetRequestIds())))
@@ -1140,7 +1140,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_CreateNew_PersistsUpdateNodesA
 	s.NoError(err)
 	persistedNodes := adminDescResp.GetDatabaseMutableState().GetChasmNodes()
 	keptNode, ok := persistedNodes["Payloads#kept"]
-	s.Require().True(ok, "payload node added by updateFn must be persisted, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
+	s.True(ok, "payload node added by updateFn must be persisted, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
 	persistedPayload := &commonpb.Payload{}
 	s.NoError(serialization.Decode(keptNode.GetData(), persistedPayload))
 	s.Equal(keptPayload.GetData(), persistedPayload.GetData())
@@ -1241,7 +1241,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_ExistingClosed() {
 	s.NoError(err)
 	persistedNodes := adminDescResp.GetDatabaseMutableState().GetChasmNodes()
 	node, ok := persistedNodes["Payloads#new-run-key"]
-	s.Require().True(ok, "payload node added by updateFn must be persisted on the new run, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
+	s.True(ok, "payload node added by updateFn must be persisted on the new run, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
 	persistedPayload := &commonpb.Payload{}
 	s.NoError(serialization.Decode(node.GetData(), persistedPayload))
 	s.Equal(newPayload.GetData(), persistedPayload.GetData())
