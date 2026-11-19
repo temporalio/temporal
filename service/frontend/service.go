@@ -75,6 +75,9 @@ type Config struct {
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxInternalPerNSConcurrentLongRunningRequestsPerInstance          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxGlobalInternalPerNSConcurrentLongRunningRequests               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableInternalPerNSNamespaceRPS                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaxInternalPerNSNamespaceRPSPerInstance                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalInternalPerNSNamespaceRPS                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PollWaitForNamespaceRateLimitToken                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -340,6 +343,9 @@ func NewConfig(
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
 		MaxInternalPerNSConcurrentLongRunningRequestsPerInstance:          dynamicconfig.FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
 		MaxGlobalInternalPerNSConcurrentLongRunningRequests:               dynamicconfig.FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests.Get(dc),
+		EnableInternalPerNSNamespaceRPS:                                   dynamicconfig.FrontendEnableInternalPerNSNamespaceRPS.Get(dc),
+		MaxInternalPerNSNamespaceRPSPerInstance:                           dynamicconfig.FrontendInternalPerNSMaxNamespaceRPSPerInstance.Get(dc),
+		GlobalInternalPerNSNamespaceRPS:                                   dynamicconfig.FrontendGlobalInternalPerNSNamespaceRPS.Get(dc),
 		PollWaitForNamespaceRateLimitToken:                                dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),

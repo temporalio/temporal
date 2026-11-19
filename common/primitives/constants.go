@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"strings"
 	"time"
 
 	"go.temporal.io/server/common/debug"
@@ -29,4 +30,11 @@ const (
 
 const (
 	ScheduleWorkflowIDPrefix = "temporal-sys-scheduler:"
+	internalWorkflowIDPrefix = "temporal-sys-"
 )
+
+// IsInternalWorkflowID returns true if the workflow ID uses the prefix Temporal gives the workflows its system
+// workers run, such as schedules and worker deployments. The prefix is not enforced for customer workflow IDs.
+func IsInternalWorkflowID(workflowID string) bool {
+	return strings.HasPrefix(workflowID, internalWorkflowIDPrefix)
+}

@@ -863,6 +863,33 @@ limit is exceeded, not when it is only reached.`,
 polls across all frontend instances in the cluster, for a given namespace, per API method. If this is set to 0
 (the default), then it is ignored and frontend.internalPerNSNamespaceCount is used.`,
 	)
+	FrontendEnableInternalPerNSNamespaceRPS = NewNamespaceBoolSetting(
+		"frontend.enableInternalPerNSNamespaceRPS",
+		false,
+		`FrontendEnableInternalPerNSNamespaceRPS charges the runtime requests of per-namespace system workers to a
+separate namespace rate limit (frontend.internalPerNSNamespaceRPS) instead of the namespace's regular rate limit.
+Runtime requests are internal per-namespace task-queue polls, non-sticky query task responses from those queues,
+and workflow task responses, activity task responses, activity heartbeats, and history reads for workflows whose ID
+starts with "temporal-sys-". Actions that system workflows take on customer workflows, such as scheduled starts
+and batch operations, keep using the regular namespace rate limit, as does the runtime traffic of batch operation
+workflows, whose ID is customer supplied. Clients can imitate these request shapes, so keep the internal limit
+bounded. Applies to the frontend service only; internal-frontend already separates system worker traffic.`,
+	)
+	FrontendInternalPerNSMaxNamespaceRPSPerInstance = NewNamespaceIntSetting(
+		"frontend.internalPerNSNamespaceRPS",
+		1000,
+		`FrontendInternalPerNSMaxNamespaceRPSPerInstance is the per frontend instance namespace rate limit for
+per-namespace system worker runtime requests. It only applies when frontend.enableInternalPerNSNamespaceRPS is
+enabled, uses frontend.namespaceBurstRatio, and is ignored if frontend.globalInternalPerNSNamespaceRPS is greater
+than zero.`,
+	)
+	FrontendGlobalInternalPerNSNamespaceRPS = NewNamespaceIntSetting(
+		"frontend.globalInternalPerNSNamespaceRPS",
+		0,
+		`FrontendGlobalInternalPerNSNamespaceRPS is the cluster-wide namespace rate limit for per-namespace system worker
+runtime requests, evenly distributed among frontend instances. If this is set to 0 (the default), then it is
+ignored and frontend.internalPerNSNamespaceRPS is used.`,
+	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",
 		10,

@@ -72,11 +72,13 @@ type (
 	}
 
 	// NamespaceRateLimiters holds the three per-category namespace rate limiters that
-	// NamespaceRateLimitInterceptorProvider combines into a single routing rate limiter.
+	// NamespaceRateLimitInterceptorProvider combines into a single routing rate limiter, and the
+	// limiter for per-namespace system worker runtime requests.
 	NamespaceRateLimiters struct {
 		Execution                    quotas.RequestRateLimiter
 		Visibility                   quotas.RequestRateLimiter
 		NamespaceReplicationInducing quotas.RequestRateLimiter
+		InternalPerNSExecution       quotas.RequestRateLimiter
 	}
 
 	// RateLimiters holds the three per-category pod-level rate limiters that
@@ -642,6 +644,14 @@ func NamespaceRateLimitersProvider(
 		},
 		log.With(logger, tag.ComponentNamespaceReplication, tag.ScopeNamespace),
 	).GetQuota
+	internalPerNSRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxInternalPerNSNamespaceRPSPerInstance,
+			GlobalQuota:      serviceConfig.GlobalInternalPerNSNamespaceRPS,
+		},
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
+	).GetQuota
 
 	return NamespaceRateLimiters{
 		Execution: quotas.NewNamespaceRequestRateLimiter(
@@ -680,10 +690,23 @@ func NamespaceRateLimitersProvider(
 				)
 			},
 		),
+		InternalPerNSExecution: quotas.NewNamespaceRequestRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewExecutionPriorityRateLimiter(
+					quotas.NewNamespaceRateBurst(
+						req.Caller,
+						internalPerNSRateFn,
+						quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceBurstRatioPerInstance),
+					),
+					serviceConfig.OperatorRPSRatio,
+				)
+			},
+		),
 	}
 }
 
 func NamespaceRateLimitInterceptorProvider(
+	serviceName primitives.ServiceName,
 	namespaceRegistry namespace.Registry,
 	rateLimiters NamespaceRateLimiters,
 	serviceConfig *Config,
@@ -700,12 +723,29 @@ func NamespaceRateLimitInterceptorProvider(
 		mapping[api] = rateLimiters.NamespaceReplicationInducing
 	}
 
-	return interceptor.NewNamespaceRateLimitInterceptor(
+	regular := interceptor.NewNamespaceRateLimitInterceptor(
 		namespaceRegistry,
 		quotas.NewRoutingRateLimiter(mapping),
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
+	)
+	// Internal-frontend serves only internal callers, so its limiter already keeps system worker traffic off the
+	// public frontend's customer quota.
+	if serviceName != primitives.FrontendService {
+		return regular
+	}
+	return interceptor.NewInternalPerNSNamespaceRateLimitInterceptor(
+		regular,
+		// Classified runtime requests are all execution APIs, so they share one priority limiter instead of routing.
+		interceptor.NewNamespaceRateLimitInterceptor(
+			namespaceRegistry,
+			rateLimiters.InternalPerNSExecution,
+			configs.PollTaskAPISet,
+			serviceConfig.PollWaitForNamespaceRateLimitToken,
+			metricsHandler,
+		),
+		serviceConfig.EnableInternalPerNSNamespaceRPS,
 	)
 }
 
@@ -720,6 +760,7 @@ func RetryDelayFloorInterceptorProvider(
 		metricsHandler,
 		[]*serviceerror.ResourceExhausted{
 			interceptor.ErrNamespaceRateLimitServerBusy,
+			interceptor.ErrInternalPerNSNamespaceRateLimitServerBusy,
 			interceptor.ErrNamespaceCountLimitServerBusy,
 		},
 	)

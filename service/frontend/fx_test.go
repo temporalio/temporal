@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -66,6 +67,10 @@ type namespaceRateLimitInterceptorTestCase struct {
 	numVisibilityRequests int
 	// numReplicationInducingRequests is the number of replication inducing requests to send to the interceptor
 	numReplicationInducingRequests int
+	// numInternalHistoryRequests is the number of per-namespace system workflow history reads to send to the interceptor
+	numInternalHistoryRequests int
+	// expectedRateLimitErr is the throttling error expected when expectRateLimit is set; any rate limit error if nil
+	expectedRateLimitErr error
 	// expectRateLimit is true if the interceptor should return a rate limit error
 	expectRateLimit bool
 	// frontendServiceCount is the number of frontend services returned by ServiceResolver to rate limiter
@@ -80,6 +85,9 @@ type namespaceRateLimitInterceptorTestCase struct {
 	globalNamespaceNamespaceReplicationInducingAPIsRPS                int
 	maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance        int
 	maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance float64
+	enableInternalPerNSNamespaceRPS                                   bool
+	globalInternalPerNSNamespaceRPS                                   int
+	maxInternalPerNSNamespaceRPSPerInstance                           int
 }
 
 type rateLimitMetricsTestcase struct {
@@ -421,6 +429,14 @@ func (t *testSvc) ListWorkflowExecutions(
 	return &workflowservice.ListWorkflowExecutionsResponse{}, nil
 }
 
+// GetWorkflowExecutionHistory is a fake implementation of the GetWorkflowExecutionHistory gRPC method which does nothing.
+func (t *testSvc) GetWorkflowExecutionHistory(
+	context.Context,
+	*workflowservice.GetWorkflowExecutionHistoryRequest,
+) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
+	return &workflowservice.GetWorkflowExecutionHistoryResponse{}, nil
+}
+
 // RegisterNamespace is a fake implementation of the RegisterNamespace gRPC method which does nothing.
 func (t *testSvc) RegisterNamespace(
 	context.Context,
@@ -666,6 +682,45 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			numReplicationInducingRequests:                                    9,
 			expectRateLimit:                                                   true,
 		},
+		{
+			name:                                    "internal per-ns requests allowed after namespace rate is used up",
+			maxNamespaceRPSPerInstance:              10,
+			maxNamespaceBurstRatioPerInstance:       1,
+			numRequests:                             10,
+			enableInternalPerNSNamespaceRPS:         true,
+			maxInternalPerNSNamespaceRPSPerInstance: 10,
+			numInternalHistoryRequests:              10,
+			expectRateLimit:                         false,
+		},
+		{
+			name:                                    "internal per-ns rate hit",
+			maxNamespaceBurstRatioPerInstance:       1,
+			enableInternalPerNSNamespaceRPS:         true,
+			maxInternalPerNSNamespaceRPSPerInstance: 10,
+			numInternalHistoryRequests:              11,
+			expectRateLimit:                         true,
+			expectedRateLimitErr:                    interceptor.ErrInternalPerNSNamespaceRateLimitServerBusy,
+		},
+		{
+			name:                                    "internal per-ns rate hit when global limit is set",
+			frontendServiceCount:                    2,
+			maxNamespaceBurstRatioPerInstance:       1,
+			enableInternalPerNSNamespaceRPS:         true,
+			globalInternalPerNSNamespaceRPS:         10,
+			maxInternalPerNSNamespaceRPSPerInstance: 10,
+			numInternalHistoryRequests:              6,
+			expectRateLimit:                         true,
+			expectedRateLimitErr:                    interceptor.ErrInternalPerNSNamespaceRateLimitServerBusy,
+		},
+		{
+			name:                                    "internal per-ns requests use namespace rate when the split is disabled",
+			maxNamespaceRPSPerInstance:              10,
+			maxNamespaceBurstRatioPerInstance:       1,
+			numRequests:                             10,
+			maxInternalPerNSNamespaceRPSPerInstance: 10,
+			numInternalHistoryRequests:              1,
+			expectRateLimit:                         true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -695,6 +750,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				log.NewTestLogger(),
 			)
 			rateLimitInterceptor := NamespaceRateLimitInterceptorProvider(
+				primitives.FrontendService,
 				mockRegistry,
 				rateLimiters,
 				&config,
@@ -740,6 +796,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				// Check if the rate limit is hit.
 				if tc.expectRateLimit {
 					assert.ErrorContains(t, err, "rate limit exceeded")
+					if tc.expectedRateLimitErr != nil {
+						require.ErrorContains(t, err, tc.expectedRateLimitErr.Error())
+					}
 					s := status.Convert(err)
 					var resourceExhausted *serviceerror.ResourceExhausted
 					errors.As(serviceerror.FromStatus(s), &resourceExhausted)
@@ -794,6 +853,20 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 					return
 				}
 			}
+
+			for i := 0; i < tc.numInternalHistoryRequests; i++ {
+				_, err = client.GetWorkflowExecutionHistory(
+					context.Background(),
+					&workflowservice.GetWorkflowExecutionHistoryRequest{
+						Namespace: namespaceName,
+						Execution: &commonpb.WorkflowExecution{WorkflowId: primitives.ScheduleWorkflowIDPrefix + "test"},
+					},
+					grpc.Header(&header),
+				)
+				if err != nil {
+					return
+				}
+			}
 		})
 	}
 }
@@ -831,6 +904,15 @@ func getTestConfig(tc namespaceRateLimitInterceptorTestCase) Config {
 			return getOrDefaultLimit(tc.maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance)
 		},
 		PollWaitForNamespaceRateLimitToken: func(_ string) bool { return false },
+		EnableInternalPerNSNamespaceRPS: func(namespace string) bool {
+			return tc.enableInternalPerNSNamespaceRPS
+		},
+		GlobalInternalPerNSNamespaceRPS: func(namespace string) int {
+			return tc.globalInternalPerNSNamespaceRPS
+		},
+		MaxInternalPerNSNamespaceRPSPerInstance: func(namespace string) int {
+			return getOrDefaultLimit(tc.maxInternalPerNSNamespaceRPSPerInstance)
+		},
 	}
 }
 
