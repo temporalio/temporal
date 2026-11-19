@@ -95,7 +95,9 @@ type MatchingServiceClient interface {
 	// A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
 	// history ends up not using is not refunded.
 	//
-	// History treats any failure, including Unimplemented from an older matching host, as "do not dispatch eagerly".
+	// An error from this RPC, including Unimplemented from an older matching host, is neither a grant nor a denial.
+	// When it returns one, history dispatches the activity tasks of a RespondWorkflowTaskCompleted response eagerly.
+	// For a workflow start or a standalone activity start, history treats an error as "do not dispatch eagerly".
 	GrantEagerDispatch(ctx context.Context, in *GrantEagerDispatchRequest, opts ...grpc.CallOption) (*GrantEagerDispatchResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
 	QueryWorkflow(ctx context.Context, in *QueryWorkflowRequest, opts ...grpc.CallOption) (*QueryWorkflowResponse, error)
@@ -665,7 +667,9 @@ type MatchingServiceServer interface {
 	// A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
 	// history ends up not using is not refunded.
 	//
-	// History treats any failure, including Unimplemented from an older matching host, as "do not dispatch eagerly".
+	// An error from this RPC, including Unimplemented from an older matching host, is neither a grant nor a denial.
+	// When it returns one, history dispatches the activity tasks of a RespondWorkflowTaskCompleted response eagerly.
+	// For a workflow start or a standalone activity start, history treats an error as "do not dispatch eagerly".
 	GrantEagerDispatch(context.Context, *GrantEagerDispatchRequest) (*GrantEagerDispatchResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
 	QueryWorkflow(context.Context, *QueryWorkflowRequest) (*QueryWorkflowResponse, error)

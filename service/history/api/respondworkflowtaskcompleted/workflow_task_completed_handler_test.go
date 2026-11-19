@@ -713,7 +713,7 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 			name:     "matching error",
 			response: nil,
 			err:      errors.New("matching unavailable"),
-			granted:  []bool{false, false},
+			granted:  []bool{true, true},
 		},
 		{
 			name:     "missing response item",
@@ -1030,6 +1030,64 @@ func TestHandleEagerActivityCandidatesDispatchCheckDisabled(t *testing.T) {
 	require.Len(t, mutations, 1)
 }
 
+func TestHandleEagerActivityCandidatesMatchingError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	shardCtx := historyi.NewMockShardContext(ctrl)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:   "activity-id",
+		ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+	}
+	activityInfo := &persistencespb.ActivityInfo{
+		ScheduledEventId: 11,
+		ActivityId:       attr.GetActivityId(),
+		Attempt:          1,
+		TaskQueue:        "activity-task-queue",
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id", WorkflowId: "workflow-id"}
+	clock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
+
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	ms.EXPECT().GetActivityInfo(activityInfo.GetScheduledEventId()).Return(activityInfo, true)
+	ms.EXPECT().GetExecutionInfo().Return(executionInfo).Times(2)
+	ms.EXPECT().GetAssignedBuildId().Return("")
+	ms.EXPECT().AddActivityTaskStartedEvent(
+		activityInfo, int64(11), gomock.Any(), "worker", gomock.Any(), nil, nil, "", clock,
+	).Return(&historypb.HistoryEvent{EventId: 12}, nil)
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "run-id"})
+	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "workflow-type"})
+	shardCtx.EXPECT().NewVectorClock().Return(clock, nil)
+	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(nil, errors.New("matching unavailable"))
+
+	handler := &workflowTaskCompletedHandler{
+		identity:        "worker",
+		mutableState:    ms,
+		shard:           shardCtx,
+		tokenSerializer: tasktoken.NewSerializer(),
+		logger:          log.NewNoopLogger(),
+		metricsHandler:  metrics.NoopMetricsHandler,
+		matchingClient:  matchingClient,
+		config:          newEagerActivityDispatchTestConfig(true),
+		eagerActivityCandidates: []eagerActivityCandidate{
+			{scheduledEventID: activityInfo.GetScheduledEventId(), attr: attr},
+		},
+	}
+
+	// GenerateActivityTask has no expectation, so the activity must not also go to Matching as a task.
+	mutations, err := handler.handleEagerActivityCandidates(context.Background())
+	require.NoError(t, err)
+	require.Len(t, mutations, 1)
+	response := &historyservice.RespondWorkflowTaskCompletedResponse{}
+	require.NoError(t, mutations[0](response))
+	require.Len(t, response.GetActivityTasks(), 1)
+	require.Equal(t, attr.GetActivityId(), response.GetActivityTasks()[0].GetActivityId())
+}
+
 func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 	t.Parallel()
 
@@ -1037,16 +1095,11 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 	testCases := []struct {
 		name        string
 		response    *matchingservice.GrantEagerDispatchResponse
-		matchingErr error
 		generateErr error
 	}{
 		{
 			name:     "denied",
 			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{{}}},
-		},
-		{
-			name:        "matching error",
-			matchingErr: errors.New("matching unavailable"),
 		},
 		{
 			name:     "malformed response",
@@ -1077,7 +1130,7 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 			ms.EXPECT().GetActivityInfo(activityInfo.GetScheduledEventId()).Return(activityInfo, true)
 			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
 			ms.EXPECT().GenerateActivityTask(int64(11)).Return(test.generateErr)
-			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(test.response, test.matchingErr)
+			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(test.response, nil)
 
 			handler := &workflowTaskCompletedHandler{
 				mutableState:            ms,
