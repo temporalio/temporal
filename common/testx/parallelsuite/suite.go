@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -182,18 +183,19 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 //
 // The suite must embed [Suite] and have no other fields.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, true, true, args...)
+	run(t, s, true, nil, args...)
 }
 
-// RunExclusive runs the suite and its subtests sequentially with respect to
-// other tests in the package. Call it from a top-level test without calling
-// t.Parallel.
-func RunExclusive[T TestingSuite](t *testing.T, s T, args ...any) {
+// RunWithPackageExclusiveMethods runs the named test methods and their subtests before
+// allowing the suite to run its remaining methods in parallel. Call it from a
+// top-level test without calling t.Parallel so the named methods run in isolation
+// from other tests in the package.
+func RunWithPackageExclusiveMethods[T TestingSuite](t *testing.T, s T, exclusiveMethods []string, args ...any) {
 	if strings.Contains(t.Name(), "/") {
 		//nolint:forbidigo // Panics are fine in testing code.
-		panic("parallelsuite.RunExclusive: requires a top-level test")
+		panic("parallelsuite.RunWithPackageExclusiveMethods: requires a top-level test")
 	}
-	run(t, s, false, false, args...)
+	run(t, s, true, exclusiveMethods, args...)
 }
 
 // RunLegacySequential behaves like [Run] but does not mark test methods as parallel.
@@ -201,10 +203,10 @@ func RunExclusive[T TestingSuite](t *testing.T, s T, args ...any) {
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
 func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, true, false, args...)
+	run(t, s, false, nil, args...)
 }
 
-func run[T TestingSuite](t *testing.T, s T, suiteParallel, methodsParallel bool, args ...any) {
+func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, exclusiveMethods []string, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
@@ -221,6 +223,12 @@ func run[T TestingSuite](t *testing.T, s T, suiteParallel, methodsParallel bool,
 		//nolint:forbidigo // Panics are fine in testing code.
 		panic(fmt.Sprintf("parallelsuite.Run: suite %s has no Test* methods", structType.Name()))
 	}
+	for _, name := range exclusiveMethods {
+		if !slices.ContainsFunc(methods, func(method reflect.Method) bool { return method.Name == name }) {
+			//nolint:forbidigo // Panics are fine in testing code.
+			panic("parallelsuite.RunWithPackageExclusiveMethods: unknown test method " + name)
+		}
+	}
 
 	methods = applyTestifyMFilter(methods)
 	if len(methods) == 0 {
@@ -232,17 +240,29 @@ func run[T TestingSuite](t *testing.T, s T, suiteParallel, methodsParallel bool,
 		argVals[i] = reflect.ValueOf(a)
 	}
 
-	s.initSuite(t, suiteParallel, nil, nil)
-	if initializer, ok := any(s).(AssertionsInitializer); ok {
-		initializer.InitAssertions()
-	}
-
-	for _, method := range methods {
+	runMethod := func(method reflect.Method, parallel bool) {
 		t.Run(method.Name, func(t *testing.T) {
-			cpS := s.copySuite(t, methodsParallel, nil, nil)
+			cpS := s.copySuite(t, parallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})
+	}
+
+	remaining := methods[:0]
+	for _, method := range methods {
+		if slices.Contains(exclusiveMethods, method.Name) {
+			runMethod(method, false)
+		} else {
+			remaining = append(remaining, method)
+		}
+	}
+
+	s.initSuite(t, len(remaining) > 0, nil, nil)
+	if initializer, ok := any(s).(AssertionsInitializer); ok {
+		initializer.InitAssertions()
+	}
+	for _, method := range remaining {
+		runMethod(method, methodsParallel)
 	}
 }
 

@@ -25,7 +25,19 @@ func (s *validSuite) TestA() {
 
 type exclusiveSuite struct{ Suite[*exclusiveSuite] }
 
-func (s *exclusiveSuite) TestEnvironment(key string) {
+func (s *exclusiveSuite) TestParallel(key, original string) {
+	s.Equal(original, os.Getenv(key))
+	s.Panics(func() { s.T().Setenv(key, "parallel") })
+
+	t := s.T()
+	started := make(chan struct{}, 1)
+	s.Run("child", func(s *exclusiveSuite) {
+		started <- struct{}{}
+	})
+	require.Empty(t, started)
+}
+
+func (s *exclusiveSuite) TestSetEnvironment(key, _ string) {
 	s.T().Setenv(key, "method")
 	s.Run("child", func(s *exclusiveSuite) {
 		s.Equal("method", os.Getenv(key))
@@ -33,20 +45,22 @@ func (s *exclusiveSuite) TestEnvironment(key string) {
 	})
 }
 
-func TestRunExclusive(t *testing.T) {
+func TestRunWithPackageExclusiveMethods(t *testing.T) {
 	const key = "TESTX_EXCLUSIVE_SUITE"
-	t.Setenv(key, "parent")
-
-	RunExclusive(t, &exclusiveSuite{}, key)
-
-	require.Equal(t, "parent", os.Getenv(key))
+	RunWithPackageExclusiveMethods(t, &exclusiveSuite{}, []string{"TestSetEnvironment"}, key, os.Getenv(key))
 }
 
-func TestRunExclusiveRejectsSubtest(t *testing.T) {
+func TestRunWithPackageExclusiveMethodsRejectsSubtest(t *testing.T) {
 	t.Run("child", func(t *testing.T) {
-		require.PanicsWithValue(t, "parallelsuite.RunExclusive: requires a top-level test", func() {
-			RunExclusive(t, &exclusiveSuite{}, "TESTX_EXCLUSIVE_SUITE")
+		require.PanicsWithValue(t, "parallelsuite.RunWithPackageExclusiveMethods: requires a top-level test", func() {
+			RunWithPackageExclusiveMethods(t, &exclusiveSuite{}, []string{"TestSetEnvironment"}, "TESTX_EXCLUSIVE_SUITE", "")
 		})
+	})
+}
+
+func TestRunWithPackageExclusiveMethodsRejectsUnknownMethod(t *testing.T) {
+	require.PanicsWithValue(t, "parallelsuite.RunWithPackageExclusiveMethods: unknown test method TestMissing", func() {
+		RunWithPackageExclusiveMethods(t, &validSuite{}, []string{"TestMissing"})
 	})
 }
 
