@@ -14,41 +14,40 @@ import (
 type HistoryUtils struct {
 	t      testing.TB
 	client workflowservice.WorkflowServiceClient
+	nsName namespace.Name
 }
 
-func New(t testing.TB, client workflowservice.WorkflowServiceClient) HistoryUtils {
-	return HistoryUtils{t: t, client: client}
+func New(t testing.TB, client workflowservice.WorkflowServiceClient, nsName namespace.Name) HistoryUtils {
+	return HistoryUtils{t: t, client: client, nsName: nsName}
 }
 
-func (u HistoryUtils) GetHistoryFunc(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+func (u HistoryUtils) GetHistoryFunc(ctx context.Context, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
 		u.t.Helper()
-		return u.GetHistory(ctx, nsName, execution)
+		return u.GetHistory(ctx, execution)
 	}
 }
 
-func (u HistoryUtils) GetHistory(ctx context.Context, nsName namespace.Name, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (u HistoryUtils) GetHistory(ctx context.Context, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	u.t.Helper()
-	events, err := ReadHistory(ctx, u.client, nsName, execution)
+	events, err := u.readHistory(ctx, execution)
 	require.NoError(u.t, err)
 	return events
 }
 
-// ReadHistory reads every page of workflow history using ctx.
-func ReadHistory(
+// readHistory reads every page of workflow history using ctx.
+func (u HistoryUtils) readHistory(
 	ctx context.Context,
-	client workflowservice.WorkflowServiceClient,
-	nsName namespace.Name,
 	execution *commonpb.WorkflowExecution,
 ) ([]*historypb.HistoryEvent, error) {
 	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:       nsName.String(),
+		Namespace:       u.nsName.String(),
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
 	}
 	var events []*historypb.HistoryEvent
 	for {
-		response, err := client.GetWorkflowExecutionHistory(ctx, request)
+		response, err := u.client.GetWorkflowExecutionHistory(ctx, request)
 		if err != nil {
 			return nil, err
 		}
