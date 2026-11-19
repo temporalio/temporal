@@ -200,7 +200,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 			s.NotEqual(handlerRun.GetRunID(), replacementRunID)
 			replacementRun := env.SdkClient().GetWorkflow(ctx, handlerRun.GetID(), replacementRunID)
 			signaledEvent := s.assertSignalLinks(ctx, env, chasmEnabled, caller, replacementRun, args.RequestID)
-			handlerHistory := env.GetHistory(
+			handlerHistory := env.RequireHistory(
 				s.Context(),
 				&commonpb.WorkflowExecution{WorkflowId: replacementRun.GetID(), RunId: replacementRun.GetRunID()},
 			)
@@ -273,7 +273,7 @@ func (s *NexusWorkflowTestSuite) assertSignalBackwardLink(env *NexusTestEnv, cal
 			},
 		}
 	} else {
-		callerHistory := env.GetHistory(
+		callerHistory := env.RequireHistory(
 			s.Context(),
 			&commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()},
 		)
@@ -351,7 +351,7 @@ func (s *NexusWorkflowTestSuite) assertSignalForwardLink(ctx context.Context, en
 		return
 	}
 	s.NoError(caller.workflowRun.Get(ctx, nil))
-	callerHistory := env.GetHistory(ctx, &commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()})
+	callerHistory := env.RequireHistory(ctx, &commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()})
 	completedEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	s.Len(completedEvent.GetLinks(), 1)
 	protorequire.ProtoEqual(s.T(), wantLink, completedEvent.GetLinks()[0])
@@ -377,7 +377,7 @@ func (s *NexusWorkflowTestSuite) signalRunID(ctx context.Context, env *NexusTest
 
 func (s *NexusWorkflowTestSuite) handlerSignalEvent(env *NexusTestEnv, handlerRun client.WorkflowRun, signalRequestID string) *historypb.HistoryEvent {
 	s.T().Helper()
-	handlerHistory := env.GetHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
+	handlerHistory := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
 	var signaledEvent *historypb.HistoryEvent
 	for _, event := range handlerHistory {
 		if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == signalRequestID {
@@ -399,7 +399,7 @@ func (s *NexusWorkflowTestSuite) resetHandlerWorkflowAfterSignal(
 	var workflowTaskCompletedEventID int64
 	// Get the first completed event after the signal.
 	s.Await(func(s *NexusWorkflowTestSuite) {
-		handlerHistory := env.GetHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
+		handlerHistory := env.RequireHistory(s.Context(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
 		signalReqEventFound := false
 		for _, event := range handlerHistory {
 			if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == signalRequestID {
