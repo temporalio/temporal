@@ -70,7 +70,9 @@ func (c *Component) effectiveAvailableSlots(now time.Time) int32 {
 func (c *Component) incrementGeneration() {
 	// this causes all polls to block until WakeUpTo or WakeAll advances
 	c.Generation++
+	c.WakeUpTo = 0
 	c.WakeAll = false
+	c.WakeStage = 0
 }
 
 func (c *Component) updateConfig(config *taskqueuepb.ConcurrencyLimit, version int64) {
@@ -121,14 +123,14 @@ func (c *Component) release(slotID string) {
 }
 
 // poll is called from PollComponent and should not modify the state.
-func (c *Component) poll(now time.Time, reqGeneration int64, reqTokens int32) (int64, int32, bool) {
+func (c *Component) poll(now time.Time, reqGeneration int64, reqStartTime int64, reqTokens int32) (int64, int32, bool) {
 	if reqGeneration < c.Generation {
 		return c.Generation, 0, true // old generation, try again with current
 	} else if reqGeneration > c.Generation {
 		return 0, 0, false // shouldn't happen, but wait to keep things monotonic
 	}
 
-	wake := c.WakeAll
+	wake := c.WakeAll || reqStartTime <= c.WakeUpTo
 	storedAvailable := c.availableSlots()
 	effectiveAvailable := min(c.effectiveAvailableSlots(now), reqTokens)
 	freedByExpiration := storedAvailable == 0 && effectiveAvailable > 0

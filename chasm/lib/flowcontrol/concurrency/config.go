@@ -33,3 +33,22 @@ var ReserveTimeout = dynamicconfig.NewGlobalDurationSetting(
 	defaultReserveTimeout,
 	`How long a concurrency limiter slot reservation lasts before it expires if not committed.`,
 )
+
+type StagedWakeOptions struct {
+	// Interval is the time between wake stages.
+	Interval time.Duration
+	// MaxStage is the stage at which all remaining waiters are woken. The number of tokens
+	// woken doubles at each stage before that. Capped to 10.
+	MaxStage int32
+}
+
+var defaultStagedWakeOptions = StagedWakeOptions{
+	Interval: time.Second,
+	MaxStage: 8,
+}
+
+var StagedWake = dynamicconfig.NewGlobalTypedSetting(
+	"flowcontrol.concurrency.stagedWake",
+	defaultStagedWakeOptions,
+	`Options for waking concurrency limiter waiters in stages when slots become available.`,
+)

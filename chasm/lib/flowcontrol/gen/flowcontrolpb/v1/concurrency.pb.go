@@ -38,8 +38,12 @@ type ConcurrencyState struct {
 	Slots []*ConcurrencyState_Slot `protobuf:"bytes,3,rep,name=slots,proto3" json:"slots,omitempty"`
 	// Generation is used to ensure Wait is monotonic. See comment in Wait for details.
 	Generation int64 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`
+	// WakeUpTo is used to select and stage wakeups by priority.
+	WakeUpTo int64 `protobuf:"varint,5,opt,name=wake_up_to,json=wakeUpTo,proto3" json:"wake_up_to,omitempty"`
 	// WakeAll means wake up to maximum priority.
-	WakeAll       bool `protobuf:"varint,6,opt,name=wake_all,json=wakeAll,proto3" json:"wake_all,omitempty"`
+	WakeAll bool `protobuf:"varint,6,opt,name=wake_all,json=wakeAll,proto3" json:"wake_all,omitempty"`
+	// WakeStage is the number of staged wakeups we've done since the first one.
+	WakeStage     int32 `protobuf:"varint,7,opt,name=wake_stage,json=wakeStage,proto3" json:"wake_stage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -102,11 +106,25 @@ func (x *ConcurrencyState) GetGeneration() int64 {
 	return 0
 }
 
+func (x *ConcurrencyState) GetWakeUpTo() int64 {
+	if x != nil {
+		return x.WakeUpTo
+	}
+	return 0
+}
+
 func (x *ConcurrencyState) GetWakeAll() bool {
 	if x != nil {
 		return x.WakeAll
 	}
 	return false
+}
+
+func (x *ConcurrencyState) GetWakeStage() int32 {
+	if x != nil {
+		return x.WakeStage
+	}
+	return 0
 }
 
 type ConcurrencyServiceBatchRequest struct {
@@ -514,15 +532,19 @@ var File_temporal_server_chasm_lib_flowcontrol_proto_v1_concurrency_proto protor
 
 const file_temporal_server_chasm_lib_flowcontrol_proto_v1_concurrency_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/flowcontrol/proto/v1/concurrency.proto\x12.temporal.server.chasm.lib.flowcontrol.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto\"\x8b\x03\n" +
+	"@temporal/server/chasm/lib/flowcontrol/proto/v1/concurrency.proto\x12.temporal.server.chasm.lib.flowcontrol.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto\"\xc8\x03\n" +
 	"\x10ConcurrencyState\x12C\n" +
 	"\x06config\x18\x01 \x01(\v2+.temporal.api.taskqueue.v1.ConcurrencyLimitR\x06config\x12%\n" +
 	"\x0econfig_version\x18\x02 \x01(\x03R\rconfigVersion\x12[\n" +
 	"\x05slots\x18\x03 \x03(\v2E.temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyState.SlotR\x05slots\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x04 \x01(\x03R\n" +
-	"generation\x12\x19\n" +
-	"\bwake_all\x18\x06 \x01(\bR\awakeAll\x1as\n" +
+	"generation\x12\x1c\n" +
+	"\n" +
+	"wake_up_to\x18\x05 \x01(\x03R\bwakeUpTo\x12\x19\n" +
+	"\bwake_all\x18\x06 \x01(\bR\awakeAll\x12\x1d\n" +
+	"\n" +
+	"wake_stage\x18\a \x01(\x05R\twakeStage\x1as\n" +
 	"\x04Slot\x12\x17\n" +
 	"\aslot_id\x18\x01 \x01(\tR\x06slotId\x12\x1c\n" +
 	"\tcommitted\x18\x02 \x01(\bR\tcommitted\x124\n" +

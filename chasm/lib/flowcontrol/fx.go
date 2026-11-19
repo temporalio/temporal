@@ -10,6 +10,7 @@ var HistoryModule = fx.Module(
 	"flowcontrol-history",
 	fx.Provide(
 		concurrency.NewHandler,
+		concurrency.NewStagedWakeHandler,
 		newLibrary,
 	),
 	fx.Invoke(func(l *library, registry *chasm.Registry) error {
