@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -1132,7 +1133,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 
 			if bound {
 				mutableState.SetStickyTaskQueue("S", nil)
-				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
 			}
 			wt := addWorkflowTaskScheduledEvent(mutableState)
 			startedEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, mutableState.CurrentTaskQueue().GetName(), uuid.NewString())
@@ -1154,7 +1155,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 					if bound {
 						info := request.UpdateWorkflowMutation.ExecutionInfo
 						s.True(info.GetSessionState().GetExclusiveWorker())
-						s.Equal("S", info.GetSessionState().GetWorkerQueue())
+						s.Equal("S", info.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
 						s.Equal(int32(1), info.GetWorkflowTaskAttemptsSinceLastSuccess())
 						s.Equal("S", info.GetStickyTaskQueue())
 						s.Equal(taskQueueName, info.GetTaskQueue())

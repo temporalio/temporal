@@ -1500,16 +1500,16 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 func (ms *MutableStateImpl) SetSessionState(state *persistencespb.SessionState) {
 	current := ms.executionInfo.GetSessionState()
 	if current.GetExclusiveWorker() &&
-		(!state.GetExclusiveWorker() || state.GetWorkerQueue() != current.GetWorkerQueue()) {
+		(!state.GetExclusiveWorker() || state.GetBoundWorkerInfo().GetWorkerQueue() != current.GetBoundWorkerInfo().GetWorkerQueue()) {
 		softassert.Fail(ms.logger, "attempted to replace an exclusive worker binding",
-			tag.TaskQueueName(current.GetWorkerQueue()),
-			tag.NewStringTag("requested-task-queue", state.GetWorkerQueue()),
+			tag.TaskQueueName(current.GetBoundWorkerInfo().GetWorkerQueue()),
+			tag.NewStringTag("requested-task-queue", state.GetBoundWorkerInfo().GetWorkerQueue()),
 		)
 		return
 	}
 	ms.executionInfo.SessionState = state
-	// Note: executionInfo.StickyTaskQueue and SessionState.WorkerQueue are mirror values of each other
-	ms.SetStickyTaskQueue(state.GetWorkerQueue(), nil)
+	// Note: executionInfo.StickyTaskQueue and SessionState.BoundWorkerInfo.WorkerQueue are mirror values of each other
+	ms.SetStickyTaskQueue(state.GetBoundWorkerInfo().GetWorkerQueue(), nil)
 }
 
 func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
@@ -1518,7 +1518,7 @@ func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeo
 }
 
 // ClearStickyTaskQueue does not clear the sticky task queue if the workflow is bound to an exclusive worker.
-// Currently, executionInfo.StickyTaskQueue and SessionState.WorkerQueue are mirrors of each other.
+// Currently, executionInfo.StickyTaskQueue and SessionState.BoundWorkerInfo.WorkerQueue are mirrors of each other.
 func (ms *MutableStateImpl) ClearStickyTaskQueue() {
 	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
 		return
@@ -1526,7 +1526,7 @@ func (ms *MutableStateImpl) ClearStickyTaskQueue() {
 	ms.executionInfo.StickyTaskQueue = ""
 	ms.executionInfo.StickyScheduleToStartTimeout = nil
 	if sessionState := ms.executionInfo.GetSessionState(); sessionState != nil {
-		sessionState.WorkerQueue = ""
+		sessionState.BoundWorkerInfo = nil
 	}
 }
 

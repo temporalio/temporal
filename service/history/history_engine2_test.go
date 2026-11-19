@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
@@ -668,6 +669,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTas
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"},
 					},
 				}
+				pollRequest.WorkerInstanceKey = "worker-s-instance"
 			} else {
 				//nolint:staticcheck // SA1019: required to exercise old Build ID-based versioning.
 				pollRequest.WorkerVersionCapabilities = &commonpb.WorkerVersionCapabilities{UseVersioning: true, BuildId: buildID}
@@ -691,7 +693,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTas
 			s.Equal(response.GetStartedEventId(), persistedExecutionInfo.GetWorkflowTaskStartedEventId())
 			if tc.singleSession {
 				s.True(persistedExecutionInfo.GetSessionState().GetExclusiveWorker())
-				s.Equal("S", persistedExecutionInfo.GetSessionState().GetWorkerQueue())
+				s.Equal("S", persistedExecutionInfo.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
+				s.Equal("worker-s-instance", persistedExecutionInfo.GetSessionState().GetBoundWorkerInfo().GetInstanceKey())
 				s.Equal("S", persistedExecutionInfo.GetStickyTaskQueue())
 				s.Empty(persistedExecutionInfo.GetAssignedBuildId())
 			} else {
@@ -887,7 +890,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 
 			ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
 			if name == "replacement" {
-				ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"})
+				ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}})
 			}
 			wfMs := workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -899,7 +902,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 				s.Equal(int64(3), info.GetWorkflowTaskStartedEventId())
 				if exclusiveWorker {
 					s.Equal("S", info.GetStickyTaskQueue())
-					s.Equal("S", info.GetSessionState().GetWorkerQueue())
+					s.Equal("S", info.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
 				}
 				return tests.UpdateWorkflowExecutionResponse, nil
 			})

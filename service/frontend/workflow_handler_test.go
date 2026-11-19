@@ -7109,7 +7109,7 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 					var err error
 					if taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 						request := &workflowservice.PollWorkflowTaskQueueRequest{
-							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options),
+							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options), WorkerInstanceKey: "worker-instance",
 						}
 						original := common.CloneProto(request)
 						if !tc.disabled {
@@ -7128,7 +7128,7 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 						s.ProtoEqual(original, request)
 					} else {
 						request := &workflowservice.PollActivityTaskQueueRequest{
-							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options),
+							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options), WorkerInstanceKey: "worker-instance",
 						}
 						original := common.CloneProto(request)
 						if !tc.disabled {

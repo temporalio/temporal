@@ -18,6 +18,7 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 		options        *sessionpb.WorkerSessionOptions
 		singleSession  bool
 		stableIdentity string
+		noInstanceKey  bool
 		invalid        bool
 	}{
 		{name: "regular poll", kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -28,6 +29,7 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 		{name: "empty stable identity", kind: enumspb.TASK_QUEUE_KIND_STICKY, singleSession: true, invalid: true},
 		{name: "sticky queue differs from identity", kind: enumspb.TASK_QUEUE_KIND_STICKY, singleSession: true, stableIdentity: "session", invalid: true},
 		{name: "single session on normal queue", kind: enumspb.TASK_QUEUE_KIND_NORMAL, singleSession: true, stableIdentity: "queue", invalid: true},
+		{name: "single session without worker instance key", kind: enumspb.TASK_QUEUE_KIND_STICKY, singleSession: true, stableIdentity: "queue", noInstanceKey: true, invalid: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -37,7 +39,11 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 					Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tc.stableIdentity}},
 				}
 			}
-			err := validateWorkerSessionOptions(options, &taskqueuepb.TaskQueue{Name: "queue", Kind: tc.kind})
+			instanceKey := "worker-instance-key"
+			if tc.noInstanceKey {
+				instanceKey = ""
+			}
+			err := validateWorkerSessionOptions(options, &taskqueuepb.TaskQueue{Name: "queue", Kind: tc.kind}, instanceKey)
 			if tc.invalid {
 				require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 			} else {

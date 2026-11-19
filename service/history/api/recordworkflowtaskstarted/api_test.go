@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -145,7 +146,7 @@ func TestRecordWorkflowTaskStartedSingleSessionRejection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := invoke(t, func(ms *historyi.MockMutableState) {
 				ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-					SessionState:    &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"},
+					SessionState:    &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}},
 					StickyTaskQueue: tc.stickyQueue,
 				}).AnyTimes()
 				// Validate the destination even for a duplicate task-start request.

@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/archiver"
@@ -684,7 +685,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			executionInfo := mutableState.GetExecutionInfo()
 			executionInfo.StickyTaskQueue = stickyTaskQueueName
 			if tc.bound {
-				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: stickyTaskQueueName}
+				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: stickyTaskQueueName}}
 			}
 			executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 

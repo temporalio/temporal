@@ -55,10 +55,10 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	})
 	require.NoError(t, err)
 	workflowPollRequest := &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: namespace, TaskQueue: tv.StickyTaskQueue(), SessionOptions: session,
+		Namespace: namespace, TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(),
 	}
 	activityPollRequest := &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: namespace, TaskQueue: tv.StickyTaskQueue(), SessionOptions: session,
+		Namespace: namespace, TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(),
 	}
 	_, err = client.PollWorkflowTaskQueue(testcore.NewContext(t.Context()), workflowPollRequest)
 	var disabled *serviceerror.FailedPrecondition
@@ -150,7 +150,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	empty, err := matching.PollWorkflowTaskQueue(t.Context(), &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: env.NamespaceID().String(),
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, Identity: tv.WorkerIdentity(),
+			TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(), Identity: tv.WorkerIdentity(),
 		},
 		Conditions: &matchingservice.PollConditions{NoWait: true},
 	})
@@ -162,7 +162,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, Identity: tv.WorkerIdentity() + "-replacement",
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(), Identity: tv.WorkerIdentity() + "-replacement",
 	}).HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
@@ -178,6 +178,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 		SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: freshQueue.GetName()},
 		}},
+		WorkerInstanceKey: tv.WorkerInstanceKey(),
 	}).HandleTask(other, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, other.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
@@ -244,7 +245,7 @@ func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 			response, err := matching.PollWorkflowTaskQueue(t.Context(), &matchingservice.PollWorkflowTaskQueueRequest{
 				NamespaceId: env.NamespaceID().String(),
 				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-					TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, Identity: tv.WorkerIdentity(),
+					TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(), Identity: tv.WorkerIdentity(),
 				},
 			})
 			results <- pollResult{response: response, err: err}
@@ -279,6 +280,7 @@ func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 		SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: freshQueue.GetName()},
 		}},
+		WorkerInstanceKey: tv.WorkerInstanceKey(),
 	}).HandleTask(tv.WithWorkflowID(expectedOther), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, expectedOther, task.GetWorkflowExecution().GetWorkflowId(), "the unrelated execution remains available to S2")
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
@@ -313,7 +315,7 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 	}}
 	poller := taskpoller.New(t, client, namespace).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session,
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(),
 	})
 	_, err = poller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
@@ -423,7 +425,7 @@ func TestSingleSessionAcquisitionUsesNormalPolling(t *testing.T) {
 				WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(30 * time.Second),
 			}
 			pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{
-				TaskQueue: stickyQueue, Identity: tv.WorkerIdentity(),
+				TaskQueue: stickyQueue, Identity: tv.WorkerIdentity(), WorkerInstanceKey: tv.WorkerInstanceKey(),
 				SessionOptions: &sessionpb.WorkerSessionOptions{
 					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: stickyQueue.GetName()},

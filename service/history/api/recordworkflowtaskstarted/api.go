@@ -13,6 +13,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -85,7 +86,7 @@ func Invoke(
 			// An unbound execution can acquire the polling session's stable identity.
 			// Once bound, every start request, including retries, must identify the same session.
 			sessionState := executionInfo.GetSessionState()
-			if sessionState.GetExclusiveWorker() && (stableIdentity == "" || stableIdentity != sessionState.GetWorkerQueue()) {
+			if sessionState.GetExclusiveWorker() && (stableIdentity == "" || stableIdentity != sessionState.GetBoundWorkerInfo().GetWorkerQueue()) {
 				return nil, serviceerrors.NewObsoleteMatchingTask("workflow is bound to another single-session destination")
 			}
 
@@ -193,7 +194,10 @@ func Invoke(
 				// Bind after the task start is accepted so both changes commit in the same transaction.
 				mutableState.SetSessionState(&persistencespb.SessionState{
 					ExclusiveWorker: true,
-					WorkerQueue:     stableIdentity,
+					BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{
+						WorkerQueue: stableIdentity,
+						InstanceKey: req.PollRequest.GetWorkerInstanceKey(),
+					},
 				})
 			}
 
