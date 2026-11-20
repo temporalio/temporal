@@ -174,6 +174,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -209,6 +210,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -266,6 +268,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -355,6 +358,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -446,6 +450,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -537,6 +542,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_H
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -592,6 +598,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -681,6 +688,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -696,6 +704,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		false,
 		configVersion,
 		failoverVersion,
@@ -738,12 +747,85 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_ForceReplicate_Bypass
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		false, // replicationClusterListUpdated
 		int64(0),
 		int64(1),
 		false, // isGlobalNamespace
 		nil,
 		true, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// TestHandleTransmissionTask_ReplicationClustersDecidePublish: the publish
+// decision follows the replication clusters the caller resolved, not
+// ReplicationConfig.Clusters, and the task carries ReplicationConfig as given.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_ReplicationClustersDecidePublish() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "resolved-ns",
+		State: enumspb.NAMESPACE_STATE_REGISTERED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a"},
+	}
+
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			clusters := task.GetNamespaceTaskAttributes().GetReplicationConfig().GetClusters()
+			s.Require().Len(clusters, 1)
+			s.Equal("cluster-a", clusters[0].GetClusterName())
+			return nil
+		}).Times(1)
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		[]string{"cluster-a", "cluster-b"},
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		false, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// TestHandleTransmissionTask_SingleReplicationClusterNotReplicated: a single
+// replication cluster skips publishing even when ReplicationConfig.Clusters
+// lists more. No Publish expectation is set.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_SingleReplicationClusterNotReplicated() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "resolved-ns",
+		State: enumspb.NAMESPACE_STATE_REGISTERED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a", "cluster-b"},
+	}
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		[]string{"cluster-a"},
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		false, // forceReplicate
 	)
 	s.Require().NoError(err)
 }
@@ -769,6 +851,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_ForceReplicate_Delete
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		false, // replicationClusterListUpdated
 		int64(0),
 		int64(1),
@@ -799,6 +882,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_DeletedNotReplicated(
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		false, // replicationClusterListUpdated
 		int64(0),
 		int64(1),
@@ -841,6 +925,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_SoftDeletedReplicated
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		false, // replicationClusterListUpdated
 		int64(2),
 		int64(1),

@@ -125,6 +125,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.config,
 		nil,
 		metrics.NoopMetricsHandler,
+		namespace.NewDefaultReplicationResolverFactory(),
 	)
 }
 
