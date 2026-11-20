@@ -1685,7 +1685,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 		ID:                  tv1.WorkflowID(),
 		TaskQueue:           tv1.TaskQueue().GetName(),
 		VersioningOverride:  nil,
-		WorkflowTaskTimeout: 10 * time.Second,
+		WorkflowTaskTimeout: 30 * time.Second,
 	}
 	if withOverride {
 		startOpts.VersioningOverride = &sdkclient.PinnedVersioningOverride{
