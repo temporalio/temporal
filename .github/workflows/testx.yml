@@ -39,7 +39,7 @@ jobs:
               mods=$(go list -m -f '{{if not .Main}}{{.Path}}{{end}}' all)
               deps=$(echo "$mods" | grep '^go.temporal.io/' || true)
               if [ -n "$deps" ]; then
-                echo "::error file=$module/go.mod::testx must not depend on go.temporal.io modules: $(echo "$deps" | tr "\n" " ")"
+                echo "::error file=$module/go.mod::${module} must not depend on go.temporal.io modules: $(echo "$deps" | tr "\n" " ")"
                 exit 1
               fi
               go mod tidy -diff
