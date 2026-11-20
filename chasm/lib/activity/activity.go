@@ -292,6 +292,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
 	links := ctx.Links(a)
+	scheduledTime, startedTime := a.taskResponseTimes(attempt)
 
 	var handoffAttempt int32
 	if a.GetHandoffOptions() != nil {
@@ -299,7 +300,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	}
 
 	return &historyservice.RecordActivityTaskStartedResponse{
-		StartedTime:                 attempt.GetStartedTime(),
+		StartedTime:                 startedTime,
 		HandoffAttempt:              handoffAttempt,
 		HandoffOptions:              a.GetHandoffOptions(),
 		Attempt:                     attempt.GetCount(),
@@ -309,7 +310,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		WorkflowNamespace:           namespace,
 		HeartbeatDetails:            lastHeartbeat.GetDetails(),
 		NexusSerializationContext:   requestData.GetPropagatedNexusSerializationContext(),
-		CurrentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
+		CurrentAttemptScheduledTime: scheduledTime,
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),

@@ -60,6 +60,7 @@ func (a *Activity) eagerActivityTaskData(
 	key := ctx.ExecutionKey()
 	requestData := a.RequestData.Get(ctx)
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
+	scheduledTime, startedTime := a.taskResponseTimes(attempt)
 
 	var handoffAttempt int32
 	if a.GetHandoffOptions() != nil {
@@ -78,8 +79,8 @@ func (a *Activity) eagerActivityTaskData(
 		input:                               common.CloneProto(requestData.GetInput()),
 		heartbeatDetails:                    common.CloneProto(lastHeartbeat.GetDetails()),
 		scheduledTime:                       common.CloneProto(a.GetScheduleTime()),
-		currentAttemptScheduledTime:         common.CloneProto(a.dispatchTimeForAttempt(attempt)),
-		startedTime:                         common.CloneProto(attempt.GetStartedTime()),
+		currentAttemptScheduledTime:         common.CloneProto(scheduledTime),
+		startedTime:                         common.CloneProto(startedTime),
 		attempt:                             attempt.GetCount(),
 		handoffAttempt:                      handoffAttempt,
 		handoffOptions:                      common.CloneProto(a.GetHandoffOptions()),
@@ -443,4 +444,16 @@ func (a *Activity) terminalFailure(ctx chasm.Context) *failurepb.Failure {
 		return details.GetFailure()
 	}
 	return nil
+}
+
+// taskResponseTimes returns the dispatch and pickup times reported to workers.
+// Handoff retries reuse the times from the task that started the start-to-close window.
+// Activities without handoff options report the current task's times.
+func (a *Activity) taskResponseTimes(attempt *activitypb.ActivityAttemptState) (scheduledTime, startedTime *timestamppb.Timestamp) {
+	if a.GetHandoffOptions() != nil {
+		state := attempt.GetHandoffState()
+		return state.GetStartToCloseTaskDispatchTime(), state.GetStartToCloseStartedTime()
+	}
+
+	return a.dispatchTimeForAttempt(attempt), attempt.GetStartedTime()
 }

@@ -1330,8 +1330,11 @@ type ActivityAttemptState_HandoffState struct {
 	StartToCloseStartedTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=start_to_close_started_time,json=startToCloseStartedTime,proto3" json:"start_to_close_started_time,omitempty"`
 	// Independent generation for the carried start-to-close timer. Never rewound with visible retry counters.
 	StartToCloseStamp int32 `protobuf:"varint,3,opt,name=start_to_close_stamp,json=startToCloseStamp,proto3" json:"start_to_close_stamp,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Scheduled dispatch time of the task whose pickup started the current start-to-close window.
+	// Preserved across handoff retries.
+	StartToCloseTaskDispatchTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_to_close_task_dispatch_time,json=startToCloseTaskDispatchTime,proto3" json:"start_to_close_task_dispatch_time,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState_HandoffState) Reset() {
@@ -1383,6 +1386,13 @@ func (x *ActivityAttemptState_HandoffState) GetStartToCloseStamp() int32 {
 		return x.StartToCloseStamp
 	}
 	return 0
+}
+
+func (x *ActivityAttemptState_HandoffState) GetStartToCloseTaskDispatchTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartToCloseTaskDispatchTime
+	}
+	return nil
 }
 
 type ActivityOutcome_Successful struct {
@@ -1527,7 +1537,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\bidentity\x18\x02 \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x04 \x01(\tR\trequestId\"\xe4\f\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\"\xc9\r\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
@@ -1552,11 +1562,12 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\rhandoff_state\x18\x13 \x01(\v2N.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.HandoffStateR\fhandoffState\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
-	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\x1a\xaf\x01\n" +
+	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\x1a\x94\x02\n" +
 	"\fHandoffState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12X\n" +
 	"\x1bstart_to_close_started_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x17startToCloseStartedTime\x12/\n" +
-	"\x14start_to_close_stamp\x18\x03 \x01(\x05R\x11startToCloseStamp\"\xc9\x01\n" +
+	"\x14start_to_close_stamp\x18\x03 \x01(\x05R\x11startToCloseStamp\x12c\n" +
+	"!start_to_close_task_dispatch_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x1cstartToCloseTaskDispatchTime\"\xc9\x01\n" +
 	"\x16ActivityHeartbeatState\x12:\n" +
 	"\adetails\x18\x01 \x01(\v2 .temporal.api.common.v1.PayloadsR\adetails\x12?\n" +
 	"\rrecorded_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\frecordedTime\x122\n" +
@@ -1694,13 +1705,14 @@ var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdx
 	19, // 40: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.time:type_name -> google.protobuf.Timestamp
 	31, // 41: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.failure:type_name -> temporal.api.failure.v1.Failure
 	19, // 42: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.HandoffState.start_to_close_started_time:type_name -> google.protobuf.Timestamp
-	26, // 43: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
-	31, // 44: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
-	45, // [45:45] is the sub-list for method output_type
-	45, // [45:45] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	19, // 43: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.HandoffState.start_to_close_task_dispatch_time:type_name -> google.protobuf.Timestamp
+	26, // 44: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
+	31, // 45: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
+	46, // [46:46] is the sub-list for method output_type
+	46, // [46:46] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init() }
