@@ -46,6 +46,8 @@ var (
 	FlagTLSCaPath                  = "tls-ca-path"
 	FlagTLSDisableHostVerification = "tls-disable-host-verification"
 	FlagTLSServerName              = "tls-server-name"
+	FlagAPIKey                     = "api-key"
+	FlagGRPCMeta                   = "grpc-meta"
 	FlagLastMessageID              = "last-message-id"
 	FlagJobToken                   = "job-token"
 	FlagReason                     = "reason"
