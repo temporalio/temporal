@@ -321,6 +321,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(ctx context.Context, request *persistence.RangeCompleteHistoryTasksRequest) error {
 				s.Equal(mockShard.GetShardID(), request.ShardID)
+				s.Equal(mockShard.GetRangeID(), request.RangeID)
 				s.Equal(base.category, request.TaskCategory)
 				if base.category.Type() == tasks.CategoryTypeScheduled {
 					s.True(request.InclusiveMinTaskKey.FireTime.Equal(currentLowWatermark.FireTime))
@@ -433,6 +434,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(ctx context.Context, request *persistence.RangeCompleteHistoryTasksRequest) error {
 				s.Equal(mockShard.GetShardID(), request.ShardID)
+				s.Equal(mockShard.GetRangeID(), request.RangeID)
 				s.Equal(base.category, request.TaskCategory)
 				s.True(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark) == 0)
 				if base.category.Type() == tasks.CategoryTypeScheduled {

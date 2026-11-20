@@ -129,6 +129,10 @@ type (
 		// It's ok to use semaphore by its own or lock rwLock within the semaphore.
 		// But DO NOT try to acquire ioSemaphore while holding rwLock, as it may cause deadlock.
 		ioSemaphore locks.PrioritySemaphore
+		// serializeRangeCompletion admits history task range completion through ioSemaphore.
+		// On Cassandra, range completion is a conditional batch (LWT) on the shard partition and
+		// would otherwise contend with this shard's other conditional writes.
+		serializeRangeCompletion bool
 
 		// state is protected by stateLock
 		stateLock  sync.Mutex
@@ -1756,7 +1760,13 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 	if callerInfo.CallerType == headers.CallerTypePreemptable {
 		priority = locks.PriorityLow
 	}
+	return s.ioSemaphoreAcquireWithPriority(ctx, priority)
+}
 
+func (s *ContextImpl) ioSemaphoreAcquireWithPriority(
+	ctx context.Context,
+	priority locks.Priority,
+) (retErr error) {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope), metrics.PriorityTag(priority))
 	metrics.SemaphoreRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
@@ -2346,6 +2356,8 @@ func newContext(
 			&cache.Options{TTL: historyConfig.BusinessIDReuseLimiterCacheTTL()},
 		),
 	}
+	// Range completion is a conditional batch on the shard partition only on Cassandra.
+	shardContext.serializeRangeCompletion = persistenceConfig.DataStores[persistenceConfig.DefaultStore].Cassandra != nil
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
 		timeSource,
