@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	libraryName        = "worker"
-	groupComponentName = "group"
+	libraryName            = "worker"
+	groupComponentName     = "group"
+	workerComponentName    = "worker"
+	stringSetComponentName = "string_set"
 )
 
 var (
@@ -26,6 +28,30 @@ var (
 type WorkerGroup struct {
 	chasm.UnimplementedComponent
 	*workerstatepb.WorkerGroupState
+
+	// Workers in the group, keyed by worker_instance_key. A worker is added the first time it
+	// reports activity bindings.
+	Workers chasm.Map[string, *Worker]
+}
+
+// Worker is one worker in a group.
+type Worker struct {
+	chasm.UnimplementedComponent
+	*workerstatepb.WorkerState
+
+	// ActivityBindings holds the task tokens of activities the worker is running.
+	ActivityBindings chasm.Field[Set[string]]
+}
+
+func newWorker(ctx chasm.MutableContext) *Worker {
+	return &Worker{
+		WorkerState:      &workerstatepb.WorkerState{},
+		ActivityBindings: chasm.NewComponentField[Set[string]](ctx, newStringSet()),
+	}
+}
+
+func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
 }
 
 // newWorkerGroup creates an active group without a lease.
@@ -74,10 +100,40 @@ func (g *WorkerGroup) recordHeartbeat(
 	if err := validateHeartbeat(leaseDuration); err != nil {
 		return err
 	}
-	// TODO: Track workers and their activity bindings from these heartbeats.
+	// TODO: Apply each heartbeat's activity bindings with applyActivityBindings once
+	// temporalio/api#907 adds them to WorkerHeartbeat.
 	return transitionActiveHeartbeat.Apply(g, ctx, eventHeartbeatReceived{
 		leaseDuration: leaseDuration,
 	})
+}
+
+// applyActivityBindings applies each worker's activity binding mutation, keyed by
+// worker_instance_key. A worker is created on its first non-empty mutation. Empty mutations do not
+// read or modify the worker's nodes.
+//
+// TODO: Call from recordHeartbeat once temporalio/api#907 adds ActivityBindingDelta to
+// WorkerHeartbeat, mapping its added and removed task tokens to Mutation.Add and Mutation.Remove.
+func (g *WorkerGroup) applyActivityBindings(
+	ctx chasm.MutableContext,
+	byWorker map[string]Mutation[string],
+) error {
+	for workerKey, mutation := range byWorker {
+		if mutation.isEmpty() {
+			continue
+		}
+		field, ok := g.Workers[workerKey]
+		if !ok {
+			if g.Workers == nil {
+				g.Workers = make(chasm.Map[string, *Worker])
+			}
+			field = chasm.NewComponentField(ctx, newWorker(ctx))
+			g.Workers[workerKey] = field
+		}
+		if err := field.Get(ctx).ActivityBindings.Get(ctx).Update(ctx, mutation); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateHeartbeat(leaseDuration time.Duration) error {

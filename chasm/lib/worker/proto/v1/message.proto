@@ -16,3 +16,14 @@ enum WorkerGroupStatus {
   WORKER_GROUP_STATUS_ACTIVE = 1;
   WORKER_GROUP_STATUS_INACTIVE = 2;
 }
+
+// WorkerState is the state of one worker in a group, keyed by worker_instance_key.
+// The worker's activity bindings are stored in a child component.
+message WorkerState {}
+
+// StringSetState stores the full contents of a set of string keys.
+message StringSetState {
+  // Unique keys in ascending byte order. Stored as bytes because keys, such as activity
+  // task tokens, may hold arbitrary bytes, which a proto string field rejects as invalid UTF-8.
+  repeated bytes keys = 1;
+}
