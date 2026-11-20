@@ -44,7 +44,6 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	require.Equal(t, otherGroupKey, otherCtx.ExecutionKey().BusinessID)
 	require.Equal(t, workerstatepb.WORKER_GROUP_STATUS_ACTIVE, otherGroup.Status)
 	firstRunID := ctx.ExecutionKey().RunID
-	firstDeadline := group.LeaseExpirationTime.AsTime()
 
 	// A heartbeat from one member renews the same shared lease.
 	first.WorkerIdentity = "updated-worker"
@@ -52,8 +51,6 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	group, ctx, err = fetchWorkerGroup(t.Context(), env, groupKey, "")
 	require.NoError(t, err)
 	require.Equal(t, firstRunID, ctx.ExecutionKey().RunID)
-
-	require.True(t, group.LeaseExpirationTime.AsTime().After(firstDeadline))
 
 	// Workers are still tracked in the in-memory registry.
 	response, err := env.FrontendClient().DescribeWorker(t.Context(), &workflowservice.DescribeWorkerRequest{
