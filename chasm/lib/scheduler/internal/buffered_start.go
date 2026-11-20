@@ -52,6 +52,11 @@ func (s BufferedStartState) String() string {
 	}
 }
 
+// RunRecorded reports whether the Execute task has recorded the start's run.
+func (s BufferedStartState) RunRecorded() bool {
+	return s == BufferedStartRunning || s == BufferedStartCompleted
+}
+
 // ClassifyBufferedStart returns the lifecycle state of start. RunId and
 // Completed decide the post-execution states, and Attempt decides the rest.
 func ClassifyBufferedStart(start *schedulespb.BufferedStart) BufferedStartState {

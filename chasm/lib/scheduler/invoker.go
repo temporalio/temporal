@@ -98,10 +98,11 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 		}
 
 		// Starts ready for execution are set to their first attempt.
-		if ready[start.RequestId] && start.Attempt < 1 {
+		state := internal.ClassifyBufferedStart(start)
+		if ready[start.RequestId] && (state == internal.BufferedStartUnprocessed || state == internal.BufferedStartDeferred) {
 			internal.MarkStartSelected(ctx.Logger(), start)
 			readiedStarts++
-		} else if start.Attempt == 0 {
+		} else if state == internal.BufferedStartUnprocessed {
 			// Start was processed but deferred (e.g., BUFFER_ONE policy with running workflow).
 			// Mark as deferred to distinguish from newly-enqueued starts so addTasks
 			// won't schedule an immediate ProcessBuffer task for them. They are
@@ -215,7 +216,7 @@ func (i *Invoker) recordExecuteResult(
 
 	// Update BufferedStarts with results, dropping duplicates.
 	for _, start := range i.GetBufferedStarts() {
-		if start.RunId != "" {
+		if internal.ClassifyBufferedStart(start).RunRecorded() {
 			if _, isDuplicate := completed[start.RequestId]; isDuplicate {
 				droppedDuplicates++
 			}
@@ -317,7 +318,7 @@ func (i *Invoker) recordCompletedAction(
 	// action's CloseTime) is past the start's catchup deadline, the previous action's
 	// duration caused the miss.
 	idx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0
+		return internal.ClassifyBufferedStart(start) == internal.BufferedStartUnprocessed
 	})
 	if idx >= 0 {
 		i.BufferedStarts[idx].DesiredTime = timestamppb.New(completed.GetCloseTime().AsTime())
@@ -338,15 +339,15 @@ func (i *Invoker) recordCompletedAction(
 // RunId has been recorded. ALLOW_ALL starts do not block other actions.
 func (i *Invoker) hasPendingOrRunningStart() bool {
 	return slices.ContainsFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.GetCompleted() == nil &&
-			internal.TracksCompletionResult(start.GetOverlapPolicy()) &&
-			(start.GetRunId() != "" || start.GetAttempt() > 0)
+		state := internal.ClassifyBufferedStart(start)
+		return (state == internal.BufferedStartSelected || state == internal.BufferedStartRunning) &&
+			internal.TracksCompletionResult(start.GetOverlapPolicy())
 	})
 }
 
 func (i *Invoker) reenableDeferredStarts(logger log.Logger) {
 	for _, start := range i.GetBufferedStarts() {
-		if start.GetAttempt() == -1 {
+		if internal.ClassifyBufferedStart(start) == internal.BufferedStartDeferred {
 			internal.MarkStartUnprocessed(logger, start)
 		}
 	}
@@ -363,7 +364,7 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 		i.reenableDeferredStarts(ctx.Logger())
 	}
 
-	// If we have Attempt = 0 starts, generate a ProcessBufferTask immediately. If we
+	// If we have unprocessed starts, generate a ProcessBufferTask immediately. If we
 	// have starts that are backing off, add a timer task for the earliest backoff time.
 	if i.hasUnprocessedStarts() {
 		i.getOrCreateEventLog(ctx).LogEvent(ctx, "scheduled processBufferTask immediately")
@@ -389,14 +390,11 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 }
 
 // hasUnprocessedStarts reports whether any BufferedStart is still awaiting its
-// initial ProcessBuffer pass (Attempt == 0).
+// initial ProcessBuffer pass.
 func (i *Invoker) hasUnprocessedStarts() bool {
-	for _, start := range i.GetBufferedStarts() {
-		if start.GetAttempt() == 0 {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+		return internal.ClassifyBufferedStart(start) == internal.BufferedStartUnprocessed
+	})
 }
 
 // nextBackoffDeadline returns the earliest BackoffTime among starts that are
@@ -407,9 +405,7 @@ func (i *Invoker) nextBackoffDeadline() time.Time {
 	for _, start := range i.GetBufferedStarts() {
 		backoff := start.GetBackoffTime().AsTime()
 		// We only care about starts that are retrying.
-		if start.GetAttempt() <= 0 ||
-			start.GetRunId() != "" ||
-			start.GetCompleted() != nil ||
+		if internal.ClassifyBufferedStart(start) != internal.BufferedStartSelected ||
 			// Backed-off starts will be selected by getEligibleBufferedStarts and kick off
 			// an Execute task, instead.
 			start.BackoffTime.AsTime().Before(lastProcessedTime) {
@@ -423,14 +419,15 @@ func (i *Invoker) nextBackoffDeadline() time.Time {
 	return deadline
 }
 
-// getEligibleBufferedStarts returns all BufferedStarts that are marked for
-// execution (Attempt > 0), haven't been started yet (no RunId), and aren't
-// presently backing off, based on last processed time.
+// getEligibleBufferedStarts returns all BufferedStarts that are selected for
+// execution, have no recorded run, and aren't presently backing off, based on
+// last processed time. A start whose completion arrived before its run was
+// recorded is executed again; its request ID deduplicates the start.
 func (i *Invoker) getEligibleBufferedStarts() []*schedulespb.BufferedStart {
 	lastProcessed := i.GetLastProcessedTime().AsTime()
 	return util.FilterSlice(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt > 0 &&
-			start.GetRunId() == "" &&
+		state := internal.ClassifyBufferedStart(start)
+		return (state == internal.BufferedStartSelected || state == internal.BufferedStartCompletedUnrecorded) &&
 			!start.GetBackoffTime().AsTime().After(lastProcessed)
 	})
 }
@@ -440,7 +437,7 @@ func (i *Invoker) getEligibleBufferedStarts() []*schedulespb.BufferedStart {
 func (i *Invoker) runningWorkflowExecutions() []*commonpb.WorkflowExecution {
 	var running []*commonpb.WorkflowExecution
 	for _, start := range i.GetBufferedStarts() {
-		if start.GetRunId() != "" && start.GetCompleted() == nil &&
+		if internal.ClassifyBufferedStart(start) == internal.BufferedStartRunning &&
 			internal.TracksCompletionResult(start.GetOverlapPolicy()) {
 			running = append(running, &commonpb.WorkflowExecution{
 				WorkflowId: start.GetWorkflowId(),
@@ -459,8 +456,7 @@ func (i *Invoker) recentActions(storedActions []*schedulepb.ScheduleActionResult
 		results = append(results, common.CloneProto(action))
 	}
 	for _, start := range i.GetBufferedStarts() {
-		// Only include workflows that have been started (have a RunId).
-		if start.GetRunId() == "" {
+		if !internal.ClassifyBufferedStart(start).RunRecorded() {
 			continue
 		}
 		status := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
@@ -494,7 +490,7 @@ func (i *Invoker) recentActions(storedActions []*schedulepb.ScheduleActionResult
 func (i *Invoker) bufferedStartsCount() int {
 	count := 0
 	for _, start := range i.GetBufferedStarts() {
-		if start.GetRunId() == "" {
+		if !internal.ClassifyBufferedStart(start).RunRecorded() {
 			count++
 		}
 	}
@@ -508,7 +504,9 @@ func (i *Invoker) applyCompletedRetention() {
 	var nonCompleted []*schedulespb.BufferedStart
 
 	for _, start := range i.BufferedStarts {
-		if start.GetCompleted() != nil {
+		// Retention also counts starts whose run is not yet recorded.
+		if state := internal.ClassifyBufferedStart(start); state == internal.BufferedStartCompleted ||
+			state == internal.BufferedStartCompletedUnrecorded {
 			completed = append(completed, start)
 		} else {
 			nonCompleted = append(nonCompleted, start)

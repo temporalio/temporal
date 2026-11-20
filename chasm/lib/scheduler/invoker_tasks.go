@@ -542,8 +542,10 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	// Processing ignores starts that are already executing or backing off. An existing
 	// deferred BUFFER_ONE start still participates so it can reject later starts.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0 ||
-			(start.Attempt == -1 && scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
+		state := internal.ClassifyBufferedStart(start)
+		return state == internal.BufferedStartUnprocessed ||
+			(state == internal.BufferedStartDeferred &&
+				scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
