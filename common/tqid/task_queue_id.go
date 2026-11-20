@@ -52,9 +52,6 @@ type (
 		PersistenceTTL() time.Duration
 		SupportsFairness() bool
 		SupportsVersioning() bool
-		// SupportsUserData reports whether the partition needs task queue configuration
-		// such as versioning, fairness, or partition scaling data.
-		SupportsUserData() bool
 		// SupportsPartitions returns true for partition types that can be split into
 		// multiple partitions for load distribution. When false, partition count must be 1.
 		SupportsPartitions() bool
@@ -315,7 +312,6 @@ func (s *StickyPartition) IsChild() bool {
 func (s *StickyPartition) PersistenceTTL() time.Duration { return 24 * time.Hour }
 func (s *StickyPartition) SupportsFairness() bool        { return false }
 func (s *StickyPartition) SupportsVersioning() bool      { return false }
-func (s *StickyPartition) SupportsUserData() bool        { return true }
 func (s *StickyPartition) SupportsPartitions() bool      { return false }
 func (s *StickyPartition) MetricTag(bool) string         { return "__sticky__" }
 
@@ -367,7 +363,6 @@ func (w *WorkerCommandsPartition) IsChild() bool {
 func (w *WorkerCommandsPartition) PersistenceTTL() time.Duration { return 24 * time.Hour }
 func (w *WorkerCommandsPartition) SupportsFairness() bool        { return false }
 func (w *WorkerCommandsPartition) SupportsVersioning() bool      { return false }
-func (w *WorkerCommandsPartition) SupportsUserData() bool        { return false }
 func (w *WorkerCommandsPartition) SupportsPartitions() bool      { return false }
 func (w *WorkerCommandsPartition) MetricTag(bool) string         { return "__worker_commands__" }
 
@@ -407,7 +402,6 @@ func (p *NormalPartition) IsChild() bool {
 func (p *NormalPartition) PersistenceTTL() time.Duration { return 0 }
 func (p *NormalPartition) SupportsFairness() bool        { return true }
 func (p *NormalPartition) SupportsVersioning() bool      { return true }
-func (p *NormalPartition) SupportsUserData() bool        { return true }
 func (p *NormalPartition) SupportsPartitions() bool      { return true }
 func (p *NormalPartition) MetricTag(partitionIDBreakdown bool) string {
 	if partitionIDBreakdown {

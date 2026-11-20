@@ -83,28 +83,63 @@ func createUserDataManager(
 	)
 }
 
-// Worker-command queues must not fetch user data and load normal workflow partitions.
-func TestUserDataWorkerCommandsSkipFetch(t *testing.T) {
+// Worker-command queues read their own user data without loading normal workflow partitions.
+func TestUserDataWorkerCommandsLoadFromDB(t *testing.T) {
 	t.Parallel()
 
-	controller := gomock.NewController(t)
-	tqCfg := defaultTqmTestOpts(controller)
-	partition := tqid.UnsafeTaskQueueFamily(defaultNamespaceId, "temporal-sys/worker-commands/worker").
-		TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
-	tqCfg.dbq = UnversionedQueueKey(partition)
-	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).Times(0)
-	m := createUserDataManager(t, controller, tqCfg)
-	t.Cleanup(func() {
-		m.Stop()
-		m.goroGroup.Wait()
-	})
+	for _, tc := range []struct {
+		name string
+		data *persistencespb.VersionedTaskQueueUserData
+	}{
+		{name: "missing user data"},
+		{name: "existing user data", data: &persistencespb.VersionedTaskQueueUserData{
+			Version: 1,
+			Data:    mkUserData(1),
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			tqCfg := defaultTqmTestOpts(controller)
+			partition := tqid.UnsafeTaskQueueFamily(defaultNamespaceId, "temporal-sys/worker-commands/worker").
+				TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
+			tqCfg.dbq = UnversionedQueueKey(partition)
+			tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).Times(0)
+			m := createUserDataManager(t, controller, tqCfg)
+			require.NotNil(t, m.store)
+			store := persistence.NewMockTaskManager(controller)
+			m.store = store
+			read := store.EXPECT().GetTaskQueueUserData(gomock.Any(), &persistence.GetTaskQueueUserDataRequest{
+				NamespaceID: partition.NamespaceId(),
+				TaskQueue:   partition.TaskQueue().Name(),
+			}).MinTimes(1)
+			if tc.data == nil {
+				read.Return(nil, serviceerror.NewNotFound("no user data"))
+			} else {
+				read.Return(&persistence.GetTaskQueueUserDataResponse{UserData: tc.data}, nil)
+			}
+			t.Cleanup(func() {
+				m.Stop()
+				m.goroGroup.Wait()
+			})
 
-	m.Start()
+			m.Start()
+			require.NoError(t, m.WaitUntilInitialized(t.Context()))
+			userData, _, err := m.GetUserData()
+			require.NoError(t, err)
+			require.Equal(t, tc.data, userData)
 
-	userData, _, err := m.GetUserData()
-	require.NoError(t, err)
-	require.Nil(t, userData)
-	require.NoError(t, m.WaitUntilInitialized(t.Context()))
+			_, err = m.UpdateUserData(t.Context(), UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+				t.Fatal("worker-command partition must not update workflow user data")
+				return data, false, nil
+			})
+			require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
+			err = m.CheckTaskQueueUserDataPropagation(t.Context(), 1, 4, 4)
+			require.ErrorContains(t, err, "must be called on root workflow task queue")
+			_, err = m.userDataFetchSource()
+			require.ErrorIs(t, err, tqid.ErrNoParent)
+		})
+	}
 }
 
 func TestUserData_LoadOnInit(t *testing.T) {
