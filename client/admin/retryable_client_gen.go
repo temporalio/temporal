@@ -326,6 +326,21 @@ func (c *retryableClient) GetNamespaceReplicationMessages(
 	return resp, err
 }
 
+func (c *retryableClient) GetRemoteClusterNamespace(
+	ctx context.Context,
+	request *adminservice.GetRemoteClusterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetRemoteClusterNamespaceResponse, error) {
+	var resp *adminservice.GetRemoteClusterNamespaceResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetRemoteClusterNamespace(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,

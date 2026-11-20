@@ -230,6 +230,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
 	)
+	WorkflowHeartbeatNotificationRolloutPercent = NewNamespaceIntSetting(
+		"history.workflowHeartbeatNotificationRolloutPercent",
+		0,
+		`WorkflowHeartbeatNotificationRolloutPercent selects a stable percentage of workflows per namespace for heartbeat notifications. Zero selects none; 100 selects all.`,
+	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
 		"system.workerCommandsDispatchTimeout",
 		5*time.Second*debug.TimeoutMultiplier,

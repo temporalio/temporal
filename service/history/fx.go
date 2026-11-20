@@ -11,6 +11,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/flowcontrol"
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/chasm/lib/namespacereplication"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -81,6 +83,7 @@ var Module = fx.Options(
 	fx.Provide(links.ValidatorProvider),
 	fx.Provide(NexusOperationDestinationBlockedProvider),
 	fx.Provide(NexusOperationDestinationThrottledProvider),
+	fx.Provide(fcpb.NewConcurrencyServiceLayeredClient),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),
@@ -142,6 +145,7 @@ var Module = fx.Options(
 	chasmnexus.Module,
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
+	flowcontrol.HistoryModule,
 )
 
 // CallbackDestinationBlockedProvider lets the callback library report a callback as BLOCKED while
@@ -245,6 +249,7 @@ func HandlerProvider(args NewHandlerArgs, lc fx.Lifecycle) (*Handler, error) {
 		archivalMetadata:             args.ArchivalMetadata,
 		hostInfoProvider:             args.HostInfoProvider,
 		controller:                   args.ShardController,
+		workflowCache:                args.WorkflowCache,
 		eventNotifier:                args.EventNotifier,
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
 		taskQueueManager:             args.TaskQueueManager,

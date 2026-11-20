@@ -24,6 +24,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -246,7 +247,7 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:        collection.NewSyncMap[string, pendingQuery](),
+		queryResults:        collection.NewSyncMap[taskResultKey, chan *queryResult](),
 		logger:              logger,
 		throttledLogger:     log.ThrottledLogger(logger),
 		metricsHandler:      metrics.NoopMetricsHandler,
@@ -1366,6 +1367,92 @@ func (s *matchingEngineSuite) TestRespondQueryTaskCompleted_RejectsOtherNamespac
 	protorequire.ProtoEqual(s.T(), completed.GetQueryResult(), outcome.resp.GetQueryResult())
 }
 
+func (s *matchingEngineSuite) TestRespondNexusTask_RejectsOtherNamespace() {
+	for _, kind := range []enumspb.TaskQueueKind{
+		enumspb.TASK_QUEUE_KIND_NORMAL,
+		enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+	} {
+		for _, method := range []string{"completed", "failed"} {
+			s.Run(kind.String()+"/"+method, func() {
+				s.matchingEngine.nexusResults = collection.NewSyncMap[taskResultKey, chan *nexusResult]()
+				s.matchingEngine.outstandingPollers = collection.NewSyncMap[string, context.CancelFunc]()
+				s.matchingEngine.shutdownWorkers = cache.New(100, &cache.Options{TTL: 30 * time.Second})
+				taskQueue := &taskqueuepb.TaskQueue{Name: "nexus-tq-" + uuid.NewString(), Kind: kind}
+
+				type dispatchOutcome struct {
+					resp *matchingservice.DispatchNexusTaskResponse
+					err  error
+				}
+				dispatchDone := make(chan dispatchOutcome, 1)
+				go func() {
+					resp, err := s.matchingEngine.DispatchNexusTask(context.Background(), &matchingservice.DispatchNexusTaskRequest{
+						NamespaceId: namespaceID,
+						TaskQueue:   taskQueue,
+						Request:     &nexuspb.Request{},
+					})
+					dispatchDone <- dispatchOutcome{resp: resp, err: err}
+				}()
+
+				var pollResp *matchingservice.PollNexusTaskQueueResponse
+				await.Require(context.Background(), s.T(), func(t *await.T) {
+					var err error
+					pollResp, err = s.matchingEngine.PollNexusTaskQueue(t.Context(), &matchingservice.PollNexusTaskQueueRequest{
+						NamespaceId: namespaceID,
+						Request: &workflowservice.PollNexusTaskQueueRequest{
+							TaskQueue: taskQueue,
+							Identity:  "identity",
+						},
+					}, metrics.NoopMetricsHandler)
+					require.NoError(t, err)
+					require.NotNil(t, pollResp.GetResponse())
+				}, 5*time.Second, 10*time.Millisecond)
+
+				nexusToken, err := s.matchingEngine.tokenSerializer.DeserializeNexusTaskToken(pollResp.GetResponse().GetTaskToken())
+				s.NoError(err)
+
+				var respond func(nsID string) error
+				var expected *matchingservice.DispatchNexusTaskResponse
+				if method == "completed" {
+					completed := &workflowservice.RespondNexusTaskCompletedRequest{Response: &nexuspb.Response{}}
+					respond = func(nsID string) error {
+						_, err := s.matchingEngine.RespondNexusTaskCompleted(context.Background(), &matchingservice.RespondNexusTaskCompletedRequest{
+							NamespaceId: nsID,
+							TaskQueue:   taskQueue,
+							TaskId:      nexusToken.GetTaskId(),
+							Request:     completed,
+						}, metrics.NoopMetricsHandler)
+						return err
+					}
+					expected = &matchingservice.DispatchNexusTaskResponse{
+						Outcome: &matchingservice.DispatchNexusTaskResponse_Response{Response: completed.GetResponse()},
+					}
+				} else {
+					failed := &workflowservice.RespondNexusTaskFailedRequest{Failure: &failurepb.Failure{Message: "failed"}}
+					respond = func(nsID string) error {
+						_, err := s.matchingEngine.RespondNexusTaskFailed(context.Background(), &matchingservice.RespondNexusTaskFailedRequest{
+							NamespaceId: nsID,
+							TaskQueue:   taskQueue,
+							TaskId:      nexusToken.GetTaskId(),
+							Request:     failed,
+						}, metrics.NoopMetricsHandler)
+						return err
+					}
+					expected = &matchingservice.DispatchNexusTaskResponse{
+						Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{Failure: failed.GetFailure()},
+					}
+				}
+
+				s.ErrorAs(respond(uuid.NewString()), new(*serviceerror.NotFound))
+
+				s.NoError(respond(namespaceID))
+				outcome := await.Rcv(s.T(), dispatchDone)
+				s.NoError(outcome.err)
+				protorequire.ProtoEqual(s.T(), expected, outcome.resp)
+			})
+		}
+	}
+}
+
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
@@ -1434,9 +1521,11 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			return resp, nil
 		}).AnyTimes()
 
+	// Backlog dispatch order is not guaranteed (for example, the task validator can briefly
+	// hold tasks from the head of the backlog), so check that every task is delivered exactly
+	// once instead of checking the order.
+	delivered := make(map[int64]bool, taskCount)
 	for i := int64(0); i < taskCount; {
-		scheduledEventID := i * 3
-
 		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -1460,6 +1549,15 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.True(validateTimeRange(result.StartedTime.AsTime(), time.Minute))
 		s.Equal(time.Second*50, result.StartToCloseTimeout.AsDuration())
 		s.Equal(time.Second*10, result.HeartbeatTimeout.AsDuration())
+
+		resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
+		s.NoError(err)
+		scheduledEventID := resultToken.GetScheduledEventId()
+		s.Zero(scheduledEventID%3, "unexpected scheduled event ID %d", scheduledEventID)
+		s.Less(scheduledEventID, int64(taskCount*3))
+		s.False(delivered[scheduledEventID], "task with scheduled event ID %d delivered twice", scheduledEventID)
+		delivered[scheduledEventID] = true
+
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
 			NamespaceId:      namespaceID,
@@ -1469,11 +1567,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			ActivityId:       activityID,
 			ActivityType:     activityTypeName,
 		}
-
-		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		s.Equal(serializedToken, result.TaskToken)
+		protorequire.ProtoEqual(s.T(), taskToken, resultToken)
 		i++
 	}
+	s.Len(delivered, taskCount)
 	s.expectEmptyBacklog(tlID)
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
@@ -4172,7 +4269,7 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 
 			partition := newRootPartition("my-nsid", "my-tq", enumspb.TASK_QUEUE_TYPE_NEXUS)
 			s.matchingEngine.partitions[partition.Key()] = mockPartitionManager
-			s.matchingEngine.nexusResults = collection.NewSyncMap[string, chan *nexusResult]()
+			s.matchingEngine.nexusResults = collection.NewSyncMap[taskResultKey, chan *nexusResult]()
 
 			ctx, cancel := context.WithTimeout(context.Background(), ctxTimeout)
 			defer cancel()
@@ -4249,7 +4346,7 @@ func (s *matchingEngineSuite) TestPollNexusTaskQueue_TaskTokenContainsTaskQueueK
 			s.matchingEngine.partitionsLock.Lock()
 			s.matchingEngine.partitions[partition.Key()] = mockPM
 			s.matchingEngine.partitionsLock.Unlock()
-			s.matchingEngine.nexusResults = collection.NewSyncMap[string, chan *nexusResult]()
+			s.matchingEngine.nexusResults = collection.NewSyncMap[taskResultKey, chan *nexusResult]()
 			s.matchingEngine.outstandingPollers = collection.NewSyncMap[string, context.CancelFunc]()
 			s.matchingEngine.shutdownWorkers = cache.New(100, &cache.Options{TTL: 30 * time.Second})
 
@@ -6471,6 +6568,59 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache")
+	})
+
+	t.Run("fan-out: refuses a poll that arrives after shutdown of an unloaded task queue", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		ns, mockNsRegistry := createMockNamespaceCache(ctrl, matchingTestNamespace)
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNsRegistry,
+			logger:                log.NewNoopLogger(),
+			timeSource:            clock.NewRealTimeSource(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		}
+
+		workerKey := "test-worker"
+		taskQueue := &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       ns.ID().String(),
+				TaskQueue:         taskQueue,
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_NEXUS,
+				WorkerInstanceKey: workerKey,
+			})
+		require.NoError(t, err)
+
+		// The poll loads the partition that the shutdown found unloaded.
+		partition := tqid.UnsafeTaskQueueFamily(ns.ID().String(), taskQueue.GetName()).TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).RootPartition()
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+		mockPM.EXPECT().LongPollExpirationInterval().Return(time.Minute)
+		mockPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).Times(0)
+		engine.partitions[partition.Key()] = mockPM
+
+		resp, err := engine.PollNexusTaskQueue(context.Background(),
+			&matchingservice.PollNexusTaskQueueRequest{
+				NamespaceId: ns.ID().String(),
+				Request: &workflowservice.PollNexusTaskQueueRequest{
+					Namespace:         ns.Name().String(),
+					TaskQueue:         taskQueue,
+					WorkerInstanceKey: workerKey,
+				},
+			},
+			metrics.NoopMetricsHandler,
+		)
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, &matchingservice.PollNexusTaskQueueResponse{}, resp)
 	})
 
 	t.Run("partition API adds worker to shutdown cache", func(t *testing.T) {
