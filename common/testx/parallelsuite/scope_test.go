@@ -33,24 +33,48 @@ func (s *scopeAssertionsSuite) TestSuiteHelpers() {
 func (s *scopeAssertionsSuite) TestAwaitHelpersRetryFailedAssertions() {
 	const timeout = time.Second
 	checks := map[string]func(parallelsuite.Scope){
-		"Containsf": func(s parallelsuite.Scope) { s.Containsf([]string{"pending"}, "ready", "state %s is missing", "ready") },
-		"Failf":     func(s parallelsuite.Scope) { s.Failf("not ready", "current state is %s", "pending") },
-		"NoError":   func(s parallelsuite.Scope) { s.NoError(errors.New("not ready")) },
-		"Equal":     func(s parallelsuite.Scope) { s.Equal("ready", "pending") },
+		"Containsf": func(s parallelsuite.Scope) {
+			s.Containsf([]string{"pending"}, "ready", "state %s is missing", "ready")
+		},
+		"Failf": func(s parallelsuite.Scope) {
+			s.Failf("not ready", "current state is %s", "pending")
+		},
+		"NoError": func(s parallelsuite.Scope) {
+			s.NoError(errors.New("not ready"))
+		},
+		"Equal": func(s parallelsuite.Scope) {
+			s.Equal("ready", "pending")
+		},
 		"EqualValuesf": func(s parallelsuite.Scope) {
 			s.EqualValuesf(1, int64(2), "unexpected count %d", 2)
 		},
-		"Greater":        func(s parallelsuite.Scope) { s.Greater(1, 2) },
-		"GreaterOrEqual": func(s parallelsuite.Scope) { s.GreaterOrEqual(1, 2) },
+		"Greater": func(s parallelsuite.Scope) {
+			s.Greater(1, 2)
+		},
+		"GreaterOrEqual": func(s parallelsuite.Scope) {
+			s.GreaterOrEqual(1, 2)
+		},
 		"GreaterOrEqualf": func(s parallelsuite.Scope) {
 			s.GreaterOrEqualf(1, 2, "expected at least %d", 2)
 		},
-		"Len":         func(s parallelsuite.Scope) { s.Len([]int{1}, 2) },
-		"LessOrEqual": func(s parallelsuite.Scope) { s.LessOrEqual(2, 1) },
-		"Nil":         func(s parallelsuite.Scope) { s.Nil("pending") },
-		"NotNil":      func(s parallelsuite.Scope) { s.NotNil(nil) },
-		"NotEmpty":    func(s parallelsuite.Scope) { s.NotEmpty("") },
-		"True":        func(s parallelsuite.Scope) { s.True(false) },
+		"Len": func(s parallelsuite.Scope) {
+			s.Len([]int{1}, 2)
+		},
+		"LessOrEqual": func(s parallelsuite.Scope) {
+			s.LessOrEqual(2, 1)
+		},
+		"Nil": func(s parallelsuite.Scope) {
+			s.Nil("pending")
+		},
+		"NotNil": func(s parallelsuite.Scope) {
+			s.NotNil(nil)
+		},
+		"NotEmpty": func(s parallelsuite.Scope) {
+			s.NotEmpty("")
+		},
+		"True": func(s parallelsuite.Scope) {
+			s.True(false)
+		},
 	}
 	for name, check := range checks {
 		s.Run(name, func(s *scopeAssertionsSuite) {
