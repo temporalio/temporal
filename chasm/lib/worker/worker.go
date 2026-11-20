@@ -45,6 +45,7 @@ func (g *WorkerGroup) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 func (g *WorkerGroup) ContextMetadata(_ chasm.Context) map[string]string {
+	// TODO: Populate request context metadata for the worker group.
 	return nil
 }
 
