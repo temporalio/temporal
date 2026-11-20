@@ -2,16 +2,12 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.worker.proto.v1;
 
-import "google/protobuf/timestamp.proto";
-
 option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
 
 // WorkerGroupState owns the shared lease for workers heartbeating together.
 message WorkerGroupState {
   // Lifecycle of the group.
   WorkerGroupStatus status = 2;
-  // Lease deadline computed using CHASM's clock and the supplied lease duration.
-  google.protobuf.Timestamp lease_expiration_time = 3;
 }
 
 // WorkerGroupStatus describes the lifecycle of a worker group run.
