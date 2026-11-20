@@ -344,6 +344,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.Equal("b2", wft.BuildId)
@@ -409,10 +410,10 @@ func (s *mutableStateSuite) TestWorkflowTaskWorkerControlQueueLifecycle() {
 				false,
 				nil,
 				0,
+				"worker-control",
 			)
 			s.NoError(err)
-			s.Empty(wft.WorkerControlQueue)
-			s.mutableState.SetWorkflowTaskWorkerControlQueue("worker-control")
+			s.Equal("worker-control", wft.WorkerControlQueue)
 			s.Equal("worker-control", s.mutableState.GetStartedWorkflowTask().WorkerControlQueue)
 
 			s.NoError(tc.close(s.mutableState.GetStartedWorkflowTask()))
@@ -446,7 +447,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskWorkerControlQueueStaysIn
 
 	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 	s.NoError(err)
-	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		wft.ScheduledEventID,
 		"request-id",
 		tq,
@@ -457,9 +458,10 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskWorkerControlQueueStaysIn
 		false,
 		nil,
 		0,
+		"worker-control",
 	)
 	s.NoError(err)
-	s.mutableState.SetWorkflowTaskWorkerControlQueue("worker-control")
+	s.Equal("worker-control", wft.WorkerControlQueue)
 	s.Equal("worker-control", s.mutableState.GetStartedWorkflowTask().WorkerControlQueue)
 	s.False(s.mutableState.IsDirty())
 }
@@ -523,6 +525,7 @@ func (s *mutableStateSuite) TestDirtySpeculativeWorkflowTaskConvertsToNormalOnTr
 		false,
 		nil,
 		0,
+		"worker-control",
 	)
 	s.NoError(err)
 	s.Nil(startedEvent)
@@ -539,6 +542,7 @@ func (s *mutableStateSuite) TestDirtySpeculativeWorkflowTaskConvertsToNormalOnTr
 	)
 	s.NoError(err)
 	s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, mutation.ExecutionInfo.GetWorkflowTaskType())
+	s.Equal("worker-control", mutation.ExecutionInfo.GetWorkflowTaskWorkerControlQueue())
 	s.NotEmpty(mutation.Tasks[tasks.CategoryVisibility])
 	s.NotEmpty(mutation.Tasks[tasks.CategoryTimer])
 
@@ -573,6 +577,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -597,6 +602,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -621,6 +627,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -647,6 +654,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.Equal("", wft.BuildId)
@@ -675,6 +683,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -700,6 +709,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -763,6 +773,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 
@@ -818,6 +829,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 
@@ -888,6 +900,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.Equal("b1", wft.BuildId)
@@ -1226,6 +1239,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
@@ -1278,6 +1292,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1319,6 +1334,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1363,6 +1379,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1564,6 +1581,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
@@ -1621,6 +1639,7 @@ func (s *mutableStateSuite) TestOneTimeOverrideClearedAfterTargetWorkflowTaskCom
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 
@@ -1654,6 +1673,7 @@ func (s *mutableStateSuite) TestOneTimeOverrideNotClearedAfterDifferentWorkflowT
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 
@@ -1715,6 +1735,7 @@ func (s *mutableStateSuite) TestOneTimeOverrideContinueAsNewAfterTargetWorkflowT
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 
@@ -2191,6 +2212,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -2264,6 +2286,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent_StartedWorkflowT
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	prevWFTStamp := wft.Stamp
@@ -2304,6 +2327,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -2571,6 +2595,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -8194,6 +8219,7 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityResolution() {
 	s.NoError(err)
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		di.ScheduledEventID, di.RequestID, di.TaskQueue, "identity", nil, nil, nil, false, nil, 0,
+		"",
 	)
 	s.NoError(err)
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -8287,6 +8313,7 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -8384,6 +8411,7 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventApproximateSize() {
 				false,
 				nil,
 				0,
+				"",
 			)
 			s.NoError(err)
 			completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -8459,6 +8487,7 @@ func (s *mutableStateSuite) TestUpdateActivityProgressApproximateSize() {
 		false,
 		nil,
 		0,
+		"",
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -10254,6 +10283,7 @@ func (s *mutableStateSuite) scheduleCompletedWFTForBatchIDTest() (
 		wft.ScheduledEventID, "", tq, "",
 		worker_versioning.StampFromBuildId("b1"),
 		nil, nil, false, nil, 0,
+		"",
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(

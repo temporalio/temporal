@@ -3744,10 +3744,6 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskScheduledEvent(
 	return ms.workflowTaskManager.ApplyWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp, workflowTaskType)
 }
 
-func (ms *MutableStateImpl) SetWorkflowTaskWorkerControlQueue(queue string) {
-	ms.workflowTaskManager.SetWorkflowTaskWorkerControlQueue(queue)
-}
-
 func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	scheduledEventID int64,
 	requestID string,
@@ -3759,12 +3755,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	skipVersioningCheck bool,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	targetRevisionNumber int64,
+	workerControlQueue string,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber, workerControlQueue)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(

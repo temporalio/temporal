@@ -210,6 +210,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		Attempt:                     workflowTask.Attempt,
 		AttemptsSinceLastSuccess:    workflowTask.AttemptsSinceLastSuccess,
 		StartedTime:                 startedTime,
+		WorkerControlQueue:          workflowTask.WorkerControlQueue,
 		ScheduledTime:               workflowTask.ScheduledTime,
 		TaskQueue:                   workflowTask.TaskQueue,
 		OriginalScheduledTime:       workflowTask.OriginalScheduledTime,
@@ -461,6 +462,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	updateReg update.Registry,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	targetRevisionNumber int64,
+	workerControlQueue string,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -606,6 +608,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
 	}
+
+	workflowTask.WorkerControlQueue = workerControlQueue
 
 	workflowTask, err = m.ApplyWorkflowTaskStartedEvent(
 		workflowTask,
@@ -1183,10 +1187,6 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 		tag.Attempt(workflowTask.Attempt),
 		tag.WorkflowStartedTimestamp(workflowTask.StartedTime),
 		tag.WorkflowTaskType(workflowTask.Type.String()))
-}
-
-func (m *workflowTaskStateMachine) SetWorkflowTaskWorkerControlQueue(queue string) {
-	m.ms.executionInfo.WorkflowTaskWorkerControlQueue = queue
 }
 
 func (m *workflowTaskStateMachine) HasPendingWorkflowTask() bool {

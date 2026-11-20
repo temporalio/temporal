@@ -160,6 +160,10 @@ func Invoke(
 				return nil, err
 			}
 
+			var workerControlQueue string
+			if req.PollRequest.GetCapabilities().GetSupportsWorkflowHeartbeatNotification() {
+				workerControlQueue = req.PollRequest.GetWorkerControlTaskQueue()
+			}
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
@@ -171,15 +175,11 @@ func Invoke(
 				false,
 				req.TargetDeploymentVersion,
 				req.TaskDispatchRevisionNumber,
+				workerControlQueue,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
 				return nil, err
-			}
-			if req.PollRequest.GetCapabilities().GetSupportsWorkflowHeartbeatNotification() {
-				// Workflow tasks started inline with ReturnNewWorkflowTask don't come through here.
-				// WorkflowTaskCompletedHandler.Invoke copies the completed task's WorkerControlQueue to them.
-				mutableState.SetWorkflowTaskWorkerControlQueue(req.PollRequest.GetWorkerControlTaskQueue())
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {

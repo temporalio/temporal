@@ -144,7 +144,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_RetryOnDifferentWorkerRepla
 			addWorkflowExecutionStartedEvent(ms, we, "wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
 			wt := addWorkflowTaskScheduledEvent(ms)
 			addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", "worker-a")
-			ms.SetWorkflowTaskWorkerControlQueue("worker-a-control")
+			ms.GetExecutionInfo().WorkflowTaskWorkerControlQueue = "worker-a-control"
 			_, err := ms.AddWorkflowTaskTimedOutEvent(ms.GetStartedWorkflowTask())
 			s.NoError(err)
 			s.NoError(ms.SetHistoryTree(nil, nil, we.GetRunId()))

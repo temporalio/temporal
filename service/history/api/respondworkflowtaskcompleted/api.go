@@ -660,11 +660,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				false,
 				nil,
 				-1, // sentinel: inline path didn't consult matching, has no routing revision
+				currentWorkflowTask.WorkerControlQueue,
 			)
 			if err != nil {
 				return nil, err
 			}
-			ms.SetWorkflowTaskWorkerControlQueue(currentWorkflowTask.WorkerControlQueue)
 		}
 	}
 
@@ -791,11 +791,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			false,
 			nil,
 			-1, // sentinel: inline path didn't consult matching, has no routing revision
+			currentWorkflowTask.WorkerControlQueue,
 		)
 		if err != nil {
 			return nil, err
 		}
-		ms.SetWorkflowTaskWorkerControlQueue(currentWorkflowTask.WorkerControlQueue)
 	}
 
 	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry)

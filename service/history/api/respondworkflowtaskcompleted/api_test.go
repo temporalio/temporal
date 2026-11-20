@@ -892,6 +892,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		false,
 		nil,
 		0,
+		"",
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -972,6 +973,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		false,
 		nil,
 		0,
+		"",
 	)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: tv.Any().String(),
@@ -990,6 +992,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		false,
 		nil,
 		0,
+		"",
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -1509,6 +1512,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 		false,
 		nil,
 		0,
+		"",
 	)
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1564,7 +1568,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestInlineWorkflowTaskKeepsWorkerCon
 			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 			wfContext := s.createStartedWorkflow(tv)
 			updRequestMsg, _, serializedTaskToken := s.createSentUpdate(tv, wfContext)
-			wfContext.(*workflow.ContextImpl).MutableState.SetWorkflowTaskWorkerControlQueue(workerControlQueue)
+			wfContext.(*workflow.ContextImpl).MutableState.GetExecutionInfo().WorkflowTaskWorkerControlQueue = workerControlQueue
 
 			resp, err := s.workflowTaskCompletedHandler.Invoke(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
 				NamespaceId: tv.NamespaceID().String(),
@@ -1592,7 +1596,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestInlineWorkflowTaskKeepsWorkerCon
 			wfContext := s.createStartedWorkflow(tv)
 			updRequestMsg, _, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 			ms := wfContext.(*workflow.ContextImpl).MutableState
-			ms.SetWorkflowTaskWorkerControlQueue(workerControlQueue)
+			ms.GetExecutionInfo().WorkflowTaskWorkerControlQueue = workerControlQueue
 
 			// An update admitted while the workflow task is running makes the completion start a speculative task.
 			ctx := metrics.AddMetricsContext(context.Background())
