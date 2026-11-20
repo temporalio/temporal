@@ -40,6 +40,16 @@ func AddNextStateMachineTimerTask(ms historyi.MutableState) {
 	timerGroup.Scheduled = true
 }
 
+// refreshStateMachineTimerTasksForTimeSkipping makes the normal close path replace timer-queue
+// wake-ups after the workflow's virtual-to-wall-clock offset changes.
+func refreshStateMachineTimerTasksForTimeSkipping(ms historyi.MutableState) {
+	for _, timerGroup := range ms.GetExecutionInfo().StateMachineTimers {
+		if len(timerGroup.Infos) > 0 {
+			timerGroup.Scheduled = false
+		}
+	}
+}
+
 // TrackStateMachineTimer tracks a timer task in the mutable state's StateMachineTimers slice sorted and grouped by
 // deadline.
 // Only a single task for a given type can be tracked for a given machine. If a task of the same type is already

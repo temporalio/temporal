@@ -125,6 +125,32 @@ func (o Operation) CancelationNode(node *hsm.Node) (*hsm.Node, error) {
 	return child, err
 }
 
+// AllowsTimeSkipping reports whether the operation has no in-flight work that must complete before
+// workflow time can advance.
+func (o Operation) AllowsTimeSkipping(node *hsm.Node) (bool, error) {
+	if o.State() != enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
+		return false, nil
+	}
+	cancelRequested, err := o.cancelRequested(node)
+	if err != nil {
+		return false, err
+	}
+	return !cancelRequested, nil
+}
+
+// TimeSkippingTargets returns the logical deadlines that bound a skip while the operation waits
+// for an invocation retry.
+func (o Operation) TimeSkippingTargets() []time.Time {
+	targets := []time.Time{o.GetNextAttemptScheduleTime().AsTime()}
+	if timeout := o.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		targets = append(targets, o.GetScheduledTime().AsTime().Add(timeout))
+	}
+	if timeout := o.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		targets = append(targets, o.GetScheduledTime().AsTime().Add(timeout))
+	}
+	return targets
+}
+
 // transitionTasks returns tasks that are emitted as transition outputs.
 func (o Operation) transitionTasks() ([]hsm.Task, error) {
 	switch o.State() { // nolint:exhaustive
