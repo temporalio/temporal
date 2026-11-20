@@ -113,6 +113,7 @@ func newNexusCompletionHandler(
 		LinkValidator:                        linkValidator,
 		clientVersionChecker:                 headers.NewDefaultVersionChecker(),
 		preProcessErrorsCounter:              metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
+		omitDraftFields:                      draft.Omit,
 	}
 }
 

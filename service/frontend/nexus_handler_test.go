@@ -429,6 +429,7 @@ func newDraftNexusHandler(t *testing.T) (*nexusHandler, context.Context) {
 	h := &nexusHandler{
 		logger: oc.logger, metricsHandler: oc.metricsHandler, clusterMetadata: oc.clusterMetadata, namespaceRegistry: draftNexusRegistry{ns: oc.namespace}, auth: oc.auth, telemetryInterceptor: oc.telemetryInterceptor, requestErrorHandler: oc.requestErrorHandler, redirectionInterceptor: oc.redirectionInterceptor, forwardingEnabledForNamespace: oc.forwardingEnabledForNamespace, headersBlacklist: oc.headersBlacklist,
 		payloadSizeLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024), metricTagConfig: dynamicconfig.GetTypedPropertyFn(chasmnexus.NexusMetricTagConfig{}),
+		omitDraftFields: draft.Omit,
 	}
 	oc.requestStartTime = time.Now()
 	oc.taskQueue = "task-queue"
@@ -714,10 +715,7 @@ func TestNexusDraftOperationForwarding(t *testing.T) {
 			}
 			result, err := h.StartOperation(ctx, "service", "operation", draftNexusInput(), nexus.StartOperationOptions{Header: nexus.Header{}})
 			require.NoError(t, err)
-			links := nexus.HandlerLinks(ctx)
-			require.Len(t, links, 1)
-			require.Equal(t, "https://example.test/retained", links[0].URL.String())
-			require.Equal(t, "example.retained", links[0].Type)
+			require.Empty(t, nexus.HandlerLinks(ctx))
 			if mode == "sync" {
 				reader := result.(*nexus.HandlerStartOperationResultSync[any]).Value.(*nexus.Reader)
 				data, err := io.ReadAll(reader)

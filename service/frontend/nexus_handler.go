@@ -373,9 +373,6 @@ type nexusHandler struct {
 }
 
 func omitNexusDraftFields(logger log.Logger, omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, roots ...any) error {
-	if omit == nil {
-		omit = draft.Omit
-	}
 	for _, root := range roots {
 		if _, err := omit(root, selection); err != nil {
 			logger.Error("draft field omission failed", tag.Error(err))
@@ -618,7 +615,6 @@ func (h *nexusHandler) forwardStartOperation(
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
-	nexus.AddHandlerLinks(ctx, resp.Links...)
 
 	if resp.Successful != nil {
 		return &nexus.HandlerStartOperationResultSync[any]{Value: resp.Successful.Reader}, nil
