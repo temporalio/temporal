@@ -1021,13 +1021,15 @@ func findSearchAttribute(t *testing.T, sas []chasm.SearchAttributeKeyValue, alia
 // unregistered or had a bad value type, the CloseTransaction call would
 // error or panic.
 func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
-	sched, ctx, env := setupSchedulerForTest(t)
-	env.AllowStuck("test sets IdleCloseTime directly to exercise search attribute serialization; no idle task backs it")
+	// An expired spec makes the generator set IdleCloseTime and arm its idle task.
+	env := newTestEnv(t, withSchedule(expiredSchedule(time.Now())))
+	sched := env.Scheduler
+	require.NotNil(t, sched.IdleCloseTime)
 
+	ctx := env.MutableContext()
 	nextAction := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	generator := sched.Generator.Get(ctx)
 	generator.FutureActionTimes = []*timestamppb.Timestamp{timestamppb.New(nextAction)}
-	sched.IdleCloseTime = timestamppb.New(time.Now().Add(7 * 24 * time.Hour))
 
 	require.NoError(t, env.Node.SetRootComponent(sched))
 	err := env.CloseTransaction()
