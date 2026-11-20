@@ -44,6 +44,80 @@ func (this *WorkerGroupState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type WorkerState to the protobuf v3 wire format
+func (val *WorkerState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type WorkerState from the protobuf v3 wire format
+func (val *WorkerState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *WorkerState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two WorkerState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *WorkerState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *WorkerState
+	switch t := that.(type) {
+	case *WorkerState:
+		that1 = t
+	case WorkerState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StringSetState to the protobuf v3 wire format
+func (val *StringSetState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StringSetState from the protobuf v3 wire format
+func (val *StringSetState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StringSetState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StringSetState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StringSetState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StringSetState
+	switch t := that.(type) {
+	case *StringSetState:
+		that1 = t
+	case StringSetState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 var (
 	WorkerGroupStatus_shorthandValue = map[string]int32{
 		"Unspecified": 0,

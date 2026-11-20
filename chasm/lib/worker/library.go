@@ -39,6 +39,8 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 	}
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*WorkerGroup](groupComponentName, groupOptions...),
+		chasm.NewRegistrableComponent[*Worker](workerComponentName),
+		chasm.NewRegistrableComponent[*stringSet](stringSetComponentName),
 	}
 }
 

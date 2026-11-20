@@ -129,13 +129,101 @@ func (x *WorkerGroupState) GetStatus() WorkerGroupStatus {
 	return WORKER_GROUP_STATUS_UNSPECIFIED
 }
 
+// WorkerState is the state of one worker in a group, keyed by worker_instance_key.
+// The worker's activity bindings are stored in a child component.
+type WorkerState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerState) Reset() {
+	*x = WorkerState{}
+	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerState) ProtoMessage() {}
+
+func (x *WorkerState) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerState.ProtoReflect.Descriptor instead.
+func (*WorkerState) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP(), []int{1}
+}
+
+// StringSetState stores the full contents of a set of string keys.
+type StringSetState struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unique keys in ascending byte order. Stored as bytes because keys, such as activity
+	// task tokens, may hold arbitrary bytes, which a proto string field rejects as invalid UTF-8.
+	Keys          [][]byte `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StringSetState) Reset() {
+	*x = StringSetState{}
+	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StringSetState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StringSetState) ProtoMessage() {}
+
+func (x *StringSetState) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StringSetState.ProtoReflect.Descriptor instead.
+func (*StringSetState) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *StringSetState) GetKeys() [][]byte {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_worker_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\"h\n" +
 	"\x10WorkerGroupState\x12T\n" +
-	"\x06status\x18\x02 \x01(\x0e2<.temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatusR\x06status*z\n" +
+	"\x06status\x18\x02 \x01(\x0e2<.temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatusR\x06status\"\r\n" +
+	"\vWorkerState\"$\n" +
+	"\x0eStringSetState\x12\x12\n" +
+	"\x04keys\x18\x01 \x03(\fR\x04keys*z\n" +
 	"\x11WorkerGroupStatus\x12#\n" +
 	"\x1fWORKER_GROUP_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aWORKER_GROUP_STATUS_ACTIVE\x10\x01\x12 \n" +
@@ -154,10 +242,12 @@ func file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP() 
 }
 
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_goTypes = []any{
 	(WorkerGroupStatus)(0),   // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
 	(*WorkerGroupState)(nil), // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState
+	(*WorkerState)(nil),      // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerState
+	(*StringSetState)(nil),   // 3: temporal.server.chasm.lib.worker.proto.v1.StringSetState
 }
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState.status:type_name -> temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
@@ -179,7 +269,7 @@ func file_temporal_server_chasm_lib_worker_proto_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
