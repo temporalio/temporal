@@ -37,8 +37,8 @@ func TestNamespaceStateGateScheduler(t *testing.T) {
 		{name: "deleted retention", state: enumspb.NAMESPACE_STATE_DELETED, task: &tasks.DeleteHistoryEventTask{}},
 	}
 	for _, tc := range testCases {
-		for _, trySubmit := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/trySubmit=%v", tc.name, trySubmit), func(t *testing.T) {
+		for _, method := range []string{"Submit", "TrySubmit", "HandleBusyWorkflow"} {
+			t.Run(fmt.Sprintf("%s/%s", tc.name, method), func(t *testing.T) {
 				t.Parallel()
 				ctrl := gomock.NewController(t)
 				registry := namespace.NewMockRegistry(ctrl)
@@ -62,9 +62,9 @@ func TestNamespaceStateGateScheduler(t *testing.T) {
 				executable.EXPECT().GetType().Return(tc.task.GetType()).AnyTimes()
 				if tc.wantDiscard {
 					executable.EXPECT().Ack()
-				} else if trySubmit {
+				} else if method == "TrySubmit" {
 					base.EXPECT().TrySubmit(executable).Return(true)
-				} else {
+				} else if method == "Submit" {
 					base.EXPECT().Submit(executable)
 				}
 
@@ -74,10 +74,18 @@ func TestNamespaceStateGateScheduler(t *testing.T) {
 					IsExemptFromNamespaceStateGate,
 					metricsHandler,
 				)
-				if trySubmit {
-					require.True(t, gate.TrySubmit(executable))
-				} else {
+				switch method {
+				case "Submit":
 					gate.Submit(executable)
+				case "TrySubmit":
+					require.True(t, gate.TrySubmit(executable))
+				case "HandleBusyWorkflow":
+					// The mock base scheduler is not a BusyWorkflowHandler, so a task that passes the
+					// gate is reported as unhandled.
+					handled := gate.(BusyWorkflowHandler).HandleBusyWorkflow(executable)
+					require.Equal(t, tc.wantDiscard, handled)
+				default:
+					t.Fatalf("unknown method %q", method)
 				}
 
 				recordings := capture.SnapshotMetric(metrics.TaskDiscardedByNamespaceState.Name())

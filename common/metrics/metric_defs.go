@@ -949,9 +949,9 @@ var (
 		WithDescription("The amount of time it took to successfully send a task to the DLQ. This only records the"+
 			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
 	)
-	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
-	TaskSkipped                     = NewCounterDef("task_skipped")
-	TaskDiscardedByNamespaceState   = NewCounterDef(
+	TaskDiscarded                 = NewCounterDef("task_errors_discarded")
+	TaskSkipped                   = NewCounterDef("task_skipped")
+	TaskDiscardedByNamespaceState = NewCounterDef(
 		"task_discarded_namespace_state",
 		WithDescription("The number of history tasks acked without running because their namespace is soft-deleted or deleted."),
 	)

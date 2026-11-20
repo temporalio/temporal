@@ -17,6 +17,11 @@ type namespaceStateGateScheduler struct {
 
 // NewNamespaceStateGateScheduler wraps a scheduler so tasks of soft-deleted and deleted namespaces
 // are acked without running, except those isExempt allows.
+//
+// The gate runs at submit time, ahead of the rate limiter and worker pool, so a backlog drains at
+// read speed instead of waiting for workers. Every resubmission (Nack, rescheduler, busy workflow)
+// goes through it again. Tasks already queued in the wrapped scheduler when the namespace state
+// changes run once as usual; that window is no wider than the namespace registry's refresh lag.
 func NewNamespaceStateGateScheduler(
 	base Scheduler,
 	namespaceRegistry namespace.Registry,
@@ -58,8 +63,13 @@ func (s *namespaceStateGateScheduler) TrySubmit(e Executable) bool {
 	return s.Scheduler.TrySubmit(e)
 }
 
-// HandleBusyWorkflow passes through to the wrapped scheduler, as rateLimitedSchedulerImpl does.
+// HandleBusyWorkflow gates like Submit, then passes through to the wrapped scheduler, as
+// rateLimitedSchedulerImpl does. Without the gate here, a nacked busy-workflow task would keep
+// cycling through the sequential scheduler and never be discarded.
 func (s *namespaceStateGateScheduler) HandleBusyWorkflow(e Executable) bool {
+	if s.discard(e) {
+		return true
+	}
 	if handler, ok := s.Scheduler.(BusyWorkflowHandler); ok {
 		return handler.HandleBusyWorkflow(e)
 	}
