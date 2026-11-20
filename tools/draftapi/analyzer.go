@@ -172,13 +172,17 @@ func lineRange(tf *token.File, line int, features []string) sourceRange {
 }
 
 func allowedFeatures(comment string) []string {
-	comment = strings.TrimSpace(strings.TrimPrefix(comment, "//"))
-	directive, _, _ := strings.Cut(comment, "//")
-	fields := strings.Fields(directive)
+	fields := strings.Fields(strings.TrimPrefix(comment, "//"))
 	if len(fields) < 2 || fields[0] != "temporal:allow-draft-api" {
 		return nil
 	}
-	return fields[1:]
+	// Feature names are any whitespace-free token, as in the generators, so they may
+	// contain "//"; only a separate token starting with "//" begins an explanation.
+	features := fields[1:]
+	if i := slices.IndexFunc(features, func(field string) bool { return strings.HasPrefix(field, "//") }); i >= 0 {
+		features = features[:i]
+	}
+	return features
 }
 
 func generatedProto(pass *analysis.Pass, file *ast.File) bool {

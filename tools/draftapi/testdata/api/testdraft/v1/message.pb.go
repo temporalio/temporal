@@ -130,8 +130,10 @@ type Stable struct {
 	//
 	//	*Stable_DraftChild
 	//	*Stable_Ordinary
-	Mixed         isStable_Mixed      `protobuf_oneof:"mixed"`
-	NestedBoth    *Draft_SecondNested `protobuf:"bytes,14,opt,name=nested_both,json=nestedBoth,proto3" json:"nested_both,omitempty"`
+	Mixed      isStable_Mixed      `protobuf_oneof:"mixed"`
+	NestedBoth *Draft_SecondNested `protobuf:"bytes,14,opt,name=nested_both,json=nestedBoth,proto3" json:"nested_both,omitempty"`
+	// Feature names are any whitespace-free token, as in the generators.
+	Slashed       string `protobuf:"bytes,15,opt,name=slashed,proto3" json:"slashed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -277,6 +279,13 @@ func (x *Stable) GetNestedBoth() *Draft_SecondNested {
 		return x.NestedBoth
 	}
 	return nil
+}
+
+func (x *Stable) GetSlashed() string {
+	if x != nil {
+		return x.Slashed
+	}
+	return ""
 }
 
 type isStable_Choice interface {
@@ -535,7 +544,7 @@ var File_message_proto protoreflect.FileDescriptor
 
 const file_message_proto_rawDesc = "" +
 	"\n" +
-	"\rmessage.proto\x12\x19temporal.api.testdraft.v1\x1a\vdraft.proto\"\xa3\b\n" +
+	"\rmessage.proto\x12\x19temporal.api.testdraft.v1\x1a\vdraft.proto\"\xd3\b\n" +
 	"\x06Stable\x12\x16\n" +
 	"\x06stable\x18\x01 \x01(\tR\x06stable\x12'\n" +
 	"\x05draft\x18\x02 \x01(\tB\x11\xaa\xbb\x18\rfield-featureR\x05draft\x12]\n" +
@@ -552,7 +561,8 @@ const file_message_proto_rawDesc = "" +
 	"draftChild\x12\x1c\n" +
 	"\bordinary\x18\r \x01(\tH\x01R\bordinary\x12N\n" +
 	"\vnested_both\x18\x0e \x01(\v2-.temporal.api.testdraft.v1.Draft.SecondNestedR\n" +
-	"nestedBoth\x1a;\n" +
+	"nestedBoth\x12.\n" +
+	"\aslashed\x18\x0f \x01(\tB\x14\xaa\xbb\x18\x10qa//experimentalR\aslashed\x1a;\n" +
 	"\rDraftMapEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1ab\n" +
