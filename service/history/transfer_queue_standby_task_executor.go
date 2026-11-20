@@ -112,6 +112,9 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = t.processCloseExecution(ctx, task, executable.Attempt(), eventDetails)
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
+	case *tasks.ReleaseLimiterTask:
+		// TODO(fc): add standby release validation in later PR
+		err = nil
 	case *tasks.ChasmTask:
 		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
