@@ -200,6 +200,14 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	request *operatorservice.AddSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
+	// Pre-allocated field names (eg: Keyword01) are reserved for namespace aliases, and the
+	// Elasticsearch schema already maps them with a fixed type.
+	for saName := range request.GetSearchAttributes() {
+		if sadefs.IsPreallocatedCSAFieldNameOfAnyType(saName) {
+			return serviceerror.NewInvalidArgumentf(errSearchAttributeIsPreallocatedFieldMessage, saName)
+		}
+	}
+
 	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
@@ -491,20 +499,41 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 	}
 
 	if h.visibilityMgr.HasStoreName(esconfig.PersistenceName) {
-		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
+		return h.listSearchAttributesElasticsearch(request, searchAttributes), nil
 	}
 	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
 }
 
+// listSearchAttributesElasticsearch returns the custom search attributes registered at the
+// cluster level, plus the namespace aliases of pre-allocated fields. Pre-allocated fields
+// themselves (eg: Keyword01) are not returned: they can only be used through an alias.
 func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
-	ctx context.Context,
-	indexName string,
+	request *operatorservice.ListSearchAttributesRequest,
 	searchAttributes searchattribute.NameTypeMap,
-) (*operatorservice.ListSearchAttributesResponse, error) {
+) *operatorservice.ListSearchAttributesResponse {
+	customSearchAttributes := searchattribute.WithoutPreallocatedFields(searchAttributes.Custom())
+	if nsName := request.GetNamespace(); nsName != "" {
+		// The namespace is optional for Elasticsearch, so a lookup failure is not an error.
+		if ns, err := h.namespaceRegistry.GetNamespace(namespace.Name(nsName)); err == nil {
+			saMapper := ns.CustomSearchAttributesMapper()
+			for field, alias := range saMapper.FieldToAliasMap() {
+				tp, ok := searchAttributes.Custom()[field]
+				if !ok || !sadefs.IsPreallocatedCSAFieldName(field, tp) {
+					continue
+				}
+				// A cluster-level custom search attribute takes precedence over a namespace
+				// alias with the same name.
+				if _, exists := customSearchAttributes[alias]; exists {
+					continue
+				}
+				customSearchAttributes[alias] = tp
+			}
+		}
+	}
 	return &operatorservice.ListSearchAttributesResponse{
-		CustomAttributes: searchAttributes.Custom(),
+		CustomAttributes: customSearchAttributes,
 		SystemAttributes: searchAttributes.System(),
-	}, nil
+	}
 }
 
 func (h *OperatorHandlerImpl) listSearchAttributesSQL(

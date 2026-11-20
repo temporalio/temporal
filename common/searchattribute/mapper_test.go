@@ -253,3 +253,97 @@ func TestMapperProviderReturnsFallbackLookupError(t *testing.T) {
 	require.ErrorContains(t, err, `failed to load search attributes for fallback index "test-visibility-index"`)
 	require.ErrorContains(t, err, expectedErr.Error())
 }
+
+type staticAliasMapper struct {
+	aliasToField map[string]string
+}
+
+func (m staticAliasMapper) GetAlias(fieldName string, namespaceName string) (string, error) {
+	for alias, field := range m.aliasToField {
+		if field == fieldName {
+			return alias, nil
+		}
+	}
+	return "", serviceerror.NewInvalidArgumentf("namespace %s has no mapping for field %s", namespaceName, fieldName)
+}
+
+func (m staticAliasMapper) GetFieldName(alias string, namespaceName string) (string, error) {
+	if field, ok := m.aliasToField[alias]; ok {
+		return field, nil
+	}
+	return "", serviceerror.NewInvalidArgumentf("namespace %s has no mapping for alias %s", namespaceName, alias)
+}
+
+func Test_BackCompMapperPrefersLegacyCustomSearchAttributeOverNamespaceAlias(t *testing.T) {
+	mapper := &backCompMapper{
+		mapper: staticAliasMapper{aliasToField: map[string]string{
+			// Left over from a SQL visibility store: same name as the legacy attribute below.
+			"CustomerId": "Keyword01",
+			"NewAttr":    "Keyword02",
+		}},
+		fallbackNameTypeMap: NewNameTypeMap(map[string]enumspb.IndexedValueType{
+			"CustomerId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		}),
+	}
+
+	fieldName, err := mapper.GetFieldName("CustomerId", "ns")
+	require.NoError(t, err)
+	require.Equal(t, "CustomerId", fieldName)
+
+	fieldName, err = mapper.GetFieldName("NewAttr", "ns")
+	require.NoError(t, err)
+	require.Equal(t, "Keyword02", fieldName)
+
+	_, err = mapper.GetFieldName("Unknown", "ns")
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgumentErr)
+
+	alias, err := mapper.GetAlias("CustomerId", "ns")
+	require.NoError(t, err)
+	require.Equal(t, "CustomerId", alias)
+
+	alias, err = mapper.GetAlias("Keyword02", "ns")
+	require.NoError(t, err)
+	require.Equal(t, "NewAttr", alias)
+
+	// The field behind the ignored alias is not exposed under the legacy attribute's name.
+	_, err = mapper.GetAlias("Keyword01", "ns")
+	require.ErrorAs(t, err, &invalidArgumentErr)
+
+	sa, err := AliasFields(
+		staticMapperProvider{mapper: mapper},
+		&commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+			"CustomerId": {Data: []byte(`"legacy"`)},
+			"Keyword01":  {Data: []byte(`"via-alias"`)},
+			"Keyword02":  {Data: []byte(`"new"`)},
+		}},
+		"ns",
+	)
+	require.NoError(t, err)
+	require.Len(t, sa.GetIndexedFields(), 2)
+	require.Equal(t, []byte(`"legacy"`), sa.GetIndexedFields()["CustomerId"].GetData())
+	require.Equal(t, []byte(`"new"`), sa.GetIndexedFields()["NewAttr"].GetData())
+}
+
+type staticMapperProvider struct {
+	mapper Mapper
+}
+
+func (p staticMapperProvider) GetMapper(namespace.Name) (Mapper, error) {
+	return p.mapper, nil
+}
+
+func TestWithoutPreallocatedFields(t *testing.T) {
+	result := WithoutPreallocatedFields(map[string]enumspb.IndexedValueType{
+		"Keyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"KeywordList03": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		"Text02":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		// Same pattern but a different type than the pre-allocated field: registered by a user.
+		"Int01":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"CustomerId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	})
+	require.Equal(t, map[string]enumspb.IndexedValueType{
+		"Int01":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"CustomerId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	}, result)
+}

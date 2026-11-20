@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -3007,8 +3008,18 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 	}
+	keys := searchAttributes.All()
+	if wh.visibilityMgr.HasStoreName(esconfig.PersistenceName) {
+		// Pre-allocated custom search attribute fields (eg: Keyword01) can only be used through
+		// a namespace alias, so they are not returned as search attributes.
+		for name, tp := range searchAttributes.Custom() {
+			if sadefs.IsPreallocatedCSAFieldName(name, tp) {
+				delete(keys, name)
+			}
+		}
+	}
 	resp := &workflowservice.GetSearchAttributesResponse{
-		Keys: searchAttributes.All(),
+		Keys: keys,
 	}
 	return resp, nil
 }
