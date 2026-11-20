@@ -131,13 +131,16 @@ func TestOmitLazySelectionAndRecovery(t *testing.T) {
 	for _, tc := range []struct {
 		message   any
 		selection *Selection
+		name      string
+		recovered string
 	}{
-		{panickingOmitter{}, selection},
-		{&testfixture.Message{}, NewSelection(func() []string { panic("config contents") })},
+		{panickingOmitter{}, selection, "draft.panickingOmitter", "sensitive payload"},
+		{&testfixture.Message{}, NewSelection(func() []string { panic("config contents") }), "temporal.api.drafttest.v1.Message", "config contents"},
 	} {
 		affected, err := Omit(tc.message, tc.selection)
 		require.True(t, affected)
-		require.EqualError(t, err, "draft field omission failed")
+		require.ErrorContains(t, err, tc.name)
+		require.ErrorContains(t, err, tc.recovered)
 	}
 }
 

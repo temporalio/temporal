@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc"
 )
 
@@ -320,7 +322,7 @@ func TestNexusDraftCompletionSelections(t *testing.T) {
 							}
 							return &historyservice.CompleteNexusOperationResponse{}, nil
 						})
-						err = h.completeHSMOperation(context.Background(), hsmCompletionToken(), payload, req, []*commonpb.Link{link}, selection)
+						err = h.completeHSMOperation(context.Background(), log.NewNoopLogger(), hsmCompletionToken(), payload, req, []*commonpb.Link{link}, selection)
 					}
 					require.NoError(t, err)
 					require.Len(t, roots, 2)
@@ -386,16 +388,19 @@ func TestNexusDraftCompletionOmissionErrors(t *testing.T) {
 					t.Fatalf("unexpected omission root kind %q", kind)
 				}
 				selection := draft.NewSelection(func() []string { return nil })
-				var err error
+				completion := hsmCompletionToken()
 				if chasm {
-					err = h.completeChasmOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), payload, req, links, selection)
-				} else {
-					err = h.completeHSMOperation(context.Background(), hsmCompletionToken(), payload, req, links, selection)
+					completion = chasmCompletionToken(t)
 				}
+				core, logs := observer.New(zap.ErrorLevel)
+				err := h.completeOperation(context.Background(), log.NewZapLogger(zap.New(core)), completion, payload, req, links, chasm, selection)
 				var he *nexus.HandlerError
 				require.ErrorAs(t, err, &he)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, he.Type)
 				require.Equal(t, "internal error", he.Message)
+				entries := logs.All()
+				require.Len(t, entries, 1)
+				require.Equal(t, "private payload", entries[0].ContextMap()["error"])
 			})
 		}
 	}

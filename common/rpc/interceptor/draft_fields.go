@@ -73,7 +73,7 @@ func (i *DraftFieldsInterceptor) omitRoot(msg any, selection *draft.Selection, m
 		return nil
 	}
 	if _, err := i.omit(msg, selection); err != nil {
-		i.logger.Error(draftFilteringFailure, tag.Operation(method))
+		i.logger.Error(draftFilteringFailure, tag.Operation(method), tag.Error(err))
 		return status.Error(codes.Internal, draftFilteringFailure)
 	}
 	return nil
