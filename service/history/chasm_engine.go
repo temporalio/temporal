@@ -544,6 +544,9 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		if err := mutableState.ValidateChasmSpeculativeTransition(); err != nil {
 			return nil, err
 		}
+		if err := chasmTree.ArmMemoryWakeup(); err != nil {
+			return nil, err
+		}
 		if decision.NotifyPollers {
 			workflowKey := mutableState.GetWorkflowKey()
 			e.NotifyExecution(chasm.ExecutionKey{

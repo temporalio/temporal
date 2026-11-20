@@ -23,14 +23,17 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
 	testspb "go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
@@ -96,6 +99,73 @@ func (s *ChasmSuite) TestNewPayloadStore() {
 		},
 	)
 	s.NoError(err)
+}
+
+func (s *ChasmSuite) TestPayloadStoreSpeculativeAutoPersist() {
+	cenv := newChasmTestEnv(s.Context(), s.T())
+	tv := testvars.New(s.T())
+	storeID := tv.WorkflowID()
+	startResp, err := tests.NewPayloadStoreHandler(cenv.chasmCtx, tests.NewPayloadStoreRequest{
+		NamespaceID: cenv.NamespaceID(),
+		StoreID:     storeID,
+	})
+	s.NoError(err)
+
+	wantPayload := payload.EncodeString("speculative-value")
+	updateStartedAt := time.Now()
+	_, _, err = chasm.UpdateComponent(
+		cenv.chasmCtx,
+		chasm.NewComponentRef[*tests.PayloadStore](chasm.ExecutionKey{
+			NamespaceID: cenv.NamespaceID().String(),
+			BusinessID:  storeID,
+			RunID:       startResp.RunID,
+		}),
+		(*tests.PayloadStore).AddPayload,
+		tests.AddPayloadRequest{PayloadKey: "speculative", Payload: wantPayload},
+		chasm.WithSpeculative(),
+	)
+	s.NoError(err)
+
+	// Poll persistence directly so no foreground operation can flush the cached transition.
+	shardID := common.WorkflowIDToHistoryShard(
+		cenv.NamespaceID().String(), storeID, cenv.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+	)
+	await.Require(s.Context(), s.T(), func(t *await.T) {
+		persisted, err := cenv.GetTestCluster().ExecutionManager().GetWorkflowExecution(t.Context(), &persistence.GetWorkflowExecutionRequest{
+			ShardID:     shardID,
+			NamespaceID: cenv.NamespaceID().String(),
+			WorkflowID:  storeID,
+			RunID:       startResp.RunID,
+			ArchetypeID: tests.ArchetypeID,
+		})
+		require.NoError(t, err)
+		payloadNode := persisted.State.ChasmNodes["Payloads#speculative"]
+		require.NotNil(t, payloadNode)
+		persistedPayload := &commonpb.Payload{}
+		require.NoError(t, serialization.Decode(payloadNode.GetData(), persistedPayload))
+		protorequire.ProtoEqual(t, wantPayload, persistedPayload)
+	}, chasmTestTimeout, 50*time.Millisecond)
+
+	elapsed := time.Since(updateStartedAt)
+	s.Greater(elapsed, time.Second)
+	s.Less(elapsed, 10*time.Second)
+	s.T().Logf("Speculative state persisted after %s", elapsed)
+
+	cenv.CloseShard(cenv.NamespaceID().String(), storeID)
+	got, err := tests.GetPayloadHandler(cenv.chasmCtx, tests.GetPayloadRequest{
+		NamespaceID: cenv.NamespaceID(),
+		StoreID:     storeID,
+		PayloadKey:  "speculative",
+	})
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), wantPayload, got.Payload)
+	desc, err := tests.DescribePayloadStoreHandler(cenv.chasmCtx, tests.DescribePayloadStoreRequest{
+		NamespaceID: cenv.NamespaceID(),
+		StoreID:     storeID,
+	})
+	s.NoError(err)
+	s.Equal(int64(1), desc.State.TotalCount)
+	s.Equal(int64(len(wantPayload.Data)), desc.State.TotalSize)
 }
 
 func (s *ChasmSuite) TestNewPayloadStore_ConflictPolicy_UseExisting() {

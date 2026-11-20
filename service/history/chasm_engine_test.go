@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -66,6 +68,10 @@ type chasmEngineSuite struct {
 	archetypeID    chasm.ArchetypeID
 
 	engine *ChasmEngine
+
+	timeSource *clock.EventTimeSource
+	// sentMemoryWakeups records every in-memory wake-up sent to the shard.
+	sentMemoryWakeups []*tasks.ChasmMemoryWakeupTask
 }
 
 func TestChasmEngineSuite(t *testing.T) {
@@ -83,13 +89,15 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableChasmRequestIDDataNode = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 
-	s.mockShard = shard.NewTestContext(
+	s.timeSource = clock.NewEventTimeSource().Update(time.Now())
+	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistencespb.ShardInfo{
 			ShardId: 1,
 			RangeId: 1,
 		},
 		s.config,
+		s.timeSource,
 	)
 	s.executionCache = wcache.NewHostLevelCache(
 		s.mockShard.GetConfig(),
@@ -117,18 +125,29 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
+	s.mockShard.SetEngineForTesting(s.mockEngine)
+	s.sentMemoryWakeups = nil
+	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).Do(func(byCategory map[tasks.Category][]tasks.Task) {
+		for _, task := range byCategory[tasks.CategoryMemoryTimer] {
+			if wakeup, ok := task.(*tasks.ChasmMemoryWakeupTask); ok {
+				s.sentMemoryWakeups = append(s.sentMemoryWakeups, wakeup)
+			}
+		}
+	}).AnyTimes()
+	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
+
+	s.registerLibrary(&testChasmLibrary{})
+}
+
+// registerLibrary replaces the registry with one holding lib and creates a new engine on it.
+func (s *chasmEngineSuite) registerLibrary(lib *testChasmLibrary) {
 	s.registry = chasm.NewRegistry(s.mockShard.GetLogger())
-	err = s.registry.Register(&testChasmLibrary{})
-	s.NoError(err)
+	s.NoError(s.registry.Register(lib))
 	s.mockShard.SetChasmRegistry(s.registry)
 
 	var ok bool
 	s.archetypeID, ok = s.registry.ComponentIDFor(&testComponent{})
 	s.True(ok)
-
-	s.mockShard.SetEngineForTesting(s.mockEngine)
-	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
-	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
 	s.engine = newChasmEngine(
 		s.executionCache,
@@ -1587,6 +1606,65 @@ func (s *chasmEngineSuite) readActivityInfo(ref chasm.ComponentRef) *persistence
 		return nil
 	}))
 	return info
+}
+
+const testMaxUnpersistedDuration = 5 * time.Second
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_AutoPersistOnTransition() {
+	s.registerLibrary(&testChasmLibrary{autoPersist: &chasm.AutoPersistOptions{MaxUnpersistedDuration: testMaxUnpersistedDuration}})
+	ref := s.loadRunningTestExecution(1)
+
+	start := s.timeSource.Now()
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = "a" }), chasm.WithSpeculative())
+	s.NoError(err)
+	s.Require().Len(s.sentMemoryWakeups, 1)
+	s.Equal(start.Add(testMaxUnpersistedDuration+200*time.Millisecond), s.sentMemoryWakeups[0].VisibilityTimestamp)
+
+	// The first speculative transition after the deadline persists everything pending.
+	s.timeSource.Update(start.Add(testMaxUnpersistedDuration))
+	persisted := &persistencespb.ActivityInfo{}
+	s.expectPersistedActivityInfo(ref, persisted)
+	_, err = s.engine.UpdateComponent(context.Background(), ref,
+		s.setActivityField(func(info *persistencespb.ActivityInfo) { info.TaskQueue = "b" }), chasm.WithSpeculative())
+	s.NoError(err)
+
+	s.Equal("a", persisted.ActivityId)
+	s.Equal("b", persisted.TaskQueue)
+	s.Equal(ctasks.TaskStateCancelled, s.sentMemoryWakeups[0].State())
+	s.Len(s.sentMemoryWakeups, 1)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_Speculative_AutoPersistByWakeup() {
+	s.registerLibrary(&testChasmLibrary{autoPersist: &chasm.AutoPersistOptions{MaxUnpersistedDuration: testMaxUnpersistedDuration}})
+	//nolint:revive // unchecked-type-assertion
+	executor := newTimerQueueActiveTaskExecutor(
+		s.mockShard, s.executionCache, nil, s.mockShard.GetLogger(), metrics.NoopMetricsHandler, s.config, nil, nil,
+	).(*timerQueueActiveTaskExecutor)
+	ref := s.loadRunningTestExecution(1)
+
+	for _, id := range []string{"a", "b"} {
+		_, err := s.engine.UpdateComponent(context.Background(), ref,
+			s.setActivityField(func(info *persistencespb.ActivityInfo) { info.ActivityId = id }), chasm.WithSpeculative())
+		s.NoError(err)
+	}
+	// The first speculative transition sets the deadline; the second joins it.
+	s.Require().Len(s.sentMemoryWakeups, 1)
+
+	// Fired early: nothing is persisted and the wake-up is armed again for the same time.
+	s.NoError(executor.executeChasmMemoryWakeup(context.Background(), s.sentMemoryWakeups[0]))
+	s.Require().Len(s.sentMemoryWakeups, 2)
+	s.Equal(s.sentMemoryWakeups[0].VisibilityTimestamp, s.sentMemoryWakeups[1].VisibilityTimestamp)
+
+	s.timeSource.Update(s.sentMemoryWakeups[1].VisibilityTimestamp)
+	persisted := &persistencespb.ActivityInfo{}
+	s.expectPersistedActivityInfo(ref, persisted)
+	s.NoError(executor.executeChasmMemoryWakeup(context.Background(), s.sentMemoryWakeups[1]))
+	s.Equal("b", persisted.ActivityId)
+
+	// A stale wake-up after the write finds nothing pending and sends no new wake-up.
+	s.NoError(executor.executeChasmMemoryWakeup(context.Background(), s.sentMemoryWakeups[0]))
+	s.Len(s.sentMemoryWakeups, 2)
 }
 
 func (s *chasmEngineSuite) TestUpdateComponent_Speculative_NoPersistence() {
@@ -3838,6 +3916,8 @@ func newTestComponentStateBlob(info *persistencespb.ActivityInfo) *commonpb.Data
 
 type testChasmLibrary struct {
 	chasm.UnimplementedLibrary
+
+	autoPersist *chasm.AutoPersistOptions
 }
 
 func (l *testChasmLibrary) Name() string {
@@ -3848,7 +3928,8 @@ func (l *testChasmLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*testComponent]("test_component",
 			chasm.WithSearchAttributes(testComponentPausedSearchAttribute),
-			chasm.WithRecordPrincipals()),
+			chasm.WithRecordPrincipals(),
+			chasm.WithSpeculativeOptions(chasm.SpeculativeOptions{AutoPersist: l.autoPersist})),
 		chasm.NewRegistrableComponent[*testComponentNoMetadata]("test_component_no_metadata"),
 	}
 }
