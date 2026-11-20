@@ -298,7 +298,7 @@ func (c *catalog) draftValues(opts proto.Message) []string {
 }
 
 func (c *catalog) mark(obj types.Object, features []string) {
-	if obj != nil && len(features) > 0 {
+	if obj != nil && obj.Pkg() == c.pass.Pkg && len(features) > 0 {
 		c.facts[obj] = append(c.facts[obj], features...)
 	}
 }
@@ -379,11 +379,11 @@ func (c *catalog) addOneof(typ types.Type, message *descriptorpb.DescriptorProto
 	}
 	for _, name := range c.pass.Pkg.Scope().Names() {
 		obj, ok := c.pass.Pkg.Scope().Lookup(name).(*types.TypeName)
-		if !ok {
+		if !ok || obj.IsAlias() {
 			continue
 		}
 		wrapper := namedType(obj.Type())
-		if wrapper == nil || !types.Implements(types.NewPointer(wrapper), iface) {
+		if wrapper == nil || wrapper.Obj().Pkg() != c.pass.Pkg || !types.Implements(types.NewPointer(wrapper), iface) {
 			continue
 		}
 		structure, ok := wrapper.Underlying().(*types.Struct)
@@ -491,11 +491,11 @@ func (c *catalog) referenceFeatures(typ types.Type) []string {
 func (c *catalog) addReferencedTypes() {
 	for _, name := range c.pass.Pkg.Scope().Names() {
 		obj, ok := c.pass.Pkg.Scope().Lookup(name).(*types.TypeName)
-		if !ok {
+		if !ok || obj.IsAlias() {
 			continue
 		}
 		typ := namedType(obj.Type())
-		if typ == nil {
+		if typ == nil || typ.Obj().Pkg() != c.pass.Pkg {
 			continue
 		}
 		structure, ok := typ.Underlying().(*types.Struct)
