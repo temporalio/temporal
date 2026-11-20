@@ -73,10 +73,14 @@ func (i *DraftFieldsInterceptor) omitRoot(msg any, selection *draft.Selection, m
 		return nil
 	}
 	if _, err := i.omit(msg, selection); err != nil {
-		i.logger.Error(draftFilteringFailure, tag.Operation(method), tag.Error(err))
-		return status.Error(codes.Internal, draftFilteringFailure)
+		return i.omissionError(method, err)
 	}
 	return nil
+}
+
+func (i *DraftFieldsInterceptor) omissionError(method string, err error) error {
+	i.logger.Error(draftFilteringFailure, tag.Operation(method), tag.Error(err))
+	return status.Error(codes.Internal, draftFilteringFailure)
 }
 
 // OutgoingIntercept wraps the full chain, including successful early returns.
@@ -90,10 +94,22 @@ func (i *DraftFieldsInterceptor) OutgoingIntercept(ctx context.Context, req any,
 	if err != nil {
 		return resp, err
 	}
-	if err := i.omitRoot(resp, invocation.selection, info.FullMethod); err != nil {
+	message, ok := resp.(proto.Message)
+	if !ok {
+		return resp, nil
+	}
+	needed, err := draft.NeedsOmission(message, invocation.selection)
+	if err != nil {
+		return nil, i.omissionError(info.FullMethod, err)
+	}
+	if !needed {
+		return resp, nil
+	}
+	filtered := proto.Clone(message)
+	if err := i.omitRoot(filtered, invocation.selection, info.FullMethod); err != nil {
 		return nil, err
 	}
-	return resp, nil
+	return filtered, nil
 }
 
 // IncomingIntercept runs immediately after existing namespace normalization.

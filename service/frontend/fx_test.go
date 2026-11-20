@@ -1112,10 +1112,20 @@ func TestDraftFieldsProvider_CustomEarlyReturn(t *testing.T) {
 				return nil, nil
 			})
 			require.NoError(t, err)
-			require.Same(t, resp, out)
-			require.Equal(t, tc.want, draftUpdateUsers(h))
-			require.Equal(t, int64(1), h.Events[0].GetEventId())
-			require.Equal(t, "u", h.Events[0].GetWorkflowExecutionUpdateAcceptedEventAttributes().GetAcceptedRequest().GetMeta().GetUpdateId())
+			require.Equal(t, []string{"bob", "bob"}, draftUpdateUsers(h))
+			var returnedHistory *historypb.History
+			switch response := out.(type) {
+			case *workflowservice.GetWorkflowExecutionHistoryResponse:
+				returnedHistory = response.GetHistory()
+			case *workflowservice.RespondWorkflowTaskCompletedResponse:
+				returnedHistory = response.GetWorkflowTask().GetHistory()
+			default:
+				t.Fatalf("unexpected response type %T", out)
+			}
+			require.NotNil(t, returnedHistory)
+			require.Equal(t, tc.want, draftUpdateUsers(returnedHistory))
+			require.Equal(t, int64(1), returnedHistory.Events[0].GetEventId())
+			require.Equal(t, "u", returnedHistory.Events[0].GetWorkflowExecutionUpdateAcceptedEventAttributes().GetAcceptedRequest().GetMeta().GetUpdateId())
 		})
 	}
 }

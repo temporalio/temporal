@@ -10,9 +10,11 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestDraftFieldsHTTPBoundary(t *testing.T) {
@@ -21,15 +23,15 @@ func TestDraftFieldsHTTPBoundary(t *testing.T) {
 		dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient{
 			dynamicconfig.FrontendEnabledDraftFeatureAPIs.Key(): []string{"feature-a"},
 		}, log.NewNoopLogger())
-		source := &workflowservice.GetSystemInfoResponse{ServerVersion: "stable-version"}
+		source := &workflowservice.GetWorkflowExecutionHistoryResponse{History: draftUpdateHistory("bob")}
 		var roots []any
 		var selections []*draft.Selection
 		spy := func(root any, selection *draft.Selection) (bool, error) {
 			roots = append(roots, root)
 			selections = append(selections, selection)
 			require.True(t, selection.Enabled("feature-a"))
-			require.False(t, selection.Enabled("feature-b"))
-			return false, nil
+			require.False(t, selection.Enabled(draftUpdateFeature))
+			return draft.Omit(root, selection)
 		}
 		custom := func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			if early {
@@ -37,22 +39,28 @@ func TestDraftFieldsHTTPBoundary(t *testing.T) {
 			}
 			return handler(ctx, req)
 		}
-		options := draftBoundaryOptions(t, dc, nil, nil, custom, spy)
+		registry := namespace.NewMockRegistry(gomock.NewController(t))
+		registry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(namespace.NewLocalNamespaceForTest(nil, nil, "local"), nil).AnyTimes()
+		options := draftBoundaryOptions(t, dc, registry, nil, custom, spy)
 		svc := &draftHTTPService{response: source, calls: &handlerCalls}
-		conn := newInlineClientConn(map[string]any{"temporal.api.workflowservice.v1.WorkflowService": svc}, options.UnaryInterceptors, metrics.NoopMetricsHandler, nil)
-		req := &workflowservice.GetSystemInfoRequest{}
-		reply := &workflowservice.GetSystemInfoResponse{}
-		err := conn.Invoke(metadata.NewOutgoingContext(t.Context(), metadata.MD{}), draftFrontendMethod, req, reply)
+		conn := newInlineClientConn(map[string]any{"temporal.api.workflowservice.v1.WorkflowService": svc}, options.UnaryInterceptors, metrics.NoopMetricsHandler, registry)
+		req := &workflowservice.GetWorkflowExecutionHistoryRequest{Namespace: "namespace"}
+		reply := &workflowservice.GetWorkflowExecutionHistoryResponse{}
+		err := conn.Invoke(metadata.NewOutgoingContext(t.Context(), metadata.MD{}), draftHistoryMethod, req, reply)
 		require.NoError(t, err)
 		require.Len(t, roots, 2)
 		require.Same(t, req, roots[0])
-		require.Same(t, source, roots[1])
+		require.NotSame(t, source, roots[1])
 		require.Same(t, selections[0], selections[1])
-		require.True(t, proto.Equal(source, reply))
+		require.Equal(t, []string{"bob", "bob"}, draftUpdateUsers(source.GetHistory()))
+		protorequire.ProtoEqual(t, &workflowservice.GetWorkflowExecutionHistoryResponse{History: draftUpdateHistory("")}, reply)
 		_, marshaler := newTemporalProtoMarshaler("", false)
 		encoded, err := marshaler.Marshal(reply)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"serverVersion":"stable-version"}`, string(encoded))
+		require.JSONEq(t, `{"history":{"events":[
+			{"eventId":"1","workflowExecutionUpdateAcceptedEventAttributes":{"acceptedRequest":{"meta":{"updateId":"u"}}}},
+			{"eventId":"2","workflowExecutionUpdateAdmittedEventAttributes":{"request":{}}}
+		]}}`, string(encoded))
 		if early {
 			require.Zero(t, handlerCalls)
 		} else {
@@ -62,11 +70,11 @@ func TestDraftFieldsHTTPBoundary(t *testing.T) {
 }
 
 type draftHTTPService struct {
-	response *workflowservice.GetSystemInfoResponse
+	response *workflowservice.GetWorkflowExecutionHistoryResponse
 	calls    *int
 }
 
-func (s *draftHTTPService) GetSystemInfo(context.Context, *workflowservice.GetSystemInfoRequest) (*workflowservice.GetSystemInfoResponse, error) {
+func (s *draftHTTPService) GetWorkflowExecutionHistory(context.Context, *workflowservice.GetWorkflowExecutionHistoryRequest) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
 	*s.calls++
 	return s.response, nil
 }
