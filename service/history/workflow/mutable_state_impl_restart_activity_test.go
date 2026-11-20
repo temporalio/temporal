@@ -24,6 +24,7 @@ import (
 	commonclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -227,7 +228,7 @@ func (s *retryActivitySuite) TestRetryActivity_should_clear_per_attempt_fields()
 	s.Require().Len(transferTasks, 1)
 	releaseTask, ok := transferTasks[0].(*tasks.ReleaseLimiterTask)
 	s.Require().True(ok)
-	s.Equal(limiters, releaseTask.Limiters)
+	protorequire.ProtoSliceEqual(s.T(), limiters, releaseTask.Limiters)
 }
 
 // TestRetryActivity_should_be_scheduled_when_next_retry_delay_is_set asserts that the activity is retried after NextRetryDelay period specified in the application failure.

@@ -7,6 +7,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 func TestNewReleaseLimiterTask(t *testing.T) {
@@ -32,7 +33,7 @@ func TestNewReleaseLimiterTask(t *testing.T) {
 
 	require.NotNil(t, task)
 	require.Equal(t, workflowKey, task.WorkflowKey)
-	require.Equal(t, []*taskqueuespb.LimiterRef{concurrencyLimiter1, concurrencyLimiter2}, task.Limiters)
+	protorequire.ProtoSliceEqual(t, []*taskqueuespb.LimiterRef{concurrencyLimiter1, concurrencyLimiter2}, task.Limiters)
 }
 
 func TestNewReleaseLimiterTask_NoReleaseNeeded(t *testing.T) {

@@ -379,8 +379,8 @@ func (s *mutableStateSuite) TestWorkflowTaskLimitersStoredForAttempt() {
 		0,
 	)
 	s.NoError(err)
-	s.Equal(limiters, wft.Limiters)
-	s.Equal(limiters, s.mutableState.GetExecutionInfo().WorkflowTaskLimiters)
+	protorequire.ProtoSliceEqual(s.T(), limiters, wft.Limiters)
+	protorequire.ProtoSliceEqual(s.T(), limiters, s.mutableState.GetExecutionInfo().WorkflowTaskLimiters)
 
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
