@@ -1303,7 +1303,7 @@ func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 
 func TestExecuteTask_EventLog(t *testing.T) {
 	newStart := func(requestID, runID string) *schedulespb.BufferedStart {
-		return &schedulespb.BufferedStart{RequestId: requestID, RunId: runID}
+		return &schedulespb.BufferedStart{RequestId: requestID, RunId: runID, Attempt: 1}
 	}
 
 	cases := []struct {

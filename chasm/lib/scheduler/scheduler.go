@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"time"
 
@@ -451,40 +452,44 @@ func (s *Scheduler) NewImmediateBackfiller(
 	return backfiller
 }
 
-// useScheduledAction returns true when the Scheduler should allow scheduled
-// actions to be taken.
-//
-// When decrement is true, the schedule's state's `RemainingActions` counter is
-// decremented when an action can be taken. When decrement is false, no state
-// is mutated.
-func (s *Scheduler) useScheduledAction(decrement bool) bool {
+// scheduledActionCapacity returns how many scheduled (non-manual) actions the
+// Scheduler currently allows: none while paused, RemainingActions for limited
+// schedules, and math.MaxInt64 otherwise. It never mutates state.
+func (s *Scheduler) scheduledActionCapacity() int64 {
 	scheduleState := s.Schedule.GetState()
+	switch {
+	case scheduleState.GetPaused():
+		return 0
+	case scheduleState.GetLimitedActions():
+		return max(0, scheduleState.GetRemainingActions())
+	default:
+		return math.MaxInt64
+	}
+}
 
-	// If paused, don't do anything.
-	if scheduleState.Paused {
+// canTakeScheduledAction reports whether the Scheduler currently allows a
+// scheduled (non-manual) action. It never mutates state.
+func (s *Scheduler) canTakeScheduledAction() bool {
+	return s.scheduledActionCapacity() > 0
+}
+
+// consumeScheduledAction takes one scheduled action if allowed, decrementing
+// RemainingActions for limited schedules. It returns false, without mutating
+// state, when no action can be taken.
+func (s *Scheduler) consumeScheduledAction() bool {
+	if !s.canTakeScheduledAction() {
 		return false
 	}
-
-	// If unlimited actions, allow.
+	scheduleState := s.Schedule.GetState()
 	if !scheduleState.LimitedActions {
 		return true
 	}
-
-	// Otherwise check and decrement limit.
-	if scheduleState.RemainingActions > 0 {
-		if decrement {
-			scheduleState.RemainingActions--
-
-			// The conflict token is updated because a client might be in the process of
-			// preparing an update request that increments their schedule's RemainingActions
-			// field.
-			s.updateConflictToken()
-		}
-		return true
-	}
-
-	// No actions left
-	return false
+	scheduleState.RemainingActions--
+	// The conflict token is updated because a client might be in the process of
+	// preparing an update request that increments their schedule's RemainingActions
+	// field.
+	s.updateConflictToken()
+	return true
 }
 
 func (s *Scheduler) getCompiledSpec(specBuilder *scheduler.SpecBuilder) (*scheduler.CompiledSpec, error) {
@@ -646,7 +651,7 @@ func (s *Scheduler) getIdleExpiration(
 ) (time.Time, bool) {
 	if idleTime == 0 ||
 		s.isHeldOpen() ||
-		(!nextWakeup.IsZero() && s.useScheduledAction(false)) {
+		(!nextWakeup.IsZero() && s.canTakeScheduledAction()) {
 		return time.Time{}, false
 	}
 	return s.idleDeadline(ctx, idleTime), true

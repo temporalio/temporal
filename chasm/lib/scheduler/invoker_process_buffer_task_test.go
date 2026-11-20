@@ -482,7 +482,7 @@ func TestProcessBufferTask_NeedsTerminate(t *testing.T) {
 }
 
 // Past-catchup automated starts must drop WITHOUT consuming a LimitedActions
-// slot. Regression for the order-of-checks bug where useScheduledAction(true)
+// slot. Regression for the order-of-checks bug where consumeScheduledAction()
 // fired before the catchup-window check, decrementing RemainingActions for
 // starts that never ran.
 //
@@ -511,6 +511,46 @@ func TestProcessBufferTask_MissedCatchupPreservesRemainingActions(t *testing.T) 
 	})
 	require.Equal(t, int64(3), env.Scheduler.Schedule.State.RemainingActions,
 		"RemainingActions must not be consumed by a start that was dropped for missing the catchup window")
+}
+
+// Ready automated starts share the remaining LimitedActions within one
+// processing pass. Starts beyond the capacity are dropped, manual starts don't
+// consume it, and each consumed action updates the conflict token once.
+func TestProcessBufferTask_LimitedActionsSharedAcrossReadyStarts(t *testing.T) {
+	env := newTestEnv(t)
+	env.Scheduler.Schedule.State.LimitedActions = true
+	env.Scheduler.Schedule.State.RemainingActions = 2
+	initialToken := env.Scheduler.ConflictToken
+
+	startTime := timestamppb.New(env.TimeSource.Now())
+	newStart := func(requestID string, manual bool) *schedulespb.BufferedStart {
+		return &schedulespb.BufferedStart{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			Manual:        manual,
+			RequestId:     requestID,
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		}
+	}
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{
+			newStart("auto-1", false),
+			newStart("manual", true),
+			newStart("auto-2", false),
+			newStart("auto-3", false),
+		},
+		ExpectedBufferedStarts: 3,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			var kept []string
+			for _, start := range invoker.GetBufferedStarts() {
+				kept = append(kept, start.RequestId)
+			}
+			require.Equal(t, []string{"auto-1", "manual", "auto-2"}, kept)
+		},
+	})
+	require.Zero(t, env.Scheduler.Schedule.State.RemainingActions)
+	require.Equal(t, initialToken+2, env.Scheduler.ConflictToken)
 }
 
 // Paused schedules drop automated buffered starts during processBuffer (but
