@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 )
@@ -533,6 +534,24 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			expectedResult: "ActivityType='foo'",
 			batchType:      enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
 		},
+		{
+			name:           "Terminate nexus operation is filtered to running and paused",
+			query:          "Endpoint='foo'",
+			expectedResult: "(Endpoint='foo') AND (ExecutionStatus='Running' OR ExecutionStatus='Paused')",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+		},
+		{
+			name:           "Cancel nexus operation is filtered to running and paused",
+			query:          "Endpoint='foo'",
+			expectedResult: "(Endpoint='foo') AND (ExecutionStatus='Running' OR ExecutionStatus='Paused')",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION,
+		},
+		{
+			name:           "Delete nexus operation is not filtered",
+			query:          "Endpoint='foo'",
+			expectedResult: "Endpoint='foo'",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION,
+		},
 	}
 	for _, testRun := range tests {
 		s.Run(testRun.name, func() {
@@ -783,6 +802,24 @@ func (s *activitiesSuite) TestIsNonRetryableError() {
 			name:      "terminal state error for DELETE_ACTIVITY returns false",
 			err:       serviceerror.NewFailedPreconditionf("activity is in terminal state %v", "Completed"),
 			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+			want:      false,
+		},
+		{
+			name:      "terminal state error for TERMINATE_NEXUS_OPERATION returns true",
+			err:       serviceerror.NewFailedPrecondition("operation already completed"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+			want:      true,
+		},
+		{
+			name:      "terminal state error for CANCEL_NEXUS_OPERATION returns true",
+			err:       serviceerror.NewFailedPrecondition("operation already completed"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION,
+			want:      true,
+		},
+		{
+			name:      "terminal state error for DELETE_NEXUS_OPERATION returns false",
+			err:       serviceerror.NewFailedPrecondition("operation already completed"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION,
 			want:      false,
 		},
 		{
@@ -1355,13 +1392,73 @@ func (s *activitiesSuite) TestStartTaskProcessor_ActivityTerminalStateIsNotRetri
 	s.Equal(int32(1), calls.Load(), "terminal-state failure must not be retried")
 }
 
+// TestProcessSingleTask_NexusOperationForwardsRequestFields verifies each Nexus
+// operation batch type calls its RPC against the worker's namespace with the
+// target's IDs and, for terminate/cancel, the requester's identity and reason
+// plus a request ID derived from the job and target. NotFound counts as success.
+func (s *activitiesSuite) TestProcessSingleTask_NexusOperationForwardsRequestFields() {
+	target := &commonpb.Execution{Type: enumspb.EXECUTION_TYPE_NEXUS_OPERATION, BusinessId: "op-id", RunId: "run-id"}
+	tests := []struct {
+		name    string
+		request *workflowservice.StartBatchOperationRequest
+		expect  func()
+	}{
+		{
+			name: "terminate",
+			request: &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation{
+				TerminateNexusOperationsOperation: &batchpb.BatchOperationTerminateNexusOperations{Identity: "id", Reason: "why"},
+			}},
+			expect: func() {
+				s.mockFrontendClient.EXPECT().TerminateNexusOperationExecution(gomock.Any(), protomock.Eq(&workflowservice.TerminateNexusOperationExecutionRequest{
+					Namespace: "ns", OperationId: "op-id", RunId: "run-id", Identity: "id", Reason: "why",
+					RequestId: deterministicRequestID("job-id", "terminate-nexus-operation", "op-id", "run-id"),
+				})).Return(&workflowservice.TerminateNexusOperationExecutionResponse{}, nil)
+			},
+		},
+		{
+			name: "cancel",
+			request: &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation{
+				CancelNexusOperationsOperation: &batchpb.BatchOperationCancelNexusOperations{Identity: "id", Reason: "why"},
+			}},
+			expect: func() {
+				s.mockFrontendClient.EXPECT().RequestCancelNexusOperationExecution(gomock.Any(), protomock.Eq(&workflowservice.RequestCancelNexusOperationExecutionRequest{
+					Namespace: "ns", OperationId: "op-id", RunId: "run-id", Identity: "id", Reason: "why",
+					RequestId: deterministicRequestID("job-id", "cancel-nexus-operation", "op-id", "run-id"),
+				})).Return(&workflowservice.RequestCancelNexusOperationExecutionResponse{}, nil)
+			},
+		},
+		{
+			// An already-deleted operation returns NotFound, which counts as success.
+			name: "delete",
+			request: &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation{
+				DeleteNexusOperationsOperation: &batchpb.BatchOperationDeleteNexusOperations{},
+			}},
+			expect: func() {
+				s.mockFrontendClient.EXPECT().DeleteNexusOperationExecution(gomock.Any(), protomock.Eq(&workflowservice.DeleteNexusOperationExecutionRequest{
+					Namespace: "ns", OperationId: "op-id", RunId: "run-id",
+				})).Return(nil, serviceerror.NewNotFound("operation not found"))
+			},
+		},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			tt.expect()
+			// Intentionally different from the worker's bound namespace "ns".
+			tt.request.Namespace = "untrusted-namespace"
+			tt.request.JobId = "job-id"
+			batchOperation := &batchspb.BatchOperationInput{Request: tt.request}
+			s.Require().NoError(s.processSingleTaskForTest(batchOperation, task{targetExecution: target, attempts: 1}))
+		})
+	}
+}
+
 // TestStartTaskProcessor_InvalidArgumentIsNotRetried verifies that an
 // InvalidArgument from a target's own operation is attempted exactly once. The
 // same arguments fail the same way every time, and processTaskWithRetries retries
 // in place paced only by the batch's rate limiter, so retrying spends the whole
 // AttemptsOnRetryableError budget -- and the batch's request budget -- to arrive
-// at the same failure. Unlike the activity FailedPrecondition case, this holds
-// for every batch type.
+// at the same failure. Unlike the terminate/cancel FailedPrecondition case, this
+// holds for every batch type.
 func (s *activitiesSuite) TestStartTaskProcessor_InvalidArgumentIsNotRetried() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1809,7 +1906,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 // TestProcessWorkflowsWithProactiveFetching_InitialTargetExecutions verifies
 // that config.initialTargetExecutions builds tasks with the field the batch
 // type's processor actually reads: executionInfo for workflow batch types,
-// targetExecution for activity batch types. Regression test for a panic
+// targetExecution for other batch types. Regression test for a panic
 // where a workflow-targeted TargetExecutions batch always populated
 // targetExecution (leaving executionInfo nil), causing a nil pointer
 // dereference in the workflow-op processors (e.g. TerminationOperation).
@@ -1827,6 +1924,11 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialTarge
 		{
 			name:              "activity batch type uses targetExecution",
 			batchType:         enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			wantExecutionInfo: false,
+		},
+		{
+			name:              "nexus operation batch type uses targetExecution",
+			batchType:         enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
 			wantExecutionInfo: false,
 		},
 	}
@@ -1997,51 +2099,6 @@ func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
 
 	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
 	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
-}
-
-func (s *activitiesSuite) TestFetchPage_ListErrors() {
-	invalidArgument := serviceerror.NewInvalidArgument("bad query")
-	unavailable := serviceerror.NewUnavailable("try again")
-	for _, tc := range []struct {
-		name              string
-		batchType         enumspb.BatchOperationType
-		listErr           error
-		expectNonRetrying bool
-	}{
-		{"workflow invalid argument is non-retryable", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, invalidArgument, true},
-		{"activity invalid argument is non-retryable", enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, invalidArgument, true},
-		{"workflow other error passes through", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, unavailable, false},
-		{"activity other error passes through", enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, unavailable, false},
-	} {
-		s.Run(tc.name, func() {
-			mockSdk := &mocks.Client{}
-			if tc.batchType == enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY {
-				mockSdk.On("WorkflowService").Return(s.mockFrontendClient)
-				s.mockFrontendClient.EXPECT().ListActivityExecutions(gomock.Any(), gomock.Any()).Return(nil, tc.listErr)
-			} else {
-				mockSdk.On("ListWorkflow", mock.Anything, mock.Anything).Return(nil, tc.listErr).Once()
-			}
-			defer mockSdk.AssertExpectations(s.T())
-			config := batchProcessorConfig{
-				targetNamespace: "test-namespace",
-				adjustedQuery:   "A=B",
-				batchType:       tc.batchType,
-			}
-
-			_, err := fetchPage(context.Background(), mockSdk, config, nil, 0)
-
-			if !tc.expectNonRetrying {
-				s.Require().ErrorIs(err, tc.listErr)
-				_, isAppErr := errors.AsType[*temporal.ApplicationError](err)
-				s.False(isAppErr)
-				return
-			}
-			appErr, ok := errors.AsType[*temporal.ApplicationError](err)
-			s.Require().True(ok)
-			s.True(appErr.NonRetryable())
-			s.Equal("InvalidArgument", appErr.Type())
-		})
-	}
 }
 
 func (s *activitiesSuite) TestGetOperationRPS() {

@@ -248,6 +248,9 @@ func (s *batcherSuite) TestTargetExecutionType() {
 		{enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
 		{enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
 		{enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
+		{enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
+		{enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
+		{enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
 	} {
 		s.Run(tc.batchType.String(), func() {
 			s.Equal(tc.expected, targetExecutionType(tc.batchType))
@@ -274,9 +277,73 @@ func (s *batcherSuite) TestTargetExecutionTypeForRequest() {
 		{"terminate activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
 		{"cancel activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_CancelActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
 		{"delete activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
+		{"terminate nexus operations", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation{}}, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
+		{"cancel nexus operations", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation{}}, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
+		{"delete nexus operations", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation{}}, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
 	} {
 		s.Run(tc.name, func() {
 			s.Equal(tc.expected, TargetExecutionTypeForRequest(tc.request))
+		})
+	}
+}
+
+func (s *batcherSuite) TestValidateBatchOperation_NexusOperations() {
+	targets := func(executionType enumspb.ExecutionType) []*commonpb.Execution {
+		return []*commonpb.Execution{{Type: executionType, BusinessId: "operation-id", RunId: "run-id"}}
+	}
+	terminate := &workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation{
+		TerminateNexusOperationsOperation: &batchpb.BatchOperationTerminateNexusOperations{},
+	}
+	for _, tc := range []struct {
+		name          string
+		request       *workflowservice.StartBatchOperationRequest
+		expectedError string
+	}{
+		{
+			name: "terminate with nexus operation targets",
+			request: &workflowservice.StartBatchOperationRequest{
+				Operation:        terminate,
+				TargetExecutions: targets(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
+			},
+		},
+		{
+			name: "cancel with nexus operation targets",
+			request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation{
+					CancelNexusOperationsOperation: &batchpb.BatchOperationCancelNexusOperations{},
+				},
+				TargetExecutions: targets(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
+			},
+		},
+		{
+			name: "delete with nexus operation targets",
+			request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation{
+					DeleteNexusOperationsOperation: &batchpb.BatchOperationDeleteNexusOperations{},
+				},
+				TargetExecutions: targets(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
+			},
+		},
+		{
+			name: "terminate with activity targets",
+			request: &workflowservice.StartBatchOperationRequest{
+				Operation:        terminate,
+				TargetExecutions: targets(enumspb.EXECUTION_TYPE_ACTIVITY),
+			},
+			expectedError: "target_executions[0] has type Activity",
+		},
+	} {
+		s.Run(tc.name, func() {
+			tc.request.Namespace = "test-namespace"
+			tc.request.JobId = "job-id"
+			tc.request.Reason = "test-reason"
+
+			err := ValidateBatchOperation(tc.request)
+			if tc.expectedError == "" {
+				s.NoError(err)
+				return
+			}
+			s.ErrorContains(err, tc.expectedError)
 		})
 	}
 }
