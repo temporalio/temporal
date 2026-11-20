@@ -256,7 +256,19 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	s.NoError(err)
 }
 
-func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
+func (s *workflowReplicatorSuite) TestApplyWorkflowStateAncestorReuse() {
+	for _, tc := range []struct {
+		name         string
+		localVersion int64
+	}{
+		{name: "matching history", localVersion: 100},
+		{name: "divergent history", localVersion: 99},
+	} {
+		s.Run(tc.name, func() { s.applyWorkflowStateWithAncestors(tc.localVersion) })
+	}
+}
+
+func (s *workflowReplicatorSuite) applyWorkflowStateWithAncestors(localVersion int64) {
 	namespaceID := uuid.NewString()
 	namespaceName := "namespaceName"
 	branchInfo := &persistencespb.HistoryBranch{
@@ -416,16 +428,32 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 				Events: []*historypb.HistoryEvent{
 					{
 						EventId: 1,
+						Version: localVersion,
 					},
 					{
 						EventId: 2,
+						Version: localVersion,
 					},
 				},
 			},
 		},
 	}, nil)
 	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), gomock.Any()).Return(nil, nil).Times(3)
+	appends := 3
+	if localVersion != 100 {
+		appends = 4
+	}
+	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.AppendRawHistoryNodesRequest) (*persistence.AppendHistoryNodesResponse, error) {
+			if localVersion != 100 {
+				branch, err := s.mockExecutionManager.GetHistoryBranchUtil().ParseHistoryBranchInfo(req.BranchToken)
+				s.NoError(err)
+				s.NotEqual(branchInfo.BranchId, branch.BranchId)
+				s.Empty(branch.Ancestors)
+			}
+			return nil, nil
+		},
+	).Times(appends)
 	fakeStartHistory := &historypb.HistoryEvent{
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
