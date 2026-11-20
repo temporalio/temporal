@@ -1069,6 +1069,7 @@ func HandlerProvider(
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -1119,6 +1120,7 @@ func HandlerProvider(
 		),
 		chasmNsReplClient,
 		metricsHandler,
+		replicationResolverFactory,
 	)
 	return wfHandler
 }

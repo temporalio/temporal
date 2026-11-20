@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
@@ -78,7 +79,7 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 				handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
 					nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
 					archiver.NewArchivalMetadata(dc, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-					nil, clock.NewEventTimeSource(), cfg, client, nil)
+					nil, clock.NewEventTimeSource(), cfg, client, nil, namespace.NewDefaultReplicationResolverFactory())
 				clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 				clusters.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 				clusters.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
