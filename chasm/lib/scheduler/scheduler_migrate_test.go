@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
@@ -117,12 +118,10 @@ func TestMigrateToWorkflowTask_DoesNotPropagateDisabledTimeSkipping(t *testing.T
 		HistoryClient:    historyClient,
 		SaMapperProvider: searchattribute.NewTestMapperProvider(nil),
 	})
-	require.NoError(t, handler.Execute(
-		env.EngineContext(),
-		env.rootRef,
-		chasm.TaskAttributes{},
-		&schedulerpb.SchedulerMigrateToWorkflowTask{},
-	))
+	dropped, err := chasmtest.ExecuteSideEffectTask(context.Background(), env.engine, env.Scheduler, handler,
+		chasm.TaskAttributes{}, &schedulerpb.SchedulerMigrateToWorkflowTask{})
+	require.NoError(t, err)
+	require.False(t, dropped)
 	require.True(t, env.Scheduler.Closed)
 }
 

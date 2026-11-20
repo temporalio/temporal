@@ -1,6 +1,7 @@
 package scheduler_test
 
 import (
+	"context"
 	"sort"
 	"testing"
 	"time"
@@ -8,11 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -186,9 +191,22 @@ func TestScheduleInvokerExecuteTask_ConsistentLabels(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, valid)
 
-	// fired: Execute over an empty work set records outcome=fired (no RPCs).
-	require.NoError(t, h.Execute(env.EngineContext(), env.ComponentRef(ctx, invoker),
-		chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{}))
+	// fired: an eligible start passes Validate and records outcome=fired.
+	now := timestamppb.New(env.TimeSource.Now())
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		NominalTime:   now,
+		ActualTime:    now,
+		DesiredTime:   now,
+		RequestId:     "req1",
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		Attempt:       1,
+	}}
+	env.mockFrontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+	dropped, err := chasmtest.ExecuteSideEffectTask(context.Background(), env.engine, invoker, h,
+		chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	require.NoError(t, err)
+	require.False(t, dropped)
 	require.NoError(t, env.CloseTransaction())
 
 	requireConsistentLabelKeys(t, capture, metrics.ScheduleInvokerExecuteTask.Name(), 2)
