@@ -10,7 +10,6 @@ import (
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/testing/protorequire"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // TestRecordHeartbeat verifies the initial lease and renewal using CHASM time.
@@ -23,8 +22,7 @@ func TestRecordHeartbeat(t *testing.T) {
 	group := newWorkerGroup()
 	require.NoError(t, group.recordHeartbeat(ctx, nil, time.Minute))
 	protorequire.ProtoEqual(t, &workerstatepb.WorkerGroupState{
-		Status:              workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
-		LeaseExpirationTime: timestamppb.New(now.Add(time.Minute)),
+		Status: workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 	}, group.WorkerGroupState)
 	require.Equal(t, []chasm.MockTask{{
 		Component:  group,
@@ -35,7 +33,6 @@ func TestRecordHeartbeat(t *testing.T) {
 	// A later heartbeat extends the lease and schedules expiry at the new deadline.
 	now = now.Add(30 * time.Second)
 	require.NoError(t, group.recordHeartbeat(ctx, nil, time.Minute))
-	require.Equal(t, now.Add(time.Minute), group.GetLeaseExpirationTime().AsTime())
 	require.Len(t, ctx.Tasks, 2)
 	require.Same(t, group, ctx.Tasks[1].Component)
 	require.Equal(t, now.Add(time.Minute), ctx.Tasks[1].Attributes.ScheduledTime)
