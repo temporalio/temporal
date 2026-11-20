@@ -950,6 +950,17 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		0*time.Second,
 		`FrontendShutdownFailHealthCheckDuration is the duration of shutdown failure detection`,
 	)
+	FrontendPeerHealthCheckEnabled = NewGlobalBoolSetting(
+		"frontend.peerHealthCheckEnabled",
+		false,
+		`FrontendPeerHealthCheckEnabled enables the frontend peer health checker, which probes History and Matching hosts`,
+	)
+	FrontendPeerHealthCheckSettings = NewGlobalTypedSetting(
+		"frontend.peerHealthCheckSettings",
+		DefaultPeerHealthCheckSettings,
+		`FrontendPeerHealthCheckSettings tunes the frontend peer health checker. Unset fields keep their defaults.
+See PeerHealthCheckSettings comments for details.`,
+	)
 	FrontendMaxBadBinaries = NewNamespaceIntSetting(
 		"frontend.maxBadBinaries",
 		10,
