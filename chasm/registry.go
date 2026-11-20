@@ -296,7 +296,18 @@ func (r *Registry) validate(rc *RegistrableComponent) error {
 	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
+	if err := validateSpeculativeOptions(rc); err != nil {
+		return err
+	}
 	return r.validateVisibilityBusinessIDAlias(rc)
+}
+
+func validateSpeculativeOptions(rc *RegistrableComponent) error {
+	if autoPersist := rc.speculativeOptions.AutoPersist; autoPersist != nil && autoPersist.MaxUnpersistedDuration <= 0 {
+		return fmt.Errorf("component %s has auto persist MaxUnpersistedDuration %v, which must be greater than 0",
+			rc.componentType, autoPersist.MaxUnpersistedDuration)
+	}
+	return nil
 }
 
 // validateFieldNames rejects component fields whose node name uses the prefix reserved for

@@ -172,7 +172,9 @@ type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struc
 // WithSpeculative applies the transition to the memory only.
 //
 // A speculative transition is persisted when the next normal transition comes in. The caller must make that
-// a non speculative transition to persist.
+// a non speculative transition to persist. An archetype registered with [SpeculativeOptions.AutoPersist] also
+// persists it about AutoPersist.MaxUnpersistedDuration after the first unpersisted speculative transition,
+// while the execution stays cached.
 //   - The transition is not durable. Cache eviction, a shard move, a host restart, or any error
 //     from a later transition on the execution drops it. Report normal rejections from the update
 //     function as output rather than as an error.
