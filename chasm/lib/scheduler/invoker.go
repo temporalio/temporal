@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -98,14 +99,14 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 
 		// Starts ready for execution are set to their first attempt.
 		if ready[start.RequestId] && start.Attempt < 1 {
-			start.Attempt = 1
+			internal.MarkStartSelected(ctx.Logger(), start)
 			readiedStarts++
 		} else if start.Attempt == 0 {
 			// Start was processed but deferred (e.g., BUFFER_ONE policy with running workflow).
-			// Mark as deferred (-1) to distinguish from newly-enqueued starts so addTasks
+			// Mark as deferred to distinguish from newly-enqueued starts so addTasks
 			// won't schedule an immediate ProcessBuffer task for them. They are
 			// reconsidered when the blocking start changes state.
-			start.Attempt = -1
+			internal.MarkStartDeferred(ctx.Logger(), start)
 			deferredStarts++
 		}
 
@@ -229,13 +230,11 @@ func (i *Invoker) recordExecuteResult(
 				removedStarts++
 				continue
 			}
-			start.RunId = completedStart.GetRunId()
-			start.StartTime = completedStart.GetStartTime()
+			internal.MarkStartRunning(ctx.Logger(), start, completedStart.GetRunId(), completedStart.GetStartTime())
 			start.HasCallback = true
 		}
 		if retry, ok := retryable[start.RequestId]; ok {
-			start.Attempt++
-			start.BackoffTime = retry.GetBackoffTime()
+			internal.MarkStartRetrying(ctx.Logger(), start, retry.GetBackoffTime())
 			retriedStarts++
 		}
 	}
@@ -252,7 +251,7 @@ func (i *Invoker) recordExecuteResult(
 	// A newly recorded run can now be canceled or terminated by deferred
 	// starts. Re-evaluate their overlap policies against its recorded identity.
 	if newlyStarted > 0 {
-		i.reenableDeferredStarts()
+		i.reenableDeferredStarts(ctx.Logger())
 	}
 	i.addTasks(ctx)
 
@@ -295,7 +294,7 @@ func (i *Invoker) recordCompletedAction(
 				i.Scheduler.Get(ctx).recordRecentAction(start, completed.GetStatus())
 				completedUntracked = requestID
 			} else {
-				start.Completed = completed
+				internal.MarkStartCompleted(ctx.Logger(), start, completed)
 			}
 			break
 		}
@@ -306,10 +305,10 @@ func (i *Invoker) recordCompletedAction(
 		})
 	}
 
-	// Re-enable deferred starts (Attempt == -1) so they can be re-processed by
-	// ProcessBuffer now that a workflow has completed. This allows the overlap
-	// policy to be re-evaluated.
-	i.reenableDeferredStarts()
+	// Re-enable deferred starts so they can be re-processed by ProcessBuffer now
+	// that a workflow has completed. This allows the overlap policy to be
+	// re-evaluated.
+	i.reenableDeferredStarts(ctx.Logger())
 
 	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
 	// to drive action latency between buffered starts (the time it takes between
@@ -345,10 +344,10 @@ func (i *Invoker) hasPendingOrRunningStart() bool {
 	})
 }
 
-func (i *Invoker) reenableDeferredStarts() {
+func (i *Invoker) reenableDeferredStarts(logger log.Logger) {
 	for _, start := range i.GetBufferedStarts() {
 		if start.GetAttempt() == -1 {
-			start.Attempt = 0
+			internal.MarkStartUnprocessed(logger, start)
 		}
 	}
 }
@@ -361,7 +360,7 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	// or removal of start-only actions, rather than waiting for a completion
 	// that cannot arrive.
 	if !i.hasPendingOrRunningStart() {
-		i.reenableDeferredStarts()
+		i.reenableDeferredStarts(ctx.Logger())
 	}
 
 	// If we have Attempt = 0 starts, generate a ProcessBufferTask immediately. If we
