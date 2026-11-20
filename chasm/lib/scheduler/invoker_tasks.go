@@ -569,7 +569,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	result.overlapSkippedByPolicy = action.OverlapSkippedByPolicy
 
 	// Add starting workflows to result, trim others. Catchup-window expiry is
-	// checked before useScheduledAction so that a start past its catchup
+	// checked before consumeScheduledAction so that a start past its catchup
 	// window doesn't consume a LimitedActions slot.
 	droppedCounter := newTaggedMetricsHandler(h.metricsHandler, scheduler).
 		Counter(metrics.ScheduleBufferedStartDropped.Name())
@@ -580,7 +580,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 			// (e.g., due to overlap deferral, retries, or system delay).
 			// Only emit the metric if the schedule would have run this
 			// start -- skip paused or action-exhausted schedules.
-			if start.Manual || scheduler.useScheduledAction(false) {
+			if start.Manual || scheduler.canTakeScheduledAction() {
 				// Determine if a running action contributed: either one is still
 				// running, or the previous action's CloseTime (stored in DesiredTime)
 				// was already past this start's deadline.
@@ -596,7 +596,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 		}
 
 		// Ensure we can take more actions. Manual actions are always allowed.
-		if !start.Manual && !scheduler.useScheduledAction(true) {
+		if !start.Manual && !scheduler.consumeScheduledAction() {
 			// Drop buffered automated actions while paused or out of actions.
 			result.discardStarts = append(result.discardStarts, start)
 			droppedCounter.Record(1, metrics.ReasonTag(bufferedStartDroppedPausedOrLimited))
