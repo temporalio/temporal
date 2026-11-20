@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -1387,11 +1386,11 @@ func (env *taskQueueStatsContext) validateRates(
 		s.NotNil(resp.Stats)
 
 		if expectAddRate {
-			s.True(resp.Stats.TasksAddRate > 0,
+			s.Greater(resp.Stats.TasksAddRate, float32(0),
 				"%s: TasksAddRate should be > 0, got %f", label, resp.Stats.TasksAddRate)
 		}
 		if expectDispatchRate {
-			s.True(resp.Stats.TasksDispatchRate > 0,
+			s.Greater(resp.Stats.TasksDispatchRate, float32(0),
 				"%s: TasksDispatchRate should be > 0, got %f", label, resp.Stats.TasksDispatchRate)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
@@ -1561,7 +1560,7 @@ func (env *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 				return
 			}
 		}
-		require.Failf(s.AssertionT(), "task queue not found", "Task queue %s of type %s not found in response", tqName, tqType)
+		s.Failf("task queue not found", "Task queue %s of type %s not found in response", tqName, tqType)
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
@@ -1580,8 +1579,7 @@ func (env *taskQueueStatsContext) validateTaskQueueStatsByPriority(
 				return
 			}
 		}
-		require.Failf(
-			s.AssertionT(),
+		s.Failf(
 			"no non-zero priority stats found",
 			"%s: should have found at least one non-zero backlog count with any non-zero rate across priorities",
 			label,
@@ -1596,7 +1594,7 @@ func (env *taskQueueStatsContext) validateTaskQueueStatsByPriority(
 			priExpectation.BacklogCount *= 2 // zero priority translates to default priority 3
 		}
 
-		require.Containsf(s.AssertionT(), stats, i, "%s: stats should contain priority %d", label, i)
+		s.Containsf(stats, i, "%s: stats should contain priority %d", label, i)
 		validateTaskQueueStats(s, fmt.Sprintf("%s_Pri[%d]", label, i), stats[i], priExpectation)
 		accBacklogCount += int(stats[i].ApproximateBacklogCount)
 	}
@@ -1615,16 +1613,16 @@ func (env *taskQueueStatsContext) deploymentOptions(tqName string) *deploymentpb
 }
 
 func validateTaskQueueStatsStrict(
-	t require.TestingT,
+	s parallelsuite.Scope,
 	label string,
 	stats *taskqueuepb.TaskQueueStats,
 	expectation taskQueueExpectations,
 ) {
-	require.Equal(t, int64(expectation.BacklogCount), stats.ApproximateBacklogCount,
+	s.Equal(int64(expectation.BacklogCount), stats.ApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be %d, got %d",
 		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
 
-	require.Equal(t, stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
+	s.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
 }

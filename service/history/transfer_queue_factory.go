@@ -1,6 +1,7 @@
 package history
 
 import (
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -27,12 +28,13 @@ type (
 
 		QueueFactoryBaseParams
 
-		ClientBean             client.Bean
-		SdkClientFactory       sdk.ClientFactory
-		HistoryRawClient       resource.HistoryRawClient
-		MatchingRawClient      resource.MatchingRawClient
-		VisibilityManager      manager.VisibilityManager
-		VersionMembershipCache worker_versioning.VersionMembershipAndReactivationStatusCache
+		ClientBean               client.Bean
+		SdkClientFactory         sdk.ClientFactory
+		HistoryRawClient         resource.HistoryRawClient
+		MatchingRawClient        resource.MatchingRawClient
+		ConcurrencyServiceClient fcpb.ConcurrencyServiceClient
+		VisibilityManager        manager.VisibilityManager
+		VersionMembershipCache   worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	transferQueueFactory struct {
@@ -124,6 +126,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config,
 		f.HistoryRawClient,
 		f.MatchingRawClient,
+		f.ConcurrencyServiceClient,
 		f.VisibilityManager,
 		f.ChasmEngine,
 		f.VersionMembershipCache,

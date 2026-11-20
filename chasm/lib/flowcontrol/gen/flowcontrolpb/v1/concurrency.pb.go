@@ -110,9 +110,11 @@ func (x *ConcurrencyState) GetWakeAll() bool {
 }
 
 type ConcurrencyServiceBatchRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Key         string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Namespace that the limiter exists in.
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// Key to identify the limiter within the namespace.
+	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	// Reserve reserves a slot for a limited time. Succeeds if the slot is newly reserved or
 	// already reserved _or already committed_ for the task, i.e. idempotent. May not be durable:
 	// a successful Reserve followed by a Commit may not succeed even within the timeout. Callers
@@ -301,9 +303,11 @@ func (x *ConcurrencyServiceBatchResponse) GetCommitSuccess() []bool {
 }
 
 type ConcurrencyServiceWaitRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Key         string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Namespace that the limiter exists in.
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// Key to identify the limiter within the namespace.
+	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	// Generation is used to ensure monotonicity of waits. The caller should pass its last known
 	// generation. If it's out of date, the server may retry internally with the current
 	// generation, and return a newer one. Before context timeout, the server should return
