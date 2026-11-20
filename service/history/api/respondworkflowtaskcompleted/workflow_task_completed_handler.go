@@ -608,8 +608,8 @@ func (handler *workflowTaskCompletedHandler) handleEagerActivityCandidates(
 			continue
 		}
 		if !candidate.granted {
-			// Matching grants are best-effort. On a denial or any matching failure, generate the
-			// activity task normally instead of failing workflow task completion.
+			// Matching denied the grant, answered with an error, or sent a malformed response. Generate
+			// the activity task normally instead of failing workflow task completion.
 			if err := handler.mutableState.GenerateActivityTask(candidate.activityInfo.GetScheduledEventId()); err != nil {
 				return nil, err
 			}
@@ -669,12 +669,36 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
 		},
 		Items: items,
 	})
-	if err != nil || len(response.GetItems()) != len(items) {
+	if err != nil {
+		if eagerDispatchGrantUnanswered(err) {
+			// Matching did not answer, so it neither granted nor denied these activities. Dispatch them
+			// eagerly: an activity task generated here goes to the Matching that just failed.
+			for _, candidateIndex := range candidateIndexes {
+				handler.eagerActivityCandidates[candidateIndex].granted = true
+			}
+		}
+		return
+	}
+	if len(response.GetItems()) != len(items) {
 		return
 	}
 	for index, item := range response.GetItems() {
 		handler.eagerActivityCandidates[candidateIndexes[index]].granted = item.GetGrantedCount() == 1
 	}
+}
+
+// eagerDispatchGrantUnanswered reports whether err means that no Matching host answered a GrantEagerDispatch
+// call: the call timed out, was canceled, did not reach a host, or reached a host that does not implement it.
+// Any other error is an answer from Matching, such as ResourceExhausted from its rate limiter.
+func eagerDispatchGrantUnanswered(err error) bool {
+	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+		return true
+	}
+	if _, ok := errors.AsType[*serviceerror.Unavailable](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[*serviceerror.Unimplemented](err)
+	return ok
 }
 
 func eagerDispatchRequestCount(items []*matchingservice.GrantEagerDispatchRequest_Item) int64 {
