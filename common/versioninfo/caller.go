@@ -2,6 +2,7 @@ package versioninfo
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -9,18 +10,32 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
+)
+
+const (
+	DefaultVersionCheckTimeout = 10 * time.Second
 )
 
 type Caller struct {
-	Scheme string
-	Host   string
+	Scheme  string
+	Host    string
+	Timeout time.Duration
 }
 
 func NewCaller() Caller {
-	return Caller{"https", "version-info.temporal.io"}
+	return Caller{
+		Scheme:  "https",
+		Host:    "version-info.temporal.io",
+		Timeout: DefaultVersionCheckTimeout,
+	}
 }
 
 func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
+	return c.CallWithContext(context.Background(), r)
+}
+
+func (c Caller) CallWithContext(ctx context.Context, r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	err := validateRequest(r)
 	if err != nil {
 		return nil, err
@@ -33,12 +48,19 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if c.Scheme == "https" {
 		tr.TLSClientConfig = &tls.Config{}
 	}
-	client := &http.Client{Transport: tr}
+	timeout := c.Timeout
+	if timeout <= 0 {
+		timeout = DefaultVersionCheckTimeout
+	}
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   timeout,
+	}
 	reqBody, err := json.Marshal(r)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, err
 	}
