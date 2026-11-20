@@ -1177,8 +1177,9 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"frontend.nexusEnforceJWTAudience",
 		false,
 		`Controls whether the frontend Nexus HTTP handlers verify the "aud" claim of an inbound JWT bearer token against
-the server's expected audience. When true, requests whose token audience does not match are rejected with PermissionDenied.
-Has no effect unless a JWT audience is configured (authorization.audience or a custom JWTAudienceMapper) and the claim mapper
+the server's expected audience. When true, requests whose token audience does not match fail claim extraction and are
+rejected the same way as any other invalid token: Nexus operation requests fail as unauthenticated (HTTP 401), and Nexus
+completion requests currently fail with an internal error (HTTP 500). Has no effect unless a JWT audience is configured (authorization.audience or a custom JWTAudienceMapper) and the claim mapper
 honors AuthInfo.Audience, as the default JWT claim mapper does. Requests without an Authorization header are unaffected.
 When enabling, keep this setting consistent across connected clusters: forwarded Nexus requests carry the original caller's
 token and are checked again by the receiving cluster.`,
