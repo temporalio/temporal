@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,9 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/streambatcher"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -93,6 +97,151 @@ func (tc *testHandlerContext) apply(reqs ...*fcpb.ConcurrencyServiceBatchRequest
 		items[i] = batchReq{ctx: tc.ctx, req: req}
 	}
 	return tc.handler.applyBatch(tc.key, items)
+}
+
+func newBatchTestHandler(t *testing.T, maxItems int) *Handler {
+	t.Helper()
+	opts := streambatcher.BatcherOptions{
+		MaxItems: maxItems,
+		MinDelay: time.Second,
+		MaxDelay: time.Second,
+		IdleTime: time.Minute,
+	}
+	t.Cleanup(func() {
+		// Let the batcher workers reach their idle deadline before the bubble exits.
+		synctest.Sleep(opts.MaxDelay + opts.IdleTime)
+	})
+	return NewHandler(log.NewTestLogger(), dynamicconfig.NewCollection(dynamicconfig.StaticClient{
+		ServerBatcherOptions.Key(): opts,
+	}, log.NewNoopLogger()))
+}
+
+func callBatchAsync(ctx context.Context, handler *Handler, req *fcpb.ConcurrencyServiceBatchRequest) <-chan batchRes {
+	result := make(chan batchRes, 1)
+	go func() {
+		res, err := handler.Batch(ctx, req)
+		result <- batchRes{res: res, err: err}
+	}()
+	return result
+}
+
+func TestHandlerBatchCoalescesRequests(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		tc := newTestHandlerContext(t)
+		tc.start(t, 2)
+		h := newBatchTestHandler(t, 2)
+
+		first := callBatchAsync(tc.ctx, h, &fcpb.ConcurrencyServiceBatchRequest{
+			NamespaceId:  tc.key.namespaceID,
+			Key:          tc.key.key,
+			ReserveSlots: []string{"first"},
+		})
+		synctest.Wait() // The first request is waiting in the batch.
+		second := callBatchAsync(tc.ctx, h, &fcpb.ConcurrencyServiceBatchRequest{
+			NamespaceId:  tc.key.namespaceID,
+			Key:          tc.key.key,
+			ReserveSlots: []string{"second", "third"},
+		})
+
+		// Both callers see the state after the last slot was taken, with their own results.
+		firstResult := await.Rcv(t, first)
+		require.NoError(t, firstResult.err)
+		protorequire.ProtoEqual(t, &fcpb.ConcurrencyServiceBatchResponse{
+			Generation:     1,
+			ReserveSuccess: []bool{true},
+		}, firstResult.res)
+		secondResult := await.Rcv(t, second)
+		require.NoError(t, secondResult.err)
+		protorequire.ProtoEqual(t, &fcpb.ConcurrencyServiceBatchResponse{
+			Generation:     1,
+			ReserveSuccess: []bool{true, false},
+		}, secondResult.res)
+	})
+}
+
+func TestHandlerBatchSeparatesNamespacesAndLimiterKeys(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		keys := []chasm.ExecutionKey{
+			{NamespaceID: "first-namespace", BusinessID: "first-limiter"},
+			{NamespaceID: "first-namespace", BusinessID: "second-limiter"},
+			{NamespaceID: "second-namespace", BusinessID: "first-limiter"},
+		}
+		h := newBatchTestHandler(t, len(keys))
+		calls := make(chan chasm.ExecutionKey, len(keys))
+		notFound := serviceerror.NewNotFound("limiter not found")
+		engine := chasm.NewMockEngine(gomock.NewController(t))
+		engine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, ref chasm.ComponentRef, _ func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+				calls <- ref.ExecutionKey
+				return nil, notFound
+			},
+		).AnyTimes()
+		ctx := chasm.NewEngineContext(t.Context(), engine)
+
+		results := make([]<-chan batchRes, 0, len(keys))
+		for _, key := range keys {
+			results = append(results, callBatchAsync(ctx, h, &fcpb.ConcurrencyServiceBatchRequest{
+				NamespaceId: key.NamespaceID,
+				Key:         key.BusinessID,
+				CommitSlots: []string{"slot"},
+			}))
+		}
+
+		for _, result := range results {
+			res := await.Rcv(t, result)
+			require.ErrorIs(t, res.err, notFound)
+			require.Nil(t, res.res)
+		}
+		require.Len(t, calls, len(keys))
+		actual := make([]chasm.ExecutionKey, 0, len(keys))
+		for range keys {
+			actual = append(actual, await.Rcv(t, calls))
+		}
+		require.ElementsMatch(t, keys, actual)
+	})
+}
+
+func TestHandlerBatchCanceledLaterCaller(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		tc := newTestHandlerContext(t)
+		tc.start(t, 1)
+		h := newBatchTestHandler(t, 3)
+
+		first := callBatchAsync(tc.ctx, h, &fcpb.ConcurrencyServiceBatchRequest{
+			NamespaceId:  tc.key.namespaceID,
+			Key:          tc.key.key,
+			ReserveSlots: []string{"live"},
+		})
+		synctest.Wait() // Put the live caller first in the shared batch.
+		ctx, cancel := context.WithCancel(tc.ctx)
+		defer cancel()
+		second := callBatchAsync(ctx, h, &fcpb.ConcurrencyServiceBatchRequest{
+			NamespaceId: tc.key.namespaceID,
+			Key:         tc.key.key,
+			CommitSlots: []string{"missing"},
+		})
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+
+		// The canceled caller can return while the batch is still waiting for more items.
+		select {
+		case res := <-second:
+			require.ErrorIs(t, res.err, context.Canceled)
+			require.Nil(t, res.res)
+		default:
+			t.Fatal("canceled Batch did not return")
+		}
+		res := await.Rcv(t, first)
+		require.NoError(t, res.err)
+		protorequire.ProtoEqual(t, &fcpb.ConcurrencyServiceBatchResponse{
+			Generation:     1,
+			ReserveSuccess: []bool{true},
+		}, res.res)
+	})
 }
 
 func TestHandlerWaitRetriesWithCurrentGeneration(t *testing.T) {
