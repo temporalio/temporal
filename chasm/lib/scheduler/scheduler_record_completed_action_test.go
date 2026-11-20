@@ -38,9 +38,6 @@ func executeRecordCompletedAction(t *testing.T, tc recordCompletedActionTestCase
 	}
 }
 
-// TestRecordCompletedAction_SingleRunningWorkflow verifies that when
-// a workflow exists in BufferedStarts with a RunId (running), completing it
-// sets the Completed field.
 func TestRecordCompletedAction_SingleRunningWorkflow(t *testing.T) {
 	closeTime := time.Now()
 	tc := recordCompletedActionTestCase{
@@ -74,9 +71,6 @@ func TestRecordCompletedAction_SingleRunningWorkflow(t *testing.T) {
 	executeRecordCompletedAction(t, tc)
 }
 
-// TestRecordCompletedAction_MultipleWorkflows verifies that when multiple
-// workflows exist in BufferedStarts, only the one with the matching requestID
-// is marked as completed.
 func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
 	closeTime := time.Now()
 	tc := recordCompletedActionTestCase{
@@ -111,8 +105,7 @@ func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 2)
 
-			// Find workflows by RequestId since applyCompletedRetention reorders
-			// (non-completed first, then completed)
+			// applyCompletedRetention reorders (non-completed first), so look up by RequestId.
 			var req1Start, req2Start *schedulespb.BufferedStart
 			for _, start := range invoker.BufferedStarts {
 				switch start.RequestId {
@@ -126,11 +119,9 @@ func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
 			require.NotNil(t, req1Start)
 			require.NotNil(t, req2Start)
 
-			// First workflow (req-1) should be completed
 			require.NotNil(t, req1Start.Completed)
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, req1Start.Completed.Status)
 
-			// Second workflow (req-2) should still be running
 			require.Nil(t, req2Start.Completed)
 		},
 	}
@@ -138,9 +129,6 @@ func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
 	executeRecordCompletedAction(t, tc)
 }
 
-// TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending verifies that
-// completing a workflow updates the DesiredTime on the first pending start
-// (Attempt == 0) to the close time of the completed workflow.
 func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
 	closeTime := time.Now()
 	tc := recordCompletedActionTestCase{
@@ -174,8 +162,7 @@ func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 2)
 
-			// Find the pending start (req-2) by RequestId since applyCompletedRetention reorders
-			// (non-completed first, then completed)
+			// applyCompletedRetention reorders (non-completed first), so look up by RequestId.
 			var req2Start *schedulespb.BufferedStart
 			for _, start := range invoker.BufferedStarts {
 				if start.RequestId == "req-2" {
@@ -185,7 +172,6 @@ func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
 			}
 			require.NotNil(t, req2Start)
 
-			// Pending start (req-2) should have DesiredTime updated to closeTime
 			require.Equal(t, closeTime.Unix(), req2Start.DesiredTime.AsTime().Unix())
 		},
 	}
@@ -193,8 +179,6 @@ func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
 	executeRecordCompletedAction(t, tc)
 }
 
-// TestRecordCompletedAction_NoMatchingRequest verifies that when the requestID
-// doesn't match any BufferedStart, no changes are made.
 func TestRecordCompletedAction_NoMatchingRequest(t *testing.T) {
 	closeTime := time.Now()
 	tc := recordCompletedActionTestCase{
@@ -220,7 +204,6 @@ func TestRecordCompletedAction_NoMatchingRequest(t *testing.T) {
 		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 1)
-			// Original workflow should still be running (not completed)
 			require.Nil(t, invoker.BufferedStarts[0].Completed)
 		},
 	}

@@ -61,15 +61,12 @@ func TestEventLog_DropsEarliestWhenFull(t *testing.T) {
 	}
 
 	require.Len(t, eventLog.Events, testEventLogMaxEntries)
-	// The earliest `overflow` entries should have been dropped; the retained
-	// window starts at event-`overflow` and ends at the most recent event.
+	// The earliest `overflow` entries are dropped.
 	require.Equal(t, fmt.Sprintf("event-%d", overflow), eventLog.Events[0].Message)
 	require.Equal(t, fmt.Sprintf("event-%d", total-1), eventLog.Events[len(eventLog.Events)-1].Message)
 }
 
-// TestEventLog_NoConfigFallsBackToDefaults checks that LogEvent applies the
-// default retention limits instead of panicking when no config is reachable via
-// the context, as in tdbg's registration-only setup.
+// No config is reachable via the context in tdbg's registration-only setup.
 func TestEventLog_NoConfigFallsBackToDefaults(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	eventLog := scheduler.NewEventLog(ctx)
@@ -88,20 +85,17 @@ func TestEventLog_NoConfigFallsBackToDefaults(t *testing.T) {
 func TestEventLog_EachComponentHasOwn(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
-	// Create a backfiller so we can exercise its EventLog too.
 	backfiller := sched.NewRangeBackfiller(ctx, &schedulepb.BackfillRequest{
 		StartTime:     timestamppb.New(time.Now().Add(-time.Hour)),
 		EndTime:       timestamppb.New(time.Now()),
 		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 	})
 
-	// Each host component gets its own EventLog instance.
 	require.NotNil(t, sched.EventLog.Get(ctx))
 	require.NotNil(t, sched.Generator.Get(ctx).EventLog.Get(ctx))
 	require.NotNil(t, sched.Invoker.Get(ctx).EventLog.Get(ctx))
 	require.NotNil(t, backfiller.EventLog.Get(ctx))
 
-	// EventLogs on different hosts are independent.
 	sched.EventLog.Get(ctx).Events = nil
 	sched.Generator.Get(ctx).EventLog.Get(ctx).Events = nil
 	backfiller.EventLog.Get(ctx).Events = nil

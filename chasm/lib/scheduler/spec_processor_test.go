@@ -18,13 +18,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// testSpecProcessor wraps a real SpecProcessor for testing.
 type testSpecProcessor struct {
 	scheduler.SpecProcessor
 	mockMetrics *metrics.MockHandler
 }
 
-// newTestSpecProcessor creates a real SpecProcessor for tests that need actual scheduling logic.
 func newTestSpecProcessor(ctrl *gomock.Controller) *testSpecProcessor {
 	mockMetrics := metrics.NewMockHandler(ctrl)
 	mockMetrics.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
@@ -55,7 +53,6 @@ func TestProcessTimeRange_LimitedActions(t *testing.T) {
 	end := time.Now()
 	start := end.Add(-defaultInterval)
 
-	// A schedule with an action limit and remaining actions should buffer actions.
 	sched.Schedule.State.LimitedActions = true
 	sched.Schedule.State.RemainingActions = 1
 
@@ -63,8 +60,6 @@ func TestProcessTimeRange_LimitedActions(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res.BufferedStarts, 1)
 
-	// When a schedule has an action limit that has been exceeded, we don't bother
-	// buffering additional actions.
 	sched.Schedule.State.RemainingActions = 0
 
 	res, err = processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
@@ -94,7 +89,6 @@ func TestProcessTimeRange_UpdateAfterHighWatermark(t *testing.T) {
 	start := base.Add(-defaultInterval * 3)
 	end := base.Add(defaultInterval * 3)
 
-	// Actions taking place in time before the last update time should be dropped.
 	sched.Info.UpdateTime = timestamppb.Now()
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
@@ -102,8 +96,6 @@ func TestProcessTimeRange_UpdateAfterHighWatermark(t *testing.T) {
 	require.Len(t, res.BufferedStarts, 3)
 }
 
-// Tests that an update between a nominal time and jittered time for a start, that doesn't
-// modify that start, will still start it.
 func TestProcessTimeRange_UpdateBetweenNominalAndJitter(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := chasm.NewMutableContext(context.Background(), env.Node)
@@ -119,21 +111,17 @@ func TestProcessTimeRange_UpdateBetweenNominalAndJitter(t *testing.T) {
 	require.NoError(t, err)
 	processor := newTestSpecProcessor(env.Ctrl)
 
-	// Generate a start with a long jitter period.
 	base := time.Date(2025, 03, 31, 1, 0, 0, 0, time.UTC)
 	start := base.Add(-1 * time.Minute)
 	end := start.Add(1 * time.Hour)
 
-	// Set our update time between the start's nominal and jittered time.
 	updateTime := start.Add(10 * time.Minute)
 	sched.Info.UpdateTime = timestamppb.New(updateTime)
 
-	// A single start should have been buffered.
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
 	require.Len(t, res.BufferedStarts, 1)
 
-	// Validates the test case.
 	actualTime := res.BufferedStarts[0].GetActualTime().AsTime()
 	nominalTime := res.BufferedStarts[0].GetNominalTime().AsTime()
 	require.True(t, nominalTime.Before(updateTime))
@@ -147,8 +135,7 @@ func TestProcessTimeRange_CatchupWindow(t *testing.T) {
 	require.NoError(t, err)
 	processor := newTestSpecProcessor(env.Ctrl)
 
-	// When an action would fall outside of the schedule's catchup window, it should
-	// be dropped.
+	// Actions outside the catchup window are dropped.
 	end := time.Now()
 	start := end.Add(-defaultCatchupWindow * 2)
 
@@ -157,9 +144,6 @@ func TestProcessTimeRange_CatchupWindow(t *testing.T) {
 	require.Len(t, res.BufferedStarts, 5)
 }
 
-// A nil or zero catchup window means "not specified" and resolves to the 1-year
-// default, not the 10s minimum. Actions older than the minimum but well within
-// the default must still be buffered, not dropped as "missed catchup window".
 func TestProcessTimeRange_CatchupWindowNilOrZeroUsesDefault(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -185,8 +169,6 @@ func TestProcessTimeRange_CatchupWindowNilOrZeroUsesDefault(t *testing.T) {
 
 			res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 			require.NoError(t, err)
-			// Resolved to the 1-year default, so none are past the window: all are
-			// buffered. Under the bug (zero => clamped to 10s), all five would drop.
 			require.Len(t, res.BufferedStarts, 5)
 		})
 	}
@@ -202,16 +184,13 @@ func TestProcessTimeRange_Limit(t *testing.T) {
 	end := time.Now()
 	start := end.Add(-defaultInterval * 5)
 
-	// When a limit pointer is provided, its value should be decremented with each
-	// action buffered. Once exhausted, additional automated actions are dropped
-	// (counted in DroppedCount) rather than buffered.
+	// Once the limit is exhausted, automated actions are dropped rather than buffered.
 	limit := 2
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, &limit)
 	require.NoError(t, err)
 	require.Len(t, res.BufferedStarts, 2)
 	require.Equal(t, 0, limit)
-	// The range yields 5 actions total; 2 are buffered and the remaining 3 dropped.
 	require.Equal(t, int64(3), res.DroppedCount)
 }
 
@@ -225,9 +204,6 @@ func TestProcessTimeRange_LimitAlreadyFull(t *testing.T) {
 	end := time.Now()
 	start := end.Add(-defaultInterval * 5)
 
-	// A limit that starts at or below zero means the buffer was already full: no
-	// automated actions should be buffered, and every action in the range should
-	// be counted as dropped.
 	limit := 0
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, &limit)
 	require.NoError(t, err)
@@ -247,8 +223,7 @@ func TestProcessTimeRange_ManualDoesNotDrop(t *testing.T) {
 	end := time.Now()
 	start := end.Add(-defaultInterval * 5)
 
-	// Manual (backfill) starts stop at the limit so the backfiller can retry the
-	// remainder later; they are never counted as dropped.
+	// Manual starts stop at the limit so the backfiller can retry the remainder; they are never dropped.
 	limit := 2
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "backfill", true, &limit)
 	require.NoError(t, err)
@@ -266,7 +241,6 @@ func TestProcessTimeRange_OverlapPolicy(t *testing.T) {
 	end := time.Now()
 	start := end.Add(-defaultInterval * 5)
 
-	// Check that a default overlap policy (SKIP) is applied, even when left unspecified.
 	sched.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
@@ -276,7 +250,6 @@ func TestProcessTimeRange_OverlapPolicy(t *testing.T) {
 		require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, b.OverlapPolicy)
 	}
 
-	// Check that a specified overlap policy is applied.
 	overlapPolicy := enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL
 	sched.Schedule.Policies.OverlapPolicy = overlapPolicy
 
@@ -298,7 +271,6 @@ func TestProcessTimeRange_Basic(t *testing.T) {
 	end := time.Now()
 	start := end.Add(-defaultInterval * 5)
 
-	// Validate returned BufferedStarts for unique action times and request IDs.
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
 	require.Len(t, res.BufferedStarts, 5)
@@ -314,13 +286,11 @@ func TestProcessTimeRange_Basic(t *testing.T) {
 		uniqueTimes[actualTime] = true
 		uniqueIDs[b.RequestId] = true
 
-		// Validate WorkflowId format: scheduled-wf-{RFC3339 timestamp}
 		nominalTime := b.NominalTime.AsTime()
 		expectedTimestamp := nominalTime.Truncate(time.Second).Format(time.RFC3339)
 		require.Equal(t, "scheduled-wf-"+expectedTimestamp, b.WorkflowId)
 	}
 
-	// Validate next wakeup time.
 	require.GreaterOrEqual(t, res.NextWakeupTime, end)
 	require.Less(t, res.NextWakeupTime, end.Add(defaultInterval*2))
 }
@@ -382,8 +352,7 @@ func TestProcessTimeRange_ComputeLimitWarning(t *testing.T) {
 	schedule.Spec = &schedulepb.ScheduleSpec{
 		Calendar:        []*schedulepb.CalendarSpec{everySecond},
 		ExcludeCalendar: []*schedulepb.CalendarSpec{everySecond},
-		// A short end time bounds the (otherwise unlimited) scan so the test stays fast while
-		// still crossing the small warn threshold below.
+		// Bounds the otherwise unlimited scan so the test stays fast.
 		EndTime: timestamppb.New(end.Add(30 * time.Second)),
 	}
 	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
@@ -393,7 +362,7 @@ func TestProcessTimeRange_ComputeLimitWarning(t *testing.T) {
 	capture := rec.StartCapture()
 	defer rec.StopCapture(capture)
 
-	// Warn threshold only; leave the hard limit at its default (disabled).
+	// Warn threshold only; the hard limit stays disabled.
 	specBuilder := newLegacySpecBuilder(5, 0)
 	processor := scheduler.NewSpecProcessor(
 		&scheduler.Config{

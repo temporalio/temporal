@@ -32,7 +32,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// invokerExecuteTestEnv extends testEnv with mock clients for invoker execute tests.
 type invokerExecuteTestEnv struct {
 	*testEnv
 	handler            *scheduler.InvokerExecuteTaskHandler
@@ -90,13 +89,10 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	ctx := env.MutableContext()
 	invoker := env.Scheduler.Invoker.Get(ctx)
 
-	// Set up initial state. Note: InitialRunningWorkflows is now represented by
-	// BufferedStarts that have RunId set but no Completed field.
 	invoker.BufferedStarts = c.InitialBufferedStarts
 	invoker.CancelWorkflows = c.InitialCancelWorkflows
 	invoker.TerminateWorkflows = c.InitialTerminateWorkflows
 
-	// Add initial running workflows as BufferedStarts with RunId set.
 	for _, wf := range c.InitialRunningWorkflows {
 		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
 			RequestId:  wf.WorkflowId + "-req",
@@ -106,16 +102,13 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 		})
 	}
 
-	// Set LastProcessedTime to current time to ensure time checks pass.
 	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
 
 	require.Equal(t, c.ExpectDropped, executeTaskOnce(t, env, invoker))
 
-	// Validate the results.
-	// BufferedStarts now includes both pending and running starts (they're kept after starting).
+	// Started entries stay in BufferedStarts.
 	require.Len(t, invoker.GetBufferedStarts(), c.ExpectedBufferedStarts)
 
-	// Count running workflows from BufferedStarts (has RunId but no Completed).
 	runningCount := 0
 	for _, start := range invoker.GetBufferedStarts() {
 		if start.GetRunId() != "" && start.GetCompleted() == nil {
@@ -130,17 +123,12 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	require.Equal(t, c.ExpectedOverlapSkipped, env.Scheduler.Info.OverlapSkipped)
 	require.Equal(t, c.ExpectedMissedCatchupWindow, env.Scheduler.Info.MissedCatchupWindow)
 
-	// Callbacks.
 	if c.ValidateInvoker != nil {
 		c.ValidateInvoker(t, invoker, env)
 	}
 }
 
-// executeTaskOnce runs a single InvokerExecuteTask pass against the live
-// Invoker and commits the resulting transition. Shared by the single-pass
-// table driver (runExecuteTestCase) and by tests that need to drive several
-// Execute passes in sequence. It validates before executing, as the task
-// executor does, and reports whether Validate dropped the task.
+// executeTaskOnce validates before executing, as the task executor does, and reports whether the task was dropped.
 func executeTaskOnce(t *testing.T, env *invokerExecuteTestEnv, invoker *scheduler.Invoker) bool {
 	t.Helper()
 
@@ -151,7 +139,6 @@ func executeTaskOnce(t *testing.T, env *invokerExecuteTestEnv, invoker *schedule
 	return dropped
 }
 
-// Execute success case.
 func TestExecuteTask_Basic(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	env.Scheduler.LastCompletionResult = chasm.NewDataField(env.MutableContext(), &schedulerpb.LastCompletionResult{
@@ -180,7 +167,6 @@ func TestExecuteTask_Basic(t *testing.T) {
 		},
 	}
 
-	// Expect both buffered starts to result in workflow executions.
 	env.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
@@ -496,8 +482,7 @@ func TestExecuteTask_UsesBufferedOverlapPolicy(t *testing.T) {
 	}
 }
 
-// Schedules that persisted an empty success payload before the completion fix
-// must not forward it; codecs reject payloads without encoding metadata.
+// Codecs reject payloads without encoding metadata, so a legacy empty success payload must not be forwarded.
 func TestExecuteTask_LastCompletionResultSkipsEmptyPayload(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
@@ -756,7 +741,6 @@ func TestExecuteTask_WithoutSkippedDurationStartTimeUsesWallClock(t *testing.T) 
 	}
 }
 
-// An empty buffer gives Execute no work, so Validate drops the task.
 func TestExecuteTask_Empty(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	runExecuteTestCase(t, env, &executeTestCase{
@@ -765,12 +749,9 @@ func TestExecuteTask_Empty(t *testing.T) {
 	})
 }
 
-// A buffered start fails with a retryable error.
 func TestExecuteTask_RetryableFailure(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 
-	// Set up the Invoker's buffer with a two starts. One will succeed immediately,
-	// one will fail.
 	startTime := timestamppb.New(env.TimeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
 		{
@@ -793,7 +774,6 @@ func TestExecuteTask_RetryableFailure(t *testing.T) {
 		},
 	}
 
-	// Fail the first start, and succeed the second.
 	env.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("fail")).
 		Times(1).
@@ -805,16 +785,13 @@ func TestExecuteTask_RetryableFailure(t *testing.T) {
 			RunId: "run-id",
 		}, nil)
 
-	// After execution:
-	// - Failed start stays in buffer with backoff (pending)
-	// - Successful ALLOW_ALL start moves to recent-action history
+	// The failed start stays buffered with backoff; the ALLOW_ALL success moves to recent-action history.
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts:    bufferedStarts,
 		ExpectedBufferedStarts:   1,
 		ExpectedRunningWorkflows: 0,
 		ExpectedActionCount:      1,
 		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, env *invokerExecuteTestEnv) {
-			// Find the failed start (no RunId, has backoff).
 			for _, start := range invoker.BufferedStarts {
 				if start.GetRunId() == "" {
 					backoffTime := start.BackoffTime.AsTime()
@@ -828,7 +805,6 @@ func TestExecuteTask_RetryableFailure(t *testing.T) {
 	})
 }
 
-// A buffered start fails when a duplicate workflow has already been started.
 func TestExecuteTask_AlreadyStarted(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	startTime := timestamppb.New(env.TimeSource.Now())
@@ -844,7 +820,6 @@ func TestExecuteTask_AlreadyStarted(t *testing.T) {
 		},
 	}
 
-	// Fail with WorkflowExecutionAlreadyStarted.
 	env.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		Times(1).
@@ -858,10 +833,7 @@ func TestExecuteTask_AlreadyStarted(t *testing.T) {
 	})
 }
 
-// A buffered start fails from having exceeded its maximum retry limit.
-// InvokerMaxStartAttempts is an inclusive bound on the 1-based attempt number,
-// so the first attempt that is refused locally (zero RPCs, start dropped) is
-// the one past the limit.
+// InvokerMaxStartAttempts is an inclusive bound on the 1-based attempt number.
 func TestExecuteTask_ExceedsMaxAttempts(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	startTime := timestamppb.New(env.TimeSource.Now())
@@ -885,8 +857,7 @@ func TestExecuteTask_ExceedsMaxAttempts(t *testing.T) {
 	})
 }
 
-// Boundary control: a start sitting at exactly InvokerMaxStartAttempts is still
-// within budget, so its RPC is issued and a success there is recorded normally.
+// A start at exactly InvokerMaxStartAttempts is still within budget.
 func TestExecuteTask_SucceedsOnFinalAttempt(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	startTime := timestamppb.New(env.TimeSource.Now())
@@ -913,15 +884,7 @@ func TestExecuteTask_SucceedsOnFinalAttempt(t *testing.T) {
 	})
 }
 
-// InvokerMaxStartAttempts is documented as the maximum number of start
-// attempts, so a continuously retryable start must produce exactly that many
-// StartWorkflowExecution RPCs before it is dropped. Attempts are 1-based:
-// recordProcessBufferResult readies a start at Attempt 1, so the bound has to
-// be inclusive for the constant to mean what it says.
-//
-// This drives the real task order for a single automatic start - ProcessBuffer
-// promotes it, then ProcessBuffer (advancing the high-water mark past each
-// persisted backoff) and Execute alternate - and counts the RPCs.
+// Attempts are 1-based and the bound is inclusive, so a continuously retryable start gets exactly InvokerMaxStartAttempts RPCs.
 func TestExecuteTask_RetriesUpToMaxStartAttempts(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	processBufferHandler := newProcessBufferHandler(env.testEnv)
@@ -935,8 +898,7 @@ func TestExecuteTask_RetriesUpToMaxStartAttempts(t *testing.T) {
 			return nil, serviceerror.NewDeadlineExceeded("transient")
 		})
 
-	// Seed a single automatic, unprocessed buffered start (Attempt == 0), as the
-	// Generator would.
+	// Unprocessed (Attempt == 0), as the Generator would buffer it.
 	startTime := timestamppb.New(env.TimeSource.Now())
 	ctx := env.MutableContext()
 	invoker := env.Scheduler.Invoker.Get(ctx)
@@ -952,24 +914,16 @@ func TestExecuteTask_RetriesUpToMaxStartAttempts(t *testing.T) {
 	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
 	require.NoError(t, env.CloseTransaction())
 
-	// Attempt numbers observed at the head of each Execute pass.
 	var attempted []int64
 	maxIterations := 2*scheduler.InvokerMaxStartAttempts + 5
 	iterations := 0
 	for ; iterations < maxIterations; iterations++ {
 		starts := env.Scheduler.Invoker.Get(env.ReadContext()).GetBufferedStarts()
 		if len(starts) == 0 {
-			// The start was dropped: the retry budget is spent.
 			break
 		}
 
-		// Advance the framework clock to the persisted backoff deadline, which is
-		// where addTasks scheduled the next ProcessBuffer timer. This has to happen
-		// before the transaction's context is created, since chasm.Context.Now is
-		// captured at construction - as it is when the real timer task fires at its
-		// deadline. BackoffTime is framework-clock derived (see
-		// TestExecuteTask_BackoffUsesFrameworkClock), so the EventTimeSource is the
-		// only clock involved.
+		// Advance before creating the context, since chasm.Context.Now is captured at construction.
 		if backoffTime := starts[0].GetBackoffTime(); backoffTime != nil &&
 			backoffTime.AsTime().After(env.TimeSource.Now()) {
 			env.TimeSource.Update(backoffTime.AsTime())
@@ -992,8 +946,7 @@ func TestExecuteTask_RetriesUpToMaxStartAttempts(t *testing.T) {
 	require.Equal(t, scheduler.InvokerMaxStartAttempts, rpcCount,
 		"a continuously retryable start must issue exactly InvokerMaxStartAttempts StartWorkflowExecution RPCs")
 
-	// The executed attempt numbers must be a contiguous 1..InvokerMaxStartAttempts
-	// run, followed by the local refusal pass that drops the start.
+	// Attempts 1..InvokerMaxStartAttempts, then the local refusal pass that drops the start.
 	var expectedAttempts []int64
 	for i := int64(1); i <= scheduler.InvokerMaxStartAttempts+1; i++ {
 		expectedAttempts = append(expectedAttempts, i)
@@ -1006,7 +959,6 @@ func TestExecuteTask_RetriesUpToMaxStartAttempts(t *testing.T) {
 	require.Equal(t, int64(0), env.Scheduler.Info.ActionCount, "no action was ever started")
 }
 
-// An execute task runs with cancels/terminations queued, which fail to execute.
 func TestExecuteTask_CancelTerminateFailure(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	cancelWorkflows := []*commonpb.WorkflowExecution{
@@ -1022,14 +974,12 @@ func TestExecuteTask_CancelTerminateFailure(t *testing.T) {
 		},
 	}
 
-	// Fail both service calls.
 	env.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, serviceerror.NewInternal("internal failure"))
 	env.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, serviceerror.NewInternal("internal failure"))
 
-	// Terminate and Cancel are both attempted only once. Regardless of the service
-	// call's outcome, they should have been removed from the Invoker's queue.
+	// Terminate and Cancel are attempted once and dequeued regardless of outcome.
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts:      nil,
 		InitialCancelWorkflows:     cancelWorkflows,
@@ -1042,7 +992,6 @@ func TestExecuteTask_CancelTerminateFailure(t *testing.T) {
 	})
 }
 
-// An Execute task runs with cancels/terminations queued, resulting in success.
 func TestExecuteTask_CancelTerminateSucceed(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	cancelWorkflows := []*commonpb.WorkflowExecution{
@@ -1058,7 +1007,6 @@ func TestExecuteTask_CancelTerminateSucceed(t *testing.T) {
 		},
 	}
 
-	// Succeed both service calls.
 	env.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, nil)
 	env.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
@@ -1076,8 +1024,7 @@ func TestExecuteTask_CancelTerminateSucceed(t *testing.T) {
 	})
 }
 
-// Tests when the ExecuteTask should yield by completing and committing any
-// completed work.
+// Execute yields at the per-execution action limit, committing completed work.
 func TestExecuteTask_ExceedsMaxActionsPerExecution(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	startTime := timestamppb.New(env.TimeSource.Now())
@@ -1096,8 +1043,6 @@ func TestExecuteTask_ExceedsMaxActionsPerExecution(t *testing.T) {
 			})
 	}
 
-	// Expect up to the maximum buffered start limit to result in workflow
-	// executions.
 	env.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		Times(maxStarts).
@@ -1114,11 +1059,7 @@ func TestExecuteTask_ExceedsMaxActionsPerExecution(t *testing.T) {
 	})
 }
 
-// Two concurrent ExecuteTasks can both clone the invoker before either
-// commits, both fire StartWorkflow for the same RequestId, and both observe
-// success (server dedupes by RequestId). The losing commit must not
-// double-count, stomp the winner's RunId/StartTime/HasCallback, or rewind
-// Attempt/BackoffTime on the already-running entry.
+// Concurrent Executes can both start the same RequestId (the server dedupes); the losing commit must not double-count or overwrite the winner.
 func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
@@ -1158,8 +1099,7 @@ func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 	require.Equal(t, lastEventTime, env.Scheduler.LastEventTime.AsTime(),
 		"duplicate result must not advance the last-event high water mark")
 
-	// First-mover case: a CompletedStart for a fresh RequestId increments
-	// newlyStarted and writes through to the live entry.
+	// A fresh RequestId still increments newlyStarted and writes through.
 	invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
 		NominalTime: startTime,
 		ActualTime:  startTime,
@@ -1260,10 +1200,7 @@ func TestRecordExecuteResult_AdvancesLastEventTimeForStartOnlyAction(t *testing.
 		"start-only action must advance the mark before leaving BufferedStarts")
 }
 
-// A RetryableStart for a request whose live BufferedStart already has RunId
-// set must not bump Attempt or set BackoffTime - the same RunId guard that
-// protects the completed branch must also protect the retryable branch,
-// otherwise stale retry metadata persists on an already-running entry.
+// The RunId guard on the completed branch must also protect the retryable branch.
 func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
@@ -1283,8 +1220,7 @@ func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 	}}
 	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
 
-	// A losing concurrent Execute saw the start as eligible, its RPC failed
-	// retryably, and applyBackoff produced a RetryableStart entry.
+	// A losing concurrent Execute whose RPC failed retryably.
 	loserBackoff := timestamppb.New(env.TimeSource.Now().Add(time.Minute))
 	retryable := []*schedulespb.BufferedStart{{
 		RequestId:   "req",
@@ -1377,9 +1313,7 @@ func TestExecuteTask_EventLog(t *testing.T) {
 	}
 }
 
-// A start whose BackoffTime exactly equals LastProcessedTime must be eligible.
-// Regression for the strict-Before check, which excluded equal-time entries
-// and stranded retries that landed precisely at the HWM boundary.
+// Regression: a strict-Before check stranded retries landing exactly on the HWM boundary.
 func TestExecuteTask_Validate_BackoffEqualToLPTIsEligible(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	ctx := env.MutableContext()
@@ -1410,7 +1344,6 @@ func TestExecuteTask_Validate_MigrationPending(t *testing.T) {
 	require.False(t, valid)
 }
 
-// Validate must skip Execute when no work is ready.
 func TestExecuteTask_Validate(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	ctx := env.MutableContext()
@@ -1439,8 +1372,6 @@ func TestExecuteTask_Validate(t *testing.T) {
 			expectedValid: true,
 		},
 		{
-			// When the RunID is set, the start's already been kicked off, so we don't need
-			// an execute task.
 			name: "running start (RunId set) is invalid",
 			setup: func() {
 				invoker.LastProcessedTime = timestamppb.New(now)
@@ -1453,7 +1384,6 @@ func TestExecuteTask_Validate(t *testing.T) {
 			expectedValid: false,
 		},
 		{
-			// A retry is pending, but we're still in exponential backoff time.
 			name: "backing-off start is invalid",
 			setup: func() {
 				invoker.LastProcessedTime = timestamppb.New(now)
@@ -1494,10 +1424,6 @@ func TestExecuteTask_Validate(t *testing.T) {
 	}
 }
 
-// BackoffTime must be derived from the framework clock (chasm.Context.Now),
-// not wall-clock time.Now. Test by advancing TimeSource so it diverges from
-// the wall clock, then asserting BackoffTime falls within the framework
-// clock's frame.
 func TestExecuteTask_BackoffUsesFrameworkClock(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	frameworkNow := env.TimeSource.Now().Add(24 * time.Hour)
@@ -1523,9 +1449,7 @@ func TestExecuteTask_BackoffUsesFrameworkClock(t *testing.T) {
 			backoff := invoker.BufferedStarts[0].BackoffTime.AsTime()
 			require.True(t, backoff.After(frameworkNow),
 				"BackoffTime %v must be after framework clock %v", backoff, frameworkNow)
-			// time.Now() + any plausible delay is far before frameworkNow (TimeSource
-			// was advanced by 24h). If BackoffTime were derived from wall clock,
-			// this assertion would fail.
+			// TimeSource was advanced 24h, so a wall-clock-derived BackoffTime would fail this.
 			require.True(t, backoff.After(time.Now().Add(time.Hour)),
 				"BackoffTime %v looks derived from wall clock, not framework clock", backoff)
 		},

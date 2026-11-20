@@ -23,8 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Buffer processing runs inline when the engine commits EnqueueBufferedStarts.
-// A discarded selection must release its followers without an external wakeup.
+// Buffer processing runs inline on commit, so a discarded selection must release followers without an external wakeup.
 func TestDeferredStartsAfterDiscard(t *testing.T) {
 	t.Parallel()
 	for _, policy := range []enumspb.ScheduleOverlapPolicy{
@@ -93,8 +92,7 @@ func TestDeferredStartsAfterDiscard(t *testing.T) {
 	}
 }
 
-// Run actual start attempts, including the backoff timers, before checking that
-// a terminal failure releases the next start in the same engine transaction.
+// A terminal start failure must release the next start in the same engine transaction.
 func TestDeferredStartsAfterStartFailure(t *testing.T) {
 	t.Parallel()
 	for _, policy := range []enumspb.ScheduleOverlapPolicy{
@@ -118,8 +116,7 @@ func TestDeferredStartsAfterStartFailure(t *testing.T) {
 					t.Parallel()
 					ts := clock.NewEventTimeSource().Update(time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC))
 					schedule := defaultSchedule()
-					// Manual actions still run while paused; automatic generator ticks cannot
-					// introduce unrelated starts as the retry clock advances.
+					// Manual actions still run while paused; generator ticks cannot add starts as the retry clock advances.
 					schedule.State.Paused = true
 					env := newSchedulerTestEngine(t, schedule, withEngineTimeSource(ts))
 					var invoker *scheduler.Invoker
@@ -270,8 +267,7 @@ func executeProgressTask(t *testing.T, env *schedulerTestEngine, invoker *schedu
 	require.False(t, dropped, "a workflow-start task must be armed and eligible")
 }
 
-// Pending start requests must enforce overlap policy before their RunId is
-// recorded. Once recorded, cancel/terminate followers must target that run.
+// Followers must respect overlap with a pending start, then target its RunId once recorded.
 func TestDeferredStartsWaitForPendingStart(t *testing.T) {
 	t.Parallel()
 	for _, policy := range []enumspb.ScheduleOverlapPolicy{

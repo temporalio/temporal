@@ -13,20 +13,11 @@ import (
 	"pgregory.net/rapid"
 )
 
-// TestSchedulerProperties drives a randomly-generated schedule through a random
-// sequence of operations (advance time, pause, unpause, trigger) and asserts the
-// scheduler invariants hold after every settled transition. rapid shrinks any
-// failing operation sequence to a minimal reproducer — directly useful for the
-// "stuck open" bug class.
-//
-// The outer *testing.T owns the engine scaffolding (it requires a real
-// testing.TB); invariant violations are reported through the *rapid.T so rapid
-// can shrink them.
+// Invariant violations go through *rapid.T so rapid can shrink them.
 func TestSchedulerProperties(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		start := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-		// A small IdleTime lets fire-time gaps cross the idle window, which the
-		// 7d default never does with these intervals.
+		// A small IdleTime lets fire-time gaps cross the idle window; the 7d default never does.
 		idle := rapid.SampledFrom([]time.Duration{10 * time.Minute, time.Hour, 2 * time.Hour}).Draw(rt, "idleTime")
 		sched := drawSchedule(rt, start, idle)
 
@@ -36,24 +27,18 @@ func TestSchedulerProperties(t *testing.T) {
 			schedulertest.WithConfig(configWith(func(tw *scheduler.Tweakables) {
 				tw.IdleTime = idle
 			})),
-			// InvokerExecuteTask may lag the timers, and workflows may run, but
-			// neither for a whole idle window. Past that, V1 and V2 both close
-			// with the start still buffered.
+			// Past an idle window of lag, V1 and V2 both close with the start still buffered.
 			schedulertest.WithMaxSideEffectLag(idle/2),
 			schedulertest.WithMaxRunDuration(idle/2),
 		)
 		hook := checkInvariantsIgnoringKnownBugs(rt)
 		d.AfterStep = hook
 
-		// Check the initial settled state too.
 		hook(d)
 
 		numOps := rapid.IntRange(1, 60).Draw(rt, "numOps")
 		for range numOps {
-			// Bias toward stepping so the clock advances and the schedule actually
-			// progresses through generator/invoker/idle transitions. "pure" fires
-			// timers without dispatching side-effect tasks, so InvokerExecuteTask
-			// can lag behind the generator and idle tasks.
+			// Bias toward stepping; pure steps let InvokerExecuteTask lag behind generator and idle tasks.
 			op := rapid.SampledFrom([]string{
 				"step", "step", "pure", "pure", "sideEffect", "complete",
 				"pause", "unpause", "trigger",
@@ -81,8 +66,6 @@ func TestSchedulerProperties(t *testing.T) {
 	})
 }
 
-// drawSchedule generates a random but valid schedule definition. Some
-// schedules end, with their last fire time placed around the idle window.
 func drawSchedule(rt *rapid.T, start time.Time, idle time.Duration) *schedulepb.Schedule {
 	s := schedulertest.DefaultSchedule()
 
@@ -107,11 +90,9 @@ func drawSchedule(rt *rapid.T, start time.Time, idle time.Duration) *schedulepb.
 
 	switch rapid.SampledFrom([]string{"forever", "endTime", "oneShot"}).Draw(rt, "shape") {
 	case "endTime":
-		// Last fire lands a few intervals in, so the final gap is the interval.
 		n := rapid.IntRange(1, 4).Draw(rt, "firesBeforeEnd")
 		s.Spec.EndTime = timestamppb.New(start.Add(time.Duration(n)*interval + time.Second))
 	case "oneShot":
-		// A single fire, before, at, or after the idle window since creation.
 		offset := rapid.SampledFrom([]time.Duration{
 			idle / 2, idle - time.Minute, idle, idle + time.Minute, 3 * idle,
 		}).Draw(rt, "oneShotOffset")
@@ -133,10 +114,7 @@ func drawSchedule(rt *rapid.T, start time.Time, idle time.Duration) *schedulepb.
 	return s
 }
 
-// checkInvariantsIgnoringKnownBugs is CheckInvariantsHook minus one known bug
-// (TestLedger_DeferredStartsStrandedByPausedCompletion): a lost start where
-// every pending start is deferred and nothing is running to re-enable them.
-// Delete this once that bug is fixed.
+// Ignores TestLedger_DeferredStartsStrandedByPausedCompletion; delete once that bug is fixed.
 func checkInvariantsIgnoringKnownBugs(rt *rapid.T) func(*schedulertest.Driver) {
 	var prev *schedulertest.Snapshot
 	return func(d *schedulertest.Driver) {

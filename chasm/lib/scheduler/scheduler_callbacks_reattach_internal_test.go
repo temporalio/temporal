@@ -24,10 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// watchRunningStart decides, per buffered start, whether a completion callback was attached to
-// a still-running action or whether the action had already finished. A target that is gone
-// entirely is recorded TERMINATED; a target that closes mid-attach is retried so its actual
-// terminal status can be observed.
+// A gone target is recorded TERMINATED; one that closes mid-attach is retried to observe its real status.
 func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 	closeTime := timestamppb.New(time.Now().UTC())
 

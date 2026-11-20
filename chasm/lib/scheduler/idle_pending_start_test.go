@@ -92,7 +92,6 @@ func oneShotSpec(fire time.Time) *schedulepb.ScheduleSpec {
 	}
 }
 
-// intervalSpecFiringAt returns an interval spec phased so that it fires at fire.
 func intervalSpecFiringAt(every time.Duration, fire time.Time, end time.Time) *schedulepb.ScheduleSpec {
 	phase := time.Duration(fire.Unix()%int64(every/time.Second)) * time.Second
 	spec := &schedulepb.ScheduleSpec{Interval: []*schedulepb.IntervalSpec{{
@@ -105,8 +104,7 @@ func intervalSpecFiringAt(every time.Duration, fire time.Time, end time.Time) *s
 	return spec
 }
 
-// newPausedThenUnpaused creates the schedule paused, then unpauses it ~1s later
-// via UpdateSchedule.
+// newPausedThenUnpaused unpauses the schedule about 1s after creation.
 func newPausedThenUnpaused(t *testing.T, spec *schedulepb.ScheduleSpec, limited int64) (*schedulerTestEngine, *clock.EventTimeSource) {
 	t.Helper()
 	ts := clock.NewEventTimeSource()
@@ -145,8 +143,7 @@ func firePureTasksAt(t *testing.T, e *schedulerTestEngine, ts *clock.EventTimeSo
 	require.NoError(t, err)
 }
 
-// recordPendingStart simulates InvokerExecuteTask recording the single
-// unstarted buffered start as started at the given time.
+// recordPendingStart simulates InvokerExecuteTask starting the single unstarted buffered start.
 func recordPendingStart(t *testing.T, e *schedulerTestEngine, ts *clock.EventTimeSource, at time.Time) {
 	t.Helper()
 	ts.Update(at)
@@ -179,9 +176,7 @@ func requireSchedulerState(t *testing.T, e *schedulerTestEngine, check func(*sch
 	}))
 }
 
-// The tick that buffers a schedule's final action must not arm the idle task
-// before that action is executed. Drives the full
-// lifecycle so a fix that holds the schedule open also proves it still closes.
+// The tick that buffers the final action must not arm idle before that action executes.
 func TestIdle_FinalBufferedStartExecutesBeforeClose(t *testing.T) {
 	oneShotFire := pendingUnpauseTime.Add(idleWeek + time.Hour).Truncate(time.Second)
 	intervalFire := pendingUnpauseTime.Add(8 * 24 * time.Hour).Truncate(time.Second)
@@ -206,8 +201,7 @@ func TestIdle_FinalBufferedStartExecutesBeforeClose(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e, ts := newPausedThenUnpaused(t, tc.spec, tc.limited)
 
-			// Generator tick; processBuffer cascades. InvokerExecuteTask is a
-			// side-effect task and has not run yet.
+			// InvokerExecuteTask is a side-effect task and has not run yet.
 			firePureTasksAt(t, e, ts, tc.fire.Add(10*time.Millisecond))
 			firePureTasksAt(t, e, ts, ts.Now())
 			requireSchedulerState(t, e, func(s *scheduler.Scheduler, ctx chasm.Context) {
@@ -244,9 +238,7 @@ func TestIdle_FinalBufferedStartExecutesBeforeClose(t *testing.T) {
 	}
 }
 
-// A final start removed without ever getting a RunId (non-retryable start
-// failure) triggers no Generate call. The idle task armed at the generator tick
-// must still close the schedule, rather than leaving it stuck open.
+// A non-retryable start failure triggers no Generate, so the idle task armed at the tick must still close the schedule.
 func TestIdle_FinalStartRemovedWithoutRunID_StillCloses(t *testing.T) {
 	fire := pendingUnpauseTime.Add(idleWeek + time.Hour).Truncate(time.Second)
 	e, ts := newPausedThenUnpaused(t, oneShotSpec(fire), 0)
@@ -268,8 +260,7 @@ func TestIdle_FinalStartRemovedWithoutRunID_StillCloses(t *testing.T) {
 	})
 }
 
-// An idle task armed in the past by a pre-fix binary must be invalidated by the
-// new binary while the final start is still pending.
+// A stale idle task from a pre-fix binary must be invalidated while the final start is pending.
 func TestIdle_StaleIdleTaskInvalidatedByPendingStart(t *testing.T) {
 	fire := pendingUnpauseTime.Add(idleWeek + time.Hour).Truncate(time.Second)
 	e, ts := newPausedThenUnpaused(t, oneShotSpec(fire), 0)
@@ -288,8 +279,7 @@ func TestIdle_StaleIdleTaskInvalidatedByPendingStart(t *testing.T) {
 	})
 }
 
-// Weekly + EndTime: before the fix the final tick armed idle at
-// prevStartTime+7d = finalNominal+prevStartLatency, racing InvokerExecuteTask.
+// Before the fix, the final weekly tick armed idle at finalNominal+prevStartLatency, racing InvokerExecuteTask.
 func TestIdle_WeeklyWithEndTime_FinalRunNotRaced(t *testing.T) {
 	const prevStartLatency = 50 * time.Millisecond
 	base := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)

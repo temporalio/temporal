@@ -21,9 +21,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// A migrated schedule defers work until SchedulerCallbacksTask refreshes its
-// running workflows. A backfill must wait too, or its starts are judged
-// against a running entry the V1 workflow may already have outlived.
+// Guards that a migrated schedule's backfill waits for SchedulerCallbacksTask to refresh running workflows,
+// or its starts are judged against a running entry the V1 workflow may have outlived.
 func TestMigration_BackfillWaitsForCallbacks(t *testing.T) {
 	t.Skip("known bug: CreateSchedulerFromMigration arms Backfiller tasks immediately instead of deferring them behind SchedulerCallbacksTask")
 	ctrl := gomock.NewController(t)

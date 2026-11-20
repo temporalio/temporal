@@ -44,14 +44,9 @@ func TestCompletedHistoryDoesNotConsumeBackfillCapacity(t *testing.T) {
 	require.Positive(t, limit, "retained completed actions must not consume actionable buffer capacity")
 }
 
-// TestAllowedBufferedStartsDiscountsRetainedHistory pins the allowedBufferedStarts
-// arithmetic: actionable (non-completed) buffered starts consume backfill
-// capacity, but the first recentActionCount slots are discounted (they may be
-// retained history), and the result is clamped at zero once the buffer fills.
+// Non-completed starts consume backfill capacity, the first recentActionCount are discounted, and the result clamps at zero.
 func TestAllowedBufferedStartsDiscountsRetainedHistory(t *testing.T) {
-	// recentActionCount is 10 (scheduler.recentActionCount, unexported). With one
-	// backfiller, MaxBufferSize=20 and no generator reserve, base capacity is
-	// (20/2)/1 = 10 and the first 10 buffered starts are discounted.
+	// recentActionCount is 10; one backfiller with MaxBufferSize=20 gives base capacity (20/2)/1 = 10.
 	const (
 		maxBufferSize     = 20
 		recentActionCount = 10

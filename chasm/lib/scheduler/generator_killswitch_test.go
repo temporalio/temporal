@@ -84,8 +84,7 @@ func TestGeneratorJitterFixKillswitch(t *testing.T) {
 				}))
 			}
 
-			// CHASM validates and executes the original timer. Disabling the fix
-			// reproduces the old skip, while task completion still invalidates it.
+			// Disabling the fix reproduces the old skip, while task completion still invalidates the timer.
 			ts.Update(fire)
 			for range 2 {
 				_, err := env.engine.FirePureTasks(env.rootRef, fire)
@@ -97,8 +96,7 @@ func TestGeneratorJitterFixKillswitch(t *testing.T) {
 				}))
 			}
 
-			// Re-enable without rewriting state. The next eligible slot still
-			// fires once; a slot skipped while disabled cannot be recovered.
+			// A slot skipped while disabled cannot be recovered.
 			tweakables.EnableGeneratorJitterFix = true
 			ts.Update(followingFire)
 			for range 2 {
