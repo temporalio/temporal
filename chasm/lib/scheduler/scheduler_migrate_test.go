@@ -128,7 +128,6 @@ func TestMigrateToWorkflowTask_DoesNotPropagateDisabledTimeSkipping(t *testing.T
 func TestMigrateToWorkflow_SavesPreMigrationState(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
-	// Pause the schedule before migration with custom notes.
 	sched.Schedule.State.Paused = true
 	sched.Schedule.State.Notes = "user paused"
 
@@ -168,7 +167,6 @@ func TestMigrateToWorkflow_Idempotent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Second call succeeds without error (no-op).
 	_, err = sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
 		ScheduleId:  scheduleID,
@@ -191,14 +189,12 @@ func TestMigrateToWorkflow_Sentinel(t *testing.T) {
 func TestPatch_UnpauseBlockedDuringMigration(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
-	// Initiate migration.
 	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
 		ScheduleId:  scheduleID,
 	})
 	require.NoError(t, err)
 
-	// Attempt to unpause should fail.
 	_, err = sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &workflowservice.PatchScheduleRequest{
@@ -224,8 +220,7 @@ func TestPatch_RejectedDuringMigration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Every patch mutation, including action-producing patches, must be fenced
-	// while the migration task prepares its V1 snapshot.
+	// Every patch, including action-producing ones, is fenced while the migration task prepares its V1 snapshot.
 	_, err = sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &workflowservice.PatchScheduleRequest{
@@ -253,7 +248,6 @@ func TestUpdate_RejectedDuringMigration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Update should be rejected outright when a migration is pending.
 	newSchedule := defaultSchedule()
 	newSchedule.State.Paused = false
 	newSchedule.State.Notes = "user unpaused"

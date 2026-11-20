@@ -12,8 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// completedStart builds a completed BufferedStart whose close time is derived
-// from age (larger age = older).
+// completedStart derives close time from age; larger age is older.
 func completedStart(base time.Time, age int) *schedulespb.BufferedStart {
 	return &schedulespb.BufferedStart{
 		RequestId: fmt.Sprintf("completed-%d", age),
@@ -23,24 +22,18 @@ func completedStart(base time.Time, age int) *schedulespb.BufferedStart {
 	}
 }
 
-// When more than recentActionCount completed starts are present, retention keeps
-// only the newest recentActionCount, drops the oldest, and preserves all
-// non-completed starts.
 func TestApplyCompletedRetention_TrimsOldestBeyondLimit(t *testing.T) {
 	base := time.Now()
 	limit := scheduler.RecentActionCount
 	excess := 3
 
-	// Newest-first: age 0 is newest, age (limit+excess-1) is oldest. Add them in
-	// oldest-first order to prove retention sorts by close time rather than slice
-	// position.
+	// Added oldest-first to prove retention sorts by close time, not slice position.
 	var completed []*schedulespb.BufferedStart
 	for age := limit + excess - 1; age >= 0; age-- {
 		completed = append(completed, completedStart(base, age))
 	}
 
-	// More than `limit` pending starts, to show the retention limit applies only
-	// to completed starts and never trims non-completed ones.
+	// More than limit pending starts, to show only completed starts are trimmed.
 	pendingCount := limit + excess
 	var pending []*schedulespb.BufferedStart
 	for i := range pendingCount {
@@ -49,7 +42,6 @@ func TestApplyCompletedRetention_TrimsOldestBeyondLimit(t *testing.T) {
 
 	invoker := &scheduler.Invoker{
 		InvokerState: &schedulerpb.InvokerState{
-			// Interleave the pending starts so we also cover ordering.
 			BufferedStarts: append(pending, completed...),
 		},
 	}
@@ -65,10 +57,8 @@ func TestApplyCompletedRetention_TrimsOldestBeyondLimit(t *testing.T) {
 		}
 	}
 
-	// Non-completed starts are always retained, regardless of the limit.
 	require.Len(t, keptPending, pendingCount)
 
-	// Only the newest `limit` completed starts survive.
 	require.Len(t, keptCompleted, limit)
 	kept := make(map[string]bool, len(keptCompleted))
 	for _, s := range keptCompleted {
@@ -84,7 +74,6 @@ func TestApplyCompletedRetention_TrimsOldestBeyondLimit(t *testing.T) {
 	}
 }
 
-// At or below the limit, retention is a no-op: every completed start is kept.
 func TestApplyCompletedRetention_KeepsAllWithinLimit(t *testing.T) {
 	base := time.Now()
 	count := scheduler.RecentActionCount // exactly at the limit

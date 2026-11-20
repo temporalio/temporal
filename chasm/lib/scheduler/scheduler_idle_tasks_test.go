@@ -60,9 +60,7 @@ func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase
 	require.Equal(t, c.expectedValid, isValid)
 }
 
-// anchorLastEventTo backdates Info.UpdateTime/CreateTime so that
-// idleDeadline = anchor + idleTime; pairs with scheduledTime = anchor + idleTime
-// to make Validate's expiration check resolve to "stable".
+// Pair with scheduledTime = anchor + idleTime so Validate sees a stable deadline.
 func anchorLastEventTo(sched *scheduler.Scheduler, anchor time.Time) {
 	sched.Info.UpdateTime = timestamppb.New(anchor)
 	sched.Info.CreateTime = timestamppb.New(anchor)
@@ -88,7 +86,6 @@ func TestIdleTask_ExecuteInitializesEventLogMissingFromOlderTree(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
 	sched := env.Scheduler
-	// Simulate a Scheduler tree persisted before EventLog was introduced.
 	sched.EventLog = chasm.NewEmptyField[*scheduler.EventLog]()
 	_, ok := sched.EventLog.TryGet(ctx)
 	require.False(t, ok)
@@ -199,9 +196,7 @@ func TestIdleTask_Validate_SchedulerAlreadyClosed(t *testing.T) {
 	})
 }
 
-// Each Validate=false branch must emit ScheduleIdleTask{outcome=invalidated}
-// with the matching reason tag; pin the reason values so a future rename of
-// the constants surfaces in tests.
+// Pins the reason tag values so a rename of the constants surfaces in tests.
 func TestIdleTask_Validate_MetricReasons(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -263,10 +258,7 @@ func TestIdleTask_Validate_MetricReasons(t *testing.T) {
 	}
 }
 
-// Manual-only schedules (empty spec) close from idle like any other: V1
-// applies RetentionTime to them, and lastEventTime is advanced by manual
-// triggers via recentActions, so the idle timer cannot silently kill a
-// schedule that customers are actively using.
+// Manual triggers advance lastEventTime via recentActions, so this can't close an actively used schedule.
 func TestIdleTask_Validate_ManualOnlyClosesFromIdle(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()
@@ -282,7 +274,6 @@ func TestIdleTask_Validate_ManualOnlyClosesFromIdle(t *testing.T) {
 	})
 }
 
-// A pending backfill (separate task-driven component) must drain before close.
 func TestIdleTask_Validate_HasBackfillHeldOpen(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()
@@ -292,8 +283,7 @@ func TestIdleTask_Validate_HasBackfillHeldOpen(t *testing.T) {
 		scheduledTime:     now,
 		setupScheduler: func(sched *scheduler.Scheduler, _ chasm.Context) {
 			anchorLastEventTo(sched, now.Add(-10*time.Minute))
-			// hasMoreBackfills only checks length, so a zero-value Field stub
-			// suffices. If that ever changes, this stub will need real state.
+			// hasMoreBackfills only checks length, so a zero-value Field stub suffices.
 			sched.Backfillers = chasm.Map[string, *scheduler.Backfiller]{
 				"bf-stub": chasm.Field[*scheduler.Backfiller]{},
 			}
@@ -302,9 +292,6 @@ func TestIdleTask_Validate_HasBackfillHeldOpen(t *testing.T) {
 	})
 }
 
-// If lastEventTime advanced since arm (e.g., a workflow start appended to
-// recentActions), the recomputed deadline is later than ScheduledTime - the
-// old task is premature, the Generator will arm a fresh task at the new time.
 func TestIdleTask_Validate_ExpirationShiftedLater(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()
@@ -319,7 +306,6 @@ func TestIdleTask_Validate_ExpirationShiftedLater(t *testing.T) {
 	})
 }
 
-// Exact-equality between recomputed deadline and ScheduledTime must fire.
 func TestIdleTask_Validate_ExpirationStableFires(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()
@@ -334,12 +320,9 @@ func TestIdleTask_Validate_ExpirationStableFires(t *testing.T) {
 	})
 }
 
-// Sentinels are exempt from held-open semantics, even when their state would
-// otherwise hold a real scheduler open. They exist only to reserve a schedule
-// ID and must auto-close after SentinelIdleTime.
+// Sentinels only reserve a schedule ID, so state that holds a real scheduler open must not hold them.
 func TestIdleTask_Validate_SentinelNotHeldOpen(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
-	// Force every state that would normally hold a non-sentinel open.
 	sentinel.Schedule = &schedulepb.Schedule{
 		Spec:  &schedulepb.ScheduleSpec{},
 		State: &schedulepb.ScheduleState{Paused: true},

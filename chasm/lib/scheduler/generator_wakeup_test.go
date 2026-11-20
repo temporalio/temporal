@@ -26,8 +26,7 @@ func TestGeneratorNextWakeupTimeStaysAtPendingJitteredFire(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	realProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
 
-	// Record the real processor's output, rather than inferring it from a
-	// previously queued timer that could hide an incorrect new wakeup time.
+	// Record real output; a previously queued timer could hide an incorrect new wakeup time.
 	type output struct {
 		nextWakeupTime time.Time
 		actions        int
@@ -70,8 +69,7 @@ func TestGeneratorNextWakeupTimeStaysAtPendingJitteredFire(t *testing.T) {
 		}
 	}
 
-	// These fire times are fixed for namespace "ns-id" and schedule "sched-id".
-	// No expected timestamp is calculated by the implementation under test.
+	// Fire times are fixed for namespace "ns-id" and schedule "sched-id", not computed by the code under test.
 	expected := []output{
 		{fire, 0},          // Creation: the 22:00 nominal slot is still in the future.
 		{fire, 0},          // 22:02: inside its jitter delay.
@@ -95,7 +93,6 @@ func TestGeneratorNextWakeupTimeStaysAtPendingJitteredFire(t *testing.T) {
 		requireTimerDeadline(fire)
 	}
 
-	// Deliver the timer through CHASM's validation and transaction machinery.
 	// A second delivery must neither regenerate the action nor recalculate a wakeup.
 	timeSource.Update(fire)
 	for range 2 {

@@ -33,8 +33,7 @@ func TestSameTimePendingStartsReceiveUniqueIdentities(t *testing.T) {
 	require.NotEqual(t, converted[0].GetWorkflowId(), converted[1].GetWorkflowId(),
 		"distinct migrated actions must not collide at workflow start")
 
-	// The first start keeps the undecorated workflow ID, so a migrated action
-	// still dedups against one the V1 scheduler had already started.
+	// The undecorated ID lets a migrated action dedup against one V1 already started.
 	require.Equal(t,
 		schedulerinternal.GenerateWorkflowID("workflow-id", when.AsTime()),
 		converted[0].GetWorkflowId())

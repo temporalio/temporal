@@ -51,8 +51,7 @@ func TestSentinelIdleTask_Validate_InvalidAfterClosed(t *testing.T) {
 	require.False(t, isValid)
 }
 
-// Task armed before the natural sentinel deadline must drop: idleDeadline
-// (CreateTime + SentinelIdleTime) is after ScheduledTime (CreateTime).
+// Must drop: idleDeadline (CreateTime + SentinelIdleTime) is after ScheduledTime (CreateTime).
 func TestSentinelIdleTask_Validate_ExpirationShiftedLater(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 

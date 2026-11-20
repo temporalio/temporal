@@ -16,8 +16,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// runSentinelHandlerTestCase asserts that the given operation returns
-// NotFound when invoked on a sentinel scheduler.
 func runSentinelHandlerTestCase(
 	t *testing.T,
 	callFn func(sentinel *scheduler.Scheduler, ctx chasm.MutableContext, specBuilder *legacyscheduler.SpecBuilder) error,
@@ -226,7 +224,6 @@ func TestHandler_PatchSchedule_DedupsRequestID(t *testing.T) {
 	patch("patch-1")
 	requireBufferedStarts(1)
 
-	// A retry with the same request ID succeeds without triggering again.
 	patch("patch-1")
 	requireBufferedStarts(1)
 

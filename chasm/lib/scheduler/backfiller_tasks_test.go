@@ -50,11 +50,9 @@ func runBackfillTestCase(t *testing.T, env *testEnv, c *backfillTestCase) {
 	sched := schedComponent.(*scheduler.Scheduler)
 	invoker := sched.Invoker.Get(ctx)
 
-	// Exactly one type of request can be set per Backfiller.
 	require.False(t, c.InitialBackfillRequest != nil && c.InitialTriggerRequest != nil)
 	require.False(t, c.InitialBackfillRequest == nil && c.InitialTriggerRequest == nil)
 
-	// Spawn backfiller.
 	var backfiller *scheduler.Backfiller
 	if c.InitialTriggerRequest != nil {
 		backfiller = sched.NewImmediateBackfiller(ctx, c.InitialTriggerRequest)
@@ -62,34 +60,25 @@ func runBackfillTestCase(t *testing.T, env *testEnv, c *backfillTestCase) {
 		backfiller = sched.NewRangeBackfiller(ctx, c.InitialBackfillRequest)
 	}
 
-	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
-	// The immediate task executes automatically during CloseTransaction().
+	// The immediate pure task executes automatically during CloseTransaction().
 	require.NoError(t, env.CloseTransaction())
 
-	// Validate completion or partial progress.
 	if c.ExpectedComplete {
-		// Backfiller should no longer be present in the backfiller map.
 		_, ok := sched.Backfillers[backfiller.BackfillId].TryGet(ctx)
 		require.False(t, ok)
 	} else {
-		// TODO - check that a pure task to continue driving backfill exists here. Because
-		// a pure task in the tree already has the physically-created status, closing the
-		// transaction won't call our backend mock for AddTasks twice. Fix this when CHASM
-		// offers unit testing hooks for task generation.
+		// TODO - check the continuation pure task exists once CHASM offers task generation test hooks.
 
 		require.Equal(t, int64(c.ExpectedAttempt), backfiller.GetAttempt())
 		require.Equal(t, c.ExpectedLastProcessedTime.UTC(), backfiller.GetLastProcessedTime().AsTime())
 	}
 
-	// Validate BufferedStarts. More detailed validation must be done in the callbacks.
 	require.Len(t, invoker.GetBufferedStarts(), c.ExpectedBufferedStarts)
 
-	// Validate RequestId -> WorkflowId mapping.
 	for _, start := range invoker.GetBufferedStarts() {
 		require.Equal(t, start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
 	}
 
-	// Callbacks.
 	if c.ValidateInvoker != nil {
 		c.ValidateInvoker(t, invoker)
 	}
@@ -98,8 +87,6 @@ func runBackfillTestCase(t *testing.T, env *testEnv, c *backfillTestCase) {
 	}
 }
 
-// An immediately-triggered run should result in the machine being deleted after
-// completion.
 func TestBackfillTask_TriggerImmediate(t *testing.T) {
 	env := newTestEnv(t)
 	request := &schedulepb.TriggerImmediatelyRequest{
@@ -117,12 +104,10 @@ func TestBackfillTask_TriggerImmediate(t *testing.T) {
 	})
 }
 
-// An immediately-triggered run will back off and retry if the buffer is full.
 func TestBackfillTask_TriggerImmediateFullBuffer(t *testing.T) {
 	env := newTestEnv(t)
 
-	// Backfillers get half of the max buffer size, so fill (half the buffer -
-	// expected starts).
+	// Backfillers get half of the max buffer size.
 	ctx := env.MutableContext()
 	invoker := env.Scheduler.Invoker.Get(ctx)
 	for range scheduler.DefaultTweakables.MaxBufferSize {
@@ -139,8 +124,6 @@ func TestBackfillTask_TriggerImmediateFullBuffer(t *testing.T) {
 	})
 }
 
-// A backfill request completes entirely should result in the machine being
-// deleted after completion.
 func TestBackfillTask_CompleteFill(t *testing.T) {
 	env := newTestEnv(t)
 	startTime := env.TimeSource.Now()
@@ -166,13 +149,9 @@ func TestBackfillTask_CompleteFill(t *testing.T) {
 	})
 }
 
-// Backfill start and end times are inclusive, so a backfill scheduled for an
-// instant that exactly matches a time in the calendar spec's sequence should result
-// in a start.
 func TestBackfillTask_InclusiveStartEnd(t *testing.T) {
 	env := newTestEnv(t)
 
-	// Set an identical start and end time, landing on the calendar spec's interval.
 	backfillTime := env.TimeSource.Now().Truncate(defaultInterval)
 	request := &schedulepb.BackfillRequest{
 		StartTime: timestamppb.New(backfillTime),
@@ -184,12 +163,10 @@ func TestBackfillTask_InclusiveStartEnd(t *testing.T) {
 		ExpectedComplete:       true,
 	})
 
-	// Clear the Invoker's buffered starts.
 	ctx := env.MutableContext()
 	invoker := env.Scheduler.Invoker.Get(ctx)
 	invoker.BufferedStarts = nil
 
-	// A hair off and the action won't fire.
 	backfillTime = backfillTime.Add(1 * time.Millisecond)
 	request = &schedulepb.BackfillRequest{
 		StartTime: timestamppb.New(backfillTime),
@@ -202,12 +179,9 @@ func TestBackfillTask_InclusiveStartEnd(t *testing.T) {
 	})
 }
 
-// When the buffer's completely full, the high watermark shouldn't advance and no
-// starts should be buffered.
 func TestBackfillTask_BufferCompletelyFull(t *testing.T) {
 	env := newTestEnv(t)
 
-	// Fill buffer past max.
 	ctx := env.MutableContext()
 	invoker := env.Scheduler.Invoker.Get(ctx)
 	for range scheduler.DefaultTweakables.MaxBufferSize {
@@ -225,21 +199,15 @@ func TestBackfillTask_BufferCompletelyFull(t *testing.T) {
 		ExpectedBufferedStarts: 1000,
 		ExpectedComplete:       false,
 		ExpectedAttempt:        1,
-		// A completely-full-buffer attempt backs off (Attempt increments) but records
-		// no progress: the range backfiller's high watermark stays unset, which
-		// surfaces as the Unix epoch through AsTime(). (Previously the watermark was
-		// seeded to creation time, which a retry then mistook for durable progress.)
+		// No progress is recorded, so the unset watermark surfaces as the Unix epoch through AsTime().
 		ExpectedLastProcessedTime: time.Unix(0, 0),
 	})
 }
 
-// When the backfill range exceeds buffer capacity, partial filling should occur
-// with the remainder left for a retry.
 func TestBackfillTask_PartialFill(t *testing.T) {
 	env := newTestEnv(t)
 
-	// Use a large backfill range (1000 intervals) that exceeds the backfiller's
-	// buffer limit (MaxBufferSize/2 = 500).
+	// 1000 intervals exceeds the backfiller's buffer limit (MaxBufferSize/2 = 500).
 	startTime := env.TimeSource.Now()
 	endTime := startTime.Add(1000 * defaultInterval)
 	request := &schedulepb.BackfillRequest{
@@ -255,11 +223,9 @@ func TestBackfillTask_PartialFill(t *testing.T) {
 	backfiller := sched.NewRangeBackfiller(ctx, request)
 	require.NoError(t, env.CloseTransaction())
 
-	// Backfiller should have processed up to its limit (500), not the full 1000.
 	require.False(t, backfiller.GetLastProcessedTime().AsTime().IsZero())
 	require.Equal(t, int64(1), backfiller.GetAttempt())
 
-	// Backfiller should still exist (not complete).
 	ctx = env.MutableContext()
 	schedComponent, err = env.Node.Component(ctx, chasm.ComponentRef{})
 	require.NoError(t, err)
@@ -267,10 +233,9 @@ func TestBackfillTask_PartialFill(t *testing.T) {
 	_, ok := sched.Backfillers[backfiller.BackfillId].TryGet(ctx)
 	require.True(t, ok)
 
-	// Manually execute the second iteration since the scheduled continuation
-	// task is in the future (after backoff delay).
+	// The continuation task is scheduled after a backoff delay, so execute it manually.
 	invoker := sched.Invoker.Get(ctx)
-	invoker.BufferedStarts = nil // Clear to make room for next batch
+	invoker.BufferedStarts = nil
 	handler := scheduler.NewBackfillerTaskHandler(scheduler.BackfillerTaskHandlerOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
@@ -281,21 +246,10 @@ func TestBackfillTask_PartialFill(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, env.CloseTransaction())
 
-	// After second iteration, should have processed another batch.
 	require.Equal(t, int64(2), backfiller.GetAttempt())
 }
 
-// TestBackfillCapacityStallDoesNotSkipRange pins that a backfill whose
-// first attempt is stalled by a full buffer still reprocesses its complete range
-// on retry, rather than skipping the earlier part.
-//
-// A stalled attempt takes Execute's buffer-full back-off path, which increments
-// Attempt (its documented back-off counter) but returns before any watermark is
-// written. So the real post-stall state is Attempt > 0 with the high watermark
-// left unset. processBackfill must therefore key its resume decision on the
-// watermark's presence, not on Attempt: keying on Attempt (the original bug)
-// treated the stall as durable progress and resumed from the backfiller's
-// creation-time default, skipping the earlier part of the requested range.
+// A stall bumps Attempt without writing a watermark, so resume must key on the watermark, not Attempt.
 func TestBackfillCapacityStallDoesNotSkipRange(t *testing.T) {
 	env := newTestEnv(t)
 	fixedNow := env.TimeSource.Now().Truncate(defaultInterval)
@@ -329,15 +283,10 @@ func TestBackfillCapacityStallDoesNotSkipRange(t *testing.T) {
 		SpecProcessor:  env.SpecProcessor,
 	})
 
-	// A fresh range backfiller must carry no recorded progress: the high watermark
-	// doubles as the "progress recorded" signal and stays unset until a batch is
-	// actually processed.
 	require.Nil(t, backfiller.GetLastProcessedTime(),
 		"a fresh range backfiller must not report progress before processing anything")
 
-	// Reproduce the state left by a capacity-only stall: Execute's buffer-full path
-	// bumps Attempt (the back-off counter) but records no progress, so the watermark
-	// stays unset.
+	// State left by a capacity-only stall: Attempt bumped, watermark unset.
 	backfiller.Attempt = 1
 
 	retryResult, err := handler.ProcessBackfill(env.Scheduler, backfiller, scheduler.DefaultTweakables.MaxBufferSize)
