@@ -1526,6 +1526,43 @@ func (ms *MutableStateImpl) setSessionState(state *persistencespb.SessionState) 
 	ms.SetStickyTaskQueue(state.GetBoundWorkerInfo().GetWorkerQueue(), nil)
 }
 
+// SessionInfo returns the workflow's binding in the shape recorded on history events, or nil when it is not bound to a
+// worker.
+func (ms *MutableStateImpl) SessionInfo() *sessionpb.SessionInfo {
+	return sessionInfo(ms.executionInfo.GetSessionState())
+}
+
+// ApplySessionInfo sets the workflow's binding from a replayed workflow task started event. History wins, so it replaces
+// any binding. The instance key is not in history and stays empty until the worker starts another task.
+func (ms *MutableStateImpl) ApplySessionInfo(info *sessionpb.SessionInfo) {
+	var state *persistencespb.SessionState
+	var stickyTimeout *durationpb.Duration
+	if workerQueue := info.GetBoundWorkerInfo().GetWorkerQueue(); workerQueue != "" {
+		state = &persistencespb.SessionState{
+			ExclusiveWorker: info.GetExclusiveWorker(),
+			BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: workerQueue},
+		}
+		if !info.GetExclusiveWorker() {
+			stickyTimeout = durationpb.New(defaultSessionStickyScheduleToStartTimeout)
+		}
+	}
+	ms.executionInfo.SessionState = state
+	ms.SetStickyTaskQueue(state.GetBoundWorkerInfo().GetWorkerQueue(), stickyTimeout)
+}
+
+// sessionInfo is the binding in the shape recorded on history events, or nil when the workflow is not bound to a
+// worker. The instance key is not recorded.
+func sessionInfo(state *persistencespb.SessionState) *sessionpb.SessionInfo {
+	workerQueue := state.GetBoundWorkerInfo().GetWorkerQueue()
+	if workerQueue == "" {
+		return nil
+	}
+	return &sessionpb.SessionInfo{
+		ExclusiveWorker: state.GetExclusiveWorker(),
+		BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: workerQueue},
+	}
+}
+
 func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
 	ms.executionInfo.StickyTaskQueue = name
 	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
@@ -1591,8 +1628,15 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 		// Stickiness, and with it the binding, is only missing here if this start cleared it: the task came
 		// from the normal queue, or a deployment transition ran.
 		if ms.executionInfo.GetStickyTaskQueue() == workerQueue {
-			// No-op: the bound worker picked the task up from its sticky queue.
-			return false, nil
+			// The bound worker picked the task up from its sticky queue. A binding rebuilt from history has no instance
+			// key, since SessionInfo does not record it, so take it from this start. If SessionInfo starts recording the
+			// instance key, this is no longer needed.
+			boundWorkerInfo := ms.executionInfo.GetSessionState().GetBoundWorkerInfo()
+			if boundWorkerInfo.GetInstanceKey() != "" || instanceKey == "" {
+				return false, nil
+			}
+			boundWorkerInfo.InstanceKey = instanceKey
+			return true, nil
 		}
 		// Restore: the bound worker picked the task up from the normal queue. Its session activities
 		// are already queued there, so nothing is rescheduled. Note: We know that the task is picked from the
@@ -3882,12 +3926,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	skipVersioningCheck bool,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	targetRevisionNumber int64,
+	sessionInfo *sessionpb.SessionInfo,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber, sessionInfo)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(

@@ -7,12 +7,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -733,4 +735,82 @@ func TestSingleSessionTaskAddHooks(t *testing.T) {
 		{kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		{kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 	}, keys)
+}
+
+/*
+TestSingleSessionBindingSurvivesRebuild tests that an exclusive binding is rebuilt from history:
+ 1. A single-session worker acquires the workflow and completes its first workflow task.
+ 2. The workflow is reset after the bind, reset to before the bind, or its mutable state is rebuilt from history.
+ 3. After a reset or rebuild past the bind, the next workflow task goes to the same worker's sticky queue. After a
+    reset to before the bind, the workflow is unbound and its task goes to the normal queue.
+*/
+func TestSingleSessionBindingSurvivesRebuild(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		// rebuild resets or rebuilds the workflow and returns the run that receives the next workflow task.
+		rebuild    func(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) string
+		wantSticky bool
+	}{
+		{name: "reset after the bind", wantSticky: true, rebuild: func(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) string {
+			return resetWorkflowTo(t, env, execution, 4)
+		}},
+		{name: "reset before the bind", rebuild: func(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) string {
+			return resetWorkflowTo(t, env, execution, 3)
+		}},
+		{name: "rebuild from history", wantSticky: true, rebuild: func(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) string {
+			_, err := env.AdminClient().RebuildMutableState(t.Context(), &adminservice.RebuildMutableStateRequest{
+				Namespace: env.Namespace().String(), Execution: execution,
+			})
+			require.NoError(t, err)
+			_, err = env.FrontendClient().SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(), WorkflowExecution: execution, SignalName: "wake", Identity: "client",
+			})
+			require.NoError(t, err)
+			return execution.GetRunId()
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := testcore.NewEnv(t,
+				testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+			)
+			tv := env.Tv()
+			client := env.FrontendClient()
+			namespace := env.Namespace().String()
+			started, err := client.StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				Namespace: namespace, WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+				WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+				WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			})
+			require.NoError(t, err)
+			session := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+				SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+			}}
+			poller := taskpoller.New(t, client, namespace)
+			sessionPoller := poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: tv.WorkerInstanceKey(),
+			})
+			// Events 1-4: workflow started, workflow task scheduled, started (the bind) and completed.
+			_, err = sessionPoller.HandleTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+			}, taskpoller.WithContext(t.Context()))
+			require.NoError(t, err)
+			requireStartedEventRecordsBinding(t, env, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: started.GetRunId()})
+
+			runID := tc.rebuild(t, env, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: started.GetRunId()})
+
+			nextPoller := sessionPoller
+			if !tc.wantSticky {
+				nextPoller = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: tv.TaskQueue()})
+			}
+			_, err = nextPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				require.Equal(t, runID, task.GetWorkflowExecution().GetRunId())
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+			}, taskpoller.WithTimeout(10*time.Second))
+			require.NoError(t, err)
+		})
+	}
 }

@@ -9,6 +9,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -175,6 +176,14 @@ func Invoke(
 				return nil, err
 			}
 
+			// The worker this workflow is bound to once this task starts, recorded on the started event. Mutable state
+			// is only updated further below, by BindExclusiveWorker and UpdateNonExclusiveWorkerBinding.
+			var sessionInfo *sessionpb.SessionInfo
+			if singleSession != nil {
+				sessionInfo = &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: stableIdentity}}
+			} else if workerAddress := req.PollRequest.GetSessionOptions().GetMultiSession().GetWorkerAddress(); workerAddress != "" {
+				sessionInfo = &sessionpb.SessionInfo{BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: workerAddress}}
+			}
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
@@ -186,6 +195,7 @@ func Invoke(
 				false,
 				req.TargetDeploymentVersion,
 				req.TaskDispatchRevisionNumber,
+				sessionInfo,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
