@@ -14,7 +14,6 @@ import (
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -88,11 +87,9 @@ func (WorkerGroupStatus) EnumDescriptor() ([]byte, []int) {
 type WorkerGroupState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Lifecycle of the group.
-	Status WorkerGroupStatus `protobuf:"varint,2,opt,name=status,proto3,enum=temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus" json:"status,omitempty"`
-	// Lease deadline computed using CHASM's clock and the supplied lease duration.
-	LeaseExpirationTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=lease_expiration_time,json=leaseExpirationTime,proto3" json:"lease_expiration_time,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	Status        WorkerGroupStatus `protobuf:"varint,2,opt,name=status,proto3,enum=temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerGroupState) Reset() {
@@ -132,21 +129,13 @@ func (x *WorkerGroupState) GetStatus() WorkerGroupStatus {
 	return WORKER_GROUP_STATUS_UNSPECIFIED
 }
 
-func (x *WorkerGroupState) GetLeaseExpirationTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LeaseExpirationTime
-	}
-	return nil
-}
-
 var File_temporal_server_chasm_lib_worker_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb8\x01\n" +
+	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\"h\n" +
 	"\x10WorkerGroupState\x12T\n" +
-	"\x06status\x18\x02 \x01(\x0e2<.temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatusR\x06status\x12N\n" +
-	"\x15lease_expiration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime*z\n" +
+	"\x06status\x18\x02 \x01(\x0e2<.temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatusR\x06status*z\n" +
 	"\x11WorkerGroupStatus\x12#\n" +
 	"\x1fWORKER_GROUP_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aWORKER_GROUP_STATUS_ACTIVE\x10\x01\x12 \n" +
@@ -167,18 +156,16 @@ func file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP() 
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_goTypes = []any{
-	(WorkerGroupStatus)(0),        // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
-	(*WorkerGroupState)(nil),      // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState
-	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
+	(WorkerGroupStatus)(0),   // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
+	(*WorkerGroupState)(nil), // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState
 }
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState.status:type_name -> temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
-	2, // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState.lease_expiration_time:type_name -> google.protobuf.Timestamp
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_worker_proto_v1_message_proto_init() }

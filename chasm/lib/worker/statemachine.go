@@ -5,7 +5,6 @@ import (
 
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type eventHeartbeatReceived struct {
@@ -18,7 +17,6 @@ var transitionActiveHeartbeat = chasm.NewTransition(
 	workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 	func(g *WorkerGroup, ctx chasm.MutableContext, event eventHeartbeatReceived) error {
 		deadline := ctx.Now(g).Add(event.leaseDuration)
-		g.LeaseExpirationTime = timestamppb.New(deadline)
 		// Replace the previous expiry task so the group closes at the renewed deadline.
 		ctx.AddTask(g, chasm.TaskAttributes{ScheduledTime: deadline}, &workerstatepb.LeaseExpiryTask{})
 		return nil
