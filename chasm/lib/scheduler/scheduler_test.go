@@ -1,7 +1,6 @@
 package scheduler_test
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -417,7 +416,6 @@ func TestDescribe_RecentActionsCappedAcrossSources(t *testing.T) {
 
 func TestCreateSchedulerFromMigration(t *testing.T) {
 	now := time.Now().UTC()
-	_, _, node := setupSchedulerForTest(t)
 
 	req := &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: namespaceID,
@@ -475,44 +473,38 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 		},
 	}
 
-	ctx := chasm.NewMutableContext(context.Background(), node)
-	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
-	require.NoError(t, err)
+	setupMigratedSchedulerForTest(t, req, func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+		// Scheduler state
+		require.Equal(t, namespace, sched.Namespace)
+		require.Equal(t, namespaceID, sched.NamespaceId)
+		require.Equal(t, scheduleID, sched.ScheduleId)
+		require.Equal(t, int64(42), sched.ConflictToken)
+		require.False(t, sched.Closed)
 
-	// Scheduler state
-	require.Equal(t, namespace, sched.Namespace)
-	require.Equal(t, namespaceID, sched.NamespaceId)
-	require.Equal(t, scheduleID, sched.ScheduleId)
-	require.Equal(t, int64(42), sched.ConflictToken)
-	require.False(t, sched.Closed)
+		// Generator
+		generator := sched.Generator.Get(ctx)
+		require.Equal(t, now, generator.LastProcessedTime.AsTime())
 
-	// Generator
-	generator := sched.Generator.Get(ctx)
-	require.Equal(t, now, generator.LastProcessedTime.AsTime())
+		// Invoker buffered starts
+		invoker := sched.Invoker.Get(ctx)
+		require.Len(t, invoker.BufferedStarts, 2)
+		require.Equal(t, "req-1", invoker.BufferedStarts[0].RequestId)
+		require.Equal(t, "req-2", invoker.BufferedStarts[1].RequestId)
 
-	// Invoker buffered starts
-	invoker := sched.Invoker.Get(ctx)
-	require.Len(t, invoker.BufferedStarts, 2)
-	require.Equal(t, "req-1", invoker.BufferedStarts[0].RequestId)
-	require.Equal(t, "req-2", invoker.BufferedStarts[1].RequestId)
+		// Backfillers
+		require.Len(t, sched.Backfillers, 1)
+		bf := sched.Backfillers["bf-1"].Get(ctx)
+		require.Equal(t, "bf-1", bf.BackfillId)
 
-	// Backfillers
-	require.Len(t, sched.Backfillers, 1)
-	bf := sched.Backfillers["bf-1"].Get(ctx)
-	require.Equal(t, "bf-1", bf.BackfillId)
+		// Last completion result
+		lastResult := sched.LastCompletionResult.Get(ctx)
+		require.Equal(t, []byte("result-data"), lastResult.Success.Data)
 
-	// Last completion result
-	lastResult := sched.LastCompletionResult.Get(ctx)
-	require.Equal(t, []byte("result-data"), lastResult.Success.Data)
-
-	events := sched.EventLog.Get(ctx).Events
-	require.Len(t, events, 1)
-	require.Equal(t, "created via migration from V1", events[0].Message)
-	require.NotNil(t, events[0].Time)
-
-	require.NoError(t, node.SetRootComponent(sched))
-	_, err = node.CloseTransaction(context.Background(), true)
-	require.NoError(t, err)
+		events := sched.EventLog.Get(ctx).Events
+		require.Len(t, events, 1)
+		require.Equal(t, "created via migration from V1", events[0].Message)
+		require.NotNil(t, events[0].Time)
+	})
 }
 
 func TestCreateSchedulerFromMigrationNormalizesNamespaceName(t *testing.T) {
@@ -524,9 +516,7 @@ func TestCreateSchedulerFromMigrationNormalizesNamespaceName(t *testing.T) {
 		{name: "missing name"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, node := setupSchedulerForTest(t)
-			ctx := chasm.NewMutableContext(context.Background(), node)
-			sched, err := scheduler.CreateSchedulerFromMigration(ctx, &schedulerpb.CreateFromMigrationStateRequest{
+			setupMigratedSchedulerForTest(t, &schedulerpb.CreateFromMigrationStateRequest{
 				NamespaceId: namespaceID,
 				State: &schedulerpb.SchedulerMigrationState{
 					SchedulerState: &schedulerpb.SchedulerState{
@@ -539,9 +529,9 @@ func TestCreateSchedulerFromMigrationNormalizesNamespaceName(t *testing.T) {
 					GeneratorState: &schedulerpb.GeneratorState{},
 					InvokerState:   &schedulerpb.InvokerState{},
 				},
+			}, func(sched *scheduler.Scheduler, _ chasm.MutableContext) {
+				require.Equal(t, namespace, sched.Namespace)
 			})
-			require.NoError(t, err)
-			require.Equal(t, namespace, sched.Namespace)
 		})
 	}
 }
@@ -569,18 +559,18 @@ func TestUpdate_WithMemo(t *testing.T) {
 }
 
 func TestUpdate_WithNilMemo(t *testing.T) {
-	sched, ctx, node := setupSchedulerForTest(t)
+	sched, ctx, env := setupSchedulerForTest(t)
 
 	// Set initial memo.
 	visibility := sched.Visibility.Get(ctx)
 	visibility.MergeCustomMemo(ctx, map[string]*commonpb.Payload{
 		"existing": {Data: []byte("value")},
 	})
-	_, err := node.CloseTransaction(context.Background(), true)
+	err := env.CloseTransaction()
 	require.NoError(t, err)
 
 	// Update without memo (nil) should preserve existing memo.
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx = env.MutableContext()
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &workflowservice.UpdateScheduleRequest{
@@ -597,7 +587,7 @@ func TestUpdate_WithNilMemo(t *testing.T) {
 }
 
 func TestUpdate_MemoReplaceSemantics(t *testing.T) {
-	sched, ctx, node := setupSchedulerForTest(t)
+	sched, ctx, env := setupSchedulerForTest(t)
 
 	// Set initial memo with keys A and B.
 	visibility := sched.Visibility.Get(ctx)
@@ -605,11 +595,11 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 		"A": {Data: []byte("1")},
 		"B": {Data: []byte("2")},
 	})
-	_, err := node.CloseTransaction(context.Background(), true)
+	err := env.CloseTransaction()
 	require.NoError(t, err)
 
 	// Update with only C: should fully replace memo (A and B are gone).
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx = env.MutableContext()
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &workflowservice.UpdateScheduleRequest{
@@ -632,9 +622,9 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 	protorequire.ProtoEqual(t, &commonpb.Payload{Data: []byte("3")}, memo["C"])
 
 	// Update with empty memo: should clear all memo fields.
-	_, err = node.CloseTransaction(context.Background(), true)
+	err = env.CloseTransaction()
 	require.NoError(t, err)
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx = env.MutableContext()
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &workflowservice.UpdateScheduleRequest{
@@ -654,8 +644,6 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 }
 
 func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
-	_, _, node := setupSchedulerForTest(t)
-
 	req := &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
@@ -672,25 +660,18 @@ func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 		},
 	}
 
-	ctx := chasm.NewMutableContext(context.Background(), node)
-	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
-	require.NoError(t, err)
+	setupMigratedSchedulerForTest(t, req, func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+		require.Equal(t, int64(1), sched.ConflictToken)
+		require.Empty(t, sched.Backfillers)
 
-	require.Equal(t, int64(1), sched.ConflictToken)
-	require.Empty(t, sched.Backfillers)
-
-	invoker := sched.Invoker.Get(ctx)
-	require.Empty(t, invoker.BufferedStarts)
-
-	require.NoError(t, node.SetRootComponent(sched))
-	_, err = node.CloseTransaction(context.Background(), true)
-	require.NoError(t, err)
+		invoker := sched.Invoker.Get(ctx)
+		require.Empty(t, invoker.BufferedStarts)
+	})
 }
 
 func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	infra := setupTestInfra(t, newRealSpecProcessor(ctrl, testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)))
-	ctx := chasm.NewMutableContext(context.Background(), infra.node)
+	specProcessor := newRealSpecProcessor(ctrl, testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly))
 
 	req := &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: namespaceID,
@@ -710,15 +691,13 @@ func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
 		},
 	}
 
-	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
-	require.NoError(t, err)
-	require.NoError(t, infra.node.SetRootComponent(sched))
-	_, err = infra.node.CloseTransaction(context.Background(), true)
-	require.NoError(t, err)
+	_, _, env := setupExecutionForTest(t, specProcessor, func(ctx chasm.MutableContext) (*scheduler.Scheduler, error) {
+		return scheduler.CreateSchedulerFromMigration(ctx, req)
+	})
 
 	hasGeneratorTask := false
 outer:
-	for _, taskList := range infra.nodeBackend.TasksByCategory {
+	for _, taskList := range env.NodeBackend.TasksByCategory {
 		for _, task := range taskList {
 			chasmTask, ok := task.(*tasks.ChasmTask)
 			if ok && chasmTask.GetVisibilityTime().Equal(chasm.TaskScheduledTimeImmediate) {
@@ -1042,15 +1021,16 @@ func findSearchAttribute(t *testing.T, sas []chasm.SearchAttributeKeyValue, alia
 // unregistered or had a bad value type, the CloseTransaction call would
 // error or panic.
 func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
-	sched, ctx, node := setupSchedulerForTest(t)
+	sched, ctx, env := setupSchedulerForTest(t)
+	env.AllowStuck("test sets IdleCloseTime directly to exercise search attribute serialization; no idle task backs it")
 
 	nextAction := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	generator := sched.Generator.Get(ctx)
 	generator.FutureActionTimes = []*timestamppb.Timestamp{timestamppb.New(nextAction)}
 	sched.IdleCloseTime = timestamppb.New(time.Now().Add(7 * 24 * time.Hour))
 
-	require.NoError(t, node.SetRootComponent(sched))
-	_, err := node.CloseTransaction(context.Background(), true)
+	require.NoError(t, env.Node.SetRootComponent(sched))
+	err := env.CloseTransaction()
 	require.NoError(t, err, "CloseTransaction should accept the scheduler search attributes")
 }
 
