@@ -145,6 +145,9 @@ func (b *readBuffer) readPage(
 
 	// Not covered: fetch from persistence (outside the lock), then cache the result
 	// when it extends coverage contiguously or restarts it at a newer tip.
+	// Concurrent misses are not coalesced. Other readers can fetch the same range
+	// before this call publishes coverage after fetching and serialization. A larger
+	// capacity does not prevent these duplicate reads while a fill is in flight.
 	page, coveredTo, err := fetch(minInclusive, maxExclusive)
 	if err != nil {
 		return nil, 0, err
