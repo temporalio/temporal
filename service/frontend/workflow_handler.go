@@ -5538,9 +5538,6 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 		return nil, err
 	}
 
-	// temporal:allow-draft-api update-user-tagging // Testing out the linter.
-	_ = request.GetRequest().GetUser()
-
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
