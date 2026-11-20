@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"time"
 
@@ -451,14 +452,25 @@ func (s *Scheduler) NewImmediateBackfiller(
 	return backfiller
 }
 
+// scheduledActionCapacity returns how many scheduled (non-manual) actions the
+// Scheduler currently allows: none while paused, RemainingActions for limited
+// schedules, and math.MaxInt64 otherwise. It never mutates state.
+func (s *Scheduler) scheduledActionCapacity() int64 {
+	scheduleState := s.Schedule.GetState()
+	switch {
+	case scheduleState.GetPaused():
+		return 0
+	case scheduleState.GetLimitedActions():
+		return max(0, scheduleState.GetRemainingActions())
+	default:
+		return math.MaxInt64
+	}
+}
+
 // canTakeScheduledAction reports whether the Scheduler currently allows a
 // scheduled (non-manual) action. It never mutates state.
 func (s *Scheduler) canTakeScheduledAction() bool {
-	scheduleState := s.Schedule.GetState()
-	if scheduleState.Paused {
-		return false
-	}
-	return !scheduleState.LimitedActions || scheduleState.RemainingActions > 0
+	return s.scheduledActionCapacity() > 0
 }
 
 // consumeScheduledAction takes one scheduled action if allowed, decrementing

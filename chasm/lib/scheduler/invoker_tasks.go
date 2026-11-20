@@ -530,9 +530,10 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 
 // processBuffer resolves the Invoker's buffered starts that haven't yet begun
 // execution. This is where the decision is made to drive execution to
-// completion, or skip/drop a start.
+// completion, or skip/drop a start. It only reads state;
+// recordProcessBufferResult applies the result.
 func (h *InvokerProcessBufferTaskHandler) processBuffer(
-	ctx chasm.MutableContext,
+	ctx chasm.Context,
 	invoker *Invoker,
 	scheduler *Scheduler,
 ) (result processBufferResult) {
@@ -571,8 +572,9 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	result.overlapSkippedByPolicy = action.OverlapSkippedByPolicy
 
 	// Add starting workflows to result, trim others. Catchup-window expiry is
-	// checked before consumeScheduledAction so that a start past its catchup
-	// window doesn't consume a LimitedActions slot.
+	// checked before taking scheduled-action capacity so that a start past its
+	// catchup window doesn't consume a LimitedActions slot.
+	capacity := scheduler.scheduledActionCapacity()
 	droppedCounter := newTaggedMetricsHandler(h.metricsHandler, scheduler).
 		Counter(metrics.ScheduleBufferedStartDropped.Name())
 	for _, start := range readyStarts {
@@ -582,7 +584,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 			// (e.g., due to overlap deferral, retries, or system delay).
 			// Only emit the metric if the schedule would have run this
 			// start -- skip paused or action-exhausted schedules.
-			if start.Manual || scheduler.canTakeScheduledAction() {
+			if start.Manual || capacity > 0 {
 				// Determine if a running action contributed: either one is still
 				// running, or the previous action's CloseTime (stored in DesiredTime)
 				// was already past this start's deadline.
@@ -598,11 +600,14 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 		}
 
 		// Ensure we can take more actions. Manual actions are always allowed.
-		if !start.Manual && !scheduler.consumeScheduledAction() {
-			// Drop buffered automated actions while paused or out of actions.
-			result.discardStarts = append(result.discardStarts, start)
-			droppedCounter.Record(1, metrics.ReasonTag(bufferedStartDroppedPausedOrLimited))
-			continue
+		if !start.Manual {
+			if capacity == 0 {
+				// Drop buffered automated actions while paused or out of actions.
+				result.discardStarts = append(result.discardStarts, start)
+				droppedCounter.Record(1, metrics.ReasonTag(bufferedStartDroppedPausedOrLimited))
+				continue
+			}
+			capacity--
 		}
 
 		keepStarts[start.GetRequestId()] = struct{}{}

@@ -14,6 +14,8 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -79,6 +81,15 @@ type processBufferResult struct {
 // recordProcessBufferResult updates the Invoker's internal state based on result, as well as the
 // LastProcessedTime watermark. Tasks to continue execution are added, if needed.
 func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *processBufferResult) {
+	// processBuffer selected scheduled starts within the available capacity.
+	scheduler := i.Scheduler.Get(ctx)
+	for _, start := range result.startWorkflows {
+		if !start.Manual {
+			softassert.That(ctx.Logger(), scheduler.consumeScheduledAction(),
+				"selected scheduled start exceeds action capacity", tag.RequestID(start.GetRequestId()))
+		}
+	}
+
 	discards := make(map[string]bool) // request ID -> is present
 	ready := make(map[string]bool)
 	for _, start := range result.discardStarts {
