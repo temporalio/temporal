@@ -68,6 +68,9 @@ enum TaskType {
 
   // A timer task that fires when an elapsed-duration time-skipping bound is reached.
   TASK_TYPE_TIMESKIPPING_TIMER = 36;
+
+  // A transfer task that releases flow-control limiters held by a completed task attempt.
+  TASK_TYPE_TRANSFER_RELEASE_LIMITER = 37;
 }
 
 // TaskPriority is only used for replication task as of May 2024
