@@ -145,6 +145,21 @@ type executeResult struct {
 	CompletedTerminates []*commonpb.WorkflowExecution
 }
 
+type startOutcomeKind int
+
+const (
+	startOutcomeStarted startOutcomeKind = iota
+	startOutcomeRetryable
+	startOutcomeFailed
+)
+
+// startOutcome is an Execute task's result for one buffered start. executed is
+// the start as the task ran it, carrying RunId and StartTime, or BackoffTime.
+type startOutcome struct {
+	kind     startOutcomeKind
+	executed *schedulespb.BufferedStart
+}
+
 // Append combines two executeResults (no deduplication is done).
 func (e *executeResult) Append(o executeResult) executeResult {
 	return executeResult{
@@ -166,21 +181,21 @@ func (i *Invoker) recordExecuteResult(
 	ctx chasm.MutableContext,
 	result *executeResult,
 ) (newlyStarted, droppedDuplicates int, latestStartTime time.Time, startOnlyActions []*schedulespb.BufferedStart) {
-	completed := make(map[string]*schedulespb.BufferedStart) // request ID -> BufferedStart with RunId/StartTime
-	failed := make(map[string]bool)                          // request ID -> is present
-	retryable := make(map[string]*schedulespb.BufferedStart) // request ID -> *BufferedStart
-	canceled := make(map[string]bool)                        // run ID -> is present
-	terminated := make(map[string]bool)                      // run ID -> is present
-
+	// Start outcomes are keyed by request ID and applied to the buffered start's
+	// current state. A completion callback or a concurrent Execute task may have
+	// changed that state while the start RPC was in flight.
+	outcomes := make(map[string]startOutcome)
 	for _, start := range result.CompletedStarts {
-		completed[start.RequestId] = start
-	}
-	for _, start := range result.FailedStarts {
-		failed[start.RequestId] = true
+		outcomes[start.RequestId] = startOutcome{kind: startOutcomeStarted, executed: start}
 	}
 	for _, start := range result.RetryableStarts {
-		retryable[start.RequestId] = start
+		outcomes[start.RequestId] = startOutcome{kind: startOutcomeRetryable, executed: start}
 	}
+	for _, start := range result.FailedStarts {
+		outcomes[start.RequestId] = startOutcome{kind: startOutcomeFailed, executed: start}
+	}
+	canceled := make(map[string]bool)   // run ID -> is present
+	terminated := make(map[string]bool) // run ID -> is present
 	for _, wf := range result.CompletedCancels {
 		canceled[wf.RunId] = true
 	}
@@ -188,16 +203,39 @@ func (i *Invoker) recordExecuteResult(
 		terminated[wf.RunId] = true
 	}
 
-	// Remove failed (non-retryable) starts from the buffer.
 	removedStarts := 0
 	retriedStarts := 0
-	startedUntracked := make(map[string]struct{})
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		failed := failed[start.RequestId]
-		if failed {
-			removedStarts++
+		outcome, ok := outcomes[start.GetRequestId()]
+		if !ok {
+			return false
 		}
-		return failed
+		switch {
+		case outcome.kind == startOutcomeFailed:
+			removedStarts++
+			return true
+		case internal.ClassifyBufferedStart(start).RunRecorded():
+			// Another Execute task already recorded this start's run.
+			if outcome.kind == startOutcomeStarted {
+				droppedDuplicates++
+			}
+			return false
+		case outcome.kind == startOutcomeStarted:
+			newlyStarted++
+			latestStartTime = util.MaxTime(latestStartTime, outcome.executed.GetStartTime().AsTime())
+			if !internal.TracksCompletionResult(start.GetOverlapPolicy()) {
+				startOnlyActions = append(startOnlyActions, outcome.executed)
+				removedStarts++
+				return true
+			}
+			internal.MarkStartRunning(ctx.Logger(), start, outcome.executed.GetRunId(), outcome.executed.GetStartTime())
+			start.HasCallback = true
+			return false
+		default:
+			internal.MarkStartRetrying(ctx.Logger(), start, outcome.executed.GetBackoffTime())
+			retriedStarts++
+			return false
+		}
 	})
 	i.CancelWorkflows = slices.DeleteFunc(i.GetCancelWorkflows(), func(we *commonpb.WorkflowExecution) bool {
 		canceled := canceled[we.RunId]
@@ -212,36 +250,6 @@ func (i *Invoker) recordExecuteResult(
 			removedStarts++
 		}
 		return terminated
-	})
-
-	// Update BufferedStarts with results, dropping duplicates.
-	for _, start := range i.GetBufferedStarts() {
-		if internal.ClassifyBufferedStart(start).RunRecorded() {
-			if _, isDuplicate := completed[start.RequestId]; isDuplicate {
-				droppedDuplicates++
-			}
-			continue
-		}
-		if completedStart, ok := completed[start.RequestId]; ok {
-			newlyStarted++
-			latestStartTime = util.MaxTime(latestStartTime, completedStart.GetStartTime().AsTime())
-			if !internal.TracksCompletionResult(start.GetOverlapPolicy()) {
-				startOnlyActions = append(startOnlyActions, completedStart)
-				startedUntracked[start.RequestId] = struct{}{}
-				removedStarts++
-				continue
-			}
-			internal.MarkStartRunning(ctx.Logger(), start, completedStart.GetRunId(), completedStart.GetStartTime())
-			start.HasCallback = true
-		}
-		if retry, ok := retryable[start.RequestId]; ok {
-			internal.MarkStartRetrying(ctx.Logger(), start, retry.GetBackoffTime())
-			retriedStarts++
-		}
-	}
-	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		_, remove := startedUntracked[start.GetRequestId()]
-		return remove
 	})
 	i.getOrCreateEventLog(ctx).LogEvent(ctx,
 		fmt.Sprintf("recordExecuteResult kicked off %d starts, removed %d starts, retried %d starts",
