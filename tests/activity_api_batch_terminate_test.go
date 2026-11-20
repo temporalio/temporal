@@ -76,7 +76,7 @@ type startedActivity struct {
 func assertBatchOperationType(
 	ctx context.Context,
 	t *testing.T,
-	env *standaloneActivityEnv,
+	env *testcore.TestEnv,
 	jobID string,
 	expected enumspb.BatchOperationType,
 	expectedQuery string,
@@ -273,7 +273,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 			s.NoError(err)
 
 			// Describe/List should report the correct operation type for the batch.
-			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, expectedQuery, expectedExecutions)
+			assertBatchOperationType(ctx, t, env.TestEnv, jobID, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, expectedQuery, expectedExecutions)
 
 			// All three activities must reach the Terminated status.
 			for _, a := range activities {

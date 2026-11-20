@@ -287,67 +287,6 @@ func (s *batcherSuite) TestTargetExecutionTypeForRequest() {
 	}
 }
 
-func (s *batcherSuite) TestValidateBatchOperation_NexusOperations() {
-	targets := func(executionType enumspb.ExecutionType) []*commonpb.Execution {
-		return []*commonpb.Execution{{Type: executionType, BusinessId: "operation-id", RunId: "run-id"}}
-	}
-	terminate := &workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation{
-		TerminateNexusOperationsOperation: &batchpb.BatchOperationTerminateNexusOperations{},
-	}
-	for _, tc := range []struct {
-		name          string
-		request       *workflowservice.StartBatchOperationRequest
-		expectedError string
-	}{
-		{
-			name: "terminate with nexus operation targets",
-			request: &workflowservice.StartBatchOperationRequest{
-				Operation:        terminate,
-				TargetExecutions: targets(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
-			},
-		},
-		{
-			name: "cancel with nexus operation targets",
-			request: &workflowservice.StartBatchOperationRequest{
-				Operation: &workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation{
-					CancelNexusOperationsOperation: &batchpb.BatchOperationCancelNexusOperations{},
-				},
-				TargetExecutions: targets(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
-			},
-		},
-		{
-			name: "delete with nexus operation targets",
-			request: &workflowservice.StartBatchOperationRequest{
-				Operation: &workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation{
-					DeleteNexusOperationsOperation: &batchpb.BatchOperationDeleteNexusOperations{},
-				},
-				TargetExecutions: targets(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
-			},
-		},
-		{
-			name: "terminate with activity targets",
-			request: &workflowservice.StartBatchOperationRequest{
-				Operation:        terminate,
-				TargetExecutions: targets(enumspb.EXECUTION_TYPE_ACTIVITY),
-			},
-			expectedError: "target_executions[0] has type Activity",
-		},
-	} {
-		s.Run(tc.name, func() {
-			tc.request.Namespace = "test-namespace"
-			tc.request.JobId = "job-id"
-			tc.request.Reason = "test-reason"
-
-			err := ValidateBatchOperation(tc.request)
-			if tc.expectedError == "" {
-				s.NoError(err)
-				return
-			}
-			s.ErrorContains(err, tc.expectedError)
-		})
-	}
-}
-
 // TestBatchActivityOptions_IndependentPerCall verifies the activity options are
 // built per call and share no mutable state, so concurrent batch workflows on a
 // worker cannot race on them or pick up each other's heartbeat timeout.

@@ -181,9 +181,43 @@ func fetchPage(
 	var err error
 	switch executionType := targetExecutionType(config.batchType); executionType {
 	case enumspb.EXECUTION_TYPE_ACTIVITY:
-		targetExecutionInfo, nextPageToken, err = listActivityExecutions(ctx, sdkClient, config, pageToken)
+		var resp *workflowservice.ListActivityExecutionsResponse
+		resp, err = sdkClient.WorkflowService().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace:     config.targetNamespace,
+			PageSize:      int32(pageSize),
+			NextPageToken: pageToken,
+			Query:         config.adjustedQuery,
+		})
+		if err == nil {
+			targetExecutionInfo = make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
+			for _, activityExecution := range resp.GetExecutions() {
+				targetExecutionInfo = append(targetExecutionInfo, &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+					BusinessId: activityExecution.GetActivityId(),
+					RunId:      activityExecution.GetRunId(),
+				})
+			}
+			nextPageToken = resp.GetNextPageToken()
+		}
 	case enumspb.EXECUTION_TYPE_NEXUS_OPERATION:
-		targetExecutionInfo, nextPageToken, err = listNexusOperationExecutions(ctx, sdkClient, config, pageToken)
+		var resp *workflowservice.ListNexusOperationExecutionsResponse
+		resp, err = sdkClient.WorkflowService().ListNexusOperationExecutions(ctx, &workflowservice.ListNexusOperationExecutionsRequest{
+			Namespace:     config.targetNamespace,
+			PageSize:      int32(pageSize),
+			NextPageToken: pageToken,
+			Query:         config.adjustedQuery,
+		})
+		if err == nil {
+			targetExecutionInfo = make([]*commonpb.Execution, 0, len(resp.GetOperations()))
+			for _, operationExecution := range resp.GetOperations() {
+				targetExecutionInfo = append(targetExecutionInfo, &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+					BusinessId: operationExecution.GetOperationId(),
+					RunId:      operationExecution.GetRunId(),
+				})
+			}
+			nextPageToken = resp.GetNextPageToken()
+		}
 	case enumspb.EXECUTION_TYPE_WORKFLOW:
 		var resp *workflowservice.ListWorkflowExecutionsResponse
 		resp, err = sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
@@ -213,66 +247,6 @@ func fetchPage(
 		nextPageToken:       nextPageToken,
 		pageNumber:          pageNumber,
 	}, nil
-}
-
-// listActivityExecutions lists a page of standalone activity executions as
-// target executions.
-func listActivityExecutions(
-	ctx context.Context,
-	sdkClient sdkclient.Client,
-	config batchProcessorConfig,
-	pageToken []byte,
-) ([]*commonpb.Execution, []byte, error) {
-	resp, err := sdkClient.WorkflowService().ListActivityExecutions(ctx,
-		&workflowservice.ListActivityExecutionsRequest{
-			Namespace:     config.targetNamespace,
-			PageSize:      int32(pageSize),
-			NextPageToken: pageToken,
-			Query:         config.adjustedQuery,
-		})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	executions := make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
-	for _, activityExecution := range resp.GetExecutions() {
-		executions = append(executions, &commonpb.Execution{
-			Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
-			BusinessId: activityExecution.GetActivityId(),
-			RunId:      activityExecution.GetRunId(),
-		})
-	}
-	return executions, resp.GetNextPageToken(), nil
-}
-
-// listNexusOperationExecutions lists a page of standalone Nexus operation
-// executions as target executions.
-func listNexusOperationExecutions(
-	ctx context.Context,
-	sdkClient sdkclient.Client,
-	config batchProcessorConfig,
-	pageToken []byte,
-) ([]*commonpb.Execution, []byte, error) {
-	resp, err := sdkClient.WorkflowService().ListNexusOperationExecutions(ctx,
-		&workflowservice.ListNexusOperationExecutionsRequest{
-			Namespace:     config.targetNamespace,
-			PageSize:      int32(pageSize),
-			NextPageToken: pageToken,
-			Query:         config.adjustedQuery,
-		})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	executions := make([]*commonpb.Execution, 0, len(resp.GetOperations()))
-	for _, operation := range resp.GetOperations() {
-		executions = append(executions, &commonpb.Execution{
-			Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
-			BusinessId: operation.GetOperationId(),
-			RunId:      operation.GetRunId(),
-		})
-	}
-	return executions, resp.GetNextPageToken(), nil
 }
 
 // heartbeatInterval returns 1/4th fraction of the activity's heartbeat timeout.

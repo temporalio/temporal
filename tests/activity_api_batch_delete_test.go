@@ -57,7 +57,7 @@ func (s *ActivityAPIBatchDeleteClientTestSuite) TestActivityBatchDelete_Success(
 			s.NoError(err)
 
 			// Describe/List should report the correct operation type for the batch.
-			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, expectedQuery, expectedExecutions)
+			assertBatchOperationType(ctx, t, env.TestEnv, jobID, enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, expectedQuery, expectedExecutions)
 
 			// All three activities must be deleted (no longer describable).
 			for _, a := range activities {
