@@ -45,7 +45,6 @@ func (ms *MutableStateImpl) closeTransactionGenerateReleaseLimiterTask(
 	limiters := ms.releaseLimiterRefs
 	if ms.executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED &&
 		ms.stateInDB != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		limiters = append(limiters, ms.executionInfo.WorkflowTaskLimiters...)
 		for _, activityInfo := range ms.pendingActivityInfoIDs {
 			limiters = append(limiters, activityInfo.Limiters...)
 		}

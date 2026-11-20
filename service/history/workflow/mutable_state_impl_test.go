@@ -353,45 +353,6 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 	s.Equal(int64(1), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
 }
 
-func (s *mutableStateSuite) TestWorkflowTaskLimitersStoredForAttempt() {
-	tq := &taskqueuepb.TaskQueue{Name: "tq"}
-	s.createVersionedMutableStateWithCompletedWFT(tq)
-
-	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
-	s.NoError(err)
-	limiters := []*taskqueuespb.LimiterRef{{
-		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
-		Key:         "limiter-1",
-		SlotId:      uuid.NewString(),
-	}}
-	s.mutableState.GetExecutionInfo().WorkflowTaskLimiters = limiters
-
-	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
-		wft.ScheduledEventID,
-		"",
-		tq,
-		"",
-		worker_versioning.StampFromBuildId("b1"),
-		nil,
-		nil,
-		false,
-		nil,
-		0,
-	)
-	s.NoError(err)
-	protorequire.ProtoSliceEqual(s.T(), limiters, wft.Limiters)
-	protorequire.ProtoSliceEqual(s.T(), limiters, s.mutableState.GetExecutionInfo().WorkflowTaskLimiters)
-
-	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
-		wft,
-		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		workflowTaskCompletionLimits,
-	)
-	s.NoError(err)
-	s.Nil(s.mutableState.GetExecutionInfo().WorkflowTaskLimiters)
-	s.requireReleaseLimiterTask(limiters)
-}
-
 func (s *mutableStateSuite) TestActivityLimiterReleasedOnCompletion() {
 	tq, completedEvent := s.scheduleCompletedWFTForBatchIDTest()
 	s.mutableState.PopTasks()
@@ -437,17 +398,11 @@ func (s *mutableStateSuite) TestActivityLimiterReleasedOnCompletion() {
 
 func (s *mutableStateSuite) TestWorkflowCloseReleasesPendingTaskLimiters() {
 	s.mutableState.PopTasks()
-	workflowTaskLimiter := &taskqueuespb.LimiterRef{
-		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
-		Key:         "workflow-task-limiter",
-		SlotId:      uuid.NewString(),
-	}
 	activityLimiter := &taskqueuespb.LimiterRef{
 		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
 		Key:         "activity-limiter",
 		SlotId:      uuid.NewString(),
 	}
-	s.mutableState.executionInfo.WorkflowTaskLimiters = []*taskqueuespb.LimiterRef{workflowTaskLimiter}
 	s.mutableState.pendingActivityInfoIDs[123] = &persistencespb.ActivityInfo{
 		Limiters: []*taskqueuespb.LimiterRef{activityLimiter},
 	}
@@ -462,7 +417,7 @@ func (s *mutableStateSuite) TestWorkflowCloseReleasesPendingTaskLimiters() {
 	s.Require().True(ok)
 	protorequire.ProtoElementsMatch(
 		s.T(),
-		[]*taskqueuespb.LimiterRef{workflowTaskLimiter, activityLimiter},
+		[]*taskqueuespb.LimiterRef{activityLimiter},
 		releaseTask.Limiters,
 	)
 }

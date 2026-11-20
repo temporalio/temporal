@@ -218,7 +218,6 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		SuggestContinueAsNewReasons: suggestContinueAsNewReasons,
 		HistorySizeBytes:            historySizeBytes,
 		BuildIdRedirectCounter:      redirectCounter,
-		Limiters:                    workflowTask.Limiters,
 		Stamp:                       m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
@@ -1169,8 +1168,6 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
-	m.ms.trackRemovedLimiterRefs(m.ms.executionInfo.WorkflowTaskLimiters, workflowTask.Limiters)
-	m.ms.executionInfo.WorkflowTaskLimiters = workflowTask.Limiters
 
 	m.ms.workflowTaskUpdated = true
 
@@ -1309,7 +1306,6 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		BuildIdRedirectCounter:      m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
 		ScheduleToStartTimeoutTask:  m.ms.GetWorkflowTaskScheduleToStartTimeoutTask(),
 		StartToCloseTimeoutTask:     m.ms.GetWorkflowTaskStartToCloseTimeoutTask(),
-		Limiters:                    m.ms.executionInfo.WorkflowTaskLimiters,
 		Stamp:                       m.ms.executionInfo.WorkflowTaskStamp,
 	}
 
