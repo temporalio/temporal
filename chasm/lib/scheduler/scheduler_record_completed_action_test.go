@@ -1,7 +1,6 @@
 package scheduler_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -22,7 +21,7 @@ type recordCompletedActionTestCase struct {
 }
 
 func executeRecordCompletedAction(t *testing.T, tc recordCompletedActionTestCase) {
-	sched, ctx, node := setupSchedulerForTest(t)
+	sched, ctx, env := setupSchedulerForTest(t)
 
 	if tc.setupScheduler != nil {
 		tc.setupScheduler(sched, ctx)
@@ -30,10 +29,10 @@ func executeRecordCompletedAction(t *testing.T, tc recordCompletedActionTestCase
 
 	sched.RecordCompletedAction(ctx, tc.completed, tc.requestID)
 
-	_, err := node.CloseTransaction(context.Background(), true)
+	err := env.CloseTransaction()
 	require.NoError(t, err)
 
-	readCtx := chasm.NewContext(context.Background(), node)
+	readCtx := env.ReadContext()
 	if tc.validate != nil {
 		tc.validate(t, sched, readCtx)
 	}
