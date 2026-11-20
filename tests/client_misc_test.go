@@ -101,7 +101,7 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
  WorkflowTaskScheduled
  WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
-		return env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: parentWorkflowID})
+		return env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: parentWorkflowID})
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// unblock the last child, allowing it to complete, which lowers the number of pending child workflows
@@ -182,7 +182,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
  22 WorkflowTaskScheduled
  23 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
-		return env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID(), RunId: workflowRun.GetRunID()})
+		return env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID(), RunId: workflowRun.GetRunID()})
 	}, 3*time.Second, 500*time.Millisecond)
 
 	// mark one of the pending activities as complete and verify that the workflow can now complete
@@ -243,7 +243,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
-			return env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
+			return env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 		}, 5*time.Second, 500*time.Millisecond)
 
 		shardID := common.WorkflowIDToHistoryShard(env.NamespaceID().String(), run.GetID(), env.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
@@ -331,7 +331,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
-			return env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()})
+			return env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()})
 		}, 3*time.Second, 500*time.Millisecond)
 
 		s.NoError(env.SdkClient().CancelWorkflow(s.Context(), senderRun.GetID(), ""))
@@ -572,7 +572,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	4 WorkflowTaskCompleted
 	5 MarkerRecorded
 	6 WorkflowExecutionCompleted`,
-		env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 			RunId:      workflowRun.GetRunID(),
 		}))
@@ -944,7 +944,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 	8 WorkflowTaskCompleted
 	9 MarkerRecorded
 	10 WorkflowExecutionCompleted`,
-		env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 			RunId:      workflowRun.GetRunID(),
 		}))
@@ -1371,7 +1371,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	s.NoError(err)
 	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	// wait for first wft and first activity to complete
-	s.Eventually(func() bool { return len(env.GetHistory(env.Namespace().String(), ex)) >= 10 }, 5*time.Second, 100*time.Millisecond) //nolint:forbidigo
+	s.Eventually(func() bool { return len(env.RequireHistory(s, ex)) >= 10 }, 5*time.Second, 100*time.Millisecond) //nolint:forbidigo
 
 	w1.Stop()
 

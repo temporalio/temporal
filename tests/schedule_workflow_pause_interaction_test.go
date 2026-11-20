@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -522,7 +523,10 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-			s.GetHistoryFunc(s.Namespace().String(), firstRun),
+			func() []*historypb.HistoryEvent {
+				t.Helper()
+				return s.RequireHistoryWithT(t, firstRun)
+			},
 			10*time.Second,
 			250*time.Millisecond,
 		)

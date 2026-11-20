@@ -20,6 +20,7 @@ import (
 const (
 	callbackIgnoredUnrecognizedRequest metrics.ReasonString = "unrecognized_request_id"
 	callbackIgnoredAlreadyCompleted    metrics.ReasonString = "already_completed"
+	callbackIgnoredStartNotRecorded    metrics.ReasonString = "start_not_recorded"
 )
 
 var _ chasm.NexusCompletionHandler = &Scheduler{}
@@ -124,6 +125,15 @@ func (s *Scheduler) HandleNexusCompletion(
 		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(
 			1,
 			metrics.ReasonTag(callbackIgnoredUnrecognizedRequest),
+		)
+		return nil
+	}
+	if !internal.TracksCompletionResult(start.GetOverlapPolicy()) && start.GetRunId() == "" {
+		// A callback can beat the start RPC response. Preserve the pending entry
+		// until that response records its identity and action count.
+		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(
+			1,
+			metrics.ReasonTag(callbackIgnoredStartNotRecorded),
 		)
 		return nil
 	}

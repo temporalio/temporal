@@ -76,7 +76,7 @@ func (s *Versioning3OneTimeOverrideSuite) TestChildWorkflowExplicitOverrideRoute
 			}, nil
 		})
 
-	parentHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	parentHistory := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tv1.WorkflowID(),
 		RunId:      runID,
 	})
@@ -444,7 +444,7 @@ func (s *Versioning3OneTimeOverrideSuite) TestResetReappliesPendingMove() {
 	env.pollUntilRegistered(s, tv2)
 
 	var resetEventID int64
-	for _, event := range env.GetHistory(env.Namespace().String(), execution) {
+	for _, event := range env.RequireHistory(s, execution) {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 			resetEventID = event.GetEventId() // just capturing the resetID here so that we come back to this event when we actually do the reset!
 			break
