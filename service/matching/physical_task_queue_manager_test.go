@@ -170,7 +170,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
-	prtnMgr.defaultQueueFuture.Set(s.tqMgr, nil)
+	setDefaultQueueForTest(prtnMgr, s.tqMgr)
 }
 
 /*
@@ -768,7 +768,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 
 	tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, physicalTaskQueueKey)
 	require.NoError(t, err)
-	prtnMgr.defaultQueueFuture.Set(tqMgr, nil)
+	setDefaultQueueForTest(prtnMgr, tqMgr)
 
 	tqMgr.Start()
 
@@ -812,7 +812,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 
 	tqMgr2, err := newPhysicalTaskQueueManager(prtnMgr2, physicalTaskQueueKey)
 	require.NoError(t, err)
-	prtnMgr2.defaultQueueFuture.Set(tqMgr2, nil)
+	setDefaultQueueForTest(prtnMgr2, tqMgr2)
 
 	tqMgr2.Start()
 	defer tqMgr2.Stop(unloadCauseShuttingDown)

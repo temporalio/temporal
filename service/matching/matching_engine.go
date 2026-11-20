@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"slices"
 	"strings"
@@ -185,8 +184,8 @@ type (
 		metricsHandler                metrics.Handler
 		partitionsLock                sync.RWMutex // locks mutation of partitions
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
-		namespaceStateUnloads         sync.WaitGroup
-		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
+		unloads                       sync.WaitGroup // Stops of partitions removed from the map; engine Stop waits for them
+		gaugeMetrics                  gaugeMetrics   // per-namespace task queue counters
 		config                        *Config
 		partitionScalerFactory        PartitionScalerFactory
 		versionChecker                headers.VersionChecker
@@ -399,10 +398,17 @@ func (e *matchingEngineImpl) Stop() {
 
 	e.nexusEndpointClient.notifyOwnershipChanged(false)
 
-	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
-		l.Stop(unloadCauseShuttingDown)
+	// Take the whole map, so a concurrent unload can't find (and stop) these partitions again, and
+	// getTaskQueuePartitionManager, which checks status under the same lock, can't add one after this.
+	e.partitionsLock.Lock()
+	partitions := e.partitions
+	e.partitions = make(map[tqid.PartitionKey]taskQueuePartitionManager)
+	e.partitionsLock.Unlock()
+	for _, pm := range partitions {
+		pm.Stop(unloadCauseShuttingDown)
 	}
-	e.namespaceStateUnloads.Wait()
+	// Then wait for unloads that removed partitions before Stop took the map.
+	e.unloads.Wait()
 }
 
 // onNamespaceStateChange unloads a namespace's partitions when it fails over to or away from this
@@ -430,7 +436,7 @@ func (e *matchingEngineImpl) onNamespaceStateChange(ns *namespace.Namespace, del
 	const batchSize = 100
 	for i := 0; i < len(unloaded); i += batchSize {
 		batch := unloaded[i:min(len(unloaded), i+batchSize)]
-		e.namespaceStateUnloads.Go(func() {
+		e.unloads.Go(func() {
 			for _, pm := range batch {
 				pm.Stop(unloadCauseNamespaceStateChange)
 			}
@@ -703,6 +709,11 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	pm, ok = e.partitions[key]
 	if ok {
 		return pm, false, nil
+	}
+	// Stop takes the map under this lock after setting status, so a partition added here is either in
+	// the map Stop takes or never added.
+	if atomic.LoadInt32(&e.status) == common.DaemonStatusStopped {
+		return nil, false, errTaskQueueClosed
 	}
 
 	// Building under the lock is cheap, and reading the namespace here sees any failover or deletion
@@ -3475,15 +3486,18 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 }
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded
-// partitions map), then does nothing.
-// partitions map), unloadPM.Stop(...) is still called.
+// partitions map), then does nothing: whoever removed it stopped it.
 func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitionManager, unloadCause unloadCause) {
 	e.unloadTaskQueuePartitionByKey(unloadPM.Partition(), unloadPM, unloadCause)
 }
 
 // Unloads a task queue partition by id. If unloadPM is given and the loaded partition for queueID does not match
-// unloadPM, then nothing is unloaded from matching engine (but unloadPM will be stopped).
+// unloadPM, then nothing is unloaded or stopped.
 // Returns true if it unloaded a partition and false if not.
+//
+// A partition is stopped by whoever removes it from e.partitions: this function, onNamespaceStateChange
+// or Stop, each under partitionsLock. That keeps Stop to once per partition, and the first two add to
+// e.unloads so that engine Stop waits for them.
 func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 	partition tqid.Partition,
 	unloadPM taskQueuePartitionManager,
@@ -3497,7 +3511,9 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 		return false
 	}
 	delete(e.partitions, key)
+	e.unloads.Add(1)
 	e.partitionsLock.Unlock()
+	defer e.unloads.Done()
 	foundTQM.Stop(unloadCause)
 	return true
 }

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -90,6 +91,11 @@ type (
 		defaultQueueFuture *future.FutureImpl[physicalTaskQueueManager]
 		initCtx            context.Context
 		initCancel         func()
+		initDone           chan struct{} // closed when initialize returns
+
+		// status is a common.DaemonStatus value. Start and Stop each take effect once, and a Stop
+		// that comes first keeps Start from starting anything.
+		status atomic.Int32
 
 		cancelFairnessSub func()
 
@@ -186,6 +192,7 @@ func newTaskQueuePartitionManager(
 		rateLimitManager:   rateLimitManager,
 		scaleManager:       scaleManager,
 		defaultQueueFuture: future.NewFuture[physicalTaskQueueManager](),
+		initDone:           make(chan struct{}),
 		taskHooks:          taskHooks,
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
@@ -200,6 +207,7 @@ func newTaskQueuePartitionManager(
 }
 
 func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
+	defer close(pm.initDone)
 	defer pm.initCancel()
 	defer func() { pm.defaultQueueFuture.SetIfNotReady(nil, retErr) }()
 
@@ -248,6 +256,9 @@ func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
+	if !pm.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
 	pm.loadTime = time.Now()
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.rateLimitManager.Start()
@@ -262,9 +273,24 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
 // unloading the partition. For stopping and unloading a partition call unloadFromEngine instead.
+// Only the first call has an effect.
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
+	if pm.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStopped) {
+		// Unloaded between the engine adding it and starting it: nothing has started, so only
+		// release callers waiting for it to initialize.
+		pm.initCancel()
+		pm.defaultQueueFuture.SetIfNotReady(nil, errTaskQueueClosed)
+		return
+	}
+	if !pm.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
+		return
+	}
+
+	// Once initCtx is canceled, initialize returns promptly. Waiting for it means the default
+	// queue, if any, has been started and the fairness subscription is set before they're stopped.
 	pm.initCancel()
-	queue, err := pm.defaultQueueFuture.Get(context.Background())
+	<-pm.initDone
+	queue, err := pm.defaultQueueFuture.GetIfReady()
 	if err == nil {
 		queue.Stop(unloadCause)
 	}
@@ -274,11 +300,14 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	}
 	pm.scaleManager.Stop()
 
+	// getVersionedQueueNoWait checks status under this lock, so no queue is added after this.
 	pm.versionedQueuesLock.Lock()
-	for _, vq := range pm.versionedQueues {
+	versionedQueues := pm.versionedQueues
+	pm.versionedQueues = make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager)
+	pm.versionedQueuesLock.Unlock()
+	for _, vq := range versionedQueues {
 		vq.Stop(unloadCause)
 	}
-	pm.versionedQueuesLock.Unlock()
 
 	for _, hook := range pm.taskHooks {
 		hook.Stop()
@@ -2112,6 +2141,11 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 		pm.versionedQueuesLock.Lock()
 		vq, ok = pm.versionedQueues[key]
 		if !ok {
+			// Stop sets status before it takes the map under this lock.
+			if pm.status.Load() == common.DaemonStatusStopped {
+				pm.versionedQueuesLock.Unlock()
+				return nil, errTaskQueueClosed
+			}
 			var err error
 			var dbq *PhysicalTaskQueueKey
 			if deployment != nil {
@@ -2126,13 +2160,12 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 				pm.versionedQueuesLock.Unlock()
 				return nil, err
 			}
+			// Start doesn't block. Starting it under the lock means Stop never takes a queue that
+			// hasn't started, which it couldn't stop.
+			vq.Start()
 			pm.versionedQueues[key] = vq
 		}
 		pm.versionedQueuesLock.Unlock()
-
-		if !ok {
-			vq.Start()
-		}
 	}
 	return vq, nil
 }
