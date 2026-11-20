@@ -704,11 +704,10 @@ func (s *functionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	}
 }
 
-// TODO (alex): change to nsName namespace.Name
-func (s *functionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
+func (s *functionalTestBase) SendSignal(nsName namespace.Name, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         nsName,
+		Namespace:         nsName.String(),
 		WorkflowExecution: execution,
 		SignalName:        signalName,
 		Input:             input,

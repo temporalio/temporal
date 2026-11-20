@@ -231,7 +231,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 		WorkflowId: versionWorkflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// verifying we see our registered workers in the version deployment even after a CAN
@@ -308,7 +308,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 		WorkflowId: versionWorkflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// Verify that the override state is used after CAN (metadata should be present)
@@ -899,7 +899,7 @@ func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRa
 			},
 		},
 	}
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
 	s.NoError(err)
 
 	// describe version and confirm that it is not drained
@@ -1084,7 +1084,7 @@ func (s *DeploymentVersionSuite) signalAndWaitForDrained(env *testcore.TestEnv, 
 			},
 		},
 	}
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv.ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv.ClientIdentity())
 	s.NoError(err)
 
 	// wait for drained
