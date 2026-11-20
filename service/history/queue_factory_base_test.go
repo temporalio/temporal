@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -159,6 +160,7 @@ type unusedDependencies struct {
 	persistence.HistoryTaskQueueManager
 	cache.Cache
 	chasm.Engine
+	fcpb.ConcurrencyServiceClient
 	ChasmRegistry *chasm.Registry
 	worker_versioning.VersionMembershipAndReactivationStatusCache
 }
