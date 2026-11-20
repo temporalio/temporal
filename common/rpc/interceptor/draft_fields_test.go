@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -42,6 +43,17 @@ type draftUnaffectedRequest struct {
 
 func (r *draftUnaffectedRequest) GetNamespace() string { return r.name }
 
+func TestDraftFieldsSharedResponse(t *testing.T) {
+	i := NewDraftFieldsInterceptor(func(string) []string { return []string{"feature-a"} }, nil, log.NewNoopLogger(), draft.Omit)
+	shared := &testfixture.Parent{Message: draftMessage()}
+	out, err := draftInvoke(i, &emptypb.Empty{}, nil, func(context.Context, any) (any, error) {
+		return shared, nil
+	})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, &testfixture.Parent{Message: &testfixture.Message{Stable: "stable", FeatureA: "a"}}, out.(*testfixture.Parent))
+	protorequire.ProtoEqual(t, &testfixture.Parent{Message: draftMessage()}, shared)
+}
+
 func TestDraftFieldsResponseOnlyNamespaceBinding(t *testing.T) {
 	reads := 0
 	i := NewDraftFieldsInterceptor(func(name string) []string {
@@ -51,13 +63,13 @@ func TestDraftFieldsResponseOnlyNamespaceBinding(t *testing.T) {
 	}, nil, log.NewNoopLogger(), draft.Omit)
 	req := &draftUnaffectedRequest{Empty: &emptypb.Empty{}, name: "disabled"}
 	response := draftMessage()
-	_, err := draftInvoke(i, req, nil, func(context.Context, any) (any, error) {
+	out, err := draftInvoke(i, req, nil, func(context.Context, any) (any, error) {
 		require.Zero(t, reads)
 		req.name = "enabled"
 		return response, nil
 	})
 	require.NoError(t, err)
-	require.Empty(t, response.FeatureA)
+	require.Empty(t, out.(*testfixture.Message).GetFeatureA())
 	require.Equal(t, 1, reads)
 }
 
@@ -99,11 +111,11 @@ func TestDraftFieldsSelections(t *testing.T) {
 				return response, nil
 			})
 			require.NoError(t, err)
-			require.Same(t, response, out)
-			require.Equal(t, tc.a, response.FeatureA)
-			require.Equal(t, tc.b, response.FeatureB)
+			if tc.a != "" && tc.b != "" {
+				require.Same(t, response, out)
+			}
+			protorequire.ProtoEqual(t, &testfixture.Message{Stable: "stable", FeatureA: tc.a, FeatureB: tc.b}, out.(*testfixture.Message))
 			require.Equal(t, "stable", req.Stable)
-			require.Equal(t, "stable", response.Stable)
 			require.Equal(t, 1, reads)
 		})
 	}
@@ -141,9 +153,9 @@ func TestDraftFieldsNamespacePolicy(t *testing.T) {
 				return []string{"feature-a"}
 			}, registry, log.NewNoopLogger(), draft.Omit)
 			response := draftMessage()
-			_, err := draftInvoke(i, tc.req, nil, func(context.Context, any) (any, error) { return response, nil })
+			out, err := draftInvoke(i, tc.req, nil, func(context.Context, any) (any, error) { return response, nil })
 			require.NoError(t, err)
-			require.Equal(t, tc.want, response.FeatureA)
+			require.Equal(t, tc.want, out.(*testfixture.Message).GetFeatureA())
 			require.Equal(t, tc.reads, reads)
 		})
 	}
@@ -176,13 +188,13 @@ func TestDraftFieldsNamespaceNormalization(t *testing.T) {
 			}, registry, log.NewNoopLogger(), draft.Omit)
 			validator := NewNamespaceValidatorInterceptor(registry, dynamicconfig.GetBoolPropertyFn(false), dynamicconfig.GetIntPropertyFn(100), nil)
 			response := draftMessage()
-			_, err := draftInvoke(i, req, validator.NamespaceValidateIntercept, func(context.Context, any) (any, error) { return response, nil })
+			out, err := draftInvoke(i, req, validator.NamespaceValidateIntercept, func(context.Context, any) (any, error) { return response, nil })
 			require.NoError(t, err)
 			require.Equal(t, 1, reads)
 			if enabled {
-				require.Equal(t, "a", response.FeatureA)
+				require.Equal(t, "a", out.(*testfixture.Message).GetFeatureA())
 			} else {
-				require.Empty(t, response.FeatureA)
+				require.Empty(t, out.(*testfixture.Message).GetFeatureA())
 			}
 		}
 	}
@@ -194,9 +206,10 @@ func TestDraftFieldsFailuresAndPassthrough(t *testing.T) {
 	_, err := draftInvoke(i, &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: []byte{255}}, validator.NamespaceValidateIntercept, func(context.Context, any) (any, error) { t.Fatal("handler ran"); return nil, nil })
 	require.Error(t, err)
 	for _, method := range []string{draftTestMethod, "/temporal.server.api.adminservice.v1.AdminService/Test"} {
-		out, err := i.OutgoingIntercept(t.Context(), nil, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) { return &emptypb.Empty{}, nil })
+		response := &emptypb.Empty{}
+		out, err := i.OutgoingIntercept(t.Context(), nil, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) { return response, nil })
 		require.NoError(t, err)
-		require.IsType(t, &emptypb.Empty{}, out)
+		require.Same(t, response, out)
 	}
 	original := errors.New("handler error")
 	out, err := draftInvoke(i, nil, nil, func(context.Context, any) (any, error) { return draftMessage(), original })

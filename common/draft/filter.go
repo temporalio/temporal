@@ -32,7 +32,25 @@ func Omit(msg any, s *Selection) (affected bool, err error) {
 	if !ok {
 		return false, nil
 	}
-	affected = true
+	return true, omit(omitter, s.Enabled)
+}
+
+// NeedsOmission reports whether the generated traversal encounters a disabled draft feature.
+func NeedsOmission(msg proto.Message, s *Selection) (bool, error) {
+	omitter, ok := msg.(draftOmitter)
+	if !ok {
+		return false, nil
+	}
+	needed := false
+	err := omit(omitter, func(feature string) bool {
+		needed = needed || !s.Enabled(feature)
+		// Generated omission code only writes when a feature check returns false.
+		return true
+	})
+	return needed, err
+}
+
+func omit(msg draftOmitter, enabled func(string) bool) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			if message, ok := msg.(proto.Message); ok {
@@ -42,6 +60,6 @@ func Omit(msg any, s *Selection) (affected bool, err error) {
 			}
 		}
 	}()
-	omitter.OmitDraftFields(s.Enabled)
-	return true, nil
+	msg.OmitDraftFields(enabled)
+	return nil
 }
