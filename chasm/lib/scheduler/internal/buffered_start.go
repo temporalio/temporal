@@ -80,36 +80,36 @@ func ClassifyBufferedStart(start *schedulespb.BufferedStart) BufferedStartState 
 	}
 }
 
-// MarkStartDeferred holds an unprocessed start until an overlapping action
+// TransitionStartDeferred holds an unprocessed start until an overlapping action
 // changes state.
-func MarkStartDeferred(logger log.Logger, start *schedulespb.BufferedStart) {
+func TransitionStartDeferred(logger log.Logger, start *schedulespb.BufferedStart) {
 	assertTransition(logger, start, BufferedStartDeferred, BufferedStartUnprocessed)
 	start.Attempt = -1
 }
 
-// MarkStartUnprocessed returns a deferred start to ProcessBuffer.
-func MarkStartUnprocessed(logger log.Logger, start *schedulespb.BufferedStart) {
+// TransitionStartReenabled returns a deferred start to ProcessBuffer.
+func TransitionStartReenabled(logger log.Logger, start *schedulespb.BufferedStart) {
 	assertTransition(logger, start, BufferedStartUnprocessed, BufferedStartDeferred)
 	start.Attempt = 0
 }
 
-// MarkStartSelected marks a start for its first execution attempt.
-func MarkStartSelected(logger log.Logger, start *schedulespb.BufferedStart) {
+// TransitionStartSelected marks a start for its first execution attempt.
+func TransitionStartSelected(logger log.Logger, start *schedulespb.BufferedStart) {
 	assertTransition(logger, start, BufferedStartSelected, BufferedStartUnprocessed, BufferedStartDeferred)
 	start.Attempt = 1
 }
 
-// MarkStartRetrying advances a start that failed with a retryable error to its
-// next attempt. Its completion may already have arrived if an earlier attempt
-// started the run but its response was lost.
-func MarkStartRetrying(logger log.Logger, start *schedulespb.BufferedStart, backoffTime *timestamppb.Timestamp) {
+// TransitionStartAttemptFailed advances a start that failed with a retryable
+// error to its next attempt. Its completion may already have arrived if an
+// earlier attempt started the run but its response was lost.
+func TransitionStartAttemptFailed(logger log.Logger, start *schedulespb.BufferedStart, backoffTime *timestamppb.Timestamp) {
 	assertTransition(logger, start, BufferedStartSelected, BufferedStartSelected, BufferedStartCompletedUnrecorded)
 	start.Attempt++
 	start.BackoffTime = backoffTime
 }
 
-// MarkStartRunning records the run created for a start.
-func MarkStartRunning(
+// TransitionStartRecorded records the run created for a start.
+func TransitionStartRecorded(
 	logger log.Logger,
 	start *schedulespb.BufferedStart,
 	runID string,
@@ -120,9 +120,9 @@ func MarkStartRunning(
 	start.StartTime = startTime
 }
 
-// MarkStartCompleted records a start's completion. The completion can arrive
+// TransitionStartCompleted records a start's completion. The completion can arrive
 // before the Execute task records the run.
-func MarkStartCompleted(logger log.Logger, start *schedulespb.BufferedStart, result *schedulespb.CompletedResult) {
+func TransitionStartCompleted(logger log.Logger, start *schedulespb.BufferedStart, result *schedulespb.CompletedResult) {
 	assertTransition(logger, start, BufferedStartCompleted, BufferedStartRunning, BufferedStartSelected)
 	start.Completed = result
 }

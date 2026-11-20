@@ -76,37 +76,37 @@ func TestBufferedStartTransitions(t *testing.T) {
 	}{
 		{
 			name:  "deferred",
-			apply: MarkStartDeferred,
+			apply: TransitionStartDeferred,
 			from:  []BufferedStartState{BufferedStartUnprocessed},
 		},
 		{
 			name:  "unprocessed",
-			apply: MarkStartUnprocessed,
+			apply: TransitionStartReenabled,
 			from:  []BufferedStartState{BufferedStartDeferred},
 		},
 		{
 			name:  "selected",
-			apply: MarkStartSelected,
+			apply: TransitionStartSelected,
 			from:  []BufferedStartState{BufferedStartUnprocessed, BufferedStartDeferred},
 		},
 		{
 			name: "retrying",
 			apply: func(logger log.Logger, start *schedulespb.BufferedStart) {
-				MarkStartRetrying(logger, start, timestamppb.Now())
+				TransitionStartAttemptFailed(logger, start, timestamppb.Now())
 			},
 			from: []BufferedStartState{BufferedStartSelected, BufferedStartCompletedUnrecorded},
 		},
 		{
 			name: "running",
 			apply: func(logger log.Logger, start *schedulespb.BufferedStart) {
-				MarkStartRunning(logger, start, "run", timestamppb.Now())
+				TransitionStartRecorded(logger, start, "run", timestamppb.Now())
 			},
 			from: []BufferedStartState{BufferedStartSelected, BufferedStartCompletedUnrecorded},
 		},
 		{
 			name: "completed",
 			apply: func(logger log.Logger, start *schedulespb.BufferedStart) {
-				MarkStartCompleted(logger, start, &schedulespb.CompletedResult{})
+				TransitionStartCompleted(logger, start, &schedulespb.CompletedResult{})
 			},
 			from: []BufferedStartState{BufferedStartRunning, BufferedStartSelected},
 		},
@@ -133,21 +133,21 @@ func TestBufferedStartTransitionTargets(t *testing.T) {
 	completed := &schedulespb.CompletedResult{}
 
 	start := newBufferedStart(BufferedStartUnprocessed)
-	MarkStartDeferred(logger, start)
+	TransitionStartDeferred(logger, start)
 	require.Equal(t, BufferedStartDeferred, ClassifyBufferedStart(start))
-	MarkStartUnprocessed(logger, start)
+	TransitionStartReenabled(logger, start)
 	require.Equal(t, BufferedStartUnprocessed, ClassifyBufferedStart(start))
-	MarkStartSelected(logger, start)
+	TransitionStartSelected(logger, start)
 	require.Equal(t, BufferedStartSelected, ClassifyBufferedStart(start))
 
 	backoff := timestamppb.Now()
-	MarkStartRetrying(logger, start, backoff)
+	TransitionStartAttemptFailed(logger, start, backoff)
 	require.Equal(t, int64(2), start.GetAttempt())
 	require.Equal(t, backoff, start.GetBackoffTime())
 
-	MarkStartCompleted(logger, start, completed)
+	TransitionStartCompleted(logger, start, completed)
 	require.Equal(t, BufferedStartCompletedUnrecorded, ClassifyBufferedStart(start))
-	MarkStartRunning(logger, start, "run", timestamppb.Now())
+	TransitionStartRecorded(logger, start, "run", timestamppb.Now())
 	require.Equal(t, BufferedStartCompleted, ClassifyBufferedStart(start))
 
 	require.Zero(t, logger.errors)

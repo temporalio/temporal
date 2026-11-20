@@ -111,14 +111,14 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 		// Starts ready for execution are set to their first attempt.
 		state := internal.ClassifyBufferedStart(start)
 		if ready[start.RequestId] && (state == internal.BufferedStartUnprocessed || state == internal.BufferedStartDeferred) {
-			internal.MarkStartSelected(ctx.Logger(), start)
+			internal.TransitionStartSelected(ctx.Logger(), start)
 			readiedStarts++
 		} else if state == internal.BufferedStartUnprocessed {
 			// Start was processed but deferred (e.g., BUFFER_ONE policy with running workflow).
 			// Mark as deferred to distinguish from newly-enqueued starts so addTasks
 			// won't schedule an immediate ProcessBuffer task for them. They are
 			// reconsidered when the blocking start changes state.
-			internal.MarkStartDeferred(ctx.Logger(), start)
+			internal.TransitionStartDeferred(ctx.Logger(), start)
 			deferredStarts++
 		}
 
@@ -156,20 +156,29 @@ type executeResult struct {
 	CompletedTerminates []*commonpb.WorkflowExecution
 }
 
-type startOutcomeKind int
+// startResult is an Execute task's result for one buffered start.
+type startResult interface {
+	mustImplementStartResult()
+}
 
-const (
-	startOutcomeStarted startOutcomeKind = iota
-	startOutcomeRetryable
-	startOutcomeFailed
-)
-
-// startOutcome is an Execute task's result for one buffered start. executed is
-// the start as the task ran it, carrying RunId and StartTime, or BackoffTime.
-type startOutcome struct {
-	kind     startOutcomeKind
+// startResultOK carries the start as the task ran it, with its RunId and
+// StartTime.
+type startResultOK struct {
 	executed *schedulespb.BufferedStart
 }
+
+// startResultRetry carries the start as the task ran it, with its next
+// BackoffTime.
+type startResultRetry struct {
+	executed *schedulespb.BufferedStart
+}
+
+// startResultFail marks a start that failed with a non-retryable error.
+type startResultFail struct{}
+
+func (startResultOK) mustImplementStartResult()    {}
+func (startResultRetry) mustImplementStartResult() {}
+func (startResultFail) mustImplementStartResult()  {}
 
 // Append combines two executeResults (no deduplication is done).
 func (e *executeResult) Append(o executeResult) executeResult {
@@ -192,18 +201,18 @@ func (i *Invoker) recordExecuteResult(
 	ctx chasm.MutableContext,
 	result *executeResult,
 ) (newlyStarted, droppedDuplicates int, latestStartTime time.Time, startOnlyActions []*schedulespb.BufferedStart) {
-	// Start outcomes are keyed by request ID and applied to the buffered start's
+	// Start results are keyed by request ID and applied to the buffered start's
 	// current state. A completion callback or a concurrent Execute task may have
 	// changed that state while the start RPC was in flight.
-	outcomes := make(map[string]startOutcome)
+	startResults := make(map[string]startResult)
 	for _, start := range result.CompletedStarts {
-		outcomes[start.RequestId] = startOutcome{kind: startOutcomeStarted, executed: start}
+		startResults[start.RequestId] = startResultOK{executed: start}
 	}
 	for _, start := range result.RetryableStarts {
-		outcomes[start.RequestId] = startOutcome{kind: startOutcomeRetryable, executed: start}
+		startResults[start.RequestId] = startResultRetry{executed: start}
 	}
 	for _, start := range result.FailedStarts {
-		outcomes[start.RequestId] = startOutcome{kind: startOutcomeFailed, executed: start}
+		startResults[start.RequestId] = startResultFail{}
 	}
 	canceled := make(map[string]bool)   // run ID -> is present
 	terminated := make(map[string]bool) // run ID -> is present
@@ -217,36 +226,39 @@ func (i *Invoker) recordExecuteResult(
 	removedStarts := 0
 	retriedStarts := 0
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		outcome, ok := outcomes[start.GetRequestId()]
+		startRes, ok := startResults[start.GetRequestId()]
 		if !ok {
 			return false
 		}
-		switch {
-		case outcome.kind == startOutcomeFailed:
+		if _, failed := startRes.(startResultFail); failed {
 			removedStarts++
 			return true
-		case internal.ClassifyBufferedStart(start).RunRecorded():
+		}
+		if internal.ClassifyBufferedStart(start).RunRecorded() {
 			// Another Execute task already recorded this start's run.
-			if outcome.kind == startOutcomeStarted {
+			if _, started := startRes.(startResultOK); started {
 				droppedDuplicates++
 			}
 			return false
-		case outcome.kind == startOutcomeStarted:
+		}
+		switch r := startRes.(type) {
+		case startResultOK:
 			newlyStarted++
-			latestStartTime = util.MaxTime(latestStartTime, outcome.executed.GetStartTime().AsTime())
+			latestStartTime = util.MaxTime(latestStartTime, r.executed.GetStartTime().AsTime())
 			if !internal.TracksCompletionResult(start.GetOverlapPolicy()) {
-				startOnlyActions = append(startOnlyActions, outcome.executed)
+				startOnlyActions = append(startOnlyActions, r.executed)
 				removedStarts++
 				return true
 			}
-			internal.MarkStartRunning(ctx.Logger(), start, outcome.executed.GetRunId(), outcome.executed.GetStartTime())
+			internal.TransitionStartRecorded(ctx.Logger(), start, r.executed.GetRunId(), r.executed.GetStartTime())
 			start.HasCallback = true
-			return false
-		default:
-			internal.MarkStartRetrying(ctx.Logger(), start, outcome.executed.GetBackoffTime())
+		case startResultRetry:
+			internal.TransitionStartAttemptFailed(ctx.Logger(), start, r.executed.GetBackoffTime())
 			retriedStarts++
-			return false
+		default:
+			// startResultFail is applied above.
 		}
+		return false
 	})
 	i.CancelWorkflows = slices.DeleteFunc(i.GetCancelWorkflows(), func(we *commonpb.WorkflowExecution) bool {
 		canceled := canceled[we.RunId]
@@ -314,7 +326,7 @@ func (i *Invoker) recordCompletedAction(
 				i.Scheduler.Get(ctx).recordRecentAction(start, completed.GetStatus())
 				completedUntracked = requestID
 			} else {
-				internal.MarkStartCompleted(ctx.Logger(), start, completed)
+				internal.TransitionStartCompleted(ctx.Logger(), start, completed)
 			}
 			break
 		}
@@ -367,7 +379,7 @@ func (i *Invoker) hasPendingOrRunningStart() bool {
 func (i *Invoker) reenableDeferredStarts(logger log.Logger) {
 	for _, start := range i.GetBufferedStarts() {
 		if internal.ClassifyBufferedStart(start) == internal.BufferedStartDeferred {
-			internal.MarkStartUnprocessed(logger, start)
+			internal.TransitionStartReenabled(logger, start)
 		}
 	}
 }
