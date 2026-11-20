@@ -1,9 +1,9 @@
 package draft
 
 import (
+	"slices"
 	"testing"
 
-	"github.com/bufbuild/prototransform"
 	"github.com/stretchr/testify/require"
 	protometapb "go.temporal.io/api/protometa/v1"
 	"go.temporal.io/server/common/draft/testfixture"
@@ -78,11 +78,8 @@ func TestOmitOracleAndNilElements(t *testing.T) {
 	for _, features := range [][]string{nil, {"feature-a"}, {"feature-b"}, {"feature-a", "feature-b"}} {
 		selection := NewSelection(func() []string { return features })
 		source := populatedMessage()
-		redact := prototransform.Redact(func(f protoreflect.FieldDescriptor) bool {
-			feature, _ := proto.GetExtension(f.Options(), protometapb.E_Draft).(string)
-			return feature != "" && !selection.Enabled(feature)
-		})
-		expected := redact(proto.Clone(source).ProtoReflect()).Interface()
+		expected := proto.Clone(source)
+		stripDisabled(expected.ProtoReflect(), features)
 		_, err := Omit(source, selection)
 		require.NoError(t, err)
 		require.True(t, proto.Equal(expected, source))
@@ -109,6 +106,70 @@ func TestOmitOracleAndNilElements(t *testing.T) {
 	var nilMapParent *testfixture.MapParent
 	_, err = Omit(nilMapParent, selection)
 	require.NoError(t, err)
+}
+
+// typeDraftFeatures returns the draft_message features of a message or enum and of the
+// messages it is nested in.
+func typeDraftFeatures(descriptor protoreflect.Descriptor) []string {
+	var features []string
+	for ; descriptor != nil; descriptor = descriptor.Parent() {
+		if message, ok := descriptor.(protoreflect.MessageDescriptor); ok {
+			if feature, _ := proto.GetExtension(message.Options(), protometapb.E_DraftMessage).(string); feature != "" {
+				features = append(features, feature)
+			}
+		}
+	}
+	return features
+}
+
+// fieldDraftFeatures returns the features a field needs: its own and those of the
+// message or enum it holds, or of a map field's value.
+func fieldDraftFeatures(field protoreflect.FieldDescriptor) []string {
+	var features []string
+	if feature, _ := proto.GetExtension(field.Options(), protometapb.E_Draft).(string); feature != "" {
+		features = append(features, feature)
+	}
+	if field.IsMap() {
+		field = field.MapValue()
+	}
+	if field.Message() != nil {
+		features = append(features, typeDraftFeatures(field.Message())...)
+	} else if field.Enum() != nil {
+		features = append(features, typeDraftFeatures(field.Enum())...)
+	}
+	return features
+}
+
+// stripDisabled clears every field that needs a feature outside enabled, at any depth.
+func stripDisabled(m protoreflect.Message, enabled []string) {
+	var disabled []protoreflect.FieldDescriptor
+	m.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+		for _, feature := range fieldDraftFeatures(field) {
+			if !slices.Contains(enabled, feature) {
+				disabled = append(disabled, field)
+				return true
+			}
+		}
+		switch {
+		case field.IsList() && field.Message() != nil:
+			for i := 0; i < value.List().Len(); i++ {
+				stripDisabled(value.List().Get(i).Message(), enabled)
+			}
+		case field.IsMap() && field.MapValue().Message() != nil:
+			value.Map().Range(func(_ protoreflect.MapKey, entry protoreflect.Value) bool {
+				stripDisabled(entry.Message(), enabled)
+				return true
+			})
+		case field.Message() != nil && !field.IsList() && !field.IsMap():
+			stripDisabled(value.Message(), enabled)
+		default:
+			// Scalars and lists, maps of scalars hold no draft fields.
+		}
+		return true
+	})
+	for _, field := range disabled {
+		m.Clear(field)
+	}
 }
 
 type panickingOmitter struct{}
