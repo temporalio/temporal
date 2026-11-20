@@ -58,7 +58,9 @@ jobs:
           git config --local user.name 'Temporal Data'
           git config --local user.email 'commander-data@temporal.io'
 
-          for attempt in 1 2 3; do
+          max_attempts=3
+          for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+            echo "testx bump attempt $attempt of $max_attempts"
             git fetch origin main
             git switch --detach FETCH_HEAD
 
@@ -82,12 +84,10 @@ jobs:
             if ! grep -Eq '\[rejected\] \((fetch first|non-fast-forward)\)$' <<< "$push_output"; then
               exit 1
             fi
-            if [[ "$attempt" -eq 3 ]]; then
-              echo "::error::Could not bump testx after three attempts because main kept advancing."
-              exit 1
-            fi
-            echo "main advanced. Retrying the testx bump."
           done
+
+          echo "::error::Could not bump testx after $max_attempts attempts because main kept advancing."
+          exit 1
 
   # Fails if the testx version required on main doesn't match common/testx/, e.g. because the bump failed
   # to push. Builds in this repo don't notice, since they use the replace.
