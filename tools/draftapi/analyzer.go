@@ -1,3 +1,12 @@
+// Package draftapi provides a review aid for named references to draft protobuf
+// symbols. It skips files with a standard Code generated header. It cannot trace
+// draft data accessed through protoreflect, protojson or other serialization,
+// proto.Merge or proto.Clone, interface methods, or generic constraints. It also
+// misses fields initialized in unkeyed literals and draft types referenced only
+// through aliases declared in another server package.
+//
+// The runtime filter in common/rpc/interceptor/draft_fields.go and in the Nexus
+// handlers enforces draft API exposure.
 package draftapi
 
 import (
@@ -62,31 +71,25 @@ func run(pass *analysis.Pass) (any, error) {
 }
 
 func checkAPIMetadata(pass *analysis.Pass) {
+	if !strings.HasPrefix(pass.Pkg.Path(), "go.temporal.io/api/") {
+		return
+	}
 	var metadata optionsFact
 	var options []option
 	for _, pkg := range pass.Pkg.Imports() {
 		var imported optionsFact
 		if pass.ImportPackageFact(pkg, &imported) {
 			options = append(options, imported.Options...)
-			metadata.Errors = append(metadata.Errors, imported.Errors...)
 		}
 	}
-	if strings.HasPrefix(pass.Pkg.Path(), "go.temporal.io/api/") {
-		exportAPIs(pass, options, &metadata)
-	}
-	metadata.Errors = reportValidationErrors(pass, metadata.Errors)
-	if len(metadata.Options) > 0 || len(metadata.Errors) > 0 {
+	validationErrors := exportAPIs(pass, options, &metadata)
+	if len(metadata.Options) > 0 {
 		pass.ExportPackageFact(&metadata)
 	}
-}
-
-func reportValidationErrors(pass *analysis.Pass, errors []string) []string {
-	slices.Sort(errors)
-	errors = slices.Compact(errors)
-	for _, err := range errors {
+	slices.Sort(validationErrors)
+	for _, err := range slices.Compact(validationErrors) {
 		pass.Reportf(pass.Files[0].Pos(), "draft API validation failed: %s", err)
 	}
-	return errors
 }
 
 func objectName(obj types.Object) string {

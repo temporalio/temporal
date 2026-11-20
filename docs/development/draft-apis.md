@@ -47,10 +47,10 @@ Feature names are case-sensitive, nonempty whitespace-free tokens.
 The `draftapi` analyzer reports direct references to draft fields, getters, types,
 contained declarations and oneof branches, including otherwise unannotated
 fields/getters whose type is draft. It reads the descriptors in the API module
-selected by `go.mod`; no separate API inventory needs updating. Invalid API
-annotation, descriptor and generated-symbol mapping errors propagate through
-package facts, including intervening imports, so dependency-mode `go vet` fails
-closed instead of silently losing usage diagnostics.
+selected by `go.mod`; no separate API inventory needs updating. Each invalid API
+annotation, descriptor or generated-symbol mapping error is reported once at the
+API package that produced it. This fails `go vet` even when the API module is
+only a transitive dependency of the packages being vetted.
 
 Use an exact feature acknowledgment:
 
@@ -73,17 +73,23 @@ func applyDraftFeature(req *Request) {
 Names match exactly; there is no wildcard. An explanation may follow after a
 separate `//` token; a feature name may itself contain `//`. A missing, misspelled or wrong-case
 feature still produces a diagnostic. `//nolint:draftapi`, `//nolint:all` and
-blanket `//nolint` do not acknowledge draft usage. Acknowledgment is a review
-signal, not static proof of a dynamic behavior guard.
+blanket `//nolint` do not acknowledge draft usage. The analyzer and its
+acknowledgments aid review. The runtime filter enforces draft API exposure in
+the [gRPC interceptor](../../common/rpc/interceptor/draft_fields.go) and the
+[Nexus operation](../../service/frontend/nexus_handler.go) and
+[completion](../../service/frontend/nexus_completion_http_handler.go) handlers.
 
-Generated files, `_test.go` files, and packages under `tests/` and
-`common/testing/` are exempt. Go type information covers aliases and promoted
-fields. Reflection, dynamic field names, serialization and references hidden
-behind an acknowledged wrapper remain outside the check. Indirect access through
-interfaces, ad-hoc type assertions or generic constraints, and naming a draft
-type through an alias declared in another package, are not checked, because the
-analyzer reports direct references only. Implementing a server method is not itself a reference to a
-generated RPC declaration.
+The analyzer checks named references to draft symbols, including promoted
+fields. It misses draft data accessed through `protoreflect`, dynamic field
+names, `protojson` or other serialization, `proto.Merge` or `proto.Clone`,
+interface methods such as `GetUser`, ad-hoc type assertions, generic constraints,
+or an acknowledged wrapper. Unkeyed composite literals hide the names of the
+fields they initialize. Naming a draft type through an alias declared in
+another server package also bypasses the check. Implementing a server method
+does not reference the generated RPC declaration.
+
+The analyzer intentionally skips files with a standard `Code generated` header,
+`_test.go` files, and packages under `tests/` and `common/testing/`.
 
 Run the same analyzer used by normal lint/CI:
 
