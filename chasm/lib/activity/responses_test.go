@@ -118,8 +118,10 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 			Priority:               priority,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
-			Count:          1,
-			HandoffState:   &activitypb.ActivityAttemptState_HandoffState{Count: 1},
+			Count: 1,
+			HandoffState: &activitypb.ActivityAttemptState_HandoffState{
+				Count: 1, StartToCloseStartedTime: startedTime, StartToCloseTaskDispatchTime: dispatchTime,
+			},
 			StartRequestId: "request-id",
 			StartedTime:    startedTime,
 			DispatchTime:   dispatchTime,

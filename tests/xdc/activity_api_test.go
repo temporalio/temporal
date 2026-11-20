@@ -361,6 +361,7 @@ func (s *StandaloneActivityStateReplicationSuite) TestHandoffFailover() {
 				return task
 			}
 			task := poll(s.clusters[0].FrontendClient())
+			firstTask := task
 			handoff := &workflowservice.RespondActivityTaskHandoffRequest{Namespace: ns, TaskToken: task.GetTaskToken()}
 			if testCase.handoffRetry {
 				// The hour-long backoff keeps the retry pending throughout replication and failover.
@@ -452,6 +453,8 @@ func (s *StandaloneActivityStateReplicationSuite) TestHandoffFailover() {
 				task = poll(client)
 				require.EqualValues(t, 1, task.GetAttempt())
 				require.EqualValues(t, 2, task.GetHandoffAttempt())
+				protorequire.ProtoEqual(t, firstTask.GetStartedTime(), task.GetStartedTime())
+				protorequire.ProtoEqual(t, firstTask.GetCurrentAttemptScheduledTime(), task.GetCurrentAttemptScheduledTime())
 				protorequire.ProtoEqual(t, before.GetInfo().GetHandoffOptions(), task.GetHandoffOptions())
 				protorequire.ProtoEqual(t, before.GetInfo().GetStartToCloseTimeout(), task.GetStartToCloseTimeout())
 

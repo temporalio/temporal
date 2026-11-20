@@ -1532,8 +1532,7 @@ func TestHandoffLifecycle(t *testing.T) {
 
 // TestHandoffStartClocks verifies eager and Matching pickup initialize clocks, handoff retries
 // preserve the original start-to-close clock, and enabling that timeout uses the original pickup.
-// Describe and task-poll responses do not expose the start-to-close clock's start time or timer
-// generation. A controlled clock verifies these directly without timing-sensitive assertions.
+// A controlled clock verifies exact timer deadlines and generations without timing-sensitive assertions.
 func TestHandoffStartClocks(t *testing.T) {
 	t.Parallel()
 
@@ -1559,6 +1558,7 @@ func TestHandoffStartClocks(t *testing.T) {
 				startToHandoffTimeout := a.GetHandoffOptions().GetStartToHandoffTimeout().AsDuration()
 				attempt := a.LastAttempt.Get(ctx)
 				*attempt = activitypb.ActivityAttemptState{}
+				firstTaskDispatchTime := a.GetScheduleTime()
 				if eager {
 					a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 					require.NoError(t, TransitionEagerStarted.Apply(a, ctx, eagerStartEvent{requestID: "start"}))
@@ -1566,6 +1566,8 @@ func TestHandoffStartClocks(t *testing.T) {
 					a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
 					attempt.Count = 1
 					attempt.Stamp = 1
+					firstTaskDispatchTime = timestamppb.New(now.Add(-time.Second))
+					attempt.DispatchTime = firstTaskDispatchTime
 					attempt.HandoffState = &activitypb.ActivityAttemptState_HandoffState{Count: 1}
 					require.NoError(t, TransitionStarted.Apply(a, ctx, &historyservice.RecordActivityTaskStartedRequest{RequestId: "start", Stamp: 1}))
 				}
@@ -1573,6 +1575,11 @@ func TestHandoffStartClocks(t *testing.T) {
 				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, a.GetStatus())
 				require.Equal(t, now, attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime())
 				require.EqualValues(t, 1, attempt.GetHandoffState().GetStartToCloseStamp())
+
+				firstResponse, err := a.GenerateRecordActivityTaskStartedResponse(ctx, "test-namespace")
+				require.NoError(t, err)
+				require.Equal(t, now, firstResponse.GetStartedTime().AsTime())
+				protorequire.ProtoEqual(t, firstTaskDispatchTime, firstResponse.GetCurrentAttemptScheduledTime())
 
 				expected := []chasm.MockTask{}
 				if testCase.value.AsDuration() > 0 {
@@ -1598,6 +1605,11 @@ func TestHandoffStartClocks(t *testing.T) {
 				require.Equal(t, now, attempt.GetStartedTime().AsTime())
 				require.Equal(t, pickupTime, attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime())
 				require.Equal(t, startToCloseStamp, attempt.GetHandoffState().GetStartToCloseStamp())
+
+				retryResponse, err := a.GenerateRecordActivityTaskStartedResponse(ctx, "test-namespace")
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, firstResponse.GetStartedTime(), retryResponse.GetStartedTime())
+				protorequire.ProtoEqual(t, firstResponse.GetCurrentAttemptScheduledTime(), retryResponse.GetCurrentAttemptScheduledTime())
 				require.Equal(t, []chasm.MockTask{
 					{Component: a, Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(startToHandoffTimeout)}, Payload: &activitypb.StartToHandoffTimeoutTask{Stamp: attempt.GetStamp()}},
 				}, ctx.Tasks)
@@ -1630,7 +1642,7 @@ func TestHandoffStartClocks(t *testing.T) {
 
 // TestHandoffUnpauseStartsFreshStartToCloseWindow verifies that pausing ends the old start-to-close
 // window and pickup after unpause starts a full new one, even after the old deadline has passed.
-// The public parity driver cannot observe the internal start time or timer generation.
+// A controlled clock verifies the exact deadline and timer generation without waiting for expiration.
 func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
 	t.Parallel()
 
@@ -1648,6 +1660,7 @@ func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, a.GetStatus())
 	require.Nil(t, attempt.GetHandoffState().GetStartToCloseStartedTime())
+	require.Nil(t, attempt.GetHandoffState().GetStartToCloseTaskDispatchTime())
 
 	// Unpause after the old timeout would have expired; pickup must get the full new window.
 	now = originalStart.Add(2 * a.GetStartToCloseTimeout().AsDuration())
@@ -1655,12 +1668,14 @@ func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx.Tasks = nil
-	_, err = a.HandleStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
+	response, err := a.HandleStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
 		Stamp: attempt.GetStamp(), RequestId: "unpaused-task",
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{Namespace: "test-namespace"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, now, attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime())
+	protorequire.ProtoEqual(t, attempt.GetDispatchTime(), response.GetCurrentAttemptScheduledTime())
+	require.Equal(t, now, response.GetStartedTime().AsTime())
 	require.Greater(t, attempt.GetHandoffState().GetStartToCloseStamp(), originalStamp)
 	require.Equal(t, now.Add(a.GetStartToCloseTimeout().AsDuration()), ctx.Tasks[0].Attributes.ScheduledTime)
 	require.IsType(t, &activitypb.HandoffStartToCloseTimeoutTask{}, ctx.Tasks[0].Payload)

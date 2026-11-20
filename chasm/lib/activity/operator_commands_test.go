@@ -837,6 +837,7 @@ func TestHandoffTimeoutUpdates(t *testing.T) {
 			require.Equal(t, before.GetCount(), attempt.GetCount())
 			require.Equal(t, before.GetHandoffState().GetCount(), attempt.GetHandoffState().GetCount())
 			protorequire.ProtoEqual(t, before.GetHandoffState().GetStartToCloseStartedTime(), attempt.GetHandoffState().GetStartToCloseStartedTime())
+			protorequire.ProtoEqual(t, before.GetHandoffState().GetStartToCloseTaskDispatchTime(), attempt.GetHandoffState().GetStartToCloseTaskDispatchTime())
 			require.Equal(t, before.GetStartedStamp(), attempt.GetStartedStamp())
 			require.Equal(t, before.GetHandoffState().GetStartToCloseStamp()+1, attempt.GetHandoffState().GetStartToCloseStamp())
 
@@ -892,6 +893,9 @@ func TestHandoffTimeoutUpdates(t *testing.T) {
 func TestLiveHandoffOptionsUpdate(t *testing.T) {
 	t.Parallel()
 
+	firstTaskDispatchTime := defaultTime.Add(-2 * time.Second)
+	currentTaskDispatchTime := defaultTime.Add(-time.Second)
+
 	for _, testCase := range []struct {
 		name                                              string
 		setup                                             func(*Activity, *chasm.MockMutableContext)
@@ -899,6 +903,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 		paths                                             []string
 		expectedHandoffCount                              int32
 		expectedStartedAt                                 time.Time
+		expectedTaskDispatchTime                          time.Time
 		expectedCompletion                                bool
 		expectedStartToCloseTimer, expectedHeartbeatTimer time.Time
 		invalid                                           bool
@@ -906,7 +911,8 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 	}{
 		{
 			name: "add to running task", paths: []string{"handoff_options"}, expectedHandoffCount: 1, expectedStartedAt: defaultTime,
-			options: &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{}},
+			expectedTaskDispatchTime: currentTaskDispatchTime,
+			options:                  &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{}},
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.HandoffOptions = nil
 				a.LastAttempt.Get(ctx).HandoffState = nil
@@ -914,7 +920,8 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 		},
 		{
 			name: "add after reporting-only handoff", paths: []string{"handoff_options", "start_to_close_timeout", "schedule_to_close_timeout"}, expectedHandoffCount: 1, expectedStartedAt: defaultTime, expectedCompletion: true,
-			options: &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{StartToHandoffTimeout: durationpb.New(5 * time.Second), HandoffToCloseTimeout: durationpb.New(120 * time.Second)}},
+			expectedTaskDispatchTime: currentTaskDispatchTime,
+			options:                  &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{StartToHandoffTimeout: durationpb.New(5 * time.Second), HandoffToCloseTimeout: durationpb.New(120 * time.Second)}},
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.HandoffOptions = nil
 				a.LastAttempt.Get(ctx).HandoffState = nil
@@ -938,7 +945,8 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 		{
 			name: "edit after handoff redispatch preserves first pickup", paths: []string{"handoff_options.heartbeat_timeout"},
 			expectedHandoffCount: 2, expectedStartedAt: defaultTime,
-			options: &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{HeartbeatTimeout: durationpb.New(time.Second)}},
+			expectedTaskDispatchTime: firstTaskDispatchTime,
+			options:                  &apiactivitypb.ActivityOptions{HandoffOptions: &apiactivitypb.HandoffOptions{HeartbeatTimeout: durationpb.New(time.Second)}},
 			setup: func(a *Activity, ctx *chasm.MockMutableContext) {
 				a.LastAttempt.Get(ctx).StartedTime = timestamppb.New(defaultTime.Add(5 * time.Second))
 			},
@@ -1014,6 +1022,7 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 			config := activityContextFromChasm(ctx).config
 			config.StandaloneHandoffEnabled = func(namespaceName string) bool { return namespaceName == testNamespaceEntry().Name().String() }
 			config.DefaultActivityRetryPolicy = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(retrypolicy.DefaultDefaultRetrySettings)
+			a.LastAttempt.Get(ctx).DispatchTime = timestamppb.New(currentTaskDispatchTime)
 			testCase.setup(a, ctx)
 			beforeState := common.CloneProto(a.ActivityState)
 			beforeAttempt := common.CloneProto(a.LastAttempt.Get(ctx))
@@ -1046,6 +1055,12 @@ func TestLiveHandoffOptionsUpdate(t *testing.T) {
 				require.Nil(t, attempt.GetHandoffState().GetStartToCloseStartedTime())
 			} else {
 				require.Equal(t, testCase.expectedStartedAt, attempt.GetHandoffState().GetStartToCloseStartedTime().AsTime())
+			}
+
+			if testCase.expectedTaskDispatchTime.IsZero() {
+				require.Nil(t, attempt.GetHandoffState().GetStartToCloseTaskDispatchTime())
+			} else {
+				require.Equal(t, testCase.expectedTaskDispatchTime, attempt.GetHandoffState().GetStartToCloseTaskDispatchTime().AsTime())
 			}
 
 			if !a.hasAttemptInProgress() {

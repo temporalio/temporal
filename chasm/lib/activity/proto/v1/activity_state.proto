@@ -315,6 +315,10 @@ message ActivityAttemptState {
 
     // Independent generation for the carried start-to-close timer. Never rewound with visible retry counters.
     int32 start_to_close_stamp = 3;
+
+    // Scheduled dispatch time of the task whose pickup started the current start-to-close window.
+    // Preserved across handoff retries.
+    google.protobuf.Timestamp start_to_close_task_dispatch_time = 4;
   }
 
   // Retry type selected when the retry was scheduled.

@@ -477,6 +477,7 @@ func (a *Activity) issueHandoffTimers(ctx chasm.MutableContext, issueStartToClos
 func (a *Activity) clearStartToCloseState(ctx chasm.MutableContext) {
 	if state := a.LastAttempt.Get(ctx).GetHandoffState(); state != nil {
 		state.StartToCloseStartedTime = nil
+		state.StartToCloseTaskDispatchTime = nil
 		state.StartToCloseStamp++
 	}
 }
@@ -498,6 +499,7 @@ func (a *Activity) startAttemptTimers(ctx chasm.MutableContext, attempt *activit
 	issueStartToCloseTimer := state.StartToCloseStartedTime == nil
 	if issueStartToCloseTimer {
 		state.StartToCloseStartedTime = attempt.GetStartedTime()
+		state.StartToCloseTaskDispatchTime = a.dispatchTimeForAttempt(attempt)
 	}
 
 	return a.issueHandoffTimers(ctx, issueStartToCloseTimer, true)

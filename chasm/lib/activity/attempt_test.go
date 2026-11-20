@@ -437,6 +437,7 @@ func TestHandoffRetryPolicySelection(t *testing.T) {
 				expected.Count++
 				expected.HandoffState.Count = 1
 				expected.HandoffState.StartToCloseStartedTime = nil
+				expected.HandoffState.StartToCloseTaskDispatchTime = nil
 				expected.HandoffState.StartToCloseStamp++
 			} else {
 				expected.HandoffState.Count++
@@ -650,6 +651,8 @@ func newHandoffRetryTestActivity(t *testing.T) (*Activity, *chasm.MockMutableCon
 	ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNow: func(chasm.Component) time.Time { return defaultTime.Add(10 * time.Second) }}}
 	injectActivityContext(t, ctx)
 	activityContextFromChasm(ctx).config.BreakdownMetricsByTaskQueue = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
+
+	firstTaskDispatchTime := defaultTime.Add(-2 * time.Second)
 	a := &Activity{
 		ActivityState: &activitypb.ActivityState{
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
@@ -682,9 +685,10 @@ func newHandoffRetryTestActivity(t *testing.T) (*Activity, *chasm.MockMutableCon
 			StartedStamp: 7,
 			StartedTime:  timestamppb.New(defaultTime),
 			HandoffState: &activitypb.ActivityAttemptState_HandoffState{
-				Count:                   2,
-				StartToCloseStartedTime: timestamppb.New(defaultTime),
-				StartToCloseStamp:       4,
+				Count:                        2,
+				StartToCloseStartedTime:      timestamppb.New(defaultTime),
+				StartToCloseStamp:            4,
+				StartToCloseTaskDispatchTime: timestamppb.New(firstTaskDispatchTime),
 			},
 		}),
 		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),

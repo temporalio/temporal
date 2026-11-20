@@ -1560,12 +1560,15 @@ func (s *activityParityTestSuite) TestHandoff() {
 
 				check := func(t *testing.T, env *testcore.TestEnv, a parityActivity) {
 					// Poll before waiting for backoff so an obsolete Matching task can expose an early pickup.
+					first := a.taskResponse()
 					next := a.pollForTask(t, activityDriverTimeout)
 					require.NotNil(t, next)
 					require.EqualValues(t, 2, next.GetAttempt())
 					require.EqualValues(t, 1, next.GetHandoffAttempt())
 					require.NotNil(t, next.GetStartedTime())
 					require.NotNil(t, next.GetCurrentAttemptScheduledTime())
+					require.True(t, next.GetCurrentAttemptScheduledTime().AsTime().After(first.GetStartedTime().AsTime()),
+						"a new activity attempt must get fresh timestamps")
 					require.False(t, next.GetStartedTime().AsTime().Before(next.GetCurrentAttemptScheduledTime().AsTime()),
 						"replacement attempt started before its dispatch time")
 
@@ -1648,6 +1651,8 @@ func (s *activityParityTestSuite) TestHandoff() {
 			next := a.taskResponse()
 			require.Equal(t, first.GetAttempt(), next.GetAttempt())
 			require.EqualValues(t, 2, next.GetHandoffAttempt())
+			protorequire.ProtoEqual(t, first.GetStartedTime(), next.GetStartedTime())
+			protorequire.ProtoEqual(t, first.GetCurrentAttemptScheduledTime(), next.GetCurrentAttemptScheduledTime())
 
 			assertStaleToken()
 			for _, event := range []model.Event{model.Handoff, model.Complete} {

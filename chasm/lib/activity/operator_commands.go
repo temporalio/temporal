@@ -726,6 +726,13 @@ func (a *Activity) applyRetryAndHandoffStateUpdate(
 		state.StartToCloseStartedTime = nil
 		if !startToCloseStartedAt.IsZero() {
 			state.StartToCloseStartedTime = timestamppb.New(startToCloseStartedAt)
+
+			// Existing options retain the original dispatch time, even after handoff retries.
+			if !hadHandoffOptions {
+				state.StartToCloseTaskDispatchTime = a.dispatchTimeForAttempt(attempt)
+			}
+		} else {
+			state.StartToCloseTaskDispatchTime = nil
 		}
 	}
 
