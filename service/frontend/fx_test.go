@@ -4,12 +4,8 @@ import (
 	"context"
 	"errors"
 	"net"
-	"reflect"
-	"runtime"
-	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,12 +17,13 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/draft"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -35,10 +32,14 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/nettest"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -981,51 +982,78 @@ func draftBoundaryOptions(
 	t *testing.T,
 	dc *dynamicconfig.Collection,
 	registry namespace.Registry,
-	redirection *interceptor.Redirection,
 	custom grpc.UnaryServerInterceptor,
-	omitters ...func(any, *draft.Selection) (bool, error),
+	overrides ...fx.Option,
 ) GrpcServerOptions {
 	t.Helper()
-	logger := log.NewNoopLogger()
-	rpcFactory := common.NewMockRPCFactory(gomock.NewController(t))
+	ctrl := gomock.NewController(t)
+	rpcFactory := common.NewMockRPCFactory(ctrl)
 	rpcFactory.EXPECT().GetFrontendGRPCServerOptions().Return(nil, nil)
-	serviceConfig := &Config{
-		KeepAliveMinTime:               dynamicconfig.GetDurationPropertyFn(time.Second),
-		KeepAlivePermitWithoutStream:   dynamicconfig.GetBoolPropertyFn(false),
-		KeepAliveMaxConnectionIdle:     dynamicconfig.GetDurationPropertyFn(time.Second),
-		KeepAliveMaxConnectionAge:      dynamicconfig.GetDurationPropertyFn(time.Second),
-		KeepAliveMaxConnectionAgeGrace: dynamicconfig.GetDurationPropertyFn(time.Second),
-		KeepAliveTime:                  dynamicconfig.GetDurationPropertyFn(time.Second),
-		KeepAliveTimeout:               dynamicconfig.GetDurationPropertyFn(time.Second),
+	clusterMetadata := cluster.NewMockMetadata(ctrl)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("local").AnyTimes()
+
+	health := interceptor.NewHealthInterceptor()
+	health.SetHealthy(true)
+	var customInterceptors []grpc.UnaryServerInterceptor
+	if custom != nil {
+		customInterceptors = []grpc.UnaryServerInterceptor{custom}
 	}
-	omit := draft.Omit
-	if len(omitters) > 0 {
-		omit = omitters[0]
+
+	namespaceRateLimiters := NamespaceRateLimiters{
+		Execution:                    quotas.NoopRequestRateLimiter,
+		Visibility:                   quotas.NoopRequestRateLimiter,
+		NamespaceReplicationInducing: quotas.NoopRequestRateLimiter,
 	}
-	options := GrpcServerOptionsProvider(
-		logger, nil, serviceConfig, primitives.FrontendService, rpcFactory,
-		interceptor.NewServiceErrorInterceptor(dynamicconfig.GetIntPropertyFn(4000), metrics.NoopMetricsHandler, logger),
-		interceptor.NewDraftFieldsInterceptor(dynamicconfig.FrontendEnabledDraftFeatureAPIs.Get(dc), registry, logger, omit),
-		nil, (*interceptor.NamespaceRateLimitInterceptorImpl)(nil), nil, interceptor.NewNamespaceValidatorInterceptor(registry, dynamicconfig.GetBoolPropertyFn(false), dynamicconfig.GetIntPropertyFn(100), nil), nil, nil, redirection,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		interceptor.NewMaskInternalErrorDetailsInterceptor(dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), registry, logger),
-		nil, nil, nil, []grpc.UnaryServerInterceptor{custom}, nil, metrics.NoopMetricsHandler, testhooks.TestHooks{},
+	var options GrpcServerOptions
+	app := fx.New(
+		fx.NopLogger,
+		fx.Supply(
+			dc, health, primitives.FrontendService, &config.Config{}, config.Persistence{}, config.DCRedirectionPolicy{},
+			testhooks.TestHooks{}, customInterceptors, []grpc.StreamServerInterceptor{},
+			fx.Annotate(rpcFactory, fx.As(new(common.RPCFactory))),
+			fx.Annotate(registry, fx.As(new(namespace.Registry))),
+			fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
+			fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger))),
+			fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),
+			fx.Annotate(clock.NewRealTimeSource(), fx.As(new(clock.TimeSource))),
+			namespaceRateLimiters, RateLimiters(namespaceRateLimiters),
+		),
+		fx.Provide(
+			ConfigProvider,
+			resource.DefaultSnTaggedLoggerProvider,
+			GrpcServerOptionsProvider,
+			ServiceErrorInterceptorProvider,
+			DraftFieldsInterceptorProvider,
+			NamespaceValidatorInterceptorProvider,
+			MaskInternalErrorDetailsInterceptorProvider,
+			NamespaceLogInterceptorProvider,
+			interceptor.NewRoutingKeyExtractor,
+			BusinessIDInterceptorProvider,
+			NamespaceHandoverInterceptorProvider,
+			RedirectionInterceptorProvider,
+			RetryDelayFloorInterceptorProvider,
+			ErrorHandlerProvider,
+			TelemetryInterceptorProvider,
+			RetryableInterceptorProvider,
+			NamespaceCountLimitInterceptorProvider,
+			NamespaceRateLimitInterceptorProvider,
+			RateLimitInterceptorProvider,
+			SDKVersionInterceptorProvider,
+			CallerInfoInterceptorProvider,
+			SlowRequestLoggerInterceptorProvider,
+			ContextMetadataInterceptorProvider,
+			metrics.NewServerStatsHandler,
+			func() telemetry.ServerStatsHandler { return nil },
+			func() resource.NamespaceLogger { return nil },
+			func() membership.ServiceResolver { return nil },
+			func() client.Bean { return nil },
+			func() *authorization.Interceptor { return &authorization.Interceptor{} },
+			func() *chasm.ChasmVisibilityInterceptor { return chasm.ChasmVisibilityInterceptorProvider(nil) },
+		),
+		fx.Options(overrides...),
+		fx.Populate(&options),
 	)
-	wantOuter := []string{"DraftFieldsInterceptor).OutgoingIntercept", "MaskInternalErrorDetailsInterceptor).Intercept", "ServiceErrorInterceptor).Intercept", "NewFrontendServiceErrorInterceptor"}
-	for idx, name := range wantOuter {
-		require.Contains(t, runtime.FuncForPC(reflect.ValueOf(options.UnaryInterceptors[idx]).Pointer()).Name(), name)
-	}
-	require.Contains(t, runtime.FuncForPC(reflect.ValueOf(options.UnaryInterceptors[5]).Pointer()).Name(), "NamespaceValidatorInterceptor).NamespaceValidateIntercept")
-	require.Contains(t, runtime.FuncForPC(reflect.ValueOf(options.UnaryInterceptors[6]).Pointer()).Name(), "DraftFieldsInterceptor).IncomingIntercept")
-	for idx := 4; idx < len(options.UnaryInterceptors); idx++ {
-		name := runtime.FuncForPC(reflect.ValueOf(options.UnaryInterceptors[idx]).Pointer()).Name()
-		if strings.Contains(name, "NamespaceValidatorInterceptor).NamespaceValidateIntercept") || strings.Contains(name, "DraftFieldsInterceptor).IncomingIntercept") || (redirection != nil && strings.Contains(name, "Redirection).Intercept")) || reflect.ValueOf(options.UnaryInterceptors[idx]).Pointer() == reflect.ValueOf(custom).Pointer() {
-			continue
-		}
-		options.UnaryInterceptors[idx] = func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-			return handler(ctx, req)
-		}
-	}
+	require.NoError(t, app.Err())
 	return options
 }
 
@@ -1077,8 +1105,14 @@ func draftUpdateUsers(h *historypb.History) []string {
 func TestDraftFieldsProvider_CustomEarlyReturn(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	registry := namespace.NewMockRegistry(ctrl)
-	registry.EXPECT().GetNamespaceByID(namespace.ID("tenant-id")).Return(
-		namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: "tenant-id", Name: "tenant"}, nil, "local"), nil).AnyTimes()
+	tenant := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{
+		Id: "tenant-id", Name: "tenant", State: enumspb.NAMESPACE_STATE_REGISTERED,
+	}, nil, "local")
+	registry.EXPECT().GetNamespaceByID(namespace.ID("tenant-id")).Return(tenant, nil).AnyTimes()
+	registry.EXPECT().GetNamespace(namespace.Name("tenant")).Return(tenant, nil).AnyTimes()
+	registry.EXPECT().GetNamespace(namespace.Name("other")).Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "other", State: enumspb.NAMESPACE_STATE_REGISTERED}, nil, "local",
+	), nil).AnyTimes()
 	token, err := tasktoken.NewSerializer().Serialize(&tokenspb.Task{NamespaceId: "tenant-id"})
 	require.NoError(t, err)
 
@@ -1105,7 +1139,7 @@ func TestDraftFieldsProvider_CustomEarlyReturn(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, h := tc.resp()
 			custom := func(context.Context, any, *grpc.UnaryServerInfo, grpc.UnaryHandler) (any, error) { return resp, nil }
-			options := draftBoundaryOptions(t, draftUpdateFeatureCollection(), registry, nil, custom)
+			options := draftBoundaryOptions(t, draftUpdateFeatureCollection(), registry, custom)
 			chain := chainUnaryServerInterceptors(options.UnaryInterceptors)
 			out, err := chain(t.Context(), tc.req, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) {
 				t.Fatal("custom interceptor must return early")
@@ -1123,7 +1157,7 @@ func TestDraftFieldsProvider_CustomEarlyReturn(t *testing.T) {
 				t.Fatalf("unexpected response type %T", out)
 			}
 			require.NotNil(t, returnedHistory)
-			require.Equal(t, tc.want, draftUpdateUsers(returnedHistory))
+			require.Equal(t, tc.want, draftUpdateUsers(returnedHistory), "response filtering must use the validated namespace")
 			require.Equal(t, int64(1), returnedHistory.Events[0].GetEventId())
 			require.Equal(t, "u", returnedHistory.Events[0].GetWorkflowExecutionUpdateAcceptedEventAttributes().GetAcceptedRequest().GetMeta().GetUpdateId())
 		})
@@ -1141,8 +1175,6 @@ func TestDraftFieldsProvider_RedirectionEarlyReturn(t *testing.T) {
 		&persistencespb.NamespaceReplicationConfig{ActiveClusterName: "remote", Clusters: []string{"local", "remote"}}, 1,
 	)
 	registry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(entry, nil).AnyTimes()
-	clusterMetadata := cluster.NewMockMetadata(ctrl)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("local").AnyTimes()
 	bean := client.NewMockBean(ctrl)
 	var forwarded *workflowservice.UpdateWorkflowExecutionRequest
 	conn := &draftRemoteConn{invoke: func(_ context.Context, method string, args, reply any, _ ...grpc.CallOption) error {
@@ -1157,15 +1189,16 @@ func TestDraftFieldsProvider_RedirectionEarlyReturn(t *testing.T) {
 		return nil
 	}}
 	bean.EXPECT().GetRemoteFrontendClient("remote").Return(conn, nil, nil).AnyTimes()
-	redirect := interceptor.NewRedirection(
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true), dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), registry,
-		config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding}, log.NewNoopLogger(), bean, metrics.NoopMetricsHandler, clock.NewRealTimeSource(), clusterMetadata,
-	)
 	custom := func(context.Context, any, *grpc.UnaryServerInfo, grpc.UnaryHandler) (any, error) {
 		t.Fatal("redirection must return early")
 		return nil, nil
 	}
-	options := draftBoundaryOptions(t, draftUpdateFeatureCollection(), registry, redirect, custom)
+	options := draftBoundaryOptions(t, draftUpdateFeatureCollection(), registry, custom,
+		fx.Replace(
+			config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding},
+			fx.Annotate(bean, fx.As(new(client.Bean))),
+		),
+	)
 	chain := chainUnaryServerInterceptors(options.UnaryInterceptors)
 	out, err := chain(t.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{Namespace: "namespace"}, &grpc.UnaryServerInfo{FullMethod: draftHistoryMethod}, func(context.Context, any) (any, error) {
 		t.Fatal("redirection must return early")
@@ -1184,32 +1217,60 @@ func TestDraftFieldsProvider_RedirectionEarlyReturn(t *testing.T) {
 	require.Empty(t, forwarded.GetRequest().GetUser(), "forwarded request must be omitted before redirection")
 }
 
+func TestDraftFieldsProvider_OutgoingIsOutermost(t *testing.T) {
+	registry := namespace.NewMockRegistry(gomock.NewController(t))
+	options := draftBoundaryOptions(t, draftUpdateFeatureCollection(), registry, nil)
+	require.NotEmpty(t, options.UnaryInterceptors)
+
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{Namespace: "tenant"}
+	source := &workflowservice.GetWorkflowExecutionHistoryResponse{History: draftUpdateHistory("bob")}
+	out, err := options.UnaryInterceptors[0](t.Context(), req, &grpc.UnaryServerInfo{FullMethod: draftHistoryMethod}, func(context.Context, any) (any, error) {
+		return source, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"", ""}, draftUpdateUsers(out.(*workflowservice.GetWorkflowExecutionHistoryResponse).GetHistory()))
+	require.Equal(t, []string{"bob", "bob"}, draftUpdateUsers(source.GetHistory()))
+}
+
 func TestDraftFieldsProvider_ErrorWrapperOrder(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	registry := namespace.NewMockRegistry(ctrl)
-	registry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "namespace"}, nil, "local"), nil).AnyTimes()
-	options := draftBoundaryOptions(t, dynamicconfig.NewNoopCollection(), registry, nil, func(context.Context, any, *grpc.UnaryServerInfo, grpc.UnaryHandler) (any, error) { return nil, nil })
-	chain := chainUnaryServerInterceptors(options.UnaryInterceptors[:4])
+	registry := namespace.NewMockRegistry(gomock.NewController(t))
+	registry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "namespace", State: enumspb.NAMESPACE_STATE_REGISTERED}, nil, "local",
+	), nil).AnyTimes()
+	const maskedMessage = "something went wrong, please retry"
+	dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient{
+		dynamicconfig.MaxServiceErrorMessageLength.Key(): len(maskedMessage) - 1,
+	}, log.NewNoopLogger())
 	for _, tc := range []struct {
 		err     error
 		code    codes.Code
 		message string
 	}{
 		{serviceerror.NewDataLoss("internal details"), codes.Unavailable, "internal history service error"},
-		{serviceerror.NewInternal("internal details"), codes.Internal, "something went wrong, please retry"},
+		{serviceerror.NewInternal("internal details"), codes.Internal, maskedMessage},
 		{serviceerror.NewNotFound("stable details"), codes.NotFound, "stable details"},
 	} {
-		resp, err := chain(t.Context(), &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespace"}, &grpc.UnaryServerInfo{FullMethod: draftFrontendMethod}, func(context.Context, any) (any, error) { return nil, tc.err })
-		require.Nil(t, resp)
-		require.Equal(t, tc.code, status.Code(err))
-		require.Contains(t, status.Convert(err).Message(), tc.message)
-		if tc.code == codes.Internal {
-			require.NotContains(t, err.Error(), "internal details")
-		}
+		t.Run(tc.code.String(), func(t *testing.T) {
+			custom := func(context.Context, any, *grpc.UnaryServerInfo, grpc.UnaryHandler) (any, error) {
+				return nil, tc.err
+			}
+			options := draftBoundaryOptions(t, dc, registry, custom)
+			chain := chainUnaryServerInterceptors(options.UnaryInterceptors)
+			req := &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespace"}
+			info := &grpc.UnaryServerInfo{FullMethod: workflowservice.WorkflowService_StartWorkflowExecution_FullMethodName}
+			resp, err := chain(t.Context(), req, info, func(context.Context, any) (any, error) {
+				t.Fatal("custom interceptor must return early")
+				return nil, nil
+			})
+			require.Nil(t, resp)
+			require.Equal(t, tc.code, status.Code(err))
+			require.Contains(t, status.Convert(err).Message(), tc.message)
+			if tc.code == codes.Internal {
+				require.NotContains(t, err.Error(), "internal details")
+			}
+		})
 	}
 }
-
-const draftFrontendMethod = "/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo"
 
 type draftRemoteConn struct {
 	grpc.ClientConnInterface

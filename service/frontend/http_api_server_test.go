@@ -5,13 +5,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/draft"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -40,8 +44,14 @@ func TestDraftFieldsHTTPBoundary(t *testing.T) {
 			return handler(ctx, req)
 		}
 		registry := namespace.NewMockRegistry(gomock.NewController(t))
-		registry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(namespace.NewLocalNamespaceForTest(nil, nil, "local"), nil).AnyTimes()
-		options := draftBoundaryOptions(t, dc, registry, nil, custom, spy)
+		registry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(namespace.NewLocalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Name: "namespace", State: enumspb.NAMESPACE_STATE_REGISTERED}, nil, "local",
+		), nil).AnyTimes()
+		options := draftBoundaryOptions(t, dc, registry, custom, fx.Decorate(
+			func(cfg *Config, registry namespace.Registry, logger log.Logger) *interceptor.DraftFieldsInterceptor {
+				return interceptor.NewDraftFieldsInterceptor(cfg.EnabledDraftFeatureAPIs, registry, logger, spy)
+			},
+		))
 		svc := &draftHTTPService{response: source, calls: &handlerCalls}
 		conn := newInlineClientConn(map[string]any{"temporal.api.workflowservice.v1.WorkflowService": svc}, options.UnaryInterceptors, metrics.NoopMetricsHandler, registry)
 		req := &workflowservice.GetWorkflowExecutionHistoryRequest{Namespace: "namespace"}
