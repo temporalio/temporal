@@ -141,14 +141,39 @@ func TestValidateAttachedCallbacks_NothingAttached(t *testing.T) {
 	require.NoError(t, validateAttachedCallbacks(context.Background(), api.NewWorkflowLease(wfContext, nil, ms), "", nil))
 }
 
+// memberVersionCache reports every version as a member of the task queue.
+type memberVersionCache struct{}
+
+func (memberVersionCache) Get(
+	string, string, enumspb.TaskQueueType, string, string,
+) (isMember bool, shouldSkipReactivation bool, revisionNumber int64, ok bool) {
+	return true, false, 0, true
+}
+
+func (memberVersionCache) Put(string, string, enumspb.TaskQueueType, string, string, bool, bool, int64) {
+}
+
 func TestPrepareEagerDispatchCheck(t *testing.T) {
 	t.Parallel()
 
 	priority := &commonpb.Priority{PriorityKey: 2}
+	pinned := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+		Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+			Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+			Version:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"},
+		},
+	}}
+	otherBuild := &deploymentpb.WorkerDeploymentOptions{
+		DeploymentName:       "deployment",
+		BuildId:              "other-build-id",
+		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+	}
 	testCases := []struct {
 		name             string
 		checkEnabled     bool
 		firstTaskBackoff bool
+		override         *workflowpb.VersioningOverride
+		workerOptions    *deploymentpb.WorkerDeploymentOptions
 		response         *matchingservice.GrantEagerDispatchResponse
 		matchingErr      error
 		wantDeniedReason metrics.ReasonString
@@ -184,6 +209,19 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			firstTaskBackoff: true,
 			wantDeniedReason: eagerStartDeniedReasonFirstWorkflowTaskBackoff,
 		},
+		{
+			// Matching isn't asked when the eager worker can't run the task, so no grant is spent.
+			name:             "worker version mismatch",
+			checkEnabled:     true,
+			override:         pinned,
+			workerOptions:    otherBuild,
+			wantDeniedReason: eagerStartDeniedReasonWorkerVersionMismatch,
+		},
+		{
+			name:          "worker version mismatch, check disabled",
+			override:      pinned,
+			workerOptions: otherBuild,
+		},
 	}
 
 	for _, test := range testCases {
@@ -202,7 +240,8 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
 			shardContext.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
 
-			grantRequested := test.checkEnabled && !test.firstTaskBackoff
+			grantRequested := test.checkEnabled && !test.firstTaskBackoff &&
+				test.wantDeniedReason != eagerStartDeniedReasonWorkerVersionMismatch
 			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 			if grantRequested {
 				matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), protomock.Eq(&matchingservice.GrantEagerDispatchRequest{
@@ -222,18 +261,21 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			starter := &Starter{
 				shardContext:   shardContext,
 				matchingClient: matchingClient,
+				versionCache:   memberVersionCache{},
 				namespace:      tests.LocalNamespaceEntry,
 				request: &historyservice.StartWorkflowExecutionRequest{
 					NamespaceId:              tests.NamespaceID.String(),
 					FirstWorkflowTaskBackoff: firstTaskBackoff,
 					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-						Namespace:             tests.Namespace.String(),
-						RequestId:             "request-id",
-						WorkflowId:            "workflow-id",
-						WorkflowType:          &commonpb.WorkflowType{Name: "workflow-type"},
-						TaskQueue:             &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
-						RequestEagerExecution: true,
-						Priority:              priority,
+						Namespace:                    tests.Namespace.String(),
+						RequestId:                    "request-id",
+						WorkflowId:                   "workflow-id",
+						WorkflowType:                 &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:                    &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
+						RequestEagerExecution:        true,
+						Priority:                     priority,
+						VersioningOverride:           test.override,
+						EagerWorkerDeploymentOptions: test.workerOptions,
 					},
 				},
 			}
@@ -269,13 +311,55 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 	t.Parallel()
 
 	version := &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"}
+	versionedWorker := &deploymentpb.WorkerDeploymentOptions{
+		DeploymentName:       "worker-deployment",
+		BuildId:              "worker-build-id",
+		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+	}
 	testCases := []struct {
-		name        string
-		override    *workflowpb.VersioningOverride
-		wantVersion *deploymentspb.WorkerDeploymentVersion
+		name          string
+		override      *workflowpb.VersioningOverride
+		workerOptions *deploymentpb.WorkerDeploymentOptions
+		wantVersion   *deploymentspb.WorkerDeploymentVersion
 	}{
 		{
 			name: "no override",
+		},
+		{
+			name:          "no override, versioned worker",
+			workerOptions: versionedWorker,
+			wantVersion:   &deploymentspb.WorkerDeploymentVersion{DeploymentName: "worker-deployment", BuildId: "worker-build-id"},
+		},
+		{
+			name: "no override, unversioned worker",
+			workerOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       "worker-deployment",
+				BuildId:              "worker-build-id",
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED,
+			},
+		},
+		{
+			name: "auto-upgrade override, versioned worker",
+			override: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{
+				AutoUpgrade: true,
+			}},
+			workerOptions: versionedWorker,
+			wantVersion:   &deploymentspb.WorkerDeploymentVersion{DeploymentName: "worker-deployment", BuildId: "worker-build-id"},
+		},
+		{
+			name: "pinned override, worker on the same version",
+			override: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  version,
+				},
+			}},
+			workerOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       "deployment",
+				BuildId:              "build-id",
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
+			wantVersion: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"},
 		},
 		{
 			name: "pinned override",
@@ -322,12 +406,76 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 				namespace:      tests.LocalNamespaceEntry,
 				request: &historyservice.StartWorkflowExecutionRequest{
 					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-						TaskQueue:          &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
-						VersioningOverride: test.override,
+						TaskQueue:                    &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
+						VersioningOverride:           test.override,
+						EagerWorkerDeploymentOptions: test.workerOptions,
 					},
 				},
 			}
 			require.True(t, starter.grantEagerWorkflowDispatch(context.Background()))
+		})
+	}
+}
+
+func TestEagerWorkerVersionMismatch(t *testing.T) {
+	t.Parallel()
+
+	version := &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"}
+	pinned := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+		Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+			Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+			Version:  version,
+		},
+	}}
+	oneTime := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_OneTime{
+		OneTime: &workflowpb.VersioningOverride_OneTimeOverride{TargetDeploymentVersion: version},
+	}}
+	autoUpgrade := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{
+		AutoUpgrade: true,
+	}}
+	sameVersion := &deploymentpb.WorkerDeploymentOptions{
+		DeploymentName:       "deployment",
+		BuildId:              "build-id",
+		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+	}
+	otherBuild := &deploymentpb.WorkerDeploymentOptions{
+		DeploymentName:       "deployment",
+		BuildId:              "other-build-id",
+		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+	}
+	unversioned := &deploymentpb.WorkerDeploymentOptions{
+		DeploymentName:       "deployment",
+		BuildId:              "build-id",
+		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED,
+	}
+	testCases := []struct {
+		name          string
+		override      *workflowpb.VersioningOverride
+		workerOptions *deploymentpb.WorkerDeploymentOptions
+		want          bool
+	}{
+		{name: "no override, no worker options"},
+		{name: "no override, versioned worker", workerOptions: otherBuild},
+		{name: "auto-upgrade override, versioned worker", override: autoUpgrade, workerOptions: otherBuild},
+		{name: "pinned override, no worker options", override: pinned},
+		{name: "pinned override, same version", override: pinned, workerOptions: sameVersion},
+		{name: "one-time override, same version", override: oneTime, workerOptions: sameVersion},
+		{name: "pinned override, other version", override: pinned, workerOptions: otherBuild, want: true},
+		{name: "one-time override, other version", override: oneTime, workerOptions: otherBuild, want: true},
+		{name: "pinned override, unversioned worker", override: pinned, workerOptions: unversioned, want: true},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			starter := &Starter{request: &historyservice.StartWorkflowExecutionRequest{
+				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+					VersioningOverride:           test.override,
+					EagerWorkerDeploymentOptions: test.workerOptions,
+				},
+			}}
+			require.Equal(t, test.want, starter.eagerWorkerVersionMismatch())
 		})
 	}
 }
