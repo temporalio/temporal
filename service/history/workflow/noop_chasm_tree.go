@@ -109,6 +109,18 @@ func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 	return nil
 }
 
+func (*noopChasmTree) ArmMemoryWakeup() error {
+	return nil
+}
+
+func (*noopChasmTree) RunMemoryWakeup(
+	context.Context,
+	*tasks.ChasmMemoryWakeupTask,
+	time.Time,
+) (chasm.MemoryWakeupResult, error) {
+	return chasm.MemoryWakeupResult{}, nil
+}
+
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,

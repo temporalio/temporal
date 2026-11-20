@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -4498,6 +4499,110 @@ func (s *nodeSuite) TestApplySpeculativeTransition_KeepsNewTasks() {
 	_, err = root.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTransfer], 1)
+}
+
+func (s *nodeSuite) TestArmMemoryWakeup_NothingToRun() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.HandleAddMemoryWakeup = func(time.Time) (*tasks.ChasmMemoryWakeupTask, error) {
+		s.FailNow("no wake-up expected")
+		return nil, nil
+	}
+	s.NoError(root.ArmMemoryWakeup())
+	s.Empty(s.armedMemoryWakeups(root))
+}
+
+func (s *nodeSuite) TestArmMemoryWakeupAt_OnlyEarlier() {
+	root, _ := s.cleanTestComponentTree()
+	now := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.nodeBackend.HandleNow = func() time.Time { return now }
+	var armed []time.Time
+	s.nodeBackend.HandleAddMemoryWakeup = func(fireTime time.Time) (*tasks.ChasmMemoryWakeupTask, error) {
+		armed = append(armed, fireTime)
+		return &tasks.ChasmMemoryWakeupTask{VisibilityTimestamp: fireTime}, nil
+	}
+
+	s.NoError(root.armMemoryWakeupAt(now.Add(2 * time.Minute)))
+	s.NoError(root.armMemoryWakeupAt(now.Add(time.Minute)))
+	s.NoError(root.armMemoryWakeupAt(now.Add(3 * time.Minute)))
+	s.NoError(root.armMemoryWakeupAt(now.Add(time.Minute)))
+	s.Equal([]time.Time{now.Add(2 * time.Minute), now.Add(time.Minute)}, armed)
+
+	// A fire time in the past fires now.
+	s.NoError(root.armMemoryWakeupAt(now.Add(-time.Minute)))
+	s.Equal([]time.Time{now.Add(2 * time.Minute), now.Add(time.Minute), now}, armed)
+}
+
+func (s *nodeSuite) TestArmMemoryWakeupAt_DropsLostWakeup() {
+	root, _ := s.cleanTestComponentTree()
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	now := start
+	s.nodeBackend.HandleNow = func() time.Time { return now }
+	var armed []*tasks.ChasmMemoryWakeupTask
+	s.nodeBackend.HandleAddMemoryWakeup = func(fireTime time.Time) (*tasks.ChasmMemoryWakeupTask, error) {
+		task := &tasks.ChasmMemoryWakeupTask{VisibilityTimestamp: fireTime}
+		armed = append(armed, task)
+		return task, nil
+	}
+
+	s.NoError(root.armMemoryWakeupAt(start.Add(5 * time.Minute)))
+	// This wake-up is lost: it never runs.
+	s.NoError(root.armMemoryWakeupAt(start))
+	s.Require().Len(armed, 2)
+	future, lost := armed[0], armed[1]
+
+	// Within the grace period the lost wake-up may still be queued.
+	now = start.Add(memoryWakeupGracePeriod)
+	s.NoError(root.armMemoryWakeupAt(now))
+	s.Len(armed, 2)
+
+	now = start.Add(memoryWakeupGracePeriod + time.Millisecond)
+	s.NoError(root.armMemoryWakeupAt(now))
+	s.Require().Len(armed, 3)
+	s.Equal(now, armed[2].VisibilityTimestamp)
+	s.Equal([]*tasks.ChasmMemoryWakeupTask{future, armed[2]}, s.armedMemoryWakeups(root))
+	// A lost entry is only forgotten; it may still be running.
+	s.NotEqual(ctasks.TaskStateCancelled, lost.State())
+}
+
+func (s *nodeSuite) TestRunMemoryWakeup_RemovesFiredAndDue() {
+	root, _ := s.cleanTestComponentTree()
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.nodeBackend.HandleNow = func() time.Time { return start }
+
+	s.NoError(root.armMemoryWakeupAt(start.Add(3 * time.Minute)))
+	s.NoError(root.armMemoryWakeupAt(start.Add(2 * time.Minute)))
+	s.NoError(root.armMemoryWakeupAt(start.Add(time.Minute)))
+	armed := s.armedMemoryWakeups(root)
+	s.Require().Len(armed, 3)
+	later, due, fired := armed[0], armed[1], armed[2]
+
+	// The wake-up armed for +1m runs late, after the +2m one is also due.
+	_, err := root.RunMemoryWakeup(context.Background(), fired, start.Add(2*time.Minute))
+	s.NoError(err)
+	s.Equal([]*tasks.ChasmMemoryWakeupTask{later}, s.armedMemoryWakeups(root))
+	s.Equal(ctasks.TaskStateCancelled, due.State())
+	s.NotEqual(ctasks.TaskStateCancelled, fired.State())
+	s.NotEqual(ctasks.TaskStateCancelled, later.State())
+}
+
+func (s *nodeSuite) TestCloseTransaction_CancelsMemoryWakeups() {
+	root, _ := s.cleanTestComponentTree()
+	s.NoError(root.armMemoryWakeupAt(s.timeSource.Now().Add(time.Minute)))
+	armed := s.armedMemoryWakeups(root)
+	s.Require().Len(armed, 1)
+
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Empty(s.armedMemoryWakeups(root))
+	s.Equal(ctasks.TaskStateCancelled, armed[0].State())
+}
+
+func (s *nodeSuite) armedMemoryWakeups(root *Node) []*tasks.ChasmMemoryWakeupTask {
+	var armed []*tasks.ChasmMemoryWakeupTask
+	for _, w := range root.memory.wakeups {
+		armed = append(armed, w.task)
+	}
+	return armed
 }
 
 func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {

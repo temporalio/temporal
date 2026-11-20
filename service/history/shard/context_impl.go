@@ -526,6 +526,24 @@ func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
 	return nil
 }
 
+func (s *ContextImpl) AddChasmMemoryWakeup(
+	task *tasks.ChasmMemoryWakeupTask,
+) error {
+	// Use a cancelled context to avoid blocking if engineFuture is not ready.
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// err should never be returned here. engineFuture must always be ready.
+	engine, err := s.engineFuture.Get(cancelledCtx)
+	if err != nil {
+		return err
+	}
+
+	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{task.GetCategory(): {task}})
+
+	return nil
+}
+
 func (s *ContextImpl) GetHistoryTasks(
 	ctx context.Context,
 	request *persistence.GetHistoryTasksRequest,

@@ -134,6 +134,8 @@ const (
 	TASK_TYPE_TIMESKIPPING_TIMER TaskType = 36
 	// A transfer task that releases flow-control limiters held by a completed task attempt.
 	TASK_TYPE_TRANSFER_RELEASE_LIMITER TaskType = 37
+	// An in-memory timer task that wakes up a cached CHASM execution.
+	TASK_TYPE_CHASM_MEMORY_WAKEUP TaskType = 38
 )
 
 // Enum value maps for TaskType.
@@ -174,6 +176,7 @@ var (
 		35: "TASK_TYPE_WORKER_COMMANDS",
 		36: "TASK_TYPE_TIMESKIPPING_TIMER",
 		37: "TASK_TYPE_TRANSFER_RELEASE_LIMITER",
+		38: "TASK_TYPE_CHASM_MEMORY_WAKEUP",
 	}
 	TaskType_value = map[string]int32{
 		"TASK_TYPE_UNSPECIFIED":                           0,
@@ -211,6 +214,7 @@ var (
 		"TASK_TYPE_WORKER_COMMANDS":                       35,
 		"TASK_TYPE_TIMESKIPPING_TIMER":                    36,
 		"TASK_TYPE_TRANSFER_RELEASE_LIMITER":              37,
+		"TASK_TYPE_CHASM_MEMORY_WAKEUP":                   38,
 	}
 )
 
@@ -302,6 +306,8 @@ func (x TaskType) String() string {
 		return "TimeskippingTimer"
 	case TASK_TYPE_TRANSFER_RELEASE_LIMITER:
 		return "TransferReleaseLimiter"
+	case TASK_TYPE_CHASM_MEMORY_WAKEUP:
+		return "ChasmMemoryWakeup"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -391,7 +397,7 @@ const file_temporal_server_api_enums_v1_task_proto_rawDesc = "" +
 	"TaskSource\x12\x1b\n" +
 	"\x17TASK_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13TASK_SOURCE_HISTORY\x10\x01\x12\x1a\n" +
-	"\x16TASK_SOURCE_DB_BACKLOG\x10\x02*\xcb\n" +
+	"\x16TASK_SOURCE_DB_BACKLOG\x10\x02*\xee\n" +
 	"\n" +
 	"\bTaskType\x12\x19\n" +
 	"\x15TASK_TYPE_UNSPECIFIED\x10\x00\x12!\n" +
@@ -429,7 +435,8 @@ const file_temporal_server_api_enums_v1_task_proto_rawDesc = "" +
 	"&TASK_TYPE_REPLICATION_DELETE_EXECUTION\x10\"\x12\x1d\n" +
 	"\x19TASK_TYPE_WORKER_COMMANDS\x10#\x12 \n" +
 	"\x1cTASK_TYPE_TIMESKIPPING_TIMER\x10$\x12&\n" +
-	"\"TASK_TYPE_TRANSFER_RELEASE_LIMITER\x10%\"\x04\b\t\x10\t\"\x04\b\v\x10\v\"\x04\b\x17\x10\x17*\\\n" +
+	"\"TASK_TYPE_TRANSFER_RELEASE_LIMITER\x10%\x12!\n" +
+	"\x1dTASK_TYPE_CHASM_MEMORY_WAKEUP\x10&\"\x04\b\t\x10\t\"\x04\b\v\x10\v\"\x04\b\x17\x10\x17*\\\n" +
 	"\fTaskPriority\x12\x1d\n" +
 	"\x19TASK_PRIORITY_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12TASK_PRIORITY_HIGH\x10\x01\x12\x15\n" +

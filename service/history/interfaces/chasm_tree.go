@@ -52,6 +52,12 @@ type ChasmTree interface {
 		task *tasks.ChasmTask,
 	) (isTaskInTree bool, isValidByComponent bool, err error)
 	IsStale(chasm.ComponentRef) error
+	ArmMemoryWakeup() error
+	RunMemoryWakeup(
+		ctx context.Context,
+		wakeup *tasks.ChasmMemoryWakeupTask,
+		now time.Time,
+	) (chasm.MemoryWakeupResult, error)
 	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)
 	ComponentByPath(chasm.Context, []string) (chasm.Component, error)
 }
