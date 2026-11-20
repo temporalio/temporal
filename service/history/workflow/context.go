@@ -1700,6 +1700,7 @@ func (c *ContextImpl) forceTerminateWorkflow(
 
 // CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
 // which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
+// CacheSize reads the mutable state and the update registry, so it requires the workflow lock.
 func (c *ContextImpl) CacheSize() int {
 	if !c.config.HistoryCacheLimitSizeBased {
 		return 1
