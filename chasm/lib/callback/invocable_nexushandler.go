@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -230,7 +231,7 @@ func (n invocableNexusHandler) dispatch(
 	if dispatchResult.Outcome.Succeeded() {
 		outcome = string(outcomeSuccess)
 	}
-	return n.classifyDispatchResult(logger, dispatchResult), outcomeTag(outcome)
+	return n.classifyDispatchResult(logger, dispatchResult, ns.Name().String(), h.linkValidator), outcomeTag(outcome)
 }
 
 // classifyDispatchResult inspects the response from the Nexus handler to determine how to handle
@@ -238,13 +239,20 @@ func (n invocableNexusHandler) dispatch(
 func (n invocableNexusHandler) classifyDispatchResult(
 	logger log.Logger,
 	result commonnexus.DispatchResult,
+	namespaceName string,
+	linkValidator commonlinks.Validator,
 ) invocationResult {
 	if result.Outcome.Succeeded() {
 		// Both flavors of success count as delivered. An async start means the worker accepted the
 		// completion and started an operation to process it; either way the callback is done, it does
 		// not wait for that operation to finish.
+		//
+		// The worker's links are sanitized here, where they enter the system, rather than when they are
+		// recorded on the callback.
 		return invocationResultOK{
-			links: commonnexus.ConvertLinksFromProto(result.Links),
+			links: commonnexus.ConvertAndSanitizeHandlerLinks(
+				commonnexus.ConvertLinksFromProto(result.Links), namespaceName, linkValidator, logger,
+			),
 		}
 	}
 

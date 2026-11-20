@@ -20,6 +20,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -147,6 +148,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClientFactory = s.mockResource.ClientFactory
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
+	s.mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockAdminVisibilityMgr = s.mockResource.AdminVisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
@@ -232,7 +234,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetLogger(),
 		testhooks.TestHooks{},
 	)
-	s.handler = NewAdminHandler(args, namespaceDLQHandler)
+	s.handler = NewAdminHandler(args, namespaceDLQHandler, nsreplication.NewMockMutationTaskExecutor(s.controller))
 	s.handler.Start()
 }
 
@@ -356,10 +358,10 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload()
 	s.Require().ErrorContains(err, "decode namespace_task_payload")
 }
 
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsAuthoritativeRequest() {
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsMissingPayload() {
 	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{})
-	var failedPrecondition *serviceerror.FailedPrecondition
-	s.ErrorAs(err, &failedPrecondition)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutationRejectsInvalidLegacyReference() {
@@ -1341,14 +1343,22 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 
 func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	namespaceID := "someId"
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: cluster.TestCurrentClusterName,
+		State:       enumspb.NAMESPACE_RESTORE_STATE_RUNNING,
+		StartTime:   timestamppb.New(time.Unix(100, 0)),
+	}
 	nsResponse := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			FailoverVersion: 1,
 			Info: &persistencespb.NamespaceInfo{
-				Id:    namespaceID,
-				Name:  "another random namespace name",
-				State: enumspb.NAMESPACE_STATE_DELETED,
-				Data:  make(map[string]string)},
+				Id:          namespaceID,
+				Name:        "another random namespace name",
+				State:       enumspb.NAMESPACE_STATE_DELETED,
+				Data:        make(map[string]string),
+				RestoreInfo: restoreInfo,
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -1374,6 +1384,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
+	protorequire.ProtoEqual(s.T(), restoreInfo, resp.GetRestoreInfo())
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
@@ -1420,6 +1431,69 @@ func (s *adminHandlerSuite) TestGetNamespace_EmptyRequest() {
 	v := &adminservice.GetNamespaceRequest{}
 	_, err := s.handler.GetNamespace(context.Background(), v)
 	s.Equal(errRequestNotSet, err)
+}
+
+// tdbg namespace replication verify compares replicas through GetNamespace, so
+// a replicated field missing from the response would compare equal on every
+// cluster and drift in it would go unreported.
+func (s *adminHandlerSuite) TestGetNamespace_ReturnsReplicatedFields() {
+	at := timestamppb.New(time.Unix(123, 0))
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id: "namespace-id", Name: "namespace", State: enumspb.NAMESPACE_STATE_REGISTERED,
+			Description: "description", Owner: "owner@example.com", Data: map[string]string{"key": "value"},
+			RestoreInfo: &persistencespb.NamespaceRestoreInfo{RestoreId: "restore-id"},
+		},
+		Config: &persistencespb.NamespaceConfig{
+			Retention: timestamp.DurationFromDays(1), ArchivalBucket: "source-local",
+			BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+				"checksum": {Reason: "bad", Operator: "operator", CreateTime: at},
+			}},
+			HistoryArchivalState: enumspb.ARCHIVAL_STATE_ENABLED, HistoryArchivalUri: "s3://history",
+			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED, VisibilityArchivalUri: "s3://visibility",
+			CustomSearchAttributeAliases: map[string]string{"Alias": "Keyword01"},
+			WorkflowRules:                map[string]*rulespb.WorkflowRule{"source-local": {}},
+		},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "cluster-a", State: enumspb.REPLICATION_STATE_NORMAL,
+			Clusters:        []string{"cluster-a", "cluster-b"},
+			FailoverHistory: []*persistencespb.FailoverStatus{{FailoverTime: at, FailoverVersion: 20}},
+			ClusterReplicationRamps: map[string]*persistencespb.NamespaceReplicationRamp{
+				"cluster-b": {StartTime: at, Duration: timestamp.DurationFromDays(1)},
+			},
+		},
+		ConfigVersion: 10, FailoverVersion: 20, FailoverNotificationVersion: 30, FailoverEndTime: at,
+	}
+	// Every field is populated, so a field that starts replicating is compared
+	// below; schema additions must extend the fixture, even source-local ones.
+	for _, message := range []proto.Message{detail, detail.Info, detail.Config, detail.ReplicationConfig, detail.ReplicationConfig.FailoverHistory[0]} {
+		reflected := message.ProtoReflect()
+		fields := reflected.Descriptor().Fields()
+		for i := range fields.Len() {
+			s.True(reflected.Has(fields.Get(i)), "populate %s in the replicated fields fixture", fields.Get(i).FullName())
+		}
+	}
+	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "namespace-id"}).
+		Return(&persistence.GetNamespaceResponse{Namespace: detail, IsGlobalNamespace: true}, nil)
+
+	resp, err := s.handler.GetNamespace(context.Background(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{Id: "namespace-id"},
+	})
+	s.NoError(err)
+
+	transmitted := nsreplication.NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+	expected := &adminservice.GetNamespaceResponse{
+		Info:              proto.CloneOf(transmitted.Info),
+		Config:            transmitted.Config,
+		ReplicationConfig: transmitted.ReplicationConfig,
+		ConfigVersion:     transmitted.ConfigVersion,
+		FailoverVersion:   transmitted.FailoverVersion,
+		FailoverHistory:   transmitted.FailoverHistory,
+		IsGlobalNamespace: true,
+		RestoreInfo:       transmitted.RestoreInfo,
+	}
+	expected.Info.Id = transmitted.Id
+	s.ProtoEqual(expected, resp)
 }
 
 func (s *adminHandlerSuite) TestGetDLQTasks() {

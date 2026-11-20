@@ -423,7 +423,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 			break
 		}
 	}
-	s.Require().NotNil(falsePositiveTaskQueue, "expected to find a Bloom filter false positive")
+	s.NotNil(falsePositiveTaskQueue, "expected to find a Bloom filter false positive")
 	currentDeploymentRunID := func() string {
 		describeResponse, err := env.FrontendClient().DescribeWorkflowExecution(
 			s.Context(),
@@ -432,9 +432,9 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 				Execution: &commonpb.WorkflowExecution{WorkflowId: deploymentWorkflowID},
 			},
 		)
-		s.Require().NoError(err)
+		s.NoError(err)
 		runID := describeResponse.GetWorkflowExecutionInfo().GetExecution().GetRunId()
-		s.Require().NotEmpty(runID)
+		s.NotEmpty(runID)
 		return runID
 	}
 	firstRelevantRunID := currentDeploymentRunID()
@@ -452,7 +452,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 			break
 		}
 	}
-	s.Require().NotNil(rejectedTaskQueue, "expected to find a task queue that is definitely absent from the Bloom filter")
+	s.NotNil(rejectedTaskQueue, "expected to find a task queue that is definitely absent from the Bloom filter")
 
 	s.pollFromDeploymentExpectFail(env, rejectedTaskQueue, expectedError(rejectedTaskQueue))
 	s.Await(func(s *WorkerDeploymentSuite) {
@@ -487,7 +487,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 		if runID == lastRelevantRunID {
 			break
 		}
-		s.Require().NotEmpty(nextRunID, "expected Deployment workflow run %q to continue as new", runID)
+		s.NotEmpty(nextRunID, "expected Deployment workflow run %q to continue as new", runID)
 		runID = nextRunID
 	}
 	s.True(

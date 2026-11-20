@@ -240,10 +240,11 @@ func (s *namespaceReplicationTaskExecutorSuite) replicationEventContext(
 		},
 	)
 	s.Require().True(ok)
+	sourceTaskID := int64(42)
 	ctx := wideevents.SetNamespaceReplicationTaskContext(context.Background(), wideevents.NamespaceReplicationTaskContext{
 		SourceCluster: "source-cluster",
 		TargetCluster: "target-cluster",
-		SourceTaskID:  42,
+		SourceTaskID:  &sourceTaskID,
 		AttemptCount:  2,
 		EventData:     eventData,
 	})
@@ -338,6 +339,58 @@ func (s *namespaceReplicationTaskExecutorSuite) TestEmitProcessedRequiresExplici
 		nil,
 	)
 	s.Len(s.eventLogger.records, 1)
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestEmitProcessedCarriesCHASMCorrelationAndMutationDetails() {
+	task := &replicationspb.NamespaceTaskAttributes{
+		Id:                 "namespace-id",
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+		Info:               &namespacepb.NamespaceInfo{Name: "namespace-name"},
+	}
+	eventData, ok := CHASMAuthoritativeApplyEventData(CHASMAuthoritativeApplyObservation{
+		Task:                task,
+		Stage:               CHASMApplyStageReceive,
+		ComponentBusinessID: "business-id",
+		ComponentRunID:      "run-id",
+	})
+	s.Require().True(ok)
+	ctx := wideevents.SetNamespaceReplicationTaskContext(context.Background(), wideevents.NamespaceReplicationTaskContext{
+		SourceCluster: "source-cluster",
+		TargetCluster: "target-cluster",
+		AttemptCount:  2,
+		EventData:     eventData,
+	})
+	preMutation := &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}}
+	request := &persistence.UpdateNamespaceRequest{
+		Namespace:           &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}},
+		NotificationVersion: 7,
+		IsGlobalNamespace:   true,
+	}
+
+	s.namespaceReplicator.emitNamespaceReplicationProcessed(
+		ctx,
+		wideevents.NamespaceReplicationOutcomeUpdated,
+		preMutation,
+		nil,
+		request,
+	)
+
+	s.Require().Len(s.eventLogger.records, 1)
+	values := make(map[string]otellog.Value)
+	s.eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		values[kv.Key] = kv.Value
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(values["details"].AsString()), &details))
+	s.Equal(CHASMReplicationTransport, details["transport"])
+	s.Equal("authoritative", details["mode"])
+	s.Equal(CHASMApplyStageReceive, details["apply_stage"])
+	s.Equal("business-id", details["component_business_id"])
+	s.Equal("run-id", details["component_run_id"])
+	s.NotNil(details["local_namespace_pre_mutation"])
+	s.NotNil(details["persistence_request"])
+	s.NotContains(details, "source_task_id")
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_NameUUIDCollision() {
@@ -530,8 +583,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Nil(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 	s.requireMetricOutcome(metricsOutcomeApplied, metricsOperationCreate)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)
 	s.Equal("CreateNamespaceRequest", request["request_type"])
@@ -581,7 +635,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	}}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
 	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
-	s.Nil(err)
+	s.Require().NoError(err)
 	s.requireMetricOutcome(metricsOutcomeNoChange, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeDuplicate))
 }
@@ -605,8 +659,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		Name: task.GetInfo().GetName(),
 	}).Return(nil, &serviceerror.NamespaceNotFound{})
 
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Require().NoError(err)
+	s.Equal(ApplyOutcomeNotAdmitted, outcome)
 	s.requireMetricOutcome(metricsOutcomeNotAdmitted, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeNotAdmitted))
 }
@@ -724,8 +779,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(updateTask), updateTask)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(updateTask), updateTask, MutationApplyOptions{})
 	s.Nil(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)
 	s.Equal("CreateNamespaceRequest", request["request_type"])
 	s.Equal("12", request["namespace"].(map[string]any)["config_version"])
@@ -1177,4 +1233,115 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	}))
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.NoError(err)
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) softDeletedNamespaceTask(
+	operation enumsspb.NamespaceOperation,
+	id string,
+	name string,
+	configVersion int64,
+	restoreInfo *persistencespb.NamespaceRestoreInfo,
+) *replicationspb.NamespaceTaskAttributes {
+	return &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &namespacepb.NamespaceInfo{
+			Name:  name,
+			State: enumspb.NAMESPACE_STATE_SOFT_DELETED,
+		},
+		Config: &namespacepb.NamespaceConfig{
+			WorkflowExecutionRetentionTtl: durationpb.New(24 * time.Hour),
+		},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: "some random active cluster name",
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: "some random active cluster name"},
+				{ClusterName: "some random standby cluster name"},
+			},
+		},
+		ConfigVersion:   configVersion,
+		FailoverVersion: 1,
+		RestoreInfo:     restoreInfo,
+	}
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_SoftDeleted() {
+	id := uuid.NewString()
+	name := "soft-deleted-namespace"
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: "some random active cluster name",
+		State:       enumspb.NAMESPACE_RESTORE_STATE_FAILED,
+	}
+	task := s.softDeletedNamespaceTask(enumsspb.NAMESPACE_OPERATION_CREATE, id, name, 3, restoreInfo)
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
+		nil, &serviceerror.NamespaceNotFound{}).Times(1)
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, request.Namespace.Info.State)
+			s.True(proto.Equal(restoreInfo, request.Namespace.Info.RestoreInfo))
+			return &persistence.CreateNamespaceResponse{ID: id}, nil
+		})
+
+	s.NoError(s.namespaceReplicator.Execute(s.T().Context(), task))
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_SoftDeleted() {
+	id := uuid.NewString()
+	name := "soft-deleted-namespace"
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: "some random active cluster name",
+		State:       enumspb.NAMESPACE_RESTORE_STATE_FAILED,
+	}
+	task := s.softDeletedNamespaceTask(enumsspb.NAMESPACE_OPERATION_UPDATE, id, name, 3, restoreInfo)
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
+		&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    id,
+				Name:  name,
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			ConfigVersion:     2,
+			FailoverVersion:   1,
+		}, IsGlobalNamespace: true}, nil).Times(2)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: 10,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, request.Namespace.Info.State)
+			s.True(proto.Equal(restoreInfo, request.Namespace.Info.RestoreInfo))
+			s.Equal(int64(3), request.Namespace.ConfigVersion)
+			return nil
+		})
+
+	s.NoError(s.namespaceReplicator.Execute(s.T().Context(), task))
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_StaleSoftDeleteIgnored() {
+	id := uuid.NewString()
+	name := "restored-namespace"
+	task := s.softDeletedNamespaceTask(enumsspb.NAMESPACE_OPERATION_UPDATE, id, name, 3, nil)
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
+		&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    id,
+				Name:  name,
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			ConfigVersion:     4,
+			FailoverVersion:   1,
+		}, IsGlobalNamespace: true}, nil).Times(2)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: 10,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+
+	s.NoError(s.namespaceReplicator.Execute(s.T().Context(), task))
 }

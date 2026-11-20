@@ -26,6 +26,7 @@ import "temporal/server/api/persistence/v1/chasm.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/update.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
@@ -327,6 +328,10 @@ message WorkflowExecutionInfo {
 
   // Nexus operation context retained across runs so workers can select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
+  // Opaque metadata that a persistence implementation can store about this record. The server
+  // never reads or sets it. The value describes the local copy of the record, so it is not
+  // replicated, and applying a replicated snapshot or mutation keeps the local value.
+  bytes persistence_metadata = 118;
 }
 
 message TimeSkippingInfo {
@@ -387,6 +392,20 @@ message ExecutionStats {
   // Total count of external payloads referenced in the entire history tree of the execution, not just the current branch.
   // This number doesn't include payloads in buffered events.
   int64 external_payload_count = 3;
+  // Running storage usage of this run on this cluster. Each cluster (active or passive) accrues its own;
+  // it is not replicated. Copy or clear this field on its own, not the whole ExecutionStats.
+  StorageUsage storage_usage = 4;
+}
+
+// Running storage usage of a run on one cluster, accrued by that cluster (active or passive) at each
+// state transition it persists, from its own clock and its own sizes.
+message StorageUsage {
+  // (-- api-linter: core::0142::time-field-type=disabled
+  //     aip.dev/not-precedent: byte-seconds is a storage unit, not a time. --)
+  int64 mutable_state_byte_seconds = 1;
+  // (-- api-linter: core::0142::time-field-type=disabled
+  //     aip.dev/not-precedent: byte-seconds is a storage unit, not a time. --)
+  int64 history_byte_seconds = 2;
 }
 
 // execution_state column
@@ -445,11 +464,16 @@ message TransferTaskInfo {
     // Only standby execution skips verification; active execution still notifies the parent.
     bool skip_parent_verification = 2;
   }
+  message ReleaseLimiterTaskDetails {
+    repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 1;
+  }
   oneof task_details {
     CloseExecutionTaskDetails close_execution_task_details = 16;
 
     // If the task addresses a CHASM component, this field will be set.
     ChasmTaskInfo chasm_task_info = 18;
+
+    ReleaseLimiterTaskDetails release_limiter_task_details = 19;
   }
   // Stamp represents the "version" of the entity's internal state for which the transfer task was created.
   // It increases monotonically when the entity's options are modified.

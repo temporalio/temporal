@@ -309,14 +309,12 @@ func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
 		}
 	}
 }
+
 func (m *StreamReceiverMonitorImpl) monitorStreamStatus() {
 	var panicErr error
-	defer func() {
-		log.CapturePanic(m.Logger, &panicErr)
-		if panicErr != nil {
-			metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
-		}
-	}()
+	defer log.CapturePanicWithHook(m.Logger, &panicErr, func(error) {
+		metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
+	})
 
 	if m.shutdownOnce.IsShutdown() {
 		return

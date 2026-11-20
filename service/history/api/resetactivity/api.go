@@ -66,7 +66,7 @@ func Invoke(
 				}
 				if err := workflow.ResetActivity(
 					ctx,
-					shardContext, mutableState, activityId,
+					mutableState, activityId,
 					request.ResetHeartbeat, request.KeepPaused, request.RestoreOriginalOptions,
 					request.Jitter.AsDuration(),
 				); err != nil {

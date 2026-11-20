@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
@@ -21,8 +22,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	nsreplicationcommon "go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/proto"
@@ -39,6 +43,7 @@ type applyLocalTaskHandlerOptions struct {
 	ClusterMetadata cluster.Metadata
 	Config          *config
 	Logger          log.Logger
+	TestHooks       testhooks.TestHooks
 	MetricsHandler  metrics.Handler
 	EventLogger     otellog.Logger
 	DynamicConfig   *dynamicconfig.Collection
@@ -47,6 +52,7 @@ type applyLocalTaskHandlerOptions struct {
 type applyLocalTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*namespacereplicationpb.ApplyLocalTask]
 
+	testHooks                    testhooks.TestHooks
 	metadataManager              persistence.MetadataManager
 	currentCluster               string
 	config                       *config
@@ -75,6 +81,7 @@ const (
 
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
 	return &applyLocalTaskHandler{
+		testHooks:                    opts.TestHooks,
 		metadataManager:              opts.MetadataManager,
 		currentCluster:               opts.ClusterMetadata.GetCurrentClusterName(),
 		config:                       opts.Config,
@@ -103,37 +110,32 @@ func (h *applyLocalTaskHandler) Validate(
 }
 
 // Execute writes authoritative mutations to the local metadata store with
-// strict version-CAS and skips that write for shadow mutations. Ambiguous
-// authoritative results are reconciled against current namespace state and
-// retried with a durable timer. A newer namespace version fences an UPDATE
-// whose exact outcome can no longer be determined; later mutations converge
-// current peers, while a peer removed only by the fenced mutation may require
-// operator repair.
+// strict version-CAS. Shadow and replicate-only mutations skip the local write;
+// only shadow also suppresses destination writes. Ambiguous authoritative
+// results are reconciled against current namespace state and retried with a
+// durable timer. A newer namespace version fences an UPDATE whose exact outcome
+// can no longer be determined; later mutations converge current peers, while a
+// peer removed only by the fenced mutation may require operator repair.
 func (h *applyLocalTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	_ chasm.TaskAttributes,
 	task *namespacereplicationpb.ApplyLocalTask,
 ) error {
+	startTime := time.Now() // nolint:forbidigo // Wall-clock time is used only for latency metrics.
 	// Read the mutation payload from component state.
-	type loadResult struct {
-		Operation         enumsspb.NamespaceOperation
-		Detail            *persistencespb.NamespaceDetail
-		ExpectedVer       int64
-		IsGlobalNamespace bool
-		Shadow            bool
-	}
 	loaded, err := chasm.ReadComponent(
 		ctx,
 		ref,
-		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (loadResult, error) {
+		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (localApplyInput, error) {
 			m := c.GetMutation()
-			return loadResult{
+			return localApplyInput{
 				Operation:         m.GetOperation(),
 				Detail:            common.CloneProto(m.GetNamespaceDetail()),
 				ExpectedVer:       m.GetExpectedVersion(),
 				IsGlobalNamespace: m.GetIsGlobalNamespace(),
 				Shadow:            m.GetShadow(),
+				ReplicateOnly:     m.GetReplicateOnly(),
 			}, nil
 		},
 		nil,
@@ -141,6 +143,49 @@ func (h *applyLocalTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read chasm component details: %w", err)
 	}
+	result, err := h.applyLocal(ctx, ref, task, loaded)
+	if result == nil {
+		return err
+	}
+	// Observe the attempt, then the component if the attempt finished it. Each
+	// observer recovers its own panics, so one cannot suppress the other.
+	namespaceTask := nsreplicationcommon.NamespaceDetailToTaskAttributes(loaded.Operation, loaded.Detail)
+	// Attempt counts are one-based, matching peer observations.
+	h.observeLocal(ref, namespaceTask, int(task.GetAttempt())+1, startTime, result)
+	if result.saveErr == nil {
+		emitComponentTerminal(
+			h.logger,
+			h.eventLogger,
+			h.emitNamespaceLifecycleEvents,
+			h.currentCluster,
+			ref,
+			namespaceTask,
+			result.record.componentTerminal,
+			result.err,
+		)
+	}
+	return result.saveErr
+}
+
+// localApplyInput is the mutation state that a local apply attempt reads.
+type localApplyInput struct {
+	Operation         enumsspb.NamespaceOperation
+	Detail            *persistencespb.NamespaceDetail
+	ExpectedVer       int64
+	IsGlobalNamespace bool
+	Shadow            bool
+	ReplicateOnly     bool
+}
+
+// applyLocal makes one local apply attempt and returns how it ended. It returns
+// a nil result for attempts that are not observed: shadow mutations, which do
+// not write locally, and unreachable branches, which return their error.
+func (h *applyLocalTaskHandler) applyLocal(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	task *namespacereplicationpb.ApplyLocalTask,
+	loaded localApplyInput,
+) (*localApplyResult, error) {
 	if !loaded.IsGlobalNamespace {
 		return h.recordLocalFailure(
 			ctx,
@@ -148,15 +193,30 @@ func (h *applyLocalTaskHandler) Execute(
 			loaded.Detail.GetInfo().GetId(),
 			task,
 			serviceerror.NewInvalidArgument("CHASM namespace replication only supports global namespaces"),
-		)
+		), nil
 	}
 	if loaded.Shadow {
-		return h.resolveLocal(ctx, ref, task, true)
+		_, err := h.resolveLocal(ctx, ref, task, true)
+		return nil, err
+	}
+	if loaded.ReplicateOnly {
+		// A replicate-only mutation represents a legacy no-op UpdateNamespace: the
+		// source row is already the desired snapshot, but peer fan-out must still
+		// run authoritatively. Resolve the local phase as committed while keeping
+		// Shadow false so ApplyPeerTask writes the snapshot at destinations.
+		recorded, err := h.resolveLocal(ctx, ref, task, false)
+		return &localApplyResult{
+			outcome: nsreplicationcommon.CHASMApplyOutcomeNoChange,
+			saveErr: err,
+			record:  recorded,
+			details: map[string]any{"replicate_only": true},
+		}, nil
 	}
 
-	// The metadata write and component transition cannot share a transaction, so
-	// reconcile ambiguous write results before deciding whether to fail or commit
-	// the component.
+	// Apply to the local metadata store. The metadata write and the component
+	// transition cannot share a transaction, so an ambiguous write result is
+	// reconciled against the persisted namespace before deciding whether to fail
+	// or commit the component.
 	var applyErr error
 	switch loaded.Operation {
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
@@ -177,7 +237,7 @@ func (h *applyLocalTaskHandler) Execute(
 			loaded.Detail.GetInfo().GetId(),
 			task,
 			fmt.Errorf("unsupported namespace operation: %v", loaded.Operation),
-		)
+		), nil
 	}
 	if applyErr != nil {
 		var resolution localApplyResolution
@@ -194,13 +254,13 @@ func (h *applyLocalTaskHandler) Execute(
 				applyErr,
 			)
 		default:
-			return h.recordLocalFailure(
-				ctx,
-				ref,
-				loaded.Detail.GetInfo().GetId(),
-				task,
-				fmt.Errorf("unsupported namespace operation: %v", loaded.Operation),
+			// The write switch above already failed unsupported operations.
+			softassert.Fail(
+				h.logger,
+				"local apply reconciliation reached an unsupported namespace operation",
+				tag.Operation(loaded.Operation.String()),
 			)
+			return nil, fmt.Errorf("unsupported namespace operation: %v", loaded.Operation)
 		}
 		if reconcileErr != nil {
 			// Persist the retry before acknowledging this task so queue-local retry
@@ -211,7 +271,7 @@ func (h *applyLocalTaskHandler) Execute(
 				loaded.Detail.GetInfo().GetId(),
 				task,
 				fmt.Errorf("reconcile local namespace mutation after %v: %w", applyErr, reconcileErr),
-			)
+			), nil
 		}
 		switch resolution {
 		case localApplyResolutionCommitted:
@@ -220,7 +280,13 @@ func (h *applyLocalTaskHandler) Execute(
 				tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
 				tag.NewStringTag("business_id", ref.BusinessID),
 			)
-			return h.resolveLocal(ctx, ref, task, false)
+			recorded, err := h.resolveLocal(ctx, ref, task, false)
+			return &localApplyResult{
+				outcome: nsreplicationcommon.CHASMApplyOutcomeApplied,
+				saveErr: err,
+				record:  recorded,
+				details: map[string]any{"reconciled": true},
+			}, nil
 		case localApplyResolutionUnresolved:
 			// A read immediately after a timed-out write can still see the old
 			// value even when that write later commits.
@@ -230,9 +296,9 @@ func (h *applyLocalTaskHandler) Execute(
 				loaded.Detail.GetInfo().GetId(),
 				task,
 				fmt.Errorf("local namespace mutation outcome remains unresolved: %w", applyErr),
-			)
+			), nil
 		case localApplyResolutionFailed:
-			return h.recordLocalFailure(ctx, ref, loaded.Detail.GetInfo().GetId(), task, applyErr)
+			return h.recordLocalFailure(ctx, ref, loaded.Detail.GetInfo().GetId(), task, applyErr), nil
 		case localApplyResolutionIndeterminate:
 			return h.recordLocalIndeterminate(
 				ctx,
@@ -240,12 +306,11 @@ func (h *applyLocalTaskHandler) Execute(
 				loaded.Detail.GetInfo().GetId(),
 				task,
 				fmt.Errorf("local namespace mutation outcome was fenced by a newer version: %w", applyErr),
-			)
+			), nil
 		default:
-			return fmt.Errorf("unknown local namespace mutation resolution: %v", resolution)
+			return nil, fmt.Errorf("unknown local namespace mutation resolution: %v", resolution)
 		}
 	}
-
 	// Commit transition: record success and schedule peer fan-out. When there are
 	// no peers (single-cluster global namespace) allPeersTerminal() is already true,
 	// so complete the component in the same update. This is a separate transition
@@ -253,7 +318,16 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
-	return h.resolveLocal(ctx, ref, task, false)
+	// Tests inject a failure after the metadata write succeeds but before the CHASM
+	// commit, verifying that retries reconcile the write and schedule peer delivery.
+	namespaceName := namespace.Name(loaded.Detail.GetInfo().GetName())
+	if fault, ok := testhooks.Get(h.testHooks, testhooks.NamespaceReplicationBeforeLocalCommit, namespaceName); ok {
+		if err := fault(ctx); err != nil {
+			return &localApplyResult{outcome: nsreplicationcommon.CHASMApplyOutcomeApplied, saveErr: err}, nil
+		}
+	}
+	recorded, err := h.resolveLocal(ctx, ref, task, false)
+	return &localApplyResult{outcome: nsreplicationcommon.CHASMApplyOutcomeApplied, saveErr: err, record: recorded}, nil
 }
 
 // reconcileCreateLocalApply resolves a failed CREATE attempt by comparing the
@@ -465,13 +539,13 @@ func (h *applyLocalTaskHandler) resolveLocal(
 	ref chasm.ComponentRef,
 	task *namespacereplicationpb.ApplyLocalTask,
 	shadow bool,
-) error {
-	completion, _, err := chasm.UpdateComponent(
+) (localRecord, error) {
+	recorded, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (*shadowCompletionRecord, error) {
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (localRecord, error) {
 			if !localTaskIsCurrent(c, task) {
-				return nil, nil
+				return localRecord{}, nil
 			}
 
 			var err error
@@ -481,26 +555,60 @@ func (h *applyLocalTaskHandler) resolveLocal(
 				err = TransitionLocalCommitted.Apply(c, mctx, EventLocalCommitted{Time: mctx.Now(c)})
 			}
 			if err != nil {
-				return nil, err
+				return localRecord{}, err
 			}
 			if c.allPeersTerminal() {
 				if err := TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{}); err != nil {
-					return nil, err
+					return localRecord{}, err
 				}
-				return newShadowCompletionRecord(c, mctx.Now(c)), nil
+				terminal := newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, mctx.Now(c))
+				if shadow {
+					terminal.shadowCompletion = newShadowCompletionRecord(c, mctx.Now(c))
+				}
+				return localRecord{stateUpdated: true, componentTerminal: terminal}, nil
 			}
-			return nil, nil
+			return localRecord{stateUpdated: true}, nil
 		},
 		nil,
 	)
-	if err == nil {
-		observer := shadowCompletionObserver{
-			logger: h.logger, metricsHandler: h.metricsHandler, eventLogger: h.eventLogger,
-			emitNamespaceLifecycleEvents: h.emitNamespaceLifecycleEvents, sourceCluster: h.currentCluster,
-		}
-		observer.observe(ref, completion)
+	if err != nil {
+		return localRecord{}, err
 	}
-	return err
+	if shadow && recorded.componentTerminal != nil {
+		observer := shadowCompletionObserver{logger: h.logger, metricsHandler: h.metricsHandler, eventLogger: h.eventLogger,
+			emitNamespaceLifecycleEvents: h.emitNamespaceLifecycleEvents, sourceCluster: h.currentCluster}
+		observer.observe(ref, recorded.componentTerminal.shadowCompletion)
+	}
+	return recorded, nil
+}
+
+// localApplyResult is how one local apply attempt ended. Execute observes each
+// result once.
+type localApplyResult struct {
+	// outcome is reported when the state update is saved.
+	outcome string
+	// err is reported with outcome and on the component event. Commits report
+	// no error, including a commit recovered by reconciliation.
+	err error
+	// saveErr is the failure to save the state update. Execute returns it.
+	saveErr error
+	// record describes the state update. UpdateComponent returns it even when
+	// the save fails, so it describes persisted state only if saveErr is nil.
+	record localRecord
+	// retry marks results of recordLocalRetry, which also report retry state.
+	retry   bool
+	details map[string]any
+}
+
+// localRecord is what a local apply state update changed.
+type localRecord struct {
+	stateUpdated      bool
+	componentTerminal *componentTerminalObservation
+	// Set only by recordLocalRetry.
+	retryScheduled bool
+	retryExhausted bool
+	firstAttemptAt time.Time
+	recordedAt     time.Time
 }
 
 func (h *applyLocalTaskHandler) recordLocalRetry(
@@ -509,7 +617,7 @@ func (h *applyLocalTaskHandler) recordLocalRetry(
 	namespaceID string,
 	task *namespacereplicationpb.ApplyLocalTask,
 	retryErr error,
-) error {
+) *localApplyResult {
 	expiration := h.config.localRetryExpiration()
 	h.logger.Warn(
 		"namespacereplication local apply remains unresolved",
@@ -518,12 +626,12 @@ func (h *applyLocalTaskHandler) recordLocalRetry(
 		tag.NewInt32("attempt", task.GetAttempt()),
 		tag.Error(retryErr),
 	)
-	_, _, err := chasm.UpdateComponent(
+	recorded, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (localRecord, error) {
 			if !localTaskIsCurrent(c, task) {
-				return nil, nil
+				return localRecord{}, nil
 			}
 
 			now := mctx.Now(c)
@@ -532,9 +640,10 @@ func (h *applyLocalTaskHandler) recordLocalRetry(
 			if c.GetLocalApply().GetFirstAttemptAt() != nil {
 				firstAt = c.GetLocalApply().GetFirstAttemptAt().AsTime()
 			}
+			record := localRecord{stateUpdated: true, firstAttemptAt: firstAt, recordedAt: now}
 			deadline := firstAt.Add(expiration)
 			if !now.Before(deadline) {
-				return nil, TransitionLocalIndeterminate.Apply(c, mctx, EventLocalIndeterminate{
+				err := TransitionLocalIndeterminate.Apply(c, mctx, EventLocalIndeterminate{
 					Time:     now,
 					Attempts: completedAttempts,
 					Err: fmt.Errorf(
@@ -543,10 +652,17 @@ func (h *applyLocalTaskHandler) recordLocalRetry(
 						retryErr,
 					),
 				})
+				if err != nil {
+					return localRecord{}, err
+				}
+				record.retryExhausted = true
+				record.componentTerminal = newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_FAILED, now)
+				return record, nil
 			}
 
 			delay := min(localRetryBackoff(completedAttempts), deadline.Sub(now))
-			return nil, TransitionLocalRetry.Apply(c, mctx, EventLocalRetry{
+			record.retryScheduled = true
+			return record, TransitionLocalRetry.Apply(c, mctx, EventLocalRetry{
 				Time:     now,
 				Attempts: completedAttempts,
 				Delay:    delay,
@@ -555,7 +671,11 @@ func (h *applyLocalTaskHandler) recordLocalRetry(
 		},
 		nil,
 	)
-	return err
+	outcome := nsreplicationcommon.CHASMApplyOutcomeRetryableError
+	if recorded.retryExhausted {
+		outcome = nsreplicationcommon.CHASMApplyOutcomeRetryExhausted
+	}
+	return &localApplyResult{outcome: outcome, err: retryErr, saveErr: err, record: recorded, retry: true}
 }
 
 func (h *applyLocalTaskHandler) recordLocalFailure(
@@ -564,7 +684,7 @@ func (h *applyLocalTaskHandler) recordLocalFailure(
 	namespaceID string,
 	task *namespacereplicationpb.ApplyLocalTask,
 	applyErr error,
-) error {
+) *localApplyResult {
 	errType := classifyLocalErr(applyErr)
 	h.logger.Warn("namespacereplication local apply failed",
 		tag.WorkflowNamespaceID(namespaceID),
@@ -572,53 +692,81 @@ func (h *applyLocalTaskHandler) recordLocalFailure(
 		tag.NewStringTag("error_type", errType),
 		tag.Error(applyErr),
 	)
-	_, _, err := chasm.UpdateComponent(
+	recorded, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (localRecord, error) {
 			if !localTaskIsCurrent(c, task) {
-				return nil, nil
+				return localRecord{}, nil
 			}
-			return nil, TransitionLocalFailed.Apply(c, mctx, EventLocalFailed{
+			err := TransitionLocalFailed.Apply(c, mctx, EventLocalFailed{
 				Time:    mctx.Now(c),
 				Err:     applyErr,
 				ErrType: errType,
 			})
+			if err != nil {
+				return localRecord{}, err
+			}
+			return localRecord{
+				stateUpdated:      true,
+				componentTerminal: newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_FAILED, mctx.Now(c)),
+			}, nil
 		},
 		nil,
 	)
-	return err
+	return &localApplyResult{
+		outcome: nsreplicationcommon.CHASMApplyOutcomeTerminalError,
+		err:     applyErr,
+		saveErr: err,
+		record:  recorded,
+		details: map[string]any{"error_type": errType},
+	}
 }
 
+// recordLocalIndeterminate fails the component for an UPDATE whose outcome was
+// fenced by a newer namespace version.
 func (h *applyLocalTaskHandler) recordLocalIndeterminate(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	namespaceID string,
 	task *namespacereplicationpb.ApplyLocalTask,
 	applyErr error,
-) error {
+) *localApplyResult {
 	h.logger.Warn(
 		"namespacereplication local apply outcome is indeterminate",
 		tag.WorkflowNamespaceID(namespaceID),
 		tag.NewStringTag("business_id", ref.BusinessID),
 		tag.Error(applyErr),
 	)
-	_, _, err := chasm.UpdateComponent(
+	recorded, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (localRecord, error) {
 			if !localTaskIsCurrent(c, task) {
-				return nil, nil
+				return localRecord{}, nil
 			}
-			return nil, TransitionLocalIndeterminate.Apply(c, mctx, EventLocalIndeterminate{
+			err := TransitionLocalIndeterminate.Apply(c, mctx, EventLocalIndeterminate{
 				Time:     mctx.Now(c),
 				Attempts: task.GetAttempt() + 1,
 				Err:      applyErr,
 			})
+			if err != nil {
+				return localRecord{}, err
+			}
+			return localRecord{
+				stateUpdated:      true,
+				componentTerminal: newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_FAILED, mctx.Now(c)),
+			}, nil
 		},
 		nil,
 	)
-	return err
+	return &localApplyResult{
+		outcome: nsreplicationcommon.CHASMApplyOutcomeFencedAmbiguous,
+		err:     applyErr,
+		saveErr: err,
+		record:  recorded,
+		details: map[string]any{"resolution": "fenced_ambiguous"},
+	}
 }
 
 func localTaskIsCurrent(
@@ -814,14 +962,18 @@ func (h *applyPeerTaskHandler) Execute(
 	callCtx, cancel := contextutil.WithDeadlineBuffer(ctx, 10*time.Second, time.Second)
 	defer cancel()
 	request := PeerApplyRequest{
-		SourceCluster:           h.currentCluster,
-		ComponentBusinessID:     ref.BusinessID,
-		ComponentRunID:          ref.RunID,
-		AttemptCount:            task.GetAttempt() + 1,
-		TargetCluster:           task.GetTargetCell(),
-		Operation:               loaded.Operation,
-		Detail:                  loaded.Detail,
-		Shadow:                  loaded.Shadow,
+		SourceCluster:       h.currentCluster,
+		ComponentBusinessID: ref.BusinessID,
+		ComponentRunID:      ref.RunID,
+		AttemptCount:        task.GetAttempt() + 1,
+		TargetCluster:       task.GetTargetCell(),
+		Operation:           loaded.Operation,
+		Detail:              loaded.Detail,
+		Shadow:              loaded.Shadow,
+		// Targets are the union of previous and new membership. A target absent
+		// from the new list must retain the removal snapshot to fence older adds.
+		RemovedPeer: !loaded.Shadow && loaded.Operation == enumsspb.NAMESPACE_OPERATION_UPDATE &&
+			!slices.Contains(loaded.Detail.GetReplicationConfig().GetClusters(), task.GetTargetCell()),
 		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
 	}
 	result, applyErr := h.peerApplier.Apply(callCtx, request)
@@ -834,6 +986,10 @@ func (h *applyPeerTaskHandler) Execute(
 				emitNamespaceLifecycleEvents: h.emitNamespaceLifecycleEvents, sourceCluster: h.currentCluster,
 			}
 			observer.observe(ref, recorded.completion)
+			if !loaded.Shadow {
+				emitComponentTerminal(h.logger, h.eventLogger, h.emitNamespaceLifecycleEvents, h.currentCluster, ref,
+					nsreplicationcommon.NamespaceDetailToTaskAttributes(loaded.Operation, loaded.Detail), recorded.componentTerminal, nil)
+			}
 		}
 		return saveErr
 	}
@@ -964,6 +1120,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 					return peerOutcomeRecord{}, err
 				}
 				record.completion = newShadowCompletionRecord(c, now)
+				record.componentTerminal = newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, now)
 			}
 			return record, nil
 		},

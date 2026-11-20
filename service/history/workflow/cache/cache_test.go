@@ -229,27 +229,22 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	release(err4)
 }
 
-// TestHistoryCacheEvictionReleasesPaginationBuffer verifies that when a cached context
-// holding an in-flight pagination buffer is evicted, the bytes it
-// reserved on the shared pagination limiter are released. Without a Clear() on the eviction
-// path those bytes leak and eventually reject all paginated completions on the host.
-func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() {
-	// Count-based cache with room for a single entry, so the next insert forces eviction.
+func (s *workflowCacheSuite) newSingleEntryCacheWithBufferedPage(
+	workflowID string,
+) (*workflow.ContextImpl, *historyi.MockMutableState, historyi.ReleaseWorkflowContextFunc) {
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	// Production shards always have a finalizer, so give the test shard one too
 	s.mockShard.SetFinalizerForTest(finalizer.New(s.mockShard.GetLogger(), metrics.NoopMetricsHandler))
-	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
-	limiter := s.cache.(*cacheImpl).paginationLimiter
 
 	we := commonpb.WorkflowExecution{
-		WorkflowId: "wf-cache-test-eviction-buffer",
+		WorkflowId: workflowID,
 		RunId:      uuid.NewString(),
 	}
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
-		namespaceID,
+		namespace.ID("test_namespace_id"),
 		&we,
 		locks.PriorityHigh,
 	)
@@ -265,7 +260,6 @@ func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() 
 	wfCtx := ctx.(*workflow.ContextImpl)
 	wfCtx.MutableState = mock
 
-	// Buffer an intermediate page; this reserves bytes on the shared limiter.
 	page := &workflowservice.RespondWorkflowTaskCompletedRequest{
 		IntermediatePage: true,
 		PageNumber:       0,
@@ -277,28 +271,54 @@ func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() 
 		}},
 	}
 	s.NoError(wfCtx.AppendTaskCompletionPage(10, 1, page))
-	s.Positive(limiter.Used())
+	s.Positive(s.cache.(*cacheImpl).paginationLimiter.Used())
+	return wfCtx, mock, release
+}
 
-	// Unpin the entry so it is eligible for eviction.
-	release(nil)
-
-	// Insert a second workflow, forcing eviction of the first from the cache.
-	we2 := commonpb.WorkflowExecution{
-		WorkflowId: "wf-cache-test-eviction-buffer-2",
+// forceEviction loads and releases another workflow, which evicts the single
+// unpinned entry from a cache built by newSingleEntryCacheWithBufferedPage.
+func (s *workflowCacheSuite) forceEviction(workflowID string) {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
 		RunId:      uuid.NewString(),
 	}
-	_, release2, err := s.cache.GetOrCreateWorkflowExecution(
+	_, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
-		namespaceID,
-		&we2,
+		namespace.ID("test_namespace_id"),
+		&we,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	release2(nil)
+	release(nil)
+}
+
+// TestHistoryCacheEvictionReleasesPaginationBuffer verifies that when a cached context
+// holding an in-flight pagination buffer is evicted, the bytes it
+// reserved on the shared pagination limiter are released. Without a Clear() on the eviction
+// path those bytes leak and eventually reject all paginated completions on the host.
+func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() {
+	_, _, release := s.newSingleEntryCacheWithBufferedPage("wf-cache-test-eviction-buffer")
+
+	// Unpin the entry so it is eligible for eviction.
+	release(nil)
+	s.forceEviction("wf-cache-test-eviction-buffer-2")
 
 	// The evicted context must have released its reserved pagination bytes.
-	s.Equal(int64(0), limiter.Used())
+	s.Equal(int64(0), s.cache.(*cacheImpl).paginationLimiter.Used())
+}
+
+func (s *workflowCacheSuite) TestHistoryCacheEvictionSkipsClearWhenWorkflowContextIsLocked() {
+	wfCtx, mock, release := s.newSingleEntryCacheWithBufferedPage("wf-cache-test-eviction-locked-buffer")
+
+	// Violate the cache protocol to verify eviction does not clear a locked context.
+	release(nil)
+	s.NoError(wfCtx.Lock(context.Background(), locks.PriorityHigh))
+	defer wfCtx.Unlock()
+	s.forceEviction("wf-cache-test-eviction-locked-buffer-2")
+
+	s.Positive(s.cache.(*cacheImpl).paginationLimiter.Used())
+	s.Same(mock, wfCtx.MutableState)
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
