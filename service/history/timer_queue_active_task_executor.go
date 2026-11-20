@@ -881,7 +881,6 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 
 	processedTimers, err := t.executeStateMachineTimers(
 		ctx,
-		wfCtx,
 		ms,
 		task,
 		func(node *hsm.Node, task hsm.Task) error {

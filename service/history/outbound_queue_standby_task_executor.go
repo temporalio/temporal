@@ -117,24 +117,39 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 
 func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
 	ctx context.Context,
-	task tasks.Task,
+	task *tasks.StateMachineOutboundTask,
 	nsName string,
 ) error {
-	destination := ""
-	if dtask, ok := task.(tasks.HasDestination); ok {
-		destination = dtask.GetDestination()
-	}
-
-	ref, _, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
-	if err != nil {
+	destination := task.GetDestination()
+	// Reject malformed task payloads before acquiring a workflow lease.
+	if _, _, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task); err != nil {
 		return err
 	}
 
-	err = e.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		// If we managed to access the machine the task is still valid.
-		// The logic below will either discard it or retry.
-		return nil
-	})
+	_, release, _, err := e.getValidatedMutableState(ctx, taskWorkflowKey(task),
+		func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error {
+			accessType := hsm.AccessRead
+			if task.GetTaskID() != 0 {
+				accessType = hsm.AccessWrite
+			}
+			if err := e.validateNotZombieWorkflow(ms, accessType); err != nil {
+				return err
+			}
+			if err := validateTaskGeneration(ctx, e.shardContext, workflowContext, ms, task.GetTaskID()); err != nil {
+				return err
+			}
+			_, err := e.verifyStateMachineOutboundTask(ctx, task, ms)
+			if !potentialStaleState && errors.Is(err, consts.ErrStaleState) {
+				// References without a physical task ID may request a cache reload on the first pass only.
+				ref, _, deserializeErr := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
+				if deserializeErr != nil {
+					return deserializeErr
+				}
+				return e.validateStateMachineRefState(ms, ref, false)
+			}
+			return err
+		},
+	)
 
 	if err != nil {
 		if errors.Is(err, consts.ErrStaleReference) {
@@ -145,8 +160,9 @@ func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
 		return err
 	}
 
-	// If there was no error from Access nor from the accessor function, then the task
-	// is still valid for processing based on the current state of the machine.
+	release(nil)
+
+	// The local state machine still considers this task valid.
 	// The *likely* reasons are: a) delay in the replication stack; b) destination is down.
 	// In any case, the task needs to be retried (or discarded, based on the configured discard delay).
 
@@ -188,13 +204,11 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
+	verification, err := e.verifyChasmSideEffectTask(ctx, task, ms)
 	if err != nil {
 		return err
 	}
-	if !isTaskInTree || !isValid {
-		// Replication has removed the logical task, or the component reports it
-		// invalid — drop the physical task.
+	if verification == nil {
 		return nil
 	}
 

@@ -20,11 +20,13 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -413,4 +415,41 @@ func (s *outboundQueueStandbyTaskExecutorSuite) mustGenerateTaskID() int64 {
 	taskID, err := s.mockShard.GenerateTaskID()
 	s.NoError(err)
 	return taskID
+}
+
+func (s *outboundQueueStandbyTaskExecutorSuite) TestStateMachineVerification() {
+	s.Require().NoError(workflow.RegisterStateMachine(s.hsmRegistry))
+	s.Require().NoError(s.hsmRegistry.RegisterTaskSerializer(hsmtest.TaskType, hsmtest.TaskSerializer{}))
+	info := &persistencespb.WorkflowExecutionInfo{}
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	root, err := hsm.NewRoot(s.hsmRegistry, workflow.StateMachineType, s.mockMutableState,
+		make(map[string]*persistencespb.StateMachineMap), s.mockMutableState)
+	s.Require().NoError(err)
+	s.mockMutableState.EXPECT().HSM().Return(root).AnyTimes()
+	task := &tasks.StateMachineOutboundTask{
+		WorkflowKey:         tests.WorkflowKey,
+		TaskID:              1,
+		VisibilityTimestamp: s.now,
+		Info: &persistencespb.StateMachineTaskInfo{
+			Type: hsmtest.TaskType, Data: []byte("{}"),
+			Ref: &persistencespb.StateMachineRef{
+				MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: root.InternalRepr().GetInitialVersionedTransition().GetNamespaceFailoverVersion(),
+				},
+			},
+		},
+	}
+	// The verifier can inspect a supplied state without acquiring a workflow context.
+	verification, err := s.executor.verifyStateMachineOutboundTask(s.T().Context(), task, s.mockMutableState)
+	s.Require().NoError(err)
+	s.Require().NotNil(verification)
+	s.mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).Return(s.mockWorkflowContext, cache.NoopReleaseFn, nil).Times(2)
+	s.mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), gomock.Any()).Return(s.mockMutableState, nil).Times(2)
+	s.Require().ErrorIs(s.executor.executeStateMachineTask(s.T().Context(), task, tests.Namespace.String()), consts.ErrTaskRetry)
+
+	task.Info.Ref.MachineInitialVersionedTransition.NamespaceFailoverVersion++
+	_, err = s.executor.verifyStateMachineOutboundTask(s.T().Context(), task, s.mockMutableState)
+	s.Require().ErrorIs(err, consts.ErrStaleReference)
+	s.Require().NoError(s.executor.executeStateMachineTask(s.T().Context(), task, tests.Namespace.String()))
 }

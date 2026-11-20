@@ -3,27 +3,22 @@ package history
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
-	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -128,31 +123,11 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
-	actionFn := func(
-		ctx context.Context,
-		wfContext historyi.WorkflowContext,
-		mutableState historyi.MutableState,
-		_ historyi.ReleaseWorkflowContextFunc,
-	) (any, error) {
-		err := t.executeChasmPureTimers(
-			mutableState,
-			task,
-			func(_ chasm.NodePureTask, _ chasm.TaskAttributes, _ any) (bool, error) {
-				// Any task present means replication has not yet removed it — retry.
-				return false, consts.ErrTaskRetry
-			},
-		)
-		if err != nil && errors.Is(err, consts.ErrTaskRetry) {
-			return &struct{}{}, nil
-		}
-
-		return nil, err
-	}
 
 	return t.processTimer(
 		ctx,
 		task,
-		actionFn,
+		standbyTaskVerifier(t.verifyChasmPureTimerTask),
 		getStandbyPostActionFn(
 			task,
 			t.getCurrentTime,
@@ -166,32 +141,12 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
-	actionFn := func(
-		ctx context.Context,
-		wfContext historyi.WorkflowContext,
-		ms historyi.MutableState,
-		_ historyi.ReleaseWorkflowContextFunc,
-	) (any, error) {
-		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
-		if err != nil {
-			return nil, err
-		}
-		if !isTaskInTree || !isValid {
-			// Replication has removed the logical task, or the component reports it
-			// invalid — drop the physical task.
-			return nil, nil
-		}
-
-		// Task still exists in the tree; retry until the active cluster executes
-		// and replicates the resulting state change.
-		return ms.ChasmTree(), nil
-	}
 
 	chasmTaskType, _ := t.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
 	return t.processTimer(
 		ctx,
 		task,
-		actionFn,
+		standbyTaskVerifier(t.verifyChasmSideEffectTimerTask),
 		getStandbyPostActionFn(
 			task,
 			t.getCurrentTime,
@@ -241,26 +196,10 @@ func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 	timerTask *tasks.TimeSkippingFastForwardTimerTask,
 ) error {
 
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		if !mutableState.IsWorkflowExecutionRunning() {
-			return nil, nil
-		}
-		tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-		ffi := tsi.GetFastForwardInfo()
-
-		// the fast-forward this timer task is associated with is still valid and has not been reached so keep waiting
-		if ffi != nil &&
-			transitionhistory.Compare(tsi.GetFastForwardInfoLastUpdateVersionedTransition(), timerTask.VersionedTransition) == 0 &&
-			!ffi.GetHasReached() {
-			return &struct{}{}, nil
-		}
-		return nil, nil
-	}
-
 	return t.processTimer(
 		ctx,
 		timerTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyTimeSkippingTimerTask),
 		getStandbyPostActionFn(
 			timerTask,
 			t.getCurrentTime,
@@ -274,44 +213,11 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	ctx context.Context,
 	timerTask *tasks.UserTimerTask,
 ) error {
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
-			return nil, nil
-		}
-
-		referenceTime := t.getCurrentTime()
-
-		timerSequence := t.getTimerSequence(mutableState)
-		timerSequenceIDs := timerSequence.LoadAndSortUserTimers()
-		if len(timerSequenceIDs) > 0 {
-			timerSequenceID := timerSequenceIDs[0]
-			_, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.EventID)
-			if !ok {
-				errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
-				t.logger.Error(errString)
-				return nil, serviceerror.NewInternal(errString)
-			}
-
-			// Timer task visibility and the converted deadline use wall-clock time.
-			if queues.IsTimeExpired(
-				timerTask,
-				referenceTime,
-				mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(timerSequenceID.Timestamp),
-			) {
-				return &struct{}{}, nil
-			}
-			// Since the user timers are already sorted, then if there is one timer which is not expired,
-			// all user timers after that timer are not expired.
-		}
-		// If there is no user timer expired, then we are good.
-		return nil, nil
-	}
 
 	return t.processTimer(
 		ctx,
 		timerTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyUserTimerTimeoutTask),
 		getStandbyPostActionFn(
 			timerTask,
 			t.getCurrentTime,
@@ -336,91 +242,11 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	//
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
-	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
-			return nil, nil
-		}
-
-		referenceTime := t.getCurrentTime()
-
-		timerSequence := t.getTimerSequence(mutableState)
-		updateMutableState := false
-		timerSequenceIDs := timerSequence.LoadAndSortActivityTimers()
-		if len(timerSequenceIDs) > 0 {
-			timerSequenceID := timerSequenceIDs[0]
-			_, ok := mutableState.GetActivityInfo(timerSequenceID.EventID)
-			if !ok {
-				errString := fmt.Sprintf("failed to find in memory activity timer: %v", timerSequenceID.EventID)
-				t.logger.Error(errString)
-				return nil, serviceerror.NewInternal(errString)
-			}
-
-			// Timer task visibility and the converted deadline use wall-clock time.
-			if queues.IsTimeExpired(
-				timerTask,
-				referenceTime,
-				mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(timerSequenceID.Timestamp),
-			) {
-				return &struct{}{}, nil
-			}
-			// Since the activity timers are already sorted, then if there is one timer which is not expired,
-			// all activity timers after that timer are not expired.
-		}
-
-		// for reason to update mutable state & generate a new activity task,
-		// see comments at the beginning of this function.
-		// NOTE: this is the only place in the standby logic where mutable state can be updated
-
-		// need to clear the activity heartbeat timer task marks
-		// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
-		// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
-		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
-		// created.
-		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
-
-		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(heartbeatTimeoutVis)) {
-			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
-				return nil, err
-			}
-			updateMutableState = true
-		}
-
-		// passive logic need to explicitly call create timer
-		modified, err := timerSequence.CreateNextActivityTimer()
-		if err != nil {
-			return nil, err
-		}
-		updateMutableState = updateMutableState || modified
-
-		if !updateMutableState {
-			return nil, nil
-		}
-
-		// TODO: why do we need to update the current version here?
-		// Neither UpdateActivity nor CreateNextActivityTimer uses the current version.
-		// Current version also not used when closing the transaction as passive
-		//
-		// we need to handcraft some of the variables
-		// since the job being done here is update the activity and possibly write a timer task to DB
-		// also need to reset the current version.
-		lastWriteVersion, err := mutableState.GetLastWriteVersion()
-		if err != nil {
-			return nil, err
-		}
-		if err := mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
-			return nil, err
-		}
-
-		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
-		return nil, err
-	}
 
 	return t.processTimer(
 		ctx,
 		timerTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyActivityTimeoutTask),
 		getStandbyPostActionFn(
 			timerTask,
 			t.getCurrentTime,
@@ -434,40 +260,11 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 	ctx context.Context,
 	task *tasks.ActivityRetryTimerTask,
 ) (retError error) {
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
-			return nil, nil
-		}
-
-		activityInfo, ok := mutableState.GetActivityInfo(task.EventID) // activity schedule ID
-		if !ok {
-			return nil, nil
-		}
-
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
-		if err != nil {
-			return nil, err
-		}
-
-		// we ignore retry timer task if:
-		// * this retry task is from old Stamp.
-		// * attempts is not the same as recorded in activity info.
-		// * activity is already started.
-		if activityInfo.Attempt > task.Attempt ||
-			activityInfo.Stamp != task.Stamp ||
-			activityInfo.StartedEventId != common.EmptyEventID ||
-			activityInfo.Paused {
-			return nil, nil
-		}
-
-		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, activityInfo.ScheduleToStartTimeout.AsDuration(), activityInfo)
-	}
 
 	return t.processTimer(
 		ctx,
 		task,
-		actionFn,
+		standbyTaskVerifier(t.verifyActivityRetryTimerTask),
 		getStandbyPostActionFn(
 			task,
 			t.getCurrentTime,
@@ -484,46 +281,15 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 	// workflow task schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky workflow task, which is
 	// not applicable on the passive cluster
+
 	if timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		return nil
-	}
-
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
-			return nil, nil
-		}
-
-		workflowTask := mutableState.GetWorkflowTaskByID(timerTask.EventID)
-		if workflowTask == nil {
-			return nil, nil
-		}
-		if timerTask.Stamp != workflowTask.Stamp {
-			return nil, consts.ErrStaleReference
-		}
-
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
-		if err != nil {
-			return nil, err
-		}
-
-		if workflowTask.Attempt != timerTask.ScheduleAttempt {
-			return nil, nil
-		}
-
-		// We could check if workflow task is started state (since the timeout type here is START_TO_CLOSE)
-		// but that's unnecessary.
-		//
-		// Ifthe  workflow task is in scheduled state, it must have a higher attempt
-		// count and will be captured by the attempt check above.
-
-		return &struct{}{}, nil
 	}
 
 	return t.processTimer(
 		ctx,
 		timerTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyWorkflowTaskTimeoutTask),
 		getStandbyPostActionFn(
 			timerTask,
 			t.getCurrentTime,
@@ -537,35 +303,11 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	ctx context.Context,
 	timerTask *tasks.WorkflowBackoffTimerTask,
 ) error {
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
-			return nil, nil
-		}
-
-		if mutableState.HadOrHasWorkflowTask() {
-			// if there is one workflow task already been processed
-			// or has pending workflow task, meaning workflow has already running
-			return nil, nil
-		}
-
-		// Note: do not need to verify task version here
-		// logic can only go here if mutable state build's next event ID is 2
-		// meaning history only contains workflow started event.
-		// we can do the checking of task version vs workflow started version
-		// however, workflow started version is immutable
-
-		// active cluster will add first workflow task after backoff timeout.
-		// standby cluster should just call ack manager to retry this task
-		// since we are stilling waiting for the first WorkflowTaskScheduledEvent to be replicated from active side.
-
-		return &struct{}{}, nil
-	}
 
 	return t.processTimer(
 		ctx,
 		timerTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyWorkflowBackoffTimerTask),
 		getStandbyPostActionFn(
 			timerTask,
 			t.getCurrentTime,
@@ -580,27 +322,10 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 	timerTask *tasks.WorkflowRunTimeoutTask,
 ) error {
 
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		if !t.isValidWorkflowRunTimeoutTask(mutableState, timerTask) {
-			return nil, nil
-		}
-
-		startVersion, err := mutableState.GetStartVersion()
-		if err != nil {
-			return nil, err
-		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
-		if err != nil {
-			return nil, err
-		}
-
-		return &struct{}{}, nil
-	}
-
 	return t.processTimer(
 		ctx,
 		timerTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyWorkflowRunTimeoutTask),
 		getStandbyPostActionFn(
 			timerTask,
 			t.getCurrentTime,
@@ -614,29 +339,11 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowExecutionTimeoutTask(
 	ctx context.Context,
 	timerTask *tasks.WorkflowExecutionTimeoutTask,
 ) error {
-	actionFn := func(
-		_ context.Context,
-		wfContext historyi.WorkflowContext,
-		mutableState historyi.MutableState,
-		_ historyi.ReleaseWorkflowContextFunc,
-	) (any, error) {
-		if !t.isValidWorkflowExecutionTimeoutTask(mutableState, timerTask) {
-			return nil, nil
-		}
-
-		// If the task is valid, it means the workflow should be timed out but it is still running.
-		// The standby logic should continue to wait for the workflow timeout event to be replicated from the active side.
-		//
-		// Return non-nil post action info to indicate that verification is not done yet.
-		// The returned post action info can be used to resend history fron active side.
-
-		return newExecutionTimerPostActionInfo(mutableState)
-	}
 
 	return t.processTimer(
 		ctx,
 		timerTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyWorkflowExecutionTimeoutTask),
 		getStandbyPostActionFn(
 			timerTask,
 			t.getCurrentTime,
@@ -650,58 +357,11 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 	ctx context.Context,
 	timerTask *tasks.StateMachineTimerTask,
 ) error {
-	actionFn := func(
-		ctx context.Context,
-		wfContext historyi.WorkflowContext,
-		mutableState historyi.MutableState,
-		_ historyi.ReleaseWorkflowContextFunc,
-	) (any, error) {
-		processedTimers, err := t.executeStateMachineTimers(
-			ctx,
-			wfContext,
-			mutableState,
-			timerTask,
-			func(node *hsm.Node, task hsm.Task) error {
-				// If this line of code is reached, the task's Validate() function returned no error, which indicates
-				// that it is still expected to run. Return ErrTaskRetry to wait the machine to transition on the active
-				// cluster.
-				return consts.ErrTaskRetry
-			},
-		)
-		if err != nil {
-			if errors.Is(err, consts.ErrTaskRetry) {
-				// This handles the ErrTaskRetry error returned by executeStateMachineTimers.
-				return &struct{}{}, nil
-			}
-			return nil, err
-		}
-
-		// We haven't done any work, return without committing.
-		if processedTimers == 0 {
-			return nil, nil
-		}
-
-		if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
-			return nil, wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
-		}
-
-		// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
-		if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
-			// and we are operating on a closed workflow.
-			return nil, wfContext.SubmitClosedWorkflowSnapshot(
-				ctx,
-				t.shardContext,
-				historyi.TransactionPolicyPassive,
-			)
-		}
-		return nil, wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
-	}
 
 	return t.processTimer(
 		ctx,
 		timerTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyStateMachineTimerTask),
 		getStandbyPostActionFn(
 			timerTask,
 			t.getCurrentTime,
@@ -720,7 +380,7 @@ func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 func (t *timerQueueStandbyTaskExecutor) processTimer(
 	ctx context.Context,
 	timerTask tasks.Task,
-	actionFn standbyActionFn,
+	verify standbyVerificationFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
@@ -755,13 +415,17 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(ctx, executionContext, mutableState, release)
+	historyResendInfo, err := verify(ctx, timerTask, mutableState)
 	if err != nil {
 		return err
 	}
 
-	// NOTE: do not access anything related mutable state after this lock release
-	// Release is idempotent, so safe to call even if action already released
+	historyResendInfo, err = t.applyTimerMaintenance(ctx, executionContext, mutableState, historyResendInfo)
+	if err != nil {
+		return err
+	}
+
+	// Do not access mutable state after releasing the workflow lock.
 	release(nil)
 	return postActionFn(ctx, timerTask, historyResendInfo, t.logger)
 }

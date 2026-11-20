@@ -828,6 +828,12 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	})).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	verification, err := s.transferQueueStandbyTaskExecutor.verifyCloseExecution(s.T().Context(), transferTask, mutableState)
+	s.Require().NoError(err)
+	requestInfo, ok := verification.(*closeExecutionVerificationInfo)
+	s.Require().True(ok)
+	s.Require().NotSame(parentClock, requestInfo.request.Clock)
+
 	mutableStateLoaded := false
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
@@ -1036,11 +1042,33 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// The suite runs the executor as the namespace's active cluster, so once the task is past the discard delay
-	// the source lookup finds the namespace active here and retries the task instead of discarding it.
-	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	// Exercise the overdue task on a passive cell while its source still has pending work.
+	s.transferQueueStandbyTaskExecutor.clusterName = cluster.TestCurrentClusterName
+	s.timeSource.Update(now.Add(s.discardDuration))
+	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(s.mockRemoteAdminClient, nil).Times(2)
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
+		&adminservice.DescribeMutableStateResponse{DatabaseMutableState: persistenceMutableState}, nil,
+	)
+	executable := s.newTaskExecutable(transferTask)
+	for range 3 {
+		resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+		s.Require().ErrorIs(resp.ExecutionErr, consts.ErrTaskRetry)
+	}
+
+	s.timeSource.Update(executable.RemoteVerificationState().NextAttemptTime)
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
+		&adminservice.DescribeMutableStateResponse{DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: persistenceMutableState.ExecutionState,
+			NextEventId:    persistenceMutableState.NextEventId,
+		}}, nil,
+	)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.Require().ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
+
+	// Only local verification can acknowledge the task normally.
+	delete(persistenceMutableState.RequestCancelInfos, event.GetEventId())
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.Require().NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Success() {
@@ -1168,11 +1196,33 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// The suite runs the executor as the namespace's active cluster, so once the task is past the discard delay
-	// the source lookup finds the namespace active here and retries the task instead of discarding it.
-	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	// Exercise the overdue task on a passive cell while its source still has pending work.
+	s.transferQueueStandbyTaskExecutor.clusterName = cluster.TestCurrentClusterName
+	s.timeSource.Update(now.Add(s.discardDuration))
+	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(s.mockRemoteAdminClient, nil).Times(2)
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
+		&adminservice.DescribeMutableStateResponse{DatabaseMutableState: persistenceMutableState}, nil,
+	)
+	executable := s.newTaskExecutable(transferTask)
+	for range 3 {
+		resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+		s.Require().ErrorIs(resp.ExecutionErr, consts.ErrTaskRetry)
+	}
+
+	s.timeSource.Update(executable.RemoteVerificationState().NextAttemptTime)
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
+		&adminservice.DescribeMutableStateResponse{DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: persistenceMutableState.ExecutionState,
+			NextEventId:    persistenceMutableState.NextEventId,
+		}}, nil,
+	)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.Require().ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
+
+	// Only local verification can acknowledge the task normally.
+	delete(persistenceMutableState.SignalInfos, event.GetEventId())
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.Require().NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Success() {

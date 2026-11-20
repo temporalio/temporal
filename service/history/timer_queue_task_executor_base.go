@@ -214,7 +214,6 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
 
 func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	ctx context.Context,
-	workflowContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	deadline time.Time,
 	timer *persistencespb.StateMachineTaskInfo,
@@ -242,7 +241,8 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	if err := t.validateNotZombieWorkflow(ms, hsm.AccessWrite); err != nil {
 		return err
 	}
-	if err := t.validateStateMachineRef(ctx, workflowContext, ms, ref, false); err != nil {
+	// Logical timer references have no physical task ID. The outer loader handles task-generation repair.
+	if err := t.validateStateMachineRefState(ms, ref, false); err != nil {
 		return err
 	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())
@@ -291,17 +291,28 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 // and returns a count of timers processed.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	ctx context.Context,
-	workflowContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	task *tasks.StateMachineTimerTask,
 	execute func(node *hsm.Node, task hsm.Task) error,
 ) (int, error) {
+	processed, remaining, err := t.visitStateMachineTimers(ctx, ms, task, execute)
+	if err == nil && processed > 0 {
+		ms.GetExecutionInfo().StateMachineTimers = remaining
+	}
+	return processed, err
+}
+
+// visitStateMachineTimers validates expired timer groups without removing them from mutable state.
+func (t *timerQueueTaskExecutorBase) visitStateMachineTimers(
+	ctx context.Context, ms historyi.MutableState, task *tasks.StateMachineTimerTask,
+	execute func(*hsm.Node, hsm.Task) error,
+) (int, []*persistencespb.StateMachineTimerGroup, error) {
 
 	// need to specifically check for zombie workflows here instead of workflow running
 	// or not since zombie workflows are considered as not running but state machine timers
 	// can target closed workflows.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return 0, consts.ErrWorkflowZombie
+		return 0, nil, consts.ErrWorkflowZombie
 	}
 
 	timers := ms.GetExecutionInfo().StateMachineTimers
@@ -315,7 +326,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 		}
 
 		for _, timer := range group.Infos {
-			err := t.executeSingleStateMachineTimer(ctx, workflowContext, ms, group.Deadline.AsTime(), timer, execute)
+			err := t.executeSingleStateMachineTimer(ctx, ms, group.Deadline.AsTime(), timer, execute)
 			if err != nil {
 				// This includes errors such as ErrStaleReference and ErrWorkflowCompleted.
 				if !errors.As(err, new(*serviceerror.NotFound)) {
@@ -327,7 +338,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 					// Return on first error as we don't want to duplicate the Executable's error handling logic.
 					// This implies that a single bad task in the mutable state timer sequence will cause all other
 					// tasks to be stuck. We'll accept this limitation for now.
-					return 0, err
+					return 0, nil, err
 				}
 				metrics.StateMachineTimerSkipsCounter.With(t.metricsHandler).Record(
 					1,
@@ -341,9 +352,5 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 		processedTimers++
 	}
 
-	if processedTimers > 0 {
-		// Update processed timers.
-		ms.GetExecutionInfo().StateMachineTimers = timers
-	}
-	return processedTimers, nil
+	return processedTimers, timers, nil
 }
