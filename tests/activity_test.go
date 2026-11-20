@@ -484,7 +484,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.Equal(1, activityExecutedCount)
 
 	// go over history and verify that the activity task scheduled event has header on it
-	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -683,7 +683,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		env.Logger.Info("Processing workflow task:", tag.Counter(i))
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithRetries(1))
 		if err != nil {
-			s.PrintHistoryEvents(env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+			s.PrintHistoryEvents(env.RequireHistory(s, &commonpb.WorkflowExecution{
 				WorkflowId: tv.WorkflowID(),
 				RunId:      we.GetRunId(),
 			}))
@@ -1053,7 +1053,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	select {
 	case activityTask = <-activityStartedCh:
 	case result := <-activityPollResultCh:
-		s.Require().NoError(result.err)
+		s.NoError(result.err)
 		s.FailNow("activity poll completed before the activity started")
 	case <-ctx.Done():
 		s.FailNowf("activity poll did not start before the test context ended", "error: %v", ctx.Err())
@@ -1071,16 +1071,16 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		Input:      nil,
 		Identity:   identity,
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	scheduleActivity = false
 	requestCancellation = true
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Require().NoError(err)
+	s.NoError(err)
 	continueActivity()
 
 	result := s.Rcv(activityPollResultCh)
-	s.Require().NoError(result.err)
+	s.NoError(result.err)
 	s.True(result.canceled, "Activity was not cancelled.")
 	env.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
@@ -1583,6 +1583,6 @@ func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
 	s.ErrorAs(activityError, &applicationErr)
 	s.Equal("non-retryable-error", applicationErr.Message())
 
-	history := env.GetHistory(string(env.Namespace()), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
 	s.ContainsHistory(`ActivityTaskFailed`, &historypb.History{Events: history})
 }

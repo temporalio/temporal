@@ -109,6 +109,9 @@ func GetTransferTaskEventID(
 		eventID = task.InitiatedEventID
 	case *ResetWorkflowTask:
 		eventID = common.FirstEventID
+	case *ReleaseLimiterTask:
+		// release task doesn't depend on any event
+		return getChasmTaskEventID()
 	case *ChasmTask:
 		return getChasmTaskEventID()
 	case *FakeTask:

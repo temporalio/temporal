@@ -45,6 +45,42 @@ func (t *T) AssertionT() require.TestingT {
 	return t
 }
 
+// NoError requires err to be nil for the current attempt.
+func (t *T) NoError(err error, msgAndArgs ...any) {
+	t.Helper()
+	require.NoError(t, err, msgAndArgs...)
+}
+
+// Equal requires expected and actual to be equal for the current attempt.
+func (t *T) Equal(expected, actual any, msgAndArgs ...any) {
+	t.Helper()
+	require.Equal(t, expected, actual, msgAndArgs...)
+}
+
+// Nil requires object to be nil for the current attempt.
+func (t *T) Nil(object any, msgAndArgs ...any) {
+	t.Helper()
+	require.Nil(t, object, msgAndArgs...)
+}
+
+// NotNil requires object to be non-nil for the current attempt.
+func (t *T) NotNil(object any, msgAndArgs ...any) {
+	t.Helper()
+	require.NotNil(t, object, msgAndArgs...)
+}
+
+// NotEmpty requires object to be nonempty for the current attempt.
+func (t *T) NotEmpty(object any, msgAndArgs ...any) {
+	t.Helper()
+	require.NotEmpty(t, object, msgAndArgs...)
+}
+
+// True requires value to be true for the current attempt.
+func (t *T) True(value bool, msgAndArgs ...any) {
+	t.Helper()
+	require.True(t, value, msgAndArgs...)
+}
+
 // Fail marks the current attempt as failed without stopping it.
 func (t *T) Fail() {
 	t.failed = true

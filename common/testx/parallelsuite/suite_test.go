@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,42 @@ func (s *validSuite) TestA() {
 	ch := make(chan int, 1)
 	s.Snd(ch, 42)
 	s.Equal(42, s.Rcv(ch))
+}
+
+type synctestSuite struct{ Suite[*synctestSuite] }
+
+func (s *synctestSuite) TestBubbleScope() {
+	parent := s
+	s.Synctest(func(s *synctestSuite) {
+		synctest.Wait()
+		s.NotSame(parent, s)
+		s.NotSame(parent.T(), s.T())
+	})
+}
+
+func TestSynctest(t *testing.T) {
+	Run(t, &synctestSuite{})
+}
+
+type isolatedSuite struct{ Suite[*isolatedSuite] }
+
+func (s *isolatedSuite) TestFirst(instances chan<- *isolatedSuite) {
+	instances <- s
+}
+
+func (s *isolatedSuite) TestSecond(instances chan<- *isolatedSuite) {
+	instances <- s
+}
+
+func TestRunIsolatesMethods(t *testing.T) {
+	instances := make(chan *isolatedSuite, 2)
+	t.Cleanup(func() {
+		require.Len(t, instances, 2)
+		first, second := <-instances, <-instances
+		require.NotSame(t, first, second)
+		require.NotSame(t, first.T(), second.T())
+	})
+	Run(t, &isolatedSuite{}, instances)
 }
 
 type validWithArgsSuite struct{ Suite[*validWithArgsSuite] }
