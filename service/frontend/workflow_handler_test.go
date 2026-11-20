@@ -3203,6 +3203,104 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_UnpauseActivitiesPreserve
 	}
 }
 
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_NexusOperations() {
+	terminateOp := &workflowservice.StartBatchOperationRequest{
+		Operation: &workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation{
+			TerminateNexusOperationsOperation: &batchpb.BatchOperationTerminateNexusOperations{Identity: "terminate-identity"},
+		},
+	}
+	cancelOp := &workflowservice.StartBatchOperationRequest{
+		Operation: &workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation{
+			CancelNexusOperationsOperation: &batchpb.BatchOperationCancelNexusOperations{Identity: "cancel-identity"},
+		},
+	}
+	deleteOp := &workflowservice.StartBatchOperationRequest{
+		Operation: &workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation{
+			DeleteNexusOperationsOperation: &batchpb.BatchOperationDeleteNexusOperations{},
+		},
+	}
+	testCases := []struct {
+		name              string
+		batchFlagDisabled bool
+		chasmDisabled     bool
+		sanoDisabled      bool
+		operation         *workflowservice.StartBatchOperationRequest // only Operation is set
+		wantRejected      bool
+		wantBatchType     enumspb.BatchOperationType
+		wantIdentity      string
+	}{
+		{name: "batch flag disabled", batchFlagDisabled: true, operation: terminateOp, wantRejected: true},
+		{name: "chasm disabled", chasmDisabled: true, operation: terminateOp, wantRejected: true},
+		{name: "standalone nexus operations disabled", sanoDisabled: true, operation: terminateOp, wantRejected: true},
+		{name: "cancel with batch flag disabled", batchFlagDisabled: true, operation: cancelOp, wantRejected: true},
+		{name: "delete with batch flag disabled", batchFlagDisabled: true, operation: deleteOp, wantRejected: true},
+		{
+			name:          "terminate",
+			operation:     terminateOp,
+			wantBatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+			wantIdentity:  "terminate-identity",
+		},
+		{
+			name:          "cancel",
+			operation:     cancelOp,
+			wantBatchType: enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION,
+			wantIdentity:  "cancel-identity",
+		},
+		{
+			name:          "delete",
+			operation:     deleteOp,
+			wantBatchType: enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION,
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			config := s.newConfig()
+			config.EnableBatchOperationsForStandaloneNexusOperations = dc.GetBoolPropertyFnFilteredByNamespace(!tt.batchFlagDisabled)
+			config.EnableChasm = dc.GetBoolPropertyFnFilteredByNamespace(!tt.chasmDisabled)
+			config.StandaloneNexusOperationsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(!tt.sanoDisabled)
+			wh := s.getWorkflowHandler(config)
+			namespaceID := namespace.ID(uuid.NewString())
+			request := &workflowservice.StartBatchOperationRequest{
+				Namespace: "test-namespace",
+				JobId:     uuid.NewString(),
+				Reason:    "test",
+				TargetExecutions: []*commonpb.Execution{
+					{Type: enumspb.EXECUTION_TYPE_NEXUS_OPERATION, BusinessId: "operation-id", RunId: "run-id"},
+				},
+				Operation: tt.operation.GetOperation(),
+			}
+
+			if tt.wantRejected {
+				_, err := wh.StartBatchOperation(context.Background(), request)
+				var invalidArgumentErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgumentErr)
+				s.ErrorContains(err, "not supported for this namespace")
+				return
+			}
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+			s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+			s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(
+					_ context.Context,
+					startRequest *historyservice.StartWorkflowExecutionRequest,
+					_ ...grpc.CallOption,
+				) (*historyservice.StartWorkflowExecutionResponse, error) {
+					var input batchspb.BatchOperationInput
+					s.Require().NoError(payloads.Decode(startRequest.StartRequest.Input, &input))
+					s.Equal(tt.wantBatchType, input.BatchType)
+					s.Equal(tt.wantIdentity, startRequest.StartRequest.Identity)
+					return &historyservice.StartWorkflowExecutionResponse{}, nil
+				},
+			)
+
+			_, err := wh.StartBatchOperation(context.Background(), request)
+			s.NoError(err)
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
@@ -5014,6 +5112,10 @@ func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
 		{"reset activities", enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY, batcher.BatchTypeResetActivities, enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY},
 		{"unpause activities", enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, batcher.BatchTypeUnpauseActivities, enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY},
 		{"update activity options", enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, batcher.BatchTypeUpdateActivitiesOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS},
+		// Nexus operation batch operations round-trip to their own enum values.
+		{"terminate nexus operations", enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION, batcher.BatchTypeTerminateNexusOperations, enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION},
+		{"cancel nexus operations", enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION, batcher.BatchTypeCancelNexusOperations, enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION},
+		{"delete nexus operations", enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION, batcher.BatchTypeDeleteNexusOperations, enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION},
 		// The disambiguated _WORKFLOW enum variants retain the legacy persisted
 		// memo strings during rollout and read back as the non-deprecated type.
 		{"terminate workflows", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW},
