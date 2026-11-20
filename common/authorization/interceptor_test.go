@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"net/http"
 	"slices"
 	"testing"
 
@@ -895,6 +896,43 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_AudienceMapperSkippedWi
 	ss := &mockServerStream{ctx: inCtx}
 	err := interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
 	s.NoError(err)
+}
+
+func (s *authorizerInterceptorSuite) TestHTTPAudience() {
+	newInterceptor := func(audienceGetter JWTAudienceMapper) *Interceptor {
+		return NewInterceptor(
+			s.mockClaimMapper,
+			s.mockAuthorizer,
+			s.mockMetricsHandler,
+			log.NewNoopLogger(),
+			mockNamespaceChecker(testNamespace),
+			audienceGetter,
+			"",
+			"",
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			dynamicconfig.GetBoolPropertyFn(false),
+		)
+	}
+	withToken := http.Header{}
+	withToken.Set("Authorization", "Bearer some-token")
+
+	s.Run("no audience mapper", func() {
+		var audienceGetter JWTAudienceMapper
+		s.Empty(newInterceptor(audienceGetter).HTTPAudience(ctx, withToken))
+	})
+	s.Run("no auth token skips mapper", func() {
+		// No EXPECT: the audienceGetter must not be called for tokenless (e.g. mTLS-only) requests.
+		audienceGetter := NewMockJWTAudienceMapper(s.controller)
+		s.Empty(newInterceptor(audienceGetter).HTTPAudience(ctx, http.Header{}))
+		s.Empty(newInterceptor(audienceGetter).HTTPAudience(ctx, nil))
+	})
+	s.Run("auth token returns mapper audience", func() {
+		audienceGetter := NewMockJWTAudienceMapper(s.controller)
+		audienceGetter.EXPECT().Audience(gomock.Any(), nil, nil).Return("http-audience")
+		s.Equal("http-audience", newInterceptor(audienceGetter).HTTPAudience(ctx, withToken))
+	})
 }
 
 func (s *authorizerInterceptorSuite) TestInterceptStream_ContextPropagated() {
