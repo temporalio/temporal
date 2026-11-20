@@ -24,6 +24,8 @@ message Stable {
     string ordinary = 13;
   }
   Draft.SecondNested nested_both = 14;
+  // Feature names are any whitespace-free token, as in the generators.
+  string slashed = 15 [(temporal.api.protometa.v1.draft) = "qa//experimental"];
   message StableNested { string stable = 1; }
   message DraftNested {
     option (temporal.api.protometa.v1.draft_message) = "nested-feature";

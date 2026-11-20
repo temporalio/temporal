@@ -70,7 +70,8 @@ func applyDraftFeature(req *Request) {
 }
 ```
 
-Names match exactly; there is no wildcard. A missing, misspelled or wrong-case
+Names match exactly; there is no wildcard. An explanation may follow after a
+separate `//` token; a feature name may itself contain `//`. A missing, misspelled or wrong-case
 feature still produces a diagnostic. `//nolint:draftapi`, `//nolint:all` and
 blanket `//nolint` do not acknowledge draft usage. Acknowledgment is a review
 signal, not static proof of a dynamic behavior guard.
