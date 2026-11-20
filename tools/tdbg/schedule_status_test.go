@@ -22,6 +22,8 @@ import (
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type statusWorkflowClient struct {
@@ -109,6 +111,7 @@ func TestScheduleStatus_CountError(t *testing.T) {
 // registered returns NotFound, matching a real server's response for a nonexistent execution.
 type describeMutableStateAdminClient struct {
 	adminservice.AdminServiceClient
+	errors    map[string]error
 	responses map[string]*adminservice.DescribeMutableStateResponse // workflowID -> response
 
 	requests []*adminservice.DescribeMutableStateRequest
@@ -120,6 +123,9 @@ func (c *describeMutableStateAdminClient) DescribeMutableState(
 	_ ...grpc.CallOption,
 ) (*adminservice.DescribeMutableStateResponse, error) {
 	c.requests = append(c.requests, req)
+	if err := c.errors[req.GetExecution().GetWorkflowId()]; err != nil {
+		return nil, err
+	}
 	if resp, ok := c.responses[req.GetExecution().GetWorkflowId()]; ok {
 		return resp, nil
 	}
@@ -312,4 +318,46 @@ func TestScheduleStatus_SingleSchedule_UnexpectedBothGenuine(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, stdout, `Schedule "foo" is in an unexpected state`)
+}
+
+//parallelize:ignore
+func TestScheduleStatusRawGRPCErrors(t *testing.T) {
+	// CLI apps share mutable flag state and must run sequentially.
+	v1ID := primitives.ScheduleWorkflowIDPrefix + "foo"
+	notFound := status.Error(codes.NotFound, "workflow not found")
+	denied := status.Error(codes.PermissionDenied, "permission denied")
+	for _, tc := range []struct {
+		name      string
+		v1        bool
+		v2        bool
+		errors    map[string]error
+		summary   string
+		wantError error
+		requests  int
+	}{
+		{name: "missing CHASM side still checks V1", v1: true, errors: map[string]error{"foo": notFound}, summary: `Schedule "foo" is a V1 (workflow-backed) schedule.`, requests: 2},
+		{name: "missing workflow side still reports V2", v2: true, errors: map[string]error{v1ID: notFound}, summary: `Schedule "foo" is a V2 (CHASM) schedule.`, requests: 2},
+		{name: "both sides missing", errors: map[string]error{"foo": notFound, v1ID: notFound}, summary: `Schedule "foo" was not found as either`, requests: 2},
+		{name: "CHASM permission error remains fatal", errors: map[string]error{"foo": denied}, wantError: denied, requests: 1},
+		{name: "workflow permission error remains fatal", v2: true, errors: map[string]error{v1ID: denied}, wantError: denied, requests: 2},
+	} {
+		//parallelize:ignore
+		t.Run(tc.name, func(t *testing.T) {
+			admin := &describeMutableStateAdminClient{errors: tc.errors, responses: make(map[string]*adminservice.DescribeMutableStateResponse)}
+			if tc.v1 {
+				admin.responses[v1ID] = workflowTypeResponse(scheduler.WorkflowType)
+			}
+			if tc.v2 {
+				admin.responses["foo"] = chasmSchedulerStateResponse(t, false)
+			}
+			stdout, _, err := runScheduleStatusForSchedule(t, admin, "-n", "my-ns", "schedule", "migrate", "status", "--schedule-id", "foo")
+			if tc.wantError != nil {
+				require.ErrorIs(t, err, tc.wantError)
+			} else {
+				require.NoError(t, err)
+				require.Contains(t, stdout, tc.summary)
+			}
+			require.Len(t, admin.requests, tc.requests)
+		})
+	}
 }
