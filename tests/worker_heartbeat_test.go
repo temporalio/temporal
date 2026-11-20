@@ -48,7 +48,7 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	// A heartbeat from one member renews the same shared lease.
 	first.WorkerIdentity = "updated-worker"
 	sendWorkerHeartbeats(t, env, first)
-	group, ctx, err = fetchWorkerGroup(t.Context(), env, groupKey, "")
+	_, ctx, err = fetchWorkerGroup(t.Context(), env, groupKey, "")
 	require.NoError(t, err)
 	require.Equal(t, firstRunID, ctx.ExecutionKey().RunID)
 
