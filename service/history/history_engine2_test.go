@@ -681,6 +681,80 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTas
 	s.Equal(buildID, persistedExecutionInfo.GetAssignedBuildId())
 }
 
+func (s *engine2Suite) TestRecordWorkflowTaskStarted_SpeculativeWorkflowTaskWithLimiter() {
+	const taskQueue = "testTaskQueue"
+	const updateID = "update-id"
+	workflowExecution := &commonpb.WorkflowExecution{WorkflowId: "wId", RunId: tests.RunID}
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, tests.Version).
+		Return(cluster.TestCurrentClusterName).AnyTimes()
+	ms := s.createExecutionStartedState(workflowExecution, taskQueue, "testIdentity", false, false)
+	// Use the active failover version so failover cannot independently force persistence.
+	s.Require().NoError(ms.UpdateCurrentVersion(tests.GlobalNamespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()), true))
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)},
+		nil,
+	)
+
+	ctx := metrics.AddMetricsContext(s.T().Context())
+	wft := func() *historyi.WorkflowTaskInfo {
+		wfCtx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
+			ctx, s.mockShard, tests.NamespaceID, workflowExecution, locks.PriorityHigh,
+		)
+		s.Require().NoError(err)
+		defer release(nil)
+		loadedMS, err := wfCtx.LoadMutableState(ctx, s.mockShard)
+		s.Require().NoError(err)
+		upd, _, err := wfCtx.UpdateRegistry(ctx).FindOrCreate(ctx, updateID)
+		s.Require().NoError(err)
+		s.Require().NoError(upd.Admit(&updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: updateID},
+			Input: &updatepb.Input{Name: "update"},
+		}, workflow.WithEffects(effect.Immediate(ctx), loadedMS)))
+		wft, err := loadedMS.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+		s.Require().NoError(err)
+		s.Require().Equal(enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE, wft.Type)
+		s.Require().False(loadedMS.IsDirty())
+		return wft
+	}()
+
+	var persistedExecutionInfo *persistencespb.WorkflowExecutionInfo
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			persistedExecutionInfo = request.UpdateWorkflowMutation.ExecutionInfo
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ReadHistoryBranchResponse{}, nil,
+	)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
+		Return(searchattribute.TestNameTypeMap(), nil)
+
+	limiters := []*taskqueuespb.LimiterRef{{
+		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+		Key:         "limiter-1",
+		SlotId:      "slot-1",
+	}}
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
+		NamespaceId:       tests.NamespaceID.String(),
+		WorkflowExecution: workflowExecution,
+		ScheduledEventId:  wft.ScheduledEventID,
+		RequestId:         "request-id",
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+			Identity:  "testIdentity",
+		},
+		Limiters: limiters,
+	})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().NotNil(persistedExecutionInfo)
+	s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, persistedExecutionInfo.GetWorkflowTaskType())
+	protorequire.ProtoSliceEqual(s.T(), limiters, persistedExecutionInfo.GetWorkflowTaskLimiters())
+}
+
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 	namespaceID := tests.NamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{
