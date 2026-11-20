@@ -147,7 +147,7 @@ func TestOmitLazySelectionAndRecovery(t *testing.T) {
 func BenchmarkOmit(b *testing.B) {
 	for _, tc := range []struct {
 		name    string
-		message any
+		message proto.Message
 	}{
 		{"unaffected", &testfixture.StableMessage{Stable: "stable"}},
 		{"small", populatedMessage()},
@@ -155,11 +155,13 @@ func BenchmarkOmit(b *testing.B) {
 		{"blob-limit", &testfixture.Message{Stable: "stable", FeatureA: "a", Raw: make([]byte, 2*1024*1024)}},
 	} {
 		b.Run(tc.name, func(b *testing.B) {
-			selection := NewSelection(func() []string { return nil })
 			b.ReportAllocs()
-			b.ResetTimer()
 			for b.Loop() {
-				if _, err := Omit(tc.message, selection); err != nil {
+				b.StopTimer()
+				message := proto.Clone(tc.message)
+				selection := NewSelection(func() []string { return nil })
+				b.StartTimer()
+				if _, err := Omit(message, selection); err != nil {
 					b.Fatal(err)
 				}
 			}
