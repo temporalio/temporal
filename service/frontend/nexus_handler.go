@@ -372,12 +372,13 @@ type nexusHandler struct {
 	omitDraftFields               func(any, *draft.Selection) (bool, error)
 }
 
-func omitNexusDraftFields(omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, roots ...any) error {
+func omitNexusDraftFields(logger log.Logger, omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, roots ...any) error {
 	if omit == nil {
 		omit = draft.Omit
 	}
 	for _, root := range roots {
 		if _, err := omit(root, selection); err != nil {
+			logger.Error("draft field omission failed", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
 	}
@@ -504,7 +505,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
 	selection := newNexusDraftSelection(h.enabledDraftFeatureAPIs, oc.namespace.Name().String())
-	if err := omitNexusDraftFields(h.omitDraftFields, selection, request.Request); err != nil {
+	if err := omitNexusDraftFields(oc.logger, h.omitDraftFields, selection, request.Request); err != nil {
 		return nil, err
 	}
 
@@ -518,7 +519,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
-	if err := omitNexusDispatchDraftFields(h.omitDraftFields, selection, response, true); err != nil {
+	if err := omitNexusDispatchDraftFields(oc.logger, h.omitDraftFields, selection, response, true); err != nil {
 		return nil, err
 	}
 	result, handlerLinks, err := oc.handleStartOperationResponse(response, operation)
@@ -530,6 +531,7 @@ func (h *nexusHandler) StartOperation(
 }
 
 func omitNexusDispatchDraftFields(
+	logger log.Logger,
 	omit func(any, *draft.Selection) (bool, error),
 	selection *draft.Selection,
 	response *matchingservice.DispatchNexusTaskResponse,
@@ -537,19 +539,19 @@ func omitNexusDispatchDraftFields(
 ) error {
 	switch outcome := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
-		return omitNexusDraftFields(omit, selection, outcome.Failure)
+		return omitNexusDraftFields(logger, omit, selection, outcome.Failure)
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError: //nolint:staticcheck // Deprecated worker outcomes still require omission for backward compatibility.
-		return omitNexusDraftFields(omit, selection, outcome.HandlerError.GetFailure())
+		return omitNexusDraftFields(logger, omit, selection, outcome.HandlerError.GetFailure())
 	case *matchingservice.DispatchNexusTaskResponse_Response:
-		if err := omitNexusDraftFields(omit, selection, outcome.Response); err != nil || !start {
+		if err := omitNexusDraftFields(logger, omit, selection, outcome.Response); err != nil || !start {
 			return err
 		}
 		//nolint:staticcheck // Deprecated worker outcomes still require omission for backward compatibility.
 		switch result := outcome.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_OperationError:
-			return omitNexusDraftFields(omit, selection, result.OperationError.GetFailure())
+			return omitNexusDraftFields(logger, omit, selection, result.OperationError.GetFailure())
 		case *nexuspb.StartOperationResponse_Failure:
-			return omitNexusDraftFields(omit, selection, result.Failure)
+			return omitNexusDraftFields(logger, omit, selection, result.Failure)
 		default:
 			return nil
 		}
@@ -659,7 +661,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return err
 	}
 	selection := newNexusDraftSelection(h.enabledDraftFeatureAPIs, oc.namespace.Name().String())
-	if err := omitNexusDraftFields(h.omitDraftFields, selection, request.Request); err != nil {
+	if err := omitNexusDraftFields(oc.logger, h.omitDraftFields, selection, request.Request); err != nil {
 		return err
 	}
 
@@ -673,7 +675,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
-	if err := omitNexusDispatchDraftFields(h.omitDraftFields, selection, response, false); err != nil {
+	if err := omitNexusDispatchDraftFields(oc.logger, h.omitDraftFields, selection, response, false); err != nil {
 		return err
 	}
 	return oc.handleCancelOperationResponse(response, operation)

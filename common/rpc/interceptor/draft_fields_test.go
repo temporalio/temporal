@@ -18,6 +18,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -224,7 +226,8 @@ func TestDraftFieldsOmissionBeforeValidation(t *testing.T) {
 
 func TestDraftFieldsConfigPanic(t *testing.T) {
 	for _, incoming := range []bool{false, true} {
-		i := NewDraftFieldsInterceptor(func(string) []string { panic("sensitive config") }, nil, log.NewNoopLogger(), draft.Omit)
+		core, logs := observer.New(zap.ErrorLevel)
+		i := NewDraftFieldsInterceptor(func(string) []string { panic("sensitive config") }, nil, log.NewZapLogger(zap.New(core)), draft.Omit)
 		var req any = &emptypb.Empty{}
 		if incoming {
 			req = draftMessage()
@@ -236,8 +239,13 @@ func TestDraftFieldsConfigPanic(t *testing.T) {
 		})
 		require.Equal(t, !incoming, called)
 		require.Nil(t, out)
-		require.Equal(t, codes.Internal, status.Code(err))
-		require.NotContains(t, err.Error(), "sensitive")
+		require.Equal(t, status.New(codes.Internal, "draft field omission failed"), status.Convert(err))
+		entries := logs.All()
+		require.Len(t, entries, 1)
+		fields := entries[0].ContextMap()
+		require.Equal(t, draftTestMethod, fields["operation"])
+		require.Contains(t, fields["error"], "temporal.api.drafttest.v1.Message")
+		require.Contains(t, fields["error"], "sensitive config")
 	}
 }
 

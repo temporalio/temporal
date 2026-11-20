@@ -2,9 +2,11 @@
 package draft
 
 import (
-	"errors"
+	"fmt"
 	"slices"
 	"sync"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type Selection struct {
@@ -32,8 +34,12 @@ func Omit(msg any, s *Selection) (affected bool, err error) {
 	}
 	affected = true
 	defer func() {
-		if recover() != nil {
-			err = errors.New("draft field omission failed")
+		if recovered := recover(); recovered != nil {
+			if message, ok := msg.(proto.Message); ok {
+				err = fmt.Errorf("draft field omission failed for %s: %v", proto.MessageName(message), recovered)
+			} else {
+				err = fmt.Errorf("draft field omission failed for %T: %v", msg, recovered)
+			}
 		}
 	}()
 	omitter.OmitDraftFields(s.Enabled)
