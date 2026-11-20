@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -52,7 +51,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
-	env.NoError(err0)
+	s.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -101,24 +100,24 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 	// First workflow task immediately fails and schedules a transient workflow task
 	_, err := poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
 	// Now send a signal when transient workflow task is scheduled
 	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signalA", nil, identity)
-	env.NoError(err, "failed to send signal to execution")
+	s.NoError(err, "failed to send signal to execution")
 
 	// Drop workflow task to cause a workflow task timeout
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithDropTask)
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
 	// Now process signal and complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
-	env.Equal(1, signalCount)
-	env.True(workflowComplete)
+	s.Equal(1, signalCount)
+	s.True(workflowComplete)
 }
 
 func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
@@ -143,7 +142,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
-	env.NoError(err0)
+	s.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -169,15 +168,15 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		// find workflow task started event
 		event := task.History.Events[len(task.History.Events)-1]
-		env.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.GetEventType())
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.GetEventType())
 		attrs := event.GetWorkflowTaskStartedEventAttributes()
 		env.Logger.Info("wtHandler", tag.Counter(stage))
 
 		stage++
 		switch stage {
 		case 1:
-			env.Less(attrs.HistorySizeBytes, int64(10*1024))
-			env.False(attrs.SuggestContinueAsNew)
+			s.Less(attrs.HistorySizeBytes, int64(10*1024))
+			s.False(attrs.SuggestContinueAsNew)
 			// record a large marker
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
 			return []*commandpb.Command{{
@@ -189,8 +188,8 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 			}}, nil
 
 		case 2:
-			env.Greater(attrs.HistorySizeBytes, int64(10*1024))
-			env.False(attrs.SuggestContinueAsNew)
+			s.Greater(attrs.HistorySizeBytes, int64(10*1024))
+			s.False(attrs.SuggestContinueAsNew)
 			// record another large marker
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
 			return []*commandpb.Command{{
@@ -202,26 +201,26 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 			}}, nil
 
 		case 3:
-			env.Greater(attrs.HistorySizeBytes, int64(20*1024))
-			env.True(attrs.SuggestContinueAsNew)
+			s.Greater(attrs.HistorySizeBytes, int64(20*1024))
+			s.True(attrs.SuggestContinueAsNew)
 			failedTaskSawSize = attrs.HistorySizeBytes
 			// fail workflow task and we'll get a transient one
 			return nil, errors.New("oops") //nolint:err113
 
 		case 4:
 			// we might not get the same value but it shouldn't be smaller, and not too much larger
-			env.GreaterOrEqual(attrs.HistorySizeBytes, failedTaskSawSize)
-			env.Less(attrs.HistorySizeBytes, failedTaskSawSize+10000)
-			env.False(attrs.SuggestContinueAsNew)
+			s.GreaterOrEqual(attrs.HistorySizeBytes, failedTaskSawSize)
+			s.Less(attrs.HistorySizeBytes, failedTaskSawSize+10000)
+			s.False(attrs.SuggestContinueAsNew)
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
 			return nil, nil
 
 		case 5:
 			// we should get just a little larger
 			prevSize := sawFields[len(sawFields)-1].size
-			env.Greater(attrs.HistorySizeBytes, prevSize)
-			env.Less(attrs.HistorySizeBytes, prevSize+10000)
-			env.False(attrs.SuggestContinueAsNew) // now false
+			s.Greater(attrs.HistorySizeBytes, prevSize)
+			s.Less(attrs.HistorySizeBytes, prevSize+10000)
+			s.False(attrs.SuggestContinueAsNew) // now false
 
 			workflowComplete = true
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
@@ -250,23 +249,23 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	// stage 1
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
 	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signal", nil, identity)
-	env.NoError(err, "failed to send signal to execution")
+	s.NoError(err, "failed to send signal to execution")
 
 	// stage 2
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
 	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signal", nil, identity)
-	env.NoError(err, "failed to send signal to execution")
+	s.NoError(err, "failed to send signal to execution")
 
 	// stage 3: this one fails with a panic
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
 	// change the dynamic config so that SuggestContinueAsNew should now be false. the current
 	// workflow task should still see true, but the next one will see false.
@@ -276,38 +275,32 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	// Increase retries to handle asynchronous task creation timing
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands, testcore.WithRetries(3))
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
 	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signal", nil, identity)
-	env.NoError(err, "failed to send signal to execution")
+	s.NoError(err, "failed to send signal to execution")
 
 	// drop workflow task to cause a workflow task timeout
 	// Use increased retries to ensure we successfully poll and drop the task
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDropTask, testcore.WithNoDumpCommands, testcore.WithRetries(3))
 	env.Logger.Info("PollAndProcessWorkflowTask (drop)", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
 	// Wait for the workflow task timeout to actually fire before polling for stage 5
 	// With 10s timeout, poll for up to 15s to ensure timeout has occurred
-	env.EventuallyWithT(func(c *assert.CollectT) {
+	s.Await(func(s *TransientTaskSuite) {
 		events := env.RequireHistory(s, workflowExecution)
 		// Look for WorkflowTaskTimedOut event (should be event 21)
-		timedOutFound := false
-		for _, event := range events {
-			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
-				timedOutFound = true
-				break
-			}
-		}
-		assert.True(c, timedOutFound, "Expected WorkflowTaskTimedOut event not found in history")
+		s.True(hasEventType(events, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT),
+			"Expected WorkflowTaskTimedOut event not found in history")
 	}, 15*time.Second, 500*time.Millisecond)
 
 	// stage 5: process task after timeout and complete workflow
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands, testcore.WithRetries(3))
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
-	env.True(workflowComplete)
+	s.True(workflowComplete)
 
 	var sawFieldsFlat []any
 	for _, f := range sawFields {
@@ -315,7 +308,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	allEvents := env.RequireHistory(s, workflowExecution)
-	env.EqualHistoryEvents(fmt.Sprintf(`
+	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted {"HistorySizeBytes":%d, "SuggestContinueAsNew":%t}
@@ -365,7 +358,7 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
-	env.NoError(err0)
+	s.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -386,7 +379,7 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 					Input:      payloads.EncodeString("buffered-signal-input"),
 					Identity:   identity,
 				})
-			env.NoError(err)
+			s.NoError(err)
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -423,15 +416,15 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 	// so it will fail and create a new workflow task
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.Error(err)
-	env.ErrorAs(err, new(*serviceerror.InvalidArgument))
-	env.Equal("UnhandledCommand", err.Error())
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	s.Equal("UnhandledCommand", err.Error())
 
 	// second workflow task, which will complete the workflow
 	// this expect the workflow task to have attempt == 1
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(1))
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	env.NoError(err)
+	s.NoError(err)
 
-	env.True(workflowComplete)
+	s.True(workflowComplete)
 }
