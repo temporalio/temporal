@@ -757,6 +757,7 @@ func getStartTimeFromState(state *persistencespb.WorkflowExecutionState) *time.T
 	if state == nil || state.StartTime == nil {
 		return nil
 	}
-	startTime := state.StartTime.AsTime()
+	// Normalize before writing so database rounding agrees with currentExecutionsEqual.
+	startTime := state.StartTime.AsTime().Truncate(time.Microsecond)
 	return &startTime
 }
