@@ -449,7 +449,9 @@ func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 // Otherwise it returns (output, ref, err), where output is the output of the predicate function,
 // and ref is a component reference identifying the state at which the predicate was satisfied. The
 // predicate must be monotonic: if it returns true at execution state transition s then it must
-// return true at all transitions t > s. If the predicate is true at the outset then PollComponent
+// return true at all transitions t > s. The predicate must not depend on ephemeral components
+// (see [ComponentFieldEphemeral]): they are lost when the execution is evicted, and changing only
+// them doesn't wake waiting pollers. If the predicate is true at the outset then PollComponent
 // returns immediately. opts are currently ignored.
 func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,

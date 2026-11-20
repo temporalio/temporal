@@ -1087,6 +1087,89 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 	s.NoError(err)
 }
 
+func (s *chasmEngineSuite) TestUpdateComponent_SkipCleanUpdates() {
+	s.config.EnableCHASMSkipCleanUpdates = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	})
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{ActivityId: "initial"},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+
+	notified, unsubscribe := s.engine.notifier.Subscribe(ref.ExecutionKey)
+	defer unsubscribe()
+
+	// An update without changes isn't persisted, and pollers aren't notified.
+	_, err := s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			s.Equal("initial", component.(*testComponent).ActivityInfo.ActivityId)
+			return nil
+		},
+	)
+	s.NoError(err)
+	select {
+	case <-notified:
+		s.Fail("skipped update notified pollers")
+	default:
+	}
+
+	// An update with changes is.
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+	_, err = s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			component.(*testComponent).ActivityInfo.ActivityId = "updated"
+			return nil
+		},
+	)
+	s.NoError(err)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_SkipCleanUpdates_RequestIDIsPersisted() {
+	s.config.EnableCHASMSkipCleanUpdates = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	for _, dataNode := range []bool{false, true} {
+		s.Run(fmt.Sprintf("request ID data node %t", dataNode), func() {
+			// The request ID is recorded in mutable state, or in a CHASM data node, and must be persisted either way.
+			s.config.EnableChasmRequestIDDataNode = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(dataNode)
+			ref := s.loadRunningTestExecution(1)
+			request := s.expectPersistedActivityInfo(ref, &persistencespb.ActivityInfo{})
+
+			_, err := s.engine.UpdateComponent(context.Background(), ref,
+				func(chasm.MutableContext, chasm.Component) error { return nil },
+				chasm.WithRequestID("request-id"))
+			s.NoError(err)
+			if !dataNode {
+				s.Contains((*request).UpdateWorkflowMutation.ExecutionState.RequestIds, "request-id")
+			}
+		})
+	}
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_SkipCleanUpdatesDisabled() {
+	s.config.EnableCHASMSkipPersistence = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	ref := s.loadRunningTestExecution(1)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil).
+		Times(1)
+
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		func(chasm.MutableContext, chasm.Component) error { return nil })
+	s.NoError(err)
+}
+
 func (s *chasmEngineSuite) TestUpdateComponent_SetsContextMetadata() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())

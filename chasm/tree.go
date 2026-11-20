@@ -143,6 +143,10 @@ type (
 		//
 		// This is a per-node field (not in nodeBase) and is reset after each transaction.
 		subtreeIsDirty bool
+
+		// encodedValue is the node's value as encoded by CloseTransactionIfClean, which CloseTransaction reuses instead
+		// of encoding the value again. It is reset whenever the value state changes, and after each transaction.
+		encodedValue *commonpb.DataBlob
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -153,9 +157,24 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
-		// Following fields are changes accumulated in this transaction,
-		// and will get cleaned up after CloseTransaction().
+		// Node value -> node
+		// Only component and data node values are tracked right now
+		valueToNode map[any]*Node
 
+		taskValueCache map[*commonpb.DataBlob]reflect.Value
+
+		// Root component's search attributes and memo at the start of a transaction.
+		// They will be updated upon CloseTransaction() if they are changed.
+		currentSA   map[string]VisibilityValue
+		currentMemo proto.Message
+
+		transactionState
+	}
+
+	// transactionState holds the changes accumulated in a transaction. cleanupTransaction resets all of it, and
+	// CloseTransactionIfClean skips the write only if none of it is pending. A new field must be handled by both
+	// clearTransactionState and hasPendingWrites; TestTransactionState_EveryFieldCovered fails until it is.
+	transactionState struct {
 		// mutation field captures all user state changes (those will be replicated)
 		mutation NodesMutation
 		// systemMutation field captures all cell specific system changes (those will NOT be replicated)
@@ -170,26 +189,19 @@ type (
 		pendingRequestLinks map[any]map[string][]*commonpb.Link
 		pendingUserMetadata map[any]*sdkpb.UserMetadata
 
-		// Node value -> node
-		// Only component and data node values are tracked right now
-		valueToNode map[any]*Node
-
-		taskValueCache map[*commonpb.DataBlob]reflect.Value
-
-		// Root component's search attributes and memo at the start of a transaction.
-		// They will be updated upon CloseTransaction() if they are changed.
-		currentSA   map[string]VisibilityValue
-		currentMemo proto.Message
-
 		needsPointerResolution bool
 
 		totalTimeSkippedUpdatedInPassive bool
+
+		// backendStateChanged is set when the transaction changed state that the backend persists outside the tree,
+		// e.g. the time-skipping config.
+		backendStateChanged bool
 
 		// speculativeTransitionPending is set when a speculative transition left changes in the tree that
 		// aren't persisted. The next active CloseTransaction persists them.
 		speculativeTransitionPending bool
 		// speculativeTransitionFailoverVersion is the namespace failover version of the pending
-		// speculative transition.
+		// speculative transition. It is only read while speculativeTransitionPending is set.
 		speculativeTransitionFailoverVersion int64
 	}
 
@@ -346,21 +358,9 @@ func newTreeHelper(
 		logger:         logger,
 		metricsHandler: metricsHandler,
 
-		mutation: NodesMutation{
-			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
-			DeletedNodes: make(map[string]struct{}),
-		},
-		systemMutation: NodesMutation{
-			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
-			DeletedNodes: make(map[string]struct{}),
-		},
-		newTasks:               make(map[any][]taskWithAttributes),
-		immediatePureTasks:     make(map[any][]taskWithAttributes),
-		pendingRequestLinks:    make(map[any]map[string][]*commonpb.Link),
-		pendingUserMetadata:    make(map[any]*sdkpb.UserMetadata),
-		valueToNode:            make(map[any]*Node),
-		taskValueCache:         make(map[*commonpb.DataBlob]reflect.Value),
-		needsPointerResolution: false,
+		valueToNode:      make(map[any]*Node),
+		taskValueCache:   make(map[*commonpb.DataBlob]reflect.Value),
+		transactionState: newTransactionState(),
 	}
 
 	return newNode(base, nil, "")
@@ -437,6 +437,7 @@ func (n *Node) setValue(value any) {
 
 func (n *Node) setValueState(state valueState) {
 	n.valueState = state
+	n.encodedValue = nil
 	if state >= valueStateNeedSerialize {
 		n.markSubtreeDirty()
 	}
@@ -905,7 +906,7 @@ func (n *Node) serializeComponentNode() error {
 		var blob *commonpb.DataBlob
 		if !field.val.IsNil() {
 			var err error
-			if blob, err = encodeChasmBlob(field.val.Interface().(proto.Message)); err != nil {
+			if blob, err = n.encodeValue(field.val.Interface().(proto.Message)); err != nil {
 				return err
 			}
 		}
@@ -1327,7 +1328,7 @@ func (n *Node) serializeDataNode() error {
 	var blob *commonpb.DataBlob
 	if protoValue != nil {
 		var err error
-		if blob, err = encodeChasmBlob(protoValue); err != nil {
+		if blob, err = n.encodeValue(protoValue); err != nil {
 			return err
 		}
 	}
@@ -1336,6 +1337,15 @@ func (n *Node) serializeDataNode() error {
 	n.setValueState(valueStateSynced)
 
 	return nil
+}
+
+// encodeValue encodes the value of a component's data field or of a data node, reusing the encoding from
+// CloseTransactionIfClean if the node's value hasn't changed since.
+func (n *Node) encodeValue(value proto.Message) (*commonpb.DataBlob, error) {
+	if n.encodedValue != nil {
+		return n.encodedValue, nil
+	}
+	return encodeChasmBlob(value)
 }
 
 // serializeCollectionNode serializes the collection node.
@@ -2018,6 +2028,103 @@ func (n *Node) speculativeTransitionClosesExecution(ctx context.Context) (bool, 
 		return false, err
 	}
 	return rootComponent.LifecycleState(immutableContext).IsClosed(), nil
+}
+
+// CloseTransactionIfClean closes the transaction without a mutation if it has nothing to persist, e.g. because it only
+// read components or only changed ephemeral components. Otherwise it returns false and leaves the transaction open, in
+// which case the caller must close it with CloseTransaction, which reuses the values encoded here. Only changes made
+// through the tree are checked, so the caller must not have changed the backend's state directly. This method should
+// only be invoked on the root node.
+func (n *Node) CloseTransactionIfClean() (bool, error) {
+	// Syncing the structure is repeatable, so CloseTransaction can still be called if the transaction isn't clean.
+	if err := n.syncSubComponents(); err != nil {
+		return false, err
+	}
+
+	// Encode every changed value even once the transaction is known not to be clean, so that CloseTransaction
+	// doesn't encode any value again.
+	clean := !n.hasPendingWrites()
+	var unchangedNodes []*Node
+	for _, node := range n.andAllChildren() {
+		if node.terminated {
+			clean = false
+		}
+		if node.valueState < valueStateNeedSerialize {
+			continue
+		}
+		if node.shouldPersist() {
+			unchanged, err := node.encodeAndCompareValue()
+			if err != nil {
+				return false, err
+			}
+			if !unchanged {
+				clean = false
+				continue
+			}
+		}
+		unchangedNodes = append(unchangedNodes, node)
+	}
+	if !clean {
+		return false, nil
+	}
+
+	for _, node := range unchangedNodes {
+		node.setValueState(valueStateSynced)
+	}
+	n.cleanupTransaction()
+	return true, nil
+}
+
+// encodeAndCompareValue encodes the node's value for CloseTransaction and reports whether it matches the persisted
+// value.
+func (n *Node) encodeAndCompareValue() (bool, error) {
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+		// The node was never persisted.
+		return false, nil
+	}
+
+	switch attributes := n.serializedNode.GetMetadata().GetAttributes().(type) {
+	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
+		for field := range n.valueFields() {
+			if field.err != nil {
+				return false, field.err
+			}
+			if field.kind != fieldKindData {
+				continue
+			}
+			if field.val.IsNil() {
+				return n.serializedNode.GetData() == nil, nil
+			}
+			return n.encodeAndCompareData(field.val.Interface().(proto.Message))
+		}
+		return n.serializedNode.GetData() == nil, nil
+	case *persistencespb.ChasmNodeMetadata_DataAttributes:
+		protoValue, ok := n.value.(proto.Message)
+		if !ok {
+			return false, serviceerror.NewInternal("only support proto.Message as chasm data")
+		}
+		if protoValue == nil {
+			return n.serializedNode.GetData() == nil, nil
+		}
+		return n.encodeAndCompareData(protoValue)
+	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
+		// Collections have no value. Added and removed items are nodes of their own.
+		return true, nil
+	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
+		path, ok := n.value.([]string)
+		return ok && slices.Equal(path, attributes.PointerAttributes.GetNodePath()), nil
+	default:
+		return false, softassert.UnexpectedInternalErr(n.logger, "unknown node type", nil)
+	}
+}
+
+func (n *Node) encodeAndCompareData(value proto.Message) (bool, error) {
+	blob, err := encodeChasmBlob(value)
+	if err != nil {
+		return false, err
+	}
+	n.encodedValue = blob
+	return bytes.Equal(blob.GetData(), n.serializedNode.GetData().GetData()), nil
 }
 
 func (n *Node) executeImmediatePureTasks() error {
@@ -2879,41 +2986,78 @@ func (n *Node) andAllChildren() iter.Seq2[[]string, *Node] {
 }
 
 func (n *Node) cleanupTransaction() {
-	n.mutation = NodesMutation{
+	n.clearTransactionState()
+
+	// Reset per-node transaction state on all nodes in the tree.
+	for _, node := range n.andAllChildren() {
+		node.subtreeIsDirty = false
+		node.encodedValue = nil
+	}
+}
+
+func newTransactionState() transactionState {
+	return transactionState{
+		mutation: NodesMutation{
+			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+			DeletedNodes: make(map[string]struct{}),
+		},
+		systemMutation: NodesMutation{
+			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+			DeletedNodes: make(map[string]struct{}),
+		},
+		newTasks:            make(map[any][]taskWithAttributes),
+		immediatePureTasks:  make(map[any][]taskWithAttributes),
+		pendingRequestLinks: make(map[any]map[string][]*commonpb.Link),
+		pendingUserMetadata: make(map[any]*sdkpb.UserMetadata),
+	}
+}
+
+// clearTransactionState clears the transaction state for the next transaction. Maps that are usually empty are reused.
+func (s *transactionState) clearTransactionState() {
+	s.mutation = NodesMutation{
 		UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
 		DeletedNodes: make(map[string]struct{}),
 	}
-
-	// System mutation are most likely to be empty, so we reuse existing ones if possible.
-	if len(n.systemMutation.UpdatedNodes) != 0 {
-		n.systemMutation.UpdatedNodes = make(map[string]*persistencespb.ChasmNode)
+	if len(s.systemMutation.UpdatedNodes) != 0 {
+		s.systemMutation.UpdatedNodes = make(map[string]*persistencespb.ChasmNode)
 	}
-	if len(n.systemMutation.DeletedNodes) != 0 {
-		n.systemMutation.DeletedNodes = make(map[string]struct{})
+	if len(s.systemMutation.DeletedNodes) != 0 {
+		s.systemMutation.DeletedNodes = make(map[string]struct{})
 	}
 
-	n.newTasks = make(map[any][]taskWithAttributes)
-	if len(n.immediatePureTasks) != 0 {
-		// n.immediatePureTasks should already be empty after executeImmediatePureTasks()
-		// unless there's an error.
-		n.immediatePureTasks = make(map[any][]taskWithAttributes)
+	s.newTasks = make(map[any][]taskWithAttributes)
+	if len(s.immediatePureTasks) != 0 {
+		// immediatePureTasks should already be empty after executeImmediatePureTasks() unless there's an error.
+		s.immediatePureTasks = make(map[any][]taskWithAttributes)
+	}
+	if len(s.pendingRequestLinks) != 0 {
+		s.pendingRequestLinks = make(map[any]map[string][]*commonpb.Link)
+	}
+	if len(s.pendingUserMetadata) != 0 {
+		s.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
 	}
 
-	if len(n.pendingRequestLinks) != 0 {
-		n.pendingRequestLinks = make(map[any]map[string][]*commonpb.Link)
-	}
-	if len(n.pendingUserMetadata) != 0 {
-		n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
-	}
+	s.needsPointerResolution = false
+	s.totalTimeSkippedUpdatedInPassive = false
+	s.backendStateChanged = false
+	s.speculativeTransitionPending = false
+	s.speculativeTransitionFailoverVersion = 0
+}
 
-	n.needsPointerResolution = false
-	n.totalTimeSkippedUpdatedInPassive = false
-	n.speculativeTransitionPending = false
-
-	// Reset per-node subtreeIsDirty on all nodes in the tree.
-	for _, node := range n.andAllChildren() {
-		node.subtreeIsDirty = false
-	}
+// hasPendingWrites reports whether the transaction has anything to persist other than changed node values.
+func (s *transactionState) hasPendingWrites() bool {
+	return len(s.mutation.UpdatedNodes) != 0 ||
+		len(s.mutation.DeletedNodes) != 0 ||
+		len(s.systemMutation.UpdatedNodes) != 0 ||
+		len(s.systemMutation.DeletedNodes) != 0 ||
+		len(s.newTasks) != 0 ||
+		len(s.immediatePureTasks) != 0 ||
+		len(s.pendingRequestLinks) != 0 ||
+		len(s.pendingUserMetadata) != 0 ||
+		s.needsPointerResolution ||
+		s.totalTimeSkippedUpdatedInPassive ||
+		s.backendStateChanged ||
+		s.speculativeTransitionPending
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
