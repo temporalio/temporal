@@ -428,11 +428,11 @@ func (c *cacheImpl) makeReleaseFunc(
 // unlockAndRelease unlocks the item's workflow context and then releases the item's cache entry.
 // The cache reads the entry's size on release. unlockAndRelease measures that size before it
 // unlocks the context, because the context's mutable state and update registry are guarded by
-// the workflow lock.
+// the workflow lock. The unlock and release are deferred, so they still happen if measuring panics.
 func (c *cacheImpl) unlockAndRelease(cacheKey Key, item *cacheItem) {
+	defer c.Release(cacheKey)
+	defer item.wfContext.Unlock()
 	item.updateSize()
-	item.wfContext.Unlock()
-	c.Release(cacheKey)
 }
 
 func (c *cacheImpl) validateWorkflowExecutionInfo(
@@ -527,8 +527,8 @@ func newCacheItem(shardID int32, wfContext historyi.WorkflowContext, fin *finali
 // that has not yet been put into the cache.
 func (c *cacheItem) updateSize() {
 	size := 0
-	if sg, ok := c.wfContext.(cache.SizeGetter); ok {
-		size = sg.CacheSize()
+	if wfContext, ok := c.wfContext.(*workflow.ContextImpl); ok {
+		size = wfContext.ApproximateSize()
 	}
 	c.size.Store(int64(size))
 }
