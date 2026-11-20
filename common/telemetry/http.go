@@ -118,6 +118,9 @@ func NewHTTPHandler(
 		operation,
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
+		otelhttp.WithSpanNameFormatter(func(operation string, _ *http.Request) string {
+			return operation
+		}),
 	)
 }
 

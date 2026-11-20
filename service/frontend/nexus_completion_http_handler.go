@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -114,13 +115,17 @@ func newNexusCompletionHandler(
 	}
 }
 
-func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler) *nexusCompletionHTTPHandler {
+func newNexusCompletionHTTPHandler(
+	handler *nexusCompletionHandler,
+	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
+) *nexusCompletionHTTPHandler {
+	httpHandler := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
+		Handler:    handler,
+		Logger:     log.NewSlogLogger(handler.Logger),
+		Serializer: commonnexus.PayloadSerializer,
+	})
 	return &nexusCompletionHTTPHandler{
-		httpHandler: nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
-			Handler:    handler,
-			Logger:     log.NewSlogLogger(handler.Logger),
-			Serializer: commonnexus.PayloadSerializer,
-		}),
+		httpHandler: httpServerHandlerInstrumenter.Instrument(httpHandler, strings.TrimPrefix(nexusCompletionAPIName, "/")),
 	}
 }
 
@@ -472,14 +477,12 @@ func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r
 }
 
 func (h *nexusCompletionHTTPHandler) RegisterRoutes(r *mux.Router) {
-	r.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	serveCompletion := func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
 		h.httpHandler.ServeHTTP(w, r)
-	})
-	r.Path(commonnexus.PathCompletionCallbackNoIdentifier).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
-		h.httpHandler.ServeHTTP(w, r)
-	})
+	}
+	r.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(serveCompletion)
+	r.Path(commonnexus.PathCompletionCallbackNoIdentifier).HandlerFunc(serveCompletion)
 }
 
 type forwardingHTTPHeaderWrapper struct {
