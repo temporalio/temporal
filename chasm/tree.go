@@ -2040,7 +2040,7 @@ func (n *Node) RunMemoryWakeup(
 // nextMemoryWakeupTime returns when the execution next has in-memory work. The bool is false when
 // it has none.
 func (n *Node) nextMemoryWakeupTime() (time.Time, bool) {
-	// Currently returns false. Will be used to scan side effect task later.
+	// Returns false until a feature adds in-memory work.
 	return time.Time{}, false
 }
 

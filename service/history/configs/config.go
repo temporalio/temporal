@@ -171,9 +171,8 @@ type Config struct {
 	NamespaceMinRetentionGlobal                      dynamicconfig.DurationPropertyFn
 	NamespaceMinRetentionLocal                       dynamicconfig.DurationPropertyFn
 
-	MemoryTimerProcessorSchedulerWorkerCount                    dynamicconfig.TypedSubscribable[int]
-	MemoryTimerProcessorChasmWakeupSchedulerWorkerCount         dynamicconfig.TypedSubscribable[int]
-	MemoryTimerProcessorChasmSpeculativeSideEffectTaskBatchSize dynamicconfig.IntPropertyFn
+	MemoryTimerProcessorSchedulerWorkerCount            dynamicconfig.TypedSubscribable[int]
+	MemoryTimerProcessorChasmWakeupSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 
 	// TransferQueueProcessor settings
 	TransferTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -649,9 +648,8 @@ func NewConfig(
 		NamespaceMinRetentionGlobal:                      dynamicconfig.NamespaceMinRetentionGlobal.Get(dc),
 		NamespaceMinRetentionLocal:                       dynamicconfig.NamespaceMinRetentionLocal.Get(dc),
 
-		MemoryTimerProcessorSchedulerWorkerCount:                    dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
-		MemoryTimerProcessorChasmWakeupSchedulerWorkerCount:         dynamicconfig.MemoryTimerProcessorChasmWakeupSchedulerWorkerCount.Subscribe(dc),
-		MemoryTimerProcessorChasmSpeculativeSideEffectTaskBatchSize: dynamicconfig.MemoryTimerProcessorChasmSpeculativeSideEffectTaskBatchSize.Get(dc),
+		MemoryTimerProcessorSchedulerWorkerCount:            dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
+		MemoryTimerProcessorChasmWakeupSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorChasmWakeupSchedulerWorkerCount.Subscribe(dc),
 
 		TransferTaskBatchSize:                               dynamicconfig.TransferTaskBatchSize.Get(dc),
 		TransferProcessorSchedulerWorkerCount:               dynamicconfig.TransferProcessorSchedulerWorkerCount.Subscribe(dc),

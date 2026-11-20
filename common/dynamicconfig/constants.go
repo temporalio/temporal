@@ -2427,12 +2427,6 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 		`MemoryTimerProcessorChasmWakeupSchedulerWorkerCount is the number of workers that run CHASM wake-ups in the
 in memory timer processor.`,
 	)
-	MemoryTimerProcessorChasmSpeculativeSideEffectTaskBatchSize = NewGlobalIntSetting(
-		"history.memoryTimerProcessorChasmSpeculativeSideEffectTaskBatchSize",
-		10,
-		`MemoryTimerProcessorChasmSpeculativeSideEffectTaskBatchSize is the most side-effect tasks added by speculative
-CHASM transitions that one wake-up runs. Remaining due tasks run in the next wake-up.`,
-	)
 
 	TransferTaskBatchSize = NewGlobalIntSetting(
 		"history.transferTaskBatchSize",
