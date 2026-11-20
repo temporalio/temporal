@@ -45,7 +45,10 @@ type (
 	}
 )
 
-var _ Handler = (*otelMetricsHandler)(nil)
+var (
+	_ Handler      = (*otelMetricsHandler)(nil)
+	_ GaugeRemover = (*gaugeAdapterGauge)(nil)
+)
 
 // NewOtelMetricsHandler returns a new Handler that uses the provided OpenTelemetry [metric.Meter] to record metrics.
 // This OTel handler supports metric descriptions for metrics registered with the New*Def functions. However, those
@@ -148,6 +151,13 @@ func (g *gaugeAdapterGauge) Record(v float64, tags ...Tag) {
 	g.adapter.lock.Lock()
 	defer g.adapter.lock.Unlock()
 	g.adapter.values[set.Equivalent()] = gaugeValue{value: v, set: set}
+}
+
+func (g *gaugeAdapterGauge) Remove(tags ...Tag) {
+	set := g.omp.makeSet(tags)
+	g.adapter.lock.Lock()
+	defer g.adapter.lock.Unlock()
+	delete(g.adapter.values, set.Equivalent())
 }
 
 // Timer obtains a timer for the given name.
