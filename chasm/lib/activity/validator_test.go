@@ -577,7 +577,7 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 			ActivityId:      defaultActivityID,
 			RestoreOriginal: true,
 		}
-		err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		err := ValidateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
 		require.NoError(t, err)
 		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
 		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
@@ -726,7 +726,7 @@ func TestRequestIDTooLong(t *testing.T) {
 			RestoreOriginal: true,
 			RequestId:       tooLong,
 		}
-		err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		err := ValidateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -1597,7 +1597,7 @@ func TestValidateAndNormalizeHandoffOptions(t *testing.T) {
 					ActivityOptions: &activitypb.ActivityOptions{HandoffOptions: common.CloneProto(testCase.options)},
 					UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{testCase.path}},
 				}
-				err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(request, getDefaultRetrySettings, defaultMaxIDLengthLimit)
+				err := ValidateAndNormalizeUpdateActivityExecutionOptionsRequest(request, getDefaultRetrySettings, defaultMaxIDLengthLimit)
 				if testCase.invalid {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 					return

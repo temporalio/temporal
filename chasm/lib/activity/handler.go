@@ -499,7 +499,7 @@ func (h *handler) RequestCancelActivityExecution(
 	response, _, err = chasm.UpdateComponent(
 		ctx,
 		ref,
-		(*Activity).handleCancellationRequested,
+		(*Activity).RequestCancel,
 		req,
 	)
 	if err != nil {
@@ -538,7 +538,7 @@ func (h *handler) PauseActivityExecution(ctx context.Context, req *activitypb.Pa
 		RunID:       frontendReq.GetRunId(),
 	})
 
-	_, _, err := chasm.UpdateComponent(ctx, ref, (*Activity).handlePauseRequested, req)
+	_, _, err := chasm.UpdateComponent(ctx, ref, (*Activity).Pause, req)
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +574,7 @@ func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.
 		RunID:       frontendReq.GetRunId(),
 	})
 
-	_, _, err := chasm.UpdateComponent(ctx, ref, (*Activity).handleUnpauseRequested, req)
+	_, _, err := chasm.UpdateComponent(ctx, ref, (*Activity).Unpause, req)
 	if err != nil {
 		return nil, err
 	}
@@ -615,7 +615,7 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		(*Activity).handleReset,
+		(*Activity).Reset,
 		req,
 	)
 	if err != nil {

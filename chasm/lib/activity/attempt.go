@@ -52,14 +52,19 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
 	// TODO: Populate VersionDirective when standalone activity versioning is supported, including handoff redispatch.
-	return &matchingservice.AddActivityTaskRequest{
+	request := &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            namespaceID,
 		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
 		TaskQueue:              a.GetTaskQueue(),
 		Priority:               a.GetPriority(),
 		ComponentRef:           componentRef,
 		Stamp:                  a.LastAttempt.Get(ctx).GetStamp(),
-	}, nil
+	}
+	if err := a.StoreOrSelf(ctx).PrepareAddActivityTaskRequest(ctx, a, request); err != nil {
+		return nil, err
+	}
+
+	return request, nil
 }
 
 // dispatchTimeForAttempt returns the dispatch time of the given attempt.
@@ -100,9 +105,10 @@ func dispatchTimeForRetry(attempt *activitypb.ActivityAttemptState) *timestamppb
 // created. But for SAA, if there's a start delay, then next_attempt_schedule_time is the
 // dispatch_time (non-null).
 func (a *Activity) nextAttemptDispatchTime(ctx chasm.Context, attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
-	if a.hasAttemptInProgress() || a.isPaused() || a.isTerminal() {
+	if a.hasAttemptInProgress() || a.IsPaused() || a.isTerminal() {
 		return nil
 	}
+
 	if t := a.dispatchTimeForAttempt(attempt); t != nil {
 		if t.AsTime().After(ctx.Now(a)) {
 			return t
@@ -139,7 +145,11 @@ func (a *Activity) recordFailedAttempt(
 	attemptFailure := failure
 	if !noRetriesLeft {
 		// Similar to workflow activity, truncate only retryable failure, not the final one.
-		attemptFailure = truncateRetryableFailure(ctx, failure)
+		var err error
+		attemptFailure, err = a.StoreOrSelf(ctx).TruncateRetryFailure(ctx, a, failure)
+		if err != nil {
+			return err
+		}
 	}
 
 	attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
@@ -187,20 +197,20 @@ func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(
 	return nil
 }
 
-// truncateRetryableFailure caps the size of a failure retained in the activity's state while it
+// TruncateRetryFailure caps the size of a failure retained in the activity's state while it
 // retries, mirroring MutableStateImpl.truncateRetryableActivityFailure for workflow activities.
-func truncateRetryableFailure(ctx chasm.Context, attemptFailure *failurepb.Failure) *failurepb.Failure {
+func (a *Activity) TruncateRetryFailure(ctx chasm.MutableContext, _ *Activity, attemptFailure *failurepb.Failure) (*failurepb.Failure, error) {
 	actCtx := activityContextFromChasm(ctx)
 	sizeLimit := actCtx.config.MutableStateActivityFailureSizeLimitError(ctx.NamespaceEntry().Name().String())
 	if attemptFailure.Size() <= sizeLimit {
-		return attemptFailure
+		return attemptFailure, nil
 	}
 
 	// nonRetryable is set to false here as only failures of attempts that will be retried are
 	// truncated, so the value is only for visibility/debugging purposes.
 	serverFailure := commonfailure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
 	serverFailure.Cause = commonfailure.Truncate(attemptFailure, sizeLimit)
-	return serverFailure
+	return serverFailure, nil
 }
 
 type retryEvent struct {
@@ -273,6 +283,14 @@ func (a *Activity) tryReschedule(ctx chasm.MutableContext, event retryEvent) (en
 
 	if !retryable {
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
+	}
+
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED {
+		if err := a.StoreOrSelf(ctx).PrepareRetry(ctx, a); err != nil {
+			return enumspb.RETRY_STATE_UNSPECIFIED, err
+		}
+
+		status = a.GetStatus()
 	}
 
 	retryState, retryInterval := a.shouldRetry(ctx, policy, count, event.overridingRetryInterval)
