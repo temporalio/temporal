@@ -27,6 +27,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -324,6 +325,56 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 	).Return(emptyIterator)
 
 	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(&historyservice.SyncActivityResponse{}, nil)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	s.NoError(err)
+}
+
+func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_WorkflowNotFoundInBothClusters() {
+	namespaceID := namespace.ID(uuid.NewString())
+	workflowID := uuid.NewString()
+	runID := uuid.NewString()
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
+				NamespaceId: namespaceID.String(),
+				WorkflowId:  workflowID,
+				RunId:       runID,
+			},
+		},
+	}
+
+	resendErr := serviceerrors.NewRetryReplication(
+		"some random error message",
+		namespaceID.String(),
+		workflowID,
+		runID,
+		123,
+		234,
+		345,
+		456,
+	)
+	s.historyClient.EXPECT().SyncActivity(gomock.Any(), gomock.Any()).Return(nil, resendErr)
+	notFoundIterator := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
+		return nil, nil, serviceerror.NewNotFound("workflow not found in source cluster")
+	})
+	s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
+		gomock.Any(),
+		s.remoteCluster,
+		namespaceID,
+		workflowID,
+		runID,
+		int64(123),
+		int64(234),
+		int64(345),
+		int64(456),
+	).Return(notFoundIterator)
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), gomock.Any(), namespaceID, gomock.Any(), gomock.Any(),
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("workflow not found in target cluster"))
+
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
