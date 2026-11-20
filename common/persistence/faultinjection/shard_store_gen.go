@@ -9,6 +9,7 @@ package faultinjection
 import (
 	"context"
 
+	"go.temporal.io/server/common/faultinjection"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
 )
 
@@ -16,14 +17,14 @@ type (
 	// faultInjectionShardStore implements ShardStore interface with fault injection.
 	faultInjectionShardStore struct {
 		_sourcePersistence.ShardStore
-		generator faultGenerator
+		generator faultinjection.Generator[any, struct{}]
 	}
 )
 
 // newFaultInjectionShardStore returns faultInjectionShardStore.
 func newFaultInjectionShardStore(
 	baseStore _sourcePersistence.ShardStore,
-	generator faultGenerator,
+	generator faultinjection.Generator[any, struct{}],
 ) *faultInjectionShardStore {
 	return &faultInjectionShardStore{
 		ShardStore: baseStore,
@@ -33,27 +34,27 @@ func newFaultInjectionShardStore(
 
 // AssertShardOwnership wraps ShardStore.AssertShardOwnership.
 func (d faultInjectionShardStore) AssertShardOwnership(ctx context.Context, request *_sourcePersistence.AssertShardOwnershipRequest) (err error) {
-	err = d.generator.generate("AssertShardOwnership", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "AssertShardOwnership", any(request), func() (struct{}, error) {
 		err = d.ShardStore.AssertShardOwnership(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetOrCreateShard wraps ShardStore.GetOrCreateShard.
 func (d faultInjectionShardStore) GetOrCreateShard(ctx context.Context, request *_sourcePersistence.InternalGetOrCreateShardRequest) (ip1 *_sourcePersistence.InternalGetOrCreateShardResponse, err error) {
-	err = d.generator.generate("GetOrCreateShard", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetOrCreateShard", any(request), func() (struct{}, error) {
 		ip1, err = d.ShardStore.GetOrCreateShard(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // UpdateShard wraps ShardStore.UpdateShard.
 func (d faultInjectionShardStore) UpdateShard(ctx context.Context, request *_sourcePersistence.InternalUpdateShardRequest) (err error) {
-	err = d.generator.generate("UpdateShard", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "UpdateShard", any(request), func() (struct{}, error) {
 		err = d.ShardStore.UpdateShard(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
