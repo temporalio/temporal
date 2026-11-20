@@ -35,8 +35,6 @@ var draftOptionExtendees = map[string]string{
 
 type optionsFact struct {
 	Options []option
-	// Dependency-only vet runs discard diagnostics and Run errors.
-	Errors []string
 }
 
 func (*optionsFact) AFact() {}
@@ -52,9 +50,10 @@ type catalog struct {
 
 // exportAPIs validates the package's draft declarations and exports facts for its draft
 // APIs. Declaration and Go-mapping errors are independent, so both are recorded.
-func exportAPIs(pass *analysis.Pass, imported []option, metadata *optionsFact) {
+func exportAPIs(pass *analysis.Pass, imported []option, metadata *optionsFact) []string {
+	var validationErrors []string
 	fail := func(err error) {
-		metadata.Errors = append(metadata.Errors, fmt.Sprintf("%s: %v", pass.Pkg.Path(), err))
+		validationErrors = append(validationErrors, fmt.Sprintf("%s: %v", pass.Pkg.Path(), err))
 	}
 	files, err := readDescriptors(pass)
 	if err == nil {
@@ -62,7 +61,7 @@ func exportAPIs(pass *analysis.Pass, imported []option, metadata *optionsFact) {
 	}
 	if err != nil {
 		fail(err)
-		return
+		return validationErrors
 	}
 	c := &catalog{
 		pass: pass, options: append(imported, metadata.Options...), facts: make(map[types.Object][]string),
@@ -74,6 +73,7 @@ func exportAPIs(pass *analysis.Pass, imported []option, metadata *optionsFact) {
 			fail(err)
 		}
 	}
+	return validationErrors
 }
 
 func (c *catalog) addAPIs(files map[string]*descriptorpb.FileDescriptorProto) error {
