@@ -402,12 +402,12 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 	s.Rcv(activityStarted)
 	op := s.Rcv(callback)
 	s.Await(func(s *NexusWorkflowTestSuite) {
-		history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+		history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED)
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 	}, 10*time.Second, 100*time.Millisecond)
 	s.Await(func(s *NexusWorkflowTestSuite) {
-		history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: childID})
+		history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: childID})
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
 	}, 10*time.Second, 100*time.Millisecond)
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "begin-local-activity", nil))

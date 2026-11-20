@@ -100,7 +100,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -205,7 +205,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -304,7 +304,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 

@@ -1890,7 +1890,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 		"chain total: run 1 contributed 2h, run 2 only the remaining 1h — the budget caps the chain, not each run")
 
 	// Run 2's history carries exactly one transition: the cap-hit skip+disable.
-	hist2 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: run2ID})
+	hist2 := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: run2ID})
 	var transitions []*historypb.HistoryEvent
 	for _, e := range hist2 {
 		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {

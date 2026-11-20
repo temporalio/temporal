@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -200,8 +201,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 			s.NotEqual(handlerRun.GetRunID(), replacementRunID)
 			replacementRun := env.SdkClient().GetWorkflow(ctx, handlerRun.GetID(), replacementRunID)
 			signaledEvent := s.assertSignalLinks(ctx, env, chasmEnabled, caller, replacementRun, args.RequestID)
-			handlerHistory := env.GetHistory(
-				env.Namespace().String(),
+			handlerHistory := env.RequireHistory(
+				s,
 				&commonpb.WorkflowExecution{WorkflowId: replacementRun.GetID(), RunId: replacementRun.GetRunID()},
 			)
 			startedEvent := s.RequireHistoryEvent(handlerHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
@@ -273,8 +274,8 @@ func (s *NexusWorkflowTestSuite) assertSignalBackwardLink(env *NexusTestEnv, cal
 			},
 		}
 	} else {
-		callerHistory := env.GetHistory(
-			env.Namespace().String(),
+		callerHistory := env.RequireHistory(
+			s,
 			&commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()},
 		)
 		scheduledEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
@@ -351,7 +352,7 @@ func (s *NexusWorkflowTestSuite) assertSignalForwardLink(ctx context.Context, en
 		return
 	}
 	s.NoError(caller.workflowRun.Get(ctx, nil))
-	callerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()})
+	callerHistory := env.RequireHistory(parallelsuite.WithContext(ctx, s), &commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()})
 	completedEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	s.Len(completedEvent.GetLinks(), 1)
 	protorequire.ProtoEqual(s.T(), wantLink, completedEvent.GetLinks()[0])
@@ -377,7 +378,7 @@ func (s *NexusWorkflowTestSuite) signalRunID(ctx context.Context, env *NexusTest
 
 func (s *NexusWorkflowTestSuite) handlerSignalEvent(env *NexusTestEnv, handlerRun client.WorkflowRun, signalRequestID string) *historypb.HistoryEvent {
 	s.T().Helper()
-	handlerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
+	handlerHistory := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
 	var signaledEvent *historypb.HistoryEvent
 	for _, event := range handlerHistory {
 		if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == signalRequestID {
@@ -399,7 +400,7 @@ func (s *NexusWorkflowTestSuite) resetHandlerWorkflowAfterSignal(
 	var workflowTaskCompletedEventID int64
 	// Get the first completed event after the signal.
 	s.Await(func(s *NexusWorkflowTestSuite) {
-		handlerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
+		handlerHistory := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
 		signalReqEventFound := false
 		for _, event := range handlerHistory {
 			if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == signalRequestID {
