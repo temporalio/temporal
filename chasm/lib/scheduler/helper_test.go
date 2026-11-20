@@ -134,7 +134,9 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 	)
 }
 
-// testEnv holds all components needed for scheduler tests.
+// testEnv holds a scheduler execution on a CHASM test engine, with direct
+// access to its node, for tests that mutate the scheduler in an open
+// transaction and commit it with CloseTransaction.
 type testEnv struct {
 	t             *testing.T
 	Ctrl          *gomock.Controller
@@ -272,9 +274,7 @@ func newTestEngineContextFromConfig(
 		specProcessor = newRealSpecProcessor(gomock.NewController(t), logger)
 	}
 
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
+	registry := newTestRegistry(t, logger, specProcessor)
 
 	config.engineOpts = append(config.engineOpts, chasmtest.WithInvariantCheck(
 		func(t *testing.T, node *chasm.Node, root chasm.RootComponent) {
@@ -287,7 +287,8 @@ func newTestEngineContextFromConfig(
 
 // schedulerTestEngine bundles a CHASM test engine, a created Scheduler root
 // component, and convenience accessors, for tests that drive a Scheduler
-// through its actual task handlers rather than the newTestEnv rapid harness.
+// through its actual task handlers and the engine's update and read paths,
+// rather than testEnv's open transaction on the execution's node.
 type schedulerTestEngine struct {
 	engine     *chasmtest.Engine
 	engineCtx  context.Context
@@ -458,8 +459,8 @@ func (e *testEnv) ReadContext() chasm.Context {
 	return chasm.NewContext(context.Background(), e.Node)
 }
 
-// CloseTransaction closes the current CHASM transaction and then asserts the
-// stuckness invariant: a scheduler that is not in a terminal state must carry
+// CloseTransaction commits the open CHASM transaction through the engine,
+// whose invariant check asserts the stuckness invariant: a scheduler that is not in a terminal state must carry
 // at least one live logical task, or nothing will ever wake it again.
 //
 // This runs on every test in the package that closes through testEnv, so the
