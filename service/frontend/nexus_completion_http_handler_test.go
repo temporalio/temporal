@@ -207,7 +207,7 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 			client := historyservicemock.NewMockHistoryServiceClient(ctrl)
 			tc.setupClient(t, client)
 
-			h := &nexusCompletionHandler{HistoryClient: client}
+			h := &nexusCompletionHandler{HistoryClient: client, omitDraftFields: draft.Omit}
 			req := &nexusrpc.CompletionRequest{State: nexus.OperationStateSucceeded, OperationToken: "operation-token"}
 
 			err := h.completeOperation(context.Background(), log.NewNoopLogger(), tc.token(t), &commonpb.Payload{}, req, nil, !tc.chasmDisabled, draft.NewSelection(func() []string { return nil }))
@@ -234,7 +234,7 @@ func TestCompleteChasmOperation_CanceledBareFailure(t *testing.T) {
 			return &historyservice.CompleteNexusOperationChasmResponse{}, nil
 		})
 
-	h := &nexusCompletionHandler{HistoryClient: client}
+	h := &nexusCompletionHandler{HistoryClient: client, omitDraftFields: draft.Omit}
 	req := &nexusrpc.CompletionRequest{
 		State: nexus.OperationStateCanceled,
 		Error: &nexus.OperationError{
@@ -242,7 +242,7 @@ func TestCompleteChasmOperation_CanceledBareFailure(t *testing.T) {
 			OriginalFailure: &nexus.Failure{Message: "operation canceled"},
 		},
 	}
-	require.NoError(t, h.completeChasmOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, req, nil, nil))
+	require.NoError(t, h.completeChasmOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, req, nil, newNexusDraftSelection(nil, "")))
 	require.NotNil(t, captured.GetFailure().GetCanceledFailureInfo(),
 		"bare canceled failures must carry CanceledFailureInfo")
 }
@@ -254,12 +254,11 @@ func TestNexusDraftCompletionSelections(t *testing.T) {
 				t.Run(fmt.Sprintf("%v/chasm=%v/failed=%v", features, chasm, failed), func(t *testing.T) {
 					ctrl := gomock.NewController(t)
 					client := historyservicemock.NewMockHistoryServiceClient(ctrl)
-					h := &nexusCompletionHandler{HistoryClient: client}
 					reads := 0
 					selection := newNexusDraftSelection(func(ns string) []string { require.Equal(t, "tenant", ns); reads++; return features }, "tenant")
 					var roots []any
 					wanted := &testfixture.Message{Stable: "stable", FeatureA: "a", FeatureB: "b"}
-					h.omitDraftFields = func(root any, s *draft.Selection) (bool, error) {
+					omitDraftFields := func(root any, s *draft.Selection) (bool, error) {
 						require.Same(t, selection, s)
 						roots = append(roots, root)
 						wanted = &testfixture.Message{Stable: "stable", FeatureA: "a", FeatureB: "b"}
@@ -283,6 +282,7 @@ func TestNexusDraftCompletionSelections(t *testing.T) {
 						}
 						return true, nil
 					}
+					h := &nexusCompletionHandler{HistoryClient: client, omitDraftFields: omitDraftFields}
 					payload := &commonpb.Payload{Data: []byte("opaque"), Metadata: map[string][]byte{"stable": []byte("metadata")}}
 					link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "stable"}}}
 					verify := func(actualPayload *commonpb.Payload, links []*commonpb.Link, message, stack string) {
@@ -337,12 +337,11 @@ func TestNexusDraftCompletionFallbackSnapshot(t *testing.T) {
 	for _, chasm := range []bool{false, true} {
 		t.Run(fmt.Sprintf("chasm=%v", chasm), func(t *testing.T) {
 			client := historyservicemock.NewMockHistoryServiceClient(gomock.NewController(t))
-			h := &nexusCompletionHandler{HistoryClient: client}
 			features := []string{"feature-a"}
 			reads := 0
 			selection := draft.NewSelection(func() []string { reads++; return features })
 			calls := 0
-			h.omitDraftFields = func(root any, s *draft.Selection) (bool, error) {
+			omitDraftFields := func(root any, s *draft.Selection) (bool, error) {
 				require.Same(t, selection, s)
 				calls++
 				require.True(t, s.Enabled("feature-a"))
@@ -350,6 +349,7 @@ func TestNexusDraftCompletionFallbackSnapshot(t *testing.T) {
 				features = []string{"feature-b"}
 				return true, nil
 			}
+			h := &nexusCompletionHandler{HistoryClient: client, omitDraftFields: omitDraftFields}
 			if chasm {
 				gomock.InOrder(client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("retry")), client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).Return(&historyservice.CompleteNexusOperationResponse{}, nil))
 			} else {
@@ -371,8 +371,11 @@ func TestNexusDraftCompletionOmissionErrors(t *testing.T) {
 	for _, chasm := range []bool{false, true} {
 		for _, kind := range []string{"payload", "link", "failure"} {
 			t.Run(fmt.Sprintf("chasm=%v/%s", chasm, kind), func(t *testing.T) {
-				h := &nexusCompletionHandler{}
-				h.omitDraftFields = func(root any, _ *draft.Selection) (bool, error) { return true, errors.New("private payload") }
+				h := &nexusCompletionHandler{
+					omitDraftFields: func(any, *draft.Selection) (bool, error) {
+						return true, errors.New("private payload")
+					},
+				}
 				req := &nexusrpc.CompletionRequest{State: nexus.OperationStateSucceeded}
 				var payload *commonpb.Payload
 				var links []*commonpb.Link
@@ -411,7 +414,8 @@ func newDraftNexusCompletionHandler(t *testing.T) *nexusCompletionHandler {
 	operation, _ := newDraftNexusHandler(t)
 	oc := newOperationContext(contextOptions{namespaceState: enumspb.NAMESPACE_STATE_REGISTERED, quota: 1, namespaceRateLimitAllow: true, rateLimitAllow: true})
 	return &nexusCompletionHandler{ClusterMetadata: operation.clusterMetadata, NamespaceRegistry: operation.namespaceRegistry, Logger: log.NewNoopLogger(), MetricsHandler: metrics.NoopMetricsHandler,
-		Config: &Config{MaxNexusOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(4096), BlobSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024), EnableChasm: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)}, CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(), AuthInterceptor: oc.auth, NamespaceValidationInterceptor: oc.namespaceValidationInterceptor, NamespaceConcurrencyLimitInterceptor: oc.namespaceConcurrencyLimitInterceptor, NamespaceRateLimitInterceptor: oc.namespaceRateLimitInterceptor, RateLimitInterceptor: oc.rateLimitInterceptor, RedirectionInterceptor: oc.redirectionInterceptor, clientVersionChecker: headers.NewDefaultVersionChecker()}
+		omitDraftFields: draft.Omit,
+		Config:          &Config{MaxNexusOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(4096), BlobSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024), EnableChasm: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)}, CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(), AuthInterceptor: oc.auth, NamespaceValidationInterceptor: oc.namespaceValidationInterceptor, NamespaceConcurrencyLimitInterceptor: oc.namespaceConcurrencyLimitInterceptor, NamespaceRateLimitInterceptor: oc.namespaceRateLimitInterceptor, RateLimitInterceptor: oc.rateLimitInterceptor, RedirectionInterceptor: oc.redirectionInterceptor, clientVersionChecker: headers.NewDefaultVersionChecker()}
 }
 
 func draftNexusCompletionRequest(t *testing.T, h *nexusCompletionHandler) *nexusrpc.CompletionRequest {
