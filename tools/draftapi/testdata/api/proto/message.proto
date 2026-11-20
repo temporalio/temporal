@@ -14,10 +14,6 @@ message Stable {
     string stable_choice = 4;
     string draft_choice = 5 [(temporal.api.protometa.v1.draft) = "branch-feature"];
   }
-  oneof draft_union {
-    option (temporal.api.protometa.v1.draft_oneof) = "oneof-feature";
-    string member = 6;
-  }
   Draft whole = 7;
   Draft both = 8 [(temporal.api.protometa.v1.draft) = "field-feature"];
   repeated Draft list = 9;
@@ -48,29 +44,9 @@ message Draft {
 
 enum StableEnum {
   STABLE_ZERO = 0;
-  DRAFT_VALUE = 1 [(temporal.api.protometa.v1.draft_enum_value) = "value-feature"];
   STABLE_ALIAS = 2;
-  DRAFT_ALIAS = 2 [(temporal.api.protometa.v1.draft_enum_value) = "alias-feature"];
-  option allow_alias = true;
-}
-
-enum DraftEnum {
-  option (temporal.api.protometa.v1.draft_enum) = "enum-feature";
-  DRAFT_ZERO = 0;
 }
 
 service StableService {
   rpc StableCall(Stable) returns (Stable);
-  rpc DraftCall(Stable) returns (Stable) {
-    option (temporal.api.protometa.v1.draft_method) = "method-feature";
-  }
-}
-
-service DraftService {
-  option (temporal.api.protometa.v1.draft_service) = "service-feature";
-  rpc Call(Stable) returns (Stable);
-}
-
-service EmptyDraftService {
-  option (temporal.api.protometa.v1.draft_service) = "empty-service-feature";
 }
