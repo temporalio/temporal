@@ -129,6 +129,7 @@ func NewWorkflowWithSignal(
 			false,
 			nil,
 			-1, // sentinel: eager-exec path didn't consult matching, has no routing revision
+			newMutableState.SessionInfo(),
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history

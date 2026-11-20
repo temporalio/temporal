@@ -83,7 +83,8 @@ type (
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *timestamppb.Timestamp, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo, update.Registry, bool, *deploymentpb.WorkerDeploymentVersion, int64) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
+		// AddWorkflowTaskStartedEvent records sessionInfo, the workflow's binding once this task started, on the event.
+		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo, update.Registry, bool, *deploymentpb.WorkerDeploymentVersion, int64, *sessionpb.SessionInfo) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
 		AddWorkflowTaskTimedOutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, namespace.Name, namespace.ID, string, string) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, namespace.Name, namespace.ID, string, string, string) (*historypb.HistoryEvent, error)
@@ -244,6 +245,10 @@ type (
 		ClearStickyTaskQueue()
 		IsStickyTaskQueueSet() bool
 		SessionWorkerQueue() string
+		// SessionInfo returns the workflow's binding in the shape recorded on history events, or nil if it is not bound.
+		SessionInfo() *sessionpb.SessionInfo
+		// ApplySessionInfo sets the workflow's binding from a replayed workflow task started event.
+		ApplySessionInfo(info *sessionpb.SessionInfo)
 		ClearStickyTaskQueueUnlessPartOfSession() bool
 		// UpdateNonExclusiveWorkerBinding gives the workflow a non-exclusive binding to the multi-session worker that started
 		// its workflow task or one of its session activities. previousWorkerQueue and previousStickyTimeout must be read

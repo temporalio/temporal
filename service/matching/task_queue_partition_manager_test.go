@@ -1540,12 +1540,12 @@ func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 }
 
 /*
-TestStickyActivityAssignmentRules tests sticky routing after assignment rules are resolved:
-1. Resolve an activity's assignment-rules directive with no selected version to its sticky queue.
-2. Preserve validation for workflow tasks, explicit build IDs, and selected legacy versions.
-3. Preserve rejection when a redirect requires another worker.
+TestStickyAssignmentRules tests sticky routing of session tasks after assignment rules are resolved:
+1. Resolve an assignment-rules directive with no selected version to the sticky queue, for activities and workflow tasks.
+2. Send a task whose assignment rules select a build ID or version set back to the normal queue.
+3. Preserve validation for explicit build IDs, and rejection when a redirect requires another worker.
 */
-func TestStickyActivityAssignmentRules(t *testing.T) {
+func TestStickyAssignmentRules(t *testing.T) {
 	t.Parallel()
 	missingBuildID := serviceerror.NewInternal("should have a build ID directive on versioned sticky queue")
 	for _, tc := range []struct {
@@ -1567,8 +1567,10 @@ func TestStickyActivityAssignmentRules(t *testing.T) {
 			directive: worker_versioning.MakeUseAssignmentRulesDirective(), versioningData: &persistencespb.VersioningData{},
 		},
 		{
-			name: "workflow still requires explicit build ID", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+			// A bound workflow's workflow task before any completed, e.g. the first task after a reset, or a re-offered
+			// failed first task.
+			name: "workflow task of a bound workflow without a completed task", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(),
 		},
 		{
 			name: "activity with explicit empty build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -1576,14 +1578,28 @@ func TestStickyActivityAssignmentRules(t *testing.T) {
 		},
 		{
 			name: "activity with selected build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: serviceerrors.NewStickyWorkerUnavailable(),
 			versioningData: &persistencespb.VersioningData{
 				AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp("build")},
 			},
 		},
 		{
 			name: "activity with selected version set", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: serviceerrors.NewStickyWorkerUnavailable(),
+			versioningData: &persistencespb.VersioningData{
+				VersionSets: []*persistencespb.CompatibleVersionSet{createVersionSet("build")},
+			},
+		},
+		{
+			name: "workflow task with selected build ID falls back", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: serviceerrors.NewStickyWorkerUnavailable(),
+			versioningData: &persistencespb.VersioningData{
+				AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp("build")},
+			},
+		},
+		{
+			name: "workflow task with selected version set falls back", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: serviceerrors.NewStickyWorkerUnavailable(),
 			versioningData: &persistencespb.VersioningData{
 				VersionSets: []*persistencespb.CompatibleVersionSet{createVersionSet("build")},
 			},

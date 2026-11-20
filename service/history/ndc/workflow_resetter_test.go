@@ -546,6 +546,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		TaskQueue:        workflowTaskSchedule.TaskQueue,
 	}
 	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule).AnyTimes()
+	mutableState.EXPECT().SessionInfo().Return(nil).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskStartedEvent(
 		workflowTaskSchedule.ScheduledEventID,
 		workflowTaskSchedule.RequestID,
@@ -557,6 +558,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		true,
 		nil,
 		gomock.Any(),
+		nil,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart,
@@ -1879,6 +1881,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		RequestID:        workflowTaskSchedule.RequestID,
 		TaskQueue:        workflowTaskSchedule.TaskQueue,
 	}
+	resetMutableState.EXPECT().SessionInfo().Return(nil).AnyTimes()
 	resetMutableState.EXPECT().AddWorkflowTaskStartedEvent(
 		workflowTaskSchedule.ScheduledEventID,
 		workflowTaskSchedule.RequestID,
@@ -1890,6 +1893,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		true,
 		nil,
 		gomock.Any(),
+		nil,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 
 	resetMutableState.EXPECT().AddWorkflowTaskFailedEvent(

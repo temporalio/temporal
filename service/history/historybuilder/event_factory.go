@@ -10,6 +10,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -133,6 +134,7 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	buildIdRedirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
 	targetWorkerDeploymentVersionChanged bool,
+	sessionInfo *sessionpb.SessionInfo,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
@@ -147,6 +149,7 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 			BuildIdRedirectCounter:      buildIdRedirectCounter,
 
 			TargetWorkerDeploymentVersionChanged: targetWorkerDeploymentVersionChanged,
+			SessionInfo:                          sessionInfo,
 		},
 	}
 	return event
