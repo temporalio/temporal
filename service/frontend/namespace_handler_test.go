@@ -717,6 +717,8 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityHandoff)
+	s.False(resp.NamespaceInfo.Capabilities.WorkflowActivityHandoff)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
@@ -2682,5 +2684,27 @@ func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
 			},
 		)
 		s.ErrorIs(err, errInvalidNamespaceStateUpdate, "%v -> %v", testCase.oldState, testCase.newState)
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestHandoffCapabilities() {
+	for _, test := range []struct {
+		name                          string
+		standalone, handoff, workflow bool
+	}{
+		{name: "disabled"},
+		{name: "standalone enabled", standalone: true, handoff: true},
+		{name: "standalone unavailable", handoff: true},
+		{name: "workflow separate", standalone: true, workflow: true},
+	} {
+		s.Run(test.name, func() {
+			s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(test.standalone)
+			s.config.Activity.StandaloneHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.handoff)
+			s.config.Activity.WorkflowHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.workflow)
+			info, _, _, _ := s.handler.createResponse(&persistencespb.NamespaceInfo{Name: "namespace"}, &persistencespb.NamespaceConfig{}, &persistencespb.NamespaceReplicationConfig{})
+			s.Equal(test.standalone && test.handoff, info.GetCapabilities().GetStandaloneActivityHandoff())
+			// The workflow switch is reserved until its handoff handler is implemented.
+			s.False(info.GetCapabilities().GetWorkflowActivityHandoff())
+		})
 	}
 }

@@ -82,6 +82,7 @@ var (
 		"PollActivityTaskQueue":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingAlways},
 		"RecordActivityTaskHeartbeat":                  {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RecordActivityTaskHeartbeatById":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"RespondActivityTaskHandoff":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RespondActivityTaskCompleted":                 {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RespondActivityTaskCompletedById":             {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RespondActivityTaskFailed":                    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},

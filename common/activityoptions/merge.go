@@ -4,11 +4,12 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/util"
 )
 
 // MergeActivityOptions applies the fields specified in updateFields from mergeFrom into mergeInto in-place.
 // updateFields is a map of camelCase JSON field paths, as returned by util.ParseFieldMask
-// Returns an error if a required parent field (TaskQueue, Priority, RetryPolicy) is nil in mergeFrom
+// Returns an error if a required source parent message is nil in mergeFrom
 // when a sub-field of that parent is listed in updateFields.
 //
 //nolint:revive // cyclomatic: field-mask application requires explicit handling of each supported field
@@ -119,6 +120,64 @@ func MergeActivityOptions(mergeInto, mergeFrom *activitypb.ActivityOptions, upda
 			mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
 		}
 		mergeInto.RetryPolicy.MaximumAttempts = mergeFrom.GetRetryPolicy().GetMaximumAttempts()
+	}
+
+	if util.FieldMaskHasSubPath(updateFields, "handoffOptions") && mergeFrom.GetHandoffOptions() == nil {
+		return serviceerror.NewInvalidArgument("HandoffOptions is not provided")
+	}
+
+	if util.FieldMaskHasPathOrSubPath(updateFields, "handoffOptions.retryPolicy") &&
+		mergeFrom.GetHandoffOptions().GetRetryPolicy() == nil {
+		return serviceerror.NewInvalidArgument("HandoffOptions.RetryPolicy is not provided")
+	}
+
+	if _, ok := updateFields["handoffOptions"]; ok {
+		mergeInto.HandoffOptions = mergeFrom.GetHandoffOptions()
+	}
+
+	if util.FieldMaskHasSubPath(updateFields, "handoffOptions") {
+		if mergeInto.HandoffOptions == nil {
+			mergeInto.HandoffOptions = &activitypb.HandoffOptions{}
+		}
+
+		into, from := mergeInto.HandoffOptions, mergeFrom.GetHandoffOptions()
+		if _, ok := updateFields["handoffOptions.startToHandoffTimeout"]; ok {
+			into.StartToHandoffTimeout = from.GetStartToHandoffTimeout()
+		}
+
+		if _, ok := updateFields["handoffOptions.handoffToCloseTimeout"]; ok {
+			into.HandoffToCloseTimeout = from.GetHandoffToCloseTimeout()
+		}
+
+		if _, ok := updateFields["handoffOptions.heartbeatTimeout"]; ok {
+			into.HeartbeatTimeout = from.GetHeartbeatTimeout()
+		}
+
+		if _, ok := updateFields["handoffOptions.retryPolicy"]; ok {
+			into.RetryPolicy = from.GetRetryPolicy()
+		}
+
+		if util.FieldMaskHasSubPath(updateFields, "handoffOptions.retryPolicy") {
+			if into.RetryPolicy == nil {
+				into.RetryPolicy = &commonpb.RetryPolicy{}
+			}
+
+			if _, ok := updateFields["handoffOptions.retryPolicy.initialInterval"]; ok {
+				into.RetryPolicy.InitialInterval = from.GetRetryPolicy().GetInitialInterval()
+			}
+
+			if _, ok := updateFields["handoffOptions.retryPolicy.backoffCoefficient"]; ok {
+				into.RetryPolicy.BackoffCoefficient = from.GetRetryPolicy().GetBackoffCoefficient()
+			}
+
+			if _, ok := updateFields["handoffOptions.retryPolicy.maximumInterval"]; ok {
+				into.RetryPolicy.MaximumInterval = from.GetRetryPolicy().GetMaximumInterval()
+			}
+
+			if _, ok := updateFields["handoffOptions.retryPolicy.maximumAttempts"]; ok {
+				into.RetryPolicy.MaximumAttempts = from.GetRetryPolicy().GetMaximumAttempts()
+			}
+		}
 	}
 
 	if _, ok := updateFields["startDelay"]; ok {

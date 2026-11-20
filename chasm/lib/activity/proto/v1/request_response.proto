@@ -93,3 +93,14 @@ message UpdateActivityExecutionOptionsRequest {
 message UpdateActivityExecutionOptionsResponse {
   temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsResponse frontend_response = 1;
 }
+
+message RespondActivityTaskHandoffRequest {
+  string namespace_id = 1;
+  temporal.api.workflowservice.v1.RespondActivityTaskHandoffRequest frontend_request = 2;
+  // Activity ID for a standalone activity, or workflow ID for a workflow activity.
+  string business_id = 3;
+}
+
+message RespondActivityTaskHandoffResponse {
+  temporal.api.workflowservice.v1.RespondActivityTaskHandoffResponse frontend_response = 1;
+}

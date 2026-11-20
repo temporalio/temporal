@@ -1199,6 +1199,20 @@ func (c *metricClient) RespondActivityTaskFailedById(
 	return c.client.RespondActivityTaskFailedById(ctx, request, opts...)
 }
 
+func (c *metricClient) RespondActivityTaskHandoff(
+	ctx context.Context,
+	request *workflowservice.RespondActivityTaskHandoffRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.RespondActivityTaskHandoffResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientRespondActivityTaskHandoff")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RespondActivityTaskHandoff(ctx, request, opts...)
+}
+
 func (c *metricClient) RespondNexusTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondNexusTaskCompletedRequest,
