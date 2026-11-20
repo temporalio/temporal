@@ -311,6 +311,21 @@ type NamespaceRegisteredInput struct {
 	NamespaceID string
 	Fields      NamespaceStateFields
 	Requested   NamespaceStateFields
+	Replication *NamespaceReplicationRoute
+}
+
+// NamespaceReplicationRoute records how the source replicates one namespace write. It is set only on
+// writes that replicate.
+type NamespaceReplicationRoute struct {
+	// Transport is the path that replicated the write: legacy, shadow, or chasm.
+	Transport string `json:"transport"`
+	// HeldOnLegacy marks a write that the deployment's transport policy kept on the legacy queue
+	// although the cell runs shadow or chasm.
+	HeldOnLegacy bool `json:"held_on_legacy"`
+	// PeerCells and RemovedPeers are the cells a chasm write is delivered to and the ones it removes,
+	// as the source's replication resolver decided them.
+	PeerCells    []string `json:"peer_cells,omitempty"`
+	RemovedPeers []string `json:"removed_peers,omitempty"`
 }
 
 // NamespaceUpdatedInput is the input to EmitNamespaceUpdated. IsFailover marks an active-cluster
@@ -343,43 +358,52 @@ type NamespaceUpdatedInput struct {
 	Before                    NamespaceStateFields
 	After                     NamespaceStateFields
 	Requested                 NamespaceStateFields
+	Replication               *NamespaceReplicationRoute
 }
 
 // EmitNamespaceRegistered emits a namespace_registered event for a newly persisted namespace.
 func EmitNamespaceRegistered(logger otellog.Logger, in NamespaceRegisteredInput) {
+	details := map[string]any{
+		"requested": in.Requested,
+		"after":     in.Fields,
+	}
+	if in.Replication != nil {
+		details["replication"] = in.Replication
+	}
 	Emit(logger, NamespaceLifecyclePayload{
 		Phase:       PhaseNamespaceRegistered,
 		Namespace:   in.Namespace,
 		NamespaceID: in.NamespaceID,
-		Details: map[string]any{
-			"requested": in.Requested,
-			"after":     in.Fields,
-		},
+		Details:     details,
 	})
 }
 
 // EmitNamespaceUpdated emits a namespace_updated event for a persisted namespace mutation.
 func EmitNamespaceUpdated(logger otellog.Logger, in NamespaceUpdatedInput) {
+	details := map[string]any{
+		"is_failover":                  in.IsFailover,
+		"is_promotion":                 in.IsPromotion,
+		"promote_namespace_requested":  in.PromoteNamespaceRequested,
+		"delete_bad_binary":            in.DeleteBadBinary,
+		"workflow_rule_created":        in.WorkflowRuleCreated,
+		"workflow_rule_created_detail": in.WorkflowRuleCreatedDetail,
+		"workflow_rule_deleted":        in.WorkflowRuleDeleted,
+		"workflow_rule_deleted_detail": in.WorkflowRuleDeletedDetail,
+		"workflow_rule_force_scan":     in.WorkflowRuleForceScan,
+		"workflow_rule_request_id":     in.WorkflowRuleRequestID,
+		"requested_fields":             in.RequestedFields,
+		"requested":                    in.Requested,
+		"before":                       in.Before,
+		"after":                        in.After,
+	}
+	if in.Replication != nil {
+		details["replication"] = in.Replication
+	}
 	Emit(logger, NamespaceLifecyclePayload{
 		Phase:       PhaseNamespaceUpdated,
 		Namespace:   in.Namespace,
 		NamespaceID: in.NamespaceID,
-		Details: map[string]any{
-			"is_failover":                  in.IsFailover,
-			"is_promotion":                 in.IsPromotion,
-			"promote_namespace_requested":  in.PromoteNamespaceRequested,
-			"delete_bad_binary":            in.DeleteBadBinary,
-			"workflow_rule_created":        in.WorkflowRuleCreated,
-			"workflow_rule_created_detail": in.WorkflowRuleCreatedDetail,
-			"workflow_rule_deleted":        in.WorkflowRuleDeleted,
-			"workflow_rule_deleted_detail": in.WorkflowRuleDeletedDetail,
-			"workflow_rule_force_scan":     in.WorkflowRuleForceScan,
-			"workflow_rule_request_id":     in.WorkflowRuleRequestID,
-			"requested_fields":             in.RequestedFields,
-			"requested":                    in.Requested,
-			"before":                       in.Before,
-			"after":                        in.After,
-		},
+		Details:     details,
 	})
 }
 

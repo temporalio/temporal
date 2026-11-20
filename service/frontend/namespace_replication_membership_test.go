@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
@@ -94,7 +95,7 @@ func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
 			handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
 				nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
 				archiver.NewArchivalMetadata(dc, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-				nil, clock.NewEventTimeSource(), cfg, client, metrics.NoopMetricsHandler, tc.factory)
+				nil, clock.NewEventTimeSource(), cfg, client, metrics.NoopMetricsHandler, tc.factory, nil)
 			clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 			clusters.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 			clusters.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
@@ -199,4 +200,38 @@ func TestDeliveryPolicy(t *testing.T) {
 			require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, resp.GetOutcome())
 		})
 	}
+}
+
+func TestDeliveryPolicyDeferralIsNotRecordedAsError(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	clusters := cluster.NewMockMetadata(ctrl)
+	clusters.EXPECT().GetCurrentClusterName().Return("cellC").AnyTimes()
+	clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	mh := metricstest.NewCaptureHandler()
+	capture := mh.StartCapture()
+	defer mh.StopCapture(capture)
+	events := &captureRemoteClusterEventLogger{}
+	handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters,
+		namespaceMutationExecutor: nsreplication.NewMockMutationTaskExecutor(ctrl),
+		metricsHandler:            mh, eventLogger: events,
+		config: &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true)},
+		deliveryPolicy: func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) {
+			return false, serviceerror.NewFailedPrecondition("not ready")
+		}}
+	payload, err := nsreplication.MarshalNamespaceTask(removalTestTask(false))
+	require.NoError(t, err)
+
+	_, err = handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
+		SourceCluster: "cellA", NamespaceTaskPayload: payload, TargetCluster: "cellC",
+	})
+	require.Equal(t, codes.FailedPrecondition, serviceerror.ToStatus(err).Code())
+
+	// The source retries a deferred delivery, so it is told apart from a failed apply.
+	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, nsreplication.CHASMApplyOutcomeDeferred, recordings[0].Tags["outcome"])
+	_, details := remoteClusterEventValues(t, events.records)
+	require.Equal(t, nsreplication.CHASMApplyOutcomeDeferred, details["outcome"])
+	require.Equal(t, err.Error(), details["error"])
 }

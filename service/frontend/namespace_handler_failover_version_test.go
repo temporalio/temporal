@@ -138,6 +138,7 @@ func TestUpdateNamespace_PassiveClusterFailoverVersionBump(t *testing.T) {
 				nil,
 				metrics.NoopMetricsHandler,
 				namespace.NewDefaultReplicationResolverFactory(),
+				nil,
 			)
 
 			metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{

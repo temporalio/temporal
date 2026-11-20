@@ -136,6 +136,7 @@ var Module = fx.Options(
 	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(nsreplication.NewDefaultAdmitter),
 	fx.Provide(nsreplication.NewDefaultDeliveryPolicy),
+	fx.Provide(nsreplication.NewDefaultTransportPolicy),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
@@ -1073,6 +1074,7 @@ func HandlerProvider(
 	frontendServiceResolver membership.ServiceResolver,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
 	replicationResolverFactory namespace.ReplicationResolverFactory,
+	transportPolicy nsreplication.TransportPolicy,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -1124,6 +1126,7 @@ func HandlerProvider(
 		chasmNsReplClient,
 		metricsHandler,
 		replicationResolverFactory,
+		transportPolicy,
 	)
 	return wfHandler
 }

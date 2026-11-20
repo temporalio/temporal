@@ -34,6 +34,10 @@ const (
 	CHASMApplyOutcomeCompletedWithFailures = "completed_with_failures"
 	CHASMApplyOutcomeFailed                = "failed"
 
+	// CHASMApplyOutcomeDeferred marks a delivery the receiver's DeliveryPolicy
+	// deferred. The source retries it.
+	CHASMApplyOutcomeDeferred = "deferred"
+
 	chasmAuthoritativeMode = "authoritative"
 	chasmApplyStageTag     = "apply_stage"
 )

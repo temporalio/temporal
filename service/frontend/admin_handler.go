@@ -1124,7 +1124,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		if adh.deliveryPolicy != nil {
 			var err error
 			if trusted, err = adh.deliveryPolicy(ctx, payloadTask); err != nil {
-				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeDeferred, err, startTime)
 				return nil, err
 			}
 		}
