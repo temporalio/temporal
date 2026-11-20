@@ -3,8 +3,10 @@ package parallelsuite
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/testx/await"
 )
 
 // Scope provides the context and test handles for a test or await attempt.
@@ -37,4 +39,14 @@ func WithContext(ctx context.Context, scope Scope) Scope {
 
 func (s contextScope) Context() context.Context {
 	return s.ctx
+}
+
+// Await retries fn on assertion failure until the timeout or scope cancellation.
+// The scope passed to fn carries the context and assertions for that attempt.
+func Await(s Scope, fn func(Scope), timeout, interval time.Duration) {
+	tb := s.TB()
+	tb.Helper()
+	await.Require(s.Context(), tb, func(t *await.T) {
+		fn(t)
+	}, timeout, interval)
 }

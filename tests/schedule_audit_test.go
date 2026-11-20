@@ -5,21 +5,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tools/tdbg/scheduleaudit"
 )
 
-func TestScheduleV1AuditVisibility(t *testing.T) { testScheduleAuditVisibility(t, v1ContextFactory) }
-func TestScheduleCHASMAuditVisibility(t *testing.T) {
-	testScheduleAuditVisibility(t, chasmContextFactory)
+type ScheduleAuditSuite struct {
+	parallelsuite.Suite[*ScheduleAuditSuite]
 }
 
-func testScheduleAuditVisibility(t *testing.T, newContext contextFactory) {
+func TestScheduleV1AuditVisibility(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleAuditSuite{}, v1ContextFactory)
+}
+func TestScheduleCHASMAuditVisibility(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleAuditSuite{}, chasmContextFactory)
+}
+
+func (s *ScheduleAuditSuite) TestVisibility(newContext contextFactory) {
+	t := s.T()
 	env := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	ctx := newContext(testcore.NewContext())
 	sid := testcore.RandomizeStr("audit-schedule")
@@ -38,21 +44,21 @@ func testScheduleAuditVisibility(t *testing.T, newContext contextFactory) {
 	})
 	loader := scheduleaudit.NewGRPCExecutionLoader(env.FrontendClient(), io.Discard, nil)
 	var blocker scheduleaudit.Execution
-	await.Require(ctx, t, func(t *await.T) {
-		rows, err := loader.ListExecutions(t.Context(), env.Namespace().String(), []string{sid}, first.Add(-time.Second), first.Add(time.Second))
-		require.NoError(t, err)
-		require.Len(t, rows[sid], 1)
+	s.Await(func(s *ScheduleAuditSuite) {
+		rows, err := loader.ListExecutions(newContext(s.Context()), env.Namespace().String(), []string{sid}, first.Add(-time.Second), first.Add(time.Second))
+		s.NoError(err)
+		s.Len(rows[sid], 1)
 		blocker = rows[sid][0]
-		require.Equal(t, first, blocker.NominalTime)
+		s.Equal(first, blocker.NominalTime)
 	}, 30*time.Second, pollInterval)
-	await.RequireTrue(t, func() bool { return time.Now().After(second.Add(time.Second)) }, 30*time.Second, pollInterval)
+	s.AwaitTrue(func() bool { return time.Now().After(second.Add(time.Second)) }, 30*time.Second, pollInterval)
 	rows, err := loader.ListExecutions(ctx, env.Namespace().String(), []string{sid}, second.Add(-time.Second), second.Add(time.Second))
-	require.NoError(t, err)
-	require.Len(t, rows[sid], 1)
-	require.Equal(t, blocker.RunID, rows[sid][0].RunID, "pre-window running action remains visible")
-	require.NoError(t, env.SdkClient().SignalWorkflow(ctx, blocker.WorkflowID, blocker.RunID, "finish", nil))
+	s.NoError(err)
+	s.Len(rows[sid], 1)
+	s.Equal(blocker.RunID, rows[sid][0].RunID, "pre-window running action remains visible")
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, blocker.WorkflowID, blocker.RunID, "finish", nil))
 	var delayed scheduleaudit.Execution
-	await.RequireTrue(t, func() bool {
+	s.AwaitTrue(func() bool {
 		rows, err := loader.ListExecutions(ctx, env.Namespace().String(), []string{sid}, second.Add(-time.Second), second.Add(time.Second))
 		if err != nil || len(rows[sid]) != 2 {
 			return false
@@ -65,6 +71,6 @@ func testScheduleAuditVisibility(t *testing.T, newContext contextFactory) {
 		}
 		return false
 	}, 30*time.Second, pollInterval)
-	require.True(t, delayed.StartTime.After(second.Add(time.Second)), "in-window nominal matches even when the buffered workflow starts after window end")
-	require.NotEqual(t, blocker.RunID, delayed.RunID)
+	s.True(delayed.StartTime.After(second.Add(time.Second)), "in-window nominal matches even when the buffered workflow starts after window end")
+	s.NotEqual(blocker.RunID, delayed.RunID)
 }
