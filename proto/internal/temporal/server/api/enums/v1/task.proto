@@ -71,6 +71,9 @@ enum TaskType {
 
   // A transfer task that releases flow-control limiters held by a completed task attempt.
   TASK_TYPE_TRANSFER_RELEASE_LIMITER = 37;
+
+  // An in-memory timer task that wakes up a cached CHASM execution.
+  TASK_TYPE_CHASM_MEMORY_WAKEUP = 38;
 }
 
 // TaskPriority is only used for replication task as of May 2024

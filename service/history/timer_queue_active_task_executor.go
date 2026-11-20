@@ -130,6 +130,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
+	case *tasks.ChasmMemoryWakeupTask:
+		err = t.executeChasmMemoryWakeup(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
@@ -1129,6 +1131,60 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 		tree,
 		task,
 	)
+}
+
+// executeChasmMemoryWakeup runs the in-memory work of a cached CHASM execution. The queue never
+// retries it.
+func (t *timerQueueActiveTaskExecutor) executeChasmMemoryWakeup(
+	ctx context.Context,
+	task *tasks.ChasmMemoryWakeupTask,
+) (retErr error) {
+	// The memory queue runs tasks for every namespace, so the wake-up checks that this cluster is active.
+	nsEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.NamespaceID))
+	if err != nil {
+		return err
+	}
+	if nsEntry.ActiveClusterName(namespace.RoutingKey{ID: task.WorkflowID}) != t.currentClusterName {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	_, ms, release, err := t.loadCachedChasmExecution(ctx, task)
+	if err != nil || ms == nil {
+		return err
+	}
+	defer func() { release(retErr) }()
+
+	tree := ms.ChasmTree()
+	if _, err := tree.RunMemoryWakeup(ctx, task, ms.Now()); err != nil {
+		return err
+	}
+	return tree.ArmMemoryWakeup()
+}
+
+// loadCachedChasmExecution locks the execution and returns its mutable state only if it is already
+// cached. In-memory work lives only in the cached copy. A nil mutable state means the lock is
+// already released.
+func (t *timerQueueActiveTaskExecutor) loadCachedChasmExecution(
+	ctx context.Context,
+	task *tasks.ChasmMemoryWakeupTask,
+) (historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc, error) {
+	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if wfCtxImpl, ok := wfCtx.(*workflow.ContextImpl); ok && wfCtxImpl.MutableState == nil {
+		release(nil)
+		return nil, nil, nil, nil
+	}
+	ms, err := wfCtx.LoadMutableState(ctx, t.shardContext)
+	if err != nil {
+		release(err)
+		return nil, nil, nil, err
+	}
+	return wfCtx, ms, release, nil
 }
 
 func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(

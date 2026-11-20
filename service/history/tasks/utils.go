@@ -156,6 +156,8 @@ func GetTimerTaskEventID(
 		return getChasmTaskEventID()
 	case *ChasmTask:
 		return getChasmTaskEventID()
+	case *ChasmMemoryWakeupTask:
+		return getChasmTaskEventID()
 	case *FakeTask:
 		// no-op
 	default:

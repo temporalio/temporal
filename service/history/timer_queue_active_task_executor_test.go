@@ -2862,3 +2862,92 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	s.NoError(resp.ExecutionErr,
 		"dedup branch must fire under accumulated skip via ToPhysicalTimeWithCurrentTimeSkippingOffset(heartbeatTimeoutVis); without it the executor would short-circuit with errNoTimerFired")
 }
+
+func (s *timerQueueActiveTaskExecutorSuite) newChasmMemoryWakeupTest() (
+	*timerQueueActiveTaskExecutor,
+	*wcache.MockCache,
+	*tasks.ChasmMemoryWakeupTask,
+) {
+	wakeup := &tasks.ChasmMemoryWakeupTask{
+		WorkflowKey:         definition.NewWorkflowKey(s.namespaceID.String(), tests.WorkflowKey.WorkflowID, tests.WorkflowKey.RunID),
+		VisibilityTimestamp: s.now,
+		ArchetypeID:         tests.ArchetypeID,
+	}
+	mockCache := wcache.NewMockCache(s.controller)
+	//nolint:revive // unchecked-type-assertion
+	executor := newTimerQueueActiveTaskExecutor(
+		s.mockShard,
+		mockCache,
+		nil,
+		s.mockShard.GetLogger(),
+		metrics.NoopMetricsHandler,
+		s.config,
+		nil,
+		nil,
+	).(*timerQueueActiveTaskExecutor)
+	return executor, mockCache, wakeup
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) expectChasmMemoryWakeupLoad(
+	mockCache *wcache.MockCache,
+	wfCtx historyi.WorkflowContext,
+) *gomock.Call {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowKey.WorkflowID,
+		RunId:      tests.WorkflowKey.RunID,
+	}
+	return mockCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, locks.PriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmMemoryWakeup_NotCached() {
+	executor, mockCache, wakeup := s.newChasmMemoryWakeupTest()
+	// A context with no mutable state means the execution is not cached; nothing is loaded.
+	wfCtx := workflow.NewContext(
+		s.config,
+		wakeup.WorkflowKey,
+		tests.ArchetypeID,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetThrottledLogger(),
+		metrics.NoopMetricsHandler,
+		nil,
+		testhooks.TestHooks{},
+	)
+	s.expectChasmMemoryWakeupLoad(mockCache, wfCtx).Times(1)
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+	s.Nil(wfCtx.MutableState)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmMemoryWakeup_NamespaceNotActive() {
+	executor, _, wakeup := s.newChasmMemoryWakeupTest()
+	// The mock cache has no expectations, so loading the execution fails the test.
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(s.namespaceID).Return(tests.GlobalStandbyNamespaceEntry, nil).Times(1)
+	executor.registry = registry
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmMemoryWakeup_RunsAndRearms() {
+	executor, mockCache, wakeup := s.newChasmMemoryWakeupTest()
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).Times(1)
+	s.expectChasmMemoryWakeupLoad(mockCache, wfCtx).Times(1)
+
+	gomock.InOrder(
+		chasmTree.EXPECT().RunMemoryWakeup(gomock.Any(), wakeup, s.now).Return(chasm.MemoryWakeupResult{}, nil),
+		chasmTree.EXPECT().ArmMemoryWakeup().Return(nil),
+	)
+	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any()).Times(0)
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+}

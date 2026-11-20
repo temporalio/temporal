@@ -47,6 +47,7 @@ type MockNodeBackend struct {
 	HandleTimeSkippingMaxAccumulatedDuration  func() time.Duration
 	HandleNow                                 func() time.Time
 	HandleRecordTimeSkippingTransition        func(transition *TimeSkippingTransition)
+	HandleAddMemoryWakeup                     func(fireTime time.Time) (*tasks.ChasmMemoryWakeupTask, error)
 
 	HandleChasmDLQScheduledPureTaskOnValidationEnabled func() bool
 
@@ -154,6 +155,13 @@ func (m *MockNodeBackend) AddTasks(ts ...tasks.Task) {
 		category := task.GetCategory()
 		m.TasksByCategory[category] = append(m.TasksByCategory[category], task)
 	}
+}
+
+func (m *MockNodeBackend) AddMemoryWakeup(fireTime time.Time) (*tasks.ChasmMemoryWakeupTask, error) {
+	if m.HandleAddMemoryWakeup != nil {
+		return m.HandleAddMemoryWakeup(fireTime)
+	}
+	return &tasks.ChasmMemoryWakeupTask{VisibilityTimestamp: fireTime}, nil
 }
 
 func (m *MockNodeBackend) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time) {

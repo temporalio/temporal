@@ -36,8 +36,9 @@ type (
 	}
 
 	memoryScheduledQueueFactory struct {
-		scheduler        ctasks.Scheduler[ctasks.Task]
-		priorityAssigner queues.PriorityAssigner
+		workflowTaskTimeoutScheduler ctasks.Scheduler[ctasks.Task]
+		chasmWakeupScheduler         ctasks.Scheduler[ctasks.Task]
+		priorityAssigner             queues.PriorityAssigner
 
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
@@ -58,16 +59,25 @@ func NewMemoryScheduledQueueFactory(
 	logger := log.With(params.Logger, tag.ComponentMemoryScheduledQueue)
 	metricsHandler := params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationMemoryScheduledQueueProcessorScope))
 
-	hostScheduler := ctasks.NewFIFOScheduler[ctasks.Task](
+	// Schedulers don't buffer tasks. If all workers are busy, memoryScheduledQueue reschedules tasks into itself.
+	workflowTaskTimeoutScheduler := ctasks.NewFIFOScheduler[ctasks.Task](
 		&ctasks.FIFOSchedulerOptions{
-			QueueSize:   0, // Don't buffer tasks in scheduler. If all workers are busy memoryScheduledQueue reschedules tasks into itself.
+			QueueSize:   0,
 			WorkerCount: params.Config.MemoryTimerProcessorSchedulerWorkerCount,
+		},
+		logger,
+	)
+	chasmWakeupScheduler := ctasks.NewFIFOScheduler[ctasks.Task](
+		&ctasks.FIFOSchedulerOptions{
+			QueueSize:   0,
+			WorkerCount: params.Config.MemoryTimerProcessorChasmWakeupSchedulerWorkerCount,
 		},
 		logger,
 	)
 
 	return &memoryScheduledQueueFactory{
-		scheduler: hostScheduler,
+		workflowTaskTimeoutScheduler: workflowTaskTimeoutScheduler,
+		chasmWakeupScheduler:         chasmWakeupScheduler,
 		priorityAssigner: queues.NewPriorityAssigner(
 			params.NamespaceRegistry,
 			params.ClusterMetadata.GetCurrentClusterName(),
@@ -85,20 +95,22 @@ func NewMemoryScheduledQueueFactory(
 }
 
 func (f *memoryScheduledQueueFactory) Start() {
-	f.scheduler.Start()
+	f.workflowTaskTimeoutScheduler.Start()
+	f.chasmWakeupScheduler.Start()
 }
 
 func (f *memoryScheduledQueueFactory) Stop() {
-	f.scheduler.Stop()
+	f.workflowTaskTimeoutScheduler.Stop()
+	f.chasmWakeupScheduler.Stop()
 }
 
 func (f *memoryScheduledQueueFactory) CreateQueue(
 	shardCtx historyi.ShardContext,
 ) queues.Queue {
 
-	// Reuse TimerQueueActiveTaskExecutor only to executeWorkflowTaskTimeoutTask.
-	// Unused dependencies are nil.
-	speculativeWorkflowTaskTimeoutExecutor := newTimerQueueActiveTaskExecutor(
+	// Reuse TimerQueueActiveTaskExecutor only for speculative workflow task timeouts and CHASM
+	// wake-ups. Unused dependencies are nil.
+	speculativeTaskExecutor := newTimerQueueActiveTaskExecutor(
 		shardCtx,
 		f.workflowCache,
 		nil,
@@ -109,13 +121,14 @@ func (f *memoryScheduledQueueFactory) CreateQueue(
 		nil,
 	)
 	if f.executorWrapper != nil {
-		speculativeWorkflowTaskTimeoutExecutor = f.executorWrapper.Wrap(speculativeWorkflowTaskTimeoutExecutor)
+		speculativeTaskExecutor = f.executorWrapper.Wrap(speculativeTaskExecutor)
 	}
 
-	return queues.NewSpeculativeWorkflowTaskTimeoutQueue(
-		f.scheduler,
+	return queues.NewSpeculativeTaskQueue(
+		f.workflowTaskTimeoutScheduler,
+		f.chasmWakeupScheduler,
 		f.priorityAssigner,
-		speculativeWorkflowTaskTimeoutExecutor,
+		speculativeTaskExecutor,
 		f.namespaceRegistry,
 		f.clusterMetadata,
 		f.timeSource,

@@ -8870,6 +8870,31 @@ func (s *mutableStateSuite) TestSetSpeculativeWorkflowTaskTimeoutTask_SubtractsS
 	s.Equal(virtualTime.Add(-skipped), (*captured)[0].GetVisibilityTime())
 }
 
+func (s *mutableStateSuite) TestAddMemoryWakeup_SubtractsSkip() {
+	skipped := 30 * time.Minute
+	virtualTime := s.mockShard.GetTimeSource().Now().Add(2 * time.Hour)
+
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(skipped),
+	}
+	var captured []tasks.Task
+	engine := historyi.NewMockEngine(s.controller)
+	engine.EXPECT().NotifyNewTasks(gomock.Any()).Do(func(byCategory map[tasks.Category][]tasks.Task) {
+		captured = append(captured, byCategory[tasks.CategoryMemoryTimer]...)
+	}).Times(1)
+	engine.EXPECT().Stop().AnyTimes()
+	s.mockShard.SetEngineForTesting(engine)
+
+	task, err := s.mutableState.AddMemoryWakeup(virtualTime)
+	s.NoError(err)
+
+	s.Equal(s.mutableState.GetWorkflowKey(), task.WorkflowKey)
+	s.Equal(virtualTime.Add(-skipped), task.VisibilityTimestamp)
+	s.NotZero(task.TaskID)
+	s.Require().Len(captured, 1)
+	s.Same(task, captured[0])
+}
+
 // TestAccumulatedSkippedDuration_NilSafety pins the contract that the unexported
 // accumulatedSkippedDuration helper never panics regardless of how much of the proto chain is
 // nil, and returns 0 whenever time-skipping is not configured. AddTasks,

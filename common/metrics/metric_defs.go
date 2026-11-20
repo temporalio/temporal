@@ -615,6 +615,7 @@ const (
 	TaskTypeTimerActiveTaskDeleteHistoryEvent             = "TimerActiveTaskDeleteHistoryEvent"
 	TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout = "TimerActiveTaskSpeculativeWorkflowTaskTimeout"
 	TaskTypeTimerActiveTaskChasmPureTask                  = "TimerActiveTaskChasmPureTask"
+	TaskTypeTimerActiveTaskChasmMemoryWakeup              = "TimerActiveTaskChasmMemoryWakeup"
 	TaskTypeTimerActiveTaskTimeSkippingTimer              = "TimerActiveTaskTimeSkippingTimer"
 	TaskTypeTimerStandbyTaskActivityTimeout               = "TimerStandbyTaskActivityTimeout"
 	TaskTypeTimerStandbyTaskWorkflowTaskTimeout           = "TimerStandbyTaskWorkflowTaskTimeout"

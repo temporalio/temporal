@@ -185,13 +185,28 @@ type (
 
 		totalTimeSkippedUpdatedInPassive bool
 
+		memory memoryState
+	}
+
+	// memoryState is tree state that lives only in the cached mutable state.
+	memoryState struct {
 		// speculativeTransitionPending is set when a speculative transition left changes in the tree that
 		// aren't persisted. The next active CloseTransaction persists them.
 		speculativeTransitionPending bool
 		// speculativeTransitionFailoverVersion is the namespace failover version of the pending
 		// speculative transition.
 		speculativeTransitionFailoverVersion int64
+		// wakeups are the armed in-memory wake-ups, latest fire time first. CloseTransaction cancels them.
+		wakeups []memoryWakeup
 	}
+
+	memoryWakeup struct {
+		fireTime time.Time // In the execution's logical time.
+		task     *tasks.ChasmMemoryWakeupTask
+	}
+
+	// MemoryWakeupResult is what [Node.RunMemoryWakeup] leaves for the caller to do.
+	MemoryWakeupResult struct{}
 
 	taskWithAttributes struct {
 		task       any
@@ -233,6 +248,9 @@ type (
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		// AddMemoryWakeup schedules an in-memory wake-up of the execution at fireTime, in the
+		// execution's logical time.
+		AddMemoryWakeup(fireTime time.Time) (*tasks.ChasmMemoryWakeupTask, error)
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
@@ -1530,7 +1548,7 @@ func (n *Node) Ref(
 	}
 	// A component created by a pending speculative transition has a creation version that isn't
 	// persisted. A later transition can give another component at the same path the same version.
-	if n.speculativeTransitionPending && ref.componentInitialVT != nil {
+	if n.memory.speculativeTransitionPending && ref.componentInitialVT != nil {
 		if savedVT := n.backend.CurrentVersionedTransition(); savedVT != nil &&
 			transitionhistory.Compare(ref.componentInitialVT, savedVT) > 0 {
 			return nil, ErrSpeculativeComponentRef
@@ -1888,7 +1906,7 @@ func (n *Node) AddTask(
 func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutation, error) {
 	// Speculative changes are never replicated, so a passive transaction must not persist them.
 	// The tree is left unchanged.
-	if !isActive && n.speculativeTransitionPending {
+	if !isActive && n.memory.speculativeTransitionPending {
 		return NodesMutation{}, serviceerror.NewUnavailable("passive transaction cannot persist a pending speculative CHASM transition")
 	}
 
@@ -1973,15 +1991,89 @@ func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
 		}
 	}
 
-	n.speculativeTransitionPending = true
-	n.speculativeTransitionFailoverVersion = n.backend.GetCurrentVersion()
+	n.memory.speculativeTransitionPending = true
+	n.memory.speculativeTransitionFailoverVersion = n.backend.GetCurrentVersion()
 	return nil
 }
 
 // SpeculativeTransitionFailoverVersion returns the namespace failover version of the pending speculative
 // transition. The bool is false when none is pending.
 func (n *Node) SpeculativeTransitionFailoverVersion() (int64, bool) {
-	return n.speculativeTransitionFailoverVersion, n.speculativeTransitionPending
+	return n.memory.speculativeTransitionFailoverVersion, n.memory.speculativeTransitionPending
+}
+
+// memoryWakeupGracePeriod is how long past its fire time an armed wake-up is still expected to run.
+// Older entries may have been lost, so they no longer block arming.
+const memoryWakeupGracePeriod = time.Second
+
+// ArmMemoryWakeup schedules an in-memory wake-up for the next in-memory work of the execution,
+// unless an armed wake-up fires earlier.
+func (n *Node) ArmMemoryWakeup() error {
+	fireTime, ok := n.nextMemoryWakeupTime()
+	if !ok {
+		return nil
+	}
+	return n.armMemoryWakeupAt(fireTime)
+}
+
+// RunMemoryWakeup handles a fired in-memory wake-up. The caller does what the result asks, then
+// calls [Node.ArmMemoryWakeup].
+func (n *Node) RunMemoryWakeup(
+	_ context.Context,
+	wakeup *tasks.ChasmMemoryWakeupTask,
+	now time.Time,
+) (MemoryWakeupResult, error) {
+	// This run handles everything due by now, so other due wake-ups are no longer needed.
+	n.memory.wakeups = slices.DeleteFunc(n.memory.wakeups, func(w memoryWakeup) bool {
+		if w.task == wakeup {
+			return true
+		}
+		if w.fireTime.After(now) {
+			return false
+		}
+		w.task.Cancel()
+		return true
+	})
+	return MemoryWakeupResult{}, nil
+}
+
+// nextMemoryWakeupTime returns when the execution next has in-memory work. The bool is false when
+// it has none.
+func (n *Node) nextMemoryWakeupTime() (time.Time, bool) {
+	// Currently returns false. Will be used to scan side effect task later.
+	return time.Time{}, false
+}
+
+// armMemoryWakeupAt schedules a wake-up at fireTime unless an armed wake-up fires at or before it.
+func (n *Node) armMemoryWakeupAt(fireTime time.Time) error {
+	now := n.backend.Now()
+	if fireTime.Before(now) {
+		fireTime = now
+	}
+
+	// Entries are latest first, so lost wake-ups are at the end.
+	lostBefore := now.Add(-memoryWakeupGracePeriod)
+	for last := len(n.memory.wakeups) - 1; last >= 0 && n.memory.wakeups[last].fireTime.Before(lostBefore); last-- {
+		n.memory.wakeups = n.memory.wakeups[:last]
+	}
+	if last := len(n.memory.wakeups) - 1; last >= 0 && !fireTime.Before(n.memory.wakeups[last].fireTime) {
+		return nil
+	}
+
+	task, err := n.backend.AddMemoryWakeup(fireTime)
+	if err != nil {
+		return err
+	}
+	n.memory.wakeups = append(n.memory.wakeups, memoryWakeup{fireTime: fireTime, task: task})
+	return nil
+}
+
+// cancelMemoryWakeups cancels every armed wake-up.
+func (n *Node) cancelMemoryWakeups() {
+	for _, w := range n.memory.wakeups {
+		w.task.Cancel()
+	}
+	n.memory.wakeups = nil
 }
 
 // TransitionDecision describes the engine's actions for a transition.
@@ -2908,7 +3000,10 @@ func (n *Node) cleanupTransaction() {
 
 	n.needsPointerResolution = false
 	n.totalTimeSkippedUpdatedInPassive = false
-	n.speculativeTransitionPending = false
+	n.memory.speculativeTransitionPending = false
+	// A persisted transaction leaves no in-memory work, and armed fire times may use an old
+	// time-skipping offset.
+	n.cancelMemoryWakeups()
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {

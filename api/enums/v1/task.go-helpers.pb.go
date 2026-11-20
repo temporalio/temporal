@@ -61,6 +61,7 @@ var (
 		"WorkerCommands":                     35,
 		"TimeskippingTimer":                  36,
 		"TransferReleaseLimiter":             37,
+		"ChasmMemoryWakeup":                  38,
 	}
 )
 

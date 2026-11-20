@@ -113,6 +113,8 @@ func GetActiveTimerTaskTypeTagValue(
 		return prefix + "." + getCHASMTaskTypeTagValue(t, chasmRegistry)
 	case *tasks.ChasmTaskPure:
 		return metrics.TaskTypeTimerActiveTaskChasmPureTask
+	case *tasks.ChasmMemoryWakeupTask:
+		return metrics.TaskTypeTimerActiveTaskChasmMemoryWakeup
 	case *tasks.TimeSkippingFastForwardTimerTask:
 		return metrics.TaskTypeTimerActiveTaskTimeSkippingTimer
 	default:
