@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -62,10 +61,7 @@ func (q *queueV2) EnqueueMessage(
 	}
 	lastMessageID, ok, err := q.getMaxMessageID(ctx, request.QueueType, request.QueueName, tx)
 	if err != nil {
-		rollBackErr := tx.Rollback()
-		if rollBackErr != nil {
-			q.logger.Error("transaction rollback error", tag.Error(rollBackErr))
-		}
+		q.rollback(tx)
 		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. failed to get last messageId. Error: %v",
 			request.QueueType,
@@ -81,10 +77,7 @@ func (q *queueV2) EnqueueMessage(
 		newQueueV2Row(request.QueueType, request.QueueName, nextMessageID, request.Blob),
 	})
 	if err != nil {
-		rollBackErr := tx.Rollback()
-		if rollBackErr != nil {
-			q.logger.Error("transaction rollback error", tag.Error(rollBackErr))
-		}
+		q.rollback(tx)
 		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. InsertIntoQueueV2Messages operation failed. Error: %v",
 			request.QueueType,
