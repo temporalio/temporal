@@ -33,12 +33,15 @@ func (s *scopeAssertionsSuite) TestSuiteHelpers() {
 func (s *scopeAssertionsSuite) TestAwaitHelpersRetryFailedAssertions() {
 	const timeout = time.Second
 	checks := map[string]func(parallelsuite.Scope){
-		"NoError":  func(s parallelsuite.Scope) { s.NoError(errors.New("not ready")) },
-		"Equal":    func(s parallelsuite.Scope) { s.Equal("ready", "pending") },
-		"Nil":      func(s parallelsuite.Scope) { s.Nil("pending") },
-		"NotNil":   func(s parallelsuite.Scope) { s.NotNil(nil) },
-		"NotEmpty": func(s parallelsuite.Scope) { s.NotEmpty("") },
-		"True":     func(s parallelsuite.Scope) { s.True(false) },
+		"Containsf": func(s parallelsuite.Scope) { s.Containsf([]string{"pending"}, "ready", "state %s is missing", "ready") },
+		"Failf":     func(s parallelsuite.Scope) { s.Failf("not ready", "current state is %s", "pending") },
+		"NoError":   func(s parallelsuite.Scope) { s.NoError(errors.New("not ready")) },
+		"Equal":     func(s parallelsuite.Scope) { s.Equal("ready", "pending") },
+		"Greater":   func(s parallelsuite.Scope) { s.Greater(1, 2) },
+		"Nil":       func(s parallelsuite.Scope) { s.Nil("pending") },
+		"NotNil":    func(s parallelsuite.Scope) { s.NotNil(nil) },
+		"NotEmpty":  func(s parallelsuite.Scope) { s.NotEmpty("") },
+		"True":      func(s parallelsuite.Scope) { s.True(false) },
 	}
 	for name, check := range checks {
 		s.Run(name, func(s *scopeAssertionsSuite) {
