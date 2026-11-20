@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
@@ -104,6 +105,7 @@ func Invoke(
 						tag.WorkflowID(workflowID),
 						tag.WorkflowRunID(baseRunID),
 					)
+					metrics.EventReapplySkippedCount.With(shardContext.GetMetricsHandler()).Record(1, metrics.OperationTag(metrics.HistoryReapplyEventsScope))
 					return &api.UpdateWorkflowAction{
 						Noop:               true,
 						CreateWorkflowTask: false,

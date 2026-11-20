@@ -327,6 +327,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(baseRunID),
 			)
+			metrics.EventReapplySkippedCount.With(r.metricsHandler).Record(1, metrics.OperationTag(metrics.HistoryReapplyEventsScope))
 			// the target workflow is not reset so it is still the current workflow. It need to persist updated version histories.
 			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
 		}
