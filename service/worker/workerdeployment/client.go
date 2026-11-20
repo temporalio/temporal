@@ -570,8 +570,13 @@ func (d *ClientImpl) UpdateVersionComputeConfig(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
+		switch failure.GetApplicationFailureInfo().GetType() {
+		case errInvalidComputeConfig:
 			return serviceerror.NewInvalidArgument(failure.GetMessage())
+		case errFailedPrecondition:
+			return serviceerror.NewFailedPrecondition(failure.GetMessage())
+		case errWCILimitExceeded:
+			return d.newResourceExhaustedError(namespaceEntry.Name(), metrics.WorkerDeploymentLimitWorkerControllerInstances, failure.GetMessage())
 		}
 		return serviceerror.NewInternalf("update version compute config failed: %s", failure.Message)
 	}
@@ -1366,6 +1371,9 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
 			return serviceerror.NewInvalidArgument(failure.GetMessage())
+		}
+		if failure.GetApplicationFailureInfo().GetType() == errWCILimitExceeded {
+			return d.newResourceExhaustedError(namespaceEntry.Name(), metrics.WorkerDeploymentLimitWorkerControllerInstances, failure.GetMessage())
 		}
 		return serviceerror.NewInternalf("create deployment version failed: %s", failure.Message)
 	}

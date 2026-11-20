@@ -236,10 +236,11 @@ type WorkerDeploymentLimitType string
 const (
 	workerDeploymentLimitTypeTagName = "limit_type"
 
-	WorkerDeploymentLimitTaskQueuesPerVersion    WorkerDeploymentLimitType = "task_queues"
-	WorkerDeploymentLimitVersionsPerDeployment   WorkerDeploymentLimitType = "versions"
-	WorkerDeploymentLimitVersionsPerTaskQueue    WorkerDeploymentLimitType = "versions_per_task_queue"
-	WorkerDeploymentLimitDeploymentsPerNamespace WorkerDeploymentLimitType = "deployments"
+	WorkerDeploymentLimitTaskQueuesPerVersion      WorkerDeploymentLimitType = "task_queues"
+	WorkerDeploymentLimitVersionsPerDeployment     WorkerDeploymentLimitType = "versions"
+	WorkerDeploymentLimitVersionsPerTaskQueue      WorkerDeploymentLimitType = "versions_per_task_queue"
+	WorkerDeploymentLimitDeploymentsPerNamespace   WorkerDeploymentLimitType = "deployments"
+	WorkerDeploymentLimitWorkerControllerInstances WorkerDeploymentLimitType = "worker_controller_instances"
 )
 
 func WorkerDeploymentLimitTypeTag(limitType WorkerDeploymentLimitType) Tag {
