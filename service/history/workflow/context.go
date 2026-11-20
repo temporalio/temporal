@@ -457,6 +457,15 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		return nil, err
 	}
 
+	if c.MutableState != nil {
+		// Speculative CHASM changes from an earlier failover version were never replicated. Reload from
+		// the DB so they are not mixed with state written by another cluster.
+		version, pending := c.MutableState.ChasmTree().SpeculativeTransitionFailoverVersion()
+		if pending && version != namespaceEntry.FailoverVersion(c.workflowKey.WorkflowID) {
+			c.Clear()
+		}
+	}
+
 	if c.MutableState == nil {
 		response, err := getWorkflowExecution(ctx, shardContext, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardContext.GetShardID(),
@@ -911,6 +920,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 					shardContext,
 					updateMode,
 					newMutableState,
+					updateWorkflowTransactionPolicy,
 					payload,
 				)
 			},
@@ -986,6 +996,7 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 		shardContext,
 		updateMode,
 		newMutableState,
+		updateWorkflowTransactionPolicy,
 		payload,
 	)
 }
@@ -1061,6 +1072,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	shardContext historyi.ShardContext,
 	updateMode persistence.UpdateWorkflowMode,
 	newMutableState historyi.MutableState,
+	transactionPolicy historyi.TransactionPolicy,
 	payload *ExecutionTransactionPayload,
 ) error {
 	if err := c.mergeUpdateWithNewReplicationTasks(
@@ -1111,6 +1123,9 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	); err != nil {
 		return err
 	}
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		c.handleWorkflowHeartbeatNotification(shardContext, payload.ExecutionMutation.NewBufferedEvents)
+	}
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
@@ -1120,6 +1135,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		c.metricsHandler,
 		c.GetNamespace(shardContext),
 		c.MutableState.GetExecutionState().State,
+		wroteEvents(payload.ExecutionEvents),
 		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
 		int(c.MutableState.GetNextEventID()-1),
 	)

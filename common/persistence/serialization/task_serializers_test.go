@@ -17,6 +17,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -85,6 +86,33 @@ func (s *taskSerializerSuite) TestTransferActivityTask() {
 	}
 
 	s.assertEqualTasks(activityTask)
+}
+
+func (s *taskSerializerSuite) TestTransferReleaseLimiterTask() {
+	task := &tasks.ReleaseLimiterTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Limiters: []*taskqueuespb.LimiterRef{
+			{
+				LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+				Key:         "limiter-key",
+				SlotId:      uuid.NewString(),
+			},
+		},
+	}
+
+	s.assertEqualTasksWithOpts(task,
+		func(task, deserializedTask tasks.Task) {
+			original := task.(*tasks.ReleaseLimiterTask).Limiters
+			deserialized := deserializedTask.(*tasks.ReleaseLimiterTask).Limiters
+			s.Require().Len(deserialized, len(original))
+			for i := range original {
+				protorequire.ProtoEqual(s.T(), original[i], deserialized[i])
+			}
+		},
+		cmpopts.IgnoreFields(tasks.ReleaseLimiterTask{}, "Limiters"),
+	)
 }
 
 func (s *taskSerializerSuite) TestTransferRequestCancelTask() {

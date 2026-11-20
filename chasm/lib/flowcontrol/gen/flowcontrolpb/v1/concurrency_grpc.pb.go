@@ -28,7 +28,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ConcurrencyServiceClient interface {
-	// Batch applies a batch of operations to one limiter.
+	// Batch applies a batch of operations to one limiter. A limiter lives within one
+	// namespace and is identified by a key.
 	//
 	// Note that matching calls Reserve, CancelReservation, and Commit, and history calls
 	// Release, so no single batch should ever contain Release mixed with anything else, but
@@ -76,7 +77,8 @@ func (c *concurrencyServiceClient) Wait(ctx context.Context, in *ConcurrencyServ
 // All implementations must embed UnimplementedConcurrencyServiceServer
 // for forward compatibility
 type ConcurrencyServiceServer interface {
-	// Batch applies a batch of operations to one limiter.
+	// Batch applies a batch of operations to one limiter. A limiter lives within one
+	// namespace and is identified by a key.
 	//
 	// Note that matching calls Reserve, CancelReservation, and Commit, and history calls
 	// Release, so no single batch should ever contain Release mixed with anything else, but

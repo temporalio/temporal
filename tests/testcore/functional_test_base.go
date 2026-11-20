@@ -15,7 +15,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -352,6 +351,7 @@ func (s *functionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.
+	testtelemetry.AttachTestName(s.T())
 	ctx := testcontext.For(s.T())
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
 	s.namespaceID, err = s.RegisterNamespace(ctx, s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
@@ -383,12 +383,14 @@ func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persist
 // in each partition.
 func (s *functionalTestBase) SetupTest() {
 	s.checkTestShard()
+	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 }
 
 func (s *functionalTestBase) SetupSubTest() {
+	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 }
 
@@ -637,34 +639,6 @@ func (s *functionalTestBase) MarkNamespaceAsDeleted(
 	})
 
 	return err
-}
-
-func (s *functionalTestBase) GetHistoryFunc(nsName string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
-	return func() []*historypb.HistoryEvent {
-		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:       nsName,
-			Execution:       execution,
-			MaximumPageSize: 5, // Use small page size to force pagination code path
-		})
-		s.Require().NoError(err)
-
-		events := historyResponse.History.Events
-		for historyResponse.NextPageToken != nil {
-			historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace:     nsName,
-				Execution:     execution,
-				NextPageToken: historyResponse.NextPageToken,
-			})
-			s.Require().NoError(err)
-			events = append(events, historyResponse.History.Events...)
-		}
-
-		return events
-	}
-}
-
-func (s *functionalTestBase) GetHistory(nsName string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	return s.GetHistoryFunc(nsName, execution)()
 }
 
 func (s *functionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {

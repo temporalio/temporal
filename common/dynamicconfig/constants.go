@@ -230,6 +230,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
 	)
+	WorkflowHeartbeatNotificationRolloutPercent = NewNamespaceIntSetting(
+		"history.workflowHeartbeatNotificationRolloutPercent",
+		0,
+		`WorkflowHeartbeatNotificationRolloutPercent selects a stable percentage of workflows per namespace for heartbeat notifications. Zero selects none; 100 selects all.`,
+	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
 		"system.workerCommandsDispatchTimeout",
 		5*time.Second*debug.TimeoutMultiplier,
@@ -1198,6 +1203,12 @@ so forwarding by endpoint ID will not work out of the box.`,
 		2000,
 		`MaxLinksPerComponent is the maximum number of links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.`,
 	)
+	TotalLinksMaxSizePerComponent = NewNamespaceIntSetting(
+		"chasm.totalLinksMaxSizePerComponent",
+		2*1024*1024,
+		`TotalLinksMaxSizePerComponent is the maximum total size, in bytes, of all links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.
+Links embedded in completion callbacks are not included; they count toward callback.totalMaxSizePerExecution instead.`,
+	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
 		1,
@@ -1658,7 +1669,7 @@ will be issued.`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
 		"matching.pollerScalingWaitTime",
-		1*time.Second,
+		5*time.Second,
 		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
 a decision to scale down the number of pollers will be issued`,
 	)
@@ -1670,21 +1681,21 @@ second per poller by one physical queue manager`,
 	)
 	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
 		"matching.pollerScalingTaskAddToDispatchRatio",
-		1.2,
+		1.05,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
 dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
 is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
-		false,
+		true,
 		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
-metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
-scoped by namespace and/or task queue.`,
+metric describing why pollers are scaled up, down, or held for a physical task queue. Enabled by default; can be
+disabled or scoped by namespace and/or task queue.`,
 	)
 	MatchingUseSignalsV2ForPollerScaling = NewTaskQueueBoolSetting(
 		"matching.useSignalsV2ForPollerScaling",
-		false,
+		true,
 		`MatchingUseSignalsV2ForPollerScaling, when enabled, uses v2 scaling signals for poller autoscaling:
 (1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
 (2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
@@ -2825,7 +2836,7 @@ kept in the CHASM request IDs data node and capped by history.maximumRequestIDsI
 	)
 	EnableChasmRequestIDDataNode = NewNamespaceBoolSetting(
 		"history.enableChasmRequestIDDataNode",
-		false,
+		true,
 		`EnableChasmRequestIDDataNode enables recording request IDs in CHASM updates in the request IDs data node.`,
 	)
 	MaximumRequestIDsInChasmDataNode = NewNamespaceIntSetting(
