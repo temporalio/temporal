@@ -363,10 +363,6 @@ type (
 		// CloseTransactionAsMutation closes the mutable state transaction (different from DB transaction) and prepares the whole state mutation to be persisted and bumps the DBRecordVersion.
 		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsMutation(ctx context.Context, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
-		// CloseTransactionIfClean closes the transaction of a non-workflow execution without anything to persist, if it
-		// only changed ephemeral CHASM components or didn't change anything. It returns false, leaving the transaction
-		// open, if anything has to be persisted, in which case the transaction must be closed and persisted as usual.
-		CloseTransactionIfClean() (bool, error)
 		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
 		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsSnapshot(ctx context.Context, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)

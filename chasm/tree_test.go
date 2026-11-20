@@ -4176,16 +4176,8 @@ func (s *nodeSuite) nodeBase() *nodeBase {
 		backend:     s.nodeBackend,
 		pathEncoder: s.nodePathEncoder,
 
-		mutation: NodesMutation{
-			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
-			DeletedNodes: make(map[string]struct{}),
-		},
-		systemMutation: NodesMutation{
-			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
-			DeletedNodes: make(map[string]struct{}),
-		},
-		newTasks:       make(map[any][]taskWithAttributes),
-		taskValueCache: make(map[*commonpb.DataBlob]reflect.Value),
+		taskValueCache:   make(map[*commonpb.DataBlob]reflect.Value),
+		transactionState: newTransactionState(),
 	}
 }
 
@@ -6356,6 +6348,86 @@ func (s *nodeSuite) TestCloseTransactionIfClean() {
 	s.False(ok)
 }
 
+func (s *nodeSuite) TestCloseTransactionIfClean_NotClean() {
+	testCases := []struct {
+		name   string
+		update func(MutableContext, *TestComponent)
+		verify func(root *Node, encodedRoot *commonpb.DataBlob, mutation NodesMutation)
+	}{
+		{
+			name: "durable change",
+			update: func(_ MutableContext, tc *TestComponent) {
+				tc.ComponentData.RunId = "durable-change"
+			},
+			verify: func(_ *Node, encodedRoot *commonpb.DataBlob, mutation NodesMutation) {
+				// CloseTransaction persists the value encoded by CloseTransactionIfClean.
+				s.NotNil(encodedRoot)
+				s.Same(encodedRoot, mutation.UpdatedNodes[""].GetData())
+			},
+		},
+		{
+			name: "durable component added",
+			update: func(ctx MutableContext, tc *TestComponent) {
+				tc.SubComponents = Map[string, *TestSubComponent1]{
+					"durable": NewComponentField(ctx, &TestSubComponent1{
+						SubComponent1Data: &protoMessageType{RunId: "durable"},
+					}),
+				}
+			},
+			verify: func(root *Node, _ *commonpb.DataBlob, mutation NodesMutation) {
+				node, ok := root.findNode([]string{"SubComponents", "durable"})
+				s.True(ok)
+				encodedPath, err := node.getEncodedPath()
+				s.NoError(err)
+				s.Contains(mutation.UpdatedNodes, encodedPath)
+			},
+		},
+		{
+			name: "durable component removed",
+			update: func(_ MutableContext, tc *TestComponent) {
+				tc.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+			},
+			verify: func(_ *Node, _ *commonpb.DataBlob, mutation NodesMutation) {
+				s.NotEmpty(mutation.DeletedNodes)
+			},
+		},
+		{
+			// The time-skipping config is persisted by the backend, outside the tree.
+			name: "time-skipping config set",
+			update: func(ctx MutableContext, _ *TestComponent) {
+				ctx.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true})
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			root := s.testComponentTree()
+			_, err := root.CloseTransaction(context.Background(), true)
+			s.NoError(err)
+			s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+
+			ctx := NewMutableContext(context.Background(), root)
+			c, err := root.Component(ctx, ComponentRef{})
+			s.NoError(err)
+			tc.update(ctx, c.(*TestComponent))
+
+			clean, err := root.CloseTransactionIfClean()
+			s.NoError(err)
+			s.False(clean)
+			s.True(root.IsDirty())
+
+			encodedRoot := root.encodedValue
+			mutation, err := root.CloseTransaction(context.Background(), true)
+			s.NoError(err)
+			if tc.verify != nil {
+				tc.verify(root, encodedRoot, mutation)
+			}
+			s.False(root.IsDirty())
+		})
+	}
+}
+
 func (s *nodeSuite) assertNoSubComponentsPaths(nodes any) {
 	var paths []string
 	switch nodes := nodes.(type) {
@@ -7495,4 +7567,79 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 		s.False(root.totalTimeSkippedUpdatedInPassive,
 			"the flag is reset after the transaction closes")
 	})
+}
+
+func TestTransactionState_EveryFieldCovered(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name   string
+		field  string
+		change func(*transactionState)
+		// ignored is set for fields that hasPendingWrites intentionally ignores.
+		ignored bool
+	}{
+		{name: "mutation updated", field: "mutation", change: func(s *transactionState) {
+			s.mutation.UpdatedNodes["path"] = &persistencespb.ChasmNode{}
+		}},
+		{name: "mutation deleted", field: "mutation", change: func(s *transactionState) {
+			s.mutation.DeletedNodes["path"] = struct{}{}
+		}},
+		{name: "system mutation updated", field: "systemMutation", change: func(s *transactionState) {
+			s.systemMutation.UpdatedNodes["path"] = &persistencespb.ChasmNode{}
+		}},
+		{name: "system mutation deleted", field: "systemMutation", change: func(s *transactionState) {
+			s.systemMutation.DeletedNodes["path"] = struct{}{}
+		}},
+		{name: "new tasks", field: "newTasks", change: func(s *transactionState) {
+			s.newTasks["component"] = []taskWithAttributes{{}}
+		}},
+		{name: "immediate pure tasks", field: "immediatePureTasks", change: func(s *transactionState) {
+			s.immediatePureTasks["component"] = []taskWithAttributes{{}}
+		}},
+		{name: "pending request links", field: "pendingRequestLinks", change: func(s *transactionState) {
+			s.pendingRequestLinks["component"] = map[string][]*commonpb.Link{"request-id": nil}
+		}},
+		{name: "pending user metadata", field: "pendingUserMetadata", change: func(s *transactionState) {
+			s.pendingUserMetadata["component"] = &sdkpb.UserMetadata{}
+		}},
+		{name: "needs pointer resolution", field: "needsPointerResolution", change: func(s *transactionState) {
+			s.needsPointerResolution = true
+		}},
+		{name: "total time skipped updated in passive", field: "totalTimeSkippedUpdatedInPassive", change: func(s *transactionState) {
+			s.totalTimeSkippedUpdatedInPassive = true
+		}},
+		{name: "backend state changed", field: "backendStateChanged", change: func(s *transactionState) {
+			s.backendStateChanged = true
+		}},
+		{name: "speculative transition pending", field: "speculativeTransitionPending", change: func(s *transactionState) {
+			s.speculativeTransitionPending = true
+		}},
+		{name: "speculative transition failover version", field: "speculativeTransitionFailoverVersion", change: func(s *transactionState) {
+			// Only read while speculativeTransitionPending is set, which hasPendingWrites checks.
+			s.speculativeTransitionFailoverVersion = 7
+		}, ignored: true},
+	}
+
+	covered := make(map[string]bool)
+	for _, tc := range testCases {
+		covered[tc.field] = true
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newTransactionState()
+			require.False(t, s.hasPendingWrites())
+
+			tc.change(&s)
+			require.Equal(t, !tc.ignored, s.hasPendingWrites())
+
+			s.clearTransactionState()
+			require.Equal(t, newTransactionState(), s)
+		})
+	}
+
+	stateType := reflect.TypeFor[transactionState]()
+	for field := range stateType.Fields() {
+		name := field.Name
+		require.True(t, covered[name], "transactionState.%s has no test case; handle it in clearTransactionState and hasPendingWrites, then add one", name)
+	}
 }
