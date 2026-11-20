@@ -2413,12 +2413,16 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	redirectBuildId = FindRedirectBuildId(buildId, data.GetRedirectRules())
 
 	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		// TODO (Shivam): Replace this inferred session check with session options on TaskInfo
-		// once they are propagated by task-add requests.
-		if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY &&
-			directive.GetUseAssignmentRules() != nil &&
-			buildId == "" && versionSet == "" && redirectBuildId == "" {
-			return dbq, dbq, userDataChanged, 0, targetDeploymentVersion, nil
+		// Only session tasks reach a sticky queue before a build ID is assigned: session activities, and workflow tasks
+		// of a bound workflow that has not completed one yet, such as the first task after a reset.
+		// TODO (Shivam): Replace this inferred session check with the task's session directive once spooled tasks
+		// carry it.
+		if directive.GetUseAssignmentRules() != nil {
+			if buildId == "" && versionSet == "" && redirectBuildId == "" {
+				return dbq, dbq, userDataChanged, 0, targetDeploymentVersion, nil
+			}
+			// The assignment rules picked a build ID or version set, which only the normal queue applies: send the task there.
+			return nil, nil, nil, 0, nil, serviceerrors.NewStickyWorkerUnavailable()
 		}
 
 		// We may kick off this worker if there's a new default build ID in the version set.

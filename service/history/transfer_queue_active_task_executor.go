@@ -351,9 +351,11 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
-		// sticky worker is unavailable, switch to original normal task queue. Note: Sending back to the normal task queue is done
-		// only if the workflow task is not assigned to an exclusive worker. In the case of an exclusive worker, matching does not
-		// send *serviceerrors.StickyWorkerUnavailable and this code path is not taken.
+		// sticky worker is unavailable, switch to original normal task queue. Matching does not report an exclusive worker as
+		// unavailable. The exception is versioning (old build-ID assignment rules, or a deployment version the sticky queue
+		// does not belong to), which can still send the first task of a workflow with an exclusive binding here.
+		// TODO (Shivam): handle exclusive bindings on versioned task queues, for workflow tasks and session activities alike
+		// (MTC-934).
 		taskQueue = &taskqueuepb.TaskQueue{
 			// do not use task.TaskQueue which is sticky, use original normal task queue from mutable state
 			Name: normalTaskQueueName,

@@ -95,9 +95,9 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
-// addActivityTask pushes an activity task to Matching. When Matching reports that the worker owning a sticky queue is
-// dead, the task is sent to the activity's normal queue instead. The workflow's binding is left as it is: the worker
-// that starts the activity moves it.
+// addActivityTask pushes an activity task to Matching. When Matching reports the sticky queue unavailable (its worker
+// is dead, or old build-ID versioning must assign the task), the task is sent to the activity's normal queue instead.
+// The workflow's binding is left as it is: the worker that starts the activity moves it.
 func addActivityTask(
 	ctx context.Context,
 	matchingClient resource.MatchingRawClient,
