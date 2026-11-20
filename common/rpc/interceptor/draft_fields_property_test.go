@@ -213,11 +213,11 @@ func leadsToDraft(field protoreflect.FieldDescriptor) bool {
 
 // stripDisabled clears every field that needs a feature outside enabled, at any depth.
 func stripDisabled(m protoreflect.Message, enabled []string) {
-	var clear []protoreflect.FieldDescriptor
+	var disabled []protoreflect.FieldDescriptor
 	m.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
 		for _, feature := range fieldDraftFeatures(field) {
 			if !slices.Contains(enabled, feature) {
-				clear = append(clear, field)
+				disabled = append(disabled, field)
 				return true
 			}
 		}
@@ -233,10 +233,12 @@ func stripDisabled(m protoreflect.Message, enabled []string) {
 			})
 		case field.Message() != nil && !field.IsList() && !field.IsMap():
 			stripDisabled(value.Message(), enabled)
+		default:
+			// Scalars and lists, maps of scalars hold no draft fields.
 		}
 		return true
 	})
-	for _, field := range clear {
+	for _, field := range disabled {
 		m.Clear(field)
 	}
 }
