@@ -1450,7 +1450,7 @@ func (env *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 			expected := expectation.BacklogCount / 2 // only reports unversioned
 			//nolint:staticcheck // SA1019 deprecated field
 			actual := resp.TaskQueueStatus.GetBacklogCountHint()
-			s.Equal(int64(expected), actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
+			s.EqualValuesf(expected, actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
 		}
 
 		validateTaskQueueStats(s, label, resp.Stats, expectation)
@@ -1500,7 +1500,7 @@ func (env *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 		s.NotNil(resp)
 
 		//nolint:staticcheck // SA1019 deprecated
-		s.Equal(2, len(resp.GetVersionsInfo()), "should be 2: 1 default/unversioned + 1 versioned")
+		s.Len(resp.GetVersionsInfo(), 2, "should be 2: 1 default/unversioned + 1 versioned")
 		//nolint:staticcheck // SA1019 deprecated
 		for _, v := range resp.GetVersionsInfo() {
 			s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, v.GetTaskReachability())
@@ -1547,7 +1547,7 @@ func (env *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 		req.ReportTaskQueueStats = true
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), req)
 		s.NoError(err)
-		s.Equal(2, len(resp.VersionTaskQueues), "should be 1 task queue for Workflows and 1 for Activities")
+		s.Len(resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {
 			if info.Name == tqName || info.Type == tqType {
@@ -1570,7 +1570,7 @@ func (env *taskQueueStatsContext) validateTaskQueueStatsByPriority(
 	stats map[int32]*taskqueuepb.TaskQueueStats,
 	taskQueueExpectation taskQueueExpectations,
 ) {
-	s.Equal(env.maxPriority, len(stats), "%s: stats should contain %d priorities", label, env.maxPriority)
+	s.Len(stats, env.maxPriority, "%s: stats should contain %d priorities", label, env.maxPriority)
 
 	// use an abgridged version when caching since the exact stats are difficult to predict
 	if taskQueueExpectation.CachedEnabled {
@@ -1598,7 +1598,7 @@ func (env *taskQueueStatsContext) validateTaskQueueStatsByPriority(
 		validateTaskQueueStats(s, fmt.Sprintf("%s_Pri[%d]", label, i), stats[i], priExpectation)
 		accBacklogCount += int(stats[i].ApproximateBacklogCount)
 	}
-	s.True(taskQueueExpectation.BacklogCount >= accBacklogCount,
+	s.GreaterOrEqualf(taskQueueExpectation.BacklogCount, accBacklogCount,
 		"%s: accumulated backlog count from all priorities should be at least %d, got %d",
 		label, taskQueueExpectation.BacklogCount, accBacklogCount)
 }
@@ -1635,12 +1635,12 @@ func validateTaskQueueStats(
 ) {
 	// Actual counter can be greater than the expected due to history retries. We make sure the counter is in
 	// range [expected, expected+maxBacklogExtraTasks]
-	s.True(stats.ApproximateBacklogCount >= int64(expectation.BacklogCount),
+	s.GreaterOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
 		"%s: ApproximateBacklogCount should be at least %d, got %d",
 		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
 
 	maxApproximateBacklogCount := int64(expectation.BacklogCount + expectation.MaxExtraTasks)
-	s.True(stats.ApproximateBacklogCount <= maxApproximateBacklogCount,
+	s.LessOrEqual(stats.ApproximateBacklogCount, maxApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be at most %d, got %d",
 		label, maxApproximateBacklogCount, stats.ApproximateBacklogCount)
 
