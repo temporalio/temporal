@@ -61,24 +61,29 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 		if rollBackErr != nil {
 			m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
-
-		switch err.(type) {
-		case *persistence.ConditionFailedError,
-			*persistence.CurrentWorkflowConditionFailedError,
-			*persistence.WorkflowConditionFailedError,
-			*serviceerror.NamespaceAlreadyExists,
-			*persistence.ShardOwnershipLostError,
-			*serviceerror.Unavailable,
-			*serviceerror.NotFound:
-			return err
-		default:
-			return convertSQLError(operation, "", err)
-		}
+		return convertTxError(operation, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return convertSQLError(operation, "failed to commit transaction", err)
 	}
 	return nil
+}
+
+// convertTxError returns the persistence errors a transaction's function returns
+// as they are, and converts any other error with convertSQLError.
+func convertTxError(operation string, err error) error {
+	switch err.(type) {
+	case *persistence.ConditionFailedError,
+		*persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
+		*serviceerror.NamespaceAlreadyExists,
+		*persistence.ShardOwnershipLostError,
+		*serviceerror.Unavailable,
+		*serviceerror.NotFound:
+		return err
+	default:
+		return convertSQLError(operation, "", err)
+	}
 }
 
 // convertSQLError maps driver errors to persistence errors. Context cancel and

@@ -23,12 +23,14 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -53,6 +55,9 @@ type (
 		// mutable-state sub-collections. Wired from the raw DB by SQL entrypoints;
 		// nil on Cassandra, where these live as columns on the executions row.
 		MutableStateTableCounts func(ctx context.Context, shardID int32, namespaceID, workflowID, runID string) (map[string]int, error)
+		// BeginTxCount reports how many transactions the execution store began.
+		// Wired by plugins that pipeline UpdateWorkflowExecution, which begins none.
+		BeginTxCount func() int64
 
 		Ctx    context.Context
 		Cancel context.CancelFunc
@@ -584,7 +589,24 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		newSnapshot.DBRecordVersion+1,
 		branchToken,
 	)
-	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+	// One task for each task table, so the batch inserts into every one.
+	workflowKey := definition.NewWorkflowKey(s.NamespaceID, s.WorkflowID, s.RunID)
+	now := time.Now().UTC()
+	currentMutation.Tasks = map[tasks.Category][]tasks.Task{
+		tasks.CategoryTransfer:    {&tasks.ActivityTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+		tasks.CategoryVisibility:  {&tasks.StartExecutionVisibilityTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+		tasks.CategoryReplication: {&tasks.HistoryReplicationTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+		tasks.CategoryOutbound: {&tasks.StateMachineOutboundTask{
+			StateMachineTask: tasks.StateMachineTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now},
+			Destination:      "destination",
+		}},
+		tasks.CategoryTimer:    {&tasks.UserTimerTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+		tasks.CategoryArchival: {&tasks.ArchiveExecutionTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+	}
+	// A buffered event, so the batch inserts one.
+	currentMutation.ClearBufferedEvents = false
+	currentMutation.NewBufferedEvents = []*historypb.HistoryEvent{RandomHistoryEvent(newSnapshot.NextEventID, rand.Int63())}
+	err := s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
@@ -601,6 +623,19 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot, currentMutation)
 	s.AssertHEEqualWithDB(branchToken, newEvents, currentEvents)
+	current, err := s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+	s.Equal(&p.GetCurrentExecutionResponse{
+		StartRequestID: currentMutation.ExecutionState.CreateRequestId,
+		RunID:          s.RunID,
+		State:          currentMutation.ExecutionState.State,
+		Status:         currentMutation.ExecutionState.Status,
+	}, current)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
@@ -625,7 +660,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
 		newSnapshot.DBRecordVersion+1,
 		nil, // No branch token for CHASM
 	)
-	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+	err := s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
@@ -690,6 +725,42 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 	)
 }
 
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_OtherRunCurrent() {
+	firstSnapshot, firstMutation, secondRunID, _, _ := s.createRunThenNewCurrentRun()
+
+	// An update of the first run, which is no longer current.
+	updateMutation, updateEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		firstMutation.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		firstMutation.DBRecordVersion+1,
+		nil,
+	)
+	err := s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *updateMutation,
+		UpdateWorkflowEvents:   updateEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	var conflictErr *p.CurrentWorkflowConditionFailedError
+	s.ErrorAs(err, &conflictErr)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
+	s.assertCurrentRunID(secondRunID)
+}
+
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
 		rand.Int63(),
@@ -710,7 +781,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 		rand.Int63(),
 		branchToken,
 	)
-	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+	err := s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
@@ -727,6 +798,224 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, newEvents)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_ShardOwnershipLost() {
+	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	currentMutation, currentEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		newSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	err := s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID + 1,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *currentMutation,
+		UpdateWorkflowEvents:   currentEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.ErrorAs(err, new(*p.ShardOwnershipLostError))
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
+	s.AssertHEPrefixWithDB(branchToken, newEvents)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_ExecutionMissing() {
+	if strings.HasPrefix(s.T().Name(), "TestCassandra") {
+		s.T().Skip("this checks the SQL update transaction")
+	}
+
+	branchToken, newSnapshot, _ := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	// Deleting the execution keeps its current execution row.
+	err := s.ExecutionManager.DeleteWorkflowExecution(s.Ctx, &p.DeleteWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+
+	currentMutation, currentEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		newSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	err = s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *currentMutation,
+		UpdateWorkflowEvents:   currentEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.ErrorAs(err, new(*p.ConditionFailedError))
+
+	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID, chasm.WorkflowArchetypeID)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentMissing() {
+	if strings.HasPrefix(s.T().Name(), "TestCassandra") {
+		s.T().Skip("this checks the SQL update transaction")
+	}
+
+	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	err := s.ExecutionManager.DeleteCurrentWorkflowExecution(s.Ctx, &p.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+
+	currentMutation, currentEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		newSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	err = s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *currentMutation,
+		UpdateWorkflowEvents:   currentEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.ErrorAs(err, new(*serviceerror.Unavailable))
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
+	s.AssertHEPrefixWithDB(branchToken, newEvents)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_DuplicateTask() {
+	if strings.HasPrefix(s.T().Name(), "TestCassandra") {
+		s.T().Skip("Cassandra task inserts overwrite existing tasks")
+	}
+
+	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	task := &tasks.ActivityTask{
+		WorkflowKey:         definition.NewWorkflowKey(s.NamespaceID, s.WorkflowID, s.RunID),
+		TaskID:              rand.Int63(),
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
+	firstMutation, firstEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		newSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	firstMutation.Tasks[tasks.CategoryTransfer] = []tasks.Task{task}
+	err := s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *firstMutation,
+		UpdateWorkflowEvents:   firstEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	secondMutation, secondEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		firstMutation.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		firstMutation.DBRecordVersion+1,
+		branchToken,
+	)
+	secondMutation.Tasks[tasks.CategoryTransfer] = []tasks.Task{task}
+	err = s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *secondMutation,
+		UpdateWorkflowEvents:   secondEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.ErrorAs(err, new(*serviceerror.Unavailable))
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot, firstMutation)
+	s.AssertHEPrefixWithDB(branchToken, newEvents, firstEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
@@ -1178,7 +1467,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsCurrent() {
 		newSnapshot.DBRecordVersion+1,
 		branchToken,
 	)
-	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+	err := s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
 		Mode:    p.UpdateWorkflowModeIgnoreCurrent,
@@ -1250,7 +1539,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 		nonCurrentSnapshot.DBRecordVersion+1,
 		nonCurrentBranchToken,
 	)
-	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+	err = s.updatePipelined(&p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
 		Mode:    p.UpdateWorkflowModeIgnoreCurrent,
@@ -3114,4 +3403,18 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 	}
 
 	return mutableState, dbRecordVersion
+}
+
+// updatePipelined runs request and, when BeginTxCount is wired, requires that it
+// began no sequential transaction.
+func (s *ExecutionMutableStateSuite) updatePipelined(request *p.UpdateWorkflowExecutionRequest) error {
+	var beginTxCount int64
+	if s.BeginTxCount != nil {
+		beginTxCount = s.BeginTxCount()
+	}
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, request)
+	if s.BeginTxCount != nil {
+		s.Equal(beginTxCount, s.BeginTxCount(), "the update ran sequentially instead of pipelined")
+	}
+	return err
 }

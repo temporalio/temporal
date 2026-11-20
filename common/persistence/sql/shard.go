@@ -155,6 +155,9 @@ func readLockShard(
 	shardID int32,
 	oldRangeID int64,
 ) error {
+	if pipelinedTx, ok := tx.(sqlplugin.PipelinedTx); ok {
+		return pipelinedTx.ReadLockShardsWithRangeID(ctx, sqlplugin.ShardsFilter{ShardID: shardID}, oldRangeID)
+	}
 	rangeID, err := tx.ReadLockShards(ctx, sqlplugin.ShardsFilter{
 		ShardID: shardID,
 	})
