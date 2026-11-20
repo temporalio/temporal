@@ -129,15 +129,43 @@ func TestUserDataWorkerCommandsLoadFromDB(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.data, userData)
 
-			_, err = m.UpdateUserData(t.Context(), UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-				t.Fatal("worker-command partition must not update workflow user data")
-				return data, false, nil
-			})
-			require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
-			err = m.CheckTaskQueueUserDataPropagation(t.Context(), 1, 4, 4)
-			require.ErrorContains(t, err, "must be called on root workflow task queue")
-			_, err = m.userDataFetchSource()
-			require.ErrorIs(t, err, tqid.ErrNoParent)
+			require.NoError(t, m.CheckTaskQueueUserDataPropagation(t.Context(), 1, 4, 4))
+			source, err := m.userDataFetchSource()
+			require.NoError(t, err)
+			require.Nil(t, source)
+		})
+	}
+}
+
+func TestUserDataFetchSource(t *testing.T) {
+	t.Parallel()
+	family := tqid.UnsafeTaskQueueFamily(defaultNamespaceId, "queue")
+	workflow := family.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	activity := family.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	nexus := family.TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS)
+	for _, tc := range []struct {
+		name      string
+		partition tqid.Partition
+		source    tqid.Partition
+	}{
+		{name: "workflow root reads locally", partition: workflow.RootPartition()},
+		{name: "worker commands read locally", partition: nexus.WorkerCommandsPartition()},
+		{name: "activity root fetches workflow root", partition: activity.RootPartition(), source: workflow.RootPartition()},
+		{name: "nexus root fetches workflow root", partition: nexus.RootPartition(), source: workflow.RootPartition()},
+		{name: "workflow child fetches workflow parent", partition: workflow.NormalPartition(1), source: workflow.RootPartition()},
+		{name: "activity child fetches activity parent", partition: activity.NormalPartition(1), source: activity.RootPartition()},
+		{name: "nexus child fetches nexus parent", partition: nexus.NormalPartition(1), source: nexus.RootPartition()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			opts := defaultTqmTestOpts(controller)
+			opts.dbq = UnversionedQueueKey(tc.partition)
+			m := createUserDataManager(t, controller, opts)
+			source, err := m.userDataFetchSource()
+			require.NoError(t, err)
+			require.Equal(t, tc.source, source)
+			require.Equal(t, tc.source == nil, m.store != nil)
 		})
 	}
 }
@@ -375,6 +403,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false, // first is not long poll
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -388,6 +417,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // second is long poll
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -432,6 +462,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false, // first is not long poll
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_ACTIVITY).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -445,6 +476,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // second is long poll
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_ACTIVITY).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data2,
@@ -458,6 +490,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 2,
 			WaitNewData:              true,
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_ACTIVITY).ToProto(),
 		}).
 		Return(nil, serviceerror.NewUnavailable("hold on")).AnyTimes()
 
@@ -497,6 +530,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
@@ -511,6 +545,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
@@ -527,6 +562,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -584,6 +620,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
@@ -598,6 +635,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
@@ -614,6 +652,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -673,6 +712,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(taskQueue.NormalPartition(10).RpcName(), defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -686,6 +726,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
+			TaskQueuePartition:       tqid.MustNormalPartitionFromRpcName(taskQueue.NormalPartition(10).RpcName(), defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -734,6 +775,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 			LastKnownUserDataVersion:      0,
 			LastKnownEphemeralDataVersion: -1,
 			WaitNewData:                   false,
+			TaskQueuePartition:            tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData:      data1,
@@ -749,6 +791,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 			LastKnownUserDataVersion:      1,
 			LastKnownEphemeralDataVersion: -1,
 			WaitNewData:                   true, // after first successful poll, there would be long polls
+			TaskQueuePartition:            tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -794,6 +837,7 @@ func TestUserData_GetEphemeralData(t *testing.T) {
 			LastKnownUserDataVersion:      0,
 			LastKnownEphemeralDataVersion: 0,
 			WaitNewData:                   false,
+			TaskQueuePartition:            tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		})
 	require.NoError(t, err)
 	require.Nil(t, res.UserData)
@@ -808,6 +852,7 @@ func TestUserData_GetEphemeralData(t *testing.T) {
 			LastKnownUserDataVersion:      0,
 			LastKnownEphemeralDataVersion: -1,
 			WaitNewData:                   false,
+			TaskQueuePartition:            tqid.MustNormalPartitionFromRpcName(defaultRootTqID, defaultNamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW).ToProto(),
 		})
 	require.NoError(t, err)
 	require.Nil(t, res.UserData)
@@ -846,8 +891,14 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 			if !strings.Contains(req.TaskQueue, expectedTQ) {
 				return false
 			}
+			// The structured partition must identify the same normal parent as the legacy name.
+			parent, err := tqid.NormalPartitionFromRpcName(req.TaskQueue, req.NamespaceId, req.TaskQueueType)
+			if err != nil || !proto.Equal(req.TaskQueuePartition, parent.ToProto()) {
+				return false
+			}
 			// check the rest matches
 			req = common.CloneProto(req)
+			req.TaskQueuePartition = nil
 			req.TaskQueue = ""
 			return proto.Equal(req, expectedReq)
 		})
@@ -906,7 +957,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 		return data, false, nil
 	})
 	require.Error(t, err)
-	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
+	require.ErrorIs(t, err, errUserDataNoMutateNonOwner)
 
 	actTqId := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
 	actTqCfg := defaultTqmTestOpts(controller)
@@ -916,7 +967,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 		return data, false, nil
 	})
 	require.Error(t, err)
-	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
+	require.ErrorIs(t, err, errUserDataNoMutateNonOwner)
 }
 
 func newTestUnversionedPhysicalQueueKey(namespaceId string, name string, taskType enumspb.TaskQueueType, partition int) *PhysicalTaskQueueKey {
