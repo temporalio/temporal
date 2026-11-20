@@ -131,7 +131,7 @@ func (tx *Tx) Reserve(ctx context.Context) (retErr error) {
 }
 
 // Commit turns reservations into committed slots.
-// Reserve may make RPC calls.
+// Commit may make RPC calls.
 func (tx *Tx) Commit(ctx context.Context) (retErr error) {
 	if tx == nil {
 		return nil // no limiters
