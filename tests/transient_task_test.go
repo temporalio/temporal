@@ -104,7 +104,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 	env.NoError(err)
 
 	// Now send a signal when transient workflow task is scheduled
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signalA", nil, identity)
+	err = env.SendSignal(env.Namespace(), workflowExecution, "signalA", nil, identity)
 	env.NoError(err, "failed to send signal to execution")
 
 	// Drop workflow task to cause a workflow task timeout
@@ -252,7 +252,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	env.NoError(err)
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signal", nil, identity)
+	err = env.SendSignal(env.Namespace(), workflowExecution, "signal", nil, identity)
 	env.NoError(err, "failed to send signal to execution")
 
 	// stage 2
@@ -260,7 +260,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	env.NoError(err)
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signal", nil, identity)
+	err = env.SendSignal(env.Namespace(), workflowExecution, "signal", nil, identity)
 	env.NoError(err, "failed to send signal to execution")
 
 	// stage 3: this one fails with a panic
@@ -278,7 +278,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	env.NoError(err)
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signal", nil, identity)
+	err = env.SendSignal(env.Namespace(), workflowExecution, "signal", nil, identity)
 	env.NoError(err, "failed to send signal to execution")
 
 	// drop workflow task to cause a workflow task timeout
