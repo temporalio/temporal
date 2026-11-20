@@ -229,6 +229,40 @@ func TestBuildDSN_PropagatesErrorFromBuildDSNAttr(t *testing.T) {
 	require.ErrorContains(t, err, "TLS keyFile is set but TLS certFile is not set")
 }
 
+func TestBuildDSN_UserInfoEscaping(t *testing.T) {
+	cases := []struct {
+		name     string
+		username string
+		password string
+	}{
+		{name: "colon in username", username: "entity:serv-abcd", password: "s3cret"},
+		{name: "reserved characters in username", username: "a/b@c?d#e", password: "password"},
+		{name: "reserved characters in password", username: "testuser", password: "p@ss:w/rd&special"},
+		{name: "space in password", username: "testuser", password: "hello world"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.SQL{
+				User:         tc.username,
+				Password:     tc.password,
+				ConnectAddr:  "localhost:5432",
+				DatabaseName: "testdb",
+			}
+			dsn, err := buildDSN(cfg, &mockServiceResolver{addr: "localhost:5432"})
+			require.NoError(t, err)
+			parsed, err := url.Parse(dsn)
+			require.NoError(t, err)
+			require.Equal(t, tc.username, parsed.User.Username())
+			password, ok := parsed.User.Password()
+			require.True(t, ok)
+			require.Equal(t, tc.password, password)
+			require.Equal(t, "localhost:5432", parsed.Host)
+			require.Equal(t, "/testdb", parsed.Path)
+			require.Equal(t, "disable", parsed.Query().Get("sslmode"))
+		})
+	}
+}
+
 type mockServiceResolver struct {
 	addr string
 }
