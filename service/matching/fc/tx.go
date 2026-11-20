@@ -1,3 +1,5 @@
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination tx_mock_test.go
+
 package fc
 
 import (
