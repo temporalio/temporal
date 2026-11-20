@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -61,16 +63,16 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 	workflowRun2 := s.createBatchUpdateOptionsWorkflow(env, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
-	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun1.GetID(), workflowRun1.GetRunID())
-		s.NoError(err)
-		s.Len(description.GetPendingActivities(), 1)
-		s.Positive(internalWorkflow.startedActivityCount.Load())
+	env.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
-		description, err = env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun2.GetID(), workflowRun2.GetRunID())
-		s.NoError(err)
-		s.Len(description.GetPendingActivities(), 1)
-		s.Positive(internalWorkflow.startedActivityCount.Load())
+		description, err = env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -81,20 +83,20 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 	}
 	pauseRequest.Execution.WorkflowId = workflowRun1.GetID()
 	resp, err := env.FrontendClient().PauseActivity(ctx, pauseRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+	env.NoError(err)
+	env.NotNil(resp)
 
 	pauseRequest.Execution.WorkflowId = workflowRun2.GetID()
 	resp, err = env.FrontendClient().PauseActivity(ctx, pauseRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+	env.NoError(err)
+	env.NotNil(resp)
 
 	// wait for activities to be paused
-	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun1.GetID(), workflowRun1.GetRunID())
-		s.NoError(err)
-		s.Len(description.GetPendingActivities(), 1)
-		s.True(description.PendingActivities[0].Paused)
+	env.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.True(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	workflowTypeName := "WorkflowFunc"
@@ -106,15 +108,15 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 	unpauseCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, unpauseCause)
 
-	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
-		listResp, err = env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+	env.EventuallyWithT(func(t *assert.CollectT) {
+		listResp, err = env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     query,
 		})
-		s.NoError(err)
-		s.NotNil(listResp)
-		s.Len(listResp.GetExecutions(), 2)
+		require.NoError(t, err)
+		require.NotNil(t, listResp)
+		require.Len(t, listResp.GetExecutions(), 2)
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
@@ -135,21 +137,21 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
-	s.NoError(err)
+	env.NoError(err)
 
 	// make sure activities are unpaused
-	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun1.GetID(), workflowRun1.GetRunID())
-		s.NoError(err)
-		s.Len(description.PendingActivities, 1)
-		s.Equal(10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
-		s.True(description.PendingActivities[0].Paused)
+	env.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.PendingActivities, 1)
+		require.Equal(t, 10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
+		require.True(t, description.PendingActivities[0].Paused)
 
-		description, err = env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun2.GetID(), workflowRun2.GetRunID())
-		s.NoError(err)
-		s.Len(description.PendingActivities, 1)
-		s.Equal(10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
-		s.True(description.PendingActivities[0].Paused)
+		description, err = env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.PendingActivities, 1)
+		require.Equal(t, 10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
+		require.True(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
@@ -164,21 +166,21 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
-	s.NoError(err)
+	env.NoError(err)
 
 	// make sure activities are unpaused
-	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun1.GetID(), workflowRun1.GetRunID())
-		s.NoError(err)
-		s.Len(description.PendingActivities, 1)
-		s.Equal(10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
-		s.False(description.PendingActivities[0].Paused)
+	env.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.PendingActivities, 1)
+		require.Equal(t, 10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
+		require.False(t, description.PendingActivities[0].Paused)
 
-		description, err = env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun2.GetID(), workflowRun2.GetRunID())
-		s.NoError(err)
-		s.Len(description.PendingActivities, 1)
-		s.Equal(10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
-		s.False(description.PendingActivities[0].Paused)
+		description, err = env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.PendingActivities, 1)
+		require.Equal(t, 10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
+		require.False(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let both of the activities succeed
@@ -186,10 +188,10 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 
 	var out string
 	err = workflowRun1.Get(ctx, &out)
-	s.NoError(err)
+	env.NoError(err)
 
 	err = workflowRun2.Get(ctx, &out)
-	s.NoError(err)
+	env.NoError(err)
 }
 
 func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsMatchAll() {
@@ -300,9 +302,9 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFaile
 		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
-	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	env.Error(err)
+	env.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+	env.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// neither activity type nor "match all" is provided
 	_, err = env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
@@ -316,9 +318,9 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFaile
 		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
-	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	env.Error(err)
+	env.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+	env.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// cannot set activity options and restore original
 	_, err = env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
@@ -336,9 +338,9 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFaile
 		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
-	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	env.Error(err)
+	env.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+	env.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 // TestActivityBatchUpdateOptionsNoUpdateMask verifies that an activity-options

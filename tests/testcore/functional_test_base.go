@@ -206,6 +206,10 @@ func (s *functionalTestBase) GetTestCluster() *TestCluster {
 	return s.testCluster
 }
 
+func (s *functionalTestBase) GetTestClusterConfig() *TestClusterConfig {
+	return s.testClusterConfig
+}
+
 func (s *functionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
 	return s.testCluster.FrontendClient()
 }
@@ -698,6 +702,19 @@ func (s *functionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 			subtest()
 		})
 	}
+}
+
+func (s *functionalTestBase) SendSignal(nsName namespace.Name, execution *commonpb.WorkflowExecution, signalName string,
+	input *commonpb.Payloads, identity string) error {
+	_, err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         nsName.String(),
+		WorkflowExecution: execution,
+		SignalName:        signalName,
+		Input:             input,
+		Identity:          identity,
+	})
+
+	return err
 }
 
 // RegisterTest records t as currently using this cluster. At t's Cleanup it

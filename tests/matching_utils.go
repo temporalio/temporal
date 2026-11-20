@@ -16,23 +16,20 @@ import (
 )
 
 // runWithMatchingBehaviors runs a test with all combinations of matching behaviors.
-func runWithMatchingBehaviors[S interface {
-	T() *testing.T
-	RunSequential(string, func(S)) bool
-}](
-	s S,
+func runWithMatchingBehaviors(
+	t *testing.T,
 	baseOpts []testcore.TestOption,
-	subtest func(s S, env *testcore.TestEnv, behavior testcore.MatchingBehavior),
+	subtest func(s *testcore.TestEnv, behavior testcore.MatchingBehavior),
 ) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
-		s.RunSequential(behavior.Name(), func(s S) {
+		t.Run(behavior.Name(), func(t *testing.T) {
 			opts := append([]testcore.TestOption{}, baseOpts...)
 			opts = append(opts, behavior.Options()...)
 
-			env := testcore.NewEnv(s.T(), opts...)
+			env := testcore.NewEnv(t, opts...)
 			behavior.InjectHooks(env)
 
-			subtest(s, env, behavior)
+			subtest(env, behavior)
 		})
 	}
 }

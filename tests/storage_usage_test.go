@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -58,16 +59,16 @@ func (s *StorageUsageSuite) TestStorageUsage_Workflow() {
 	}
 
 	usage, current := s.describeStorageUsage(ctx, env, tv.WorkflowID(), startResp.RunId, chasm.WorkflowArchetype)
-	s.Positive(usage.GetMutableStateByteSeconds())
-	s.Positive(usage.GetHistoryByteSeconds())
-	s.GreaterOrEqual(current.GetMutableStateByteSeconds(), usage.GetMutableStateByteSeconds())
+	env.Positive(usage.GetMutableStateByteSeconds())
+	env.Positive(usage.GetHistoryByteSeconds())
+	env.GreaterOrEqual(current.GetMutableStateByteSeconds(), usage.GetMutableStateByteSeconds())
 
 	// Still running with no new transition: the stored counter stays, the current value keeps growing.
 	time.Sleep(storageUsageHoldTime) //nolint:forbidigo // byte-seconds accrue on wall-clock time between transitions
 	laterUsage, laterCurrent := s.describeStorageUsage(ctx, env, tv.WorkflowID(), startResp.RunId, chasm.WorkflowArchetype)
-	s.ProtoEqual(usage, laterUsage)
-	s.Greater(laterCurrent.GetMutableStateByteSeconds(), current.GetMutableStateByteSeconds())
-	s.Greater(laterCurrent.GetHistoryByteSeconds(), current.GetHistoryByteSeconds())
+	env.True(proto.Equal(usage, laterUsage))
+	env.Greater(laterCurrent.GetMutableStateByteSeconds(), current.GetMutableStateByteSeconds())
+	env.Greater(laterCurrent.GetHistoryByteSeconds(), current.GetHistoryByteSeconds())
 }
 
 func (s *StorageUsageSuite) TestStorageUsage_StandaloneActivity() {
@@ -102,9 +103,9 @@ func (s *StorageUsageSuite) TestStorageUsage_StandaloneActivity() {
 	s.NoError(err)
 
 	usage, current := s.describeStorageUsage(ctx, env, tv.ActivityID(), startResp.GetRunId(), activity.Archetype)
-	s.Positive(usage.GetMutableStateByteSeconds())
+	env.Positive(usage.GetMutableStateByteSeconds())
 	// Closed: accrual has stopped, so the current value is the stored one.
-	s.ProtoEqual(usage, current)
+	env.True(proto.Equal(usage, current))
 }
 
 func (s *StorageUsageSuite) describeStorageUsage(

@@ -74,7 +74,7 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 		RunID:       orphanedRunID,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}))
-	waitForMutableStateGone(ctx, s.T(), env, shardID, execMgr, tv.WorkflowID(), orphanedRunID)
+	waitForMutableStateGone(ctx, env, shardID, execMgr, tv.WorkflowID(), orphanedRunID)
 
 	current, err := execMgr.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
 		ShardID:     shardID,
@@ -83,8 +83,8 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
-	s.Equal(orphanedRunID, current.RunID)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, current.Status)
+	env.Equal(orphanedRunID, current.RunID)
+	env.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, current.Status)
 
 	env.CloseShard(env.NamespaceID().String(), tv.WorkflowID()) // otherwise cache still has the completed MS
 
@@ -101,9 +101,9 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	})
 	s.NoError(err)
-	s.True(swsResp.Started)
-	s.NotEqual(orphanedRunID, swsResp.RunId)
-	s.Equal(swsResp.RunId, swsResp.FirstExecutionRunId)
+	env.True(swsResp.Started)
+	env.NotEqual(orphanedRunID, swsResp.RunId)
+	env.Equal(swsResp.RunId, swsResp.FirstExecutionRunId)
 
 	replaced, err := execMgr.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
 		ShardID:     shardID,
@@ -112,5 +112,5 @@ func (s *SignalWithStartOrphanPointerSuite) TestSignalWithStartAfterOrphanedComp
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
-	s.Equal(swsResp.RunId, replaced.RunID)
+	env.Equal(swsResp.RunId, replaced.RunID)
 }

@@ -16,9 +16,7 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -40,7 +38,6 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/temporal"
 )
 
@@ -72,9 +69,14 @@ type Env interface {
 type HistoryReader = historyrequire.Reader
 
 type TestEnv struct {
-	functionalTestBase *functionalTestBase
+	*functionalTestBase
 	HistoryReader
-	updateutils.UpdateUtils
+
+	// Shadows functionalTestBase.Assertions with a per-test instance bound to
+	// this TestEnv's own *testing.T, avoiding data races when parallel tests
+	// share the same *functionalTestBase cluster.
+	// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
+	*require.Assertions
 
 	Logger log.Logger
 
@@ -338,7 +340,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	env := &TestEnv{
 		functionalTestBase: base,
 		HistoryReader:      historyrequire.NewReader(frontendClient, ns),
-		UpdateUtils:        updateutils.New(t),
+		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
 		nsID:               nsID,
@@ -388,62 +390,6 @@ func (e *TestEnv) NamespaceID() namespace.ID {
 	return e.nsID
 }
 
-func (e *TestEnv) GetTestCluster() *TestCluster {
-	return e.cluster
-}
-
-func (e *TestEnv) GetTestClusterConfig() *TestClusterConfig {
-	return e.functionalTestBase.testClusterConfig
-}
-
-func (e *TestEnv) FrontendClient() workflowservice.WorkflowServiceClient {
-	return e.cluster.FrontendClient()
-}
-
-func (e *TestEnv) AdminClient() adminservice.AdminServiceClient {
-	return e.cluster.AdminClient()
-}
-
-func (e *TestEnv) OperatorClient() operatorservice.OperatorServiceClient {
-	return e.cluster.OperatorClient()
-}
-
-func (e *TestEnv) HttpAPIAddress() string { //nolint:staticcheck // ST1003: preserve the existing TestEnv method name.
-	return e.functionalTestBase.HttpAPIAddress()
-}
-
-func (e *TestEnv) ExternalNamespace() namespace.Name {
-	return e.functionalTestBase.ExternalNamespace()
-}
-
-func (e *TestEnv) FrontendGRPCAddress() string {
-	return e.functionalTestBase.FrontendGRPCAddress()
-}
-
-func (e *TestEnv) RegisterNamespace(
-	ctx context.Context,
-	nsName namespace.Name,
-	retentionDays int32,
-	archivalState enumspb.ArchivalState,
-	historyArchivalURI string,
-	visibilityArchivalURI string,
-) (namespace.ID, error) {
-	return e.functionalTestBase.RegisterNamespace(ctx, nsName, retentionDays, archivalState, historyArchivalURI, visibilityArchivalURI)
-}
-
-func (e *TestEnv) SendSignal(nsName namespace.Name, execution *commonpb.WorkflowExecution, signalName string,
-	input *commonpb.Payloads, identity string) error {
-	_, err := e.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         nsName.String(),
-		WorkflowExecution: execution,
-		SignalName:        signalName,
-		Input:             input,
-		Identity:          identity,
-	})
-
-	return err
-}
-
 // InjectHook sets a test hook inside the cluster.
 //
 // It auto-detects the scope from the hook:
@@ -455,7 +401,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.functionalTestBase.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
+		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")
@@ -470,7 +416,7 @@ func (e *TestEnv) SetOnAuthorize(
 	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
 ) {
 	e.t.Helper()
-	if e.functionalTestBase.isShared {
+	if e.isShared {
 		e.t.Fatal("SetOnAuthorize cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	e.dedicatedGuard.record("authorization callback")
@@ -482,7 +428,7 @@ func (e *TestEnv) SetOnAuthorize(
 
 func (e *TestEnv) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
 	e.t.Helper()
-	if e.functionalTestBase.isShared {
+	if e.isShared {
 		e.t.Fatal("SetOnGetClaims cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	e.dedicatedGuard.record("authorization callback")
@@ -494,6 +440,22 @@ func (e *TestEnv) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorizatio
 
 func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 	return e.taskPoller
+}
+
+// NoError asserts that err is nil.
+//
+// Deprecated: use require.NoError with the parent test or suite instead.
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
+func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
+	e.Assertions.NoError(err, msgAndArgs...)
+}
+
+// Error asserts that err is not nil.
+//
+// Deprecated: use require.Error with the parent test or suite instead.
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
+func (e *TestEnv) Error(err error, msgAndArgs ...any) {
+	e.Assertions.Error(err, msgAndArgs...)
 }
 
 // Run executes a subtest.
@@ -657,7 +619,7 @@ func (e *TestEnv) WorkerTaskQueue() string {
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
 func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	if e.functionalTestBase.isShared {
+	if e.isShared {
 		if !canBeNamespaceScoped(setting.Precedence()) {
 			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
 		}
@@ -703,7 +665,7 @@ func (e *TestEnv) StartNamespaceLogCapture() *testlogger.Capture {
 // Metric capture is cluster-global, so it is only safe on dedicated clusters.
 // Misuse detection is best-effort and only applies to queried metrics that produced recordings.
 func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
-	if e.functionalTestBase.isShared {
+	if e.isShared {
 		e.t.Fatal("StartGlobalMetricCapture cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	e.dedicatedGuard.record("global metric capture") // note that globalCapture has its own misuse detection
@@ -746,15 +708,15 @@ func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *Namespac
 // CloseShard closes the shard that contains the given workflow.
 // This is a cluster-global operation and cannot be called on shared clusters.
 func (e *TestEnv) CloseShard(namespaceID string, workflowID string) {
-	if e.functionalTestBase.isShared {
+	if e.isShared {
 		e.t.Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	e.dedicatedGuard.record("shard closed")
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, e.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, e.testClusterConfig.HistoryConfig.NumHistoryShards)
 	_, err := e.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
 		ShardId: shardID,
 	})
-	require.NoError(e.t, err)
+	e.NoError(err)
 }
 
 func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {

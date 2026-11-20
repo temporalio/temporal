@@ -19,6 +19,7 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
@@ -49,6 +50,8 @@ type workflowTasksAndActivitiesPollerParams struct {
 // taskQueueStatsContext holds the per-test environment and configuration for task queue stats tests.
 type taskQueueStatsContext struct {
 	*VersioningTestEnv
+	tb              testing.TB
+	ctx             context.Context
 	minPriority     int
 	maxPriority     int
 	defaultPriority int
@@ -56,6 +59,7 @@ type taskQueueStatsContext struct {
 }
 
 func newTaskQueueStatsContext(
+	ctx context.Context,
 	t *testing.T,
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
@@ -71,6 +75,8 @@ func newTaskQueueStatsContext(
 	behavior.InjectHooks(env)
 	return &taskQueueStatsContext{
 		VersioningTestEnv: env,
+		tb:                t,
+		ctx:               ctx,
 		minPriority:       1,
 		maxPriority:       5,
 		defaultPriority:   3,
@@ -92,7 +98,7 @@ func (s *TaskQueueStatsSuite) newTaskQueueStatsContext(
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
-	return newTaskQueueStatsContext(s.T(), behavior, extraOpts...)
+	return newTaskQueueStatsContext(s.Context(), s.T(), behavior, extraOpts...)
 }
 
 func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot() {
@@ -120,7 +126,7 @@ func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats() {
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond),
 	)
-	env.publishConsumeWorkflowTasksValidateStats(s, 0, false)
+	env.publishConsumeWorkflowTasksValidateStats(0, false)
 }
 
 func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached() {
@@ -129,13 +135,13 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached() {
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour),
 	)
 	tqName := "tq-" + common.GenerateRandomString(5)
-	env.createDeploymentInTaskQueue(s.Context(), tqName)
+	env.createDeploymentInTaskQueue(tqName)
 
 	// Enqueue all workflows.
-	total := env.enqueueWorkflows(s, 2, tqName)
+	total := env.enqueueWorkflows(2, tqName)
 
 	// Verify workflow add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 
 	// Expect at least *one* of the workflow/activity tasks to be in the stats.
 	expectations := taskQueueExpectations{
@@ -145,31 +151,31 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached() {
 	}
 
 	// Enqueue 1 activity set, to make sure the workflow backlog has some tasks.
-	env.enqueueActivitiesForEachWorkflow(s, 1, tqName)
+	env.enqueueActivitiesForEachWorkflow(1, tqName)
 
 	// Expect the workflow backlog to be non-empty now.
 	// This query will cache the stats for the remainder of the test.
-	env.validateTaskQueueStatsByType(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
+	env.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
 
 	// Enqueue remaining activities.
-	env.enqueueActivitiesForEachWorkflow(s, 1, tqName)
+	env.enqueueActivitiesForEachWorkflow(1, tqName)
 
 	// Poll 2 activities, ie 1 per version, to make sure the activity backlog has some tasks.
-	env.pollActivities(s, 2, tqName)
+	env.pollActivities(2, tqName)
 
 	// Verify activity dispatch rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, true)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, true)
 
 	// Expect the activity backlog to be non-empty now.
 	// This query will cache the stats for the remainder of the test.
-	env.validateTaskQueueStatsByType(s, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
+	env.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
 
 	// Poll remaining activities.
-	env.pollActivities(s, total-2, tqName)
+	env.pollActivities(total-2, tqName)
 
 	// Despite having polled all the workflows/activies; the stats won't have changed at all since they were cached.
-	env.validateTaskQueueStatsByType(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
-	env.validateTaskQueueStatsByType(s, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
+	env.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, expectations, false)
+	env.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
 }
 
 // TestVersioningSuite runs version-specific tests across all matching behavior combinations.
@@ -192,14 +198,14 @@ func (s *TaskQueueStatsVersionSuite) newTaskQueueStatsContext(
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
-	return newTaskQueueStatsContext(s.T(), behavior, extraOpts...)
+	return newTaskQueueStatsContext(s.Context(), s.T(), behavior, extraOpts...)
 }
 
 func (s *TaskQueueStatsVersionSuite) TestMultipleTasks_ValidateStats(behavior testcore.MatchingBehavior) {
 	env := s.newTaskQueueStatsContext(behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
-	env.publishConsumeWorkflowTasksValidateStats(s, 4, false)
+	env.publishConsumeWorkflowTasksValidateStats(4, false)
 }
 
 func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping(behavior testcore.MatchingBehavior) {
@@ -237,7 +243,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
 
 	// Verify workflow add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 
 	currentStatsExpectation := taskQueueExpectations{
 		BacklogCount:  unversionedWorkflowCount,
@@ -271,7 +277,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 	s.completeWorkflowTasksAndScheduleActivities(env, tqName, deploymentName, currentBuildID, activitesToSchedule)
 
 	// Verify activity add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
 
 	activityStatsExpectation := taskQueueExpectations{
 		BacklogCount:  activitesToSchedule,
@@ -343,7 +349,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
 
 	// Verify workflow add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 
 	currentExpectation := taskQueueExpectations{
 		BacklogCount:  unversionedWorkflowCount * (100 - rampPercentage) / 100,
@@ -422,7 +428,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 	)
 
 	// Verify activity add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
 
 	// It is important to note that the expected values here are theoretical values based on the ramp percentage. In other words, 70% of the unversioned backlog
 	// may not be scheduled on the current version by matching since it makes it's decision based on the workflowID of the workflow. However, when the number of workflows
@@ -501,7 +507,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
 
 	// Verify workflow add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 
 	currentExpectation := taskQueueExpectations{
 		BacklogCount:  unversionedWorkflowCount * (100 - rampPercentage) / 100,
@@ -574,7 +580,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
 
 	// Verify workflow add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 
 	rampingExpectation := taskQueueExpectations{
 		BacklogCount:  unversionedWorkflowCount * rampPercentage / 100,
@@ -650,7 +656,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	s.startPinnedWorkflows(env, pinnedWorkflows, tqName, deploymentName, inactiveBuildID)
 
 	// Verify workflow add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 
 	currentExpectation := taskQueueExpectations{
 		BacklogCount:  unversionedWorkflows,
@@ -715,8 +721,8 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	)
 
 	// Verify workflow dispatch rate and activity add rate
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, true)
-	env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, true)
+	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
 
 	// Validate activity backlogs
 	currentActivityExpectation := taskQueueExpectations{
@@ -799,7 +805,7 @@ func (s *TaskQueueStatsVersionSuite) requireWDVTaskQueueStatsRelaxed(
 	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
 	// to account for ceiling operations across partitions
 	expectation.MaxExtraTasks = env.partitionCount
-	validateTaskQueueStats(s, label, stats, expectation)
+	validateTaskQueueStats(s.Assertions, label, stats, expectation)
 }
 
 // requireLegacyTaskQueueStatsRelaxed asserts task queue statistics by allowing for over-counting in multi-partition scenarios.
@@ -820,13 +826,13 @@ func (s *TaskQueueStatsVersionSuite) requireLegacyTaskQueueStatsRelaxed(
 	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
 	// to account for ceiling operations across partitions
 	expectation.MaxExtraTasks = env.partitionCount
-	validateTaskQueueStats(s, label, stats, expectation)
+	validateTaskQueueStats(s.Assertions, label, stats, expectation)
 }
 
 // Publishes versioned and unversioned entities; with one entity per priority (plus default priority). Multiplied by `sets`.
-func (env *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(s parallelsuite.Scope, sets int, singlePartition bool) {
+func (s *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(sets int, singlePartition bool) {
 	tqName := "tq-" + common.GenerateRandomString(5)
-	env.createDeploymentInTaskQueue(s.Context(), tqName)
+	s.createDeploymentInTaskQueue(tqName)
 
 	// verify both workflow and activity backlogs are empty
 	expectations := taskQueueExpectationsByType{
@@ -840,7 +846,7 @@ func (env *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(s par
 		},
 	}
 
-	env.validateAllTaskQueueStats(s, tqName, expectations, singlePartition)
+	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 
 	// Actual counter can be greater than the expected due to History->Matching retries.
 	// We make sure the counter is in range [expected, expected+maxExtraTasksAllowed].
@@ -850,11 +856,11 @@ func (env *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(s par
 	}
 
 	// enqueue workflows
-	total := env.enqueueWorkflows(s, sets, tqName)
+	total := s.enqueueWorkflows(sets, tqName)
 
 	// verify workflow add rate
 	if sets > 0 {
-		env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+		s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 	}
 
 	// verify workflow backlog is not empty, activity backlog is empty
@@ -863,16 +869,16 @@ func (env *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(s par
 		MaxExtraTasks: maxExtraTasksAllowed,
 	}
 
-	env.validateAllTaskQueueStats(s, tqName, expectations, singlePartition)
+	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 
 	// poll all workflow tasks and enqueue one activity task for each workflow
-	totalAct := env.enqueueActivitiesForEachWorkflow(s, sets, tqName)
+	totalAct := s.enqueueActivitiesForEachWorkflow(sets, tqName)
 	s.Equal(total, totalAct, "should have enqueued the same number of activities as workflows")
 
 	// verify workflow dispatch rate and activity add rate
 	if sets > 0 {
-		env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
-		env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
+		s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
+		s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
 	}
 
 	// verify workflow backlog is empty, activity backlog is not
@@ -885,14 +891,14 @@ func (env *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(s par
 		MaxExtraTasks: maxExtraTasksAllowed,
 	}
 
-	env.validateAllTaskQueueStats(s, tqName, expectations, singlePartition)
+	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 
 	// poll all activity tasks
-	env.pollActivities(s, total, tqName)
+	s.pollActivities(total, tqName)
 
 	// verify activity dispatch rate
 	if sets > 0 {
-		env.validateRates(s, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, true)
+		s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, true)
 	}
 
 	// verify both workflow and activity backlogs are empty
@@ -905,7 +911,7 @@ func (env *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(s par
 		MaxExtraTasks: maxExtraTasksAllowed,
 	}
 
-	env.validateAllTaskQueueStats(s, tqName, expectations, singlePartition)
+	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 }
 
 func (s *TaskQueueStatsVersionSuite) startUnversionedWorkflows(env *taskQueueStatsContext, count int, tqName string) {
@@ -1114,15 +1120,15 @@ func (s *TaskQueueStatsVersionSuite) setRampingVersion(env *taskQueueStatsContex
 	s.NoError(err)
 }
 
-func (env *taskQueueStatsContext) describeWDVTaskQueueStats(
+func (s *taskQueueStatsContext) describeWDVTaskQueueStats(
 	ctx context.Context,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	deploymentName string,
 	buildID string,
 ) (stats *taskqueuepb.TaskQueueStats, found bool, err error) {
-	resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-		Namespace: env.Namespace().String(),
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
 			BuildId:        buildID,
@@ -1132,7 +1138,7 @@ func (env *taskQueueStatsContext) describeWDVTaskQueueStats(
 	if err != nil {
 		return nil, false, err
 	}
-	if tq := env.findVersionTaskQueue(resp.GetVersionTaskQueues(), tqName, tqType); tq != nil {
+	if tq := s.findVersionTaskQueue(resp.GetVersionTaskQueues(), tqName, tqType); tq != nil {
 		return tq.GetStats(), true, nil
 	}
 	return nil, false, nil
@@ -1140,13 +1146,13 @@ func (env *taskQueueStatsContext) describeWDVTaskQueueStats(
 
 // DescribeTaskQueue Legacy Mode shall report the stats for this task queue from all the different versions
 // that the task queue is part of.
-func (env *taskQueueStatsContext) describeLegacyTaskQueueStats(
+func (s *taskQueueStatsContext) describeLegacyTaskQueueStats(
 	ctx context.Context,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 ) (stats *taskqueuepb.TaskQueueStats, found bool, err error) {
-	resp, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     env.Namespace().String(),
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		TaskQueueType: tqType,
 		ReportStats:   true,
@@ -1157,18 +1163,18 @@ func (env *taskQueueStatsContext) describeLegacyTaskQueueStats(
 	return resp.GetStats(), true, nil
 }
 
-func (env *taskQueueStatsContext) enqueueWorkflows(s parallelsuite.Scope, sets int, tqName string) int {
-	deploymentOpts := env.deploymentOptions(tqName)
+func (s *taskQueueStatsContext) enqueueWorkflows(sets int, tqName string) int {
+	deploymentOpts := s.deploymentOptions(tqName)
 
 	var total int
 	for version := range 2 { // 0=unversioned, 1=versioned
-		for priority := 0; priority <= env.maxPriority; priority++ {
+		for priority := 0; priority <= s.maxPriority; priority++ {
 			for range sets {
 				wt := "functional-workflow-multiple-tasks"
 				workflowType := &commonpb.WorkflowType{Name: wt}
 
 				request := &workflowservice.StartWorkflowExecutionRequest{
-					Namespace:             env.Namespace().String(),
+					Namespace:             s.Namespace().String(),
 					WorkflowId:            uuid.NewString(),
 					WorkflowType:          workflowType,
 					TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -1194,7 +1200,7 @@ func (env *taskQueueStatsContext) enqueueWorkflows(s parallelsuite.Scope, sets i
 					}
 				}
 
-				_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+				_, err := s.FrontendClient().StartWorkflowExecution(s.ctx, request)
 				s.NoError(err)
 
 				total++
@@ -1202,7 +1208,7 @@ func (env *taskQueueStatsContext) enqueueWorkflows(s parallelsuite.Scope, sets i
 		}
 	}
 
-	s.TB().Logf("Enqueued %d workflows", total)
+	s.T().Logf("Enqueued %d workflows", total)
 	return total
 }
 
@@ -1242,54 +1248,54 @@ func (s *TaskQueueStatsVersionSuite) createVersionsInTaskQueue(ctx context.Conte
 }
 
 // TODO (Shivam): Remove this guy.
-func (env *taskQueueStatsContext) createDeploymentInTaskQueue(ctx context.Context, tqName string) {
+func (s *taskQueueStatsContext) createDeploymentInTaskQueue(tqName string) {
 	// Using old DeploymentData format
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		_, _ = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace:         env.Namespace().String(),
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(s.ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
-			DeploymentOptions: env.deploymentOptions(tqName),
+			DeploymentOptions: s.deploymentOptions(tqName),
 		})
 	})
 
 	wg.Go(func() {
-		_, _ = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-			Namespace:         env.Namespace().String(),
+		_, _ = s.FrontendClient().PollActivityTaskQueue(s.ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
-			DeploymentOptions: env.deploymentOptions(tqName),
+			DeploymentOptions: s.deploymentOptions(tqName),
 		})
 	})
 
 	wg.Wait()
 }
 
-func (env *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(s parallelsuite.Scope, sets int, tqName string) int {
-	deploymentOpts := env.deploymentOptions(tqName)
+func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqName string) int {
+	deploymentOpts := s.deploymentOptions(tqName)
 
 	var total int
 	for version := range 2 { // 0=unversioned, 1=versioned
-		for priority := 0; priority <= env.maxPriority; priority++ {
+		for priority := 0; priority <= s.maxPriority; priority++ {
 			for i := 0; i < sets; { // not counting up here to allow for retries
 				pollReq := &workflowservice.PollWorkflowTaskQueueRequest{
-					Namespace: env.Namespace().String(),
+					Namespace: s.Namespace().String(),
 					TaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				}
 				if version == 1 {
 					pollReq.DeploymentOptions = deploymentOpts
 				}
 
-				resp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), pollReq)
+				resp, err := s.FrontendClient().PollWorkflowTaskQueue(s.ctx, pollReq)
 				s.NoError(err)
 				if resp == nil || resp.GetAttempt() < 1 {
 					continue
 				}
 
 				respondReq := &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Namespace: env.Namespace().String(),
+					Namespace: s.Namespace().String(),
 					TaskToken: resp.TaskToken,
 					Commands: []*commandpb.Command{
 						{
@@ -1313,7 +1319,7 @@ func (env *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(s parallelsui
 					respondReq.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 				}
 
-				_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), respondReq)
+				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(s.ctx, respondReq)
 				s.NoError(err)
 
 				i++
@@ -1321,25 +1327,25 @@ func (env *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(s parallelsui
 			}
 		}
 	}
-	s.TB().Logf("Enqueued %d activities", total)
+	s.T().Logf("Enqueued %d activities", total)
 	return total
 }
 
-func (env *taskQueueStatsContext) pollActivities(s parallelsuite.Scope, count int, tqName string) {
+func (s *taskQueueStatsContext) pollActivities(count int, tqName string) {
 	for i := 0; i < count; {
 		pollReq := &workflowservice.PollActivityTaskQueueRequest{
-			Namespace: env.Namespace().String(),
+			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: tqName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 		}
 		if i%2 == 0 {
-			pollReq.DeploymentOptions = env.deploymentOptions(tqName)
+			pollReq.DeploymentOptions = s.deploymentOptions(tqName)
 		}
 
-		resp, err := env.FrontendClient().PollActivityTaskQueue(
-			s.Context(), pollReq,
+		resp, err := s.FrontendClient().PollActivityTaskQueue(
+			s.ctx, pollReq,
 		)
 		s.NoError(err)
 		if resp == nil || resp.GetAttempt() < 1 {
@@ -1347,64 +1353,61 @@ func (env *taskQueueStatsContext) pollActivities(s parallelsuite.Scope, count in
 		}
 		i++
 	}
-	s.TB().Logf("Polled %d activities", count)
+	s.T().Logf("Polled %d activities", count)
 }
 
-func (env *taskQueueStatsContext) validateAllTaskQueueStats(
-	s parallelsuite.Scope,
+func (s *taskQueueStatsContext) validateAllTaskQueueStats(
 	tqName string,
 	expectations taskQueueExpectationsByType,
 	singlePartition bool,
 ) {
 	for tqType, expectation := range expectations {
-		env.validateTaskQueueStatsByType(s, tqName, tqType, expectation, singlePartition)
+		s.validateTaskQueueStatsByType(tqName, tqType, expectation, singlePartition)
 	}
 }
 
 // validateRates verifies TasksAddRate and/or TasksDispatchRate in a dedicated await block.
 // This should be called immediately after the relevant operation (enqueue for add rate, poll for dispatch rate)
 // to ensure the rate is checked while still fresh (before the 30-second sliding window decays).
-func (env *taskQueueStatsContext) validateRates(
-	s parallelsuite.Scope,
+func (s *taskQueueStatsContext) validateRates(
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectAddRate bool,
 	expectDispatchRate bool,
 ) {
 	req := &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     env.Namespace().String(),
+		Namespace:     s.Namespace().String(),
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		TaskQueueType: tqType,
 		ReportStats:   true,
 	}
 
-	parallelsuite.Await(s, func(s parallelsuite.Scope) {
+	await.Require(s.Context(), s.tb, func(t *await.T) {
 		label := "validateRates[" + tqType.String() + "]"
 
-		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), req)
-		s.NoError(err)
-		s.NotNil(resp)
-		s.NotNil(resp.Stats)
+		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.NotNil(t, resp.Stats)
 
 		if expectAddRate {
-			s.True(resp.Stats.TasksAddRate > 0,
+			require.Greater(t, resp.Stats.TasksAddRate, float32(0),
 				"%s: TasksAddRate should be > 0, got %f", label, resp.Stats.TasksAddRate)
 		}
 		if expectDispatchRate {
-			s.True(resp.Stats.TasksDispatchRate > 0,
+			require.Greater(t, resp.Stats.TasksDispatchRate, float32(0),
 				"%s: TasksDispatchRate should be > 0, got %f", label, resp.Stats.TasksDispatchRate)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func (env *taskQueueStatsContext) validateTaskQueueStatsByType(
-	s parallelsuite.Scope,
+func (s *taskQueueStatsContext) validateTaskQueueStatsByType(
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation taskQueueExpectations,
 	singlePartition bool,
 ) {
-	env.validateDescribeTaskQueueWithDefaultMode(s, tqName, tqType, expectation, singlePartition)
+	s.validateDescribeTaskQueueWithDefaultMode(tqName, tqType, expectation, singlePartition)
 
 	// The other two methods report *either* versioned or unversioned stats, so we need to
 	// half the expectations to account for that.
@@ -1412,65 +1415,63 @@ func (env *taskQueueStatsContext) validateTaskQueueStatsByType(
 	halfExpectation.BacklogCount /= 2
 	halfExpectation.MaxExtraTasks /= 2
 
-	env.validateDescribeTaskQueueWithEnhancedMode(s, tqName, tqType, halfExpectation)
-	env.validateDescribeWorkerDeploymentVersion(s, tqName, tqType, halfExpectation)
+	s.validateDescribeTaskQueueWithEnhancedMode(tqName, tqType, halfExpectation)
+	s.validateDescribeWorkerDeploymentVersion(tqName, tqType, halfExpectation)
 }
 
-func (env *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
-	s parallelsuite.Scope,
+func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation taskQueueExpectations,
 	singlePartition bool,
 ) {
 	req := &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     env.Namespace().String(),
+		Namespace:     s.Namespace().String(),
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		TaskQueueType: tqType,
 	}
 
 	// test stats are not reported by default (and therefore also not cached)
-	resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), req)
+	resp, err := s.FrontendClient().DescribeTaskQueue(s.Context(), req)
 	s.NoError(err)
 	s.NotNil(resp)
 	s.Nil(resp.Stats, "stats should not be reported by default")
 	//nolint:staticcheck // SA1019 deprecated
 	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
 
-	parallelsuite.Await(s, func(s parallelsuite.Scope) {
+	await.Require(s.Context(), s.tb, func(t *await.T) {
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
 
 		req.ReportStats = true
 		//nolint:staticcheck // SA1019 deprecated
 		req.IncludeTaskQueueStatus = true
-		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), req)
-		s.NoError(err)
-		s.NotNil(resp)
+		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
 
 		if singlePartition {
 			expected := expectation.BacklogCount / 2 // only reports unversioned
 			//nolint:staticcheck // SA1019 deprecated field
 			actual := resp.TaskQueueStatus.GetBacklogCountHint()
-			s.Equal(int64(expected), actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
+			require.EqualValuesf(t, expected, actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
 		}
 
-		validateTaskQueueStats(s, label, resp.Stats, expectation)
+		validateTaskQueueStats(require.New(t), label, resp.Stats, expectation)
 		if expectation.BacklogCount > 0 {
 			// Per priority stats are only available with the priority matcher and when they've been actively used.
-			env.validateTaskQueueStatsByPriority(s, label, resp.StatsByPriorityKey, expectation)
+			s.validateTaskQueueStatsByPriority(t, label, resp.StatsByPriorityKey, expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func (env *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
-	s parallelsuite.Scope,
+func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation taskQueueExpectations,
 ) {
-	deploymentOpts := env.deploymentOptions(tqName)
+	deploymentOpts := s.deploymentOptions(tqName)
 	req := &workflowservice.DescribeTaskQueueRequest{
-		Namespace: env.Namespace().String(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 		Versions: &taskqueuepb.TaskQueueVersionSelection{
@@ -1486,7 +1487,7 @@ func (env *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 	}
 
 	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
-		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), req)
+		resp, err := s.FrontendClient().DescribeTaskQueue(s.Context(), req)
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Nil(resp.Stats, "stats should not be reported by default")
@@ -1494,42 +1495,41 @@ func (env *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 		s.Nil(resp.TaskQueueStatus, "status should not be reported")
 	}
 
-	parallelsuite.Await(s, func(s parallelsuite.Scope) {
+	await.Require(s.Context(), s.tb, func(t *await.T) {
 		req.ReportStats = true
-		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), req)
-		s.NoError(err)
-		s.NotNil(resp)
+		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
 
 		//nolint:staticcheck // SA1019 deprecated
-		s.Equal(2, len(resp.GetVersionsInfo()), "should be 2: 1 default/unversioned + 1 versioned")
+		require.Len(t, resp.GetVersionsInfo(), 2, "should be 2: 1 default/unversioned + 1 versioned")
 		//nolint:staticcheck // SA1019 deprecated
 		for _, v := range resp.GetVersionsInfo() {
-			s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, v.GetTaskReachability())
+			require.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, v.GetTaskReachability())
 
 			info := v.GetTypesInfo()[int32(tqType)]
-			s.NotNil(info, "should have info for task queue type %s", tqType)
+			require.NotNil(t, info, "should have info for task queue type %s", tqType)
 			if info == nil {
 				return
 			}
-			s.NotNil(info.Stats, "should have stats for task queue type %s", tqType)
+			require.NotNil(t, info.Stats, "should have stats for task queue type %s", tqType)
 			if info.Stats == nil {
 				return
 			}
 
-			validateTaskQueueStats(s, "DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", info.Stats, expectation)
+			validateTaskQueueStats(require.New(t), "DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", info.Stats, expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func (env *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
-	s parallelsuite.Scope,
+func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation taskQueueExpectations,
 ) {
-	deploymentOpts := env.deploymentOptions(tqName)
+	deploymentOpts := s.deploymentOptions(tqName)
 	req := &workflowservice.DescribeWorkerDeploymentVersionRequest{
-		Namespace: env.Namespace().String(),
+		Namespace: s.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			BuildId:        deploymentOpts.BuildId,
 			DeploymentName: deploymentOpts.DeploymentName,
@@ -1537,51 +1537,51 @@ func (env *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 	}
 
 	// test stats are not reported by default (and therefore also not cached)
-	resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), req)
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), req)
 	s.NoError(err)
 	s.NotNil(resp)
 	for _, info := range resp.VersionTaskQueues {
 		s.Nil(info.Stats, "stats should not be reported by default")
 	}
 
-	parallelsuite.Await(s, func(s parallelsuite.Scope) {
+	await.Require(s.Context(), s.tb, func(t *await.T) {
 		req.ReportTaskQueueStats = true
-		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), req)
-		s.NoError(err)
-		s.Equal(2, len(resp.VersionTaskQueues), "should be 1 task queue for Workflows and 1 for Activities")
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(t.Context(), req)
+		require.NoError(t, err)
+		require.Len(t, resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {
 			if info.Name == tqName || info.Type == tqType {
 				label := "DescribeWorkerDeploymentVersion[" + tqType.String() + "]"
-				validateTaskQueueStats(s, label, info.Stats, expectation)
+				validateTaskQueueStats(require.New(t), label, info.Stats, expectation)
 				if expectation.BacklogCount > 0 {
 					// Per priority stats are only available with the priority matcher and when they've been actively used.
-					env.validateTaskQueueStatsByPriority(s, label, info.StatsByPriorityKey, expectation)
+					s.validateTaskQueueStatsByPriority(t, label, info.StatsByPriorityKey, expectation)
 				}
 				return
 			}
 		}
-		require.Failf(s.AssertionT(), "task queue not found", "Task queue %s of type %s not found in response", tqName, tqType)
+		require.Failf(t, "task queue not found", "Task queue %s of type %s not found in response", tqName, tqType)
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func (env *taskQueueStatsContext) validateTaskQueueStatsByPriority(
-	s parallelsuite.Scope,
+func (s *taskQueueStatsContext) validateTaskQueueStatsByPriority(
+	t require.TestingT,
 	label string,
 	stats map[int32]*taskqueuepb.TaskQueueStats,
 	taskQueueExpectation taskQueueExpectations,
 ) {
-	s.Equal(env.maxPriority, len(stats), "%s: stats should contain %d priorities", label, env.maxPriority)
+	require.Len(t, stats, s.maxPriority, "%s: stats should contain %d priorities", label, s.maxPriority)
 
 	// use an abgridged version when caching since the exact stats are difficult to predict
 	if taskQueueExpectation.CachedEnabled {
-		for i := int32(env.minPriority); i <= int32(env.maxPriority); i++ {
+		for i := int32(s.minPriority); i <= int32(s.maxPriority); i++ {
 			if stats[i].ApproximateBacklogCount != 0 && stats[i].TasksDispatchRate > 0 || stats[i].TasksAddRate > 0 {
 				return
 			}
 		}
 		require.Failf(
-			s.AssertionT(),
+			t,
 			"no non-zero priority stats found",
 			"%s: should have found at least one non-zero backlog count with any non-zero rate across priorities",
 			label,
@@ -1589,24 +1589,24 @@ func (env *taskQueueStatsContext) validateTaskQueueStatsByPriority(
 	}
 
 	var accBacklogCount int
-	for i := int32(env.minPriority); i <= int32(env.maxPriority); i++ {
+	for i := int32(s.minPriority); i <= int32(s.maxPriority); i++ {
 		priExpectation := taskQueueExpectation
-		priExpectation.BacklogCount = taskQueueExpectation.BacklogCount / (env.maxPriority + 1)
-		if i == int32(env.defaultPriority) {
+		priExpectation.BacklogCount = taskQueueExpectation.BacklogCount / (s.maxPriority + 1)
+		if i == int32(s.defaultPriority) {
 			priExpectation.BacklogCount *= 2 // zero priority translates to default priority 3
 		}
 
-		require.Containsf(s.AssertionT(), stats, i, "%s: stats should contain priority %d", label, i)
-		validateTaskQueueStats(s, fmt.Sprintf("%s_Pri[%d]", label, i), stats[i], priExpectation)
+		require.Containsf(t, stats, i, "%s: stats should contain priority %d", label, i)
+		validateTaskQueueStats(require.New(t), fmt.Sprintf("%s_Pri[%d]", label, i), stats[i], priExpectation)
 		accBacklogCount += int(stats[i].ApproximateBacklogCount)
 	}
-	s.True(taskQueueExpectation.BacklogCount >= accBacklogCount,
+	require.GreaterOrEqualf(t, taskQueueExpectation.BacklogCount, accBacklogCount,
 		"%s: accumulated backlog count from all priorities should be at least %d, got %d",
 		label, taskQueueExpectation.BacklogCount, accBacklogCount)
 }
 
 // TODO: Remove this once older stats tests are refactored to use the createDeploymentOptions function.
-func (env *taskQueueStatsContext) deploymentOptions(tqName string) *deploymentpb.WorkerDeploymentOptions {
+func (s *taskQueueStatsContext) deploymentOptions(tqName string) *deploymentpb.WorkerDeploymentOptions {
 	return &deploymentpb.WorkerDeploymentOptions{
 		DeploymentName:       tqName + "-deployment",
 		BuildId:              "build-id",
@@ -1630,23 +1630,23 @@ func validateTaskQueueStatsStrict(
 }
 
 func validateTaskQueueStats(
-	s parallelsuite.Scope,
+	a *require.Assertions,
 	label string,
 	stats *taskqueuepb.TaskQueueStats,
 	expectation taskQueueExpectations,
 ) {
 	// Actual counter can be greater than the expected due to history retries. We make sure the counter is in
 	// range [expected, expected+maxBacklogExtraTasks]
-	s.True(stats.ApproximateBacklogCount >= int64(expectation.BacklogCount),
+	a.GreaterOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
 		"%s: ApproximateBacklogCount should be at least %d, got %d",
 		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
 
 	maxApproximateBacklogCount := int64(expectation.BacklogCount + expectation.MaxExtraTasks)
-	s.True(stats.ApproximateBacklogCount <= maxApproximateBacklogCount,
+	a.LessOrEqual(stats.ApproximateBacklogCount, maxApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be at most %d, got %d",
 		label, maxApproximateBacklogCount, stats.ApproximateBacklogCount)
 
-	s.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
+	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
 }

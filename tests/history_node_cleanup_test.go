@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,7 +18,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -57,12 +55,12 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
 	})
-	s.NoError(err)
+	env.NoError(err)
 	runID := startResp.RunId
 
-	completeWorkflowWithActivities(s.T(), tv, poller)
+	completeWorkflowWithActivities(env, tv, poller)
 
-	branchToken := captureCurrentBranchToken(ctx, s.T(), env, tv.WorkflowID(), runID)
+	branchToken := captureCurrentBranchToken(ctx, env, tv.WorkflowID(), runID)
 
 	// The admin force-delete and the DeleteHistoryEventTask retention timer both
 	// reach the same persistence.ExecutionManager.DeleteHistoryBranch call, which
@@ -72,8 +70,8 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 		Archetype: chasm.WorkflowArchetype,
 	})
-	s.NoError(err)
-	waitForMutableStateGone(ctx, s.T(), env, shardID, execMgr, tv.WorkflowID(), runID)
+	env.NoError(err)
+	waitForMutableStateGone(ctx, env, shardID, execMgr, tv.WorkflowID(), runID)
 
 	resp, err := execMgr.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		ShardID:     shardID,
@@ -83,7 +81,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 		PageSize:    1000,
 	})
 	if err == nil {
-		s.Empty(resp.HistoryEvents, "history_node rows should be gone after deletion")
+		env.Empty(resp.HistoryEvents, "history_node rows should be gone after deletion")
 	}
 	// A NotFound/InvalidArgument error is also acceptable — it means the branch is gone.
 }
@@ -112,12 +110,12 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfWorkflowAfterReset() {
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
 	})
-	s.NoError(err)
+	env.NoError(err)
 	runIDA := startResp.RunId
 
-	completeWorkflowWithActivities(s.T(), tv, poller)
+	completeWorkflowWithActivities(env, tv, poller)
 
-	branchTokenA := captureCurrentBranchToken(ctx, s.T(), env, tv.WorkflowID(), runIDA)
+	branchTokenA := captureCurrentBranchToken(ctx, env, tv.WorkflowID(), runIDA)
 
 	// Find the first WorkflowTaskCompleted event to use as the reset point.
 	// B inherits A's opening events and forks from there.
@@ -131,7 +129,7 @@ resetSearch:
 			NextPageToken:   histPageToken,
 			MaximumPageSize: 100,
 		})
-		s.NoError(err)
+		env.NoError(err)
 		for _, event := range histResp.GetHistory().GetEvents() {
 			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 				resetEventID = event.EventId
@@ -143,7 +141,7 @@ resetSearch:
 			break
 		}
 	}
-	s.NotZero(resetEventID)
+	env.NotZero(resetEventID)
 
 	// ── Step 2: reset A → run B ───────────────────────────────────────────────
 	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
@@ -153,13 +151,13 @@ resetSearch:
 		RequestId:                 uuid.NewString(),
 		WorkflowTaskFinishEventId: resetEventID,
 	})
-	s.NoError(err)
+	env.NoError(err)
 	runIDB := resetResp.RunId
 
 	tvB := tv.WithRunID(runIDB)
-	completeWorkflowWithActivities(s.T(), tvB, poller)
+	completeWorkflowWithActivities(env, tvB, poller)
 
-	branchTokenB := captureCurrentBranchToken(ctx, s.T(), env, tv.WorkflowID(), runIDB)
+	branchTokenB := captureCurrentBranchToken(ctx, env, tv.WorkflowID(), runIDB)
 
 	// ── Step 3: force-delete run A ────────────────────────────────────────────
 	// Both the admin force-delete and the DeleteHistoryEventTask retention timer
@@ -170,8 +168,8 @@ resetSearch:
 		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runIDA},
 		Archetype: chasm.WorkflowArchetype,
 	})
-	s.NoError(err)
-	waitForMutableStateGone(ctx, s.T(), env, shardID, execMgr, tv.WorkflowID(), runIDA)
+	env.NoError(err)
+	waitForMutableStateGone(ctx, env, shardID, execMgr, tv.WorkflowID(), runIDA)
 
 	// ── Step 4: force-delete run B ────────────────────────────────────────────
 	_, err = env.AdminClient().DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
@@ -179,8 +177,8 @@ resetSearch:
 		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runIDB},
 		Archetype: chasm.WorkflowArchetype,
 	})
-	s.NoError(err)
-	waitForMutableStateGone(ctx, s.T(), env, shardID, execMgr, tv.WorkflowID(), runIDB)
+	env.NoError(err)
+	waitForMutableStateGone(ctx, env, shardID, execMgr, tv.WorkflowID(), runIDB)
 
 	// ── Assertions ────────────────────────────────────────────────────────────
 	for _, tc := range []struct {
@@ -198,7 +196,7 @@ resetSearch:
 			PageSize:    1000,
 		})
 		if err == nil {
-			s.Empty(resp.HistoryEvents,
+			env.Empty(resp.HistoryEvents,
 				"history_node rows for %s should be gone after deletion", tc.label)
 		}
 		// A NotFound/InvalidArgument error is acceptable — it means the branch is gone.
@@ -207,11 +205,10 @@ resetSearch:
 
 // completeWorkflowWithActivities drives a workflow through a single activity then completes it.
 func completeWorkflowWithActivities(
-	t *testing.T,
+	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	poller *taskpoller.TaskPoller,
 ) {
-	t.Helper()
 	activityScheduled := false
 	wtHandler := func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		if !activityScheduled {
@@ -240,42 +237,40 @@ func completeWorkflowWithActivities(
 	}
 
 	_, err := poller.PollAndHandleWorkflowTask(tv, wtHandler)
-	require.NoError(t, err)
+	env.NoError(err)
 	_, err = poller.PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
-	require.NoError(t, err)
+	env.NoError(err)
 	_, err = poller.PollAndHandleWorkflowTask(tv, wtHandler)
-	require.NoError(t, err)
+	env.NoError(err)
 }
 
 // captureCurrentBranchToken extracts the current branch token from a workflow's mutable state.
-func captureCurrentBranchToken(ctx context.Context, t *testing.T, env *testcore.TestEnv, workflowID, runID string) []byte {
-	t.Helper()
+func captureCurrentBranchToken(ctx context.Context, env *testcore.TestEnv, workflowID, runID string) []byte {
 	descResp, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		Archetype: chasm.WorkflowArchetype,
 	})
-	require.NoError(t, err)
+	env.NoError(err)
 	vh := descResp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
 	currentVH, err := versionhistory.GetCurrentVersionHistory(vh)
-	require.NoError(t, err)
+	env.NoError(err)
 	token := currentVH.GetBranchToken()
-	require.NotEmpty(t, token)
+	env.NotEmpty(token)
 	return token
 }
 
 // waitForMutableStateGone polls until GetWorkflowExecution returns NotFound for the given runID.
-func waitForMutableStateGone(ctx context.Context, t *testing.T, env *testcore.TestEnv, shardID int32, execMgr persistence.ExecutionManager, workflowID, runID string) {
-	t.Helper()
-	await.Requiref(ctx, t, func(t *await.T) {
-		_, err := execMgr.GetWorkflowExecution(t.Context(), &persistence.GetWorkflowExecutionRequest{
+func waitForMutableStateGone(ctx context.Context, env *testcore.TestEnv, shardID int32, execMgr persistence.ExecutionManager, workflowID, runID string) {
+	env.Eventually(func() bool {
+		_, err := execMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: env.NamespaceID().String(),
 			WorkflowID:  workflowID,
 			RunID:       runID,
 			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
-		require.True(t, common.IsNotFoundError(err), "expected NotFound, got %v", err)
+		return common.IsNotFoundError(err)
 	}, 10*time.Second, 100*time.Millisecond,
 		"timed out waiting for mutable state of run %s to be deleted", runID)
 }
