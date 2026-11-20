@@ -327,7 +327,7 @@ func TestReplaceOrphanedChildAction(t *testing.T) {
 			mutableState.EXPECT().VisitUpdates(gomock.Any())
 			updateRegistry := update.NewRegistry(mutableState)
 			if tc.admittedUpdate {
-				mutableState.EXPECT().GetUpdateOutcome(gomock.Any(), "update-id").Return(
+				mutableState.EXPECT().GetCompletedUpdate(gomock.Any(), "update-id").Return(
 					nil,
 					serviceerror.NewNotFound("update not found"),
 				)

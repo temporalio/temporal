@@ -215,12 +215,59 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		0,
 		time.Time{},
 		time.Time{},
+		time.Time{},
 		&stage,
 		false,
 	)
 
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
+}
+
+func (s *contextSuite) TestDeleteWorkflowExecution_VisibilityTaskCarriesTimes() {
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  tests.WorkflowID,
+		RunID:       tests.RunID,
+	}
+	startTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	createTime := startTime.Add(-2 * time.Hour)
+	stage := tasks.DeleteWorkflowExecutionStageNone
+
+	var captured *persistence.AddHistoryTasksRequest
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *persistence.AddHistoryTasksRequest) error {
+			captured = req
+			return nil
+		})
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any())
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
+
+	err := s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		chasm.WorkflowArchetypeID,
+		tests.Version,
+		[]byte("branchToken"),
+		0,
+		time.Time{},
+		startTime,
+		createTime,
+		&stage,
+		true,
+	)
+	s.NoError(err)
+
+	s.Require().NotNil(captured)
+	visibilityTasks := captured.Tasks[tasks.CategoryVisibility]
+	s.Require().Len(visibilityTasks, 1)
+	deleteTask, ok := visibilityTasks[0].(*tasks.DeleteExecutionVisibilityTask)
+	s.Require().True(ok)
+	s.Equal(startTime, deleteTask.StartTime)
+	s.Equal(createTime, deleteTask.CreateTime)
+	s.True(deleteTask.IsRetentionDelete)
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
@@ -244,6 +291,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		0,
 		time.Time{},
 		time.Time{},
+		time.Time{},
 		&stage,
 		false,
 	)
@@ -262,6 +310,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		0,
 		time.Time{},
 		time.Time{},
+		time.Time{},
 		&stage,
 		false,
 	)
@@ -277,6 +326,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -307,6 +357,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		0,
 		time.Time{},
 		time.Time{},
+		time.Time{},
 		&stage,
 		false,
 	)
@@ -322,6 +373,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -341,6 +393,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		0,
 		time.Time{},
 		time.Time{},
+		time.Time{},
 		&stage,
 		false,
 	)
@@ -355,6 +408,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -430,6 +484,7 @@ func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 		0,
 		time.Time{},
 		time.Time{},
+		time.Time{},
 		&stage,
 		false,
 	)
@@ -458,6 +513,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		0,
 		time.Time{},
 		time.Time{},
+		time.Time{},
 		&stage,
 		false,
 	)
@@ -475,6 +531,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,

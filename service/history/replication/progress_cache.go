@@ -3,13 +3,18 @@
 package replication
 
 import (
+	"context"
 	"slices"
 	"sync"
+	"time"
 	"unsafe"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -19,6 +24,8 @@ import (
 
 type (
 	ProgressCache interface {
+		Start()
+		Stop()
 		Get(
 			runID string,
 			targetClusterID int32,
@@ -32,8 +39,15 @@ type (
 	}
 
 	progressCacheImpl struct {
-		cacheLock sync.RWMutex
-		cache     cache.Cache
+		cacheLock      sync.RWMutex
+		cache          cache.Cache
+		maxSize        int
+		maxSizeFn      dynamicconfig.IntPropertyFn
+		cacheOptions   cache.Options
+		metricsHandler metrics.Handler
+		timeSource     clock.TimeSource
+		startOnce      sync.Once
+		loops          goro.Group
 	}
 
 	ReplicationProgress struct {
@@ -54,13 +68,53 @@ func NewProgressCache(
 	logger log.Logger,
 	handler metrics.Handler,
 ) ProgressCache {
-	maxSize := config.ReplicationProgressCacheMaxSize()
-	opts := &cache.Options{
-		TTL: config.ReplicationProgressCacheTTL(),
+	c := &progressCacheImpl{
+		maxSizeFn:      config.ReplicationProgressCacheMaxSize,
+		timeSource:     clock.NewRealTimeSource(),
+		cacheOptions:   cache.Options{TTL: config.ReplicationProgressCacheTTL()},
+		metricsHandler: handler.WithTags(metrics.CacheTypeTag(metrics.ReplicationProgressCacheTypeTagValue)),
 	}
-	return &progressCacheImpl{
-		cache: cache.NewWithMetrics(maxSize, opts, handler.WithTags(metrics.CacheTypeTag(metrics.ReplicationProgressCacheTypeTagValue))),
+	c.refreshCache()
+	return c
+}
+
+func (c *progressCacheImpl) Start() {
+	c.startOnce.Do(func() {
+		c.loops.Go(c.refreshLoop)
+	})
+}
+
+func (c *progressCacheImpl) Stop() {
+	c.loops.Cancel()
+	c.loops.Wait()
+}
+
+func (c *progressCacheImpl) refreshLoop(ctx context.Context) error {
+	ch, timer := c.timeSource.NewTimer(time.Minute)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ch:
+			c.refreshCache()
+			timer.Reset(time.Minute)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
+}
+
+// refreshCache replaces the cache when its configured capacity changes. Cached progress
+// is discarded, so receivers may need to fetch history while the new cache warms up.
+func (c *progressCacheImpl) refreshCache() {
+	c.cacheLock.Lock()
+	defer c.cacheLock.Unlock()
+	maxSize := max(0, c.maxSizeFn())
+	if c.cache != nil && maxSize == c.maxSize {
+		return
+	}
+	c.cache = cache.NewWithMetrics(maxSize, &c.cacheOptions, c.metricsHandler)
+	c.maxSize = maxSize
+	metrics.CacheUsage.With(c.metricsHandler).Record(0)
 }
 
 func (c *progressCacheImpl) Get(

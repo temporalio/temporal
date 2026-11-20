@@ -247,6 +247,33 @@ func (util *TimeSkippingInfoUtil) GetAccumulatedSkippedDuration() time.Duration 
 	return util.tsi.GetAccumulatedSkippedDuration().AsDuration()
 }
 
+// ToPhysicalTimeWithCurrentTimeSkippingOffset converts logical time to physical time
+// using the current accumulated skipped duration. Zero time is returned unchanged.
+func (util *TimeSkippingInfoUtil) ToPhysicalTimeWithCurrentTimeSkippingOffset(logicalTime time.Time) time.Time {
+	if logicalTime.IsZero() {
+		return logicalTime
+	}
+	return logicalTime.Add(-util.GetAccumulatedSkippedDuration())
+}
+
+// ToLogicalTimeWithCurrentTimeSkippingOffset converts physical time to logical time
+// using the current accumulated skipped duration. Zero time is returned unchanged.
+func (util *TimeSkippingInfoUtil) ToLogicalTimeWithCurrentTimeSkippingOffset(physicalTime time.Time) time.Time {
+	if physicalTime.IsZero() {
+		return physicalTime
+	}
+	return physicalTime.Add(util.GetAccumulatedSkippedDuration())
+}
+
+// CreateTime returns startTime minus the initial skipped duration, which is when the execution was
+// created. It ignores the accumulated skipped duration, which grows as the execution skips.
+func (util *TimeSkippingInfoUtil) CreateTime(startTime time.Time) time.Time {
+	if util == nil || util.tsi == nil || startTime.IsZero() {
+		return startTime
+	}
+	return startTime.Add(-util.tsi.GetInitialSkippedDuration().AsDuration())
+}
+
 // HasTimeSkippingClockOffset reports whether accumulated skipped time shifts the workflow clock.
 func (util *TimeSkippingInfoUtil) HasTimeSkippingClockOffset() bool {
 	return util.GetAccumulatedSkippedDuration() != 0

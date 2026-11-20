@@ -134,6 +134,8 @@ type Config struct {
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
+	TaskThrottleController dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
+
 	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay      dynamicconfig.DurationPropertyFn
@@ -420,6 +422,8 @@ type Config struct {
 	EnableWorkflowEagerDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 
+	WorkflowHeartbeatNotificationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
+
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	ArchivalProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
@@ -612,6 +616,7 @@ func NewConfig(
 		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
+		TaskThrottleController:                               dynamicconfig.TaskThrottleController.Get(dc),
 		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
 		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
 		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
@@ -861,6 +866,8 @@ func NewConfig(
 		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		EnableWorkflowEagerDispatchCheck:  dynamicconfig.EnableWorkflowEagerDispatchCheck.Get(dc),
 		NamespaceCacheRefreshInterval:     dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
+
+		WorkflowHeartbeatNotificationRolloutPercent: dynamicconfig.WorkflowHeartbeatNotificationRolloutPercent.Get(dc),
 
 		// Archival related
 		ArchivalTaskBatchSize:                               dynamicconfig.ArchivalTaskBatchSize.Get(dc),

@@ -17,6 +17,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -85,6 +86,33 @@ func (s *taskSerializerSuite) TestTransferActivityTask() {
 	}
 
 	s.assertEqualTasks(activityTask)
+}
+
+func (s *taskSerializerSuite) TestTransferReleaseLimiterTask() {
+	task := &tasks.ReleaseLimiterTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Limiters: []*taskqueuespb.LimiterRef{
+			{
+				LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+				Key:         "limiter-key",
+				SlotId:      uuid.NewString(),
+			},
+		},
+	}
+
+	s.assertEqualTasksWithOpts(task,
+		func(task, deserializedTask tasks.Task) {
+			original := task.(*tasks.ReleaseLimiterTask).Limiters
+			deserialized := deserializedTask.(*tasks.ReleaseLimiterTask).Limiters
+			s.Require().Len(deserialized, len(original))
+			for i := range original {
+				protorequire.ProtoEqual(s.T(), original[i], deserialized[i])
+			}
+		},
+		cmpopts.IgnoreFields(tasks.ReleaseLimiterTask{}, "Limiters"),
+	)
 }
 
 func (s *taskSerializerSuite) TestTransferRequestCancelTask() {
@@ -352,6 +380,51 @@ func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
 	}
 
 	s.assertEqualTasks(deleteExecutionVisibilityTask)
+}
+
+func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask_CreateTime() {
+	startTime := time.Unix(0, rand.Int63()).UTC()
+	newTask := func(createTime time.Time) *tasks.DeleteExecutionVisibilityTask {
+		return &tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey:         s.workflowKey,
+			VisibilityTimestamp: time.Unix(0, 0).UTC(),
+			TaskID:              rand.Int63(),
+			StartTime:           startTime,
+			CreateTime:          createTime,
+		}
+	}
+
+	s.Run("Set", func() {
+		s.assertEqualTasks(newTask(startTime.Add(-2 * time.Hour)))
+	})
+
+	deserialize := func(blob *commonpb.DataBlob) *tasks.DeleteExecutionVisibilityTask {
+		deserializedTask, err := s.serializer.DeserializeTask(tasks.CategoryVisibility, blob)
+		s.NoError(err)
+		deleteTask, ok := deserializedTask.(*tasks.DeleteExecutionVisibilityTask)
+		s.Require().True(ok)
+		return deleteTask
+	}
+
+	s.Run("Unknown", func() {
+		blob, err := s.serializer.SerializeTask(newTask(time.Time{}))
+		s.NoError(err)
+		s.True(deserialize(blob).CreateTime.IsZero())
+	})
+
+	s.Run("MissingFromBlob", func() {
+		blob, err := s.serializer.SerializeTask(newTask(startTime.Add(-2 * time.Hour)))
+		s.NoError(err)
+		info := &persistencespb.VisibilityTaskInfo{}
+		s.NoError(Decode(blob, info))
+		info.CreateTime = nil
+		blob, err = Encode(info)
+		s.NoError(err)
+
+		deleteTask := deserialize(blob)
+		s.True(deleteTask.CreateTime.IsZero())
+		s.Equal(startTime, deleteTask.StartTime)
+	})
 }
 
 func (s *taskSerializerSuite) TestVisibilityChasmTask() {

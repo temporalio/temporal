@@ -31,6 +31,46 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestTimeSkippingInfoUtilTimeConversions(t *testing.T) {
+	t.Parallel()
+
+	timestamp := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		util     *TimeSkippingInfoUtil
+		input    time.Time
+		physical time.Time
+		logical  time.Time
+	}{
+		{name: "nil util", input: timestamp, physical: timestamp, logical: timestamp},
+		{name: "nil info", util: NewTimeSkippingInfoUtil(nil), input: timestamp, physical: timestamp, logical: timestamp},
+		{name: "unset duration", util: NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{}), input: timestamp, physical: timestamp, logical: timestamp},
+		{
+			name: "accumulated offset applies when skipping is disabled",
+			util: NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+				InitialSkippedDuration:     durationpb.New(30 * time.Minute),
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			}),
+			input:    timestamp,
+			physical: timestamp.Add(-time.Hour),
+			logical:  timestamp.Add(time.Hour),
+		},
+		{
+			name: "zero time remains unset",
+			util: NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			}),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.physical, tc.util.ToPhysicalTimeWithCurrentTimeSkippingOffset(tc.input))
+			require.Equal(t, tc.logical, tc.util.ToLogicalTimeWithCurrentTimeSkippingOffset(tc.input))
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestIsTimeSkippingFeatureEnabled() {
 	cases := []struct {
 		name             string
@@ -722,6 +762,80 @@ func (s *mutableStateSuite) TestInitialSkippedDurationRemainsFixed() {
 	s.Equal(initialSkip, tsi.GetInitialSkippedDuration().AsDuration())
 }
 
+func (s *mutableStateSuite) TestTimeSkippingInfoUtil_CreateTime() {
+	startTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	s.Run("NilReceiver_ReturnsStartTime", func() {
+		var util *TimeSkippingInfoUtil
+		s.Equal(startTime, util.CreateTime(startTime))
+	})
+
+	s.Run("NilTimeSkippingInfo_ReturnsStartTime", func() {
+		s.Equal(startTime, NewTimeSkippingInfoUtil(nil).CreateTime(startTime))
+	})
+
+	s.Run("NoInitialSkip_ReturnsStartTime", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		})
+		s.Equal(startTime, util.CreateTime(startTime))
+	})
+
+	s.Run("ZeroStartTime_ReturnsZero", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			InitialSkippedDuration: durationpb.New(time.Hour),
+		})
+		s.True(util.CreateTime(time.Time{}).IsZero())
+	})
+
+	s.Run("InitialSkip_SubtractsInitialNotAccumulated", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(5 * time.Hour),
+			InitialSkippedDuration:     durationpb.New(2 * time.Hour),
+		})
+		s.Equal(startTime.Add(-2*time.Hour), util.CreateTime(startTime))
+	})
+}
+
+func (s *mutableStateSuite) TestCreateTime_InheritedSkip() {
+	realNow := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	parentSkip := 5 * time.Hour
+	parentTSI := func() *persistencespb.TimeSkippingInfo {
+		return &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 100},
+			AccumulatedSkippedDuration: durationpb.New(parentSkip),
+		}
+	}
+
+	testCases := []struct {
+		name      string
+		propagate func(*persistencespb.TimeSkippingInfo) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
+	}{
+		// continue-as-new and retry
+		{name: "ContinueAsNewOrRetry", propagate: propagateTimeSkippingToNextRun},
+		// child workflows and schedules
+		{name: "ChildOrSchedule", propagate: chasm.PropagateTimeSkippingToOtherExecution},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			tsc, stateProp := tc.propagate(parentTSI())
+			s.Require().Equal(parentSkip, stateProp.GetInitialSkippedDuration().AsDuration())
+
+			startTime := AdjustNowWithTimeSkipping(realNow, stateProp)
+			s.Require().Equal(realNow.Add(parentSkip), startTime)
+
+			s.mutableState.initTimeSkippingInfo(tsc, stateProp)
+			util := NewTimeSkippingInfoUtil(s.mutableState.GetExecutionInfo().GetTimeSkippingInfo())
+			s.Equal(realNow, util.CreateTime(startTime))
+
+			s.mutableState.executeTimeSkippingTransition(time.Hour, true, false)
+			util = NewTimeSkippingInfoUtil(s.mutableState.GetExecutionInfo().GetTimeSkippingInfo())
+			s.Equal(parentSkip+time.Hour, util.GetAccumulatedSkippedDuration())
+			s.Equal(realNow, util.CreateTime(startTime))
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 	s.Run("UpdateWithNilConfig_ClearsConfigAndFastForward", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
@@ -996,7 +1110,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 
 		timers := s.mutableState.PopTasks()[tasks.CategoryTimer]
 		s.Require().Len(timers, 1, "an enabled config with a pending target schedules a fast-forward timer")
-		s.WithinDuration(s.mutableState.ToRealTimeWithCurrentOffset(fastForward.GetTargetTime().AsTime()), timers[0].GetVisibilityTime(), 0)
+		s.WithinDuration(s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(fastForward.GetTargetTime().AsTime()), timers[0].GetVisibilityTime(), 0)
 	})
 
 	s.Run("FuturePropagatedTarget_SchedulesTimer", func() {
@@ -1021,7 +1135,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		timers := s.mutableState.PopTasks()[tasks.CategoryTimer]
 		s.Require().Len(timers, 1, "a future target schedules a fast-forward timer")
 		// AddTasks converts the virtual target to real wall-clock (minus accumulated skip).
-		s.Equal(s.mutableState.ToRealTimeWithCurrentOffset(propagatedTarget), timers[0].GetVisibilityTime())
+		s.Equal(s.mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(propagatedTarget), timers[0].GetVisibilityTime())
 	})
 
 	s.Run("FuturePropagatedTargetDisabledConfig_NoTimer", func() {

@@ -182,6 +182,18 @@ func (c *clientImpl) Route(p tqid.Partition) (string, error) {
 	return c.clients.Lookup(p.RoutingKey(spread))
 }
 
+func (c *clientImpl) NextRouteChange(p tqid.Partition) time.Time {
+	now := time.Now()
+	spreadChange := c.spreadRouting()
+	spread := spreadChange.Value(p.GradualChangeKey(), now)
+	key, index := p.RoutingKey(spread)
+	next := c.resolver.NextLookupChange(key, index+1) // see serviceKeyResolverImpl.Lookup
+	if when := spreadChange.When(p.GradualChangeKey()); when.After(now) && (next.IsZero() || when.Before(next)) {
+		next = when
+	}
+	return next
+}
+
 func (c *clientImpl) getClientForTaskQueuePartition(
 	partition tqid.Partition,
 ) (matchingservice.MatchingServiceClient, error) {

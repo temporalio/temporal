@@ -1022,6 +1022,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
 	workflowStartTime time.Time,
+	workflowCreateTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
 	retentionDelete bool,
 ) (retErr error) {
@@ -1102,6 +1103,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 							CloseTime:                      workflowCloseTime,
 							StartTime:                      workflowStartTime,
+							CreateTime:                     workflowCreateTime,
 							IsRetentionDelete:              retentionDelete,
 						},
 					}

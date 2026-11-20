@@ -7,13 +7,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -110,8 +113,8 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 		Return(lease, nil)
 
 	s.currentMutableState.EXPECT().
-		GetUpdateOutcome(gomock.Any(), gomock.Any()).
-		Return(&updatepb.Outcome{}, nil)
+		GetCompletedUpdate(gomock.Any(), testUpdateID).
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{Outcome: &updatepb.Outcome{}, AcceptedEventId: 42}, nil)
 
 	nexusSerializationContext := &nexuspb.PropagatedSerializationContext{
 		Endpoint:  "endpoint",
@@ -170,6 +173,187 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 	s.True(releaseCalledWithNilErr.Load(), "release function should have been called with nil error")
 	protorequire.ProtoEqual(s.T(), nexusSerializationContext,
 		resp.Responses[1].GetUpdateWorkflow().GetResponse().GetPropagatedNexusSerializationContext())
+}
+
+func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesUpdateResponseLink() {
+	ctx := testcontext.For(s.T())
+	const acceptedEventID int64 = 42
+
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId:  tests.RunID,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
+	lease := api.NewWorkflowLease(s.currentContext, func(error) {}, s.currentMutableState)
+	s.consistencyChecker.EXPECT().
+		GetWorkflowLease(gomock.Any(), nil, gomock.Any(), gomock.Any()).
+		Return(lease, nil)
+	s.currentMutableState.EXPECT().
+		GetCompletedUpdate(gomock.Any(), testUpdateID).
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{Outcome: &updatepb.Outcome{}, AcceptedEventId: acceptedEventID}, nil)
+	s.currentMutableState.EXPECT().
+		GetExecutionState().
+		Return(executionState)
+	s.currentMutableState.EXPECT().
+		GetUpdateNexusSerializationContext(testUpdateID).
+		Return(nil)
+	s.currentContext.EXPECT().
+		GetWorkflowKey().
+		Return(tests.WorkflowKey)
+
+	updateReq := createUpdateRequest(testUpdateID)
+	updateReq.Request.Namespace = tests.Namespace.String()
+	uws := &updateWithStart{
+		namespaceId:        tests.NamespaceID,
+		consistencyChecker: s.consistencyChecker,
+		updateReq:          updateReq,
+		startReq: &historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:  tests.Namespace.String(),
+				WorkflowId: tests.WorkflowID,
+			},
+		},
+		updater: updateworkflow.NewUpdater(nil, nil, nil, updateReq),
+	}
+
+	resp, err := uws.Invoke(ctx)
+	s.NoError(err)
+	s.Nil(resp.GetResponses()[0].GetStartWorkflow().GetLink())
+	protorequire.ProtoEqual(s.T(), &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  tests.Namespace.String(),
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   acceptedEventID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+					},
+				},
+			},
+		},
+	}, resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
+}
+
+func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesExistingRequestIDLink() {
+	ctx := testcontext.For(s.T())
+	const (
+		acceptedEventID int64 = 42
+		callbackEventID int64 = 43
+		requestID             = "request-id"
+	)
+
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId:  tests.RunID,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			requestID: {
+				EventId:   callbackEventID,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			},
+		},
+	}
+	lease := api.NewWorkflowLease(s.currentContext, func(error) {}, s.currentMutableState)
+	s.consistencyChecker.EXPECT().
+		GetWorkflowLease(gomock.Any(), nil, gomock.Any(), gomock.Any()).
+		Return(lease, nil)
+	s.currentMutableState.EXPECT().
+		GetCompletedUpdate(gomock.Any(), testUpdateID).
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{Outcome: &updatepb.Outcome{}, AcceptedEventId: acceptedEventID}, nil)
+	s.currentMutableState.EXPECT().
+		GetExecutionState().
+		Return(executionState).
+		Times(2)
+	s.currentMutableState.EXPECT().
+		GetUpdateNexusSerializationContext(testUpdateID).
+		Return(nil)
+	s.currentContext.EXPECT().
+		GetWorkflowKey().
+		Return(tests.WorkflowKey)
+
+	updateReq := createUpdateRequest(testUpdateID)
+	updateReq.Request.Namespace = tests.Namespace.String()
+	updateReq.Request.Request.RequestId = requestID
+	updateReq.Request.Request.CompletionCallbacks = []*commonpb.Callback{{}}
+	uws := &updateWithStart{
+		namespaceId:        tests.NamespaceID,
+		consistencyChecker: s.consistencyChecker,
+		updateReq:          updateReq,
+		startReq: &historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:  tests.Namespace.String(),
+				WorkflowId: tests.WorkflowID,
+			},
+		},
+		updater: updateworkflow.NewUpdater(nil, nil, nil, updateReq),
+	}
+
+	resp, err := uws.Invoke(ctx)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  tests.Namespace.String(),
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: requestID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					},
+				},
+			},
+		},
+	}, resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
+}
+
+func (s *updateWithStartSuite) TestInvokeCompletedUpdateWithoutAcceptedEventIDOmitsUpdateLink() {
+	ctx := testcontext.For(s.T())
+	var releaseErr error
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId:  tests.RunID,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	}
+	lease := api.NewWorkflowLease(
+		s.currentContext,
+		func(err error) { releaseErr = err },
+		s.currentMutableState,
+	)
+	s.consistencyChecker.EXPECT().
+		GetWorkflowLease(gomock.Any(), nil, gomock.Any(), gomock.Any()).
+		Return(lease, nil)
+	s.currentMutableState.EXPECT().
+		GetCompletedUpdate(gomock.Any(), testUpdateID).
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{Outcome: &updatepb.Outcome{}}, nil)
+	s.currentMutableState.EXPECT().
+		GetExecutionState().
+		Return(executionState)
+	s.currentMutableState.EXPECT().
+		GetUpdateNexusSerializationContext(testUpdateID).
+		Return(nil)
+	s.currentContext.EXPECT().
+		GetWorkflowKey().
+		Return(tests.WorkflowKey)
+
+	updateReq := createUpdateRequest(testUpdateID)
+	uws := &updateWithStart{
+		namespaceId:        tests.NamespaceID,
+		consistencyChecker: s.consistencyChecker,
+		updateReq:          updateReq,
+		startReq: &historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId: tests.WorkflowID,
+			},
+		},
+		updater: updateworkflow.NewUpdater(nil, nil, nil, updateReq),
+	}
+
+	resp, err := uws.Invoke(ctx)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.NoError(releaseErr)
+	s.Nil(resp.GetResponses()[0].GetStartWorkflow().GetLink())
+	s.Nil(resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
 }
 
 func createUpdateRequest(updateID string) *historyservice.UpdateWorkflowExecutionRequest {

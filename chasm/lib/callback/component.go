@@ -169,19 +169,16 @@ func (c *Callback) loadInvocationArgs(
 //
 // For a NexusHandler callback these are the handler links the worker attached to its StartOperation
 // response, e.g. a workflow_event link to the workflow it started to process the completion.
-func (c *Callback) recordHandlerLinks(ctx chasm.MutableContext, links []nexus.Link) error {
+//
+// The links have already been converted and sanitized by the invocation task handler, which dropped any
+// that were unconvertible or invalid rather than failing the delivered callback.
+func (c *Callback) recordHandlerLinks(ctx chasm.MutableContext, links []*commonpb.Link) error {
 	if len(links) == 0 {
 		return nil
 	}
-	// Unconvertible links are dropped with a warning rather than failing the callback. The callback
-	// has already been delivered at this point, so returning an error would fail the transition and
-	// leave the delivered callback retrying forever.
-	protoLinks := commonnexus.ConvertNexusLinksToProtoLinks(links, ctx.Logger())
-	if len(protoLinks) == 0 {
-		return nil
-	}
-	// Swallow any errors here for the same reason as above.
-	if err := ctx.SetRequestLinks(c, c.RequestId, protoLinks); err != nil {
+	// The callback has already been delivered at this point, so returning an error would fail the
+	// transition and leave the delivered callback retrying forever. Swallow any errors instead.
+	if err := ctx.SetRequestLinks(c, c.RequestId, links); err != nil {
 		softassert.Fail(ctx.Logger(), "failed to record NexusHandler callback links", tag.Error(err))
 	}
 	return nil
