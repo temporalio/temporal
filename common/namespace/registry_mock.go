@@ -10,6 +10,7 @@
 package namespace
 
 import (
+	fmt "fmt"
 	reflect "reflect"
 
 	pingable "go.temporal.io/server/common/pingable"
@@ -204,7 +205,7 @@ func (mr *MockRegistryMockRecorder) RefreshNamespaceById(namespaceId any) *gomoc
 }
 
 // RegisterStateChangeCallback mocks base method.
-func (m *MockRegistry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn) {
+func (m *MockRegistry) RegisterStateChangeCallback(key fmt.Stringer, cb StateChangeCallbackFn) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RegisterStateChangeCallback", key, cb)
 }
@@ -240,7 +241,7 @@ func (mr *MockRegistryMockRecorder) Stop() *gomock.Call {
 }
 
 // UnregisterStateChangeCallback mocks base method.
-func (m *MockRegistry) UnregisterStateChangeCallback(key any) {
+func (m *MockRegistry) UnregisterStateChangeCallback(key fmt.Stringer) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UnregisterStateChangeCallback", key)
 }

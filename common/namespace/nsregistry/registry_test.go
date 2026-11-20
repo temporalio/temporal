@@ -34,6 +34,10 @@ type (
 	}
 )
 
+type callbackKey string
+
+func (k callbackKey) String() string { return string(k) }
+
 func TestRegistrySuite(t *testing.T) {
 	s := new(registrySuite)
 	suite.Run(t, s)
@@ -284,7 +288,7 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 
 	var entriesNotification []*namespace.Namespace
 	s.registry.RegisterStateChangeCallback(
-		"0",
+		callbackKey("0"),
 		func(ns *namespace.Namespace, deletedFromDb bool) {
 			s.False(deletedFromDb)
 			entriesNotification = append(entriesNotification, ns)
@@ -449,7 +453,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 	s.registry.RegisterStateChangeCallback(
-		"0",
+		callbackKey("0"),
 		func(ns *namespace.Namespace, deletedFromDb bool) {
 			defer wg.Done()
 			s.False(deletedFromDb)
@@ -637,7 +641,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	s.registry.RegisterStateChangeCallback(
-		"1",
+		callbackKey("1"),
 		func(ns *namespace.Namespace, deletedFromDb bool) {
 			if deletedFromDb {
 				wg.Done()
@@ -842,7 +846,7 @@ func (s *registrySuite) TestNamespaceRename() {
 	defer s.registry.Stop()
 	// Register callback to detect when the rename is applied
 	refreshCompletedCh := make(chan struct{})
-	s.registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
+	s.registry.RegisterStateChangeCallback(callbackKey("test"), func(ns *namespace.Namespace, deletedFromDb bool) {
 		if ns.Name() == "renamed-name" {
 			close(refreshCompletedCh)
 		}

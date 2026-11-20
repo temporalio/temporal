@@ -26,6 +26,7 @@ package nsregistry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -119,7 +120,7 @@ type (
 
 		// stateChangeCallbacks is a sync.Map so that it can be used without contending for the lock protecting the cache maps; we don't
 		// need to block namespace operations while running or updating callbacks.
-		stateChangeCallbacks          sync.Map // map[any]StateChangeCallbackFn
+		stateChangeCallbacks          sync.Map // map[fmt.Stringer]StateChangeCallbackFn
 		stateChangedDuringReadthrough []*namespace.Namespace
 
 		// readthroughLock protects readthroughNotFoundCache and requests to persistence
@@ -275,7 +276,7 @@ func (r *registry) GetAllNamespaces() []*namespace.Namespace {
 	return expmaps.Values(r.idToNamespace)
 }
 
-func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChangeCallbackFn) {
+func (r *registry) RegisterStateChangeCallback(key fmt.Stringer, cb namespace.StateChangeCallbackFn) {
 	// Store callback first to avoid race where watch events arrive between reading the namespace snapshot and storing the
 	// callback. This ensures no events are missed, but introduces a different trade-off: The callback may receive duplicate
 	// calls for the same namespace if a watch event arrives while we're iterating through the catch-up loop below. For
@@ -294,10 +295,10 @@ func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChange
 				metrics.NamespaceRegistrySlowCallbacks.With(r.metricsHandler).Record(1)
 				r.logger.Warn(
 					"Namespace registry callback slow",
-					// Use tag.Any (JSON reflection) rather than fmt %v: %v walks unexported fields, which
+					// Use tag.Stringer rather than fmt %v on arbitrary objects: %v walks unexported fields, which
 					// deep-printed the whole registrant (e.g. *WorkflowHandler) and iterated an internal map
 					// mid-mutation, crashing the process with "concurrent map iteration and map write".
-					tag.Any("key", key),
+					tag.Stringer("key", key),
 					tag.Duration("duration", duration),
 				)
 			}
@@ -318,7 +319,7 @@ func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChange
 	}
 }
 
-func (r *registry) UnregisterStateChangeCallback(key any) {
+func (r *registry) UnregisterStateChangeCallback(key fmt.Stringer) {
 	r.stateChangeCallbacks.Delete(key)
 }
 

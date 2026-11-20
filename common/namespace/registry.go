@@ -3,6 +3,8 @@
 package namespace
 
 import (
+	"fmt"
+
 	"go.temporal.io/server/common/pingable"
 )
 
@@ -34,8 +36,9 @@ type (
 		// Registers callback for namespace state changes.
 		// StateChangeCallbackFn will be invoked for a new/deleted namespace or namespace that has
 		// State, ReplicationState, ActiveCluster, or isGlobalNamespace config changed.
-		RegisterStateChangeCallback(key any, cb StateChangeCallbackFn)
-		UnregisterStateChangeCallback(key any)
+		// Keys must be comparable, and String must be safe to call concurrently.
+		RegisterStateChangeCallback(key fmt.Stringer, cb StateChangeCallbackFn)
+		UnregisterStateChangeCallback(key fmt.Stringer)
 		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
 		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
 		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
