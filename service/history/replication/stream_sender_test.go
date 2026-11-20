@@ -1330,14 +1330,26 @@ func (s *streamSenderSuite) TestSendEventLoop_Panic_ShouldCaptureAsError() {
 	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").Do(func(_ string) {
 		panic("panic")
 	})
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.streamSender.metrics = metricsHandler
+
 	err := s.streamSender.sendEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED)
 	s.Error(err) // panic is captured as error
+	s.Len(capture.Snapshot()[metrics.ReplicationStreamPanic.Name()], 1)
 }
 
 func (s *streamSenderSuite) TestRecvEventLoop_Panic_ShouldCaptureAsError() {
 	s.streamSender.shutdownChan = nil // mimic nil pointer panic
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.streamSender.metrics = metricsHandler
+
 	err := s.streamSender.recvEventLoop()
 	s.Error(err) // panic is captured as error
+	s.Len(capture.Snapshot()[metrics.ReplicationStreamPanic.Name()], 1)
 }
 
 func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStreamError() {

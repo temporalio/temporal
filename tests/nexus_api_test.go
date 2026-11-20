@@ -650,7 +650,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	if !errors.Is(err, context.DeadlineExceeded) {
 		var handlerErr *nexus.HandlerError
 		if !errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeUpstreamTimeout {
-			s.T().Fatal("expected a DeadlineExceeded or upstream timeout error")
+			s.FailNow("expected a DeadlineExceeded or upstream timeout error")
 		}
 	}
 	// Cancel the parent context to unblock the pollers that didn't receive a task.

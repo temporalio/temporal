@@ -45,6 +45,7 @@ func NewComponentField[C Component](
 	}
 	internal := newFieldInternalWithValue(fieldTypeComponent, c)
 	internal.detached = opts.detached
+	internal.ephemeral = opts.ephemeral
 	return Field[C]{
 		Internal: internal,
 	}

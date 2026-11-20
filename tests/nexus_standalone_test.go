@@ -248,7 +248,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 			RunId:       resp1.RunId,
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 		})
-		require.NoError(s.T(), err)
+		s.NoError(err)
 		s.Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResp.GetWaitStage())
 		s.ProtoEqual(&nexuspb.PropagatedSerializationContext{
 			Endpoint:  endpointName,
@@ -505,7 +505,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 		select {
 		case result := <-describeResultCh:
 			s.NoError(result.err)
-			s.T().Fatal("DescribeNexusOperationExecution returned before the state changed")
+			s.FailNow("DescribeNexusOperationExecution returned before the state changed")
 		case <-time.After(1 * time.Second):
 		}
 
@@ -1284,7 +1284,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		case headerValue := <-taskHeaderCh:
 			s.Equal("expected-value", headerValue)
 		case <-time.After(10 * time.Second):
-			s.T().Fatal("CancelOperation was not invoked")
+			s.FailNow("CancelOperation was not invoked")
 		}
 	})
 
@@ -2195,7 +2195,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		select {
 		case result := <-pollResultCh:
 			s.NoError(result.err)
-			s.T().Fatal("PollNexusOperationExecution returned before the operation started")
+			s.FailNow("PollNexusOperationExecution returned before the operation started")
 		default:
 		}
 
@@ -2313,7 +2313,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 				select {
 				case result := <-pollResultCh:
 					s.NoError(result.err)
-					s.T().Fatal("PollNexusOperationExecution returned before the state changed")
+					s.FailNow("PollNexusOperationExecution returned before the state changed")
 				default:
 				}
 
