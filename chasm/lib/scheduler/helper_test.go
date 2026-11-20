@@ -157,8 +157,8 @@ type testEnv struct {
 
 // testEnvConfig holds configuration options for testEnv.
 type testEnvConfig struct {
-	specProcessor  scheduler.SpecProcessor
-	schedule       *schedulepb.Schedule
+	specProcessor scheduler.SpecProcessor
+	schedule      *schedulepb.Schedule
 }
 
 // testEnvOption is a functional option for configuring testEnv.
