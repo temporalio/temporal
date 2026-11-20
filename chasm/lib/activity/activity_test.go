@@ -1435,7 +1435,7 @@ func TestEffectiveUserMetadata_FallsBackToLegacy(t *testing.T) {
 func TestHandleHandoff(t *testing.T) {
 	t.Parallel()
 
-	for _, test := range []struct {
+	for _, testCase := range []struct {
 		name   string
 		status activitypb.ActivityExecutionStatus
 	}{
@@ -1444,7 +1444,7 @@ func TestHandleHandoff(t *testing.T) {
 		{name: "pending cancellation", status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED},
 		{name: "pending reset", status: activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED},
 	} {
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			now := defaultTime
 			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
@@ -1460,7 +1460,7 @@ func TestHandleHandoff(t *testing.T) {
 			ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "namespace-id", BusinessId: "activity-id", ArchetypeId: ArchetypeID}).Marshal()
 			require.NoError(t, err)
 			act := &Activity{
-				ActivityState: &activitypb.ActivityState{Status: test.status},
+				ActivityState: &activitypb.ActivityState{Status: testCase.status},
 				LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 2, Stamp: 7, StartedStamp: 6}),
 			}
 			input := WithToken[*activitypb.RespondActivityTaskHandoffRequest]{
@@ -1482,7 +1482,7 @@ func TestHandleHandoff(t *testing.T) {
 			require.True(t, result.NewlyRecorded)
 			require.True(t, act.GetAwaitingCompletion())
 			require.Equal(t, defaultTime, act.GetHandoffTime().AsTime())
-			require.Equal(t, test.status, act.GetStatus())
+			require.Equal(t, testCase.status, act.GetStatus())
 			require.Empty(t, ctx.Tasks, "reporting alone must not restart legacy timers")
 			require.EqualValues(t, 2, act.LastAttempt.Get(ctx).GetCount())
 
@@ -1509,7 +1509,7 @@ func TestHandleHandoff(t *testing.T) {
 func TestHandleHandoffRejectsInvalidTask(t *testing.T) {
 	t.Parallel()
 
-	for _, test := range []struct {
+	for _, testCase := range []struct {
 		name    string
 		status  activitypb.ActivityExecutionStatus
 		attempt int32
@@ -1523,7 +1523,7 @@ func TestHandleHandoffRejectsInvalidTask(t *testing.T) {
 		{name: "timed out", status: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, attempt: 2},
 		{name: "wrong positive attempt", status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, attempt: 1},
 	} {
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
 				HandleNow:            func(chasm.Component) time.Time { return defaultTime },
@@ -1536,13 +1536,13 @@ func TestHandleHandoffRejectsInvalidTask(t *testing.T) {
 			}).Marshal()
 			require.NoError(t, err)
 			act := &Activity{
-				ActivityState: &activitypb.ActivityState{Status: test.status},
+				ActivityState: &activitypb.ActivityState{Status: testCase.status},
 				LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 2, Stamp: 7, StartedStamp: 6}),
 			}
 			input := WithToken[*activitypb.RespondActivityTaskHandoffRequest]{
 				Token: &tokenspb.Task{
 					NamespaceId:          "namespace-id",
-					Attempt:              test.attempt,
+					Attempt:              testCase.attempt,
 					ActivityAttemptStamp: 6,
 					ComponentRef:         ref,
 				},
