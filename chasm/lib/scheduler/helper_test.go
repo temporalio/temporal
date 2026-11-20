@@ -144,7 +144,6 @@ type testEnv struct {
 	TimeSource    *clock.EventTimeSource
 	Scheduler     *scheduler.Scheduler
 	SpecProcessor scheduler.SpecProcessor
-	MockEngine    *chasm.MockEngine
 	Logger        log.Logger
 
 	// engine owns the execution backing Node; rootRef identifies it.
@@ -158,9 +157,8 @@ type testEnv struct {
 
 // testEnvConfig holds configuration options for testEnv.
 type testEnvConfig struct {
-	specProcessor  scheduler.SpecProcessor
-	withMockEngine bool
-	schedule       *schedulepb.Schedule
+	specProcessor scheduler.SpecProcessor
+	schedule      *schedulepb.Schedule
 }
 
 // testEnvOption is a functional option for configuring testEnv.
@@ -172,13 +170,6 @@ type testEnvOption func(*testEnvConfig)
 func withSpecProcessor(sp scheduler.SpecProcessor) testEnvOption {
 	return func(c *testEnvConfig) {
 		c.specProcessor = sp
-	}
-}
-
-// withMockEngine configures testEnv to include a mock CHASM engine for side-effect tasks.
-func withMockEngine() testEnvOption {
-	return func(c *testEnvConfig) {
-		c.withMockEngine = true
 	}
 }
 
@@ -417,10 +408,6 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	})
 	env.Ctrl = ctrl
 
-	if config.withMockEngine {
-		env.MockEngine = chasm.NewMockEngine(ctrl)
-	}
-
 	return env
 }
 
@@ -537,35 +524,21 @@ func (e *testEnv) HasTaskInCategory(task any, category tasks.Category, visibilit
 	return false
 }
 
-// EngineContext returns a context with a mock engine. Requires withMockEngine().
+// EngineContext returns a context bound to the test engine, for side-effect
+// task handlers that read and update components through the engine.
 func (e *testEnv) EngineContext() context.Context {
-	if e.MockEngine == nil {
-		e.t.Fatal("EngineContext requires withMockEngine() option")
-	}
-	return chasm.NewEngineContext(context.Background(), e.MockEngine)
+	return chasm.NewEngineContext(context.Background(), e.engine)
 }
 
-// ExpectReadComponent sets up mock expectations for reading a component.
-func (e *testEnv) ExpectReadComponent(ctx chasm.Context, returnedComponent chasm.Component) {
-	if e.MockEngine == nil {
-		e.t.Fatal("ExpectReadComponent requires withMockEngine() option")
-	}
-	e.MockEngine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, _ ...chasm.TransitionOption) error {
-			return readFn(ctx, returnedComponent)
-		}).Times(1)
-}
-
-// ExpectUpdateComponent sets up mock expectations for updating a component.
-func (e *testEnv) ExpectUpdateComponent(ctx chasm.MutableContext, componentToUpdate chasm.Component) {
-	if e.MockEngine == nil {
-		e.t.Fatal("ExpectUpdateComponent requires withMockEngine() option")
-	}
-	e.MockEngine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
-			err := updateFn(ctx, componentToUpdate)
-			return nil, err
-		}).Times(1)
+// ComponentRef returns the engine ref for component, as a task handler
+// would receive it.
+func (e *testEnv) ComponentRef(ctx chasm.Context, component chasm.Component) chasm.ComponentRef {
+	e.t.Helper()
+	serialized, err := ctx.Ref(component)
+	require.NoError(e.t, err)
+	ref, err := chasm.DeserializeComponentRef(serialized)
+	require.NoError(e.t, err)
+	return ref
 }
 
 // newTestRegistry builds a CHASM registry with the core and scheduler

@@ -41,7 +41,7 @@ type invokerExecuteTestEnv struct {
 }
 
 func newInvokerExecuteTestEnv(t *testing.T, configure ...func(*scheduler.Config)) *invokerExecuteTestEnv {
-	env := newTestEnv(t, withMockEngine())
+	env := newTestEnv(t)
 
 	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(env.Ctrl)
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
@@ -141,14 +141,9 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 func executeTaskOnce(t *testing.T, env *invokerExecuteTestEnv, ctx chasm.MutableContext, invoker *scheduler.Invoker) {
 	t.Helper()
 
-	// Set expectations. The read and update calls will also update the Scheduler
-	// component, within the same transition.
-	env.ExpectReadComponent(ctx, invoker)
-	env.ExpectUpdateComponent(ctx, invoker)
-
 	// Create engine context for side effect task execution.
 	engineCtx := env.EngineContext()
-	err := env.handler.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	err := env.handler.Execute(engineCtx, env.ComponentRef(ctx, invoker), chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.NoError(t, env.CloseTransaction())
 }

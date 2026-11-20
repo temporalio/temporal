@@ -92,7 +92,7 @@ func TestMigrateToWorkflow_BlockedByTimeSkipping(t *testing.T) {
 }
 
 func TestMigrateToWorkflowTask_DoesNotPropagateDisabledTimeSkipping(t *testing.T) {
-	env := newTestEnv(t, withMockEngine())
+	env := newTestEnv(t)
 	env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
 		return &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
@@ -101,10 +101,6 @@ func TestMigrateToWorkflowTask_DoesNotPropagateDisabledTimeSkipping(t *testing.T
 		}
 	}
 	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
-
-	readCtx := env.ReadContext()
-	env.ExpectReadComponent(readCtx, env.Scheduler)
-	env.ExpectUpdateComponent(env.MutableContext(), env.Scheduler)
 
 	historyClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
 	historyClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
@@ -123,7 +119,7 @@ func TestMigrateToWorkflowTask_DoesNotPropagateDisabledTimeSkipping(t *testing.T
 	})
 	require.NoError(t, handler.Execute(
 		env.EngineContext(),
-		chasm.ComponentRef{},
+		env.rootRef,
 		chasm.TaskAttributes{},
 		&schedulerpb.SchedulerMigrateToWorkflowTask{},
 	))
