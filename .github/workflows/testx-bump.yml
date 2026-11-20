@@ -75,18 +75,12 @@ jobs:
 
             git add go.mod go.sum
             git commit -m "Bump go.temporal.io/testx to ${sha::9}"
-            if push_output=$(LC_ALL=C git push --porcelain origin HEAD:main); then
-              printf '%s\n' "$push_output"
+            if git push origin HEAD:main; then
               exit 0
-            fi
-
-            printf '%s\n' "$push_output"
-            if ! grep -Eq '\[rejected\] \((fetch first|non-fast-forward)\)$' <<< "$push_output"; then
-              exit 1
             fi
           done
 
-          echo "::error::Could not bump testx after $max_attempts attempts because main kept advancing."
+          echo "::error::Could not push the testx bump after $max_attempts attempts."
           exit 1
 
   # Fails if the testx version required on main doesn't match common/testx/, e.g. because the bump failed
