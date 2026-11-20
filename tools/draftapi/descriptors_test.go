@@ -77,16 +77,19 @@ func TestMissingMapping(t *testing.T) {
 
 func mappingCatalog() *catalog {
 	return &catalog{
-		options: []option{{Extendee: "google.protobuf.MessageOptions", Number: 12345}, {Extendee: "google.protobuf.EnumOptions", Number: 12346}},
+		options: []option{{Extendee: "google.protobuf.MessageOptions", Number: 12345}},
 		seen:    make(map[proto.Message]bool),
 	}
 }
 
 func TestMissingEnumMapping(t *testing.T) {
-	enum := &descriptorpb.EnumDescriptorProto{Name: proto.String("DraftEnum"), Options: &descriptorpb.EnumOptions{}}
-	setVetDraftOption(enum.Options, 12346, "feature")
-	fd := &descriptorpb.FileDescriptorProto{Name: proto.String("test.proto"), EnumType: []*descriptorpb.EnumDescriptorProto{enum}}
-	require.ErrorContains(t, mappingCatalog().checkMappings(fd), "cannot map draft enum DraftEnum to Go")
+	enum := &descriptorpb.EnumDescriptorProto{Name: proto.String("NestedEnum")}
+	parent := &descriptorpb.DescriptorProto{Name: proto.String("Parent"), Options: &descriptorpb.MessageOptions{}, EnumType: []*descriptorpb.EnumDescriptorProto{enum}}
+	setVetDraftOption(parent.Options, 12345, "feature")
+	fd := &descriptorpb.FileDescriptorProto{Name: proto.String("test.proto"), MessageType: []*descriptorpb.DescriptorProto{parent}}
+	c := mappingCatalog()
+	c.seen[parent] = true
+	require.ErrorContains(t, c.checkMappings(fd), "cannot map draft enum NestedEnum to Go")
 }
 
 func TestMissingNestedAnnotatedMapping(t *testing.T) {

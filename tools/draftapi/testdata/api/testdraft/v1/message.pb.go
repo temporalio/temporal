@@ -26,24 +26,18 @@ type StableEnum int32
 
 const (
 	StableEnum_STABLE_ZERO  StableEnum = 0
-	StableEnum_DRAFT_VALUE  StableEnum = 1
 	StableEnum_STABLE_ALIAS StableEnum = 2
-	StableEnum_DRAFT_ALIAS  StableEnum = 2
 )
 
 // Enum value maps for StableEnum.
 var (
 	StableEnum_name = map[int32]string{
 		0: "STABLE_ZERO",
-		1: "DRAFT_VALUE",
 		2: "STABLE_ALIAS",
-		// Duplicate value: 2: "DRAFT_ALIAS",
 	}
 	StableEnum_value = map[string]int32{
 		"STABLE_ZERO":  0,
-		"DRAFT_VALUE":  1,
 		"STABLE_ALIAS": 2,
-		"DRAFT_ALIAS":  2,
 	}
 )
 
@@ -74,49 +68,6 @@ func (StableEnum) EnumDescriptor() ([]byte, []int) {
 	return file_message_proto_rawDescGZIP(), []int{0}
 }
 
-type DraftEnum int32
-
-const (
-	DraftEnum_DRAFT_ZERO DraftEnum = 0
-)
-
-// Enum value maps for DraftEnum.
-var (
-	DraftEnum_name = map[int32]string{
-		0: "DRAFT_ZERO",
-	}
-	DraftEnum_value = map[string]int32{
-		"DRAFT_ZERO": 0,
-	}
-)
-
-func (x DraftEnum) Enum() *DraftEnum {
-	p := new(DraftEnum)
-	*p = x
-	return p
-}
-
-func (x DraftEnum) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (DraftEnum) Descriptor() protoreflect.EnumDescriptor {
-	return file_message_proto_enumTypes[1].Descriptor()
-}
-
-func (DraftEnum) Type() protoreflect.EnumType {
-	return &file_message_proto_enumTypes[1]
-}
-
-func (x DraftEnum) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use DraftEnum.Descriptor instead.
-func (DraftEnum) EnumDescriptor() ([]byte, []int) {
-	return file_message_proto_rawDescGZIP(), []int{1}
-}
-
 type Draft_NestedEnum int32
 
 const (
@@ -144,11 +95,11 @@ func (x Draft_NestedEnum) String() string {
 }
 
 func (Draft_NestedEnum) Descriptor() protoreflect.EnumDescriptor {
-	return file_message_proto_enumTypes[2].Descriptor()
+	return file_message_proto_enumTypes[1].Descriptor()
 }
 
 func (Draft_NestedEnum) Type() protoreflect.EnumType {
-	return &file_message_proto_enumTypes[2]
+	return &file_message_proto_enumTypes[1]
 }
 
 func (x Draft_NestedEnum) Number() protoreflect.EnumNumber {
@@ -169,11 +120,7 @@ type Stable struct {
 	//
 	//	*Stable_StableChoice
 	//	*Stable_DraftChoice
-	Choice isStable_Choice `protobuf_oneof:"choice"`
-	// Types that are valid to be assigned to DraftUnion:
-	//
-	//	*Stable_Member
-	DraftUnion    isStable_DraftUnion      `protobuf_oneof:"draft_union"`
+	Choice        isStable_Choice          `protobuf_oneof:"choice"`
 	Whole         *Draft                   `protobuf:"bytes,7,opt,name=whole,proto3" json:"whole,omitempty"`
 	Both          *Draft                   `protobuf:"bytes,8,opt,name=both,proto3" json:"both,omitempty"`
 	List          []*Draft                 `protobuf:"bytes,9,rep,name=list,proto3" json:"list,omitempty"`
@@ -265,22 +212,6 @@ func (x *Stable) GetDraftChoice() string {
 	return ""
 }
 
-func (x *Stable) GetDraftUnion() isStable_DraftUnion {
-	if x != nil {
-		return x.DraftUnion
-	}
-	return nil
-}
-
-func (x *Stable) GetMember() string {
-	if x != nil {
-		if x, ok := x.DraftUnion.(*Stable_Member); ok {
-			return x.Member
-		}
-	}
-	return ""
-}
-
 func (x *Stable) GetWhole() *Draft {
 	if x != nil {
 		return x.Whole
@@ -363,16 +294,6 @@ type Stable_DraftChoice struct {
 func (*Stable_StableChoice) isStable_Choice() {}
 
 func (*Stable_DraftChoice) isStable_Choice() {}
-
-type isStable_DraftUnion interface {
-	isStable_DraftUnion()
-}
-
-type Stable_Member struct {
-	Member string `protobuf:"bytes,6,opt,name=member,proto3,oneof"`
-}
-
-func (*Stable_Member) isStable_DraftUnion() {}
 
 type isStable_Mixed interface {
 	isStable_Mixed()
@@ -614,23 +535,22 @@ var File_message_proto protoreflect.FileDescriptor
 
 const file_message_proto_rawDesc = "" +
 	"\n" +
-	"\rmessage.proto\x12\x19temporal.api.testdraft.v1\x1a\vdraft.proto\"\xdf\b\n" +
+	"\rmessage.proto\x12\x19temporal.api.testdraft.v1\x1a\vdraft.proto\"\xa3\b\n" +
 	"\x06Stable\x12\x16\n" +
 	"\x06stable\x18\x01 \x01(\tR\x06stable\x12'\n" +
 	"\x05draft\x18\x02 \x01(\tB\x11\xaa\xbb\x18\rfield-featureR\x05draft\x12]\n" +
 	"\tdraft_map\x18\x03 \x03(\v2/.temporal.api.testdraft.v1.Stable.DraftMapEntryB\x0f\xaa\xbb\x18\vmap-featureR\bdraftMap\x12%\n" +
 	"\rstable_choice\x18\x04 \x01(\tH\x00R\fstableChoice\x127\n" +
-	"\fdraft_choice\x18\x05 \x01(\tB\x12\xaa\xbb\x18\x0ebranch-featureH\x00R\vdraftChoice\x12\x18\n" +
-	"\x06member\x18\x06 \x01(\tH\x01R\x06member\x126\n" +
+	"\fdraft_choice\x18\x05 \x01(\tB\x12\xaa\xbb\x18\x0ebranch-featureH\x00R\vdraftChoice\x126\n" +
 	"\x05whole\x18\a \x01(\v2 .temporal.api.testdraft.v1.DraftR\x05whole\x12G\n" +
 	"\x04both\x18\b \x01(\v2 .temporal.api.testdraft.v1.DraftB\x11\xaa\xbb\x18\rfield-featureR\x04both\x124\n" +
 	"\x04list\x18\t \x03(\v2 .temporal.api.testdraft.v1.DraftR\x04list\x12F\n" +
 	"\aby_name\x18\n" +
 	" \x03(\v2-.temporal.api.testdraft.v1.Stable.ByNameEntryR\x06byName\x12R\n" +
 	"\x0einherited_enum\x18\v \x01(\x0e2+.temporal.api.testdraft.v1.Draft.NestedEnumR\rinheritedEnum\x12C\n" +
-	"\vdraft_child\x18\f \x01(\v2 .temporal.api.testdraft.v1.DraftH\x02R\n" +
+	"\vdraft_child\x18\f \x01(\v2 .temporal.api.testdraft.v1.DraftH\x01R\n" +
 	"draftChild\x12\x1c\n" +
-	"\bordinary\x18\r \x01(\tH\x02R\bordinary\x12N\n" +
+	"\bordinary\x18\r \x01(\tH\x01R\bordinary\x12N\n" +
 	"\vnested_both\x18\x0e \x01(\v2-.temporal.api.testdraft.v1.Draft.SecondNestedR\n" +
 	"nestedBoth\x1a;\n" +
 	"\rDraftMapEntry\x12\x10\n" +
@@ -643,8 +563,7 @@ const file_message_proto_rawDesc = "" +
 	"\x06stable\x18\x01 \x01(\tR\x06stable\x1a7\n" +
 	"\vDraftNested\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value:\x12\xb2\xbb\x18\x0enested-featureB\b\n" +
-	"\x06choiceB \n" +
-	"\vdraft_union\x12\x11ڻ\x18\roneof-featureB\a\n" +
+	"\x06choiceB\a\n" +
 	"\x05mixed\"\xaa\x01\n" +
 	"\x05Draft\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x1a\x1e\n" +
@@ -654,23 +573,14 @@ const file_message_proto_rawDesc = "" +
 	"\x05value\x18\x01 \x01(\tR\x05value:\x18\xb2\xbb\x18\x14nested-other-feature\"\x16\n" +
 	"\n" +
 	"NestedEnum\x12\b\n" +
-	"\x04ZERO\x10\x00:\x13\xb2\xbb\x18\x0fmessage-feature*{\n" +
+	"\x04ZERO\x10\x00:\x13\xb2\xbb\x18\x0fmessage-feature*/\n" +
 	"\n" +
 	"StableEnum\x12\x0f\n" +
-	"\vSTABLE_ZERO\x10\x00\x12\"\n" +
-	"\vDRAFT_VALUE\x10\x01\x1a\x11»\x18\rvalue-feature\x12\x10\n" +
-	"\fSTABLE_ALIAS\x10\x02\x12\"\n" +
-	"\vDRAFT_ALIAS\x10\x02\x1a\x11»\x18\ralias-feature\x1a\x02\x10\x01*-\n" +
-	"\tDraftEnum\x12\x0e\n" +
-	"\n" +
-	"DRAFT_ZERO\x10\x00\x1a\x10\xba\xbb\x18\fenum-feature2\xca\x01\n" +
+	"\vSTABLE_ZERO\x10\x00\x12\x10\n" +
+	"\fSTABLE_ALIAS\x10\x022c\n" +
 	"\rStableService\x12R\n" +
 	"\n" +
-	"StableCall\x12!.temporal.api.testdraft.v1.Stable\x1a!.temporal.api.testdraft.v1.Stable\x12e\n" +
-	"\tDraftCall\x12!.temporal.api.testdraft.v1.Stable\x1a!.temporal.api.testdraft.v1.Stable\"\x12һ\x18\x0emethod-feature2q\n" +
-	"\fDraftService\x12L\n" +
-	"\x04Call\x12!.temporal.api.testdraft.v1.Stable\x1a!.temporal.api.testdraft.v1.Stable\x1a\x13ʻ\x18\x0fservice-feature2.\n" +
-	"\x11EmptyDraftService\x1a\x19ʻ\x18\x15empty-service-featureB+Z)go.temporal.io/api/testdraft/v1;testdraftb\x06proto3"
+	"StableCall\x12!.temporal.api.testdraft.v1.Stable\x1a!.temporal.api.testdraft.v1.StableB+Z)go.temporal.io/api/testdraft/v1;testdraftb\x06proto3"
 
 var (
 	file_message_proto_rawDescOnce sync.Once
@@ -684,39 +594,34 @@ func file_message_proto_rawDescGZIP() []byte {
 	return file_message_proto_rawDescData
 }
 
-var file_message_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_message_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_message_proto_goTypes = []any{
 	(StableEnum)(0),             // 0: temporal.api.testdraft.v1.StableEnum
-	(DraftEnum)(0),              // 1: temporal.api.testdraft.v1.DraftEnum
-	(Draft_NestedEnum)(0),       // 2: temporal.api.testdraft.v1.Draft.NestedEnum
-	(*Stable)(nil),              // 3: temporal.api.testdraft.v1.Stable
-	(*Draft)(nil),               // 4: temporal.api.testdraft.v1.Draft
-	nil,                         // 5: temporal.api.testdraft.v1.Stable.DraftMapEntry
-	nil,                         // 6: temporal.api.testdraft.v1.Stable.ByNameEntry
-	(*Stable_StableNested)(nil), // 7: temporal.api.testdraft.v1.Stable.StableNested
-	(*Stable_DraftNested)(nil),  // 8: temporal.api.testdraft.v1.Stable.DraftNested
-	(*Draft_Nested)(nil),        // 9: temporal.api.testdraft.v1.Draft.Nested
-	(*Draft_SecondNested)(nil),  // 10: temporal.api.testdraft.v1.Draft.SecondNested
+	(Draft_NestedEnum)(0),       // 1: temporal.api.testdraft.v1.Draft.NestedEnum
+	(*Stable)(nil),              // 2: temporal.api.testdraft.v1.Stable
+	(*Draft)(nil),               // 3: temporal.api.testdraft.v1.Draft
+	nil,                         // 4: temporal.api.testdraft.v1.Stable.DraftMapEntry
+	nil,                         // 5: temporal.api.testdraft.v1.Stable.ByNameEntry
+	(*Stable_StableNested)(nil), // 6: temporal.api.testdraft.v1.Stable.StableNested
+	(*Stable_DraftNested)(nil),  // 7: temporal.api.testdraft.v1.Stable.DraftNested
+	(*Draft_Nested)(nil),        // 8: temporal.api.testdraft.v1.Draft.Nested
+	(*Draft_SecondNested)(nil),  // 9: temporal.api.testdraft.v1.Draft.SecondNested
 }
 var file_message_proto_depIdxs = []int32{
-	5,  // 0: temporal.api.testdraft.v1.Stable.draft_map:type_name -> temporal.api.testdraft.v1.Stable.DraftMapEntry
-	4,  // 1: temporal.api.testdraft.v1.Stable.whole:type_name -> temporal.api.testdraft.v1.Draft
-	4,  // 2: temporal.api.testdraft.v1.Stable.both:type_name -> temporal.api.testdraft.v1.Draft
-	4,  // 3: temporal.api.testdraft.v1.Stable.list:type_name -> temporal.api.testdraft.v1.Draft
-	6,  // 4: temporal.api.testdraft.v1.Stable.by_name:type_name -> temporal.api.testdraft.v1.Stable.ByNameEntry
-	2,  // 5: temporal.api.testdraft.v1.Stable.inherited_enum:type_name -> temporal.api.testdraft.v1.Draft.NestedEnum
-	4,  // 6: temporal.api.testdraft.v1.Stable.draft_child:type_name -> temporal.api.testdraft.v1.Draft
-	10, // 7: temporal.api.testdraft.v1.Stable.nested_both:type_name -> temporal.api.testdraft.v1.Draft.SecondNested
-	9,  // 8: temporal.api.testdraft.v1.Stable.ByNameEntry.value:type_name -> temporal.api.testdraft.v1.Draft.Nested
-	3,  // 9: temporal.api.testdraft.v1.StableService.StableCall:input_type -> temporal.api.testdraft.v1.Stable
-	3,  // 10: temporal.api.testdraft.v1.StableService.DraftCall:input_type -> temporal.api.testdraft.v1.Stable
-	3,  // 11: temporal.api.testdraft.v1.DraftService.Call:input_type -> temporal.api.testdraft.v1.Stable
-	3,  // 12: temporal.api.testdraft.v1.StableService.StableCall:output_type -> temporal.api.testdraft.v1.Stable
-	3,  // 13: temporal.api.testdraft.v1.StableService.DraftCall:output_type -> temporal.api.testdraft.v1.Stable
-	3,  // 14: temporal.api.testdraft.v1.DraftService.Call:output_type -> temporal.api.testdraft.v1.Stable
-	12, // [12:15] is the sub-list for method output_type
-	9,  // [9:12] is the sub-list for method input_type
+	4,  // 0: temporal.api.testdraft.v1.Stable.draft_map:type_name -> temporal.api.testdraft.v1.Stable.DraftMapEntry
+	3,  // 1: temporal.api.testdraft.v1.Stable.whole:type_name -> temporal.api.testdraft.v1.Draft
+	3,  // 2: temporal.api.testdraft.v1.Stable.both:type_name -> temporal.api.testdraft.v1.Draft
+	3,  // 3: temporal.api.testdraft.v1.Stable.list:type_name -> temporal.api.testdraft.v1.Draft
+	5,  // 4: temporal.api.testdraft.v1.Stable.by_name:type_name -> temporal.api.testdraft.v1.Stable.ByNameEntry
+	1,  // 5: temporal.api.testdraft.v1.Stable.inherited_enum:type_name -> temporal.api.testdraft.v1.Draft.NestedEnum
+	3,  // 6: temporal.api.testdraft.v1.Stable.draft_child:type_name -> temporal.api.testdraft.v1.Draft
+	9,  // 7: temporal.api.testdraft.v1.Stable.nested_both:type_name -> temporal.api.testdraft.v1.Draft.SecondNested
+	8,  // 8: temporal.api.testdraft.v1.Stable.ByNameEntry.value:type_name -> temporal.api.testdraft.v1.Draft.Nested
+	2,  // 9: temporal.api.testdraft.v1.StableService.StableCall:input_type -> temporal.api.testdraft.v1.Stable
+	2,  // 10: temporal.api.testdraft.v1.StableService.StableCall:output_type -> temporal.api.testdraft.v1.Stable
+	10, // [10:11] is the sub-list for method output_type
+	9,  // [9:10] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name
@@ -730,7 +635,6 @@ func file_message_proto_init() {
 	file_message_proto_msgTypes[0].OneofWrappers = []any{
 		(*Stable_StableChoice)(nil),
 		(*Stable_DraftChoice)(nil),
-		(*Stable_Member)(nil),
 		(*Stable_DraftChild)(nil),
 		(*Stable_Ordinary)(nil),
 	}
@@ -739,10 +643,10 @@ func file_message_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_message_proto_rawDesc), len(file_message_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      2,
 			NumMessages:   8,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   1,
 		},
 		GoTypes:           file_message_proto_goTypes,
 		DependencyIndexes: file_message_proto_depIdxs,

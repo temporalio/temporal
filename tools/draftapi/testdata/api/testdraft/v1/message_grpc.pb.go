@@ -20,7 +20,6 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	StableService_StableCall_FullMethodName = "/temporal.api.testdraft.v1.StableService/StableCall"
-	StableService_DraftCall_FullMethodName  = "/temporal.api.testdraft.v1.StableService/DraftCall"
 )
 
 // StableServiceClient is the client API for StableService service.
@@ -28,7 +27,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StableServiceClient interface {
 	StableCall(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error)
-	DraftCall(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error)
 }
 
 type stableServiceClient struct {
@@ -49,22 +47,11 @@ func (c *stableServiceClient) StableCall(ctx context.Context, in *Stable, opts .
 	return out, nil
 }
 
-func (c *stableServiceClient) DraftCall(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Stable)
-	err := c.cc.Invoke(ctx, StableService_DraftCall_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // StableServiceServer is the server API for StableService service.
 // All implementations must embed UnimplementedStableServiceServer
 // for forward compatibility.
 type StableServiceServer interface {
 	StableCall(context.Context, *Stable) (*Stable, error)
-	DraftCall(context.Context, *Stable) (*Stable, error)
 	mustEmbedUnimplementedStableServiceServer()
 }
 
@@ -77,9 +64,6 @@ type UnimplementedStableServiceServer struct{}
 
 func (UnimplementedStableServiceServer) StableCall(context.Context, *Stable) (*Stable, error) {
 	return nil, status.Error(codes.Unimplemented, "method StableCall not implemented")
-}
-func (UnimplementedStableServiceServer) DraftCall(context.Context, *Stable) (*Stable, error) {
-	return nil, status.Error(codes.Unimplemented, "method DraftCall not implemented")
 }
 func (UnimplementedStableServiceServer) mustEmbedUnimplementedStableServiceServer() {}
 func (UnimplementedStableServiceServer) testEmbeddedByValue()                       {}
@@ -120,24 +104,6 @@ func _StableService_StableCall_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _StableService_DraftCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Stable)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(StableServiceServer).DraftCall(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: StableService_DraftCall_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StableServiceServer).DraftCall(ctx, req.(*Stable))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // StableService_ServiceDesc is the grpc.ServiceDesc for StableService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -149,173 +115,7 @@ var StableService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "StableCall",
 			Handler:    _StableService_StableCall_Handler,
 		},
-		{
-			MethodName: "DraftCall",
-			Handler:    _StableService_DraftCall_Handler,
-		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "message.proto",
-}
-
-const (
-	DraftService_Call_FullMethodName = "/temporal.api.testdraft.v1.DraftService/Call"
-)
-
-// DraftServiceClient is the client API for DraftService service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type DraftServiceClient interface {
-	Call(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error)
-}
-
-type draftServiceClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewDraftServiceClient(cc grpc.ClientConnInterface) DraftServiceClient {
-	return &draftServiceClient{cc}
-}
-
-func (c *draftServiceClient) Call(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Stable)
-	err := c.cc.Invoke(ctx, DraftService_Call_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// DraftServiceServer is the server API for DraftService service.
-// All implementations must embed UnimplementedDraftServiceServer
-// for forward compatibility.
-type DraftServiceServer interface {
-	Call(context.Context, *Stable) (*Stable, error)
-	mustEmbedUnimplementedDraftServiceServer()
-}
-
-// UnimplementedDraftServiceServer must be embedded to have
-// forward compatible implementations.
-//
-// NOTE: this should be embedded by value instead of pointer to avoid a nil
-// pointer dereference when methods are called.
-type UnimplementedDraftServiceServer struct{}
-
-func (UnimplementedDraftServiceServer) Call(context.Context, *Stable) (*Stable, error) {
-	return nil, status.Error(codes.Unimplemented, "method Call not implemented")
-}
-func (UnimplementedDraftServiceServer) mustEmbedUnimplementedDraftServiceServer() {}
-func (UnimplementedDraftServiceServer) testEmbeddedByValue()                      {}
-
-// UnsafeDraftServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to DraftServiceServer will
-// result in compilation errors.
-type UnsafeDraftServiceServer interface {
-	mustEmbedUnimplementedDraftServiceServer()
-}
-
-func RegisterDraftServiceServer(s grpc.ServiceRegistrar, srv DraftServiceServer) {
-	// If the following call panics, it indicates UnimplementedDraftServiceServer was
-	// embedded by pointer and is nil.  This will cause panics if an
-	// unimplemented method is ever invoked, so we test this at initialization
-	// time to prevent it from happening at runtime later due to I/O.
-	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
-		t.testEmbeddedByValue()
-	}
-	s.RegisterService(&DraftService_ServiceDesc, srv)
-}
-
-func _DraftService_Call_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Stable)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DraftServiceServer).Call(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DraftService_Call_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DraftServiceServer).Call(ctx, req.(*Stable))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-// DraftService_ServiceDesc is the grpc.ServiceDesc for DraftService service.
-// It's only intended for direct use with grpc.RegisterService,
-// and not to be introspected or modified (even as a copy)
-var DraftService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "temporal.api.testdraft.v1.DraftService",
-	HandlerType: (*DraftServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Call",
-			Handler:    _DraftService_Call_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "message.proto",
-}
-
-// EmptyDraftServiceClient is the client API for EmptyDraftService service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type EmptyDraftServiceClient interface {
-}
-
-type emptyDraftServiceClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewEmptyDraftServiceClient(cc grpc.ClientConnInterface) EmptyDraftServiceClient {
-	return &emptyDraftServiceClient{cc}
-}
-
-// EmptyDraftServiceServer is the server API for EmptyDraftService service.
-// All implementations must embed UnimplementedEmptyDraftServiceServer
-// for forward compatibility.
-type EmptyDraftServiceServer interface {
-	mustEmbedUnimplementedEmptyDraftServiceServer()
-}
-
-// UnimplementedEmptyDraftServiceServer must be embedded to have
-// forward compatible implementations.
-//
-// NOTE: this should be embedded by value instead of pointer to avoid a nil
-// pointer dereference when methods are called.
-type UnimplementedEmptyDraftServiceServer struct{}
-
-func (UnimplementedEmptyDraftServiceServer) mustEmbedUnimplementedEmptyDraftServiceServer() {}
-func (UnimplementedEmptyDraftServiceServer) testEmbeddedByValue()                           {}
-
-// UnsafeEmptyDraftServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to EmptyDraftServiceServer will
-// result in compilation errors.
-type UnsafeEmptyDraftServiceServer interface {
-	mustEmbedUnimplementedEmptyDraftServiceServer()
-}
-
-func RegisterEmptyDraftServiceServer(s grpc.ServiceRegistrar, srv EmptyDraftServiceServer) {
-	// If the following call panics, it indicates UnimplementedEmptyDraftServiceServer was
-	// embedded by pointer and is nil.  This will cause panics if an
-	// unimplemented method is ever invoked, so we test this at initialization
-	// time to prevent it from happening at runtime later due to I/O.
-	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
-		t.testEmbeddedByValue()
-	}
-	s.RegisterService(&EmptyDraftService_ServiceDesc, srv)
-}
-
-// EmptyDraftService_ServiceDesc is the grpc.ServiceDesc for EmptyDraftService service.
-// It's only intended for direct use with grpc.RegisterService,
-// and not to be introspected or modified (even as a copy)
-var EmptyDraftService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "temporal.api.testdraft.v1.EmptyDraftService",
-	HandlerType: (*EmptyDraftServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
-	Streams:     []grpc.StreamDesc{},
-	Metadata:    "message.proto",
 }

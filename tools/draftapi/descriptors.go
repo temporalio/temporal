@@ -90,7 +90,6 @@ func (c *catalog) addAPIs(files map[string]*descriptorpb.FileDescriptorProto) er
 		if err := c.checkMappings(fd); err != nil {
 			return err
 		}
-		c.addServices(fd)
 	}
 	for obj, features := range c.facts {
 		slices.Sort(features)
@@ -348,10 +347,10 @@ func (c *catalog) addMessage(typ *types.Named, message *descriptorpb.DescriptorP
 		c.symbols[field] = objectName(typ.Obj()) + "." + field.Name()
 		tag := reflect.StructTag(structure.Tag(i))
 		if oneof := tag.Get("protobuf_oneof"); oneof != "" {
-			for j, decl := range message.OneofDecl {
+			for _, decl := range message.OneofDecl {
 				if decl.GetName() == oneof {
-					c.mark(field, append(slices.Clone(features), c.features(decl.Options)...))
-					c.addOneof(field.Type(), message, j, features)
+					c.mark(field, slices.Clone(features))
+					c.addOneof(field.Type(), message, features)
 				}
 			}
 			continue
@@ -367,17 +366,13 @@ func (c *catalog) fieldFeatures(tag reflect.StructTag, message *descriptorpb.Des
 	}
 	for _, field := range message.Field {
 		if strconv.Itoa(int(field.GetNumber())) == parts[1] {
-			features := c.features(field.Options)
-			if field.OneofIndex != nil {
-				features = append(features, c.features(message.OneofDecl[field.GetOneofIndex()].Options)...)
-			}
-			return features
+			return c.features(field.Options)
 		}
 	}
 	return nil
 }
 
-func (c *catalog) addOneof(typ types.Type, message *descriptorpb.DescriptorProto, index int, inherited []string) {
+func (c *catalog) addOneof(typ types.Type, message *descriptorpb.DescriptorProto, inherited []string) {
 	iface, ok := typ.Underlying().(*types.Interface)
 	if !ok {
 		return
@@ -395,8 +390,7 @@ func (c *catalog) addOneof(typ types.Type, message *descriptorpb.DescriptorProto
 		if !ok || structure.NumFields() != 1 {
 			continue
 		}
-		features := append(slices.Clone(inherited), c.features(message.OneofDecl[index].Options)...)
-		features = append(features, c.fieldFeatures(reflect.StructTag(structure.Tag(0)), message)...)
+		features := append(slices.Clone(inherited), c.fieldFeatures(reflect.StructTag(structure.Tag(0)), message)...)
 		if c.oneofWrappers != nil {
 			c.oneofWrappers[wrapper] = structure.Field(0)
 		}
@@ -408,7 +402,9 @@ func (c *catalog) addOneof(typ types.Type, message *descriptorpb.DescriptorProto
 
 func (c *catalog) addEnum(file *ast.File, typ *types.Named, enum *descriptorpb.EnumDescriptorProto, inherited []string) {
 	c.seen[enum] = true
-	features := append(slices.Clone(inherited), c.features(enum.Options)...)
+	// Draft annotations on enums and their values are rejected, so an enum is draft only
+	// through the messages it is nested in.
+	features := slices.Clone(inherited)
 	c.markType(typ, features)
 	index := 0
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -420,7 +416,7 @@ func (c *catalog) addEnum(file *ast.File, typ *types.Named, enum *descriptorpb.E
 		if !ok || !types.Identical(obj.Type(), typ) || index >= len(enum.Value) {
 			return true
 		}
-		c.mark(obj, append(slices.Clone(features), c.features(enum.Value[index].Options)...))
+		c.mark(obj, slices.Clone(features))
 		index++
 		return true
 	})
@@ -441,11 +437,7 @@ func (c *catalog) checkMappings(fd *descriptorpb.FileDescriptorProto) error {
 }
 
 func (c *catalog) checkEnumMapping(enum *descriptorpb.EnumDescriptorProto, inherited bool) error {
-	draft := inherited || len(c.features(enum.Options)) > 0
-	for _, value := range enum.Value {
-		draft = draft || len(c.features(value.Options)) > 0
-	}
-	if draft && !c.seen[enum] {
+	if inherited && !c.seen[enum] {
 		return fmt.Errorf("cannot map draft enum %s to Go; unsupported generated descriptor accessors", enum.GetName())
 	}
 	return nil
@@ -456,9 +448,6 @@ func (c *catalog) checkMessageMapping(message *descriptorpb.DescriptorProto, inh
 	needsMapping := draft
 	for _, field := range message.Field {
 		needsMapping = needsMapping || len(c.features(field.Options)) > 0
-	}
-	for _, oneof := range message.OneofDecl {
-		needsMapping = needsMapping || len(c.features(oneof.Options)) > 0
 	}
 	if needsMapping && !message.GetOptions().GetMapEntry() && !c.seen[message] {
 		return fmt.Errorf("cannot map draft message %s to Go; unsupported generated descriptor accessors", message.GetName())
