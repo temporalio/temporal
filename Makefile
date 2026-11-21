@@ -230,7 +230,7 @@ protoc: $(API_BINPB)
 		-protoc-gen-go-helpers-bin=$(PROTOC_GEN_GO_HELPERS) \
 		$(PROTO_DIRS)
 
-proto-codegen: $(API_BINPB) $(PROTOC_GEN_GO)
+proto-codegen: $(API_BINPB)
 	@printf $(COLOR) "Generate service clients..."
 	@go generate -run genrpcwrappers ./client/...
 	@printf $(COLOR) "Generate server interceptors..."
@@ -240,7 +240,8 @@ proto-codegen: $(API_BINPB) $(PROTOC_GEN_GO)
 	@printf $(COLOR) "Generate search attributes helpers..."
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
 	@printf $(COLOR) "Generate draft omission fixtures..."
-	@API_BINPB=$(abspath $(API_BINPB)) PROTOC_GEN_GO=$(abspath $(PROTOC_GEN_GO)) go generate ./common/draft/testfixture
+	@API_BINPB="$(abspath $(API_BINPB))" PROTOC="$(PROTOC)" PROTOC_GEN_GO="$(abspath $(PROTOC_GEN_GO))" \
+		go generate ./common/draft/testfixture
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
