@@ -340,3 +340,21 @@ func mustParent(p Partition, n int) *NormalPartition {
 	}
 	return parent
 }
+
+func TestPartitionProtoRoundTrip(t *testing.T) {
+	t.Parallel()
+	tq := UnsafeTaskQueueFamily("namespace", "queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	for _, partition := range []Partition{
+		tq.RootPartition(),
+		tq.NormalPartition(7),
+		tq.StickyPartition("sticky"),
+		tq.Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition(),
+	} {
+		t.Run(partition.RpcName()+partition.Kind().String(), func(t *testing.T) {
+			t.Parallel()
+			encoded := partition.ToProto()
+			decoded := PartitionFromPartitionProto(encoded, partition.NamespaceId())
+			require.Equal(t, partition, decoded)
+		})
+	}
+}

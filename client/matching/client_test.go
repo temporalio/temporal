@@ -311,3 +311,47 @@ func TestGrantEagerDispatch_RejectsUnsupportedPartition(t *testing.T) {
 		})
 	}
 }
+
+func TestGetTaskQueueUserDataPartitionRouting(t *testing.T) {
+	t.Parallel()
+	workflow := tqid.UnsafeTaskQueueFamily(testNamespaceID, testTaskQueueName).TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	nexus := workflow.Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS)
+	for _, tc := range []struct {
+		name      string
+		partition tqid.Partition
+		legacy    bool
+	}{
+		{name: "legacy workflow root", partition: workflow.RootPartition(), legacy: true},
+		{name: "legacy normal child", partition: workflow.NormalPartition(3), legacy: true},
+		{name: "workflow root", partition: workflow.RootPartition()},
+		{name: "normal child", partition: workflow.NormalPartition(3)},
+		{name: "worker commands", partition: nexus.WorkerCommandsPartition()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			serviceClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			cache := &testClientCache{client: serviceClient}
+			client := newTestClient(cache, nil)
+			request := &matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   testNamespaceID,
+				TaskQueue:     tc.partition.RpcName(),
+				TaskQueueType: tc.partition.TaskType(),
+			}
+			if !tc.legacy {
+				request.TaskQueuePartition = tc.partition.ToProto()
+				request.TaskQueue = "ignored-legacy-name"
+				request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+			}
+			response := &matchingservice.GetTaskQueueUserDataResponse{}
+			serviceClient.EXPECT().GetTaskQueueUserData(gomock.Any(), request).Return(response, nil)
+			actual, err := client.GetTaskQueueUserData(t.Context(), request)
+			require.NoError(t, err)
+			require.Same(t, response, actual)
+			key, index := tc.partition.RoutingKey(0)
+			require.Equal(t, key, cache.lookupKey)
+			require.Equal(t, index, cache.lookupIndex)
+			require.Equal(t, 1, cache.lookupCalls)
+		})
+	}
+}

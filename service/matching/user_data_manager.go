@@ -85,11 +85,12 @@ type (
 	// userDataManager is responsible for fetching and keeping user data and ephemeral data
 	// up-to-date in-memory for a given TQ partition.
 	//
-	// If a partition is the root of a normal (non-sticky) task queue with workflow type, we say the
-	// partition "owns" user data for its task queue. All reads and writes to/from the persistence
-	// layer passes through userDataManager of the owning partition. All other partitions long-poll
-	// the latest user data from their parent in the forwarding tree structure, and the root
-	// partitions of other queue types poll from the root workflow partition.
+	// The root workflow partition owns user data for a normal task queue. Other normal
+	// partitions long-poll their parent in the forwarding tree, and roots of other task
+	// types poll the root workflow partition. Sticky queues fetch from their normal queue.
+	// Worker-command partitions read their own user data directly from persistence,
+	// without loading normal workflow partitions. Only partitions that read locally can
+	// update user data.
 	//
 	// Ephemeral data is a little different: First, it's separate for different task queue types.
 	// Second, we're currently more lax about aggregating it, since the purposes it's used for don't
@@ -105,7 +106,7 @@ type (
 		userData               *persistencespb.VersionedTaskQueueUserData
 		userDataChanged        chan struct{}
 		userDataState          userDataState
-		// only set if this partition owns user data of its task queue
+		// Only set if this partition reads and owns its user data locally.
 		store             persistence.TaskManager
 		config            *taskQueueConfig
 		namespaceRegistry namespace.Registry
@@ -128,7 +129,7 @@ type (
 var _ userDataManager = (*userDataManagerImpl)(nil)
 
 var (
-	errUserDataNoMutateNonRoot         = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
+	errUserDataNoMutateNonOwner        = serviceerror.NewInvalidArgument("can only mutate user data on the owning partition")
 	errRequestedVersionTooLarge        = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
 	errTaskQueueClosed                 = serviceerror.NewUnavailable("task queue closed")
 	errFairnessOverridesUpdateRejected = serviceerror.NewInvalidArgument("fairness weight overrides update rejected: exceeding maximum key size")
@@ -161,7 +162,7 @@ func newUserDataManager(
 		ephemeralDataChanged:   make(chan struct{}),
 	}
 
-	if partition.IsRoot() && partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+	if source, err := m.userDataFetchSource(); err == nil && source == nil {
 		m.store = store
 	}
 
@@ -255,13 +256,13 @@ func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, error) {
+// userDataFetchSource returns the upstream partition, or nil for a local persistence read.
+func (m *userDataManagerImpl) userDataFetchSource() (tqid.Partition, error) {
 	switch p := m.partition.(type) {
 	case *tqid.NormalPartition:
 		if p.IsRoot() {
 			if p.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-				// we shouldn't get here since the root workflow queue should read from the db
-				return nil, tqid.ErrNoParent
+				return nil, nil
 			}
 			// root of other queue types goes to root workflow queue
 			return p.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), nil
@@ -273,7 +274,9 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 			return nil, err // invalid degree
 		}
 		return parent, nil
-	default:
+	case *tqid.WorkerCommandsPartition:
+		return nil, nil
+	case *tqid.StickyPartition:
 		normalQ := p.TaskQueue()
 		// Sticky queues get data from their corresponding normal queue
 		if normalQ.Name() == "" {
@@ -287,8 +290,9 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 		partitions := m.config.NumReadPartitions()
 		partition := int(farm.Fingerprint32([]byte(p.RpcName()))) % partitions
 		return wfTQ.NormalPartition(partition), nil
+	default:
+		return nil, tqid.ErrNoParent
 	}
-
 }
 
 func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
@@ -321,6 +325,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 			NamespaceId:                   m.partition.NamespaceId(),
 			TaskQueue:                     fetchSource.RpcName(),
 			TaskQueueType:                 fetchSource.TaskType(),
+			TaskQueuePartition:            fetchSource.ToProto(),
 			LastKnownUserDataVersion:      knownUserData.GetVersion(),
 			LastKnownEphemeralDataVersion: m.getIncomingEphemeralDataVersion(),
 			WaitNewData:                   hasFetchedUserData,
@@ -462,7 +467,7 @@ func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
 // Extra care should be taken to avoid mutating the existing data in the update function.
 func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	if m.store == nil {
-		return 0, errUserDataNoMutateNonRoot
+		return 0, errUserDataNoMutateNonOwner
 	}
 	if err := m.WaitUntilInitialized(ctx); err != nil {
 		return 0, err
@@ -623,7 +628,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			}
 			return &res, nil
 		} else if userData != nil && userData.Version < lastVersion && m.store != nil {
-			// When m.store == nil it means this is a non-owner partition, so it is possible
+			// Partitions that fetch from a parent can temporarily lag behind, so it is possible
 			// for the requested version to be greater than the known version if there are
 			// concurrent user data updates in flight. We do not log an error in that case.
 
@@ -668,9 +673,13 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	actPartitions int,
 ) error {
 	if m.store == nil {
-		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must be called on root workflow task queue")
+		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must be called on the user data owner")
 	} else if version < 1 {
 		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must wait for version >= 1")
+	}
+
+	if !m.partition.SupportsPartitions() {
+		return nil
 	}
 
 	complete := make(chan error)

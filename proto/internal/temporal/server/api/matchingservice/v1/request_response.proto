@@ -469,8 +469,7 @@ message GetWorkerBuildIdCompatibilityResponse {
 
 message GetTaskQueueUserDataRequest {
   string namespace_id = 1;
-  // The task queue to fetch data from. The task queue is always considered as a normal
-  // queue, since sticky queues have no user data.
+  // Legacy RPC name of the normal partition. Used when task_queue_partition is absent.
   string task_queue = 2;
   temporal.api.enums.v1.TaskQueueType task_queue_type = 5;
   // The value of the last known user data version.
@@ -487,6 +486,9 @@ message GetTaskQueueUserDataRequest {
   bool wait_new_data = 4;
   // If set, do not load task queue if unloaded. (Returns FailedPrecondition error in that case.)
   bool only_if_loaded = 6;
+  // The partition to fetch user data from, including its kind. Takes precedence over
+  // task_queue and task_queue_type. Senders also fill the legacy fields for older servers.
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 8;
 }
 
 message GetTaskQueueUserDataResponse {
