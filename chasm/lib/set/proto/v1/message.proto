@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.set.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/set/gen/setpb;setpb";
+
+// StringSetState stores the full contents of a set of string keys.
+message StringSetState {
+  // Unique keys in ascending byte order. Stored as bytes because keys, such as activity
+  // task tokens, may hold arbitrary bytes, which a proto string field rejects as invalid UTF-8.
+  repeated bytes keys = 1;
+}

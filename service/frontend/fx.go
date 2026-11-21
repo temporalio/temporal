@@ -16,6 +16,7 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmset "go.temporal.io/server/chasm/lib/set"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworker "go.temporal.io/server/chasm/lib/worker"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
@@ -94,6 +95,7 @@ var Module = fx.Options(
 	resource.Module,
 	chasmtests.Module,
 	chasmworker.FrontendModule,
+	chasmset.Module,
 	scheduler.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
