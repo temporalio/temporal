@@ -1,11 +1,11 @@
 # Using draft APIs
 
 Draft annotations drive stable proto projection, explicit usage acknowledgments,
-and generated request/response omission. SDKs consume the stable API. The server
-pins `github.com/temporalio/api-go/api_next` as its replacement for
-`go.temporal.io/api`.
+and server-side RPC gating and payload filtering. SDKs consume the stable API.
+The server uses `github.com/temporalio/api-go/api_next` at commit `4bd28ec6`
+as its replacement for `go.temporal.io/api`.
 
-## Annotating fields and messages
+## Annotating draft declarations
 
 Edit sources under `api/temporal/api_next`, importing
 `temporal/api_next/protometa/v1/draft.proto`. A field can name one feature:
@@ -23,31 +23,36 @@ message DraftDetails {
 }
 ```
 
-Every field referencing `DraftDetails` automatically requires `feature-a`.
-Projection removes the message and those references. Runtime omission removes
-an entire referencing field, repeated/map container, or active oneof branch when
-its type's gate is disabled. Stable containing messages and siblings remain,
-even if a containing message becomes empty. Map value types determine the gate.
+A field in a stable message that references `DraftDetails` must explicitly
+carry `draft` with feature `feature-a`. The same rule applies to repeated
+elements, map values and the members of stable oneofs. A member of a draft
+container inherits that container's feature and may only reference draft types
+with the same feature. This also applies to types nested inside a draft message.
+Keep a shared type stable and annotate its reference fields when only some
+uses should be draft.
 
-A field tagged B and typed as a message tagged A requires **both A and B**.
-Declarations nested inside a draft message inherit its gate, including nested
-enums referenced elsewhere. A nested message tagged B inside an outer message
-tagged A requires both gates. Keep a shared type stable and annotate its reference
-fields when only some uses should be draft. An annotation on a type cannot be
-overridden at a reference.
+Use `draft_enum` for a whole enum, `draft_enum_value` for a new value in a stable
+enum, and `draft_oneof` for a whole oneof. A draft value in a stable enum must
+have a unique, nonzero number. A nonempty enum, oneof or service whose members
+are all draft must carry the corresponding container annotation. Stable messages
+can retain their identity when all their fields are draft.
 
-Only field and message annotations are supported. Standalone enum annotations,
-enum values, whole oneofs, services, RPCs, files and extensions are unsupported.
-A stable RPC cannot directly use a draft message or nested type as its request
-or response: projection reports that dangling signature. Extension references
-to draft types are rejected too; extensions are not a supported omission path.
-Feature names are case-sensitive, nonempty whitespace-free tokens.
+Use `draft_service` for a whole service and `draft_method` for an RPC in a stable
+service. Both endpoints of a draft RPC must explicitly carry `draft_message`
+with the RPC's feature. A message can be used in only one RPC endpoint position,
+subject to the schema's allowlist for existing stable endpoints. The stable proto
+projection removes draft declarations and retains their stable containers.
+
+Each declaration has one feature. Feature names are case-sensitive, nonempty
+whitespace-free tokens. Containment is the sole source of implicit draft status.
+Proto files and extension declarations have no draft annotation. Extension
+references to draft types are rejected.
 
 ## Acknowledging references in Go
 
-The `draftapi` analyzer reports direct references to draft fields, getters, types,
-contained declarations and oneof branches, including otherwise unannotated
-fields/getters whose type is draft. It reads the descriptors in the API module
+The `draftapi` analyzer reports named references to draft declarations,
+including fields, getters, messages, enums and enum values, oneof wrappers,
+and generated service and RPC symbols. It reads the descriptors in the API module
 selected by `go.mod`; no separate API inventory needs updating. Each invalid API
 annotation, descriptor or generated-symbol mapping error is reported once at the
 API package that produced it. This fails `go vet` even when the API module is
@@ -61,13 +66,13 @@ value := req.GetDraftField() // temporal:allow-draft-api feature-a
 
 A directive immediately before a statement or declaration covers that node and
 its body. A trailing directive covers its line. A file-leading directive applies
-to the file. Multiple required gates must all be acknowledged, either together
-or through applicable directives:
+to the file. A directive can acknowledge several features when the covered code
+references several draft declarations:
 
 ```go
 // temporal:allow-draft-api feature-a feature-b // Both behaviors are gated here.
-func applyDraftFeature(req *Request) {
-    use(req.GetDraftField())
+func applyDraftFeatures(req *Request) {
+    use(req.GetFirstDraftField(), req.GetSecondDraftField())
 }
 ```
 
@@ -100,12 +105,16 @@ make lint-draft-api LINT_CODE_TARGETS=./service/frontend
 ```
 
 The analyzer fixtures use real generated output. Regenerate after editing their
-schemas, from `tools/draftapi/testdata/api/`:
+schemas from `tools/draftapi/testdata/api/` with protoc 35.1,
+`protoc-gen-go` v1.36.12, `protoc-gen-go-grpc` v1.6.2, and
+`protoc-gen-grpc-gateway` v2.30.0:
 
 ```sh
 protoc -I proto --go_out=. --go_opt=module=go.temporal.io/api \
   --go-grpc_out=. --go-grpc_opt=module=go.temporal.io/api \
   draft.proto message.proto references.proto
+protoc -I proto --grpc-gateway_out=. \
+  --grpc-gateway_opt=module=go.temporal.io/api,generate_unbound_methods=true message.proto
 ```
 
 ## Exposure and runtime boundaries
@@ -120,22 +129,24 @@ frontend.enabledDraftFeatureAPIs:
   - value: [feature-a]
 ```
 
-The default empty list hides every draft field. Unknown names have no effect;
+The default empty list disables all draft features. Unknown names have no effect;
 there is no caller opt-in. Bare strings, null, non-list values and lists containing
 null or nonstrings select the empty default with a throttled warning. A malformed
 namespace entry does not fall back to an enabling unconstrained entry. Separate
 behavior flags control feature execution and creation of draft values.
 
-WorkflowService and OperatorService unary calls on frontend/internal-frontend
-omit disabled request fields immediately after existing namespace normalization,
-before authorization, routing, ordinary validation and handlers. The outermost
-response wrapper filters responses and decoded gRPC status details, including inner
-early returns.
+WorkflowService and OperatorService unary calls on frontend and internal-frontend
+gate draft RPCs and filter requests immediately after existing namespace
+normalization, before authorization, routing, ordinary validation and handlers.
+A disabled draft RPC returns `codes.Unimplemented`. The outermost response
+wrapper filters responses and decoded gRPC status details, including early
+returns. Unrecognized status detail envelopes pass through.
 Generated HTTP operations use that same chain. Unary authorizers therefore see
 omitted requests; direct Nexus authorization sees original input before conversion.
 
 One lazy selection reads configuration at most once per invocation and shares it
-between input/output. Unaffected roots never read the list. Existing task-token
+between the RPC gate, request and response. Stable RPCs whose payloads are
+unaffected never read the list. Existing task-token
 normalization supplies namespaces, including query tokens; omission parses no
 tokens. Remaining namespace IDs resolve through the registry; an unresolved
 supplied ID selects an empty list. Namespace-less requests use the unconstrained
@@ -148,9 +159,16 @@ forwarding relays bodies/tokens/result metadata; the locally handling cluster's
 list governs it. Unary redirection filters every decoded hop. Keep exposure lists
 aligned across clusters serving a namespace.
 
-Generated `OmitDraftFields(enabled func(string) bool)` methods mutate affected
-graphs in place. Disabled optional/oneof fields lose presence, including present
-zero values. Stable siblings, unaffected containers and opaque bytes remain.
+Generated `OmitDraftFields(enabled func(string) bool) (removedEnumValue bool)`
+methods mutate affected graphs in place. Disabled optional fields and oneof
+members lose presence, including present zero values. Disabled draft enum
+values in retained fields are cleared from singular fields, dropped from lists,
+or removed with their map entries. Stable siblings, unrecognized enum numbers
+and opaque bytes remain. A request that loses a draft enum value from a retained
+field returns `codes.InvalidArgument` or a Nexus bad-request error with a generic
+message. Removing a whole disabled field or oneof skips its contents. Responses
+and error details are filtered regardless of whether they contained disabled
+enum values.
 A directly supplied draft root cannot nil its caller's pointer;
 when its type gate is disabled, its method resets the entire message, including
 unknown fields. Recursive schemas are supported; cyclic runtime object graphs
@@ -163,12 +181,12 @@ and status details before omission and passes through unaffected errors and
 non-protobuf response values. Omission/config panics yield a generic Internal
 error without payload details; existing handler panic recovery remains unchanged.
 
-- The filter excludes AdminService and internal service APIs such as
-  HistoryService and MatchingService. These trusted services need access to the
-  full data.
-- WorkflowService and OperatorService have no streaming RPCs. A descriptor test
-  fails if either service gains a streaming method, which requires adding a
-  stream interceptor first.
+- A frontend registration test requires each registered gRPC service to have
+  both draft RPC gating and payload filtering or an explicit exclusion.
+  The exclusions cover AdminService, internal service APIs such as HistoryService
+  and MatchingService, gRPC health, and reflection.
+- A separate frontend registration test fails if any covered service gains a
+  streaming RPC. Streaming RPCs require a stream interceptor.
 - Non-Nexus custom HTTP routes are outside the filter.
 - `google.protobuf.Any` fields within messages are opaque. For example, the
   update protocol packs `update.Request` into `protocol.v1.Message.body`. The
@@ -202,7 +220,7 @@ set `api_go_commit` to its hash and run these commands from the server repo.
 `go.mod` and `go.sum`.
 
 ```sh
-api_go_commit=2e289432
+api_go_commit=4bd28ec6
 go mod edit -replace="go.temporal.io/api=github.com/temporalio/api-go/api_next@${api_go_commit}"
 go mod tidy
 make proto
@@ -218,8 +236,8 @@ The draft module also regenerates proxy visitors, services and request headers
 against its descriptors and Go types; copying stable proxy output misses draft
 payload-bearing subtrees.
 CI regeneration detects stale fixtures/companions; independent registry coverage
-requires methods on affected linked types, rejects stale methods, and rejects
-affected error-detail messages on excluded channels.
+requires methods on affected linked types, including enum-only messages and
+error details, and detects stale methods.
 
 Before annotating a feature, record behavior flags and affected transports,
 including encoded exclusions; confirm omission preserves safe request meaning;
