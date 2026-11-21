@@ -2,11 +2,12 @@
 set -euo pipefail
 cd ../../..
 api_binpb=${API_BINPB:-proto/api.binpb}
+protoc=${PROTOC:-protoc}
 protoc_gen_go=${PROTOC_GEN_GO:-protoc-gen-go}
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 go build -o "$tmpdir/protoc-gen-go-helpers" go.temporal.io/api/cmd/protoc-gen-go-helpers
-protoc -I=. --descriptor_set_in="$api_binpb" \
+"$protoc" -I=. --descriptor_set_in="$api_binpb" \
   --plugin="protoc-gen-go=$protoc_gen_go" \
   --plugin="protoc-gen-go-helpers=$tmpdir/protoc-gen-go-helpers" \
   --go_out=paths=source_relative:"$tmpdir" \
