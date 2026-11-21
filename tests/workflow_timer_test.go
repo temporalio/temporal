@@ -116,14 +116,14 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
@@ -241,14 +241,14 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")

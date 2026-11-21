@@ -500,7 +500,7 @@ func (s *WorkflowUpdateSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 			s.NoError(err)
 
 			// Send signal to schedule new WT.
-			err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+			err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 			s.NoError(err)
 
 			updateResultCh := sendUpdateNoError(env, tv)
@@ -745,7 +745,7 @@ func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflo
 	s.EqualValues(3, wt2Resp.ResetHistoryEventId)
 
 	// Send signal to create WT.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Complete workflow.
@@ -1713,7 +1713,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_Reject() {
 	s.EqualValues(3, res.ResetHistoryEventId)
 
 	// Send signal to create WT.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Process signal and complete workflow.
@@ -2455,7 +2455,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_ConvertToNormal
 	  6 WorkflowTaskStarted
 	`, task.History)
 			// Send signal which will be buffered. This will persist MS and speculative WT must be converted to normal.
-			err := env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+			err := env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 			s.NoError(err)
 			return nil, nil
 		case 3:
@@ -2614,7 +2614,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_ConvertToNorm
 
 	// Send signal which will NOT be buffered because speculative WT is not started yet (only scheduled).
 	// This will persist MS and speculative WT must be converted to normal.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Process update in workflow.
@@ -3537,7 +3537,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_LostUpdate() 
 	s.Nil(pollResponse.Messages, "there should not be new WFT with messages")
 
 	// Send signal to schedule new WT.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Complete workflow and check that there is update messages.
@@ -3659,7 +3659,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_LostUpdate() {
 	s.Nil(updateResult.response)
 
 	// Send signal to schedule new WFT.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Complete workflow.
@@ -3766,7 +3766,7 @@ func (s *WorkflowUpdateSuite) TestFirstNormalWorkflowTask_UpdateResurrectedAfter
 	s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 	// Signal to create new WFT which shouldn't get any updates.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Complete workflow.
@@ -4100,7 +4100,7 @@ func (s *WorkflowUpdateSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID
 				"results of the first update must be available")
 
 			// Send signal to schedule new WT.
-			err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+			err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 			s.NoError(err)
 
 			// Complete workflow.
@@ -5695,7 +5695,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsClosed() {
 		s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 		// ensure terminated workflow is not locked by update-with-start
-		err = env.SendSignal(env.Namespace().String(), &commonpb.WorkflowExecution{
+		err = env.SendSignal(env.Namespace(), &commonpb.WorkflowExecution{
 			WorkflowId: env.Tv().WorkflowID(),
 			RunId:      initialWorkflow.RunId,
 		}, env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
