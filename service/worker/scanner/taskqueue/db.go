@@ -19,6 +19,7 @@ var (
 func (s *Scavenger) completeTasks(
 	ctx context.Context,
 	key *p.TaskQueueKey,
+	subqueue int,
 	exclusiveMaxTaskID int64,
 	limit int,
 ) (int, error) {
@@ -29,6 +30,7 @@ func (s *Scavenger) completeTasks(
 			NamespaceID:        key.NamespaceID,
 			TaskQueueName:      key.TaskQueueName,
 			TaskType:           key.TaskQueueType,
+			Subqueue:           subqueue,
 			ExclusiveMaxTaskID: exclusiveMaxTaskID,
 			Limit:              limit,
 		})
@@ -40,6 +42,7 @@ func (s *Scavenger) completeTasks(
 func (s *Scavenger) getTasks(
 	ctx context.Context,
 	key *p.TaskQueueKey,
+	subqueue int,
 	batchSize int,
 ) (*p.GetTasksResponse, error) {
 	var err error
@@ -51,6 +54,7 @@ func (s *Scavenger) getTasks(
 			TaskType:           key.TaskQueueType,
 			InclusiveMinTaskID: 0, // get the first N tasks sorted by taskID
 			ExclusiveMaxTaskID: math.MaxInt64,
+			Subqueue:           subqueue,
 			PageSize:           batchSize,
 		})
 		return err
