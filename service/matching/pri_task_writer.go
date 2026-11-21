@@ -125,7 +125,9 @@ func (w *priTaskWriter) assignTaskIDs(reqs []*writeTaskRequest) error {
 }
 
 func (w *priTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
-	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, reqs)
+	ctx, cancel := context.WithTimeout(w.backlogMgr.tqCtx, ioTimeout)
+	defer cancel()
+	resp, err := w.db.CreateTasks(ctx, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
 		// Context canceled is expected if the task queue unloads during a write.
