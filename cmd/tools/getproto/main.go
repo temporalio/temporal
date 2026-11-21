@@ -217,7 +217,7 @@ func descriptorSet(files map[string]protoreflect.FileDescriptor) *descriptorpb.F
 	sort.Strings(paths)
 	for _, path := range paths {
 		fd := protodesc.ToFileDescriptorProto(files[path])
-		fd.Name = proto.String(stablePath(fd.GetName()))
+		fd.Name = new(stablePath(fd.GetName()))
 		for i, dependency := range fd.Dependency {
 			fd.Dependency[i] = stablePath(dependency)
 		}

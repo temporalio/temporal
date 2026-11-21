@@ -66,10 +66,10 @@ func TestInvalidDescriptors(t *testing.T) {
 }
 
 func TestMissingMapping(t *testing.T) {
-	message := &descriptorpb.DescriptorProto{Name: proto.String("Draft"), Options: &descriptorpb.MessageOptions{}}
+	message := &descriptorpb.DescriptorProto{Name: new("Draft"), Options: &descriptorpb.MessageOptions{}}
 	setVetDraftOption(message.Options, 12345, "feature")
 	c := mappingCatalog()
-	fd := &descriptorpb.FileDescriptorProto{Name: proto.String("test.proto"), MessageType: []*descriptorpb.DescriptorProto{message}}
+	fd := &descriptorpb.FileDescriptorProto{Name: new("test.proto"), MessageType: []*descriptorpb.DescriptorProto{message}}
 	require.ErrorContains(t, c.checkMappings(fd), "cannot map draft message Draft to Go")
 	c.seen[message] = true
 	require.NoError(t, c.checkMappings(fd))
@@ -83,20 +83,20 @@ func mappingCatalog() *catalog {
 }
 
 func TestMissingEnumMapping(t *testing.T) {
-	enum := &descriptorpb.EnumDescriptorProto{Name: proto.String("NestedEnum")}
-	parent := &descriptorpb.DescriptorProto{Name: proto.String("Parent"), Options: &descriptorpb.MessageOptions{}, EnumType: []*descriptorpb.EnumDescriptorProto{enum}}
+	enum := &descriptorpb.EnumDescriptorProto{Name: new("NestedEnum")}
+	parent := &descriptorpb.DescriptorProto{Name: new("Parent"), Options: &descriptorpb.MessageOptions{}, EnumType: []*descriptorpb.EnumDescriptorProto{enum}}
 	setVetDraftOption(parent.Options, 12345, "feature")
-	fd := &descriptorpb.FileDescriptorProto{Name: proto.String("test.proto"), MessageType: []*descriptorpb.DescriptorProto{parent}}
+	fd := &descriptorpb.FileDescriptorProto{Name: new("test.proto"), MessageType: []*descriptorpb.DescriptorProto{parent}}
 	c := mappingCatalog()
 	c.seen[parent] = true
 	require.ErrorContains(t, c.checkMappings(fd), "cannot map draft enum NestedEnum to Go")
 }
 
 func TestMissingNestedAnnotatedMapping(t *testing.T) {
-	nested := &descriptorpb.DescriptorProto{Name: proto.String("Nested"), Options: &descriptorpb.MessageOptions{}}
+	nested := &descriptorpb.DescriptorProto{Name: new("Nested"), Options: &descriptorpb.MessageOptions{}}
 	setVetDraftOption(nested.Options, 12345, "feature")
-	parent := &descriptorpb.DescriptorProto{Name: proto.String("Parent"), NestedType: []*descriptorpb.DescriptorProto{nested}}
-	fd := &descriptorpb.FileDescriptorProto{Name: proto.String("test.proto"), MessageType: []*descriptorpb.DescriptorProto{parent}}
+	parent := &descriptorpb.DescriptorProto{Name: new("Parent"), NestedType: []*descriptorpb.DescriptorProto{nested}}
+	fd := &descriptorpb.FileDescriptorProto{Name: new("test.proto"), MessageType: []*descriptorpb.DescriptorProto{parent}}
 	c := mappingCatalog()
 	c.seen[parent] = true
 	require.ErrorContains(t, c.checkMappings(fd), "cannot map draft message Nested to Go")
@@ -104,12 +104,12 @@ func TestMissingNestedAnnotatedMapping(t *testing.T) {
 
 // Unannotated declarations nested in a draft message inherit its gate, so they need a mapping too.
 func TestMissingNestedInheritedMapping(t *testing.T) {
-	nested := &descriptorpb.DescriptorProto{Name: proto.String("Nested")}
-	enum := &descriptorpb.EnumDescriptorProto{Name: proto.String("NestedEnum")}
-	parent := &descriptorpb.DescriptorProto{Name: proto.String("Parent"), Options: &descriptorpb.MessageOptions{},
+	nested := &descriptorpb.DescriptorProto{Name: new("Nested")}
+	enum := &descriptorpb.EnumDescriptorProto{Name: new("NestedEnum")}
+	parent := &descriptorpb.DescriptorProto{Name: new("Parent"), Options: &descriptorpb.MessageOptions{},
 		NestedType: []*descriptorpb.DescriptorProto{nested}, EnumType: []*descriptorpb.EnumDescriptorProto{enum}}
 	setVetDraftOption(parent.Options, 12345, "feature")
-	fd := &descriptorpb.FileDescriptorProto{Name: proto.String("test.proto"), MessageType: []*descriptorpb.DescriptorProto{parent}}
+	fd := &descriptorpb.FileDescriptorProto{Name: new("test.proto"), MessageType: []*descriptorpb.DescriptorProto{parent}}
 	c := mappingCatalog()
 	c.seen[parent] = true
 	c.seen[nested] = true
@@ -124,13 +124,13 @@ func TestMissingNestedInheritedMapping(t *testing.T) {
 func draftFixture() (schema, file *descriptorpb.FileDescriptorProto) {
 	schema = protodesc.ToFileDescriptorProto(protometapb.File_temporal_api_next_protometa_v1_draft_proto)
 	file = &descriptorpb.FileDescriptorProto{
-		Name: proto.String("message.proto"), Package: proto.String("temporal.api.test.v1"),
+		Name: new("message.proto"), Package: new("temporal.api.test.v1"),
 		Dependency: []string{schema.GetName()}, Options: &descriptorpb.FileOptions{},
 		MessageType: []*descriptorpb.DescriptorProto{{
-			Name: proto.String("Message"), Options: &descriptorpb.MessageOptions{},
+			Name: new("Message"), Options: &descriptorpb.MessageOptions{},
 			Field: []*descriptorpb.FieldDescriptorProto{
-				{Name: proto.String("draft"), Number: proto.Int32(1), Options: &descriptorpb.FieldOptions{}},
-				{Name: proto.String("notes"), Number: proto.Int32(2), Options: &descriptorpb.FieldOptions{}},
+				{Name: new("draft"), Number: proto.Int32(1), Options: &descriptorpb.FieldOptions{}},
+				{Name: new("notes"), Number: proto.Int32(2), Options: &descriptorpb.FieldOptions{}},
 			},
 		}},
 	}
@@ -199,14 +199,14 @@ func TestDraftOptionDiscovery(t *testing.T) {
 		{name: "notes-impostor", mutate: func(schema, file *descriptorpb.FileDescriptorProto) {
 			// A draft-prefixed name outside the option table is not a draft option.
 			schema.Extension = append(schema.Extension, &descriptorpb.FieldDescriptorProto{
-				Name: proto.String("draft_notes"), Number: proto.Int32(98009), Extendee: proto.String(".google.protobuf.FieldOptions"),
+				Name: new("draft_notes"), Number: proto.Int32(98009), Extendee: new(".google.protobuf.FieldOptions"),
 				Label: descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(), Type: descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
 			})
 			setVetDraftOption(file.MessageType[0].Field[0].Options, 98009, "free text with spaces")
 			setVetDraftOption(file.MessageType[0].Field[1].Options, 98009, "token")
 		}},
 		{name: "wrong-extendee", mutate: func(schema, _ *descriptorpb.FileDescriptorProto) {
-			schema.Extension[0].Extendee = proto.String(".google.protobuf.MessageOptions")
+			schema.Extension[0].Extendee = new(".google.protobuf.MessageOptions")
 		}, want: "draft option draft must be a singular string extending google.protobuf.FieldOptions"},
 		{name: "repeated", mutate: func(schema, _ *descriptorpb.FileDescriptorProto) {
 			schema.Extension[0].Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()

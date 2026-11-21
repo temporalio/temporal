@@ -49,7 +49,7 @@ func TestDraftFieldsMatchDescriptors(t *testing.T) {
 
 	const iterations = 2000
 	stripped := map[string]int{}
-	for seed := uint64(0); seed < iterations; seed++ {
+	for seed := range uint64(iterations) {
 		rng := rand.New(rand.NewPCG(seed, 0))
 		candidates := unaffected
 		if rng.IntN(2) == 0 || len(unaffected) == 0 {
