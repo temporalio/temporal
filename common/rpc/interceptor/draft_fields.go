@@ -2,8 +2,10 @@ package interceptor
 
 import (
 	"context"
-	"strings"
+	"fmt"
 
+	"go.temporal.io/api/operatorservice/v1"
+	protometapb "go.temporal.io/api/protometa/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/api"
@@ -16,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const draftFilteringFailure = "draft field omission failed"
@@ -25,22 +28,55 @@ type DraftFieldsInterceptor struct {
 	registry namespace.Registry
 	logger   log.Logger
 	omit     func(any, *draft.Selection) (bool, error)
+	services map[string]struct{}
+	methods  map[string]string
 }
 
 type draftInvocationKey struct{}
-type draftInvocation struct{ selection *draft.Selection }
+type draftInvocation struct {
+	selection          *draft.Selection
+	gateLookupPanicked bool
+}
 
 func NewDraftFieldsInterceptor(
 	enabled dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string],
 	registry namespace.Registry,
 	logger log.Logger,
 	omit func(any, *draft.Selection) (bool, error),
+	additionalServices ...protoreflect.ServiceDescriptor,
 ) *DraftFieldsInterceptor {
-	return &DraftFieldsInterceptor{enabled: enabled, registry: registry, logger: logger, omit: omit}
+	i := &DraftFieldsInterceptor{
+		enabled: enabled, registry: registry, logger: logger, omit: omit,
+		services: make(map[string]struct{}), methods: make(map[string]string),
+	}
+	i.addDraftService(workflowservice.File_temporal_api_next_workflowservice_v1_service_proto.Services().ByName("WorkflowService"))
+	i.addDraftService(operatorservice.File_temporal_api_next_operatorservice_v1_service_proto.Services().ByName("OperatorService"))
+	for _, service := range additionalServices {
+		i.addDraftService(service)
+	}
+	return i
 }
 
-func draftMethod(method string) bool {
-	return strings.HasPrefix(method, api.WorkflowServicePrefix) || strings.HasPrefix(method, api.OperatorServicePrefix)
+// CoversService reports whether the service is subject to draft RPC gating and payload filtering.
+func (i *DraftFieldsInterceptor) CoversService(name string) bool {
+	_, ok := i.services["/"+name+"/"]
+	return ok
+}
+
+func (i *DraftFieldsInterceptor) addDraftService(service protoreflect.ServiceDescriptor) {
+	prefix := "/" + string(service.FullName()) + "/"
+	i.services[prefix] = struct{}{}
+	serviceFeature := service.Options().ProtoReflect().Get(protometapb.E_DraftService.TypeDescriptor()).String()
+	for j := 0; j < service.Methods().Len(); j++ {
+		method := service.Methods().Get(j)
+		feature := serviceFeature
+		if feature == "" {
+			feature = method.Options().ProtoReflect().Get(protometapb.E_DraftMethod.TypeDescriptor()).String()
+		}
+		if feature != "" {
+			i.methods[prefix+string(method.Name())] = feature
+		}
+	}
 }
 
 func (i *DraftFieldsInterceptor) selection(req any) *draft.Selection {
@@ -67,6 +103,25 @@ func (i *DraftFieldsInterceptor) selection(req any) *draft.Selection {
 		}
 		return i.enabled("")
 	})
+}
+
+func (i *DraftFieldsInterceptor) checkDraftMethod(ctx context.Context, method string, selection *draft.Selection) (err error) {
+	feature, ok := i.methods[method]
+	if !ok {
+		return nil
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if invocation, ok := ctx.Value(draftInvocationKey{}).(*draftInvocation); ok {
+				invocation.gateLookupPanicked = true
+			}
+			err = i.omissionError(method, fmt.Errorf("draft RPC feature selection panicked: %v", recovered))
+		}
+	}()
+	if !selection.Enabled(feature) {
+		return status.Error(codes.Unimplemented, "method is not available")
+	}
+	return nil
 }
 
 func (i *DraftFieldsInterceptor) omitRoot(msg any, selection *draft.Selection, method string) (bool, error) {
@@ -136,7 +191,7 @@ func (i *DraftFieldsInterceptor) omitErrorDetails(original error, selection *dra
 
 // OutgoingIntercept wraps the full chain, including successful early returns.
 func (i *DraftFieldsInterceptor) OutgoingIntercept(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if !draftMethod(info.FullMethod) {
+	if _, covered := i.services[api.ServiceName(info.FullMethod)]; !covered {
 		return handler(ctx, req)
 	}
 	invocation := &draftInvocation{selection: i.selection(req)}
@@ -161,12 +216,15 @@ func (i *DraftFieldsInterceptor) OutgoingIntercept(ctx context.Context, req any,
 
 // IncomingIntercept runs immediately after existing namespace normalization.
 func (i *DraftFieldsInterceptor) IncomingIntercept(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if !draftMethod(info.FullMethod) {
+	if _, covered := i.services[api.ServiceName(info.FullMethod)]; !covered {
 		return handler(ctx, req)
 	}
 	selection := i.selection(req)
 	if invocation, ok := ctx.Value(draftInvocationKey{}).(*draftInvocation); ok {
 		invocation.selection = selection
+	}
+	if err := i.checkDraftMethod(ctx, info.FullMethod, selection); err != nil {
+		return nil, err
 	}
 	removedEnumValue, err := i.omitRoot(req, selection, info.FullMethod)
 	if err != nil {

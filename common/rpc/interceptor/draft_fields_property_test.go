@@ -9,14 +9,18 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 	_ "go.temporal.io/api/operatorservice/v1"
 	protometapb "go.temporal.io/api/protometa/v1"
 	_ "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/draft"
+	"go.temporal.io/server/common/draft/testfixture"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -24,18 +28,17 @@ import (
 )
 
 // TestDraftFieldsMatchDescriptors runs random requests and responses of every unary
-// WorkflowService and OperatorService method through the draft interceptors with a
+// RPC from WorkflowService, OperatorService, and the fixture services with a
 // random set of enabled features. The handler must receive, and the client must get,
-// exactly the message with the fields of disabled features cleared, as decided from the
-// draft annotations in the descriptors alone: a field needs its own feature and those of
-// its type and of the messages that type is nested in.
+// exactly the message with disabled draft contents cleared according to the descriptors.
+// Disabled draft RPCs and requests that lose a draft enum value must be rejected.
 func TestDraftFieldsMatchDescriptors(t *testing.T) {
 	t.Parallel()
 	methods := draftServiceMethods(t)
 	features := apiDraftFeatures()
 	var affected, unaffected []protoreflect.MethodDescriptor
 	for _, method := range methods {
-		if reachesDraft(method.Input(), nil) || reachesDraft(method.Output(), nil) {
+		if referenceMethodFeature(method) != "" || reachesDraft(method.Input(), nil) || reachesDraft(method.Output(), nil) {
 			affected = append(affected, method)
 		} else {
 			unaffected = append(unaffected, method)
@@ -49,6 +52,8 @@ func TestDraftFieldsMatchDescriptors(t *testing.T) {
 
 	const iterations = 2000
 	stripped := map[string]int{}
+	rejected := map[codes.Code]int{}
+	enumResponses := 0
 	for seed := range uint64(iterations) {
 		rng := rand.New(rand.NewPCG(seed, 0))
 		candidates := unaffected
@@ -64,34 +69,64 @@ func TestDraftFieldsMatchDescriptors(t *testing.T) {
 		}
 		request := randomMessage(t, rng, method.Input())
 		response := randomMessage(t, rng, method.Output())
+		responseBefore := proto.Clone(response)
 
 		i := NewDraftFieldsInterceptor(func(string) []string { return enabled }, registry, log.NewNoopLogger(), draft.Omit)
+		fixtureServices := testfixture.File_common_draft_testfixture_filter_proto.Services()
+		for j := 0; j < fixtureServices.Len(); j++ {
+			i.addDraftService(fixtureServices.Get(j))
+		}
 		info := &grpc.UnaryServerInfo{FullMethod: fmt.Sprintf("/%s/%s", method.Parent().FullName(), method.Name())}
 		var received proto.Message
-		returned, err := i.OutgoingIntercept(context.Background(), proto.Clone(request), info, func(ctx context.Context, req any) (any, error) {
-			return i.IncomingIntercept(ctx, req, info, func(context.Context, any) (any, error) {
+		returned, err := i.OutgoingIntercept(t.Context(), proto.Clone(request), info, func(ctx context.Context, req any) (any, error) {
+			return i.IncomingIntercept(ctx, req, info, func(_ context.Context, req any) (any, error) {
 				received = proto.Clone(req.(proto.Message))
-				return proto.Clone(response), nil
+				return response, nil
 			})
 		})
-		if err != nil {
-			t.Fatalf("seed %d, %s: %v", seed, info.FullMethod, err)
+		wantRequest := proto.Clone(request)
+		removedEnum := stripDisabled(wantRequest.ProtoReflect(), enabled)
+		var wantCode codes.Code
+		switch feature := referenceMethodFeature(method); {
+		case feature != "" && !slices.Contains(enabled, feature):
+			wantCode = codes.Unimplemented
+		case removedEnum:
+			wantCode = codes.InvalidArgument
+		default:
+			wantCode = codes.OK
+		}
+		if status.Code(err) != wantCode {
+			t.Fatalf("seed %d, %s: want %v with features %v, got %v", seed, info.FullMethod, wantCode, enabled, err)
+		}
+		if wantCode != codes.OK {
+			rejected[wantCode]++
+			require.Nil(t, received)
+			if wantCode == codes.InvalidArgument {
+				require.Equal(t, "request contains a disabled draft enum value", status.Convert(err).Message())
+			}
+			continue
+		}
+		require.True(t, proto.Equal(responseBefore, response), "seed %d mutated the response", seed)
+		wantResponse := proto.Clone(responseBefore)
+		if stripDisabled(wantResponse.ProtoReflect(), enabled) {
+			enumResponses++
 		}
 		for _, check := range []struct {
-			what           string
-			sent, observed proto.Message
-		}{{"request", request, received}, {"response", response, returned.(proto.Message)}} {
-			want := proto.Clone(check.sent)
-			stripDisabled(want.ProtoReflect(), enabled)
-			if !proto.Equal(want, check.sent) {
+			what                     string
+			original, want, observed proto.Message
+		}{{"request", request, wantRequest, received}, {"response", response, wantResponse, returned.(proto.Message)}} {
+			if !proto.Equal(check.want, check.original) {
 				stripped[check.what]++
 			}
-			if diff := cmp.Diff(want, check.observed, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(check.want, check.observed, protocmp.Transform()); diff != "" {
 				t.Fatalf("seed %d, %s %s with features %v differs from the descriptor reference (-want +got):\n%s",
 					seed, info.FullMethod, check.what, enabled, diff)
 			}
 		}
 	}
+	require.Positive(t, rejected[codes.InvalidArgument])
+	require.Positive(t, rejected[codes.Unimplemented])
+	require.Positive(t, enumResponses)
 	// Guard against a generator that never sets a draft field the features disable.
 	for _, what := range []string{"request", "response"} {
 		if stripped[what] == 0 {
@@ -105,7 +140,7 @@ func TestDraftFieldsMatchDescriptors(t *testing.T) {
 func draftServiceMethods(t *testing.T) []protoreflect.MethodDescriptor {
 	t.Helper()
 	var methods []protoreflect.MethodDescriptor
-	for _, name := range []protoreflect.FullName{"temporal.api.workflowservice.v1.WorkflowService", "temporal.api.operatorservice.v1.OperatorService"} {
+	for _, name := range []protoreflect.FullName{"temporal.api.workflowservice.v1.WorkflowService", "temporal.api.operatorservice.v1.OperatorService", "temporal.api.drafttest.v1.FixtureService", "temporal.api.drafttest.v1.DraftFixtureService"} {
 		descriptor, err := protoregistry.GlobalFiles.FindDescriptorByName(name)
 		if err != nil {
 			t.Fatal(err)
@@ -123,20 +158,50 @@ func draftServiceMethods(t *testing.T) []protoreflect.MethodDescriptor {
 // apiDraftFeatures returns every feature named by a draft annotation in the linked API.
 func apiDraftFeatures() []string {
 	var features []string
-	var visit func(protoreflect.MessageDescriptors)
-	visit = func(messages protoreflect.MessageDescriptors) {
-		for i := 0; i < messages.Len(); i++ {
-			message := messages.Get(i)
-			features = append(features, typeDraftFeatures(message)...)
-			for j := 0; j < message.Fields().Len(); j++ {
-				features = append(features, fieldDraftFeatures(message.Fields().Get(j))...)
+	var visit func(protoreflect.Descriptor)
+	visit = func(d protoreflect.Descriptor) {
+		if feature := referenceFeature(d); feature != "" {
+			features = append(features, feature)
+		}
+		switch d := d.(type) {
+		case protoreflect.FileDescriptor:
+			for i := 0; i < d.Messages().Len(); i++ {
+				visit(d.Messages().Get(i))
 			}
-			visit(message.Messages())
+			for i := 0; i < d.Enums().Len(); i++ {
+				visit(d.Enums().Get(i))
+			}
+			for i := 0; i < d.Services().Len(); i++ {
+				visit(d.Services().Get(i))
+			}
+		case protoreflect.MessageDescriptor:
+			for i := 0; i < d.Messages().Len(); i++ {
+				visit(d.Messages().Get(i))
+			}
+			for i := 0; i < d.Enums().Len(); i++ {
+				visit(d.Enums().Get(i))
+			}
+			for i := 0; i < d.Fields().Len(); i++ {
+				visit(d.Fields().Get(i))
+			}
+			for i := 0; i < d.Oneofs().Len(); i++ {
+				visit(d.Oneofs().Get(i))
+			}
+		case protoreflect.EnumDescriptor:
+			for i := 0; i < d.Values().Len(); i++ {
+				visit(d.Values().Get(i))
+			}
+		case protoreflect.ServiceDescriptor:
+			for i := 0; i < d.Methods().Len(); i++ {
+				visit(d.Methods().Get(i))
+			}
+		default:
+			// Fields, oneofs, enum values, and methods have no declarations to visit.
 		}
 	}
 	protoregistry.GlobalFiles.RangeFiles(func(file protoreflect.FileDescriptor) bool {
 		if strings.HasPrefix(string(file.Package()), "temporal.api.") {
-			visit(file.Messages())
+			visit(file)
 		}
 		return true
 	})
@@ -144,36 +209,57 @@ func apiDraftFeatures() []string {
 	return slices.Compact(features)
 }
 
-// typeDraftFeatures returns the draft_message features of a message or enum and of the
-// messages it is nested in.
-func typeDraftFeatures(descriptor protoreflect.Descriptor) []string {
-	var features []string
-	for ; descriptor != nil; descriptor = descriptor.Parent() {
-		if message, ok := descriptor.(protoreflect.MessageDescriptor); ok {
-			if feature, _ := proto.GetExtension(message.Options(), protometapb.E_DraftMessage).(string); feature != "" {
-				features = append(features, feature)
-			}
-		}
+func referenceFeature(d protoreflect.Descriptor) string {
+	var option protoreflect.ExtensionType
+	switch d.(type) {
+	case protoreflect.MessageDescriptor:
+		option = protometapb.E_DraftMessage
+	case protoreflect.FieldDescriptor:
+		option = protometapb.E_Draft
+	case protoreflect.OneofDescriptor:
+		option = protometapb.E_DraftOneof
+	case protoreflect.EnumDescriptor:
+		option = protometapb.E_DraftEnum
+	case protoreflect.EnumValueDescriptor:
+		option = protometapb.E_DraftEnumValue
+	case protoreflect.ServiceDescriptor:
+		option = protometapb.E_DraftService
+	case protoreflect.MethodDescriptor:
+		option = protometapb.E_DraftMethod
+	default:
+		return ""
 	}
-	return features
+	feature, _ := proto.GetExtension(d.Options(), option).(string)
+	return feature
 }
 
-// fieldDraftFeatures returns the features a field needs: its own and those of the
-// message or enum it holds, or of a map field's value.
-func fieldDraftFeatures(field protoreflect.FieldDescriptor) []string {
-	var features []string
-	if feature, _ := proto.GetExtension(field.Options(), protometapb.E_Draft).(string); feature != "" {
-		features = append(features, feature)
+func referenceMethodFeature(method protoreflect.MethodDescriptor) string {
+	if feature := referenceFeature(method); feature != "" {
+		return feature
 	}
-	if field.IsMap() {
-		field = field.MapValue()
+	return referenceFeature(method.Parent())
+}
+
+// fieldDraftFeature returns the field's own feature or the feature of its oneof.
+func fieldDraftFeature(field protoreflect.FieldDescriptor) string {
+	if oneof := field.ContainingOneof(); oneof != nil && !oneof.IsSynthetic() {
+		if feature := referenceFeature(oneof); feature != "" {
+			return feature
+		}
 	}
-	if field.Message() != nil {
-		features = append(features, typeDraftFeatures(field.Message())...)
-	} else if field.Enum() != nil {
-		features = append(features, typeDraftFeatures(field.Enum())...)
+	return referenceFeature(field)
+}
+
+func hasDraftEnumValues(enum protoreflect.EnumDescriptor) bool {
+	if enum == nil {
+		return false
 	}
-	return features
+	for i := 0; i < enum.Values().Len(); i++ {
+		if referenceFeature(enum.Values().Get(i)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // reachesDraft reports whether a message of this type can hold a draft field.
@@ -181,19 +267,22 @@ func reachesDraft(message protoreflect.MessageDescriptor, seen map[protoreflect.
 	if seen == nil {
 		seen = map[protoreflect.FullName]bool{}
 	}
+	if referenceFeature(message) != "" {
+		return true
+	}
 	if seen[message.FullName()] {
 		return false
 	}
 	seen[message.FullName()] = true
 	for i := 0; i < message.Fields().Len(); i++ {
 		field := message.Fields().Get(i)
-		if len(fieldDraftFeatures(field)) > 0 {
+		if fieldDraftFeature(field) != "" {
 			return true
 		}
 		if field.IsMap() {
 			field = field.MapValue()
 		}
-		if field.Message() != nil && reachesDraft(field.Message(), seen) {
+		if hasDraftEnumValues(field.Enum()) || field.Message() != nil && reachesDraft(field.Message(), seen) {
 			return true
 		}
 	}
@@ -202,45 +291,68 @@ func reachesDraft(message protoreflect.MessageDescriptor, seen map[protoreflect.
 
 // leadsToDraft reports whether field is draft or holds messages that can hold one.
 func leadsToDraft(field protoreflect.FieldDescriptor) bool {
-	if len(fieldDraftFeatures(field)) > 0 {
+	if fieldDraftFeature(field) != "" {
 		return true
 	}
 	if field.IsMap() {
 		field = field.MapValue()
 	}
-	return field.Message() != nil && reachesDraft(field.Message(), nil)
+	return hasDraftEnumValues(field.Enum()) || field.Message() != nil && reachesDraft(field.Message(), nil)
 }
 
-// stripDisabled clears every field that needs a feature outside enabled, at any depth.
-func stripDisabled(m protoreflect.Message, enabled []string) {
-	var disabled []protoreflect.FieldDescriptor
+// stripDisabled clears disabled declarations and reports enum values removed from retained fields.
+func stripDisabled(m protoreflect.Message, enabled []string) bool {
+	if feature := referenceFeature(m.Descriptor()); feature != "" && !slices.Contains(enabled, feature) {
+		proto.Reset(m.Interface())
+		return false
+	}
+	removedEnum := false
 	m.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
-		for _, feature := range fieldDraftFeatures(field) {
-			if !slices.Contains(enabled, feature) {
-				disabled = append(disabled, field)
-				return true
+		if feature := fieldDraftFeature(field); feature != "" && !slices.Contains(enabled, feature) {
+			m.Clear(field)
+			return true
+		}
+		stripValue := func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+			if field.Message() != nil {
+				removedEnum = stripDisabled(value.Message(), enabled) || removedEnum
 			}
+			if field.Enum() != nil {
+				if enumValue := field.Enum().Values().ByNumber(value.Enum()); enumValue != nil {
+					feature := referenceFeature(enumValue)
+					if feature != "" && !slices.Contains(enabled, feature) {
+						removedEnum = true
+						return true
+					}
+				}
+			}
+			return false
 		}
 		switch {
-		case field.IsList() && field.Message() != nil:
-			for i := 0; i < value.List().Len(); i++ {
-				stripDisabled(value.List().Get(i).Message(), enabled)
+		case field.IsList():
+			list := value.List()
+			kept := 0
+			for i := 0; i < list.Len(); i++ {
+				if entry := list.Get(i); !stripValue(field, entry) {
+					list.Set(kept, entry)
+					kept++
+				}
 			}
-		case field.IsMap() && field.MapValue().Message() != nil:
-			value.Map().Range(func(_ protoreflect.MapKey, entry protoreflect.Value) bool {
-				stripDisabled(entry.Message(), enabled)
+			list.Truncate(kept)
+		case field.IsMap():
+			value.Map().Range(func(key protoreflect.MapKey, entry protoreflect.Value) bool {
+				if stripValue(field.MapValue(), entry) {
+					value.Map().Clear(key)
+				}
 				return true
 			})
-		case field.Message() != nil && !field.IsList() && !field.IsMap():
-			stripDisabled(value.Message(), enabled)
 		default:
-			// Scalars and lists, maps of scalars hold no draft fields.
+			if stripValue(field, value) {
+				m.Clear(field)
+			}
 		}
 		return true
 	})
-	for _, field := range disabled {
-		m.Clear(field)
-	}
+	return removedEnum
 }
 
 func randomMessage(t *testing.T, rng *rand.Rand, descriptor protoreflect.MessageDescriptor) proto.Message {
@@ -299,6 +411,9 @@ func randomValue(rng *rand.Rand, newMessage func() protoreflect.Value, field pro
 	case protoreflect.BoolKind:
 		return protoreflect.ValueOfBool(rng.IntN(2) == 0)
 	case protoreflect.EnumKind:
+		if rng.IntN(5) == 0 {
+			return protoreflect.ValueOfEnum(-12345)
+		}
 		values := field.Enum().Values()
 		return protoreflect.ValueOfEnum(values.Get(rng.IntN(values.Len())).Number())
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:

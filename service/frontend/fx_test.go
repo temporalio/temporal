@@ -24,6 +24,8 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/draft"
+	"go.temporal.io/server/common/draft/testfixture"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -38,6 +40,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/nettest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
@@ -47,6 +50,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type rateLimitInterceptorTestCase struct {
@@ -1279,4 +1283,156 @@ type draftRemoteConn struct {
 
 func (c *draftRemoteConn) Invoke(ctx context.Context, method string, args, reply any, opts ...grpc.CallOption) error {
 	return c.invoke(ctx, method, args, reply, opts...)
+}
+
+func TestDraftRPCGatePanicIsGeneric(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{"config", "namespace registry"} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+			registry := namespace.NewMockRegistry(gomock.NewController(t))
+			request := &testfixture.MethodRequest{}
+			var req any = request
+			if source == "namespace registry" {
+				request.NamespaceId = "tenant-id"
+				req = &draftNamespaceIDRequest{draftProtoRequest: request, NamespaceIDGetter: request}
+				registry.EXPECT().GetNamespaceName(namespace.ID("tenant-id")).DoAndReturn(func(namespace.ID) (namespace.Name, error) {
+					panic("private draft registry error")
+				})
+			}
+			dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient{
+				dynamicconfig.FrontendMaskInternalErrorDetails.Key(): false,
+			}, log.NewNoopLogger())
+			options := draftBoundaryOptions(t, dc, registry, nil, fx.Decorate(func(logger log.Logger) *interceptor.DraftFieldsInterceptor {
+				return interceptor.NewDraftFieldsInterceptor(func(name string) []string {
+					require.Equal(t, "config", source)
+					require.Empty(t, name)
+					panic("private draft config error")
+				}, registry, logger, draft.Omit, draftFixtureService("FixtureService"))
+			}))
+			chain := chainUnaryServerInterceptors(options.UnaryInterceptors)
+			info := &grpc.UnaryServerInfo{FullMethod: testfixture.FixtureService_Preview_FullMethodName}
+			out, err := chain(t.Context(), req, info, func(context.Context, any) (any, error) {
+				t.Fatal("draft RPC was dispatched after a gate failure")
+				return nil, nil
+			})
+			require.Nil(t, out)
+			protorequire.ProtoEqual(t, status.New(codes.Internal, "draft field omission failed").Proto(), status.Convert(err).Proto())
+		})
+	}
+}
+
+type draftProtoRequest interface {
+	proto.Message
+	OmitDraftFields(func(string) bool) bool
+}
+
+type draftNamespaceIDRequest struct {
+	draftProtoRequest
+	interceptor.NamespaceIDGetter
+}
+
+func TestDraftRPCGateRunsAfterNormalizationAndBeforeRedirection(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		service protoreflect.Name
+		method  string
+		feature string
+	}{
+		{"FixtureService", testfixture.FixtureService_Preview_FullMethodName, "method"},
+		{"DraftFixtureService", testfixture.DraftFixtureService_Preview_FullMethodName, "service"},
+	} {
+		t.Run(tc.feature, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			registry := namespace.NewMockRegistry(ctrl)
+			entry := namespace.NewGlobalNamespaceForTest(
+				&persistencespb.NamespaceInfo{Id: "tenant-id", Name: "tenant"}, nil,
+				&persistencespb.NamespaceReplicationConfig{ActiveClusterName: "remote", Clusters: []string{"local", "remote"}}, 1,
+			)
+			registry.EXPECT().GetNamespaceByID(namespace.ID("tenant-id")).Return(entry, nil)
+			// Use a request supported by the production task-token namespace normalizer.
+			token, err := tasktoken.NewSerializer().Serialize(&tokenspb.Task{NamespaceId: "tenant-id"})
+			require.NoError(t, err)
+			req := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token}
+			dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient{
+				dynamicconfig.EnableNamespaceNotActiveAutoForwarding.Key(): true,
+				dynamicconfig.FrontendEnabledDraftFeatureAPIs.Key(): []dynamicconfig.ConstrainedValue{
+					{Constraints: dynamicconfig.Constraints{Namespace: "tenant"}, Value: []any{}},
+					{Value: []any{tc.feature}},
+				},
+			}, log.NewNoopLogger())
+			options := draftBoundaryOptions(t, dc, registry, nil,
+				fx.Replace(
+					config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding},
+					fx.Annotate(client.NewMockBean(ctrl), fx.As(new(client.Bean))),
+				),
+				fx.Decorate(func(cfg *Config, logger log.Logger) *interceptor.DraftFieldsInterceptor {
+					return interceptor.NewDraftFieldsInterceptor(cfg.EnabledDraftFeatureAPIs, registry, logger, draft.Omit, draftFixtureService(tc.service))
+				}),
+				fx.Decorate(func(redirection *interceptor.Redirection) *interceptor.Redirection {
+					return redirection.WithRedirectResponses(map[string]func() any{
+						tc.method: func() any { return &testfixture.MethodResponse{} },
+					})
+				}),
+			)
+			chain := chainUnaryServerInterceptors(options.UnaryInterceptors)
+			out, err := chain(t.Context(), req, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) {
+				t.Fatal("disabled draft RPC was dispatched")
+				return nil, nil
+			})
+			require.Nil(t, out)
+			require.Equal(t, "tenant", req.Namespace)
+			protorequire.ProtoEqual(t, status.New(codes.Unimplemented, "method is not available").Proto(), status.Convert(err).Proto())
+		})
+	}
+}
+
+func draftFixtureService(name protoreflect.Name) protoreflect.ServiceDescriptor {
+	return testfixture.File_common_draft_testfixture_filter_proto.Services().ByName(name)
+}
+
+func TestDraftFieldsRejectIDOnlyRequestsWithoutMaskLookup(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		method  string
+		message draftProtoRequest
+		want    *status.Status
+	}{
+		{
+			name:    "disabled method",
+			method:  testfixture.FixtureService_Preview_FullMethodName,
+			message: &testfixture.MethodRequest{},
+			want:    status.New(codes.Unimplemented, "method is not available"),
+		},
+		{
+			name:    "disabled enum value",
+			method:  testfixture.FixtureService_CheckEnums_FullMethodName,
+			message: &testfixture.EnumRequest{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW},
+			want:    status.New(codes.InvalidArgument, "request contains a disabled draft enum value"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			registry := namespace.NewMockRegistry(gomock.NewController(t))
+			registry.EXPECT().GetNamespaceName(namespace.ID("tenant-id")).Return(namespace.Name("tenant"), nil)
+			req := &draftNamespaceIDRequest{
+				draftProtoRequest: tc.message,
+				NamespaceIDGetter: &testfixture.MethodRequest{NamespaceId: "tenant-id"},
+			}
+			options := draftBoundaryOptions(t, dynamicconfig.NewNoopCollection(), registry, nil,
+				fx.Decorate(func(cfg *Config, logger log.Logger) *interceptor.DraftFieldsInterceptor {
+					return interceptor.NewDraftFieldsInterceptor(cfg.EnabledDraftFeatureAPIs, registry, logger, draft.Omit, draftFixtureService("FixtureService"))
+				}),
+			)
+			chain := chainUnaryServerInterceptors(options.UnaryInterceptors)
+			out, err := chain(t.Context(), req, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) {
+				t.Fatal("rejected request was dispatched")
+				return nil, nil
+			})
+			require.Nil(t, out)
+			protorequire.ProtoEqual(t, tc.want.Proto(), status.Convert(err).Proto())
+		})
+	}
 }
