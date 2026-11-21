@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/draft"
@@ -83,6 +84,55 @@ func (i *DraftFieldsInterceptor) omissionError(method string, err error) error {
 	return status.Error(codes.Internal, draftFilteringFailure)
 }
 
+func (i *DraftFieldsInterceptor) omitOutgoingRoot(message proto.Message, selection *draft.Selection, method string) (proto.Message, error) {
+	needed, err := draft.NeedsOmission(message, selection)
+	if err != nil {
+		return nil, i.omissionError(method, err)
+	}
+	if !needed {
+		return nil, nil
+	}
+	filtered := proto.Clone(message)
+	if err := i.omitRoot(filtered, selection, method); err != nil {
+		return nil, err
+	}
+	return filtered, nil
+}
+
+func (i *DraftFieldsInterceptor) omitErrorDetails(original error, selection *draft.Selection, method string) error {
+	st := serviceerror.ToStatus(original)
+	var filteredDetails map[int][]byte
+	for idx, detail := range st.Details() {
+		message, ok := detail.(proto.Message)
+		if !ok {
+			continue
+		}
+		filtered, err := i.omitOutgoingRoot(message, selection, method)
+		if err != nil {
+			return err
+		}
+		if filtered == nil || proto.Equal(filtered, message) {
+			continue
+		}
+		value, err := proto.Marshal(filtered)
+		if err != nil {
+			return i.omissionError(method, err)
+		}
+		if filteredDetails == nil {
+			filteredDetails = make(map[int][]byte)
+		}
+		filteredDetails[idx] = value
+	}
+	if len(filteredDetails) == 0 {
+		return original
+	}
+	updated := st.Proto()
+	for idx, value := range filteredDetails {
+		updated.Details[idx].Value = value
+	}
+	return status.FromProto(updated).Err()
+}
+
 // OutgoingIntercept wraps the full chain, including successful early returns.
 func (i *DraftFieldsInterceptor) OutgoingIntercept(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	if !draftMethod(info.FullMethod) {
@@ -92,22 +142,18 @@ func (i *DraftFieldsInterceptor) OutgoingIntercept(ctx context.Context, req any,
 	ctx = context.WithValue(ctx, draftInvocationKey{}, invocation)
 	resp, err := handler(ctx, req)
 	if err != nil {
-		return resp, err
+		return resp, i.omitErrorDetails(err, invocation.selection, info.FullMethod)
 	}
 	message, ok := resp.(proto.Message)
 	if !ok {
 		return resp, nil
 	}
-	needed, err := draft.NeedsOmission(message, invocation.selection)
+	filtered, err := i.omitOutgoingRoot(message, invocation.selection, info.FullMethod)
 	if err != nil {
-		return nil, i.omissionError(info.FullMethod, err)
-	}
-	if !needed {
-		return resp, nil
-	}
-	filtered := proto.Clone(message)
-	if err := i.omitRoot(filtered, invocation.selection, info.FullMethod); err != nil {
 		return nil, err
+	}
+	if filtered == nil {
+		return resp, nil
 	}
 	return filtered, nil
 }
