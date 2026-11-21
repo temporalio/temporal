@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	errordetailspb "go.temporal.io/api/errordetails/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -17,7 +18,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -40,6 +44,89 @@ type draftUnaffectedRequest struct {
 
 func (r *draftUnaffectedRequest) GetNamespace() string { return r.name }
 
+func TestDraftFieldsSharedResponse(t *testing.T) {
+	i := NewDraftFieldsInterceptor(func(string) []string { return []string{"feature-a"} }, nil, log.NewNoopLogger(), draft.Omit)
+	shared := &testfixture.Parent{Message: draftMessage()}
+	out, err := draftInvoke(i, &emptypb.Empty{}, nil, func(context.Context, any) (any, error) {
+		return shared, nil
+	})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, &testfixture.Parent{Message: &testfixture.Message{Stable: "stable", FeatureA: "a"}}, out.(*testfixture.Parent))
+	protorequire.ProtoEqual(t, &testfixture.Parent{Message: draftMessage()}, shared)
+}
+
+func TestDraftFieldsErrorDetails(t *testing.T) {
+	stable := &errordetailspb.NamespaceNotFoundFailure{Namespace: "missing"}
+	detail := &testfixture.Message{Stable: "stable", FeatureA: "a"}
+	st, err := status.New(codes.NotFound, "namespace is missing").WithDetails(stable, detail)
+	require.NoError(t, err)
+	var original *serviceerror.NamespaceNotFound
+	require.ErrorAs(t, serviceerror.FromStatus(st), &original)
+	originalStatus := st.Proto()
+
+	for _, tc := range []struct {
+		name    string
+		enabled []string
+		want    *testfixture.Message
+	}{
+		{"disabled", nil, &testfixture.Message{Stable: "stable"}},
+		{"enabled", []string{"feature-a"}, &testfixture.Message{Stable: "stable", FeatureA: "a"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			i := NewDraftFieldsInterceptor(func(string) []string { return tc.enabled }, nil, log.NewNoopLogger(), draft.Omit)
+			out, err := draftInvoke(i, &emptypb.Empty{}, nil, func(context.Context, any) (any, error) {
+				return nil, original
+			})
+			require.Nil(t, out)
+			require.Error(t, err)
+			protorequire.ProtoEqual(t, originalStatus, original.Status().Proto())
+			var got *status.Status
+			if len(tc.enabled) == 0 {
+				var ok bool
+				got, ok = status.FromError(err)
+				require.True(t, ok, "filtered error must carry a gRPC status")
+			} else {
+				require.Same(t, original, err)
+				got = original.Status()
+			}
+			require.Equal(t, codes.Code(originalStatus.GetCode()), got.Code())
+			require.Equal(t, originalStatus.GetMessage(), got.Message())
+			details := got.Details()
+			require.Len(t, details, 2)
+			require.IsType(t, stable, details[0])
+			require.IsType(t, tc.want, details[1])
+			protorequire.ProtoEqual(t, stable, details[0].(*errordetailspb.NamespaceNotFoundFailure))
+			protorequire.ProtoEqual(t, tc.want, details[1].(*testfixture.Message))
+		})
+	}
+}
+
+func TestDraftFieldsUnaffectedErrorDetails(t *testing.T) {
+	i := NewDraftFieldsInterceptor(func(string) []string { t.Fatal("unexpected config lookup"); return nil }, nil, log.NewNoopLogger(), draft.Omit)
+	original := serviceerror.NewNamespaceNotFound("missing")
+	_, err := draftInvoke(i, &emptypb.Empty{}, nil, func(context.Context, any) (any, error) {
+		return nil, original
+	})
+	require.Same(t, original, err)
+}
+
+func TestDraftFieldsErrorDetailOmissionFailure(t *testing.T) {
+	st, err := status.New(codes.NotFound, "namespace is missing").WithDetails(draftMessage())
+	require.NoError(t, err)
+	i := NewDraftFieldsInterceptor(func(string) []string { return nil }, nil, log.NewNoopLogger(), func(msg any, _ *draft.Selection) (bool, error) {
+		require.IsType(t, &testfixture.Message{}, msg)
+		return true, errors.New("sensitive payload")
+	})
+	out, err := draftInvoke(i, nil, nil, func(context.Context, any) (any, error) {
+		return nil, st.Err()
+	})
+	require.Nil(t, out)
+	require.Error(t, err)
+	got, ok := status.FromError(err)
+	require.True(t, ok)
+	protorequire.ProtoEqual(t, status.New(codes.Internal, "draft field omission failed").Proto(), got.Proto())
+}
+
 func TestDraftFieldsResponseOnlyNamespaceBinding(t *testing.T) {
 	reads := 0
 	i := NewDraftFieldsInterceptor(func(name string) []string {
@@ -49,13 +136,13 @@ func TestDraftFieldsResponseOnlyNamespaceBinding(t *testing.T) {
 	}, nil, log.NewNoopLogger(), draft.Omit)
 	req := &draftUnaffectedRequest{Empty: &emptypb.Empty{}, name: "disabled"}
 	response := draftMessage()
-	_, err := draftInvoke(i, req, nil, func(context.Context, any) (any, error) {
+	out, err := draftInvoke(i, req, nil, func(context.Context, any) (any, error) {
 		require.Zero(t, reads)
 		req.name = "enabled"
 		return response, nil
 	})
 	require.NoError(t, err)
-	require.Empty(t, response.FeatureA)
+	require.Empty(t, out.(*testfixture.Message).GetFeatureA())
 	require.Equal(t, 1, reads)
 }
 
@@ -97,11 +184,11 @@ func TestDraftFieldsSelections(t *testing.T) {
 				return response, nil
 			})
 			require.NoError(t, err)
-			require.Same(t, response, out)
-			require.Equal(t, tc.a, response.FeatureA)
-			require.Equal(t, tc.b, response.FeatureB)
+			if tc.a != "" && tc.b != "" {
+				require.Same(t, response, out)
+			}
+			protorequire.ProtoEqual(t, &testfixture.Message{Stable: "stable", FeatureA: tc.a, FeatureB: tc.b}, out.(*testfixture.Message))
 			require.Equal(t, "stable", req.Stable)
-			require.Equal(t, "stable", response.Stable)
 			require.Equal(t, 1, reads)
 		})
 	}
@@ -139,9 +226,9 @@ func TestDraftFieldsNamespacePolicy(t *testing.T) {
 				return []string{"feature-a"}
 			}, registry, log.NewNoopLogger(), draft.Omit)
 			response := draftMessage()
-			_, err := draftInvoke(i, tc.req, nil, func(context.Context, any) (any, error) { return response, nil })
+			out, err := draftInvoke(i, tc.req, nil, func(context.Context, any) (any, error) { return response, nil })
 			require.NoError(t, err)
-			require.Equal(t, tc.want, response.FeatureA)
+			require.Equal(t, tc.want, out.(*testfixture.Message).GetFeatureA())
 			require.Equal(t, tc.reads, reads)
 		})
 	}
@@ -174,13 +261,13 @@ func TestDraftFieldsNamespaceNormalization(t *testing.T) {
 			}, registry, log.NewNoopLogger(), draft.Omit)
 			validator := NewNamespaceValidatorInterceptor(registry, dynamicconfig.GetBoolPropertyFn(false), dynamicconfig.GetIntPropertyFn(100), nil)
 			response := draftMessage()
-			_, err := draftInvoke(i, req, validator.NamespaceValidateIntercept, func(context.Context, any) (any, error) { return response, nil })
+			out, err := draftInvoke(i, req, validator.NamespaceValidateIntercept, func(context.Context, any) (any, error) { return response, nil })
 			require.NoError(t, err)
 			require.Equal(t, 1, reads)
 			if enabled {
-				require.Equal(t, "a", response.FeatureA)
+				require.Equal(t, "a", out.(*testfixture.Message).GetFeatureA())
 			} else {
-				require.Empty(t, response.FeatureA)
+				require.Empty(t, out.(*testfixture.Message).GetFeatureA())
 			}
 		}
 	}
@@ -192,9 +279,10 @@ func TestDraftFieldsFailuresAndPassthrough(t *testing.T) {
 	_, err := draftInvoke(i, &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: []byte{255}}, validator.NamespaceValidateIntercept, func(context.Context, any) (any, error) { t.Fatal("handler ran"); return nil, nil })
 	require.Error(t, err)
 	for _, method := range []string{draftTestMethod, "/temporal.server.api.adminservice.v1.AdminService/Test"} {
-		out, err := i.OutgoingIntercept(t.Context(), nil, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) { return &emptypb.Empty{}, nil })
+		response := &emptypb.Empty{}
+		out, err := i.OutgoingIntercept(t.Context(), nil, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) { return response, nil })
 		require.NoError(t, err)
-		require.IsType(t, &emptypb.Empty{}, out)
+		require.Same(t, response, out)
 	}
 	original := errors.New("handler error")
 	out, err := draftInvoke(i, nil, nil, func(context.Context, any) (any, error) { return draftMessage(), original })
@@ -224,7 +312,8 @@ func TestDraftFieldsOmissionBeforeValidation(t *testing.T) {
 
 func TestDraftFieldsConfigPanic(t *testing.T) {
 	for _, incoming := range []bool{false, true} {
-		i := NewDraftFieldsInterceptor(func(string) []string { panic("sensitive config") }, nil, log.NewNoopLogger(), draft.Omit)
+		core, logs := observer.New(zap.ErrorLevel)
+		i := NewDraftFieldsInterceptor(func(string) []string { panic("sensitive config") }, nil, log.NewZapLogger(zap.New(core)), draft.Omit)
 		var req any = &emptypb.Empty{}
 		if incoming {
 			req = draftMessage()
@@ -236,8 +325,13 @@ func TestDraftFieldsConfigPanic(t *testing.T) {
 		})
 		require.Equal(t, !incoming, called)
 		require.Nil(t, out)
-		require.Equal(t, codes.Internal, status.Code(err))
-		require.NotContains(t, err.Error(), "sensitive")
+		require.Equal(t, status.New(codes.Internal, "draft field omission failed"), status.Convert(err))
+		entries := logs.All()
+		require.Len(t, entries, 1)
+		fields := entries[0].ContextMap()
+		require.Equal(t, draftTestMethod, fields["operation"])
+		require.Contains(t, fields["error"], "temporal.api.drafttest.v1.Message")
+		require.Contains(t, fields["error"], "sensitive config")
 	}
 }
 
@@ -255,4 +349,76 @@ func TestDraftFieldsExcludedAndNonProto(t *testing.T) {
 	out, err := draftInvoke(i, "request", nil, func(context.Context, any) (any, error) { return "response", nil })
 	require.NoError(t, err)
 	require.Equal(t, "response", out)
+}
+
+func TestDraftRPCNamespaceSelection(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		request         *testfixture.MethodRequest
+		configNamespace string
+		want            codes.Code
+	}{
+		{name: "global default", request: &testfixture.MethodRequest{}, want: codes.OK},
+		{name: "named namespace", request: &testfixture.MethodRequest{Namespace: "disabled", NamespaceId: "ignored"}, configNamespace: "disabled", want: codes.Unimplemented},
+		{name: "resolved ID", request: &testfixture.MethodRequest{NamespaceId: "known"}, configNamespace: "enabled", want: codes.OK},
+		{name: "unresolved ID", request: &testfixture.MethodRequest{NamespaceId: "unknown"}, want: codes.Unimplemented},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			registry := namespace.NewMockRegistry(gomock.NewController(t))
+			switch tc.request.NamespaceId {
+			case "known":
+				registry.EXPECT().GetNamespaceName(namespace.ID("known")).Return(namespace.Name("enabled"), nil)
+			case "unknown":
+				registry.EXPECT().GetNamespaceName(namespace.ID("unknown")).Return(namespace.Name(""), serviceerror.NewNamespaceNotFound("unknown"))
+			default:
+				// These requests select by namespace name or use the global default.
+			}
+			reads := 0
+			i := NewDraftFieldsInterceptor(func(name string) []string {
+				reads++
+				require.Equal(t, tc.configNamespace, name)
+				if name == "disabled" {
+					return nil
+				}
+				return []string{"method"}
+			}, registry, log.NewNoopLogger(), draft.Omit)
+			i.addDraftService(testfixture.File_common_draft_testfixture_filter_proto.Services().ByName("FixtureService"))
+			info := &grpc.UnaryServerInfo{FullMethod: testfixture.FixtureService_Preview_FullMethodName}
+			response := &testfixture.MethodResponse{Values: &testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}}
+			result, err := i.OutgoingIntercept(t.Context(), tc.request, info, func(ctx context.Context, req any) (any, error) {
+				return i.IncomingIntercept(ctx, req, info, func(context.Context, any) (any, error) {
+					require.Equal(t, codes.OK, tc.want)
+					return response, nil
+				})
+			})
+			require.Equal(t, tc.want, status.Code(err))
+			if tc.want == codes.OK {
+				protorequire.ProtoEqual(t, &testfixture.MethodResponse{Values: &testfixture.EnumValues{}}, result.(*testfixture.MethodResponse))
+				protorequire.ProtoEqual(t, &testfixture.MethodResponse{Values: &testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}}, response)
+			}
+			if tc.request.NamespaceId == "unknown" {
+				require.Zero(t, reads)
+			} else {
+				require.Equal(t, 1, reads)
+			}
+		})
+	}
+}
+
+func TestDraftEnumErrorDetails(t *testing.T) {
+	t.Parallel()
+	i := NewDraftFieldsInterceptor(func(string) []string { return nil }, nil, log.NewNoopLogger(), draft.Omit)
+	detail := &testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}
+	original, err := status.New(codes.NotFound, "missing").WithDetails(detail)
+	require.NoError(t, err)
+	_, err = draftInvoke(i, &emptypb.Empty{}, nil, func(context.Context, any) (any, error) {
+		return nil, original.Err()
+	})
+	filtered := status.Convert(err)
+	require.Equal(t, codes.NotFound, filtered.Code())
+	require.Equal(t, "missing", filtered.Message())
+	require.Len(t, filtered.Details(), 1)
+	protorequire.ProtoEqual(t, &testfixture.EnumValues{}, filtered.Details()[0].(*testfixture.EnumValues))
 }

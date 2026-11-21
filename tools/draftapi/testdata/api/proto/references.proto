@@ -2,13 +2,14 @@ syntax = "proto3";
 package temporal.api.testreferences.v1;
 option go_package = "go.temporal.io/api/testreferences/v1;testreferences";
 import "message.proto";
+import "draft.proto";
 message References {
-  temporal.api.testdraft.v1.Draft value = 1;
-  repeated temporal.api.testdraft.v1.Draft list = 2;
-  map<string, temporal.api.testdraft.v1.Draft.Nested> by_name = 3;
-  temporal.api.testdraft.v1.Draft.NestedEnum state = 4;
+  temporal.api.testdraft.v1.Draft value = 1 [(temporal.api.protometa.v1.draft) = "message-feature"];
+  repeated temporal.api.testdraft.v1.Draft list = 2 [(temporal.api.protometa.v1.draft) = "message-feature"];
+  map<string, temporal.api.testdraft.v1.Draft.Nested> by_name = 3 [(temporal.api.protometa.v1.draft) = "message-feature"];
+  temporal.api.testdraft.v1.Draft.NestedEnum state = 4 [(temporal.api.protometa.v1.draft) = "message-feature"];
   oneof choice {
-    temporal.api.testdraft.v1.Draft child = 5;
+    temporal.api.testdraft.v1.Draft child = 5 [(temporal.api.protometa.v1.draft) = "message-feature"];
     string stable = 6;
   }
 }

@@ -53,20 +53,32 @@ trap 'rm -rf $tmp' EXIT
 
 check_against_commit() {
   local commit=$1 name=$2
+  local go_settings=(GOFLAGS= GOWORK=off GOENV=off)
   color "Breaking check against $name:"
   git -C "$tmp" checkout --detach "$commit"
+
+  # Server commit 5b3d3a1 used a local checkout of temporalio/api-go's api-next
+  # branch at f03089cc. Pin that revision to preserve the baseline's API types.
+  if [[ "$commit" == 5b3d3a1a7057e3addef18198f642de941a164bb6 ]] &&
+    grep -Fxq 'replace go.temporal.io/api => ../api-go/api_next' "$tmp/go.mod"; then
+    local api_pin=github.com/temporalio/api-go/api_next@v0.0.0-20261121003946-f03089cca2da
+    color "Building $name with $api_pin"
+    mise -C "$tmp" exec go -- env "${go_settings[@]}" go mod edit -replace="go.temporal.io/api=$api_pin"
+    mise -C "$tmp" exec go -- env "${go_settings[@]}" go mod download "$api_pin"
+  fi
+
   # Note that we're now in a different commit of this repo, so we're relying on different
   # versions of the Makefile to do what we expect given this make target. Check that it's
   # least new enough to handle this by looking for the string INTERNAL_BINPB.
   if grep -q INTERNAL_BINPB "$tmp/Makefile"; then
-    $MAKE -C "$tmp" "$INTERNAL_BINPB"
+    mise -C "$tmp" exec go -- "$MAKE" "${go_settings[@]}" "$INTERNAL_BINPB"
     $BUF breaking "$INTERNAL_BINPB" --against "$tmp/$INTERNAL_BINPB" --config proto/internal/buf.yaml
   else
     yellow "$name commit is too old to support breaking check for internal protos"
   fi
 
   if grep -q CHASM_BINPB "$tmp/Makefile"; then
-    $MAKE -C "$tmp" "$CHASM_BINPB"
+    mise -C "$tmp" exec go -- "$MAKE" "${go_settings[@]}" "$CHASM_BINPB"
     $BUF breaking "$CHASM_BINPB" --against "$tmp/$CHASM_BINPB" --config chasm/lib/buf.yaml
   else
     yellow "$name commit is too old to support breaking check for chasm protos"

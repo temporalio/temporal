@@ -27,8 +27,7 @@ type StableEnum int32
 const (
 	StableEnum_STABLE_ZERO  StableEnum = 0
 	StableEnum_DRAFT_VALUE  StableEnum = 1
-	StableEnum_STABLE_ALIAS StableEnum = 2
-	StableEnum_DRAFT_ALIAS  StableEnum = 2
+	StableEnum_STABLE_OTHER StableEnum = 2
 )
 
 // Enum value maps for StableEnum.
@@ -36,14 +35,12 @@ var (
 	StableEnum_name = map[int32]string{
 		0: "STABLE_ZERO",
 		1: "DRAFT_VALUE",
-		2: "STABLE_ALIAS",
-		// Duplicate value: 2: "DRAFT_ALIAS",
+		2: "STABLE_OTHER",
 	}
 	StableEnum_value = map[string]int32{
 		"STABLE_ZERO":  0,
 		"DRAFT_VALUE":  1,
-		"STABLE_ALIAS": 2,
-		"DRAFT_ALIAS":  2,
+		"STABLE_OTHER": 2,
 	}
 )
 
@@ -175,7 +172,7 @@ type Stable struct {
 	//	*Stable_Member
 	DraftUnion    isStable_DraftUnion      `protobuf_oneof:"draft_union"`
 	Whole         *Draft                   `protobuf:"bytes,7,opt,name=whole,proto3" json:"whole,omitempty"`
-	Both          *Draft                   `protobuf:"bytes,8,opt,name=both,proto3" json:"both,omitempty"`
+	AlsoDraft     *Draft                   `protobuf:"bytes,8,opt,name=also_draft,json=alsoDraft,proto3" json:"also_draft,omitempty"`
 	List          []*Draft                 `protobuf:"bytes,9,rep,name=list,proto3" json:"list,omitempty"`
 	ByName        map[string]*Draft_Nested `protobuf:"bytes,10,rep,name=by_name,json=byName,proto3" json:"by_name,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	InheritedEnum Draft_NestedEnum         `protobuf:"varint,11,opt,name=inherited_enum,json=inheritedEnum,proto3,enum=temporal.api.testdraft.v1.Draft_NestedEnum" json:"inherited_enum,omitempty"`
@@ -183,8 +180,10 @@ type Stable struct {
 	//
 	//	*Stable_DraftChild
 	//	*Stable_Ordinary
-	Mixed         isStable_Mixed      `protobuf_oneof:"mixed"`
-	NestedBoth    *Draft_SecondNested `protobuf:"bytes,14,opt,name=nested_both,json=nestedBoth,proto3" json:"nested_both,omitempty"`
+	Mixed       isStable_Mixed      `protobuf_oneof:"mixed"`
+	NestedDraft *Draft_SecondNested `protobuf:"bytes,14,opt,name=nested_draft,json=nestedDraft,proto3" json:"nested_draft,omitempty"`
+	// Feature names are any whitespace-free token, as in the generators.
+	Slashed       string `protobuf:"bytes,15,opt,name=slashed,proto3" json:"slashed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -288,9 +287,9 @@ func (x *Stable) GetWhole() *Draft {
 	return nil
 }
 
-func (x *Stable) GetBoth() *Draft {
+func (x *Stable) GetAlsoDraft() *Draft {
 	if x != nil {
-		return x.Both
+		return x.AlsoDraft
 	}
 	return nil
 }
@@ -341,11 +340,18 @@ func (x *Stable) GetOrdinary() string {
 	return ""
 }
 
-func (x *Stable) GetNestedBoth() *Draft_SecondNested {
+func (x *Stable) GetNestedDraft() *Draft_SecondNested {
 	if x != nil {
-		return x.NestedBoth
+		return x.NestedDraft
 	}
 	return nil
+}
+
+func (x *Stable) GetSlashed() string {
+	if x != nil {
+		return x.Slashed
+	}
+	return ""
 }
 
 type isStable_Choice interface {
@@ -434,6 +440,402 @@ func (x *Draft) GetValue() string {
 	return ""
 }
 
+type RegisterEmptyDraftServiceHandler struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterEmptyDraftServiceHandler) Reset() {
+	*x = RegisterEmptyDraftServiceHandler{}
+	mi := &file_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterEmptyDraftServiceHandler) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterEmptyDraftServiceHandler) ProtoMessage() {}
+
+func (x *RegisterEmptyDraftServiceHandler) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterEmptyDraftServiceHandler.ProtoReflect.Descriptor instead.
+func (*RegisterEmptyDraftServiceHandler) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{2}
+}
+
+type StableService_DraftCallClient struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StableService_DraftCallClient) Reset() {
+	*x = StableService_DraftCallClient{}
+	mi := &file_message_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StableService_DraftCallClient) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StableService_DraftCallClient) ProtoMessage() {}
+
+func (x *StableService_DraftCallClient) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StableService_DraftCallClient.ProtoReflect.Descriptor instead.
+func (*StableService_DraftCallClient) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{3}
+}
+
+type StableService_DraftCallServer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StableService_DraftCallServer) Reset() {
+	*x = StableService_DraftCallServer{}
+	mi := &file_message_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StableService_DraftCallServer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StableService_DraftCallServer) ProtoMessage() {}
+
+func (x *StableService_DraftCallServer) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StableService_DraftCallServer.ProtoReflect.Descriptor instead.
+func (*StableService_DraftCallServer) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{4}
+}
+
+type StableRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StableRequest) Reset() {
+	*x = StableRequest{}
+	mi := &file_message_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StableRequest) ProtoMessage() {}
+
+func (x *StableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StableRequest.ProtoReflect.Descriptor instead.
+func (*StableRequest) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{5}
+}
+
+type StableResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StableResponse) Reset() {
+	*x = StableResponse{}
+	mi := &file_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StableResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StableResponse) ProtoMessage() {}
+
+func (x *StableResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StableResponse.ProtoReflect.Descriptor instead.
+func (*StableResponse) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{6}
+}
+
+type MethodRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MethodRequest) Reset() {
+	*x = MethodRequest{}
+	mi := &file_message_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MethodRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MethodRequest) ProtoMessage() {}
+
+func (x *MethodRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MethodRequest.ProtoReflect.Descriptor instead.
+func (*MethodRequest) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{7}
+}
+
+type MethodResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MethodResponse) Reset() {
+	*x = MethodResponse{}
+	mi := &file_message_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MethodResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MethodResponse) ProtoMessage() {}
+
+func (x *MethodResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MethodResponse.ProtoReflect.Descriptor instead.
+func (*MethodResponse) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{8}
+}
+
+type StreamRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamRequest) Reset() {
+	*x = StreamRequest{}
+	mi := &file_message_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamRequest) ProtoMessage() {}
+
+func (x *StreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamRequest.ProtoReflect.Descriptor instead.
+func (*StreamRequest) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{9}
+}
+
+type StreamResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamResponse) Reset() {
+	*x = StreamResponse{}
+	mi := &file_message_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamResponse) ProtoMessage() {}
+
+func (x *StreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamResponse.ProtoReflect.Descriptor instead.
+func (*StreamResponse) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{10}
+}
+
+type ServiceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceRequest) Reset() {
+	*x = ServiceRequest{}
+	mi := &file_message_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceRequest) ProtoMessage() {}
+
+func (x *ServiceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceRequest.ProtoReflect.Descriptor instead.
+func (*ServiceRequest) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{11}
+}
+
+type ServiceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceResponse) Reset() {
+	*x = ServiceResponse{}
+	mi := &file_message_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceResponse) ProtoMessage() {}
+
+func (x *ServiceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceResponse.ProtoReflect.Descriptor instead.
+func (*ServiceResponse) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{12}
+}
+
 type Stable_StableNested struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Stable        string                 `protobuf:"bytes,1,opt,name=stable,proto3" json:"stable,omitempty"`
@@ -443,7 +845,7 @@ type Stable_StableNested struct {
 
 func (x *Stable_StableNested) Reset() {
 	*x = Stable_StableNested{}
-	mi := &file_message_proto_msgTypes[4]
+	mi := &file_message_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -455,7 +857,7 @@ func (x *Stable_StableNested) String() string {
 func (*Stable_StableNested) ProtoMessage() {}
 
 func (x *Stable_StableNested) ProtoReflect() protoreflect.Message {
-	mi := &file_message_proto_msgTypes[4]
+	mi := &file_message_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +889,7 @@ type Stable_DraftNested struct {
 
 func (x *Stable_DraftNested) Reset() {
 	*x = Stable_DraftNested{}
-	mi := &file_message_proto_msgTypes[5]
+	mi := &file_message_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -499,7 +901,7 @@ func (x *Stable_DraftNested) String() string {
 func (*Stable_DraftNested) ProtoMessage() {}
 
 func (x *Stable_DraftNested) ProtoReflect() protoreflect.Message {
-	mi := &file_message_proto_msgTypes[5]
+	mi := &file_message_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -531,7 +933,7 @@ type Draft_Nested struct {
 
 func (x *Draft_Nested) Reset() {
 	*x = Draft_Nested{}
-	mi := &file_message_proto_msgTypes[6]
+	mi := &file_message_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -543,7 +945,7 @@ func (x *Draft_Nested) String() string {
 func (*Draft_Nested) ProtoMessage() {}
 
 func (x *Draft_Nested) ProtoReflect() protoreflect.Message {
-	mi := &file_message_proto_msgTypes[6]
+	mi := &file_message_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -575,7 +977,7 @@ type Draft_SecondNested struct {
 
 func (x *Draft_SecondNested) Reset() {
 	*x = Draft_SecondNested{}
-	mi := &file_message_proto_msgTypes[7]
+	mi := &file_message_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -587,7 +989,7 @@ func (x *Draft_SecondNested) String() string {
 func (*Draft_SecondNested) ProtoMessage() {}
 
 func (x *Draft_SecondNested) ProtoReflect() protoreflect.Message {
-	mi := &file_message_proto_msgTypes[7]
+	mi := &file_message_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -614,25 +1016,27 @@ var File_message_proto protoreflect.FileDescriptor
 
 const file_message_proto_rawDesc = "" +
 	"\n" +
-	"\rmessage.proto\x12\x19temporal.api.testdraft.v1\x1a\vdraft.proto\"\xdf\b\n" +
+	"\rmessage.proto\x12\x19temporal.api.testdraft.v1\x1a\vdraft.proto\"\x9c\n" +
+	"\n" +
 	"\x06Stable\x12\x16\n" +
 	"\x06stable\x18\x01 \x01(\tR\x06stable\x12'\n" +
 	"\x05draft\x18\x02 \x01(\tB\x11\xaa\xbb\x18\rfield-featureR\x05draft\x12]\n" +
 	"\tdraft_map\x18\x03 \x03(\v2/.temporal.api.testdraft.v1.Stable.DraftMapEntryB\x0f\xaa\xbb\x18\vmap-featureR\bdraftMap\x12%\n" +
 	"\rstable_choice\x18\x04 \x01(\tH\x00R\fstableChoice\x127\n" +
 	"\fdraft_choice\x18\x05 \x01(\tB\x12\xaa\xbb\x18\x0ebranch-featureH\x00R\vdraftChoice\x12\x18\n" +
-	"\x06member\x18\x06 \x01(\tH\x01R\x06member\x126\n" +
-	"\x05whole\x18\a \x01(\v2 .temporal.api.testdraft.v1.DraftR\x05whole\x12G\n" +
-	"\x04both\x18\b \x01(\v2 .temporal.api.testdraft.v1.DraftB\x11\xaa\xbb\x18\rfield-featureR\x04both\x124\n" +
-	"\x04list\x18\t \x03(\v2 .temporal.api.testdraft.v1.DraftR\x04list\x12F\n" +
+	"\x06member\x18\x06 \x01(\tH\x01R\x06member\x12K\n" +
+	"\x05whole\x18\a \x01(\v2 .temporal.api.testdraft.v1.DraftB\x13\xaa\xbb\x18\x0fmessage-featureR\x05whole\x12T\n" +
+	"\n" +
+	"also_draft\x18\b \x01(\v2 .temporal.api.testdraft.v1.DraftB\x13\xaa\xbb\x18\x0fmessage-featureR\talsoDraft\x12I\n" +
+	"\x04list\x18\t \x03(\v2 .temporal.api.testdraft.v1.DraftB\x13\xaa\xbb\x18\x0fmessage-featureR\x04list\x12[\n" +
 	"\aby_name\x18\n" +
-	" \x03(\v2-.temporal.api.testdraft.v1.Stable.ByNameEntryR\x06byName\x12R\n" +
-	"\x0einherited_enum\x18\v \x01(\x0e2+.temporal.api.testdraft.v1.Draft.NestedEnumR\rinheritedEnum\x12C\n" +
-	"\vdraft_child\x18\f \x01(\v2 .temporal.api.testdraft.v1.DraftH\x02R\n" +
+	" \x03(\v2-.temporal.api.testdraft.v1.Stable.ByNameEntryB\x13\xaa\xbb\x18\x0fmessage-featureR\x06byName\x12g\n" +
+	"\x0einherited_enum\x18\v \x01(\x0e2+.temporal.api.testdraft.v1.Draft.NestedEnumB\x13\xaa\xbb\x18\x0fmessage-featureR\rinheritedEnum\x12X\n" +
+	"\vdraft_child\x18\f \x01(\v2 .temporal.api.testdraft.v1.DraftB\x13\xaa\xbb\x18\x0fmessage-featureH\x02R\n" +
 	"draftChild\x12\x1c\n" +
-	"\bordinary\x18\r \x01(\tH\x02R\bordinary\x12N\n" +
-	"\vnested_both\x18\x0e \x01(\v2-.temporal.api.testdraft.v1.Draft.SecondNestedR\n" +
-	"nestedBoth\x1a;\n" +
+	"\bordinary\x18\r \x01(\tH\x02R\bordinary\x12e\n" +
+	"\fnested_draft\x18\x0e \x01(\v2-.temporal.api.testdraft.v1.Draft.SecondNestedB\x13\xaa\xbb\x18\x0fmessage-featureR\vnestedDraft\x12.\n" +
+	"\aslashed\x18\x0f \x01(\tB\x14\xaa\xbb\x18\x10qa//experimentalR\aslashed\x1a;\n" +
 	"\rDraftMapEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1ab\n" +
@@ -645,31 +1049,42 @@ const file_message_proto_rawDesc = "" +
 	"\x05value\x18\x01 \x01(\tR\x05value:\x12\xb2\xbb\x18\x0enested-featureB\b\n" +
 	"\x06choiceB \n" +
 	"\vdraft_union\x12\x11ڻ\x18\roneof-featureB\a\n" +
-	"\x05mixed\"\xaa\x01\n" +
+	"\x05mixed\"\x90\x01\n" +
 	"\x05Draft\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x1a\x1e\n" +
 	"\x06Nested\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\x1a>\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x1a$\n" +
 	"\fSecondNested\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value:\x18\xb2\xbb\x18\x14nested-other-feature\"\x16\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\"\x16\n" +
 	"\n" +
 	"NestedEnum\x12\b\n" +
-	"\x04ZERO\x10\x00:\x13\xb2\xbb\x18\x0fmessage-feature*{\n" +
+	"\x04ZERO\x10\x00:\x13\xb2\xbb\x18\x0fmessage-feature\"\"\n" +
+	" RegisterEmptyDraftServiceHandler\"\x1f\n" +
+	"\x1dStableService_DraftCallClient\"\x1f\n" +
+	"\x1dStableService_DraftCallServer\"\x0f\n" +
+	"\rStableRequest\"\x10\n" +
+	"\x0eStableResponse\"#\n" +
+	"\rMethodRequest:\x12\xb2\xbb\x18\x0emethod-feature\"$\n" +
+	"\x0eMethodResponse:\x12\xb2\xbb\x18\x0emethod-feature\"#\n" +
+	"\rStreamRequest:\x12\xb2\xbb\x18\x0estream-feature\"$\n" +
+	"\x0eStreamResponse:\x12\xb2\xbb\x18\x0estream-feature\"%\n" +
+	"\x0eServiceRequest:\x13\xb2\xbb\x18\x0fservice-feature\"&\n" +
+	"\x0fServiceResponse:\x13\xb2\xbb\x18\x0fservice-feature*S\n" +
 	"\n" +
 	"StableEnum\x12\x0f\n" +
 	"\vSTABLE_ZERO\x10\x00\x12\"\n" +
 	"\vDRAFT_VALUE\x10\x01\x1a\x11»\x18\rvalue-feature\x12\x10\n" +
-	"\fSTABLE_ALIAS\x10\x02\x12\"\n" +
-	"\vDRAFT_ALIAS\x10\x02\x1a\x11»\x18\ralias-feature\x1a\x02\x10\x01*-\n" +
+	"\fSTABLE_OTHER\x10\x02*-\n" +
 	"\tDraftEnum\x12\x0e\n" +
 	"\n" +
-	"DRAFT_ZERO\x10\x00\x1a\x10\xba\xbb\x18\fenum-feature2\xca\x01\n" +
-	"\rStableService\x12R\n" +
+	"DRAFT_ZERO\x10\x00\x1a\x10\xba\xbb\x18\fenum-feature2\xdd\x02\n" +
+	"\rStableService\x12a\n" +
 	"\n" +
-	"StableCall\x12!.temporal.api.testdraft.v1.Stable\x1a!.temporal.api.testdraft.v1.Stable\x12e\n" +
-	"\tDraftCall\x12!.temporal.api.testdraft.v1.Stable\x1a!.temporal.api.testdraft.v1.Stable\"\x12һ\x18\x0emethod-feature2q\n" +
-	"\fDraftService\x12L\n" +
-	"\x04Call\x12!.temporal.api.testdraft.v1.Stable\x1a!.temporal.api.testdraft.v1.Stable\x1a\x13ʻ\x18\x0fservice-feature2.\n" +
+	"StableCall\x12(.temporal.api.testdraft.v1.StableRequest\x1a).temporal.api.testdraft.v1.StableResponse\x12s\n" +
+	"\x06Stream\x12(.temporal.api.testdraft.v1.StreamRequest\x1a).temporal.api.testdraft.v1.StreamResponse\"\x12һ\x18\x0estream-feature0\x01\x12t\n" +
+	"\tDraftCall\x12(.temporal.api.testdraft.v1.MethodRequest\x1a).temporal.api.testdraft.v1.MethodResponse\"\x12һ\x18\x0emethod-feature2\x82\x01\n" +
+	"\fDraftService\x12]\n" +
+	"\x04Call\x12).temporal.api.testdraft.v1.ServiceRequest\x1a*.temporal.api.testdraft.v1.ServiceResponse\x1a\x13ʻ\x18\x0fservice-feature2.\n" +
 	"\x11EmptyDraftService\x1a\x19ʻ\x18\x15empty-service-featureB+Z)go.temporal.io/api/testdraft/v1;testdraftb\x06proto3"
 
 var (
@@ -685,38 +1100,51 @@ func file_message_proto_rawDescGZIP() []byte {
 }
 
 var file_message_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_message_proto_goTypes = []any{
-	(StableEnum)(0),             // 0: temporal.api.testdraft.v1.StableEnum
-	(DraftEnum)(0),              // 1: temporal.api.testdraft.v1.DraftEnum
-	(Draft_NestedEnum)(0),       // 2: temporal.api.testdraft.v1.Draft.NestedEnum
-	(*Stable)(nil),              // 3: temporal.api.testdraft.v1.Stable
-	(*Draft)(nil),               // 4: temporal.api.testdraft.v1.Draft
-	nil,                         // 5: temporal.api.testdraft.v1.Stable.DraftMapEntry
-	nil,                         // 6: temporal.api.testdraft.v1.Stable.ByNameEntry
-	(*Stable_StableNested)(nil), // 7: temporal.api.testdraft.v1.Stable.StableNested
-	(*Stable_DraftNested)(nil),  // 8: temporal.api.testdraft.v1.Stable.DraftNested
-	(*Draft_Nested)(nil),        // 9: temporal.api.testdraft.v1.Draft.Nested
-	(*Draft_SecondNested)(nil),  // 10: temporal.api.testdraft.v1.Draft.SecondNested
+	(StableEnum)(0),                          // 0: temporal.api.testdraft.v1.StableEnum
+	(DraftEnum)(0),                           // 1: temporal.api.testdraft.v1.DraftEnum
+	(Draft_NestedEnum)(0),                    // 2: temporal.api.testdraft.v1.Draft.NestedEnum
+	(*Stable)(nil),                           // 3: temporal.api.testdraft.v1.Stable
+	(*Draft)(nil),                            // 4: temporal.api.testdraft.v1.Draft
+	(*RegisterEmptyDraftServiceHandler)(nil), // 5: temporal.api.testdraft.v1.RegisterEmptyDraftServiceHandler
+	(*StableService_DraftCallClient)(nil),    // 6: temporal.api.testdraft.v1.StableService_DraftCallClient
+	(*StableService_DraftCallServer)(nil),    // 7: temporal.api.testdraft.v1.StableService_DraftCallServer
+	(*StableRequest)(nil),                    // 8: temporal.api.testdraft.v1.StableRequest
+	(*StableResponse)(nil),                   // 9: temporal.api.testdraft.v1.StableResponse
+	(*MethodRequest)(nil),                    // 10: temporal.api.testdraft.v1.MethodRequest
+	(*MethodResponse)(nil),                   // 11: temporal.api.testdraft.v1.MethodResponse
+	(*StreamRequest)(nil),                    // 12: temporal.api.testdraft.v1.StreamRequest
+	(*StreamResponse)(nil),                   // 13: temporal.api.testdraft.v1.StreamResponse
+	(*ServiceRequest)(nil),                   // 14: temporal.api.testdraft.v1.ServiceRequest
+	(*ServiceResponse)(nil),                  // 15: temporal.api.testdraft.v1.ServiceResponse
+	nil,                                      // 16: temporal.api.testdraft.v1.Stable.DraftMapEntry
+	nil,                                      // 17: temporal.api.testdraft.v1.Stable.ByNameEntry
+	(*Stable_StableNested)(nil),              // 18: temporal.api.testdraft.v1.Stable.StableNested
+	(*Stable_DraftNested)(nil),               // 19: temporal.api.testdraft.v1.Stable.DraftNested
+	(*Draft_Nested)(nil),                     // 20: temporal.api.testdraft.v1.Draft.Nested
+	(*Draft_SecondNested)(nil),               // 21: temporal.api.testdraft.v1.Draft.SecondNested
 }
 var file_message_proto_depIdxs = []int32{
-	5,  // 0: temporal.api.testdraft.v1.Stable.draft_map:type_name -> temporal.api.testdraft.v1.Stable.DraftMapEntry
+	16, // 0: temporal.api.testdraft.v1.Stable.draft_map:type_name -> temporal.api.testdraft.v1.Stable.DraftMapEntry
 	4,  // 1: temporal.api.testdraft.v1.Stable.whole:type_name -> temporal.api.testdraft.v1.Draft
-	4,  // 2: temporal.api.testdraft.v1.Stable.both:type_name -> temporal.api.testdraft.v1.Draft
+	4,  // 2: temporal.api.testdraft.v1.Stable.also_draft:type_name -> temporal.api.testdraft.v1.Draft
 	4,  // 3: temporal.api.testdraft.v1.Stable.list:type_name -> temporal.api.testdraft.v1.Draft
-	6,  // 4: temporal.api.testdraft.v1.Stable.by_name:type_name -> temporal.api.testdraft.v1.Stable.ByNameEntry
+	17, // 4: temporal.api.testdraft.v1.Stable.by_name:type_name -> temporal.api.testdraft.v1.Stable.ByNameEntry
 	2,  // 5: temporal.api.testdraft.v1.Stable.inherited_enum:type_name -> temporal.api.testdraft.v1.Draft.NestedEnum
 	4,  // 6: temporal.api.testdraft.v1.Stable.draft_child:type_name -> temporal.api.testdraft.v1.Draft
-	10, // 7: temporal.api.testdraft.v1.Stable.nested_both:type_name -> temporal.api.testdraft.v1.Draft.SecondNested
-	9,  // 8: temporal.api.testdraft.v1.Stable.ByNameEntry.value:type_name -> temporal.api.testdraft.v1.Draft.Nested
-	3,  // 9: temporal.api.testdraft.v1.StableService.StableCall:input_type -> temporal.api.testdraft.v1.Stable
-	3,  // 10: temporal.api.testdraft.v1.StableService.DraftCall:input_type -> temporal.api.testdraft.v1.Stable
-	3,  // 11: temporal.api.testdraft.v1.DraftService.Call:input_type -> temporal.api.testdraft.v1.Stable
-	3,  // 12: temporal.api.testdraft.v1.StableService.StableCall:output_type -> temporal.api.testdraft.v1.Stable
-	3,  // 13: temporal.api.testdraft.v1.StableService.DraftCall:output_type -> temporal.api.testdraft.v1.Stable
-	3,  // 14: temporal.api.testdraft.v1.DraftService.Call:output_type -> temporal.api.testdraft.v1.Stable
-	12, // [12:15] is the sub-list for method output_type
-	9,  // [9:12] is the sub-list for method input_type
+	21, // 7: temporal.api.testdraft.v1.Stable.nested_draft:type_name -> temporal.api.testdraft.v1.Draft.SecondNested
+	20, // 8: temporal.api.testdraft.v1.Stable.ByNameEntry.value:type_name -> temporal.api.testdraft.v1.Draft.Nested
+	8,  // 9: temporal.api.testdraft.v1.StableService.StableCall:input_type -> temporal.api.testdraft.v1.StableRequest
+	12, // 10: temporal.api.testdraft.v1.StableService.Stream:input_type -> temporal.api.testdraft.v1.StreamRequest
+	10, // 11: temporal.api.testdraft.v1.StableService.DraftCall:input_type -> temporal.api.testdraft.v1.MethodRequest
+	14, // 12: temporal.api.testdraft.v1.DraftService.Call:input_type -> temporal.api.testdraft.v1.ServiceRequest
+	9,  // 13: temporal.api.testdraft.v1.StableService.StableCall:output_type -> temporal.api.testdraft.v1.StableResponse
+	13, // 14: temporal.api.testdraft.v1.StableService.Stream:output_type -> temporal.api.testdraft.v1.StreamResponse
+	11, // 15: temporal.api.testdraft.v1.StableService.DraftCall:output_type -> temporal.api.testdraft.v1.MethodResponse
+	15, // 16: temporal.api.testdraft.v1.DraftService.Call:output_type -> temporal.api.testdraft.v1.ServiceResponse
+	13, // [13:17] is the sub-list for method output_type
+	9,  // [9:13] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name
@@ -740,7 +1168,7 @@ func file_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_message_proto_rawDesc), len(file_message_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   8,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

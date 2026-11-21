@@ -17,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/draft"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -111,6 +112,7 @@ func NewNexusOperationHTTPHandler(
 				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
 				httpTraceProvider:             httpTraceProvider,
 				enabledDraftFeatureAPIs:       serviceConfig.EnabledDraftFeatureAPIs,
+				omitDraftFields:               draft.Omit,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

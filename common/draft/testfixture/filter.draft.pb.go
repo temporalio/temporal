@@ -4,11 +4,14 @@ package testfixture
 
 import (
 	proto "google.golang.org/protobuf/proto"
+	slices "slices"
 )
 
-func (m *Message) OmitDraftFields(enabled func(string) bool) {
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *Message) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
+		return false
 	}
 	if !enabled("feature-a") {
 		m.FeatureA = ""
@@ -19,13 +22,19 @@ func (m *Message) OmitDraftFields(enabled func(string) bool) {
 	if !enabled("feature-a") {
 		m.Child = nil
 	} else {
-		m.Child.OmitDraftFields(enabled)
+		if m.Child.OmitDraftFields(enabled) {
+			removedEnumValue = true
+		}
 	}
-	for _, v := range m.Items {
-		v.OmitDraftFields(enabled)
+	for _, child := range m.Items {
+		if child.OmitDraftFields(enabled) {
+			removedEnumValue = true
+		}
 	}
-	for _, v := range m.ByName {
-		v.OmitDraftFields(enabled)
+	for _, child := range m.ByName {
+		if child.OmitDraftFields(enabled) {
+			removedEnumValue = true
+		}
 	}
 	if !enabled("feature-a") {
 		m.OptionalA = nil
@@ -37,121 +46,370 @@ func (m *Message) OmitDraftFields(enabled func(string) bool) {
 	}
 	if v, ok := m.Choice.(*Message_ChoiceChild); ok {
 		if v != nil {
-			v.ChoiceChild.OmitDraftFields(enabled)
+			if v.ChoiceChild.OmitDraftFields(enabled) {
+				removedEnumValue = true
+			}
 		}
 	}
+	return removedEnumValue
 }
-func (m *Parent) OmitDraftFields(enabled func(string) bool) {
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *Parent) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
+		return false
 	}
-	m.Message.OmitDraftFields(enabled)
+	if m.Message.OmitDraftFields(enabled) {
+		removedEnumValue = true
+	}
+	return removedEnumValue
 }
-func (m *MapParent) OmitDraftFields(enabled func(string) bool) {
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *MapParent) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
+		return false
 	}
-	for _, v := range m.Values {
-		v.OmitDraftFields(enabled)
+	for _, child := range m.Values {
+		if child.OmitDraftFields(enabled) {
+			removedEnumValue = true
+		}
 	}
+	return removedEnumValue
 }
-func (m *WholeDraft) OmitDraftFields(enabled func(string) bool) {
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *WholeDraft) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
+		return false
 	}
 	if !enabled("feature-a") {
 		proto.Reset(m)
-		return
+		return false
 	}
+	return removedEnumValue
 }
-func (m *WholeDraft_Nested) OmitDraftFields(enabled func(string) bool) {
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *WholeDraft_Nested) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
-	}
-	if !enabled("feature-b") || !enabled("feature-a") {
-		proto.Reset(m)
-		return
-	}
-}
-func (m *WholeDraft_Plain) OmitDraftFields(enabled func(string) bool) {
-	if m == nil {
-		return
+		return false
 	}
 	if !enabled("feature-a") {
 		proto.Reset(m)
-		return
+		return false
 	}
+	return removedEnumValue
 }
-func (m *EmptyDraft) OmitDraftFields(enabled func(string) bool) {
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *WholeDraft_Plain) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
+		return false
 	}
 	if !enabled("feature-a") {
 		proto.Reset(m)
-		return
+		return false
 	}
+	return removedEnumValue
 }
-func (m *DraftReferences) OmitDraftFields(enabled func(string) bool) {
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *EmptyDraft) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
+		return false
+	}
+	if !enabled("feature-a") {
+		proto.Reset(m)
+		return false
+	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *DraftReferences) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
 	}
 	if !enabled("feature-a") {
 		m.Child = nil
 	} else {
-		m.Child.OmitDraftFields(enabled)
+		if m.Child.OmitDraftFields(enabled) {
+			removedEnumValue = true
+		}
 	}
 	if !enabled("feature-a") {
 		m.Items = nil
 	} else {
-		for _, v := range m.Items {
-			v.OmitDraftFields(enabled)
+		for _, child := range m.Items {
+			if child.OmitDraftFields(enabled) {
+				removedEnumValue = true
+			}
 		}
 	}
 	if !enabled("feature-a") {
 		m.Values = nil
 	} else {
-		for _, v := range m.Values {
-			v.OmitDraftFields(enabled)
+		for _, child := range m.Values {
+			if child.OmitDraftFields(enabled) {
+				removedEnumValue = true
+			}
 		}
 	}
 	if !enabled("feature-a") {
 		m.State = 0
 	}
-	if !enabled("feature-b") || !enabled("feature-a") {
+	if !enabled("feature-a") {
 		m.Nested = nil
 	} else {
-		m.Nested.OmitDraftFields(enabled)
+		if m.Nested.OmitDraftFields(enabled) {
+			removedEnumValue = true
+		}
 	}
-	if !enabled("feature-b") || !enabled("feature-a") {
-		m.Both = nil
+	if !enabled("feature-a") {
+		m.AlsoDraft = nil
 	} else {
-		m.Both.OmitDraftFields(enabled)
+		if m.AlsoDraft.OmitDraftFields(enabled) {
+			removedEnumValue = true
+		}
 	}
 	if v, ok := m.Choice.(*DraftReferences_DraftChild); ok {
 		if !enabled("feature-a") {
 			m.Choice = nil
 		} else {
 			if v != nil {
-				v.DraftChild.OmitDraftFields(enabled)
+				if v.DraftChild.OmitDraftFields(enabled) {
+					removedEnumValue = true
+				}
 			}
 		}
 	}
+	return removedEnumValue
 }
-func (m *EnumOnlyRef) OmitDraftFields(enabled func(string) bool) {
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *EnumOnlyRef) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
+		return false
 	}
 	if !enabled("feature-a") {
 		m.State = 0
 	}
+	return removedEnumValue
 }
-func (m *LexicalRef) OmitDraftFields(enabled func(string) bool) {
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *LexicalRef) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
 	if m == nil {
-		return
+		return false
 	}
 	if !enabled("feature-a") {
 		m.P = nil
 	} else {
-		m.P.OmitDraftFields(enabled)
+		if m.P.OmitDraftFields(enabled) {
+			removedEnumValue = true
+		}
 	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *EnumRequest) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
+	}
+	if m.Value == 2 && !enabled("enum-value") {
+		m.Value = 0
+		removedEnumValue = true
+	}
+	for i, value := range m.Values {
+		if !(value == 2 && !enabled("enum-value")) {
+			continue
+		}
+		kept := slices.Grow(m.Values[:0:0], len(m.Values)-1)
+		kept = append(kept, m.Values[:i]...)
+		for _, value := range m.Values[i+1:] {
+			if !(value == 2 && !enabled("enum-value")) {
+				kept = append(kept, value)
+			}
+		}
+		m.Values = kept
+		removedEnumValue = true
+		break
+	}
+	for key, value := range m.ByName {
+		if value == 2 && !enabled("enum-value") {
+			delete(m.ByName, key)
+			removedEnumValue = true
+		}
+	}
+	if m.OptionalValue != nil && (*m.OptionalValue == 2 && !enabled("enum-value")) {
+		m.OptionalValue = nil
+		removedEnumValue = true
+	}
+	if v, ok := m.StableChoice.(*EnumRequest_Option); ok {
+		if v != nil {
+			if v.Option == 2 && !enabled("enum-value") {
+				m.StableChoice = nil
+				removedEnumValue = true
+			}
+		}
+	}
+	if _, ok := m.StableChoice.(*EnumRequest_Reference_); ok {
+		if !enabled("feature-a") {
+			m.StableChoice = nil
+		}
+	}
+	if v, ok := m.PreviewChoice.(*EnumRequest_Preview); ok {
+		if !enabled("feature-a") {
+			m.PreviewChoice = nil
+		} else {
+			if v != nil {
+				if v.Preview == 2 && !enabled("enum-value") {
+					m.PreviewChoice = nil
+					removedEnumValue = true
+				}
+			}
+		}
+	}
+	if !enabled("feature-a") {
+		m.DraftEnum = 0
+	}
+	if !enabled("feature-b") {
+		m.DraftField = 0
+	} else {
+		if m.DraftField == 2 && !enabled("enum-value") {
+			m.DraftField = 0
+			removedEnumValue = true
+		}
+	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *EnumResponse) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
+	}
+	if m.Values.OmitDraftFields(enabled) {
+		removedEnumValue = true
+	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *EnumValues) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
+	}
+	if m.Value == 2 && !enabled("enum-value") {
+		m.Value = 0
+		removedEnumValue = true
+	}
+	for i, value := range m.Values {
+		if !(value == 2 && !enabled("enum-value")) {
+			continue
+		}
+		kept := slices.Grow(m.Values[:0:0], len(m.Values)-1)
+		kept = append(kept, m.Values[:i]...)
+		for _, value := range m.Values[i+1:] {
+			if !(value == 2 && !enabled("enum-value")) {
+				kept = append(kept, value)
+			}
+		}
+		m.Values = kept
+		removedEnumValue = true
+		break
+	}
+	for key, value := range m.ByName {
+		if value == 2 && !enabled("enum-value") {
+			delete(m.ByName, key)
+			removedEnumValue = true
+		}
+	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *MethodRequest) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
+	}
+	if !enabled("method") {
+		proto.Reset(m)
+		return false
+	}
+	if m.Values.OmitDraftFields(enabled) {
+		removedEnumValue = true
+	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *MethodResponse) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
+	}
+	if !enabled("method") {
+		proto.Reset(m)
+		return false
+	}
+	if m.Values.OmitDraftFields(enabled) {
+		removedEnumValue = true
+	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *ServiceRequest) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
+	}
+	if !enabled("service") {
+		proto.Reset(m)
+		return false
+	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *ServiceResponse) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
+	}
+	if !enabled("service") {
+		proto.Reset(m)
+		return false
+	}
+	return removedEnumValue
+}
+
+// OmitDraftFields clears disabled draft fields and enum values.
+// It reports whether it removed a draft enum value from a retained field.
+func (m *OneofGetterCollision) OmitDraftFields(enabled func(string) bool) (removedEnumValue bool) {
+	if m == nil {
+		return false
+	}
+	if _, ok := m.Descriptor_.(*OneofGetterCollision_Label); ok {
+		if !enabled("feature-a") {
+			m.Descriptor_ = nil
+		}
+	}
+	return removedEnumValue
 }

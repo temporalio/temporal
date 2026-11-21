@@ -120,6 +120,7 @@ MAIN_BRANCH    := main
 
 # If you update these dirs, please also update in CategoryDirs find_altered_tests.go
 TEST_DIRS       			  := $(filter-out ./common/testx/% ./tests/mixedbrain/%,$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
+TEST_DIRS := $(foreach dir,$(TEST_DIRS),$(if $(findstring /testdata/,$(dir)),,$(dir)))
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
@@ -202,9 +203,12 @@ PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc,go:google.golang.org/gr
 PROTOC_GEN_GO_HELPERS = $(shell go tool -n protoc-gen-go-helpers)
 SHELLCHECK = $(call mise-tool,shellcheck,shellcheck)
 ##### Proto #####
+DRAFT_FIXTURE_ENV = API_BINPB="$(abspath $(API_BINPB))" PROTOC="$(PROTOC)" \
+	PROTOC_GEN_GO="$(abspath $(PROTOC_GEN_GO))" PROTOC_GEN_GO_GRPC="$(abspath $(PROTOC_GEN_GO_GRPC))"
+
 $(API_BINPB): go.mod go.sum $(PROTO_FILES) $(wildcard common/draft/testfixture/*.proto)
 	@printf $(COLOR) "Generating proto dependencies image..."
-	@./cmd/tools/getproto/run.sh --out $@
+	@mise exec go -- ./cmd/tools/getproto/run.sh --out $@
 
 $(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
 	@printf $(COLOR) "Generate proto image..."
@@ -230,7 +234,7 @@ protoc: $(API_BINPB)
 		-protoc-gen-go-helpers-bin=$(PROTOC_GEN_GO_HELPERS) \
 		$(PROTO_DIRS)
 
-proto-codegen: $(API_BINPB) $(PROTOC_GEN_GO)
+proto-codegen: $(API_BINPB)
 	@printf $(COLOR) "Generate service clients..."
 	@go generate -run genrpcwrappers ./client/...
 	@printf $(COLOR) "Generate server interceptors..."
@@ -240,7 +244,7 @@ proto-codegen: $(API_BINPB) $(PROTOC_GEN_GO)
 	@printf $(COLOR) "Generate search attributes helpers..."
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
 	@printf $(COLOR) "Generate draft omission fixtures..."
-	@API_BINPB=$(abspath $(API_BINPB)) PROTOC_GEN_GO=$(abspath $(PROTOC_GEN_GO)) go generate ./common/draft/testfixture
+	@$(DRAFT_FIXTURE_ENV) go generate ./common/draft/testfixture
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
@@ -748,9 +752,9 @@ update-dependencies-major:
 	@$(GOMAJOR) get -major all
 	@go mod tidy
 
-go-generate:
+go-generate: $(API_BINPB)
 	@printf $(COLOR) "Process go:generate directives..."
-	@mise exec -- go generate ./...
+	@$(DRAFT_FIXTURE_ENV) mise exec -- go generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."

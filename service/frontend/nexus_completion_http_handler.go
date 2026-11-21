@@ -113,6 +113,7 @@ func newNexusCompletionHandler(
 		LinkValidator:                        linkValidator,
 		clientVersionChecker:                 headers.NewDefaultVersionChecker(),
 		preProcessErrorsCounter:              metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
+		omitDraftFields:                      draft.Omit,
 	}
 }
 
@@ -274,7 +275,7 @@ func (h *nexusCompletionHandler) completeOperation(
 	if isChasm {
 		err = h.completeChasmOperation(ctx, logger, completion, successPayload, req, links, selection)
 	} else {
-		err = h.completeHSMOperation(ctx, completion, successPayload, req, links, selection)
+		err = h.completeHSMOperation(ctx, logger, completion, successPayload, req, links, selection)
 	}
 	if _, notFound := errors.AsType[*serviceerror.NotFound](err); !notFound || completion.GetRequestId() == "" {
 		return err
@@ -294,7 +295,7 @@ func (h *nexusCompletionHandler) completeOperation(
 	}
 	var fallbackErr error
 	if isChasm {
-		fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links, selection)
+		fallbackErr = h.completeHSMOperation(ctx, logger, converted, successPayload, req, links, selection)
 	} else {
 		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links, selection)
 	}
@@ -328,13 +329,14 @@ func convertCompletionToOtherFramework(completion *tokenspb.NexusOperationComple
 
 func (h *nexusCompletionHandler) completeHSMOperation(
 	ctx context.Context,
+	logger log.Logger,
 	completion *tokenspb.NexusOperationCompletion,
 	successPayload *commonpb.Payload,
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
 	selection *draft.Selection,
 ) error {
-	if err := h.omitCompletionRoots(selection, successPayload, links); err != nil {
+	if err := h.omitCompletionRoots(logger, selection, successPayload, links); err != nil {
 		return err
 	}
 	hr := &historyservice.CompleteNexusOperationRequest{
@@ -348,7 +350,7 @@ func (h *nexusCompletionHandler) completeHSMOperation(
 	switch req.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		failure := commonnexus.NexusFailureToProtoFailure(*req.Error.OriginalFailure)
-		if err := omitNexusDraftFields(h.omitDraftFields, selection, failure); err != nil {
+		if err := omitNexusDraftInput(logger, h.omitDraftFields, selection, failure); err != nil {
 			return err
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
@@ -376,7 +378,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 	links []*commonpb.Link,
 	selection *draft.Selection,
 ) error {
-	if err := h.omitCompletionRoots(selection, successPayload, links); err != nil {
+	if err := h.omitCompletionRoots(logger, selection, successPayload, links); err != nil {
 		return err
 	}
 	hr := &historyservice.CompleteNexusOperationChasmRequest{
@@ -409,7 +411,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		if req.State == nexus.OperationStateCanceled {
 			failure = commonnexus.CoerceToCanceledFailure(failure)
 		}
-		if err := omitNexusDraftFields(h.omitDraftFields, selection, failure); err != nil {
+		if err := omitNexusDraftInput(logger, h.omitDraftFields, selection, failure); err != nil {
 			return err
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
@@ -428,14 +430,14 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 	return err
 }
 
-func (h *nexusCompletionHandler) omitCompletionRoots(selection *draft.Selection, payload *commonpb.Payload, links []*commonpb.Link) error {
+func (h *nexusCompletionHandler) omitCompletionRoots(logger log.Logger, selection *draft.Selection, payload *commonpb.Payload, links []*commonpb.Link) error {
 	if payload != nil {
-		if err := omitNexusDraftFields(h.omitDraftFields, selection, payload); err != nil {
+		if err := omitNexusDraftInput(logger, h.omitDraftFields, selection, payload); err != nil {
 			return err
 		}
 	}
 	for _, link := range links {
-		if err := omitNexusDraftFields(h.omitDraftFields, selection, link); err != nil {
+		if err := omitNexusDraftInput(logger, h.omitDraftFields, selection, link); err != nil {
 			return err
 		}
 	}

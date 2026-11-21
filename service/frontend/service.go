@@ -530,16 +530,20 @@ func NewService(
 	}
 }
 
-// Start starts the service
-func (s *Service) Start() {
-	s.logger.Info("frontend starting")
-
+func (s *Service) registerGRPCServices() {
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
 	operatorservice.RegisterOperatorServiceServer(s.server, s.operatorHandler)
 
 	reflection.Register(s.server)
+}
+
+// Start starts the service
+func (s *Service) Start() {
+	s.logger.Info("frontend starting")
+
+	s.registerGRPCServices()
 
 	// must start resource first
 	metrics.RestartCount.With(s.metricsHandler).Record(1)
