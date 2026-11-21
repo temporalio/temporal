@@ -217,6 +217,238 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecutionNamespaceNotActive() {
 	}
 }
 
+func (s *chasmEngineSuite) TestChasmNamespaceErrors() {
+	for _, tc := range []struct {
+		name        string
+		namespaceID string
+		lookupErr   error
+		wantErr     error
+	}{
+		{name: "missing ID", wantErr: serviceerror.NewInvalidArgument("Missing namespace UUID.")},
+		{name: "invalid ID", namespaceID: "invalid", wantErr: serviceerror.NewInvalidArgument("Invalid namespace UUID.")},
+		{name: "namespace not found", lookupErr: serviceerror.NewNamespaceNotFound("unknown")},
+		{name: "registry unavailable", lookupErr: serviceerror.NewUnavailable("registry unavailable")},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+				NamespaceID: tc.namespaceID, BusinessID: tv.WorkflowID(),
+			})
+			wantErr := tc.wantErr
+			if tc.lookupErr != nil {
+				ref.NamespaceID = tv.NamespaceID().String()
+				wantErr = tc.lookupErr
+				s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(nil, tc.lookupErr).Times(3)
+			}
+			for _, operation := range []string{"start", "update", "update-with-start"} {
+				s.Run(operation, func() {
+					createFn := func(chasm.MutableContext) (chasm.RootComponent, error) {
+						s.FailNow("namespace validation must precede creation")
+						return nil, nil
+					}
+					updateFn := func(chasm.MutableContext, chasm.Component) error {
+						s.FailNow("namespace validation must precede updates")
+						return nil
+					}
+					var err error
+					switch operation {
+					case "start":
+						_, err = s.engine.StartExecution(s.T().Context(), ref, createFn)
+					case "update":
+						_, err = s.engine.UpdateComponent(s.T().Context(), ref, updateFn)
+					case "update-with-start":
+						_, err = s.engine.UpdateWithStartExecution(s.T().Context(), ref, createFn, updateFn)
+					default:
+						s.FailNow("unknown operation: " + operation)
+					}
+					s.Equal(wantErr, err)
+				})
+			}
+		})
+	}
+}
+
+func (s *chasmEngineSuite) TestUpdateComponentNamespaceRefreshAtLease() {
+	tv := testvars.New(s.T())
+	const remoteVersion int64 = 2002
+	initialNamespace := s.namespaceEntry.Clone(namespace.WithID(tv.NamespaceID().String()))
+	refreshedNamespace := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: tv.NamespaceID().String(), Name: initialNamespace.Name().String()}, nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+		}, remoteVersion)
+	lookups := 0
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tv.NamespaceID()).DoAndReturn(
+		func(namespace.ID) (*namespace.Namespace, error) {
+			lookups++
+			if lookups == 1 {
+				return initialNamespace, nil
+			}
+			return refreshedNamespace, nil
+		}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, remoteVersion).
+		Return(cluster.TestAlternativeClusterName).AnyTimes()
+	ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+		NamespaceID: tv.NamespaceID().String(), BusinessID: tv.WorkflowID(), RunID: tv.Any().RunID(),
+	})
+	state := s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil)
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil)
+	_, err := s.engine.UpdateComponent(s.T().Context(), ref,
+		func(chasm.MutableContext, chasm.Component) error {
+			s.FailNow("the update must observe the namespace refreshed while acquiring the lease")
+			return nil
+		})
+	s.Equal(serviceerror.NewNamespaceNotActive(initialNamespace.Name().String(),
+		cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName), err)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponentNamespaceValidation() {
+	const (
+		localVersion      int64 = 1001
+		remoteVersion     int64 = 1002
+		newerLocalVersion int64 = 2001
+	)
+	for _, version := range []int64{localVersion, newerLocalVersion, common.EmptyVersion} {
+		s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(cluster.TestCurrentClusterInitialFailoverVersion, version).
+			Return(true).AnyTimes()
+	}
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, localVersion).
+		Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, remoteVersion).
+		Return(cluster.TestAlternativeClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, newerLocalVersion).
+		Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).
+		Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	for _, tc := range []struct {
+		name             string
+		namespaceVersion int64
+		stateVersion     int64
+		activeCluster    string
+		local            bool
+		reject           bool
+	}{
+		{name: "active", namespaceVersion: localVersion, stateVersion: localVersion, activeCluster: cluster.TestCurrentClusterName},
+		{name: "passive", namespaceVersion: remoteVersion, stateVersion: remoteVersion, activeCluster: cluster.TestAlternativeClusterName, reject: true},
+		{name: "stale namespace cache", namespaceVersion: localVersion, stateVersion: remoteVersion, activeCluster: cluster.TestCurrentClusterName, reject: true},
+		{name: "newer local state", namespaceVersion: localVersion, stateVersion: newerLocalVersion, activeCluster: cluster.TestCurrentClusterName},
+		{name: "newly active", namespaceVersion: newerLocalVersion, stateVersion: remoteVersion, activeCluster: cluster.TestCurrentClusterName},
+		{name: "local namespace", namespaceVersion: common.EmptyVersion, stateVersion: common.EmptyVersion, activeCluster: cluster.TestCurrentClusterName, local: true},
+	} {
+		s.Run(tc.name, func() {
+			for _, mode := range []string{"durable", "speculative", "duplicate"} {
+				s.Run(mode, func() {
+					tv := testvars.New(s.T())
+					nsInfo := &persistencespb.NamespaceInfo{Id: tv.NamespaceID().String(), Name: tv.NamespaceName().String()}
+					if tc.local {
+						s.namespaceEntry = namespace.NewLocalNamespaceForTest(nsInfo, nil, tc.activeCluster)
+					} else {
+						s.namespaceEntry = namespace.NewGlobalNamespaceForTest(nsInfo, nil,
+							&persistencespb.NamespaceReplicationConfig{
+								ActiveClusterName: tc.activeCluster,
+								Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+							}, tc.namespaceVersion)
+					}
+					s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(s.namespaceEntry.ID()).Return(s.namespaceEntry, nil).AnyTimes()
+					ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+						NamespaceID: tv.NamespaceID().String(), BusinessID: tv.WorkflowID(), RunID: tv.Any().RunID(),
+					})
+					state := s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{},
+						enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil)
+					state.ExecutionInfo.TransitionHistory[0].NamespaceFailoverVersion = tc.stateVersion
+					s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+						Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil)
+
+					var opts []chasm.TransitionOption
+					switch mode {
+					case "speculative":
+						opts = append(opts, chasm.WithSpeculative())
+					case "duplicate":
+						requestID := tv.Any().String()
+						opts = append(opts, chasm.WithRequestID(requestID))
+						state.ExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+							requestID: {AttachTime: timestamppb.New(s.mockShard.GetTimeSource().Now())},
+						}
+					case "durable":
+						if !tc.reject {
+							s.expectPersistedActivityInfo(ref, &persistencespb.ActivityInfo{})
+						}
+					default:
+						s.FailNow("unknown update mode: " + mode)
+					}
+
+					called := false
+					serializedRef, err := s.engine.UpdateComponent(s.T().Context(), ref,
+						func(_ chasm.MutableContext, component chasm.Component) error {
+							called = true
+							component.(*testComponent).ActivityInfo.ActivityId = tv.ActivityID()
+							return nil
+						}, opts...)
+					switch {
+					case tc.reject:
+						s.Equal(serviceerror.NewNamespaceNotActive(tv.NamespaceName().String(),
+							cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName), err)
+						s.Nil(serializedRef)
+						s.False(called)
+					case mode == "duplicate":
+						s.ErrorIs(err, chasm.ErrRequestIDAlreadyUsed)
+						s.Nil(serializedRef)
+						s.False(called)
+					default:
+						s.NoError(err)
+						s.NotEmpty(serializedRef)
+						s.True(called)
+					}
+				})
+			}
+		})
+	}
+}
+
+func (s *chasmEngineSuite) TestPassiveNamespaceReadsAndDelete() {
+	tv := testvars.New(s.T())
+	const remoteVersion int64 = 1002
+	s.namespaceEntry = namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: tv.NamespaceID().String(), Name: tv.NamespaceName().String()}, nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+		}, remoteVersion)
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(s.namespaceEntry.ID()).Return(s.namespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, remoteVersion).
+		Return(cluster.TestAlternativeClusterName).AnyTimes()
+	ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+		NamespaceID: tv.NamespaceID().String(), BusinessID: tv.WorkflowID(), RunID: tv.Any().RunID(),
+	})
+	state := s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{ActivityId: tv.ActivityID()},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil)
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil)
+
+	s.Equal(tv.ActivityID(), s.readActivityInfo(ref).ActivityId)
+	serializedRef, err := s.engine.PollComponent(s.T().Context(), ref,
+		func(_ chasm.Context, component chasm.Component) (bool, error) {
+			return component.(*testComponent).ActivityInfo.ActivityId == tv.ActivityID(), nil
+		})
+	s.NoError(err)
+	s.NotEmpty(serializedRef)
+
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.AddHistoryTasksRequest) error {
+			transferTasks := request.Tasks[tasks.CategoryTransfer]
+			s.Len(transferTasks, 1)
+			deleteTask, ok := transferTasks[0].(*tasks.DeleteExecutionTask)
+			s.True(ok)
+			s.Equal(ref.BusinessID, deleteTask.WorkflowID)
+			return nil
+		})
+	s.NoError(s.engine.DeleteExecution(s.T().Context(), ref, chasm.DeleteExecutionRequest{}))
+}
+
 func (s *chasmEngineSuite) TestStartExecution_BrandNew() {
 	tv := testvars.New(s.T())
 
@@ -4137,4 +4369,117 @@ func (s *chasmEngineSuite) TestConvertError() {
 			require.ErrorIs(t, convertedErr, context.DeadlineExceeded)
 		})
 	})
+}
+
+func (s *chasmEngineSuite) TestNamespaceValidationNewerExecution() {
+	caseVersion := tests.Version + 100
+	for _, operation := range []string{"start", "update-with-start", "update-with-start assume new"} {
+		for _, closed := range []bool{false, true} {
+			for _, remote := range []bool{false, true} {
+				for _, duplicate := range []bool{false, true} {
+					s.Run(fmt.Sprintf("%s/closed=%t/remote=%t/duplicate=%t", operation, closed, remote, duplicate), func() {
+						caseVersion++
+						executionVersion := caseVersion
+						tv := testvars.New(s.T()).WithRunID("11111111-2222-3333-4444-555555555555")
+						ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+							NamespaceID: tests.NamespaceID.String(), BusinessID: tv.WorkflowID(),
+						})
+						owner := cluster.TestCurrentClusterName
+						if remote {
+							owner = cluster.TestAlternativeClusterName
+						}
+						s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, executionVersion).Return(owner).AnyTimes()
+						if !remote {
+							s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(cluster.TestCurrentClusterInitialFailoverVersion, executionVersion).Return(true).AnyTimes()
+						}
+						executionState := enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+						executionStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+						if closed {
+							executionState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+							executionStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+						}
+						requestIDs := map[string]*persistencespb.RequestIDInfo{}
+						if duplicate {
+							requestIDs[tv.RequestID()] = &persistencespb.RequestIDInfo{}
+						}
+						conflict := &persistence.CurrentWorkflowConditionFailedError{
+							RunID: tv.RunID(), State: executionState, Status: executionStatus,
+							LastWriteVersion: executionVersion, RequestIDs: requestIDs,
+						}
+						if operation != "update-with-start" {
+							s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, conflict)
+						}
+						if operation != "start" {
+							loads := 1
+							if closed {
+								loads = 2
+							}
+							s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+								Return(&persistence.GetCurrentExecutionResponse{RunID: tv.RunID()}, nil).Times(loads)
+							existingKey := ref.ExecutionKey
+							existingKey.RunID = tv.RunID()
+							state := s.buildPersistenceMutableState(existingKey, &persistencespb.ActivityInfo{}, executionState, executionStatus, nil)
+							state.ExecutionInfo.TransitionHistory[0].NamespaceFailoverVersion = executionVersion
+							state.ExecutionState.RequestIds = requestIDs
+							s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+								Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil)
+							if !remote && !closed && !duplicate {
+								s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+									func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+										history := request.UpdateWorkflowMutation.ExecutionInfo.TransitionHistory
+										s.Equal(executionVersion, history[len(history)-1].NamespaceFailoverVersion)
+										return tests.UpdateWorkflowExecutionResponse, nil
+									})
+								s.mockEngine.EXPECT().NotifyChasmExecution(existingKey, gomock.Any())
+							}
+						}
+
+						createFn := s.newTestExecutionFn(tv.ActivityID())
+						opts := []chasm.TransitionOption{
+							chasm.WithRequestID(tv.RequestID()),
+							chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),
+						}
+						var err error
+						var resultKey chasm.ExecutionKey
+						var deduplicated bool
+						loadedUpdateCalled := false
+						if operation == "start" {
+							result, startErr := s.engine.StartExecution(s.T().Context(), ref, createFn, opts...)
+							err, resultKey = startErr, result.ExecutionKey
+							s.False(result.Created)
+						} else {
+							if operation == "update-with-start assume new" {
+								opts = append(opts, chasm.WithAssumeNew())
+							}
+							result, updateErr := s.engine.UpdateWithStartExecution(s.T().Context(), ref, createFn,
+								func(ctx chasm.MutableContext, component chasm.Component) error {
+									if ctx.ExecutionKey().RunID == tv.RunID() {
+										loadedUpdateCalled = true
+										component.(*testComponent).ActivityInfo.ActivityId = tv.ActivityID()
+									}
+									return nil
+								}, opts...)
+							err, resultKey, deduplicated = updateErr, result.ExecutionKey, result.Deduplicated
+							s.False(result.Created)
+						}
+						switch {
+						case remote:
+							s.Equal(serviceerror.NewNamespaceNotActive(s.namespaceEntry.Name().String(), cluster.TestCurrentClusterName, owner), err)
+							s.Empty(resultKey)
+						case closed && !duplicate:
+							s.Equal(serviceerror.NewUnavailablef("execution write version %d is older than existing execution version %d", tests.Version, executionVersion), err)
+							s.Empty(resultKey)
+						default:
+							s.NoError(err)
+							s.Equal(tv.RunID(), resultKey.RunID)
+							if operation != "start" {
+								s.Equal(duplicate, deduplicated)
+							}
+						}
+						s.Equal(operation != "start" && !remote && !closed && !duplicate, loadedUpdateCalled)
+					})
+				}
+			}
+		}
+	}
 }
