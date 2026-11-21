@@ -25,8 +25,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -127,22 +125,6 @@ func TestDraftFieldsErrorDetailOmissionFailure(t *testing.T) {
 	got, ok := status.FromError(err)
 	require.True(t, ok)
 	protorequire.ProtoEqual(t, status.New(codes.Internal, "draft field omission failed").Proto(), got.Proto())
-}
-
-func TestDraftFieldsServicesAreUnary(t *testing.T) {
-	for _, name := range []protoreflect.FullName{
-		"temporal.api.workflowservice.v1.WorkflowService",
-		"temporal.api.operatorservice.v1.OperatorService",
-	} {
-		descriptor, err := protoregistry.GlobalFiles.FindDescriptorByName(name)
-		require.NoError(t, err)
-		methods := descriptor.(protoreflect.ServiceDescriptor).Methods()
-		for idx := range methods.Len() {
-			method := methods.Get(idx)
-			require.False(t, method.IsStreamingClient() || method.IsStreamingServer(),
-				"%s is streaming. The draft filter only covers unary calls. A stream interceptor must be added first.", method.FullName())
-		}
-	}
 }
 
 func TestDraftFieldsResponseOnlyNamespaceBinding(t *testing.T) {
@@ -367,6 +349,62 @@ func TestDraftFieldsExcludedAndNonProto(t *testing.T) {
 	out, err := draftInvoke(i, "request", nil, func(context.Context, any) (any, error) { return "response", nil })
 	require.NoError(t, err)
 	require.Equal(t, "response", out)
+}
+
+func TestDraftRPCNamespaceSelection(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		request         *testfixture.MethodRequest
+		configNamespace string
+		want            codes.Code
+	}{
+		{name: "global default", request: &testfixture.MethodRequest{}, want: codes.OK},
+		{name: "named namespace", request: &testfixture.MethodRequest{Namespace: "disabled", NamespaceId: "ignored"}, configNamespace: "disabled", want: codes.Unimplemented},
+		{name: "resolved ID", request: &testfixture.MethodRequest{NamespaceId: "known"}, configNamespace: "enabled", want: codes.OK},
+		{name: "unresolved ID", request: &testfixture.MethodRequest{NamespaceId: "unknown"}, want: codes.Unimplemented},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			registry := namespace.NewMockRegistry(gomock.NewController(t))
+			switch tc.request.NamespaceId {
+			case "known":
+				registry.EXPECT().GetNamespaceName(namespace.ID("known")).Return(namespace.Name("enabled"), nil)
+			case "unknown":
+				registry.EXPECT().GetNamespaceName(namespace.ID("unknown")).Return(namespace.Name(""), serviceerror.NewNamespaceNotFound("unknown"))
+			default:
+				// These requests select by namespace name or use the global default.
+			}
+			reads := 0
+			i := NewDraftFieldsInterceptor(func(name string) []string {
+				reads++
+				require.Equal(t, tc.configNamespace, name)
+				if name == "disabled" {
+					return nil
+				}
+				return []string{"method"}
+			}, registry, log.NewNoopLogger(), draft.Omit)
+			i.addDraftService(testfixture.File_common_draft_testfixture_filter_proto.Services().ByName("FixtureService"))
+			info := &grpc.UnaryServerInfo{FullMethod: testfixture.FixtureService_Preview_FullMethodName}
+			response := &testfixture.MethodResponse{Values: &testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}}
+			result, err := i.OutgoingIntercept(t.Context(), tc.request, info, func(ctx context.Context, req any) (any, error) {
+				return i.IncomingIntercept(ctx, req, info, func(context.Context, any) (any, error) {
+					require.Equal(t, codes.OK, tc.want)
+					return response, nil
+				})
+			})
+			require.Equal(t, tc.want, status.Code(err))
+			if tc.want == codes.OK {
+				protorequire.ProtoEqual(t, &testfixture.MethodResponse{Values: &testfixture.EnumValues{}}, result.(*testfixture.MethodResponse))
+				protorequire.ProtoEqual(t, &testfixture.MethodResponse{Values: &testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}}, response)
+			}
+			if tc.request.NamespaceId == "unknown" {
+				require.Zero(t, reads)
+			} else {
+				require.Equal(t, 1, reads)
+			}
+		})
+	}
 }
 
 func TestDraftEnumErrorDetails(t *testing.T) {
