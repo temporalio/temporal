@@ -59,9 +59,8 @@ type Updater struct {
 	workflowTaskStamp                             int32
 	bufferedForWorkflowHeartbeatNotification      bool
 	firstBufferedForWorkflowHeartbeatNotification bool
-	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
-	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
-	// OnSuccess doesn't have. See [Updater.responseLink] for details.
+	// requestIDLink identifies an existing event or one projected on Update acceptance.
+	// It is captured in ApplyRequest while MutableState is available. See [Updater.responseLink].
 	requestIDLink *commonpb.Link
 	// nexusSerializationContext is a copy of the Update's Nexus serialization context, captured in ApplyRequest
 	// because it must be read while holding the workflow lease.
@@ -330,6 +329,10 @@ func (u *Updater) existingRequestIDLink(
 	if requestIDInfo == nil {
 		return nil
 	}
+	// Update-with-Start can reuse the Start request ID. Acceptance can replace its mapping.
+	if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		return api.GenerateStartedEventRefLink(u.req.Request.Namespace, wfKey.WorkflowID, wfKey.RunID)
+	}
 	return u.requestIDEventLink(wfKey, requestID, requestIDInfo.GetEventType())
 }
 
@@ -453,7 +456,7 @@ func (u *Updater) OnSuccess(
 // responseLink returns the link to the response if the status is Accepted or Completed.
 // Rejected updates (stage COMPLETED with a failure outcome and no acceptance)
 // use a Workflow link since rejected updates don't write any event to history.
-// If a requestIdRef link is already captured in ApplyRequest, use that link. Else,
+// If a link is already captured in ApplyRequest, use that link. Else,
 // link to the Accepted event.
 func (u *Updater) responseLink(status *update.Status) *commonpb.Link {
 	if status.Stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
@@ -475,8 +478,7 @@ func (u *Updater) responseLink(status *update.Status) *commonpb.Link {
 			},
 		}
 	}
-	// Use the requestIDLink if set- it is guaranteed by
-	// captureRequestIDLink that the requestIDRef will resolve.
+	// Use the link captured while mutable state was available.
 	if u.requestIDLink != nil {
 		return u.requestIDLink
 	}

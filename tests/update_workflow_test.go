@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -5322,6 +5323,62 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				  3 WorkflowTaskStarted
 				  4 WorkflowTaskCompleted`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 			})
+		})
+	}
+}
+
+func (s *UpdateWithStartSuite) TestSharedStartAndUpdateRequestIDLink() {
+	for _, stage := range []enumspb.UpdateWorkflowExecutionLifecycleStage{
+		enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+		enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
+	} {
+		s.Run(stage.String(), func(s *UpdateWithStartSuite) {
+			env := testcore.NewEnv(s.T(),
+				testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+				testcore.WithDynamicConfig(chasmcb.AllowedAddresses,
+					[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
+			)
+			tv := env.Tv()
+			startReq := s.updateWithStartReq(env, tv)
+			startReq.RequestId = tv.RequestID()
+			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			updateReq := updateWorkflowRequest(env, tv, &updatepb.WaitPolicy{LifecycleStage: stage})
+			updateReq.Request.RequestId = tv.RequestID()
+			updateReq.Request.CompletionCallbacks = []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://callback"}},
+			}}
+			responseCh := s.sendUpdateWithStart(env, startReq, updateReq)
+
+			_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					messages := env.UpdateAcceptMessages(tv, task.Messages[0])
+					if stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+						messages = env.UpdateAcceptCompleteMessages(tv, task.Messages[0])
+					}
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{Messages: messages}, nil
+				})
+			s.NoError(err)
+
+			result := await.Rcv(s.T(), responseCh)
+			s.NoError(result.err)
+			startResp := result.response.Responses[0].GetStartWorkflow()
+			updateResp := result.response.Responses[1].GetUpdateWorkflow()
+			s.Equal(stage, updateResp.Stage)
+			execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: startResp.RunId}
+			desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(), Execution: execution,
+			})
+			s.NoError(err)
+			acceptedEvent := s.RequireHistoryEvent(env.RequireHistory(s, execution), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
+			info := desc.GetWorkflowExtendedInfo().GetRequestIdInfos()[tv.RequestID()]
+			s.NotNil(info)
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, info.EventType)
+			s.Equal(acceptedEvent.EventId, info.EventId)
+			// Acceptance replaces the request-ID mapping, so the Start link must reference its event directly.
+			requireWorkflowEventLink(s.T(), updateResp.Link, env.Namespace().String(), tv.WorkflowID(), startResp.RunId,
+				common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 		})
 	}
 }
