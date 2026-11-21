@@ -161,6 +161,10 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 	}
 	for k, v := range cfg.ConnectAttributes {
 		k1, v1 := sanitizeAttr(k, v)
+		// Drop blank isolation entries; keeping them would emit an invalid "SET <key> =".
+		if (k1 == isolationLevelAttrName || k1 == isolationLevelAttrNameLegacy) && v1 == "" {
+			continue
+		}
 		attrs[k1] = v1
 	}
 
@@ -183,8 +187,8 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 }
 
 func hasAttr(attrs map[string]string, key string) bool {
-	// An empty value counts as unset so a blank isolation level uses the default.
-	return attrs[key] != ""
+	_, ok := attrs[key]
+	return ok
 }
 
 func sanitizeAttr(inkey string, invalue string) (string, string) {
