@@ -423,3 +423,19 @@ func (tg *tokenGenerator) SupportedMethods() []string {
 }
 func (tg *tokenGenerator) Close() {
 }
+
+func (s *defaultClaimMapperSuite) TestIgnoredPermissionInUnexpectedFormatLoggedAtDebug() {
+	logger := log.NewMockLogger(s.controller)
+	logger.EXPECT().Debug("ignoring permission in unexpected format", gomock.Any()).Times(1)
+
+	permissions := []string{"default:read", "billing-read"}
+	tokenString, err := s.tokenGenerator.generateToken(RSA, testSubject, permissions, errorTestOptionNoError)
+	s.NoError(err)
+	claimMapper := NewDefaultJWTClaimMapper(s.tokenGenerator, s.config, logger)
+	authInfo := &AuthInfo{AuthToken: AddBearer(tokenString), Audience: "test-audience"}
+	claims, err := claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+	s.Equal(testSubject, claims.Subject)
+	s.Len(claims.Namespaces, 1)
+	s.Equal(RoleReader, claims.Namespaces[defaultNamespace])
+}
