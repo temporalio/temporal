@@ -17,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -43,6 +44,7 @@ type NexusOperationHTTPHandler struct {
 	namespaceRegistry                    namespace.Registry
 	preprocessErrorCounter               metrics.CounterFunc
 	auth                                 *authorization.Interceptor
+	enforceJWTAudience                   dynamicconfig.BoolPropertyFn
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	callerRateLimitInterceptor           interceptor.CallerRateLimitInterceptor
@@ -82,6 +84,7 @@ func NewNexusOperationHTTPHandler(
 		enpointRegistry:                      endpointRegistry,
 		namespaceRegistry:                    namespaceRegistry,
 		auth:                                 authInterceptor,
+		enforceJWTAudience:                   serviceConfig.NexusEnforceJWTAudience,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
 		callerRateLimitInterceptor:           callerRateLimitInterceptor,
@@ -338,7 +341,10 @@ func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request, nc *nex
 	}
 
 	authInfo := h.auth.GetAuthInfo(tlsInfo, r.Header, func() string {
-		return "" // TODO: support audience getter
+		if !h.enforceJWTAudience() {
+			return ""
+		}
+		return h.auth.HTTPAudience(r.Context(), r.Header)
 	})
 
 	var err error
