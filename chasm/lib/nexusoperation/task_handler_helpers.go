@@ -74,13 +74,7 @@ func isDestinationDown(err error) bool {
 	if errors.Is(err, errOpProcessorFailed) {
 		return false
 	}
-	if errors.Is(err, ErrResponseBodyTooLarge) {
-		return false
-	}
-	if errors.Is(err, ErrInvalidOperationToken) {
-		return false
-	}
-	if errors.Is(err, commonnexus.ErrRedirectNotAllowed) {
+	if isNonRetryableCallError(err) {
 		return false
 	}
 	_, ok := errors.AsType[*operationTimeoutBelowMinError](err)
