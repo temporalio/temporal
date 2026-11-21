@@ -1,10 +1,19 @@
 package worker
 
-import "go.temporal.io/server/chasm"
+import (
+	"time"
+
+	"go.temporal.io/server/chasm"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc"
+)
 
 type Library struct {
 	chasm.UnimplementedLibrary
 
+	config                  *Config
+	handler                 *handler
 	leaseExpiryTaskExecutor *leaseExpiryTaskExecutor
 }
 
@@ -13,8 +22,8 @@ func NewNilLibrary() *Library {
 	return &Library{}
 }
 
-func NewLibrary() *Library {
-	return &Library{leaseExpiryTaskExecutor: &leaseExpiryTaskExecutor{}}
+func newLibrary(handler *handler, config *Config) *Library {
+	return &Library{config: config, handler: handler, leaseExpiryTaskExecutor: &leaseExpiryTaskExecutor{}}
 }
 
 func (l *Library) Name() string {
@@ -22,8 +31,14 @@ func (l *Library) Name() string {
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
+	var groupOptions []chasm.RegistrableComponentOption
+	if l.config != nil {
+		groupOptions = append(groupOptions, chasm.WithRetention(func(ns *namespace.Namespace) time.Duration {
+			return l.config.GroupRetention(ns.Name().String())
+		}))
+	}
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*WorkerGroup](groupComponentName),
+		chasm.NewRegistrableComponent[*WorkerGroup](groupComponentName, groupOptions...),
 	}
 }
 
@@ -35,4 +50,8 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace),
 		),
 	}
+}
+
+func (l *Library) RegisterServices(server *grpc.Server) {
+	workerstatepb.RegisterWorkerServiceServer(server, l.handler)
 }
