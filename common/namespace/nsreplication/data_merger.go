@@ -12,6 +12,20 @@ type NamespaceDataMerger interface {
 	) (mergedData map[string]string, merged bool)
 }
 
+// MutationDataMerger merges namespace data for snapshots that the CHASM
+// namespace mutation transport delivers. Such a snapshot can be the only
+// carrier of a data change, while a deployment that also replicates namespace
+// data through its own messages on the legacy queue can keep the local value
+// for queue snapshots. The default is the NamespaceDataMerger.
+type MutationDataMerger interface {
+	NamespaceDataMerger
+}
+
+// NewDefaultMutationDataMerger creates the default MutationDataMerger.
+func NewDefaultMutationDataMerger(merger NamespaceDataMerger) MutationDataMerger {
+	return merger
+}
+
 // NoopDataMerger is the default implementation that returns task data directly.
 type NoopDataMerger struct{}
 

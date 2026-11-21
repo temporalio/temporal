@@ -97,6 +97,7 @@ type (
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		namespaceMutationExecutor  nsreplication.MutationTaskExecutor
+		deliveryPolicy             nsreplication.DeliveryPolicy
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.AdminVisibilityManager
 		persistenceExecutionName   string
@@ -160,6 +161,10 @@ type (
 		// use the following components.
 		CategoryRegistry tasks.TaskCategoryRegistry
 		matchingClient   matchingservice.MatchingServiceClient
+
+		// DeliveryPolicy decides which CHASM deliveries the receiver defers, and
+		// which addressed ones skip its own membership checks. Nil does neither.
+		DeliveryPolicy nsreplication.DeliveryPolicy
 	}
 )
 
@@ -189,6 +194,7 @@ func NewAdminHandler(
 		config:                     args.Config,
 		namespaceDLQHandler:        namespaceDLQHandler,
 		namespaceMutationExecutor:  namespaceMutationExecutor,
+		deliveryPolicy:             args.DeliveryPolicy,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
@@ -1106,15 +1112,35 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			Transport: nsreplication.CHASMReplicationTransport,
 		})
 		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
+		currentCluster := adh.clusterMetadata.GetCurrentClusterName()
+		if target := request.GetTargetCluster(); target != "" && target != currentCluster {
+			err := serviceerror.NewFailedPreconditionf("namespace mutation addressed to cluster %q reached cluster %q", target, currentCluster)
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+			return nil, err
+		}
+		// The delivery policy runs before any check that ends a delivery for good,
+		// so a receiver that cannot apply it yet defers it to a later retry.
+		trusted := false
+		if adh.deliveryPolicy != nil {
+			var err error
+			if trusted, err = adh.deliveryPolicy(ctx, payloadTask); err != nil {
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeDeferred, err, startTime)
+				return nil, err
+			}
+		}
+		// A trusted delivery follows the membership decision the source made when
+		// it created the mutation, so the receiver neither re-checks a removal nor
+		// consults its admission policy.
+		addressed := request.GetTargetCluster() != "" && trusted
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after
 		// the source has stopped targeting this peer. Legacy never sets this marker.
-		if request.GetRemovedPeer() {
+		if request.GetRemovedPeer() && !addressed {
 			clusters := payloadTask.GetReplicationConfig().GetClusters()
 			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
 				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
-					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
+					return c.GetClusterName() == currentCluster
 				}) {
 				err := serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
 				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
@@ -1133,7 +1159,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
 			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
-				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer()},
+				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer(), Addressed: addressed},
 			})
 		}, policy, func(err error) bool {
 			_, retryable := errors.AsType[*serviceerror.Unavailable](err)

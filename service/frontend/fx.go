@@ -134,7 +134,9 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(nsreplication.NewNoopDataMerger),
+	fx.Provide(nsreplication.NewDefaultMutationDataMerger),
 	fx.Provide(nsreplication.NewDefaultAdmitter),
+	fx.Provide(nsreplication.NewDefaultDeliveryPolicy),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
@@ -888,6 +890,7 @@ func AdminHandlerProvider(
 	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
+	deliveryPolicy nsreplication.DeliveryPolicy,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -920,6 +923,7 @@ func AdminHandlerProvider(
 		metricsHandler,
 		taskCategoryRegistry,
 		matchingClient,
+		deliveryPolicy,
 	}
 	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)
 }
@@ -928,7 +932,7 @@ func NamespaceMutationTaskExecutorProvider(
 	configuration *Config,
 	clusterMetadata cluster.Metadata,
 	persistenceMetadataManager persistence.MetadataManager,
-	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	namespaceDataMerger nsreplication.MutationDataMerger,
 	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
 	logger log.SnTaggedLogger,
 	eventLogger otellog.Logger,
@@ -1069,6 +1073,7 @@ func HandlerProvider(
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -1119,6 +1124,7 @@ func HandlerProvider(
 		),
 		chasmNsReplClient,
 		metricsHandler,
+		replicationResolverFactory,
 	)
 	return wfHandler
 }
