@@ -37,7 +37,9 @@ message ConcurrencyState {
 }
 
 message ConcurrencyServiceBatchRequest {
+  // Namespace that the limiter exists in.
   string namespace_id = 1;
+  // Key to identify the limiter within the namespace.
   string key = 2;
 
   // Reserve reserves a slot for a limited time. Succeeds if the slot is newly reserved or
@@ -83,7 +85,9 @@ message ConcurrencyServiceBatchResponse {
 }
 
 message ConcurrencyServiceWaitRequest {
+  // Namespace that the limiter exists in.
   string namespace_id = 1;
+  // Key to identify the limiter within the namespace.
   string key = 2;
 
   // Generation is used to ensure monotonicity of waits. The caller should pass its last known
@@ -111,7 +115,8 @@ message ConcurrencyServiceWaitResponse {
 }
 
 service ConcurrencyService {
-  // Batch applies a batch of operations to one limiter.
+  // Batch applies a batch of operations to one limiter. A limiter lives within one
+  // namespace and is identified by a key.
   //
   // Note that matching calls Reserve, CancelReservation, and Commit, and history calls
   // Release, so no single batch should ever contain Release mixed with anything else, but

@@ -253,18 +253,24 @@ func (s *xdcBaseSuite) createGlobalNamespace() string {
 
 func (s *xdcBaseSuite) registerTestSearchAttributes(ns string) {
 	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
-	// Call AddSearchAttributes on the active cluster only, for both SQL and Elasticsearch.
-	// It assigns pre-allocated fields as namespace aliases via UpdateNamespace, so the
-	// alias mapping replicates to all clusters. Calling it on each cluster independently is
-	// unsafe — alias assignment uses non-deterministic Go map iteration and can produce
-	// different field→alias mappings per cluster, corrupting standby visibility.
-	_, err := s.clusters[0].OperatorClient().AddSearchAttributes(testcore.NewContext(), &operatorservice.AddSearchAttributesRequest{
-		Namespace:        ns,
-		SearchAttributes: expectedSearchAttributes,
-	})
-	var alreadyExistsErr *serviceerror.AlreadyExists
-	if err != nil && !errors.As(err, &alreadyExistsErr) {
-		s.Require().NoError(err)
+	// For SQL: call AddSearchAttributes on the active cluster only. It calls UpdateNamespace
+	// internally, so the alias mapping replicates to all clusters. Calling it on each cluster
+	// independently is unsafe — alias assignment uses non-deterministic Go map iteration and
+	// can produce different field→alias mappings per cluster, corrupting standby visibility.
+	// For ES: each cluster has its own index and cluster metadata, so register on each.
+	clusters := s.clusters
+	if testcore.UseSQLVisibility() {
+		clusters = s.clusters[:1]
+	}
+	for _, cl := range clusters {
+		_, err := cl.OperatorClient().AddSearchAttributes(testcore.NewContext(), &operatorservice.AddSearchAttributesRequest{
+			Namespace:        ns,
+			SearchAttributes: expectedSearchAttributes,
+		})
+		var alreadyExistsErr *serviceerror.AlreadyExists
+		if err != nil && !errors.As(err, &alreadyExistsErr) {
+			s.Require().NoError(err)
+		}
 	}
 	for _, cl := range s.clusters {
 		s.EventuallyWithT(func(t *assert.CollectT) {

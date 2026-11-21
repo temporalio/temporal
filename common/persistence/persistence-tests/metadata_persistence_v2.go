@@ -1573,7 +1573,7 @@ func (m *MetadataPersistenceSuiteV2) TestCASFailureUpdateNamespace() {
 		notificationVersion-1, // Use stale notification version to trigger CAS failure
 		isGlobalNamespace,
 	)
-	m.ErrorAs(err3, new(*p.ConditionFailedError))
+	m.ErrorAs(err3, new(*serviceerror.Unavailable))
 
 	// Verify that the namespace was not updated
 	resp4, err4 := m.GetNamespace(id, "")
