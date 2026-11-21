@@ -201,9 +201,8 @@ PROTOC_GEN_GO_CHASM = $(shell go tool -n protoc-gen-go-chasm)
 PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc,go:google.golang.org/grpc/cmd/protoc-gen-go-grpc)
 PROTOC_GEN_GO_HELPERS = $(shell go tool -n protoc-gen-go-helpers)
 SHELLCHECK = $(call mise-tool,shellcheck,shellcheck)
-
 ##### Proto #####
-$(API_BINPB): go.mod go.sum $(PROTO_FILES)
+$(API_BINPB): go.mod go.sum $(PROTO_FILES) $(wildcard common/draft/testfixture/*.proto)
 	@printf $(COLOR) "Generating proto dependencies image..."
 	@./cmd/tools/getproto/run.sh --out $@
 
@@ -231,7 +230,7 @@ protoc: $(API_BINPB)
 		-protoc-gen-go-helpers-bin=$(PROTOC_GEN_GO_HELPERS) \
 		$(PROTO_DIRS)
 
-proto-codegen:
+proto-codegen: $(API_BINPB) $(PROTOC_GEN_GO)
 	@printf $(COLOR) "Generate service clients..."
 	@go generate -run genrpcwrappers ./client/...
 	@printf $(COLOR) "Generate server interceptors..."
@@ -240,6 +239,8 @@ proto-codegen:
 	@go generate -run genroutingkeyextractor ./common/rpc/interceptor/...
 	@printf $(COLOR) "Generate search attributes helpers..."
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
+	@printf $(COLOR) "Generate draft omission fixtures..."
+	@API_BINPB=$(abspath $(API_BINPB)) PROTOC_GEN_GO=$(abspath $(PROTOC_GEN_GO)) go generate ./common/draft/testfixture
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
@@ -297,6 +298,8 @@ lint-actions:
 	@printf $(COLOR) "Linting GitHub actions..."
 	@mise exec shellcheck -- $(ACTIONLINT)
 
+include tools/draftapi/lint.mk
+
 .PHONY: lint-code lint-code-fast
 # --new-from-rev filters reported issues _after_ analysis; this target also reduces package inputs _before_ analysis.
 lint-code-fast:
@@ -308,7 +311,7 @@ lint-code-fast:
 	targets=$$({ \
 		git diff --no-renames --name-only "$$base" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
-	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	} | sed '/\/testdata\//d; s|^|./|; s|/[^/]*$$||' | sort -u \
 	  | grep -v "^\./common/testx/" \
 	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
 	if [ -z "$$targets" ]; then \
@@ -328,9 +331,10 @@ define lint-go
 		--config=.github/.golangci.yml \
 		$(2)
 	@go vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
+	@go vet -tags $(1) -vettool="$(DRAFTAPI)" $(2)
 endef
 
-lint-code:
+lint-code: $(DRAFTAPI)
 	@printf $(COLOR) "Linting code..."
 	$(call lint-go,$(ALL_TEST_TAGS),$(LINT_CODE_TARGETS))
 	@printf $(COLOR) "Linting code with temporal_minimal..."
