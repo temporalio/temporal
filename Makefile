@@ -203,9 +203,12 @@ PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc,go:google.golang.org/gr
 PROTOC_GEN_GO_HELPERS = $(shell go tool -n protoc-gen-go-helpers)
 SHELLCHECK = $(call mise-tool,shellcheck,shellcheck)
 ##### Proto #####
+DRAFT_FIXTURE_ENV = API_BINPB="$(abspath $(API_BINPB))" PROTOC="$(PROTOC)" \
+	PROTOC_GEN_GO="$(abspath $(PROTOC_GEN_GO))" PROTOC_GEN_GO_GRPC="$(abspath $(PROTOC_GEN_GO_GRPC))"
+
 $(API_BINPB): go.mod go.sum $(PROTO_FILES) $(wildcard common/draft/testfixture/*.proto)
 	@printf $(COLOR) "Generating proto dependencies image..."
-	@./cmd/tools/getproto/run.sh --out $@
+	@mise exec go -- ./cmd/tools/getproto/run.sh --out $@
 
 $(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
 	@printf $(COLOR) "Generate proto image..."
@@ -241,8 +244,7 @@ proto-codegen: $(API_BINPB)
 	@printf $(COLOR) "Generate search attributes helpers..."
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
 	@printf $(COLOR) "Generate draft omission fixtures..."
-	@API_BINPB="$(abspath $(API_BINPB))" PROTOC="$(PROTOC)" PROTOC_GEN_GO="$(abspath $(PROTOC_GEN_GO))" \
-		PROTOC_GEN_GO_GRPC="$(abspath $(PROTOC_GEN_GO_GRPC))" go generate ./common/draft/testfixture
+	@$(DRAFT_FIXTURE_ENV) go generate ./common/draft/testfixture
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
@@ -750,9 +752,9 @@ update-dependencies-major:
 	@$(GOMAJOR) get -major all
 	@go mod tidy
 
-go-generate:
+go-generate: $(API_BINPB)
 	@printf $(COLOR) "Process go:generate directives..."
-	@mise exec -- go generate ./...
+	@$(DRAFT_FIXTURE_ENV) mise exec -- go generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
