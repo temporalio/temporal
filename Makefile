@@ -241,7 +241,7 @@ proto-codegen: $(API_BINPB)
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
 	@printf $(COLOR) "Generate draft omission fixtures..."
 	@API_BINPB="$(abspath $(API_BINPB))" PROTOC="$(PROTOC)" PROTOC_GEN_GO="$(abspath $(PROTOC_GEN_GO))" \
-		go generate ./common/draft/testfixture
+		PROTOC_GEN_GO_GRPC="$(abspath $(PROTOC_GEN_GO_GRPC))" go generate ./common/draft/testfixture
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."

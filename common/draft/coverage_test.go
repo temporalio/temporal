@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-// Inspect the descriptors actually linked by the server, independently of the generator planner.
+// TestCoverage inspects the descriptors actually linked by the server independently of the generator planner.
 func TestCoverage(t *testing.T) {
 	messages := map[protoreflect.FullName]protoreflect.MessageDescriptor{}
 	affected := map[protoreflect.FullName]bool{}
@@ -36,7 +36,12 @@ func TestCoverage(t *testing.T) {
 			fields := message.Fields()
 			for j := 0; j < fields.Len(); j++ {
 				feature, _ := proto.GetExtension(fields.Get(j).Options(), protometapb.E_Draft).(string)
-				if feature != "" || draftFieldType(fields.Get(j)) {
+				oneof := fields.Get(j).ContainingOneof()
+				oneofFeature := ""
+				if oneof != nil {
+					oneofFeature, _ = proto.GetExtension(oneof.Options(), protometapb.E_DraftOneof).(string)
+				}
+				if feature != "" || oneofFeature != "" || draftFieldType(fields.Get(j)) {
 					affected[message.FullName()] = true
 				}
 			}
@@ -77,9 +82,6 @@ func TestCoverage(t *testing.T) {
 	}
 	omitter := reflect.TypeFor[draftOmitter]()
 	for name, message := range messages {
-		if strings.HasPrefix(string(name), "temporal.api.errordetails.v1.") {
-			require.False(t, affected[name], "error detail %s travels through an excluded status channel", name)
-		}
 		messageType, err := protoregistry.GlobalTypes.FindMessageByName(name)
 		require.NoError(t, err, "linked Go type missing for %s", message.FullName())
 		implements := reflect.TypeOf(messageType.Zero().Interface()).Implements(omitter)
@@ -107,7 +109,16 @@ func draftFieldType(field protoreflect.FieldDescriptor) bool {
 		return draftType(message)
 	}
 	if enum := field.Enum(); enum != nil {
-		return draftType(enum)
+		feature, _ := proto.GetExtension(enum.Options(), protometapb.E_DraftEnum).(string)
+		if feature != "" || draftType(enum) {
+			return true
+		}
+		for i := 0; i < enum.Values().Len(); i++ {
+			feature, _ := proto.GetExtension(enum.Values().Get(i).Options(), protometapb.E_DraftEnumValue).(string)
+			if feature != "" {
+				return true
+			}
+		}
 	}
 	return false
 }

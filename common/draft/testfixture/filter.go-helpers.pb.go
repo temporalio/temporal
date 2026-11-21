@@ -2,6 +2,7 @@
 package testfixture
 
 import (
+	"fmt"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -336,4 +337,337 @@ func (this *LexicalRef) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type EnumRequest to the protobuf v3 wire format
+func (val *EnumRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type EnumRequest from the protobuf v3 wire format
+func (val *EnumRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *EnumRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two EnumRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *EnumRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *EnumRequest
+	switch t := that.(type) {
+	case *EnumRequest:
+		that1 = t
+	case EnumRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type EnumResponse to the protobuf v3 wire format
+func (val *EnumResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type EnumResponse from the protobuf v3 wire format
+func (val *EnumResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *EnumResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two EnumResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *EnumResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *EnumResponse
+	switch t := that.(type) {
+	case *EnumResponse:
+		that1 = t
+	case EnumResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type EnumValues to the protobuf v3 wire format
+func (val *EnumValues) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type EnumValues from the protobuf v3 wire format
+func (val *EnumValues) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *EnumValues) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two EnumValues values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *EnumValues) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *EnumValues
+	switch t := that.(type) {
+	case *EnumValues:
+		that1 = t
+	case EnumValues:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type MethodRequest to the protobuf v3 wire format
+func (val *MethodRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type MethodRequest from the protobuf v3 wire format
+func (val *MethodRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *MethodRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two MethodRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *MethodRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *MethodRequest
+	switch t := that.(type) {
+	case *MethodRequest:
+		that1 = t
+	case MethodRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type MethodResponse to the protobuf v3 wire format
+func (val *MethodResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type MethodResponse from the protobuf v3 wire format
+func (val *MethodResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *MethodResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two MethodResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *MethodResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *MethodResponse
+	switch t := that.(type) {
+	case *MethodResponse:
+		that1 = t
+	case MethodResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ServiceRequest to the protobuf v3 wire format
+func (val *ServiceRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ServiceRequest from the protobuf v3 wire format
+func (val *ServiceRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ServiceRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ServiceRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ServiceRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ServiceRequest
+	switch t := that.(type) {
+	case *ServiceRequest:
+		that1 = t
+	case ServiceRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ServiceResponse to the protobuf v3 wire format
+func (val *ServiceResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ServiceResponse from the protobuf v3 wire format
+func (val *ServiceResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ServiceResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ServiceResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ServiceResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ServiceResponse
+	switch t := that.(type) {
+	case *ServiceResponse:
+		that1 = t
+	case ServiceResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type OneofGetterCollision to the protobuf v3 wire format
+func (val *OneofGetterCollision) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type OneofGetterCollision from the protobuf v3 wire format
+func (val *OneofGetterCollision) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *OneofGetterCollision) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two OneofGetterCollision values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *OneofGetterCollision) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *OneofGetterCollision
+	switch t := that.(type) {
+	case *OneofGetterCollision:
+		that1 = t
+	case OneofGetterCollision:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+var (
+	StableEnum_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Stable":      1,
+		"Preview":     2,
+	}
+)
+
+// StableEnumFromString parses a StableEnum value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to StableEnum
+func StableEnumFromString(s string) (StableEnum, error) {
+	if v, ok := StableEnum_value[s]; ok {
+		return StableEnum(v), nil
+	} else if v, ok := StableEnum_shorthandValue[s]; ok {
+		return StableEnum(v), nil
+	}
+	return StableEnum(0), fmt.Errorf("%s is not a valid StableEnum", s)
+}
+
+var (
+	DraftEnum_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Preview":     1,
+	}
+)
+
+// DraftEnumFromString parses a DraftEnum value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to DraftEnum
+func DraftEnumFromString(s string) (DraftEnum, error) {
+	if v, ok := DraftEnum_value[s]; ok {
+		return DraftEnum(v), nil
+	} else if v, ok := DraftEnum_shorthandValue[s]; ok {
+		return DraftEnum(v), nil
+	}
+	return DraftEnum(0), fmt.Errorf("%s is not a valid DraftEnum", s)
 }

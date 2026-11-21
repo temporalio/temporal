@@ -280,7 +280,7 @@ func TestNexusDraftCompletionSelections(t *testing.T) {
 						default:
 							t.Fatalf("unexpected root %T", root)
 						}
-						return true, nil
+						return false, nil
 					}
 					h := &nexusCompletionHandler{HistoryClient: client, omitDraftFields: omitDraftFields}
 					payload := &commonpb.Payload{Data: []byte("opaque"), Metadata: map[string][]byte{"stable": []byte("metadata")}}
@@ -347,7 +347,7 @@ func TestNexusDraftCompletionFallbackSnapshot(t *testing.T) {
 				require.True(t, s.Enabled("feature-a"))
 				require.False(t, s.Enabled("feature-b"))
 				features = []string{"feature-b"}
-				return true, nil
+				return false, nil
 			}
 			h := &nexusCompletionHandler{HistoryClient: client, omitDraftFields: omitDraftFields}
 			if chasm {
@@ -373,7 +373,7 @@ func TestNexusDraftCompletionOmissionErrors(t *testing.T) {
 			t.Run(fmt.Sprintf("chasm=%v/%s", chasm, kind), func(t *testing.T) {
 				h := &nexusCompletionHandler{
 					omitDraftFields: func(any, *draft.Selection) (bool, error) {
-						return true, errors.New("private payload")
+						return false, errors.New("private payload")
 					},
 				}
 				req := &nexusrpc.CompletionRequest{State: nexus.OperationStateSucceeded}
@@ -441,7 +441,7 @@ func TestNexusDraftCompletionLocalBoundary(t *testing.T) {
 		require.True(t, s.Enabled("feature-a"))
 		require.False(t, s.Enabled("feature-b"))
 		payload.Metadata["omitted"] = []byte("yes")
-		return true, nil
+		return false, nil
 	}
 	client := historyservicemock.NewMockHistoryServiceClient(gomock.NewController(t))
 	h.HistoryClient = client
@@ -478,4 +478,69 @@ func TestNexusDraftCompletionForwarding(t *testing.T) {
 	})
 	require.NoError(t, h.CompleteOperation(context.Background(), draftNexusCompletionRequest(t, h)))
 	require.True(t, forwarded)
+}
+
+func TestNexusDraftEnumRejectsCompletion(t *testing.T) {
+	t.Parallel()
+	h := newDraftNexusCompletionHandler(t)
+	h.omitDraftFields = func(root any, selection *draft.Selection) (bool, error) {
+		require.IsType(t, &commonpb.Payload{}, root)
+		return draft.Omit(&testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}, selection)
+	}
+	h.HistoryClient = historyservicemock.NewMockHistoryServiceClient(gomock.NewController(t))
+	h.RequestErrorHandler = interceptor.NewRequestErrorHandler(h.Logger, dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
+	err := h.CompleteOperation(t.Context(), draftNexusCompletionRequest(t, h))
+	var handlerErr *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerErr)
+	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+	require.Equal(t, "request contains a disabled draft enum value", handlerErr.Message)
+}
+
+func TestNexusDraftEnumRejectsCompletionLinksAndFailures(t *testing.T) {
+	t.Parallel()
+	for _, framework := range []struct {
+		name    string
+		token   func(*testing.T) *tokenspb.NexusOperationCompletion
+		failure any
+	}{
+		{name: "HSM", token: func(*testing.T) *tokenspb.NexusOperationCompletion { return hsmCompletionToken() }, failure: &nexuspb.Failure{}},
+		{name: "CHASM", token: chasmCompletionToken, failure: &failurepb.Failure{}},
+	} {
+		for _, kind := range []string{"link", "failure"} {
+			t.Run(framework.name+"/"+kind, func(t *testing.T) {
+				t.Parallel()
+				req := &nexusrpc.CompletionRequest{State: nexus.OperationStateSucceeded}
+				var payload *commonpb.Payload
+				var links []*commonpb.Link
+				wantRoot := framework.failure
+				if kind == "link" {
+					payload = &commonpb.Payload{}
+					link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "tenant"}}}
+					links = []*commonpb.Link{link}
+					wantRoot = link
+				} else {
+					req.State = nexus.OperationStateFailed
+					req.Error = &nexus.OperationError{
+						State:           nexus.OperationStateFailed,
+						OriginalFailure: &nexus.Failure{Message: "worker failure"},
+					}
+				}
+				h := &nexusCompletionHandler{
+					HistoryClient: historyservicemock.NewMockHistoryServiceClient(gomock.NewController(t)),
+					omitDraftFields: func(root any, selection *draft.Selection) (bool, error) {
+						if root == payload {
+							return false, nil
+						}
+						require.IsType(t, wantRoot, root)
+						return draft.Omit(&testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}, selection)
+					},
+				}
+				err := h.completeOperation(t.Context(), log.NewNoopLogger(), framework.token(t), payload, req, links, true, newNexusDraftSelection(nil, "tenant"))
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+				require.Equal(t, "request contains a disabled draft enum value", handlerErr.Message)
+			})
+		}
+	}
 }

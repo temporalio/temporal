@@ -23,6 +23,101 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type StableEnum int32
+
+const (
+	StableEnum_STABLE_ENUM_UNSPECIFIED StableEnum = 0
+	StableEnum_STABLE_ENUM_STABLE      StableEnum = 1
+	StableEnum_STABLE_ENUM_PREVIEW     StableEnum = 2
+)
+
+// Enum value maps for StableEnum.
+var (
+	StableEnum_name = map[int32]string{
+		0: "STABLE_ENUM_UNSPECIFIED",
+		1: "STABLE_ENUM_STABLE",
+		2: "STABLE_ENUM_PREVIEW",
+	}
+	StableEnum_value = map[string]int32{
+		"STABLE_ENUM_UNSPECIFIED": 0,
+		"STABLE_ENUM_STABLE":      1,
+		"STABLE_ENUM_PREVIEW":     2,
+	}
+)
+
+func (x StableEnum) Enum() *StableEnum {
+	p := new(StableEnum)
+	*p = x
+	return p
+}
+
+func (x StableEnum) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StableEnum) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_draft_testfixture_filter_proto_enumTypes[0].Descriptor()
+}
+
+func (StableEnum) Type() protoreflect.EnumType {
+	return &file_common_draft_testfixture_filter_proto_enumTypes[0]
+}
+
+func (x StableEnum) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use StableEnum.Descriptor instead.
+func (StableEnum) EnumDescriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{0}
+}
+
+type DraftEnum int32
+
+const (
+	DraftEnum_DRAFT_ENUM_UNSPECIFIED DraftEnum = 0
+	DraftEnum_DRAFT_ENUM_PREVIEW     DraftEnum = 1
+)
+
+// Enum value maps for DraftEnum.
+var (
+	DraftEnum_name = map[int32]string{
+		0: "DRAFT_ENUM_UNSPECIFIED",
+		1: "DRAFT_ENUM_PREVIEW",
+	}
+	DraftEnum_value = map[string]int32{
+		"DRAFT_ENUM_UNSPECIFIED": 0,
+		"DRAFT_ENUM_PREVIEW":     1,
+	}
+)
+
+func (x DraftEnum) Enum() *DraftEnum {
+	p := new(DraftEnum)
+	*p = x
+	return p
+}
+
+func (x DraftEnum) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DraftEnum) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_draft_testfixture_filter_proto_enumTypes[1].Descriptor()
+}
+
+func (DraftEnum) Type() protoreflect.EnumType {
+	return &file_common_draft_testfixture_filter_proto_enumTypes[1]
+}
+
+func (x DraftEnum) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DraftEnum.Descriptor instead.
+func (DraftEnum) EnumDescriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{1}
+}
+
 type WholeDraft_State int32
 
 const (
@@ -53,11 +148,11 @@ func (x WholeDraft_State) String() string {
 }
 
 func (WholeDraft_State) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_draft_testfixture_filter_proto_enumTypes[0].Descriptor()
+	return file_common_draft_testfixture_filter_proto_enumTypes[2].Descriptor()
 }
 
 func (WholeDraft_State) Type() protoreflect.EnumType {
-	return &file_common_draft_testfixture_filter_proto_enumTypes[0]
+	return &file_common_draft_testfixture_filter_proto_enumTypes[2]
 }
 
 func (x WholeDraft_State) Number() protoreflect.EnumNumber {
@@ -436,14 +531,14 @@ func (*EmptyDraft) Descriptor() ([]byte, []int) {
 }
 
 type DraftReferences struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Stable string                 `protobuf:"bytes,1,opt,name=stable,proto3" json:"stable,omitempty"`
-	Child  *WholeDraft            `protobuf:"bytes,2,opt,name=child,proto3" json:"child,omitempty"`
-	Items  []*WholeDraft          `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	Values map[string]*WholeDraft `protobuf:"bytes,4,rep,name=values,proto3" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	State  WholeDraft_State       `protobuf:"varint,5,opt,name=state,proto3,enum=temporal.api.drafttest.v1.WholeDraft_State" json:"state,omitempty"`
-	Nested *WholeDraft_Nested     `protobuf:"bytes,6,opt,name=nested,proto3" json:"nested,omitempty"`
-	Both   *WholeDraft            `protobuf:"bytes,7,opt,name=both,proto3" json:"both,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Stable    string                 `protobuf:"bytes,1,opt,name=stable,proto3" json:"stable,omitempty"`
+	Child     *WholeDraft            `protobuf:"bytes,2,opt,name=child,proto3" json:"child,omitempty"`
+	Items     []*WholeDraft          `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	Values    map[string]*WholeDraft `protobuf:"bytes,4,rep,name=values,proto3" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	State     WholeDraft_State       `protobuf:"varint,5,opt,name=state,proto3,enum=temporal.api.drafttest.v1.WholeDraft_State" json:"state,omitempty"`
+	Nested    *WholeDraft_Nested     `protobuf:"bytes,6,opt,name=nested,proto3" json:"nested,omitempty"`
+	AlsoDraft *WholeDraft            `protobuf:"bytes,7,opt,name=also_draft,json=alsoDraft,proto3" json:"also_draft,omitempty"`
 	// Types that are valid to be assigned to Choice:
 	//
 	//	*DraftReferences_DraftChild
@@ -525,9 +620,9 @@ func (x *DraftReferences) GetNested() *WholeDraft_Nested {
 	return nil
 }
 
-func (x *DraftReferences) GetBoth() *WholeDraft {
+func (x *DraftReferences) GetAlsoDraft() *WholeDraft {
 	if x != nil {
-		return x.Both
+		return x.AlsoDraft
 	}
 	return nil
 }
@@ -663,6 +758,537 @@ func (x *LexicalRef) GetP() *WholeDraft_Plain {
 	return nil
 }
 
+type EnumRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         StableEnum             `protobuf:"varint,1,opt,name=value,proto3,enum=temporal.api.drafttest.v1.StableEnum" json:"value,omitempty"`
+	Values        []StableEnum           `protobuf:"varint,2,rep,packed,name=values,proto3,enum=temporal.api.drafttest.v1.StableEnum" json:"values,omitempty"`
+	ByName        map[string]StableEnum  `protobuf:"bytes,3,rep,name=by_name,json=byName,proto3" json:"by_name,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.drafttest.v1.StableEnum"`
+	OptionalValue *StableEnum            `protobuf:"varint,4,opt,name=optional_value,json=optionalValue,proto3,enum=temporal.api.drafttest.v1.StableEnum,oneof" json:"optional_value,omitempty"`
+	// Types that are valid to be assigned to StableChoice:
+	//
+	//	*EnumRequest_Text
+	//	*EnumRequest_Option
+	//	*EnumRequest_Reference_
+	StableChoice isEnumRequest_StableChoice `protobuf_oneof:"stable_choice"`
+	// Types that are valid to be assigned to PreviewChoice:
+	//
+	//	*EnumRequest_Preview
+	PreviewChoice isEnumRequest_PreviewChoice `protobuf_oneof:"preview_choice"`
+	DraftEnum     DraftEnum                   `protobuf:"varint,8,opt,name=draft_enum,json=draftEnum,proto3,enum=temporal.api.drafttest.v1.DraftEnum" json:"draft_enum,omitempty"`
+	DraftField    StableEnum                  `protobuf:"varint,9,opt,name=draft_field,json=draftField,proto3,enum=temporal.api.drafttest.v1.StableEnum" json:"draft_field,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnumRequest) Reset() {
+	*x = EnumRequest{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnumRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnumRequest) ProtoMessage() {}
+
+func (x *EnumRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnumRequest.ProtoReflect.Descriptor instead.
+func (*EnumRequest) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *EnumRequest) GetValue() StableEnum {
+	if x != nil {
+		return x.Value
+	}
+	return StableEnum_STABLE_ENUM_UNSPECIFIED
+}
+
+func (x *EnumRequest) GetValues() []StableEnum {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+func (x *EnumRequest) GetByName() map[string]StableEnum {
+	if x != nil {
+		return x.ByName
+	}
+	return nil
+}
+
+func (x *EnumRequest) GetOptionalValue() StableEnum {
+	if x != nil && x.OptionalValue != nil {
+		return *x.OptionalValue
+	}
+	return StableEnum_STABLE_ENUM_UNSPECIFIED
+}
+
+func (x *EnumRequest) GetStableChoice() isEnumRequest_StableChoice {
+	if x != nil {
+		return x.StableChoice
+	}
+	return nil
+}
+
+func (x *EnumRequest) GetText() string {
+	if x != nil {
+		if x, ok := x.StableChoice.(*EnumRequest_Text); ok {
+			return x.Text
+		}
+	}
+	return ""
+}
+
+func (x *EnumRequest) GetOption() StableEnum {
+	if x != nil {
+		if x, ok := x.StableChoice.(*EnumRequest_Option); ok {
+			return x.Option
+		}
+	}
+	return StableEnum_STABLE_ENUM_UNSPECIFIED
+}
+
+func (x *EnumRequest) GetReference() string {
+	if x != nil {
+		if x, ok := x.StableChoice.(*EnumRequest_Reference_); ok {
+			return x.Reference
+		}
+	}
+	return ""
+}
+
+func (x *EnumRequest) GetPreviewChoice() isEnumRequest_PreviewChoice {
+	if x != nil {
+		return x.PreviewChoice
+	}
+	return nil
+}
+
+func (x *EnumRequest) GetPreview() StableEnum {
+	if x != nil {
+		if x, ok := x.PreviewChoice.(*EnumRequest_Preview); ok {
+			return x.Preview
+		}
+	}
+	return StableEnum_STABLE_ENUM_UNSPECIFIED
+}
+
+func (x *EnumRequest) GetDraftEnum() DraftEnum {
+	if x != nil {
+		return x.DraftEnum
+	}
+	return DraftEnum_DRAFT_ENUM_UNSPECIFIED
+}
+
+func (x *EnumRequest) GetDraftField() StableEnum {
+	if x != nil {
+		return x.DraftField
+	}
+	return StableEnum_STABLE_ENUM_UNSPECIFIED
+}
+
+type isEnumRequest_StableChoice interface {
+	isEnumRequest_StableChoice()
+}
+
+type EnumRequest_Text struct {
+	Text string `protobuf:"bytes,5,opt,name=text,proto3,oneof"`
+}
+
+type EnumRequest_Option struct {
+	Option StableEnum `protobuf:"varint,6,opt,name=option,proto3,enum=temporal.api.drafttest.v1.StableEnum,oneof"`
+}
+
+type EnumRequest_Reference_ struct {
+	Reference string `protobuf:"bytes,10,opt,name=reference,proto3,oneof"`
+}
+
+func (*EnumRequest_Text) isEnumRequest_StableChoice() {}
+
+func (*EnumRequest_Option) isEnumRequest_StableChoice() {}
+
+func (*EnumRequest_Reference_) isEnumRequest_StableChoice() {}
+
+type isEnumRequest_PreviewChoice interface {
+	isEnumRequest_PreviewChoice()
+}
+
+type EnumRequest_Preview struct {
+	Preview StableEnum `protobuf:"varint,7,opt,name=preview,proto3,enum=temporal.api.drafttest.v1.StableEnum,oneof"`
+}
+
+func (*EnumRequest_Preview) isEnumRequest_PreviewChoice() {}
+
+type EnumResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        *EnumValues            `protobuf:"bytes,1,opt,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnumResponse) Reset() {
+	*x = EnumResponse{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnumResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnumResponse) ProtoMessage() {}
+
+func (x *EnumResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnumResponse.ProtoReflect.Descriptor instead.
+func (*EnumResponse) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *EnumResponse) GetValues() *EnumValues {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type EnumValues struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         StableEnum             `protobuf:"varint,1,opt,name=value,proto3,enum=temporal.api.drafttest.v1.StableEnum" json:"value,omitempty"`
+	Values        []StableEnum           `protobuf:"varint,2,rep,packed,name=values,proto3,enum=temporal.api.drafttest.v1.StableEnum" json:"values,omitempty"`
+	ByName        map[string]StableEnum  `protobuf:"bytes,3,rep,name=by_name,json=byName,proto3" json:"by_name,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.drafttest.v1.StableEnum"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnumValues) Reset() {
+	*x = EnumValues{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnumValues) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnumValues) ProtoMessage() {}
+
+func (x *EnumValues) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnumValues.ProtoReflect.Descriptor instead.
+func (*EnumValues) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *EnumValues) GetValue() StableEnum {
+	if x != nil {
+		return x.Value
+	}
+	return StableEnum_STABLE_ENUM_UNSPECIFIED
+}
+
+func (x *EnumValues) GetValues() []StableEnum {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+func (x *EnumValues) GetByName() map[string]StableEnum {
+	if x != nil {
+		return x.ByName
+	}
+	return nil
+}
+
+type MethodRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Values        *EnumValues            `protobuf:"bytes,3,opt,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MethodRequest) Reset() {
+	*x = MethodRequest{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MethodRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MethodRequest) ProtoMessage() {}
+
+func (x *MethodRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MethodRequest.ProtoReflect.Descriptor instead.
+func (*MethodRequest) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *MethodRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *MethodRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *MethodRequest) GetValues() *EnumValues {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type MethodResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        *EnumValues            `protobuf:"bytes,1,opt,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MethodResponse) Reset() {
+	*x = MethodResponse{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MethodResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MethodResponse) ProtoMessage() {}
+
+func (x *MethodResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MethodResponse.ProtoReflect.Descriptor instead.
+func (*MethodResponse) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *MethodResponse) GetValues() *EnumValues {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type ServiceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceRequest) Reset() {
+	*x = ServiceRequest{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceRequest) ProtoMessage() {}
+
+func (x *ServiceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceRequest.ProtoReflect.Descriptor instead.
+func (*ServiceRequest) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ServiceRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+type ServiceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceResponse) Reset() {
+	*x = ServiceResponse{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceResponse) ProtoMessage() {}
+
+func (x *ServiceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceResponse.ProtoReflect.Descriptor instead.
+func (*ServiceResponse) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{15}
+}
+
+// OneofGetterCollision exercises a generated getter that conflicts with Descriptor.
+type OneofGetterCollision struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Descriptor_:
+	//
+	//	*OneofGetterCollision_Label
+	Descriptor_   isOneofGetterCollision_Descriptor_ `protobuf_oneof:"descriptor"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OneofGetterCollision) Reset() {
+	*x = OneofGetterCollision{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OneofGetterCollision) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OneofGetterCollision) ProtoMessage() {}
+
+func (x *OneofGetterCollision) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OneofGetterCollision.ProtoReflect.Descriptor instead.
+func (*OneofGetterCollision) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *OneofGetterCollision) GetDescriptor_() isOneofGetterCollision_Descriptor_ {
+	if x != nil {
+		return x.Descriptor_
+	}
+	return nil
+}
+
+func (x *OneofGetterCollision) GetLabel() string {
+	if x != nil {
+		if x, ok := x.Descriptor_.(*OneofGetterCollision_Label); ok {
+			return x.Label
+		}
+	}
+	return ""
+}
+
+type isOneofGetterCollision_Descriptor_ interface {
+	isOneofGetterCollision_Descriptor_()
+}
+
+type OneofGetterCollision_Label struct {
+	Label string `protobuf:"bytes,1,opt,name=label,proto3,oneof"`
+}
+
+func (*OneofGetterCollision_Label) isOneofGetterCollision_Descriptor_() {}
+
 type WholeDraft_Nested struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
@@ -672,7 +1298,7 @@ type WholeDraft_Nested struct {
 
 func (x *WholeDraft_Nested) Reset() {
 	*x = WholeDraft_Nested{}
-	mi := &file_common_draft_testfixture_filter_proto_msgTypes[11]
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -684,7 +1310,7 @@ func (x *WholeDraft_Nested) String() string {
 func (*WholeDraft_Nested) ProtoMessage() {}
 
 func (x *WholeDraft_Nested) ProtoReflect() protoreflect.Message {
-	mi := &file_common_draft_testfixture_filter_proto_msgTypes[11]
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -707,7 +1333,7 @@ func (x *WholeDraft_Nested) GetValue() string {
 	return ""
 }
 
-// Unannotated; draft only through its lexical parent.
+// Plain inherits the feature of its lexical parent.
 type WholeDraft_Plain struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
@@ -717,7 +1343,7 @@ type WholeDraft_Plain struct {
 
 func (x *WholeDraft_Plain) Reset() {
 	*x = WholeDraft_Plain{}
-	mi := &file_common_draft_testfixture_filter_proto_msgTypes[12]
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -729,7 +1355,7 @@ func (x *WholeDraft_Plain) String() string {
 func (*WholeDraft_Plain) ProtoMessage() {}
 
 func (x *WholeDraft_Plain) ProtoReflect() protoreflect.Message {
-	mi := &file_common_draft_testfixture_filter_proto_msgTypes[12]
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -750,6 +1376,42 @@ func (x *WholeDraft_Plain) GetValue() string {
 		return x.Value
 	}
 	return ""
+}
+
+type EnumRequest_Reference struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnumRequest_Reference) Reset() {
+	*x = EnumRequest_Reference{}
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnumRequest_Reference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnumRequest_Reference) ProtoMessage() {}
+
+func (x *EnumRequest_Reference) ProtoReflect() protoreflect.Message {
+	mi := &file_common_draft_testfixture_filter_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnumRequest_Reference.ProtoReflect.Descriptor instead.
+func (*EnumRequest_Reference) Descriptor() ([]byte, []int) {
+	return file_common_draft_testfixture_filter_proto_rawDescGZIP(), []int{9, 0}
 }
 
 var File_common_draft_testfixture_filter_proto protoreflect.FileDescriptor
@@ -784,39 +1446,102 @@ const file_common_draft_testfixture_filter_proto_rawDesc = "" +
 	"\x06values\x18\x01 \x03(\v20.temporal.api.drafttest.v1.MapParent.ValuesEntryR\x06values\x1a\\\n" +
 	"\vValuesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x127\n" +
-	"\x05value\x18\x02 \x01(\v2!.temporal.api.drafttest.v1.ParentR\x05value:\x028\x01\"\x9b\x01\n" +
+	"\x05value\x18\x02 \x01(\v2!.temporal.api.drafttest.v1.ParentR\x05value:\x028\x01\"\x8c\x01\n" +
 	"\n" +
 	"WholeDraft\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\x1a-\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x1a\x1e\n" +
 	"\x06Nested\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value:\r\xc2\xed/\tfeature-b\x1a\x1d\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x1a\x1d\n" +
 	"\x05Plain\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\"\x1a\n" +
 	"\x05State\x12\b\n" +
 	"\x04ZERO\x10\x00\x12\a\n" +
 	"\x03ONE\x10\x01:\r\xc2\xed/\tfeature-a\"\x1b\n" +
 	"\n" +
-	"EmptyDraft:\r\xc2\xed/\tfeature-a\"\xa3\x05\n" +
+	"EmptyDraft:\r\xc2\xed/\tfeature-a\"\x88\x06\n" +
 	"\x0fDraftReferences\x12\x16\n" +
-	"\x06stable\x18\x01 \x01(\tR\x06stable\x12;\n" +
-	"\x05child\x18\x02 \x01(\v2%.temporal.api.drafttest.v1.WholeDraftR\x05child\x12;\n" +
-	"\x05items\x18\x03 \x03(\v2%.temporal.api.drafttest.v1.WholeDraftR\x05items\x12N\n" +
-	"\x06values\x18\x04 \x03(\v26.temporal.api.drafttest.v1.DraftReferences.ValuesEntryR\x06values\x12A\n" +
-	"\x05state\x18\x05 \x01(\x0e2+.temporal.api.drafttest.v1.WholeDraft.StateR\x05state\x12D\n" +
-	"\x06nested\x18\x06 \x01(\v2,.temporal.api.drafttest.v1.WholeDraft.NestedR\x06nested\x12H\n" +
-	"\x04both\x18\a \x01(\v2%.temporal.api.drafttest.v1.WholeDraftB\r\xc2\xed/\tfeature-bR\x04both\x12H\n" +
-	"\vdraft_child\x18\b \x01(\v2%.temporal.api.drafttest.v1.WholeDraftH\x00R\n" +
+	"\x06stable\x18\x01 \x01(\tR\x06stable\x12J\n" +
+	"\x05child\x18\x02 \x01(\v2%.temporal.api.drafttest.v1.WholeDraftB\r\xc2\xed/\tfeature-aR\x05child\x12J\n" +
+	"\x05items\x18\x03 \x03(\v2%.temporal.api.drafttest.v1.WholeDraftB\r\xc2\xed/\tfeature-aR\x05items\x12]\n" +
+	"\x06values\x18\x04 \x03(\v26.temporal.api.drafttest.v1.DraftReferences.ValuesEntryB\r\xc2\xed/\tfeature-aR\x06values\x12P\n" +
+	"\x05state\x18\x05 \x01(\x0e2+.temporal.api.drafttest.v1.WholeDraft.StateB\r\xc2\xed/\tfeature-aR\x05state\x12S\n" +
+	"\x06nested\x18\x06 \x01(\v2,.temporal.api.drafttest.v1.WholeDraft.NestedB\r\xc2\xed/\tfeature-aR\x06nested\x12S\n" +
+	"\n" +
+	"also_draft\x18\a \x01(\v2%.temporal.api.drafttest.v1.WholeDraftB\r\xc2\xed/\tfeature-aR\talsoDraft\x12W\n" +
+	"\vdraft_child\x18\b \x01(\v2%.temporal.api.drafttest.v1.WholeDraftB\r\xc2\xed/\tfeature-aH\x00R\n" +
 	"draftChild\x12%\n" +
 	"\rstable_choice\x18\t \x01(\tH\x00R\fstableChoice\x1a`\n" +
 	"\vValuesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
 	"\x05value\x18\x02 \x01(\v2%.temporal.api.drafttest.v1.WholeDraftR\x05value:\x028\x01B\b\n" +
-	"\x06choice\"P\n" +
-	"\vEnumOnlyRef\x12A\n" +
-	"\x05state\x18\x01 \x01(\x0e2+.temporal.api.drafttest.v1.WholeDraft.StateR\x05state\"G\n" +
+	"\x06choice\"_\n" +
+	"\vEnumOnlyRef\x12P\n" +
+	"\x05state\x18\x01 \x01(\x0e2+.temporal.api.drafttest.v1.WholeDraft.StateB\r\xc2\xed/\tfeature-aR\x05state\"V\n" +
 	"\n" +
-	"LexicalRef\x129\n" +
-	"\x01p\x18\x01 \x01(\v2+.temporal.api.drafttest.v1.WholeDraft.PlainR\x01pB<Z:go.temporal.io/server/common/draft/testfixture;testfixtureb\x06proto3"
+	"LexicalRef\x12H\n" +
+	"\x01p\x18\x01 \x01(\v2+.temporal.api.drafttest.v1.WholeDraft.PlainB\r\xc2\xed/\tfeature-aR\x01p\"\xd1\x06\n" +
+	"\vEnumRequest\x12;\n" +
+	"\x05value\x18\x01 \x01(\x0e2%.temporal.api.drafttest.v1.StableEnumR\x05value\x12=\n" +
+	"\x06values\x18\x02 \x03(\x0e2%.temporal.api.drafttest.v1.StableEnumR\x06values\x12K\n" +
+	"\aby_name\x18\x03 \x03(\v22.temporal.api.drafttest.v1.EnumRequest.ByNameEntryR\x06byName\x12Q\n" +
+	"\x0eoptional_value\x18\x04 \x01(\x0e2%.temporal.api.drafttest.v1.StableEnumH\x02R\roptionalValue\x88\x01\x01\x12\x14\n" +
+	"\x04text\x18\x05 \x01(\tH\x00R\x04text\x12?\n" +
+	"\x06option\x18\x06 \x01(\x0e2%.temporal.api.drafttest.v1.StableEnumH\x00R\x06option\x12-\n" +
+	"\treference\x18\n" +
+	" \x01(\tB\r\xc2\xed/\tfeature-aH\x00R\treference\x12A\n" +
+	"\apreview\x18\a \x01(\x0e2%.temporal.api.drafttest.v1.StableEnumH\x01R\apreview\x12R\n" +
+	"\n" +
+	"draft_enum\x18\b \x01(\x0e2$.temporal.api.drafttest.v1.DraftEnumB\r\xc2\xed/\tfeature-aR\tdraftEnum\x12U\n" +
+	"\vdraft_field\x18\t \x01(\x0e2%.temporal.api.drafttest.v1.StableEnumB\r\xc2\xed/\tfeature-bR\n" +
+	"draftField\x1a\v\n" +
+	"\tReference\x1a`\n" +
+	"\vByNameEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
+	"\x05value\x18\x02 \x01(\x0e2%.temporal.api.drafttest.v1.StableEnumR\x05value:\x028\x01B\x0f\n" +
+	"\rstable_choiceB\x1f\n" +
+	"\x0epreview_choice\x12\r\xca\xed/\tfeature-aB\x11\n" +
+	"\x0f_optional_value\"M\n" +
+	"\fEnumResponse\x12=\n" +
+	"\x06values\x18\x01 \x01(\v2%.temporal.api.drafttest.v1.EnumValuesR\x06values\"\xb6\x02\n" +
+	"\n" +
+	"EnumValues\x12;\n" +
+	"\x05value\x18\x01 \x01(\x0e2%.temporal.api.drafttest.v1.StableEnumR\x05value\x12=\n" +
+	"\x06values\x18\x02 \x03(\x0e2%.temporal.api.drafttest.v1.StableEnumR\x06values\x12J\n" +
+	"\aby_name\x18\x03 \x03(\v21.temporal.api.drafttest.v1.EnumValues.ByNameEntryR\x06byName\x1a`\n" +
+	"\vByNameEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
+	"\x05value\x18\x02 \x01(\x0e2%.temporal.api.drafttest.v1.StableEnumR\x05value:\x028\x01\"\x9b\x01\n" +
+	"\rMethodRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
+	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12=\n" +
+	"\x06values\x18\x03 \x01(\v2%.temporal.api.drafttest.v1.EnumValuesR\x06values:\n" +
+	"\xc2\xed/\x06method\"[\n" +
+	"\x0eMethodResponse\x12=\n" +
+	"\x06values\x18\x01 \x01(\v2%.temporal.api.drafttest.v1.EnumValuesR\x06values:\n" +
+	"\xc2\xed/\x06method\";\n" +
+	"\x0eServiceRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace:\v\xc2\xed/\aservice\"\x1e\n" +
+	"\x0fServiceResponse:\v\xc2\xed/\aservice\"K\n" +
+	"\x14OneofGetterCollision\x12\x16\n" +
+	"\x05label\x18\x01 \x01(\tH\x00R\x05labelB\x1b\n" +
+	"\n" +
+	"descriptor\x12\r\xca\xed/\tfeature-a*j\n" +
+	"\n" +
+	"StableEnum\x12\x1b\n" +
+	"\x17STABLE_ENUM_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12STABLE_ENUM_STABLE\x10\x01\x12'\n" +
+	"\x13STABLE_ENUM_PREVIEW\x10\x02\x1a\x0e\xc2\xed/\n" +
+	"enum-value*N\n" +
+	"\tDraftEnum\x12\x1a\n" +
+	"\x16DRAFT_ENUM_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12DRAFT_ENUM_PREVIEW\x10\x01\x1a\r\xc2\xed/\tfeature-a2\xdb\x01\n" +
+	"\x0eFixtureService\x12]\n" +
+	"\n" +
+	"CheckEnums\x12&.temporal.api.drafttest.v1.EnumRequest\x1a'.temporal.api.drafttest.v1.EnumResponse\x12j\n" +
+	"\aPreview\x12(.temporal.api.drafttest.v1.MethodRequest\x1a).temporal.api.drafttest.v1.MethodResponse\"\n" +
+	"\xc2\xed/\x06method2\x84\x01\n" +
+	"\x13DraftFixtureService\x12`\n" +
+	"\aPreview\x12).temporal.api.drafttest.v1.ServiceRequest\x1a*.temporal.api.drafttest.v1.ServiceResponse\x1a\v\xc2\xed/\aserviceB<Z:go.temporal.io/server/common/draft/testfixture;testfixtureb\x06proto3"
 
 var (
 	file_common_draft_testfixture_filter_proto_rawDescOnce sync.Once
@@ -830,51 +1555,86 @@ func file_common_draft_testfixture_filter_proto_rawDescGZIP() []byte {
 	return file_common_draft_testfixture_filter_proto_rawDescData
 }
 
-var file_common_draft_testfixture_filter_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_common_draft_testfixture_filter_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_common_draft_testfixture_filter_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_common_draft_testfixture_filter_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_common_draft_testfixture_filter_proto_goTypes = []any{
-	(WholeDraft_State)(0),     // 0: temporal.api.drafttest.v1.WholeDraft.State
-	(*Message)(nil),           // 1: temporal.api.drafttest.v1.Message
-	(*StableMessage)(nil),     // 2: temporal.api.drafttest.v1.StableMessage
-	(*Parent)(nil),            // 3: temporal.api.drafttest.v1.Parent
-	(*MapParent)(nil),         // 4: temporal.api.drafttest.v1.MapParent
-	(*WholeDraft)(nil),        // 5: temporal.api.drafttest.v1.WholeDraft
-	(*EmptyDraft)(nil),        // 6: temporal.api.drafttest.v1.EmptyDraft
-	(*DraftReferences)(nil),   // 7: temporal.api.drafttest.v1.DraftReferences
-	(*EnumOnlyRef)(nil),       // 8: temporal.api.drafttest.v1.EnumOnlyRef
-	(*LexicalRef)(nil),        // 9: temporal.api.drafttest.v1.LexicalRef
-	nil,                       // 10: temporal.api.drafttest.v1.Message.ByNameEntry
-	nil,                       // 11: temporal.api.drafttest.v1.MapParent.ValuesEntry
-	(*WholeDraft_Nested)(nil), // 12: temporal.api.drafttest.v1.WholeDraft.Nested
-	(*WholeDraft_Plain)(nil),  // 13: temporal.api.drafttest.v1.WholeDraft.Plain
-	nil,                       // 14: temporal.api.drafttest.v1.DraftReferences.ValuesEntry
-	(*anypb.Any)(nil),         // 15: google.protobuf.Any
+	(StableEnum)(0),               // 0: temporal.api.drafttest.v1.StableEnum
+	(DraftEnum)(0),                // 1: temporal.api.drafttest.v1.DraftEnum
+	(WholeDraft_State)(0),         // 2: temporal.api.drafttest.v1.WholeDraft.State
+	(*Message)(nil),               // 3: temporal.api.drafttest.v1.Message
+	(*StableMessage)(nil),         // 4: temporal.api.drafttest.v1.StableMessage
+	(*Parent)(nil),                // 5: temporal.api.drafttest.v1.Parent
+	(*MapParent)(nil),             // 6: temporal.api.drafttest.v1.MapParent
+	(*WholeDraft)(nil),            // 7: temporal.api.drafttest.v1.WholeDraft
+	(*EmptyDraft)(nil),            // 8: temporal.api.drafttest.v1.EmptyDraft
+	(*DraftReferences)(nil),       // 9: temporal.api.drafttest.v1.DraftReferences
+	(*EnumOnlyRef)(nil),           // 10: temporal.api.drafttest.v1.EnumOnlyRef
+	(*LexicalRef)(nil),            // 11: temporal.api.drafttest.v1.LexicalRef
+	(*EnumRequest)(nil),           // 12: temporal.api.drafttest.v1.EnumRequest
+	(*EnumResponse)(nil),          // 13: temporal.api.drafttest.v1.EnumResponse
+	(*EnumValues)(nil),            // 14: temporal.api.drafttest.v1.EnumValues
+	(*MethodRequest)(nil),         // 15: temporal.api.drafttest.v1.MethodRequest
+	(*MethodResponse)(nil),        // 16: temporal.api.drafttest.v1.MethodResponse
+	(*ServiceRequest)(nil),        // 17: temporal.api.drafttest.v1.ServiceRequest
+	(*ServiceResponse)(nil),       // 18: temporal.api.drafttest.v1.ServiceResponse
+	(*OneofGetterCollision)(nil),  // 19: temporal.api.drafttest.v1.OneofGetterCollision
+	nil,                           // 20: temporal.api.drafttest.v1.Message.ByNameEntry
+	nil,                           // 21: temporal.api.drafttest.v1.MapParent.ValuesEntry
+	(*WholeDraft_Nested)(nil),     // 22: temporal.api.drafttest.v1.WholeDraft.Nested
+	(*WholeDraft_Plain)(nil),      // 23: temporal.api.drafttest.v1.WholeDraft.Plain
+	nil,                           // 24: temporal.api.drafttest.v1.DraftReferences.ValuesEntry
+	(*EnumRequest_Reference)(nil), // 25: temporal.api.drafttest.v1.EnumRequest.Reference
+	nil,                           // 26: temporal.api.drafttest.v1.EnumRequest.ByNameEntry
+	nil,                           // 27: temporal.api.drafttest.v1.EnumValues.ByNameEntry
+	(*anypb.Any)(nil),             // 28: google.protobuf.Any
 }
 var file_common_draft_testfixture_filter_proto_depIdxs = []int32{
-	1,  // 0: temporal.api.drafttest.v1.Message.child:type_name -> temporal.api.drafttest.v1.Message
-	1,  // 1: temporal.api.drafttest.v1.Message.items:type_name -> temporal.api.drafttest.v1.Message
-	10, // 2: temporal.api.drafttest.v1.Message.by_name:type_name -> temporal.api.drafttest.v1.Message.ByNameEntry
-	1,  // 3: temporal.api.drafttest.v1.Message.choice_child:type_name -> temporal.api.drafttest.v1.Message
-	15, // 4: temporal.api.drafttest.v1.Message.opaque:type_name -> google.protobuf.Any
-	1,  // 5: temporal.api.drafttest.v1.Parent.message:type_name -> temporal.api.drafttest.v1.Message
-	11, // 6: temporal.api.drafttest.v1.MapParent.values:type_name -> temporal.api.drafttest.v1.MapParent.ValuesEntry
-	5,  // 7: temporal.api.drafttest.v1.DraftReferences.child:type_name -> temporal.api.drafttest.v1.WholeDraft
-	5,  // 8: temporal.api.drafttest.v1.DraftReferences.items:type_name -> temporal.api.drafttest.v1.WholeDraft
-	14, // 9: temporal.api.drafttest.v1.DraftReferences.values:type_name -> temporal.api.drafttest.v1.DraftReferences.ValuesEntry
-	0,  // 10: temporal.api.drafttest.v1.DraftReferences.state:type_name -> temporal.api.drafttest.v1.WholeDraft.State
-	12, // 11: temporal.api.drafttest.v1.DraftReferences.nested:type_name -> temporal.api.drafttest.v1.WholeDraft.Nested
-	5,  // 12: temporal.api.drafttest.v1.DraftReferences.both:type_name -> temporal.api.drafttest.v1.WholeDraft
-	5,  // 13: temporal.api.drafttest.v1.DraftReferences.draft_child:type_name -> temporal.api.drafttest.v1.WholeDraft
-	0,  // 14: temporal.api.drafttest.v1.EnumOnlyRef.state:type_name -> temporal.api.drafttest.v1.WholeDraft.State
-	13, // 15: temporal.api.drafttest.v1.LexicalRef.p:type_name -> temporal.api.drafttest.v1.WholeDraft.Plain
-	1,  // 16: temporal.api.drafttest.v1.Message.ByNameEntry.value:type_name -> temporal.api.drafttest.v1.Message
-	3,  // 17: temporal.api.drafttest.v1.MapParent.ValuesEntry.value:type_name -> temporal.api.drafttest.v1.Parent
-	5,  // 18: temporal.api.drafttest.v1.DraftReferences.ValuesEntry.value:type_name -> temporal.api.drafttest.v1.WholeDraft
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	3,  // 0: temporal.api.drafttest.v1.Message.child:type_name -> temporal.api.drafttest.v1.Message
+	3,  // 1: temporal.api.drafttest.v1.Message.items:type_name -> temporal.api.drafttest.v1.Message
+	20, // 2: temporal.api.drafttest.v1.Message.by_name:type_name -> temporal.api.drafttest.v1.Message.ByNameEntry
+	3,  // 3: temporal.api.drafttest.v1.Message.choice_child:type_name -> temporal.api.drafttest.v1.Message
+	28, // 4: temporal.api.drafttest.v1.Message.opaque:type_name -> google.protobuf.Any
+	3,  // 5: temporal.api.drafttest.v1.Parent.message:type_name -> temporal.api.drafttest.v1.Message
+	21, // 6: temporal.api.drafttest.v1.MapParent.values:type_name -> temporal.api.drafttest.v1.MapParent.ValuesEntry
+	7,  // 7: temporal.api.drafttest.v1.DraftReferences.child:type_name -> temporal.api.drafttest.v1.WholeDraft
+	7,  // 8: temporal.api.drafttest.v1.DraftReferences.items:type_name -> temporal.api.drafttest.v1.WholeDraft
+	24, // 9: temporal.api.drafttest.v1.DraftReferences.values:type_name -> temporal.api.drafttest.v1.DraftReferences.ValuesEntry
+	2,  // 10: temporal.api.drafttest.v1.DraftReferences.state:type_name -> temporal.api.drafttest.v1.WholeDraft.State
+	22, // 11: temporal.api.drafttest.v1.DraftReferences.nested:type_name -> temporal.api.drafttest.v1.WholeDraft.Nested
+	7,  // 12: temporal.api.drafttest.v1.DraftReferences.also_draft:type_name -> temporal.api.drafttest.v1.WholeDraft
+	7,  // 13: temporal.api.drafttest.v1.DraftReferences.draft_child:type_name -> temporal.api.drafttest.v1.WholeDraft
+	2,  // 14: temporal.api.drafttest.v1.EnumOnlyRef.state:type_name -> temporal.api.drafttest.v1.WholeDraft.State
+	23, // 15: temporal.api.drafttest.v1.LexicalRef.p:type_name -> temporal.api.drafttest.v1.WholeDraft.Plain
+	0,  // 16: temporal.api.drafttest.v1.EnumRequest.value:type_name -> temporal.api.drafttest.v1.StableEnum
+	0,  // 17: temporal.api.drafttest.v1.EnumRequest.values:type_name -> temporal.api.drafttest.v1.StableEnum
+	26, // 18: temporal.api.drafttest.v1.EnumRequest.by_name:type_name -> temporal.api.drafttest.v1.EnumRequest.ByNameEntry
+	0,  // 19: temporal.api.drafttest.v1.EnumRequest.optional_value:type_name -> temporal.api.drafttest.v1.StableEnum
+	0,  // 20: temporal.api.drafttest.v1.EnumRequest.option:type_name -> temporal.api.drafttest.v1.StableEnum
+	0,  // 21: temporal.api.drafttest.v1.EnumRequest.preview:type_name -> temporal.api.drafttest.v1.StableEnum
+	1,  // 22: temporal.api.drafttest.v1.EnumRequest.draft_enum:type_name -> temporal.api.drafttest.v1.DraftEnum
+	0,  // 23: temporal.api.drafttest.v1.EnumRequest.draft_field:type_name -> temporal.api.drafttest.v1.StableEnum
+	14, // 24: temporal.api.drafttest.v1.EnumResponse.values:type_name -> temporal.api.drafttest.v1.EnumValues
+	0,  // 25: temporal.api.drafttest.v1.EnumValues.value:type_name -> temporal.api.drafttest.v1.StableEnum
+	0,  // 26: temporal.api.drafttest.v1.EnumValues.values:type_name -> temporal.api.drafttest.v1.StableEnum
+	27, // 27: temporal.api.drafttest.v1.EnumValues.by_name:type_name -> temporal.api.drafttest.v1.EnumValues.ByNameEntry
+	14, // 28: temporal.api.drafttest.v1.MethodRequest.values:type_name -> temporal.api.drafttest.v1.EnumValues
+	14, // 29: temporal.api.drafttest.v1.MethodResponse.values:type_name -> temporal.api.drafttest.v1.EnumValues
+	3,  // 30: temporal.api.drafttest.v1.Message.ByNameEntry.value:type_name -> temporal.api.drafttest.v1.Message
+	5,  // 31: temporal.api.drafttest.v1.MapParent.ValuesEntry.value:type_name -> temporal.api.drafttest.v1.Parent
+	7,  // 32: temporal.api.drafttest.v1.DraftReferences.ValuesEntry.value:type_name -> temporal.api.drafttest.v1.WholeDraft
+	0,  // 33: temporal.api.drafttest.v1.EnumRequest.ByNameEntry.value:type_name -> temporal.api.drafttest.v1.StableEnum
+	0,  // 34: temporal.api.drafttest.v1.EnumValues.ByNameEntry.value:type_name -> temporal.api.drafttest.v1.StableEnum
+	12, // 35: temporal.api.drafttest.v1.FixtureService.CheckEnums:input_type -> temporal.api.drafttest.v1.EnumRequest
+	15, // 36: temporal.api.drafttest.v1.FixtureService.Preview:input_type -> temporal.api.drafttest.v1.MethodRequest
+	17, // 37: temporal.api.drafttest.v1.DraftFixtureService.Preview:input_type -> temporal.api.drafttest.v1.ServiceRequest
+	13, // 38: temporal.api.drafttest.v1.FixtureService.CheckEnums:output_type -> temporal.api.drafttest.v1.EnumResponse
+	16, // 39: temporal.api.drafttest.v1.FixtureService.Preview:output_type -> temporal.api.drafttest.v1.MethodResponse
+	18, // 40: temporal.api.drafttest.v1.DraftFixtureService.Preview:output_type -> temporal.api.drafttest.v1.ServiceResponse
+	38, // [38:41] is the sub-list for method output_type
+	35, // [35:38] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_common_draft_testfixture_filter_proto_init() }
@@ -890,15 +1650,24 @@ func file_common_draft_testfixture_filter_proto_init() {
 		(*DraftReferences_DraftChild)(nil),
 		(*DraftReferences_StableChoice)(nil),
 	}
+	file_common_draft_testfixture_filter_proto_msgTypes[9].OneofWrappers = []any{
+		(*EnumRequest_Text)(nil),
+		(*EnumRequest_Option)(nil),
+		(*EnumRequest_Reference_)(nil),
+		(*EnumRequest_Preview)(nil),
+	}
+	file_common_draft_testfixture_filter_proto_msgTypes[16].OneofWrappers = []any{
+		(*OneofGetterCollision_Label)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_draft_testfixture_filter_proto_rawDesc), len(file_common_draft_testfixture_filter_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   14,
+			NumEnums:      3,
+			NumMessages:   25,
 			NumExtensions: 0,
-			NumServices:   0,
+			NumServices:   2,
 		},
 		GoTypes:           file_common_draft_testfixture_filter_proto_goTypes,
 		DependencyIndexes: file_common_draft_testfixture_filter_proto_depIdxs,

@@ -372,14 +372,29 @@ type nexusHandler struct {
 	omitDraftFields               func(any, *draft.Selection) (bool, error)
 }
 
-func omitNexusDraftFields(logger log.Logger, omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, roots ...any) error {
-	for _, root := range roots {
-		if _, err := omit(root, selection); err != nil {
-			logger.Error("draft field omission failed", tag.Error(err))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-		}
+func omitNexusDraftFields(logger log.Logger, omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, root any) error {
+	_, err := omitNexusDraftRoot(logger, omit, selection, root)
+	return err
+}
+
+func omitNexusDraftInput(logger log.Logger, omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, root any) error {
+	removedEnumValue, err := omitNexusDraftRoot(logger, omit, selection, root)
+	if err != nil {
+		return err
+	}
+	if removedEnumValue {
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, draft.DisabledEnumValueMessage)
 	}
 	return nil
+}
+
+func omitNexusDraftRoot(logger log.Logger, omit func(any, *draft.Selection) (bool, error), selection *draft.Selection, root any) (bool, error) {
+	removedEnumValue, err := omit(root, selection)
+	if err != nil {
+		logger.Error("draft field omission failed", tag.Error(err))
+		return false, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+	return removedEnumValue, nil
 }
 
 func newNexusDraftSelection(get dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string], namespaceName string) *draft.Selection {
@@ -502,7 +517,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
 	selection := newNexusDraftSelection(h.enabledDraftFeatureAPIs, oc.namespace.Name().String())
-	if err := omitNexusDraftFields(oc.logger, h.omitDraftFields, selection, request.Request); err != nil {
+	if err := omitNexusDraftInput(oc.logger, h.omitDraftFields, selection, request.Request); err != nil {
 		return nil, err
 	}
 
@@ -657,7 +672,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return err
 	}
 	selection := newNexusDraftSelection(h.enabledDraftFeatureAPIs, oc.namespace.Name().String())
-	if err := omitNexusDraftFields(oc.logger, h.omitDraftFields, selection, request.Request); err != nil {
+	if err := omitNexusDraftInput(oc.logger, h.omitDraftFields, selection, request.Request); err != nil {
 		return err
 	}
 

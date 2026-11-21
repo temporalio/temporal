@@ -33,10 +33,9 @@ message WholeDraft {
   string value = 1;
   enum State { ZERO = 0; ONE = 1; }
   message Nested {
-    option (temporal.api.protometa.v1.draft_message) = "feature-b";
     string value = 1;
   }
-  // Unannotated; draft only through its lexical parent.
+  // Plain inherits the feature of its lexical parent.
   message Plain { string value = 1; }
 }
 message EmptyDraft {
@@ -44,18 +43,94 @@ message EmptyDraft {
 }
 message DraftReferences {
   string stable = 1;
-  WholeDraft child = 2;
-  repeated WholeDraft items = 3;
-  map<string, WholeDraft> values = 4;
-  WholeDraft.State state = 5;
-  WholeDraft.Nested nested = 6;
-  WholeDraft both = 7 [(temporal.api.protometa.v1.draft) = "feature-b"];
+  WholeDraft child = 2 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  repeated WholeDraft items = 3 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  map<string, WholeDraft> values = 4 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  WholeDraft.State state = 5 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  WholeDraft.Nested nested = 6 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  WholeDraft also_draft = 7 [(temporal.api.protometa.v1.draft) = "feature-a"];
   oneof choice {
-    WholeDraft draft_child = 8;
+    WholeDraft draft_child = 8 [(temporal.api.protometa.v1.draft) = "feature-a"];
     string stable_choice = 9;
   }
 }
 // The only reference to a draft nested enum.
-message EnumOnlyRef { WholeDraft.State state = 1; }
+message EnumOnlyRef { WholeDraft.State state = 1 [(temporal.api.protometa.v1.draft) = "feature-a"]; }
 // The only reference to an unannotated message nested in a draft message.
-message LexicalRef { WholeDraft.Plain p = 1; }
+message LexicalRef { WholeDraft.Plain p = 1 [(temporal.api.protometa.v1.draft) = "feature-a"]; }
+
+enum StableEnum {
+  STABLE_ENUM_UNSPECIFIED = 0;
+  STABLE_ENUM_STABLE = 1;
+  STABLE_ENUM_PREVIEW = 2 [(temporal.api.protometa.v1.draft_enum_value) = "enum-value"];
+}
+
+enum DraftEnum {
+  option (temporal.api.protometa.v1.draft_enum) = "feature-a";
+  DRAFT_ENUM_UNSPECIFIED = 0;
+  DRAFT_ENUM_PREVIEW = 1;
+}
+
+message EnumRequest {
+  message Reference {}
+  StableEnum value = 1;
+  repeated StableEnum values = 2;
+  map<string, StableEnum> by_name = 3;
+  optional StableEnum optional_value = 4;
+  oneof stable_choice {
+    string text = 5;
+    StableEnum option = 6;
+    string reference = 10 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  }
+  oneof preview_choice {
+    option (temporal.api.protometa.v1.draft_oneof) = "feature-a";
+    StableEnum preview = 7;
+  }
+  DraftEnum draft_enum = 8 [(temporal.api.protometa.v1.draft) = "feature-a"];
+  StableEnum draft_field = 9 [(temporal.api.protometa.v1.draft) = "feature-b"];
+}
+
+message EnumResponse { EnumValues values = 1; }
+
+message EnumValues {
+  StableEnum value = 1;
+  repeated StableEnum values = 2;
+  map<string, StableEnum> by_name = 3;
+}
+
+message MethodRequest {
+  option (temporal.api.protometa.v1.draft_message) = "method";
+  string namespace = 1;
+  string namespace_id = 2;
+  EnumValues values = 3;
+}
+message MethodResponse {
+  option (temporal.api.protometa.v1.draft_message) = "method";
+  EnumValues values = 1;
+}
+message ServiceRequest {
+  option (temporal.api.protometa.v1.draft_message) = "service";
+  string namespace = 1;
+}
+message ServiceResponse {
+  option (temporal.api.protometa.v1.draft_message) = "service";
+}
+
+service FixtureService {
+  rpc CheckEnums(EnumRequest) returns (EnumResponse);
+  rpc Preview(MethodRequest) returns (MethodResponse) {
+    option (temporal.api.protometa.v1.draft_method) = "method";
+  }
+}
+service DraftFixtureService {
+  option (temporal.api.protometa.v1.draft_service) = "service";
+  rpc Preview(ServiceRequest) returns (ServiceResponse);
+}
+
+// OneofGetterCollision exercises a generated getter that conflicts with Descriptor.
+message OneofGetterCollision {
+  oneof descriptor {
+    option (temporal.api.protometa.v1.draft_oneof) = "feature-a";
+    string label = 1;
+  }
+}
