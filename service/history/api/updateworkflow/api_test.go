@@ -10,6 +10,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,6 +21,9 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -39,15 +43,16 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 		completed                       = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
 	)
 	for _, tc := range []struct {
-		name              string
-		setCallbacks      bool
-		setRequestID      bool
-		requestIDEventID  int64
-		stageAtCapture    enumspb.UpdateWorkflowExecutionLifecycleStage
-		stageAtResponse   enumspb.UpdateWorkflowExecutionLifecycleStage
-		rejected          bool
-		failed            bool
-		wantRequestIDLink bool
+		name               string
+		setCallbacks       bool
+		setRequestID       bool
+		requestIDEventID   int64
+		requestIDEventType enumspb.EventType
+		stageAtCapture     enumspb.UpdateWorkflowExecutionLifecycleStage
+		stageAtResponse    enumspb.UpdateWorkflowExecutionLifecycleStage
+		rejected           bool
+		failed             bool
+		wantRequestIDLink  bool
 	}{
 		{name: "admitted with callbacks - requestID link", stageAtResponse: admitted, stageAtCapture: admitted, setCallbacks: true, setRequestID: true, wantRequestIDLink: true},
 		{name: "admitted without callbacks - acceptedEvent link", stageAtResponse: admitted, stageAtCapture: admitted, setRequestID: true},
@@ -58,6 +63,9 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 		{name: "completed after callback attachment - requestID link", stageAtResponse: completed, stageAtCapture: completed, setCallbacks: true, setRequestID: true, requestIDEventID: callbackAttachmentEventID, wantRequestIDLink: true},
 		{name: "completed before duplicate arrives - acceptedEvent link", stageAtResponse: completed, stageAtCapture: completed, setCallbacks: true, setRequestID: true},
 		{name: "accepted after projected callback attachment - requestID link", stageAtResponse: accepted, stageAtCapture: admitted, setCallbacks: true, setRequestID: true, wantRequestIDLink: true},
+		{name: "accepted update with request ID mapped to Workflow Started - preserve existing link", stageAtResponse: accepted, stageAtCapture: accepted, setCallbacks: true, setRequestID: true, requestIDEventID: common.FirstEventID, requestIDEventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wantRequestIDLink: true},
+		{name: "completed update with request ID mapped to Workflow Started - preserve existing link", stageAtResponse: completed, stageAtCapture: completed, setCallbacks: true, setRequestID: true, requestIDEventID: common.FirstEventID, requestIDEventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wantRequestIDLink: true},
+		{name: "accepted with recorded request ID - existing Accepted link", stageAtResponse: accepted, stageAtCapture: accepted, setCallbacks: true, setRequestID: true, requestIDEventID: acceptedEventID, requestIDEventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, wantRequestIDLink: true},
 		{name: "no callbacks with existing mapping - acceptedEvent link", stageAtResponse: accepted, stageAtCapture: accepted, setRequestID: true, requestIDEventID: callbackAttachmentEventID},
 		{name: "accepted after admission without callbacks - acceptedEvent link", stageAtResponse: accepted, stageAtCapture: admitted, setRequestID: true},
 		{name: "completed without callbacks - acceptedEvent link", stageAtResponse: completed, stageAtCapture: completed, setRequestID: true},
@@ -67,6 +75,9 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			if tc.requestIDEventType == enumspb.EVENT_TYPE_UNSPECIFIED {
+				tc.requestIDEventType = enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED
+			}
 			ctrl := gomock.NewController(t)
 			ms := historyi.NewMockMutableState(ctrl)
 			outcome := &updatepb.Outcome{}
@@ -110,7 +121,7 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 				state := &persistencespb.WorkflowExecutionState{}
 				if tc.requestIDEventID != common.EmptyEventID {
 					state.RequestIds = map[string]*persistencespb.RequestIDInfo{
-						requestID: {EventId: tc.requestIDEventID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED},
+						requestID: {EventId: tc.requestIDEventID, EventType: tc.requestIDEventType},
 					}
 				}
 				ms.EXPECT().GetExecutionState().Return(state)
@@ -154,13 +165,74 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 				ref := link.GetWorkflowEvent().GetRequestIdRef()
 				require.NotNil(t, ref)
 				require.Equal(t, requestID, ref.GetRequestId())
-				require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, ref.GetEventType())
+				require.Equal(t, tc.requestIDEventType, ref.GetEventType())
 			} else {
 				ref := link.GetWorkflowEvent().GetEventRef()
 				require.NotNil(t, ref)
 				require.Equal(t, acceptedEventID, ref.GetEventId())
 				require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, ref.GetEventType())
 			}
+		})
+	}
+}
+
+func TestSharedStartRequestIDLink(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		recovered bool
+		eventType enumspb.EventType
+		wantType  enumspb.EventType
+	}{
+		{name: "admitting request", eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wantType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED},
+		{name: "recovered admission", recovered: true, eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED, wantType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED},
+		{name: "recovered admission with Started mapping", recovered: true, eventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wantType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			ms := historyi.NewMockMutableState(gomock.NewController(t))
+			ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+			req := createUpdateRequestWithCallbacks("update", "shared")
+			req.Request.Namespace = "namespace"
+			upd := update.New("update")
+			if tc.recovered {
+				ms.EXPECT().GetCurrentVersion().Return(int64(1))
+				ms.EXPECT().VisitUpdates(gomock.Any()).Do(func(visitor func(string, *persistencespb.UpdateInfo)) {
+					visitor("update", &persistencespb.UpdateInfo{Value: &persistencespb.UpdateInfo_Admission{Admission: &persistencespb.UpdateAdmissionInfo{}}})
+				})
+				upd = update.NewRegistry(ms).Find(ctx, "update")
+			}
+			store := workflow.WithEffects(effect.Immediate(ctx), ms)
+			require.NoError(t, upd.Admit(req.Request.Request, store))
+			state := &persistencespb.WorkflowExecutionState{RequestIds: map[string]*persistencespb.RequestIDInfo{
+				"shared": {EventId: 1, EventType: tc.eventType},
+			}}
+			ms.EXPECT().GetExecutionState().Return(state).AnyTimes()
+			wfKey := definition.NewWorkflowKey("namespace-id", "workflow", "run")
+			u := &Updater{req: req, upd: upd, wfKey: wfKey}
+			u.requestIDLink = u.captureRequestIDLink(ms)
+			want := api.GenerateRequestIDRefLink("namespace", "workflow", "run", "shared", tc.wantType)
+			protorequire.ProtoEqual(t, want, u.requestIDLink)
+
+			var acceptedRequest *updatepb.Request
+			if !tc.recovered {
+				acceptedRequest = req.Request.Request
+			}
+			ms.EXPECT().AddWorkflowExecutionUpdateAcceptedEvent("update", gomock.Any(), int64(7), protomock.Eq(acceptedRequest)).DoAndReturn(
+				func(string, string, int64, *updatepb.Request) (*historypb.HistoryEvent, error) {
+					if !tc.recovered {
+						state.RequestIds["shared"] = &persistencespb.RequestIDInfo{EventId: 12, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED}
+					}
+					return &historypb.HistoryEvent{EventId: 12}, nil
+				})
+			require.NoError(t, upd.OnProtocolMessage(&protocolpb.Message{Body: protoutils.MarshalAny(t, &updatepb.Acceptance{
+				AcceptedRequestMessageId: "message", AcceptedRequestSequencingEventId: 7,
+			})}, store))
+			protorequire.ProtoEqual(t, want, u.responseLink(&update.Status{Stage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED}))
+			require.Equal(t, tc.wantType, state.RequestIds["shared"].EventType, "projected link must resolve after acceptance")
+			protorequire.ProtoEqual(t, want, u.CreateCompletedResponse(ms, wfKey, &updatepb.Outcome{}, 12, nil).GetResponse().GetLink())
 		})
 	}
 }

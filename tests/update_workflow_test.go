@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -5322,6 +5323,112 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				  3 WorkflowTaskStarted
 				  4 WorkflowTaskCompleted`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 			})
+		})
+	}
+}
+
+func (s *UpdateWithStartSuite) TestSharedStartAndUpdateRequestIDLink() {
+	for _, stage := range []enumspb.UpdateWorkflowExecutionLifecycleStage{
+		enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+		enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
+	} {
+		s.Run(stage.String(), func(s *UpdateWithStartSuite) {
+			env := testcore.NewEnv(s.T(),
+				testcore.WithDedicatedCluster(),
+				testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+				testcore.WithDynamicConfig(chasmcb.AllowedAddresses,
+					[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
+			)
+			tv := env.Tv()
+			startReq := s.updateWithStartReq(env, tv)
+			startReq.RequestId = tv.RequestID()
+			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			updateReq := updateWorkflowRequest(env, tv, &updatepb.WaitPolicy{LifecycleStage: stage})
+			updateReq.Request.RequestId = tv.RequestID()
+			updateReq.Request.CompletionCallbacks = []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://callback"}},
+			}}
+			responseCh := s.sendUpdateWithStart(env, startReq, updateReq)
+
+			var updateMessage *protocolpb.Message
+			_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					updateMessage = task.Messages[0]
+					var messages []*protocolpb.Message
+					if stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+						messages = env.UpdateAcceptCompleteMessages(tv, updateMessage)
+					} else {
+						messages = env.UpdateAcceptMessages(tv, updateMessage)
+					}
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{Messages: messages}, nil
+				})
+			s.NoError(err)
+
+			result := await.Rcv(s.T(), responseCh)
+			s.NoError(result.err)
+			startResp := result.response.Responses[0].GetStartWorkflow()
+			updateResp := result.response.Responses[1].GetUpdateWorkflow()
+			s.Equal(stage, updateResp.Stage)
+			requireWorkflowEventLink(s.T(), startResp.Link, env.Namespace().String(), tv.WorkflowID(), startResp.RunId,
+				common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+			execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: startResp.RunId}
+			desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(), Execution: execution,
+			})
+			s.NoError(err)
+			acceptedEvent := s.RequireHistoryEvent(env.RequireHistory(s, execution), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
+			info := desc.GetWorkflowExtendedInfo().GetRequestIdInfos()[tv.RequestID()]
+			s.NotNil(info)
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, info.EventType)
+			s.Equal(acceptedEvent.EventId, info.EventId)
+			expectedLink := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RunId: startResp.RunId,
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: tv.RequestID(), EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+						},
+					},
+				},
+			}}
+			protorequire.ProtoEqual(s.T(), expectedLink, updateResp.Link)
+
+			// Retry after shard eviction to exercise request-ID links without the original in-memory Update.
+			env.CloseShard(env.NamespaceID().String(), tv.WorkflowID())
+			retry := await.Rcv(s.T(), s.sendUpdateWithStart(env, startReq, updateReq))
+			s.NoError(retry.err)
+			if stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
+				protorequire.ProtoEqual(s.T(), startResp.Link, retry.response.Responses[0].GetStartWorkflow().Link)
+			} else {
+				s.Nil(retry.response.Responses[0].GetStartWorkflow().Link)
+			}
+			retryUpdate := retry.response.Responses[1].GetUpdateWorkflow()
+			s.Equal(startResp.RunId, retryUpdate.GetUpdateRef().GetWorkflowExecution().GetRunId())
+			s.Equal(stage, retryUpdate.Stage)
+			protorequire.ProtoEqual(s.T(), updateResp.Link, retryUpdate.Link)
+
+			if stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
+				s.NoError(env.SendSignal(env.Namespace(), execution, tv.SignalName(), nil, tv.Sub("complete").RequestID()))
+				_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{
+							Messages: env.UpdateCompleteMessages(tv, updateMessage),
+						}, nil
+					})
+				s.NoError(err)
+				completedRetry := await.Rcv(s.T(), s.sendUpdateWithStart(env, startReq, updateReq))
+				s.NoError(completedRetry.err)
+				completedUpdate := completedRetry.response.Responses[1].GetUpdateWorkflow()
+				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, completedUpdate.Stage)
+				protorequire.ProtoEqual(s.T(), updateResp.Link, completedUpdate.Link)
+			}
+			desc, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(), Execution: execution,
+			})
+			s.NoError(err)
+			s.Len(desc.Callbacks, 1)
 		})
 	}
 }

@@ -292,7 +292,9 @@ func (u *Updater) applyRequest(
 //	requestID or callbacks empty?
 //	  - Yes: return nil to link to the accepted event.
 //	  - No: requestID already has an event recorded on it?
-//	    - Yes: link to that event.
+//	    - Yes: is it Workflow Started for the admitting Update request?
+//	        - Yes: link to the projected Update Accepted event.
+//	        - No: link to the recorded event.
 //	    - No: is the Update already completed?
 //	        - Yes: return nil as a hint to OnSuccess to link to the accepted event.
 //	        - No: link to the projected event.
@@ -302,6 +304,10 @@ func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link 
 		return nil
 	}
 
+	if u.upd.EventLinkType(requestID) == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED &&
+		ms.GetExecutionState().GetRequestIds()[requestID].GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		return u.requestIDEventLink(u.wfKey, requestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
+	}
 	if link := u.existingRequestIDLink(ms, u.wfKey, requestID); link != nil {
 		return link
 	}
