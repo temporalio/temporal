@@ -27,6 +27,7 @@ const (
 // List of non-pragma parameters
 // Taken from https://www.sqlite.org/uri.html
 var queryParameters = map[string]struct{}{
+	"_txlock":   {},
 	"cache":     {},
 	"immutable": {},
 	"mode":      {},
@@ -203,6 +204,10 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 
 		// assume pragma
 		parameters.Add("_pragma", fmt.Sprintf("%s=%s", key, value))
+	}
+	// Reserve the writer before reading to avoid stale snapshots when a transaction writes.
+	if !parameters.Has("_txlock") {
+		parameters.Set("_txlock", "immediate")
 	}
 	// set time format
 	parameters.Add("_time_format", "sqlite")
