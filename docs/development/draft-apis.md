@@ -1,8 +1,9 @@
 # Using draft APIs
 
 Draft annotations drive stable proto projection, explicit usage acknowledgments,
-and generated request/response omission. SDKs consume the stable API; the server
-builds against `../api-go/api_next` through its module replacement.
+and generated request/response omission. SDKs consume the stable API. The server
+pins `github.com/temporalio/api-go/api_next` as its replacement for
+`go.temporal.io/api`.
 
 ## Annotating fields and messages
 
@@ -193,7 +194,17 @@ make helper-test-protos
 make api-next PROTO_ROOT=../api
 make check test
 go -C api_next build -tags protolegacy ./...
-# temporal/
+```
+
+Once the regenerated `api_next` commit is available in `temporalio/api-go`,
+set `api_go_commit` to its hash and run these commands from the server repo.
+`go mod tidy` records the canonical pseudo-version and checksums in
+`go.mod` and `go.sum`.
+
+```sh
+api_go_commit=2e289432
+go mod edit -replace="go.temporal.io/api=github.com/temporalio/api-go/api_next@${api_go_commit}"
+go mod tidy
 make proto
 make lint-draft-api
 ```
