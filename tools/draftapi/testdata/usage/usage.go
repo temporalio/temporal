@@ -27,6 +27,10 @@ func fields(req *Alias) {
 	_ = req.GetChoice()
 	_ = req.Choice
 	_ = req.GetStableChoice()
+	_ = req.DraftUnion                    // want "use of draft API .*oneof-feature"
+	_ = req.GetDraftUnion()               // want "use of draft API .*oneof-feature"
+	_ = req.GetMember()                   // want "use of draft API .*oneof-feature"
+	_ = pb.Stable_Member{Member: "value"} // want "use of draft API .*oneof-feature" "use of draft API .*oneof-feature"
 }
 
 func promoted() {
@@ -42,16 +46,44 @@ func typesAndEnums() {
 	_ = pb.Draft_Nested{}       // want "use of draft API .*message-feature"
 	_ = pb.Draft_ZERO           // want "use of draft API .*message-feature"
 	_ = pb.StableEnum_STABLE_ZERO
-	_ = pb.StableEnum_STABLE_ALIAS
+	_ = pb.StableEnum_STABLE_OTHER
+	_ = pb.StableEnum_DRAFT_VALUE // want "use of draft API .*value-feature"
+	_ = pb.DraftEnum_DRAFT_ZERO   // want "use of draft API .*enum-feature"
+	var _ pb.DraftEnum            // want "use of draft API .*enum-feature"
 }
 
 func methods(ctx context.Context, client pb.StableServiceClient) {
 	_, _ = client.StableCall(ctx, nil)
-	_ = pb.StableService_StableCall_FullMethodName
+	_, _ = client.DraftCall(ctx, nil)             // want "use of draft API .*method-feature"
+	_ = pb.StableService_DraftCall_FullMethodName // want "use of draft API .*method-feature"
+	_ = pb.NewDraftServiceClient                  // want "use of draft API .*service-feature"
+	var _ pb.DraftServiceClient                   // want "use of draft API .*service-feature"
+	var _ pb.DraftServiceServer                   // want "use of draft API .*service-feature"
+	_ = pb.RegisterDraftServiceServer             // want "use of draft API .*service-feature"
+	_ = pb.UnimplementedDraftServiceServer{}      // want "use of draft API .*service-feature"
+	_ = pb.DraftService_ServiceDesc               // want "use of draft API .*service-feature"
+	var _ pb.EmptyDraftServiceClient              // want "use of draft API .*empty-service-feature"
+	_ = pb.NewEmptyDraftServiceClient             // want "use of draft API .*empty-service-feature"
+	var _ pb.UnsafeDraftServiceServer             // want "use of draft API .*service-feature"
+	_ = pb.DraftService_Call_FullMethodName       // want "use of draft API .*service-feature"
 	var server pb.UnimplementedStableServiceServer
-	_, _ = server.StableCall(ctx, nil)
+	_, _ = server.DraftCall(ctx, nil) // want "use of draft API .*method-feature"
 }
 
 type lookalike struct{ Draft string }
 
 func unrelated(req lookalike) { _ = req.Draft }
+
+func optionalServiceSymbols() {
+	_ = pb.RegisterDraftServiceHandler             // want "use of draft API .*service-feature"
+	_ = pb.RegisterDraftServiceHandlerClient       // want "use of draft API .*service-feature"
+	_ = pb.RegisterDraftServiceHandlerFromEndpoint // want "use of draft API .*service-feature"
+	_ = pb.RegisterDraftServiceHandlerServer       // want "use of draft API .*service-feature"
+	var _ pb.StableService_StreamClient            // want "use of draft API .*stream-feature"
+	var _ pb.StableService_StreamServer            // want "use of draft API .*stream-feature"
+
+	_ = pb.RegisterEmptyDraftServiceHandler{}
+	_ = pb.RegisterEmptyDraftServiceHandlerClient
+	_ = pb.StableService_DraftCallClient{}
+	_ = pb.StableService_DraftCallServer{}
+}
