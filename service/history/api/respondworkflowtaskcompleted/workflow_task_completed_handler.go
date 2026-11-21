@@ -18,6 +18,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -955,6 +956,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
+	// Closing the run clears a non-exclusive binding in place, so a retry or cron run inherits a copy.
+	sessionInfo := handler.mutableState.SessionInfo()
+
 	// Always add workflow completed event to this one
 	event, err := handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr, newExecutionRunID)
 	if err != nil {
@@ -963,7 +967,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 
 	// Check if this workflow has a cron schedule
 	if cronBackoff != backoff.NoBackoff {
-		return event, handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID)
+		return event, handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID, sessionInfo)
 	}
 
 	return event, nil
@@ -1017,6 +1021,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
+	// Closing the run clears a non-exclusive binding in place, so a retry or cron run inherits a copy.
+	sessionInfo := handler.mutableState.SessionInfo()
+
 	// Always add workflow failed event
 	event, err := handler.mutableState.AddFailWorkflowEvent(
 		handler.workflowTaskCompletedID,
@@ -1030,9 +1037,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 
 	// Handle retry or cron
 	if retryBackoff != backoff.NoBackoff {
-		return event, handler.handleRetry(ctx, retryBackoff, attr.GetFailure(), newExecutionRunID)
+		return event, handler.handleRetry(ctx, retryBackoff, attr.GetFailure(), newExecutionRunID, sessionInfo)
 	} else if cronBackoff != backoff.NoBackoff {
-		return event, handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID)
+		return event, handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID, sessionInfo)
 	}
 
 	// No retry or cron
@@ -1562,6 +1569,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 	backoffInterval time.Duration,
 	failure *failurepb.Failure,
 	newRunID string,
+	previousSessionInfo *sessionpb.SessionInfo,
 ) error {
 	startEvent, err := handler.mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -1587,6 +1595,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		ctx,
 		handler.mutableState,
 		newMutableState,
+		previousSessionInfo,
 		newRunID,
 		startAttr,
 		startEvent.Links,
@@ -1618,6 +1627,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	newRunID string,
+	previousSessionInfo *sessionpb.SessionInfo,
 ) error {
 	startEvent, err := handler.mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -1647,6 +1657,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		ctx,
 		handler.mutableState,
 		newMutableState,
+		previousSessionInfo,
 		newRunID,
 		startAttr,
 		startEvent.Links,

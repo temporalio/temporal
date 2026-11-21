@@ -97,6 +97,9 @@ const (
 	// that worker has reported its sticky schedule-to-start timeout, which only arrives with a task completion.
 	// In practice, this default timeout is only used for non-exclusive bindings on the very first workflow task of a
 	// workflow that is bound to a worker or if the user has set a 0 value for the sticky schedule-to-start timeout.
+	// It is also used until the worker's next task completion after a binding is rebuilt from history (reset,
+	// rebuild) or inherited by a new run (continue-as-new, retry, cron), since history does not record the worker's
+	// timeout.
 	defaultSessionStickyScheduleToStartTimeout = 5 * time.Second
 )
 
@@ -3108,6 +3111,12 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
+	var inheritedSessionInfo *sessionpb.SessionInfo
+	// The new run keeps the binding only if it stays on the same task queue: the bound worker polls this task queue,
+	// not the one the new run moved to.
+	if taskQueue == previousExecutionInfo.GetTaskQueue() {
+		inheritedSessionInfo = previousExecutionState.SessionInfo()
+	}
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            ms.namespaceEntry.ID().String(),
 		StartRequest:           createRequest,
@@ -3124,6 +3133,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		VersioningOverride:           pinnedOverride,
 		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
 		TimeSkippingStatePropagation: stateProp,
+		InheritedSessionInfo:         inheritedSessionInfo,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -3516,6 +3526,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		// Assume AutoUpgrade behavior for the first workflow task.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 		ms.executionInfo.VersioningInfo.ContinueAsNewInitialVersioningBehavior = event.GetInheritedAutoUpgradeInfo().GetContinueAsNewInitialVersioningBehavior()
+	}
+
+	// A new run of a bound workflow (continue-as-new, retry, cron) stays on the previous run's worker.
+	if inheritedSessionInfo := event.GetInheritedSessionInfo(); inheritedSessionInfo != nil {
+		ms.ApplySessionInfo(inheritedSessionInfo)
 	}
 
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {

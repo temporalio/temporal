@@ -14,6 +14,7 @@ import "temporal/api/history/v1/message.proto";
 import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/session/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
@@ -112,6 +113,10 @@ message StartWorkflowExecutionRequest {
   // the child's lock that its parent initiation is absent from the supplied current branch and that
   // its first run has only WorkflowExecutionStarted.
   OrphanedChildReplacementInfo orphaned_child_replacement_info = 20;
+  // The worker the previous run of this workflow (continue-as-new, retry or cron) was bound to, so the new run stays on
+  // that worker. Written onto the new run's WorkflowExecutionStartedEvent. Unset when the previous run was not bound,
+  // or the new run is on a different task queue, and always for child workflows.
+  temporal.api.session.v1.SessionInfo inherited_session_info = 21;
 }
 
 message StartWorkflowExecutionResponse {
