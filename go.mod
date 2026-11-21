@@ -237,4 +237,4 @@ tool (
 // Use the local testx; consumers of the server ignore this replace (see .github/workflows/testx-bump.yml).
 replace go.temporal.io/testx => ./common/testx
 
-replace go.temporal.io/api => ../api-go/api_next
+replace go.temporal.io/api => github.com/temporalio/api-go/api_next v0.0.0-20261121011823-2e2894327b65
