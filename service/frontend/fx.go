@@ -314,7 +314,7 @@ func GrpcServerOptionsProvider(
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		// Order of interceptors is important
-		// Filter successful responses, including early interceptor returns.
+		// Filter successful responses and error details, including early interceptor returns.
 		draftFieldsInterceptor.OutgoingIntercept,
 		// Preserve error masking outside the service error formatters.
 		maskInternalErrorDetailsInterceptor.Intercept,

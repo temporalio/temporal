@@ -128,7 +128,8 @@ behavior flags control feature execution and creation of draft values.
 WorkflowService and OperatorService unary calls on frontend/internal-frontend
 omit disabled request fields immediately after existing namespace normalization,
 before authorization, routing, ordinary validation and handlers. The outermost
-response wrapper filters successful responses, including inner early returns.
+response wrapper filters responses and decoded gRPC status details, including inner
+early returns.
 Generated HTTP operations use that same chain. Unary authorizers therefore see
 omitted requests; direct Nexus authorization sees original input before conversion.
 
@@ -148,24 +149,36 @@ aligned across clusters serving a namespace.
 
 Generated `OmitDraftFields(enabled func(string) bool)` methods mutate affected
 graphs in place. Disabled optional/oneof fields lose presence, including present
-zero values. Stable siblings, unaffected containers, unknown fields and opaque
-bytes remain. A directly supplied draft root cannot nil its caller's pointer;
+zero values. Stable siblings, unaffected containers and opaque bytes remain.
+A directly supplied draft root cannot nil its caller's pointer;
 when its type gate is disabled, its method resets the entire message, including
 unknown fields. Recursive schemas are supported; cyclic runtime object graphs
 are not. Repeated omission is idempotent.
 
 Handlers returning borrowed registry/cached/stored data must copy affected
 subgraphs first, including shared nested pointers, maps and slices. A new root
-alone does not establish ownership. Handler errors and non-protobuf values pass
-through. Omission/config panics yield a generic Internal error without payload
-details; existing handler panic recovery remains unchanged.
+alone does not establish ownership. The gRPC filter copies affected responses
+and status details before omission and passes through unaffected errors and
+non-protobuf response values. Omission/config panics yield a generic Internal
+error without payload details; existing handler panic recovery remains unchanged.
 
-Admin/internode services, streaming, non-Nexus custom HTTP routes and gRPC error
-details are excluded. Encoded Any contents, application payload bytes and raw
-history remain opaque. Annotating their containing field removes it whole; no
-encoded contents are decoded. Raw history may retain previously stored draft
-values after exposure is disabled. Structured HistoryEvent-reachable fields are
-supported. Older frontends cannot classify unknown fields from newer binaries.
+- The filter excludes AdminService and internal service APIs such as
+  HistoryService and MatchingService. These trusted services need access to the
+  full data.
+- WorkflowService and OperatorService have no streaming RPCs. A descriptor test
+  fails if either service gains a streaming method, which requires adding a
+  stream interceptor first.
+- Non-Nexus custom HTTP routes are outside the filter.
+- `google.protobuf.Any` fields within messages are opaque. For example, the
+  update protocol packs `update.Request` into `protocol.v1.Message.body`. The
+  filter leaves that embedded request, application payload bytes and raw history
+  opaque. Annotating the containing field removes it whole. Raw history may
+  retain previously stored draft values after exposure is disabled. The filter
+  traverses structured fields reachable from `HistoryEvent`.
+- In messages the filter retains, protobuf forward compatibility preserves
+  fields the server does not define. The `api_next` rule requiring deleted draft
+  fields to reserve both their number and name prevents reuse of those field
+  numbers.
 
 ## Regeneration, retirement and promotion
 

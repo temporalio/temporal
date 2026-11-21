@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	errordetailspb "go.temporal.io/api/errordetails/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -24,6 +25,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -52,6 +55,94 @@ func TestDraftFieldsSharedResponse(t *testing.T) {
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, &testfixture.Parent{Message: &testfixture.Message{Stable: "stable", FeatureA: "a"}}, out.(*testfixture.Parent))
 	protorequire.ProtoEqual(t, &testfixture.Parent{Message: draftMessage()}, shared)
+}
+
+func TestDraftFieldsErrorDetails(t *testing.T) {
+	stable := &errordetailspb.NamespaceNotFoundFailure{Namespace: "missing"}
+	detail := &testfixture.Message{Stable: "stable", FeatureA: "a"}
+	st, err := status.New(codes.NotFound, "namespace is missing").WithDetails(stable, detail)
+	require.NoError(t, err)
+	var original *serviceerror.NamespaceNotFound
+	require.ErrorAs(t, serviceerror.FromStatus(st), &original)
+	originalStatus := st.Proto()
+
+	for _, tc := range []struct {
+		name    string
+		enabled []string
+		want    *testfixture.Message
+	}{
+		{"disabled", nil, &testfixture.Message{Stable: "stable"}},
+		{"enabled", []string{"feature-a"}, &testfixture.Message{Stable: "stable", FeatureA: "a"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			i := NewDraftFieldsInterceptor(func(string) []string { return tc.enabled }, nil, log.NewNoopLogger(), draft.Omit)
+			out, err := draftInvoke(i, &emptypb.Empty{}, nil, func(context.Context, any) (any, error) {
+				return nil, original
+			})
+			require.Nil(t, out)
+			require.Error(t, err)
+			protorequire.ProtoEqual(t, originalStatus, original.Status().Proto())
+			var got *status.Status
+			if len(tc.enabled) == 0 {
+				var ok bool
+				got, ok = status.FromError(err)
+				require.True(t, ok, "filtered error must carry a gRPC status")
+			} else {
+				require.Same(t, original, err)
+				got = original.Status()
+			}
+			require.Equal(t, codes.Code(originalStatus.GetCode()), got.Code())
+			require.Equal(t, originalStatus.GetMessage(), got.Message())
+			details := got.Details()
+			require.Len(t, details, 2)
+			require.IsType(t, stable, details[0])
+			require.IsType(t, tc.want, details[1])
+			protorequire.ProtoEqual(t, stable, details[0].(*errordetailspb.NamespaceNotFoundFailure))
+			protorequire.ProtoEqual(t, tc.want, details[1].(*testfixture.Message))
+		})
+	}
+}
+
+func TestDraftFieldsUnaffectedErrorDetails(t *testing.T) {
+	i := NewDraftFieldsInterceptor(func(string) []string { t.Fatal("unexpected config lookup"); return nil }, nil, log.NewNoopLogger(), draft.Omit)
+	original := serviceerror.NewNamespaceNotFound("missing")
+	_, err := draftInvoke(i, &emptypb.Empty{}, nil, func(context.Context, any) (any, error) {
+		return nil, original
+	})
+	require.Same(t, original, err)
+}
+
+func TestDraftFieldsErrorDetailOmissionFailure(t *testing.T) {
+	st, err := status.New(codes.NotFound, "namespace is missing").WithDetails(draftMessage())
+	require.NoError(t, err)
+	i := NewDraftFieldsInterceptor(func(string) []string { return nil }, nil, log.NewNoopLogger(), func(msg any, _ *draft.Selection) (bool, error) {
+		require.IsType(t, &testfixture.Message{}, msg)
+		return true, errors.New("sensitive payload")
+	})
+	out, err := draftInvoke(i, nil, nil, func(context.Context, any) (any, error) {
+		return nil, st.Err()
+	})
+	require.Nil(t, out)
+	require.Error(t, err)
+	got, ok := status.FromError(err)
+	require.True(t, ok)
+	protorequire.ProtoEqual(t, status.New(codes.Internal, "draft field omission failed").Proto(), got.Proto())
+}
+
+func TestDraftFieldsServicesAreUnary(t *testing.T) {
+	for _, name := range []protoreflect.FullName{
+		"temporal.api.workflowservice.v1.WorkflowService",
+		"temporal.api.operatorservice.v1.OperatorService",
+	} {
+		descriptor, err := protoregistry.GlobalFiles.FindDescriptorByName(name)
+		require.NoError(t, err)
+		methods := descriptor.(protoreflect.ServiceDescriptor).Methods()
+		for idx := range methods.Len() {
+			method := methods.Get(idx)
+			require.False(t, method.IsStreamingClient() || method.IsStreamingServer(),
+				"%s is streaming. The draft filter only covers unary calls. A stream interceptor must be added first.", method.FullName())
+		}
+	}
 }
 
 func TestDraftFieldsResponseOnlyNamespaceBinding(t *testing.T) {
