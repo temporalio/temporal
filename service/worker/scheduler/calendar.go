@@ -3,6 +3,7 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -110,6 +111,39 @@ func (cc *compiledCalendar) matches(ts time.Time) bool {
 		cc.second(s)
 }
 
+// instantsAt returns the instants that read as the given wall clock time in cc.tz, in
+// increasing order. Go's time.Date does not define which instant it picks for a wall
+// clock time that a dst transition repeated, so the zone offsets around it are probed
+// instead. A wall clock time that a transition skipped has no instants, and one that a
+// transition repeated has two.
+func (cc *compiledCalendar) instantsAt(y int, mo time.Month, d, h, m, s int) []time.Time {
+	wall := time.Date(y, mo, d, h, m, s, 0, time.UTC)
+	base := time.Date(y, mo, d, h, m, s, 0, cc.tz)
+
+	var offsets [3]int
+	distinct := 0
+	for _, probe := range [...]time.Time{base.Add(-2 * time.Hour), base, base.Add(2 * time.Hour)} {
+		_, offset := probe.Zone()
+		if !slices.Contains(offsets[:distinct], offset) {
+			offsets[distinct] = offset
+			distinct++
+		}
+	}
+
+	var instants []time.Time
+	for _, offset := range offsets[:distinct] {
+		cand := wall.Add(-time.Duration(offset) * time.Second).In(cc.tz)
+		cy, cmo, cd := cand.Date()
+		ch, cm, cs := cand.Clock()
+		if !time.Date(cy, cmo, cd, ch, cm, cs, 0, time.UTC).Equal(wall) {
+			continue
+		}
+		instants = append(instants, cand)
+	}
+	slices.SortFunc(instants, time.Time.Compare)
+	return instants
+}
+
 // Returns the earliest time that matches this calendar spec that is after the given time.
 // All times are considered to have 1 second resolution.
 func (cc *compiledCalendar) next(ts time.Time) time.Time {
@@ -119,10 +153,15 @@ func (cc *compiledCalendar) next(ts time.Time) time.Time {
 	// get ymdhms from ts
 	y, mo, d := ts.Date()
 	h, m, s := ts.Clock()
-	dstoffset := 0 * time.Hour
-	if ts.Add(-time.Hour).Hour() == h {
-		// we're in the second copy of a dst repeated hour
-		dstoffset = 1 * time.Hour
+
+	// if ts is the earlier of two instants that share a wall clock time, then every
+	// match up to its repeated copy comes before any later wall clock time.
+	if repeated := cc.instantsAt(y, mo, d, h, m, s); len(repeated) == 2 && repeated[0].Equal(ts.Truncate(time.Second)) {
+		for cand := repeated[0].Add(time.Second); !cand.After(repeated[1]); cand = cand.Add(time.Second) {
+			if cc.matches(cand) {
+				return cand
+			}
+		}
 	}
 
 	// looking for first matching time after ts, so add 1 second
@@ -135,17 +174,7 @@ Outer:
 			m, s = m+1, 0
 		}
 		if m >= 60 {
-			prev := time.Date(y, mo, d, h, 0, 0, 0, cc.tz)
 			h, m = h+1, 0
-			next := time.Date(y, mo, d, h, 0, 0, 0, cc.tz)
-			// if we moved to the next hour but it's two hours later, then we skipped over
-			// a dst repeated hour. try it again with an offset.
-			if dstoffset == 0 && next.Sub(prev) > time.Hour {
-				h = h - 1
-				dstoffset = 1 * time.Hour
-			} else {
-				dstoffset = 0
-			}
 		}
 		if h >= 24 {
 			d, h = d+1, 0
@@ -162,26 +191,22 @@ Outer:
 		// try to match year, month, etc. from outside in
 		if !cc.year(y) {
 			y, mo, d, h, m, s = y+1, time.January, 1, 0, 0, 0
-			dstoffset = 0
 			continue Outer
 		}
 		for !cc.month(int(mo)) {
 			mo, d, h, m, s = mo+1, 1, 0, 0, 0
-			dstoffset = 0
 			if mo > time.December {
 				continue Outer
 			}
 		}
 		for !cc.dayOfMonth(d) || !cc.dayOfWeek(int(time.Date(y, mo, d, h, m, s, 0, cc.tz).Weekday())) {
 			d, h, m, s = d+1, 0, 0, 0
-			dstoffset = 0
 			if d > daysInMonth(mo, y) {
 				continue Outer
 			}
 		}
 		for !cc.hour(h) {
 			h, m, s = h+1, 0, 0
-			dstoffset = 0
 			if h >= 24 {
 				continue Outer
 			}
@@ -199,14 +224,13 @@ Outer:
 			}
 		}
 		// everything matches
-		nextTs := time.Date(y, mo, d, h, m, s, 0, cc.tz)
-		// we might have reached a nonexistent time that got jumped over by a dst transition.
-		// we can tell if the hour is different from what we think it should be.
-		if nextTs.Hour() != h {
-			h, m, s = h+1, 0, 0
-			continue Outer
+		for _, cand := range cc.instantsAt(y, mo, d, h, m, s) {
+			if cand.After(ts) {
+				return cand
+			}
 		}
-		return nextTs.Add(dstoffset)
+		// a dst transition jumped over this wall clock time, so keep looking.
+		h, m, s = h+1, 0, 0
 	}
 
 	// no more matching times (up to max we checked)
