@@ -40,12 +40,12 @@ func TestDraftAPIVetDependencies(t *testing.T) {
 			return ""
 		}, want: "draft option draft must have string type"},
 		{name: "placement", mutate: func(file, _ *descriptorpb.FileDescriptorProto) string {
-			file.EnumType = []*descriptorpb.EnumDescriptorProto{{Name: proto.String("Enum"), Options: &descriptorpb.EnumOptions{}}}
+			file.EnumType = []*descriptorpb.EnumDescriptorProto{{Name: new("Enum"), Options: &descriptorpb.EnumOptions{}}}
 			setVetDraftOption(file.EnumType[0].Options, 50003, "feature")
 			return ""
 		}, want: "message.proto.enum_type[0].options: draft annotations are supported only on fields and messages"},
 		{name: "extension", mutate: func(file, _ *descriptorpb.FileDescriptorProto) string {
-			file.Extension = []*descriptorpb.FieldDescriptorProto{{Name: proto.String("extension"), Extendee: proto.String(".Message"), Options: &descriptorpb.FieldOptions{}}}
+			file.Extension = []*descriptorpb.FieldDescriptorProto{{Name: new("extension"), Extendee: new(".Message"), Options: &descriptorpb.FieldOptions{}}}
 			setVetDraftOption(file.Extension[0].Options, 50001, "feature")
 			return ""
 		}, want: "message.proto.extension[0]: draft annotations are unsupported on extensions"},
@@ -58,7 +58,7 @@ func TestDraftAPIVetDependencies(t *testing.T) {
 			return ""
 		}, want: "message.proto.message_type[0].field[0].options: draft feature must be a nonempty whitespace-free token"},
 		{name: "schema-error-preserves-options", mutate: func(file, schema *descriptorpb.FileDescriptorProto) string {
-			schema.EnumType = []*descriptorpb.EnumDescriptorProto{{Name: proto.String("Enum"), Options: &descriptorpb.EnumOptions{}}}
+			schema.EnumType = []*descriptorpb.EnumDescriptorProto{{Name: new("Enum"), Options: &descriptorpb.EnumOptions{}}}
 			setVetDraftOption(schema.EnumType[0].Options, 50003, "feature")
 			setVetDraftOption(file.MessageType[0].Field[0].Options, 50001, "")
 			return ""
@@ -70,7 +70,7 @@ func TestDraftAPIVetDependencies(t *testing.T) {
 			return ""
 		}, want: "message.proto: public import of temporal/api_next/protometa/v1/draft.proto is not supported; import it directly"},
 		{name: "mapping-error-preserves-options", mutate: func(_, schema *descriptorpb.FileDescriptorProto) string {
-			schema.MessageType = []*descriptorpb.DescriptorProto{{Name: proto.String("SchemaDraft"), Options: &descriptorpb.MessageOptions{}}}
+			schema.MessageType = []*descriptorpb.DescriptorProto{{Name: new("SchemaDraft"), Options: &descriptorpb.MessageOptions{}}}
 			setVetDraftOption(schema.MessageType[0].Options, 50002, "feature")
 			return "LegacyDescriptor"
 		}, want: "message.proto: cannot map draft message Message to Go"},
@@ -114,16 +114,16 @@ func setVetDraftOption(options proto.Message, number protowire.Number, feature s
 
 func writeVetFixture(t *testing.T, dir string, mutate func(*descriptorpb.FileDescriptorProto, *descriptorpb.FileDescriptorProto) string) {
 	t.Helper()
-	schema := &descriptorpb.FileDescriptorProto{Name: proto.String("temporal/api_next/protometa/v1/draft.proto"), Package: proto.String("temporal.api.protometa.v1")}
+	schema := &descriptorpb.FileDescriptorProto{Name: new("temporal/api_next/protometa/v1/draft.proto"), Package: new("temporal.api.protometa.v1")}
 	for index, extendee := range []string{"FieldOptions", "MessageOptions", "EnumOptions"} {
 		schema.Extension = append(schema.Extension, &descriptorpb.FieldDescriptorProto{
-			Name:   proto.String([]string{"draft", "draft_message", "draft_enum"}[index]),
-			Number: proto.Int32(int32(50001 + index)), Extendee: proto.String(".google.protobuf." + extendee),
+			Name:   new([]string{"draft", "draft_message", "draft_enum"}[index]),
+			Number: new(int32(50001 + index)), Extendee: new(".google.protobuf." + extendee),
 			Type: descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
 		})
 	}
-	file := &descriptorpb.FileDescriptorProto{Name: proto.String("message.proto"), Package: proto.String("temporal.api.test.v1"), MessageType: []*descriptorpb.DescriptorProto{{
-		Name: proto.String("Message"), Field: []*descriptorpb.FieldDescriptorProto{{Name: proto.String("draft"), Number: proto.Int32(1), Options: &descriptorpb.FieldOptions{}}},
+	file := &descriptorpb.FileDescriptorProto{Name: new("message.proto"), Package: new("temporal.api.test.v1"), MessageType: []*descriptorpb.DescriptorProto{{
+		Name: new("Message"), Field: []*descriptorpb.FieldDescriptorProto{{Name: new("draft"), Number: proto.Int32(1), Options: &descriptorpb.FieldOptions{}}},
 	}}}
 	setVetDraftOption(file.MessageType[0].Field[0].Options, 50001, "feature")
 	accessor := "Descriptor"

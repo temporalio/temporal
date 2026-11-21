@@ -16,7 +16,7 @@ func TestAnalyzerReportsDeclarationErrors(t *testing.T) {
 	require.NoError(t, analysis.Validate([]*analysis.Analyzer{Analyzer}))
 	schema, file := draftFixture()
 	proto.SetExtension(file.MessageType[0].Field[0].Options, protometapb.E_Draft, "")
-	file.MessageType = append(file.MessageType, &descriptorpb.DescriptorProto{Name: proto.String("Unmapped"), Options: &descriptorpb.MessageOptions{}})
+	file.MessageType = append(file.MessageType, &descriptorpb.DescriptorProto{Name: new("Unmapped"), Options: &descriptorpb.MessageOptions{}})
 	proto.SetExtension(file.MessageType[1].Options, protometapb.E_DraftMessage, "feature")
 	diagnostics, _ := runDraftFixture(t, schema, file)
 	require.ElementsMatch(t, []string{
@@ -56,10 +56,10 @@ func TestDraftFieldAnnotationLocations(t *testing.T) {
 		{"file", &descriptorpb.FileOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) { f.Options = o.(*descriptorpb.FileOptions) }, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			file := &descriptorpb.FileDescriptorProto{Name: proto.String("test.proto"),
-				MessageType: []*descriptorpb.DescriptorProto{{Name: proto.String("Message"), Field: []*descriptorpb.FieldDescriptorProto{{Name: proto.String("field")}}, OneofDecl: []*descriptorpb.OneofDescriptorProto{{Name: proto.String("choice")}}}},
-				EnumType:    []*descriptorpb.EnumDescriptorProto{{Name: proto.String("Enum"), Value: []*descriptorpb.EnumValueDescriptorProto{{Name: proto.String("VALUE")}}}},
-				Service:     []*descriptorpb.ServiceDescriptorProto{{Name: proto.String("Service"), Method: []*descriptorpb.MethodDescriptorProto{{Name: proto.String("Method")}}}},
+			file := &descriptorpb.FileDescriptorProto{Name: new("test.proto"),
+				MessageType: []*descriptorpb.DescriptorProto{{Name: new("Message"), Field: []*descriptorpb.FieldDescriptorProto{{Name: new("field")}}, OneofDecl: []*descriptorpb.OneofDescriptorProto{{Name: new("choice")}}}},
+				EnumType:    []*descriptorpb.EnumDescriptorProto{{Name: new("Enum"), Value: []*descriptorpb.EnumValueDescriptorProto{{Name: new("VALUE")}}}},
+				Service:     []*descriptorpb.ServiceDescriptorProto{{Name: new("Service"), Method: []*descriptorpb.MethodDescriptorProto{{Name: new("Method")}}}},
 			}
 			number := int32(50001)
 			c := &catalog{options: []option{{Extendee: string(tc.options.ProtoReflect().Descriptor().FullName()), Number: number}}}
@@ -83,7 +83,7 @@ func TestDraftFeatureTokens(t *testing.T) {
 		data := protowire.AppendTag(nil, 50001, protowire.BytesType)
 		opts.ProtoReflect().SetUnknown(protowire.AppendString(data, feature))
 		c := &catalog{options: []option{{Extendee: "google.protobuf.FieldOptions", Number: 50001}}}
-		fd := &descriptorpb.FileDescriptorProto{Name: proto.String("test.proto"), MessageType: []*descriptorpb.DescriptorProto{{Field: []*descriptorpb.FieldDescriptorProto{{Options: opts}}}}}
+		fd := &descriptorpb.FileDescriptorProto{Name: new("test.proto"), MessageType: []*descriptorpb.DescriptorProto{{Field: []*descriptorpb.FieldDescriptorProto{{Options: opts}}}}}
 		require.ErrorContains(t, c.checkFieldAnnotations(fd), "whitespace-free token")
 	}
 }
@@ -92,7 +92,7 @@ func TestDraftExtensionAnnotation(t *testing.T) {
 	opts := &descriptorpb.FieldOptions{}
 	data := protowire.AppendTag(nil, 50001, protowire.BytesType)
 	opts.ProtoReflect().SetUnknown(protowire.AppendString(data, "feature"))
-	field := &descriptorpb.FieldDescriptorProto{Extendee: proto.String("Draft"), Options: opts}
+	field := &descriptorpb.FieldDescriptorProto{Extendee: new("Draft"), Options: opts}
 	c := &catalog{options: []option{{Extendee: "google.protobuf.FieldOptions", Number: 50001}}}
 	require.ErrorContains(t, c.checkDraftOptions(field, "extension"), "unsupported on extensions")
 }

@@ -305,8 +305,8 @@ func (c *catalog) mark(obj types.Object, features []string) {
 
 func (c *catalog) markType(typ *types.Named, features []string) {
 	c.mark(typ.Obj(), features)
-	for i := 0; i < typ.NumMethods(); i++ {
-		c.mark(typ.Method(i), features)
+	for method := range typ.Methods() {
+		c.mark(method, features)
 	}
 }
 
@@ -502,8 +502,8 @@ func (c *catalog) addReferencedTypes() {
 		if !ok {
 			continue
 		}
-		for i := 0; i < structure.NumFields(); i++ {
-			field := structure.Field(i)
+		for field := range structure.Fields() {
+			field := field
 			c.mark(field, c.referenceFeatures(field.Type()))
 		}
 	}
