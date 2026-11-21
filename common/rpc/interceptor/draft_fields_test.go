@@ -368,3 +368,19 @@ func TestDraftFieldsExcludedAndNonProto(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "response", out)
 }
+
+func TestDraftEnumErrorDetails(t *testing.T) {
+	t.Parallel()
+	i := NewDraftFieldsInterceptor(func(string) []string { return nil }, nil, log.NewNoopLogger(), draft.Omit)
+	detail := &testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}
+	original, err := status.New(codes.NotFound, "missing").WithDetails(detail)
+	require.NoError(t, err)
+	_, err = draftInvoke(i, &emptypb.Empty{}, nil, func(context.Context, any) (any, error) {
+		return nil, original.Err()
+	})
+	filtered := status.Convert(err)
+	require.Equal(t, codes.NotFound, filtered.Code())
+	require.Equal(t, "missing", filtered.Message())
+	require.Len(t, filtered.Details(), 1)
+	protorequire.ProtoEqual(t, &testfixture.EnumValues{}, filtered.Details()[0].(*testfixture.EnumValues))
+}

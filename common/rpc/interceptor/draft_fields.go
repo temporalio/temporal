@@ -69,14 +69,15 @@ func (i *DraftFieldsInterceptor) selection(req any) *draft.Selection {
 	})
 }
 
-func (i *DraftFieldsInterceptor) omitRoot(msg any, selection *draft.Selection, method string) error {
+func (i *DraftFieldsInterceptor) omitRoot(msg any, selection *draft.Selection, method string) (bool, error) {
 	if _, ok := msg.(proto.Message); !ok {
-		return nil
+		return false, nil
 	}
-	if _, err := i.omit(msg, selection); err != nil {
-		return i.omissionError(method, err)
+	removedEnumValue, err := i.omit(msg, selection)
+	if err != nil {
+		return false, i.omissionError(method, err)
 	}
-	return nil
+	return removedEnumValue, nil
 }
 
 func (i *DraftFieldsInterceptor) omissionError(method string, err error) error {
@@ -93,7 +94,7 @@ func (i *DraftFieldsInterceptor) omitOutgoingRoot(message proto.Message, selecti
 		return nil, nil
 	}
 	filtered := proto.Clone(message)
-	if err := i.omitRoot(filtered, selection, method); err != nil {
+	if _, err := i.omitRoot(filtered, selection, method); err != nil {
 		return nil, err
 	}
 	return filtered, nil
@@ -167,8 +168,12 @@ func (i *DraftFieldsInterceptor) IncomingIntercept(ctx context.Context, req any,
 	if invocation, ok := ctx.Value(draftInvocationKey{}).(*draftInvocation); ok {
 		invocation.selection = selection
 	}
-	if err := i.omitRoot(req, selection, info.FullMethod); err != nil {
+	removedEnumValue, err := i.omitRoot(req, selection, info.FullMethod)
+	if err != nil {
 		return nil, err
+	}
+	if removedEnumValue {
+		return nil, status.Error(codes.InvalidArgument, draft.DisabledEnumValueMessage)
 	}
 	return handler(ctx, req)
 }

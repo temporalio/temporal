@@ -350,7 +350,7 @@ func (h *nexusCompletionHandler) completeHSMOperation(
 	switch req.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		failure := commonnexus.NexusFailureToProtoFailure(*req.Error.OriginalFailure)
-		if err := omitNexusDraftFields(logger, h.omitDraftFields, selection, failure); err != nil {
+		if err := omitNexusDraftInput(logger, h.omitDraftFields, selection, failure); err != nil {
 			return err
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
@@ -411,7 +411,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		if req.State == nexus.OperationStateCanceled {
 			failure = commonnexus.CoerceToCanceledFailure(failure)
 		}
-		if err := omitNexusDraftFields(logger, h.omitDraftFields, selection, failure); err != nil {
+		if err := omitNexusDraftInput(logger, h.omitDraftFields, selection, failure); err != nil {
 			return err
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
@@ -432,12 +432,12 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 
 func (h *nexusCompletionHandler) omitCompletionRoots(logger log.Logger, selection *draft.Selection, payload *commonpb.Payload, links []*commonpb.Link) error {
 	if payload != nil {
-		if err := omitNexusDraftFields(logger, h.omitDraftFields, selection, payload); err != nil {
+		if err := omitNexusDraftInput(logger, h.omitDraftFields, selection, payload); err != nil {
 			return err
 		}
 	}
 	for _, link := range links {
-		if err := omitNexusDraftFields(logger, h.omitDraftFields, selection, link); err != nil {
+		if err := omitNexusDraftInput(logger, h.omitDraftFields, selection, link); err != nil {
 			return err
 		}
 	}

@@ -44,9 +44,9 @@ func TestOmitSelections(t *testing.T) {
 			item := m.Items[0]
 			reads := 0
 			selection := NewSelection(func() []string { reads++; return tc.features })
-			affected, err := Omit(m, selection)
+			removedEnumValue, err := Omit(m, selection)
 			require.NoError(t, err)
-			require.True(t, affected)
+			require.False(t, removedEnumValue)
 			require.Same(t, pointer, m)
 			require.Same(t, item, m.Items[0])
 			require.Equal(t, "stable", m.Stable)
@@ -86,9 +86,9 @@ func TestOmitOracleAndNilElements(t *testing.T) {
 	}
 	selection := NewSelection(func() []string { return nil })
 	var typedNil *testfixture.Message
-	affected, err := Omit(typedNil, selection)
+	removedEnumValue, err := Omit(typedNil, selection)
 	require.NoError(t, err)
-	require.True(t, affected)
+	require.False(t, removedEnumValue)
 	message := &testfixture.Message{Items: []*testfixture.Message{nil}, ByName: map[string]*testfixture.Message{"nil": nil}, Choice: &testfixture.Message_ChoiceChild{ChoiceChild: &testfixture.Message{Stable: "kept", FeatureA: "a"}}}
 	_, err = Omit(message, selection)
 	require.NoError(t, err)
@@ -174,15 +174,15 @@ func stripDisabled(m protoreflect.Message, enabled []string) {
 
 type panickingOmitter struct{}
 
-func (panickingOmitter) OmitDraftFields(func(string) bool) { panic("sensitive payload") }
+func (panickingOmitter) OmitDraftFields(func(string) bool) bool { panic("sensitive payload") }
 
 func TestOmitLazySelectionAndRecovery(t *testing.T) {
 	reads := 0
 	selection := NewSelection(func() []string { reads++; return []string{"feature-a", "feature-a", "Feature-A", ""} })
 	for _, value := range []any{nil, "not a proto", &testfixture.StableMessage{Stable: "stable"}} {
-		affected, err := Omit(value, selection)
+		removedEnumValue, err := Omit(value, selection)
 		require.NoError(t, err)
-		require.False(t, affected)
+		require.False(t, removedEnumValue)
 	}
 	require.Zero(t, reads)
 	require.True(t, selection.Enabled("feature-a"))
@@ -198,8 +198,8 @@ func TestOmitLazySelectionAndRecovery(t *testing.T) {
 		{panickingOmitter{}, selection, "draft.panickingOmitter", "sensitive payload"},
 		{&testfixture.Message{}, NewSelection(func() []string { panic("config contents") }), "temporal.api.drafttest.v1.Message", "config contents"},
 	} {
-		affected, err := Omit(tc.message, tc.selection)
-		require.True(t, affected)
+		removedEnumValue, err := Omit(tc.message, tc.selection)
+		require.False(t, removedEnumValue)
 		require.ErrorContains(t, err, tc.name)
 		require.ErrorContains(t, err, tc.recovered)
 	}
@@ -235,24 +235,36 @@ func TestOmitWholeMessages(t *testing.T) {
 		s := NewSelection(func() []string { return features })
 		m := &testfixture.DraftReferences{
 			Stable: "kept", Child: &testfixture.WholeDraft{Value: "a"},
-			Items:  []*testfixture.WholeDraft{{Value: "a"}},
-			Values: map[string]*testfixture.WholeDraft{"a": {Value: "a"}},
-			State:  testfixture.WholeDraft_ONE,
-			Nested: &testfixture.WholeDraft_Nested{Value: "ab"},
-			Both:   &testfixture.WholeDraft{Value: "ab"},
-			Choice: &testfixture.DraftReferences_DraftChild{DraftChild: &testfixture.WholeDraft{Value: "a"}},
+			Items:     []*testfixture.WholeDraft{{Value: "a"}},
+			Values:    map[string]*testfixture.WholeDraft{"a": {Value: "a"}},
+			State:     testfixture.WholeDraft_ONE,
+			Nested:    &testfixture.WholeDraft_Nested{Value: "ab"},
+			AlsoDraft: &testfixture.WholeDraft{Value: "a"},
+			Choice:    &testfixture.DraftReferences_DraftChild{DraftChild: &testfixture.WholeDraft{Value: "a"}},
 		}
 		_, err := Omit(m, s)
 		require.NoError(t, err)
 		require.Equal(t, "kept", m.Stable)
 		a := s.Enabled("feature-a")
-		both := a && s.Enabled("feature-b")
 		require.Equal(t, a, m.Child != nil)
 		require.Equal(t, a, m.Items != nil)
 		require.Equal(t, a, m.Values != nil)
 		require.Equal(t, a, m.Choice != nil)
 		require.Equal(t, a, m.State == testfixture.WholeDraft_ONE)
-		require.Equal(t, both, m.Nested != nil)
-		require.Equal(t, both, m.Both != nil)
+		require.Equal(t, a, m.Nested != nil)
+		require.Equal(t, a, m.AlsoDraft != nil)
 	}
+}
+
+func TestOmitEnumValuesInDisabledContainers(t *testing.T) {
+	t.Parallel()
+	message := &testfixture.EnumRequest{
+		DraftField:    testfixture.StableEnum_STABLE_ENUM_PREVIEW,
+		PreviewChoice: &testfixture.EnumRequest_Preview{Preview: testfixture.StableEnum_STABLE_ENUM_PREVIEW},
+	}
+	selection := NewSelection(func() []string { return nil })
+	removedEnumValue, err := Omit(message, selection)
+	require.NoError(t, err)
+	require.False(t, removedEnumValue)
+	require.True(t, proto.Equal(&testfixture.EnumRequest{}, message))
 }
