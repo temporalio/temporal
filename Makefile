@@ -208,7 +208,7 @@ DRAFT_FIXTURE_ENV = API_BINPB="$(abspath $(API_BINPB))" PROTOC="$(PROTOC)" \
 
 $(API_BINPB): go.mod go.sum $(PROTO_FILES) $(wildcard common/draft/testfixture/*.proto)
 	@printf $(COLOR) "Generating proto dependencies image..."
-	@./cmd/tools/getproto/run.sh --out $@
+	@mise exec go -- ./cmd/tools/getproto/run.sh --out $@
 
 $(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
 	@printf $(COLOR) "Generate proto image..."
