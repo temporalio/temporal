@@ -266,7 +266,6 @@ func clusterNames(clusters []*replicationpb.ClusterReplicationConfig) []string {
 // CHASM mode it handles only writes CHASM does not replicate.
 func legacyReplicationRoute(
 	mode namespaceReplicationTransportMode,
-	heldOnLegacy bool,
 	replicates bool,
 ) *wideevents.NamespaceReplicationRoute {
 	if !replicates {
@@ -276,7 +275,7 @@ func legacyReplicationRoute(
 	if mode == namespaceReplicationTransportShadow {
 		transport = namespaceReplicationTransportShadow
 	}
-	return &wideevents.NamespaceReplicationRoute{Transport: transport.String(), HeldOnLegacy: heldOnLegacy}
+	return &wideevents.NamespaceReplicationRoute{Transport: transport.String()}
 }
 
 // chasmReplicationRoute describes a write sent through a CHASM mutation.

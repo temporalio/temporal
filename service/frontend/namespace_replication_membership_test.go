@@ -95,7 +95,7 @@ func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
 			handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
 				nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
 				archiver.NewArchivalMetadata(dc, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-				nil, clock.NewEventTimeSource(), cfg, client, metrics.NoopMetricsHandler, tc.factory, nil)
+				nil, clock.NewEventTimeSource(), cfg, client, metrics.NoopMetricsHandler, tc.factory)
 			clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 			clusters.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 			clusters.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()

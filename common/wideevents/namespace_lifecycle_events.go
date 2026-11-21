@@ -319,9 +319,6 @@ type NamespaceRegisteredInput struct {
 type NamespaceReplicationRoute struct {
 	// Transport is the path that replicated the write: legacy, shadow, or chasm.
 	Transport string `json:"transport"`
-	// HeldOnLegacy marks a write that the deployment's transport policy kept on the legacy queue
-	// although the cell runs shadow or chasm.
-	HeldOnLegacy bool `json:"held_on_legacy"`
 	// PeerCells and RemovedPeers are the cells a chasm write is delivered to and the ones it removes,
 	// as the source's replication resolver decided them.
 	PeerCells    []string `json:"peer_cells,omitempty"`

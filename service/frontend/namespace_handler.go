@@ -62,9 +62,6 @@ type (
 		// replicationResolverFactory resolves replica membership. Deployments can
 		// derive membership from namespace state other than ReplicationConfig.Clusters.
 		replicationResolverFactory namespace.ReplicationResolverFactory
-		// transportPolicy can hold a namespace on the legacy queue while the cell
-		// runs shadow or CHASM. Nil holds nothing.
-		transportPolicy nsreplication.TransportPolicy
 	}
 
 	namespaceReplicationTransportMode int
@@ -106,7 +103,6 @@ func newNamespaceHandler(
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
 	metricsHandler metrics.Handler,
 	replicationResolverFactory namespace.ReplicationResolverFactory,
-	transportPolicy nsreplication.TransportPolicy,
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
@@ -124,7 +120,6 @@ func newNamespaceHandler(
 		metricsHandler:         metricsHandler,
 
 		replicationResolverFactory: replicationResolverFactory,
-		transportPolicy:            transportPolicy,
 	}
 }
 
@@ -284,12 +279,11 @@ func (d *namespaceHandler) RegisterNamespace(
 		},
 		IsGlobalNamespace: isGlobalNamespace,
 	}
-	transportMode, heldOnLegacy := d.namespaceReplicationTransport(ctx, namespaceRequest.Namespace)
+	transportMode := d.effectiveNamespaceReplicationTransportMode()
 	replicationClusters := d.replicationClusters(namespaceRequest.Namespace)
 	shouldReplicate := nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationClusters, false, info.GetState())
 	legacyRoute := legacyReplicationRoute(
 		transportMode,
-		heldOnLegacy,
 		nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationConfig.GetClusters(), false, info.GetState()),
 	)
 
@@ -707,6 +701,7 @@ func (d *namespaceHandler) UpdateNamespace(
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
 	}
+	transportMode := d.effectiveNamespaceReplicationTransportMode()
 	namespaceChanged := configurationChanged || activeClusterChanged || needsNamespacePromotion
 	if namespaceChanged {
 		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
@@ -751,14 +746,12 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 	}
 
-	transportMode, heldOnLegacy := d.namespaceReplicationTransport(ctx, detail)
 	replicationClusters := d.replicationClusters(detail)
 	replicationClustersChanged := clusterListChanged ||
 		!slices.Equal(slices.Sorted(slices.Values(previousReplicationClusters)), slices.Sorted(slices.Values(replicationClusters)))
 	shouldReplicate := nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationClusters, replicationClustersChanged, info.GetState())
 	legacyRoute := legacyReplicationRoute(
 		transportMode,
-		heldOnLegacy,
 		nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationConfig.GetClusters(), clusterListChanged, info.GetState()),
 	)
 
@@ -1624,20 +1617,6 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			)
 		}
 	}()
-}
-
-// namespaceReplicationTransport returns the transport that replicates one
-// namespace write: the cell's mode, unless the transport policy holds the
-// namespace on the legacy queue.
-func (d *namespaceHandler) namespaceReplicationTransport(
-	ctx context.Context,
-	detail *persistencespb.NamespaceDetail,
-) (mode namespaceReplicationTransportMode, heldOnLegacy bool) {
-	mode = d.effectiveNamespaceReplicationTransportMode()
-	if mode != namespaceReplicationTransportLegacy && d.transportPolicy != nil && d.transportPolicy(ctx, detail) {
-		return namespaceReplicationTransportLegacy, true
-	}
-	return mode, false
 }
 
 func (m namespaceReplicationTransportMode) String() string {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,39 +65,26 @@ func (l *syncEventLogger) phaseDetails(t *testing.T, phase string) map[string]an
 	return found[0]
 }
 
-func TestNamespaceReplicationTransportPolicy(t *testing.T) {
+func TestNamespaceUpdatedEventRecordsReplicationRoute(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name       string
 		mode       string
-		hold       bool
-		noPolicy   bool
 		members    string
-		wantCalls  int32
 		wantCHASM  bool
 		wantShadow bool
 		wantRoute  map[string]any
 	}{
-		{name: "chasm cell, not held", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM, wantCalls: 1, wantCHASM: true,
-			wantRoute: map[string]any{"transport": "chasm", "held_on_legacy": false, "peer_cells": []any{"cell-b"}}},
-		{name: "chasm cell, held on legacy", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM, hold: true, wantCalls: 1,
-			wantRoute: map[string]any{"transport": "legacy", "held_on_legacy": true}},
-		{name: "chasm cell without a policy", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM, noPolicy: true, wantCHASM: true,
-			wantRoute: map[string]any{"transport": "chasm", "held_on_legacy": false, "peer_cells": []any{"cell-b"}}},
-		{name: "shadow cell, not held", mode: dynamicconfig.NamespaceReplicationTransportModeShadow, wantCalls: 1, wantShadow: true,
-			wantRoute: map[string]any{"transport": "shadow", "held_on_legacy": false}},
-		// A held namespace is not shadowed either: its peers may not be ready for CHASM deliveries.
-		{name: "shadow cell, held on legacy", mode: dynamicconfig.NamespaceReplicationTransportModeShadow, hold: true, wantCalls: 1,
-			wantRoute: map[string]any{"transport": "legacy", "held_on_legacy": true}},
-		// The policy can only hold a namespace back, so a legacy cell never asks it.
-		{name: "legacy cell", mode: dynamicconfig.NamespaceReplicationTransportModeLegacy, hold: true,
-			wantRoute: map[string]any{"transport": "legacy", "held_on_legacy": false}},
-		// Holding keeps the legacy path's existing publish decision, which reads
-		// ReplicationConfig.Clusters (only cell-a here) rather than the resolver.
-		// The legacy path does not replicate this write, so the event carries no
-		// route.
-		{name: "held, resolver members outside the cluster list", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM,
-			hold: true, members: "cell-a,cell-c", wantCalls: 1},
+		{name: "chasm cell", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM, wantCHASM: true,
+			wantRoute: map[string]any{"transport": "chasm", "peer_cells": []any{"cell-b"}}},
+		{name: "shadow cell", mode: dynamicconfig.NamespaceReplicationTransportModeShadow, wantShadow: true,
+			wantRoute: map[string]any{"transport": "shadow"}},
+		{name: "legacy cell", mode: dynamicconfig.NamespaceReplicationTransportModeLegacy,
+			wantRoute: map[string]any{"transport": "legacy"}},
+		// CHASM peers come from the replication resolver, not ReplicationConfig.Clusters (only cell-a here).
+		{name: "chasm cell, resolver members outside the cluster list", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM,
+			members: "cell-a,cell-c", wantCHASM: true,
+			wantRoute: map[string]any{"transport": "chasm", "peer_cells": []any{"cell-c"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -113,25 +99,15 @@ func TestNamespaceReplicationTransportPolicy(t *testing.T) {
 			cfg.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 			events := &syncEventLogger{}
 			client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
-			var calls atomic.Int32
-			var policy nsreplication.TransportPolicy
-			if !tc.noPolicy {
-				policy = func(_ context.Context, detail *persistencespb.NamespaceDetail) bool {
-					calls.Add(1)
-					// The policy sees the snapshot the write replicates.
-					require.Equal(t, "updated", detail.GetInfo().GetDescription())
-					return tc.hold
-				}
-			}
 			handler := newNamespaceHandler(logger, events, metadata, nil, clusters,
 				nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
 				archiver.NewArchivalMetadata(dc, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-				nil, clock.NewEventTimeSource(), cfg, client, metrics.NoopMetricsHandler, dataMembershipFactory(), policy)
+				nil, clock.NewEventTimeSource(), cfg, client, metrics.NoopMetricsHandler, dataMembershipFactory())
 			clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 			clusters.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 			clusters.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
 			clusters.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
-				"cell-a": {Enabled: true}, "cell-b": {Enabled: true},
+				"cell-a": {Enabled: true}, "cell-b": {Enabled: true}, "cell-c": {Enabled: true},
 			}).AnyTimes()
 			info := &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "ns", State: enumspb.NAMESPACE_STATE_REGISTERED}
 			clusterList := []string{"cell-a", "cell-b"}
@@ -149,11 +125,8 @@ func TestNamespaceReplicationTransportPolicy(t *testing.T) {
 				}, IsGlobalNamespace: true,
 			}, nil)
 			if !tc.wantCHASM {
-				// The legacy path writes locally, and publishes when its cluster list replicates.
 				metadata.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
-				if tc.wantRoute != nil {
-					queue.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
-				}
+				queue.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
 			}
 
 			_, err := handler.UpdateNamespace(t.Context(), &workflowservice.UpdateNamespaceRequest{
@@ -169,28 +142,22 @@ func TestNamespaceReplicationTransportPolicy(t *testing.T) {
 			case <-time.After(2 * time.Second):
 				require.False(t, tc.wantCHASM || tc.wantShadow, "expected a CHASM trigger")
 			}
-			require.Equal(t, tc.wantCalls, calls.Load())
-			details := events.phaseDetails(t, wideevents.PhaseNamespaceUpdated)
-			if tc.wantRoute == nil {
-				require.NotContains(t, details, "replication")
-				return
-			}
-			require.Equal(t, tc.wantRoute, details["replication"])
+			require.Equal(t, tc.wantRoute, events.phaseDetails(t, wideevents.PhaseNamespaceUpdated)["replication"])
 		})
 	}
 }
 
 func TestNamespaceReplicationRoutes(t *testing.T) {
 	t.Parallel()
-	require.Nil(t, legacyReplicationRoute(namespaceReplicationTransportShadow, false, false),
+	require.Nil(t, legacyReplicationRoute(namespaceReplicationTransportShadow, false),
 		"a write the legacy path does not replicate has no route")
 	// CHASM mode sends the writes CHASM does not replicate down the legacy path.
 	require.Equal(t, &wideevents.NamespaceReplicationRoute{Transport: "legacy"},
-		legacyReplicationRoute(namespaceReplicationTransportCHASM, false, true))
+		legacyReplicationRoute(namespaceReplicationTransportCHASM, true))
 	require.Equal(t, &wideevents.NamespaceReplicationRoute{Transport: "shadow"},
-		legacyReplicationRoute(namespaceReplicationTransportShadow, false, true))
-	require.Equal(t, &wideevents.NamespaceReplicationRoute{Transport: "legacy", HeldOnLegacy: true},
-		legacyReplicationRoute(namespaceReplicationTransportLegacy, true, true))
+		legacyReplicationRoute(namespaceReplicationTransportShadow, true))
+	require.Equal(t, &wideevents.NamespaceReplicationRoute{Transport: "legacy"},
+		legacyReplicationRoute(namespaceReplicationTransportLegacy, true))
 	require.Equal(t, &wideevents.NamespaceReplicationRoute{
 		Transport: "chasm", PeerCells: []string{"cell-b", "cell-c"}, RemovedPeers: []string{"cell-c"},
 	}, chasmReplicationRoute(&namespacereplicationpb.NamespaceMutation{
