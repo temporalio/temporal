@@ -96,7 +96,7 @@ func (pdb *db) SelectFromVisibility(
 	if err != nil {
 		return nil, err
 	}
-	filter.Query = db.Rebind(filter.Query)
+	filter.Query = pdb.Rebind(filter.Query)
 	var rows []sqlplugin.VisibilityRow
 	err = db.SelectContext(ctx, &rows, filter.Query, filter.QueryArgs...)
 	if err != nil {
