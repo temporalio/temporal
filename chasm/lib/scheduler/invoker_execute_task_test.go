@@ -859,6 +859,74 @@ func TestExecuteTask_AlreadyStarted(t *testing.T) {
 	})
 }
 
+// A start rejected because its workflow ID is busy (e.g. several manual triggers in the same
+// second share a workflow ID) is caused by the user, so it is retried but not counted as a
+// schedule action error.
+func TestExecuteTask_ActionErrorMetric(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		err            error
+		wantErrorCount int
+	}{
+		{
+			name: "busy workflow",
+			err: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+				Message: "Too many starts for workflow",
+			},
+			wantErrorCount: 0,
+		},
+		{
+			name:           "unavailable",
+			err:            serviceerror.NewUnavailable("unavailable"),
+			wantErrorCount: 1,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := newInvokerExecuteTestEnv(t)
+			recorder := metricstest.NewCaptureHandler()
+			capture := recorder.StartCapture()
+			defer recorder.StopCapture(capture)
+			env.handler = scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
+				Config:         defaultConfig(),
+				MetricsHandler: recorder,
+				BaseLogger:     env.Logger,
+				HistoryClient:  env.mockHistoryClient,
+				FrontendClient: env.mockFrontendClient,
+			})
+			env.mockFrontendClient.EXPECT().
+				StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				Times(1).
+				Return(nil, tc.err)
+
+			startTime := timestamppb.New(env.TimeSource.Now())
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime:   startTime,
+					ActualTime:    startTime,
+					DesiredTime:   startTime,
+					Manual:        true,
+					RequestId:     "req",
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+					Attempt:       1,
+				}},
+				// Both errors are retryable, so the start stays buffered.
+				ExpectedBufferedStarts:   1,
+				ExpectedRunningWorkflows: 0,
+				ExpectedActionCount:      0,
+			})
+
+			require.Len(t, capture.SnapshotMetric(metrics.ScheduleActionErrors.Name()), tc.wantErrorCount)
+		})
+	}
+}
+
 // A buffered start fails from having exceeded its maximum retry limit.
 // InvokerMaxStartAttempts is an inclusive bound on the 1-based attempt number,
 // so the first attempt that is refused locally (zero RPCs, start dropped) is
