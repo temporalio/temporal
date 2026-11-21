@@ -18,18 +18,16 @@ import (
 	_ "go.temporal.io/api/operatorservice/v1"
 	protometapb "go.temporal.io/api/protometa/v1"
 	_ "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/draft/testfixture"
 	"golang.org/x/mod/modfile"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
-// TestAPIContract runs the analyzer on server code that references every message type
-// and field getter of the go.temporal.io/api the server links. The draft annotations in
-// the linked descriptors decide which references must be reported and with which
-// features: a type has its own draft_message feature and those of the messages it is
-// nested in, and a getter adds its field's own feature and those of the field's type.
-// Every other reference must not be reported.
+// TestAPIContract checks that named Go references agree with the linked descriptors.
+// It covers messages, fields, oneofs, enums, services, and RPCs.
 func TestAPIContract(t *testing.T) {
 	source, expected := apiContractSource(t)
 
@@ -47,11 +45,12 @@ func TestAPIContract(t *testing.T) {
 	cmd.Dir = dir
 	output, err = cmd.CombinedOutput()
 	diagnostic := regexp.MustCompile(`contract\.go:(\d+):\d+: use of draft API \S+ \(([^)]*)\)`)
-	actual := map[int][]string{}
+	actual := map[int]string{}
 	for _, match := range diagnostic.FindAllStringSubmatch(string(output), -1) {
 		line, convErr := strconv.Atoi(match[1])
 		require.NoError(t, convErr)
-		actual[line] = featureSet(append(actual[line], strings.Split(match[2], ", ")...))
+		require.NotContains(t, actual, line, "multiple diagnostics for one reference")
+		actual[line] = match[2]
 	}
 	if err != nil && len(actual) == 0 {
 		t.Fatalf("go vet failed without draft diagnostics: %v\n%s", err, output)
@@ -65,60 +64,130 @@ func TestAPIContract(t *testing.T) {
 			yield(line, true)
 		}
 	}))) {
-		if !slices.Equal(expected[line], actual[line]) {
+		if expected[line] != actual[line] {
 			t.Errorf("contract.go:%d %s: want draft features %v, got %v", line, strings.TrimSpace(lines[line-1]), expected[line], actual[line])
 		}
 	}
 }
 
-// apiContractSource generates the referencing package and the features expected per line.
-func apiContractSource(t *testing.T) (string, map[int][]string) {
+const contractFixtureImport = "go.temporal.io/api/drafttest"
+
+// apiContractSource generates the referencing package and the feature expected per line.
+func apiContractSource(t *testing.T) (string, map[int]string) {
 	t.Helper()
 	aliases := map[string]string{}
+	fixturePkg := reflect.TypeFor[testfixture.Message]().PkgPath()
 	alias := func(pkgPath string) string {
+		if pkgPath == fixturePkg {
+			pkgPath = contractFixtureImport
+		}
 		if aliases[pkgPath] == "" {
 			aliases[pkgPath] = fmt.Sprintf("p%d", len(aliases))
 		}
 		return aliases[pkgPath]
 	}
 	type entry struct {
-		code     string
-		features []string
+		code    string
+		feature string
 	}
 	var body []entry
-	var visit func(protoreflect.MessageDescriptors)
-	visit = func(messages protoreflect.MessageDescriptors) {
+	add := func(code string, descriptors ...protoreflect.Descriptor) {
+		var feature string
+		if len(descriptors) > 0 {
+			feature = contractFeature(descriptors[0])
+		}
+		body = append(body, entry{code, feature})
+	}
+	visitEnums := func(enums protoreflect.EnumDescriptors) {
+		for i := 0; i < enums.Len(); i++ {
+			enum := enums.Get(i)
+			typ, err := protoregistry.GlobalTypes.FindEnumByName(enum.FullName())
+			require.NoError(t, err)
+			goType := reflect.TypeOf(typ.New(0))
+			pkg := alias(goType.PkgPath())
+			add(fmt.Sprintf("var _ %s.%s", pkg, goType.Name()), enum)
+			var prefix string
+			if parent, ok := enum.Parent().(protoreflect.MessageDescriptor); ok {
+				prefix = goMessageType(t, parent).Name() + "_"
+			} else if goType.PkgPath() == fixturePkg {
+				// The API module removes the type prefix from top-level enum values.
+				prefix = goType.Name() + "_"
+			}
+			for j := 0; j < enum.Values().Len(); j++ {
+				value := enum.Values().Get(j)
+				add(fmt.Sprintf("var _ = %s.%s%s", pkg, prefix, value.Name()), value)
+			}
+		}
+	}
+	var visitMessages func(protoreflect.MessageDescriptors)
+	visitMessages = func(messages protoreflect.MessageDescriptors) {
 		for i := 0; i < messages.Len(); i++ {
 			message := messages.Get(i)
-			visit(message.Messages())
+			visitMessages(message.Messages())
+			visitEnums(message.Enums())
 			if message.IsMapEntry() {
 				continue
 			}
 			goType := goMessageType(t, message)
-			body = append(body,
-				entry{code: "func _() {"},
-				entry{code: fmt.Sprintf("\tvar m *%s.%s", alias(goType.PkgPath()), goType.Name()), features: typeFeatures(message)},
-				entry{code: "\t_ = m"},
-			)
+			pkg := alias(goType.PkgPath())
+			add("func _() {")
+			add(fmt.Sprintf("	var m *%s.%s", pkg, goType.Name()), message)
+			add("	_ = m")
+			for j := 0; j < message.Oneofs().Len(); j++ {
+				oneof := message.Oneofs().Get(j)
+				if !oneof.IsSynthetic() {
+					add(fmt.Sprintf("	_ = m.Get%s()", generatedOneofField(t, goType, oneof).Name), oneof)
+				}
+			}
 			for j := 0; j < message.Fields().Len(); j++ {
 				field := message.Fields().Get(j)
-				getter := "Get" + goCamelCase(string(field.Name()))
+				name := goCamelCase(string(field.Name()))
+				getter := "Get" + name
 				if _, ok := reflect.PointerTo(goType).MethodByName(getter); !ok {
 					t.Fatalf("%s has no getter %s for %s", goType, getter, field.FullName())
 				}
-				features := typeFeatures(message)
-				if feature, _ := proto.GetExtension(field.Options(), protometapb.E_Draft).(string); feature != "" {
-					features = append(features, feature)
+				add(fmt.Sprintf("	_ = m.%s()", getter), field)
+				if oneof := field.ContainingOneof(); oneof != nil && !oneof.IsSynthetic() {
+					add(fmt.Sprintf("	_ = %s.%s{}", pkg, oneofWrapperName(t, goType, field)), field)
 				}
-				features = append(features, fieldTypeFeatures(field)...)
-				body = append(body, entry{code: fmt.Sprintf("\t_ = m.%s()", getter), features: featureSet(features)})
 			}
-			body = append(body, entry{code: "}"})
+			add("}")
+		}
+	}
+	visitServices := func(services protoreflect.ServiceDescriptors) {
+		for i := 0; i < services.Len(); i++ {
+			service := services.Get(i)
+			name := goCamelCase(string(service.Name()))
+			file := service.ParentFile()
+			pkgPath, _, _ := strings.Cut(file.Options().(*descriptorpb.FileOptions).GetGoPackage(), ";")
+			pkg := alias(pkgPath)
+			for _, serviceType := range []string{name + "Client", name + "Server", "Unimplemented" + name + "Server", "Unsafe" + name + "Server"} {
+				add(fmt.Sprintf("var _ %s.%s", pkg, serviceType), service)
+			}
+			for _, symbol := range []string{"New" + name + "Client", "Register" + name + "Server", name + "_ServiceDesc"} {
+				add(fmt.Sprintf("var _ = %s.%s", pkg, symbol), service)
+			}
+			add("func _() {")
+			add(fmt.Sprintf("	var client %s.%sClient", pkg, name), service)
+			add(fmt.Sprintf("	var server %s.%sServer", pkg, name), service)
+			add(fmt.Sprintf("	var unimplemented %s.Unimplemented%sServer", pkg, name), service)
+			for j := 0; j < service.Methods().Len(); j++ {
+				method := service.Methods().Get(j)
+				methodName := goCamelCase(string(method.Name()))
+				add(fmt.Sprintf("	_ = %s.%s_%s_FullMethodName", pkg, name, methodName), method)
+				add(fmt.Sprintf("	_ = client.%s", methodName), method)
+				add(fmt.Sprintf("	_ = server.%s", methodName), method)
+				add(fmt.Sprintf("	_ = unimplemented.%s", methodName), method)
+			}
+			add("\t_, _, _ = client, server, unimplemented")
+			add("}")
 		}
 	}
 	protoregistry.GlobalFiles.RangeFiles(func(file protoreflect.FileDescriptor) bool {
 		if strings.HasPrefix(string(file.Package()), "temporal.api.") {
-			visit(file.Messages())
+			visitMessages(file.Messages())
+			visitEnums(file.Enums())
+			visitServices(file.Services())
 		}
 		return true
 	})
@@ -131,49 +200,46 @@ func apiContractSource(t *testing.T) (string, map[int][]string) {
 	}
 	b.WriteString(")\n\n")
 	line := strings.Count(b.String(), "\n") + 1
-	expected := map[int][]string{}
+	expected := map[int]string{}
 	for _, e := range body {
 		b.WriteString(e.code + "\n")
-		if len(e.features) > 0 {
-			expected[line] = featureSet(e.features)
+		if e.feature != "" {
+			expected[line] = e.feature
 		}
 		line++
 	}
 	return b.String(), expected
 }
 
-// typeFeatures returns the draft_message features of message and of the messages it is
-// nested in.
-func typeFeatures(descriptor protoreflect.Descriptor) []string {
-	var features []string
-	for ; descriptor != nil; descriptor = descriptor.Parent() {
-		if message, ok := descriptor.(protoreflect.MessageDescriptor); ok {
-			if feature, _ := proto.GetExtension(message.Options(), protometapb.E_DraftMessage).(string); feature != "" {
-				features = append(features, feature)
-			}
+// contractFeature reads all permitted annotations and follows declaration containment.
+func contractFeature(d protoreflect.Descriptor) string {
+	var option protoreflect.ExtensionType
+	parent := d.Parent()
+	switch d := d.(type) {
+	case protoreflect.MessageDescriptor:
+		option = protometapb.E_DraftMessage
+	case protoreflect.FieldDescriptor:
+		option = protometapb.E_Draft
+		if oneof := d.ContainingOneof(); oneof != nil && !oneof.IsSynthetic() {
+			parent = oneof
 		}
+	case protoreflect.EnumDescriptor:
+		option = protometapb.E_DraftEnum
+	case protoreflect.EnumValueDescriptor:
+		option = protometapb.E_DraftEnumValue
+	case protoreflect.OneofDescriptor:
+		option = protometapb.E_DraftOneof
+	case protoreflect.ServiceDescriptor:
+		option = protometapb.E_DraftService
+	case protoreflect.MethodDescriptor:
+		option = protometapb.E_DraftMethod
+	default:
+		return ""
 	}
-	return features
-}
-
-// fieldTypeFeatures returns the features of the message or enum a field holds, or of a
-// map field's value.
-func fieldTypeFeatures(field protoreflect.FieldDescriptor) []string {
-	if field.IsMap() {
-		field = field.MapValue()
+	if feature, _ := proto.GetExtension(d.Options(), option).(string); feature != "" {
+		return feature
 	}
-	if field.Message() != nil {
-		return typeFeatures(field.Message())
-	}
-	if field.Enum() != nil {
-		return typeFeatures(field.Enum())
-	}
-	return nil
-}
-
-func featureSet(features []string) []string {
-	set := slices.Sorted(slices.Values(features))
-	return slices.Compact(set)
+	return contractFeature(parent)
 }
 
 func goMessageType(t *testing.T, message protoreflect.MessageDescriptor) reflect.Type {
@@ -181,6 +247,27 @@ func goMessageType(t *testing.T, message protoreflect.MessageDescriptor) reflect
 	messageType, err := protoregistry.GlobalTypes.FindMessageByName(message.FullName())
 	require.NoError(t, err)
 	return reflect.TypeOf(messageType.Zero().Interface()).Elem()
+}
+
+// oneofWrapperName reads the concrete wrapper type assigned by the generated message.
+func oneofWrapperName(t *testing.T, goType reflect.Type, field protoreflect.FieldDescriptor) string {
+	t.Helper()
+	value := reflect.New(goType)
+	message := value.Interface().(proto.Message).ProtoReflect()
+	message.Set(field, message.NewField(field))
+	member := generatedOneofField(t, goType, field.ContainingOneof())
+	return value.Elem().FieldByIndex(member.Index).Elem().Type().Elem().Name()
+}
+
+func generatedOneofField(t *testing.T, goType reflect.Type, oneof protoreflect.OneofDescriptor) reflect.StructField {
+	t.Helper()
+	for member := range goType.Fields() {
+		if member.Tag.Get("protobuf_oneof") == string(oneof.Name()) {
+			return member
+		}
+	}
+	t.Fatalf("no generated oneof for %s", oneof.FullName())
+	return reflect.StructField{}
 }
 
 // goCamelCase is protoc-gen-go's conversion of a field name to its Go name.
@@ -231,6 +318,18 @@ func writeContractModule(t *testing.T, serverRoot, dir, source string) {
 		require.NoError(t, mod.DropReplace(replacement.Old.Path, replacement.Old.Version))
 		require.NoError(t, mod.AddReplace(replacement.Old.Path, replacement.Old.Version, filepath.Join(serverRoot, replacement.New.Path), ""))
 	}
+	// Use an API import path so the analyzer inspects the fixture alongside the real API.
+	fixtureDir := filepath.Join(dir, "fixture")
+	require.NoError(t, os.Mkdir(fixtureDir, 0700))
+	for _, name := range []string{"filter.pb.go", "filter_grpc.pb.go"} {
+		contents, err := os.ReadFile(filepath.Join(serverRoot, "common/draft/testfixture", name))
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, name), contents, 0600))
+	}
+	fixtureMod := fmt.Sprintf("module %s\n\ngo %s\n", contractFixtureImport, mod.Go.Version)
+	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "go.mod"), []byte(fixtureMod), 0600))
+	require.NoError(t, mod.AddRequire(contractFixtureImport, "v0.0.0"))
+	require.NoError(t, mod.AddReplace(contractFixtureImport, "", "./fixture", ""))
 	data, err = mod.Format()
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), data, 0600))
