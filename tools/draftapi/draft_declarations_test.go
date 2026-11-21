@@ -8,6 +8,7 @@ import (
 	"golang.org/x/tools/go/analysis"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -30,30 +31,28 @@ func TestDraftFieldAnnotationLocations(t *testing.T) {
 		name    string
 		options proto.Message
 		attach  func(*descriptorpb.FileDescriptorProto, proto.Message)
-		allowed bool
 	}{
 		{"field", &descriptorpb.FieldOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) {
 			f.MessageType[0].Field[0].Options = o.(*descriptorpb.FieldOptions)
-		}, true},
+		}},
 		{"message", &descriptorpb.MessageOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) {
 			f.MessageType[0].Options = o.(*descriptorpb.MessageOptions)
-		}, true},
+		}},
 		{"enum", &descriptorpb.EnumOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) {
 			f.EnumType[0].Options = o.(*descriptorpb.EnumOptions)
-		}, false},
+		}},
 		{"enum-value", &descriptorpb.EnumValueOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) {
 			f.EnumType[0].Value[0].Options = o.(*descriptorpb.EnumValueOptions)
-		}, false},
+		}},
 		{"oneof", &descriptorpb.OneofOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) {
 			f.MessageType[0].OneofDecl[0].Options = o.(*descriptorpb.OneofOptions)
-		}, false},
+		}},
 		{"service", &descriptorpb.ServiceOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) {
 			f.Service[0].Options = o.(*descriptorpb.ServiceOptions)
-		}, false},
+		}},
 		{"method", &descriptorpb.MethodOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) {
 			f.Service[0].Method[0].Options = o.(*descriptorpb.MethodOptions)
-		}, false},
-		{"file", &descriptorpb.FileOptions{}, func(f *descriptorpb.FileDescriptorProto, o proto.Message) { f.Options = o.(*descriptorpb.FileOptions) }, false},
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			file := &descriptorpb.FileDescriptorProto{Name: new("test.proto"),
@@ -64,15 +63,10 @@ func TestDraftFieldAnnotationLocations(t *testing.T) {
 			number := int32(50001)
 			c := &catalog{options: []option{{Extendee: string(tc.options.ProtoReflect().Descriptor().FullName()), Number: number}}}
 			tc.attach(file, tc.options)
-			require.NoError(t, c.checkFieldAnnotations(file))
+			require.NoError(t, c.checkDeclarations(map[string]*descriptorpb.FileDescriptorProto{"test": file}))
 			data := protowire.AppendTag(nil, protowire.Number(number), protowire.BytesType)
 			tc.options.ProtoReflect().SetUnknown(protowire.AppendString(data, "feature"))
-			err := c.checkFieldAnnotations(file)
-			if tc.allowed {
-				require.NoError(t, err)
-			} else {
-				require.ErrorContains(t, err, "draft annotations are supported only on fields and messages")
-			}
+			require.NoError(t, c.checkDeclarations(map[string]*descriptorpb.FileDescriptorProto{"test": file}))
 		})
 	}
 }
@@ -84,7 +78,7 @@ func TestDraftFeatureTokens(t *testing.T) {
 		opts.ProtoReflect().SetUnknown(protowire.AppendString(data, feature))
 		c := &catalog{options: []option{{Extendee: "google.protobuf.FieldOptions", Number: 50001}}}
 		fd := &descriptorpb.FileDescriptorProto{Name: new("test.proto"), MessageType: []*descriptorpb.DescriptorProto{{Field: []*descriptorpb.FieldDescriptorProto{{Options: opts}}}}}
-		require.ErrorContains(t, c.checkFieldAnnotations(fd), "whitespace-free token")
+		require.ErrorContains(t, c.checkDeclarations(map[string]*descriptorpb.FileDescriptorProto{"test": fd}), "whitespace-free token")
 	}
 }
 
@@ -95,4 +89,33 @@ func TestDraftExtensionAnnotation(t *testing.T) {
 	field := &descriptorpb.FieldDescriptorProto{Extendee: new("Draft"), Options: opts}
 	c := &catalog{options: []option{{Extendee: "google.protobuf.FieldOptions", Number: 50001}}}
 	require.ErrorContains(t, c.checkDraftOptions(field, "extension"), "unsupported on extensions")
+}
+
+func TestDraftAnnotationsInDraftContainers(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		parent protoreflect.ExtensionType
+		child  protoreflect.ExtensionType
+	}{
+		{name: "draft message field", parent: protometapb.E_DraftMessage, child: protometapb.E_Draft},
+		{name: "draft oneof member", parent: protometapb.E_DraftOneof, child: protometapb.E_Draft},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			schema, file := draftFixture()
+			message := file.MessageType[0]
+			if tc.parent == protometapb.E_DraftMessage {
+				proto.SetExtension(message.Options, tc.parent, "feature")
+			} else {
+				message.OneofDecl = []*descriptorpb.OneofDescriptorProto{{Name: new("choice"), Options: &descriptorpb.OneofOptions{}}}
+				message.Field[0].OneofIndex = new(int32(0))
+				proto.SetExtension(message.OneofDecl[0].Options, tc.parent, "feature")
+			}
+			proto.SetExtension(message.Field[0].Options, tc.child, "feature")
+			diagnostics, _ := runDraftFixture(t, schema, file)
+			require.Len(t, diagnostics, 1)
+			require.Contains(t, diagnostics[0], "draft members cannot declare their own feature")
+		})
+	}
 }

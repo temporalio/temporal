@@ -77,19 +77,16 @@ func TestMissingMapping(t *testing.T) {
 
 func mappingCatalog() *catalog {
 	return &catalog{
-		options: []option{{Extendee: "google.protobuf.MessageOptions", Number: 12345}},
+		options: []option{{Extendee: "google.protobuf.MessageOptions", Number: 12345}, {Extendee: "google.protobuf.EnumOptions", Number: 12346}},
 		seen:    make(map[proto.Message]bool),
 	}
 }
 
 func TestMissingEnumMapping(t *testing.T) {
-	enum := &descriptorpb.EnumDescriptorProto{Name: new("NestedEnum")}
-	parent := &descriptorpb.DescriptorProto{Name: new("Parent"), Options: &descriptorpb.MessageOptions{}, EnumType: []*descriptorpb.EnumDescriptorProto{enum}}
-	setVetDraftOption(parent.Options, 12345, "feature")
-	fd := &descriptorpb.FileDescriptorProto{Name: new("test.proto"), MessageType: []*descriptorpb.DescriptorProto{parent}}
-	c := mappingCatalog()
-	c.seen[parent] = true
-	require.ErrorContains(t, c.checkMappings(fd), "cannot map draft enum NestedEnum to Go")
+	enum := &descriptorpb.EnumDescriptorProto{Name: new("DraftEnum"), Options: &descriptorpb.EnumOptions{}}
+	setVetDraftOption(enum.Options, 12346, "feature")
+	fd := &descriptorpb.FileDescriptorProto{Name: new("test.proto"), EnumType: []*descriptorpb.EnumDescriptorProto{enum}}
+	require.ErrorContains(t, mappingCatalog().checkMappings(fd), "cannot map draft enum DraftEnum to Go")
 }
 
 func TestMissingNestedAnnotatedMapping(t *testing.T) {
@@ -159,7 +156,7 @@ func runDraftFixture(t *testing.T, schema, file *descriptorpb.FileDescriptorProt
 	pass.ImportObjectFact = func(types.Object, analysis.Fact) bool { return false }
 	pass.ExportPackageFact = func(analysis.Fact) {}
 	pass.ExportObjectFact = func(_ types.Object, fact analysis.Fact) {
-		facts[fact.(*apiFact).Symbol] = fact.(*apiFact).Features
+		facts[fact.(*apiFact).Symbol] = []string{fact.(*apiFact).Feature}
 	}
 	_, err := Analyzer.Run(pass)
 	require.NoError(t, err)
@@ -170,7 +167,6 @@ func runDraftFixture(t *testing.T, schema, file *descriptorpb.FileDescriptorProt
 // registered extensions rather than unknown fields.
 func TestRegisteredDraftOptions(t *testing.T) {
 	schema, file := draftFixture()
-	proto.SetExtension(file.MessageType[0].Field[0].Options, protometapb.E_Draft, "field-feature")
 	proto.SetExtension(file.MessageType[0].Options, protometapb.E_DraftMessage, "message-feature")
 	// Every real draft option shares one number, so an unrelated option with that number
 	// on another extendee must not be read as a draft annotation.
@@ -180,12 +176,12 @@ func TestRegisteredDraftOptions(t *testing.T) {
 	require.NoError(t, err)
 	decoded := new(descriptorpb.FileDescriptorProto)
 	require.NoError(t, proto.Unmarshal(data, decoded))
-	require.Empty(t, decoded.MessageType[0].Field[0].Options.ProtoReflect().GetUnknown())
+	require.Empty(t, decoded.MessageType[0].Options.ProtoReflect().GetUnknown())
 
 	diagnostics, facts := runDraftFixture(t, schema, file)
 	require.Empty(t, diagnostics)
 	require.Equal(t, []string{"message-feature"}, facts["go.temporal.io/api/test/v1.Message"])
-	require.Equal(t, []string{"field-feature", "message-feature"}, facts["go.temporal.io/api/test/v1.Message.Draft"])
+	require.Equal(t, []string{"message-feature"}, facts["go.temporal.io/api/test/v1.Message.Draft"])
 	require.Equal(t, []string{"message-feature"}, facts["go.temporal.io/api/test/v1.Message.Notes"])
 }
 

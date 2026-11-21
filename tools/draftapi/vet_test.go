@@ -39,11 +39,11 @@ func TestDraftAPIVetDependencies(t *testing.T) {
 			schema.Extension[0].Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
 			return ""
 		}, want: "draft option draft must have string type"},
-		{name: "placement", mutate: func(file, _ *descriptorpb.FileDescriptorProto) string {
+		{name: "enum-mapping", mutate: func(file, _ *descriptorpb.FileDescriptorProto) string {
 			file.EnumType = []*descriptorpb.EnumDescriptorProto{{Name: new("Enum"), Options: &descriptorpb.EnumOptions{}}}
 			setVetDraftOption(file.EnumType[0].Options, 50003, "feature")
 			return ""
-		}, want: "message.proto.enum_type[0].options: draft annotations are supported only on fields and messages"},
+		}, want: "message.proto: cannot map draft enum Enum to Go"},
 		{name: "extension", mutate: func(file, _ *descriptorpb.FileDescriptorProto) string {
 			file.Extension = []*descriptorpb.FieldDescriptorProto{{Name: new("extension"), Extendee: new(".Message"), Options: &descriptorpb.FieldOptions{}}}
 			setVetDraftOption(file.Extension[0].Options, 50001, "feature")

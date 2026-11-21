@@ -7,6 +7,7 @@
 package testreferences
 
 import (
+	_ "go.temporal.io/api/protometa/v1"
 	v1 "go.temporal.io/api/testdraft/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -140,14 +141,14 @@ var File_references_proto protoreflect.FileDescriptor
 
 const file_references_proto_rawDesc = "" +
 	"\n" +
-	"\x10references.proto\x12\x1etemporal.api.testreferences.v1\x1a\rmessage.proto\"\xd0\x03\n" +
+	"\x10references.proto\x12\x1etemporal.api.testreferences.v1\x1a\rmessage.proto\x1a\vdraft.proto\"\xb9\x04\n" +
 	"\n" +
-	"References\x126\n" +
-	"\x05value\x18\x01 \x01(\v2 .temporal.api.testdraft.v1.DraftR\x05value\x124\n" +
-	"\x04list\x18\x02 \x03(\v2 .temporal.api.testdraft.v1.DraftR\x04list\x12O\n" +
-	"\aby_name\x18\x03 \x03(\v26.temporal.api.testreferences.v1.References.ByNameEntryR\x06byName\x12A\n" +
-	"\x05state\x18\x04 \x01(\x0e2+.temporal.api.testdraft.v1.Draft.NestedEnumR\x05state\x128\n" +
-	"\x05child\x18\x05 \x01(\v2 .temporal.api.testdraft.v1.DraftH\x00R\x05child\x12\x18\n" +
+	"References\x12K\n" +
+	"\x05value\x18\x01 \x01(\v2 .temporal.api.testdraft.v1.DraftB\x13\xaa\xbb\x18\x0fmessage-featureR\x05value\x12I\n" +
+	"\x04list\x18\x02 \x03(\v2 .temporal.api.testdraft.v1.DraftB\x13\xaa\xbb\x18\x0fmessage-featureR\x04list\x12d\n" +
+	"\aby_name\x18\x03 \x03(\v26.temporal.api.testreferences.v1.References.ByNameEntryB\x13\xaa\xbb\x18\x0fmessage-featureR\x06byName\x12V\n" +
+	"\x05state\x18\x04 \x01(\x0e2+.temporal.api.testdraft.v1.Draft.NestedEnumB\x13\xaa\xbb\x18\x0fmessage-featureR\x05state\x12M\n" +
+	"\x05child\x18\x05 \x01(\v2 .temporal.api.testdraft.v1.DraftB\x13\xaa\xbb\x18\x0fmessage-featureH\x00R\x05child\x12\x18\n" +
 	"\x06stable\x18\x06 \x01(\tH\x00R\x06stable\x1ab\n" +
 	"\vByNameEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +

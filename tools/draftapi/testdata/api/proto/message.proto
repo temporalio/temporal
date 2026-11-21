@@ -14,16 +14,20 @@ message Stable {
     string stable_choice = 4;
     string draft_choice = 5 [(temporal.api.protometa.v1.draft) = "branch-feature"];
   }
-  Draft whole = 7;
-  Draft both = 8 [(temporal.api.protometa.v1.draft) = "field-feature"];
-  repeated Draft list = 9;
-  map<string, Draft.Nested> by_name = 10;
-  Draft.NestedEnum inherited_enum = 11;
+  oneof draft_union {
+    option (temporal.api.protometa.v1.draft_oneof) = "oneof-feature";
+    string member = 6;
+  }
+  Draft whole = 7 [(temporal.api.protometa.v1.draft) = "message-feature"];
+  Draft also_draft = 8 [(temporal.api.protometa.v1.draft) = "message-feature"];
+  repeated Draft list = 9 [(temporal.api.protometa.v1.draft) = "message-feature"];
+  map<string, Draft.Nested> by_name = 10 [(temporal.api.protometa.v1.draft) = "message-feature"];
+  Draft.NestedEnum inherited_enum = 11 [(temporal.api.protometa.v1.draft) = "message-feature"];
   oneof mixed {
-    Draft draft_child = 12;
+    Draft draft_child = 12 [(temporal.api.protometa.v1.draft) = "message-feature"];
     string ordinary = 13;
   }
-  Draft.SecondNested nested_both = 14;
+  Draft.SecondNested nested_draft = 14 [(temporal.api.protometa.v1.draft) = "message-feature"];
   // Feature names are any whitespace-free token, as in the generators.
   string slashed = 15 [(temporal.api.protometa.v1.draft) = "qa//experimental"];
   message StableNested { string stable = 1; }
@@ -38,17 +42,47 @@ message Draft {
   string value = 1;
   message Nested { string value = 1; }
   enum NestedEnum { ZERO = 0; }
-  message SecondNested {
-    option (temporal.api.protometa.v1.draft_message) = "nested-other-feature";
-    string value = 1;
-  }
+  message SecondNested { string value = 1; }
 }
 
 enum StableEnum {
   STABLE_ZERO = 0;
-  STABLE_ALIAS = 2;
+  DRAFT_VALUE = 1 [(temporal.api.protometa.v1.draft_enum_value) = "value-feature"];
+  STABLE_OTHER = 2;
 }
 
+enum DraftEnum {
+  option (temporal.api.protometa.v1.draft_enum) = "enum-feature";
+  DRAFT_ZERO = 0;
+}
+
+message RegisterEmptyDraftServiceHandler {}
+message StableService_DraftCallClient {}
+message StableService_DraftCallServer {}
+message StableRequest {}
+message StableResponse {}
+message MethodRequest { option (temporal.api.protometa.v1.draft_message) = "method-feature"; }
+message MethodResponse { option (temporal.api.protometa.v1.draft_message) = "method-feature"; }
+message StreamRequest { option (temporal.api.protometa.v1.draft_message) = "stream-feature"; }
+message StreamResponse { option (temporal.api.protometa.v1.draft_message) = "stream-feature"; }
+message ServiceRequest { option (temporal.api.protometa.v1.draft_message) = "service-feature"; }
+message ServiceResponse { option (temporal.api.protometa.v1.draft_message) = "service-feature"; }
+
 service StableService {
-  rpc StableCall(Stable) returns (Stable);
+  rpc StableCall(StableRequest) returns (StableResponse);
+  rpc Stream(StreamRequest) returns (stream StreamResponse) {
+    option (temporal.api.protometa.v1.draft_method) = "stream-feature";
+  }
+  rpc DraftCall(MethodRequest) returns (MethodResponse) {
+    option (temporal.api.protometa.v1.draft_method) = "method-feature";
+  }
+}
+
+service DraftService {
+  option (temporal.api.protometa.v1.draft_service) = "service-feature";
+  rpc Call(ServiceRequest) returns (ServiceResponse);
+}
+
+service EmptyDraftService {
+  option (temporal.api.protometa.v1.draft_service) = "empty-service-feature";
 }

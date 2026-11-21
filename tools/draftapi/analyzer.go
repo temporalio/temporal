@@ -22,7 +22,7 @@ import (
 )
 
 // Analyzer requires an explicit opt-in for direct references to draft protobuf APIs and
-// limits draft annotations to locations supported by response filtering.
+// validates draft annotation feature names and containment.
 var Analyzer = &analysis.Analyzer{
 	Name:      "draftapi",
 	Doc:       "report references to draft Temporal protobuf APIs and unsupported draft annotations",
@@ -31,13 +31,13 @@ var Analyzer = &analysis.Analyzer{
 }
 
 type apiFact struct {
-	Features []string
-	Symbol   string
+	Feature string
+	Symbol  string
 }
 
 func (*apiFact) AFact() {}
 
-func (f *apiFact) String() string { return strings.Join(f.Features, ", ") }
+func (f *apiFact) String() string { return f.Feature }
 
 func run(pass *analysis.Pass) (any, error) {
 	checkAPIMetadata(pass)
@@ -59,11 +59,11 @@ func run(pass *analysis.Pass) (any, error) {
 				return true
 			}
 			var fact apiFact
-			if !pass.ImportObjectFact(obj, &fact) || suppressed(suppressions, id.Pos(), fact.Features) {
+			if !pass.ImportObjectFact(obj, &fact) || suppressed(suppressions, id.Pos(), fact.Feature) {
 				return true
 			}
 			pass.Reportf(id.Pos(), "use of draft API %s (%s); acknowledge with // temporal:allow-draft-api %s",
-				fact.Symbol, strings.Join(fact.Features, ", "), strings.Join(fact.Features, " "))
+				fact.Symbol, fact.Feature, fact.Feature)
 			return true
 		})
 	}
@@ -113,11 +113,9 @@ type sourceRange struct {
 	features []string
 }
 
-func suppressed(ranges []sourceRange, pos token.Pos, features []string) bool {
-	return len(features) > 0 && !slices.ContainsFunc(features, func(feature string) bool {
-		return !slices.ContainsFunc(ranges, func(r sourceRange) bool {
-			return r.start <= pos && pos < r.end && slices.Contains(r.features, feature)
-		})
+func suppressed(ranges []sourceRange, pos token.Pos, feature string) bool {
+	return slices.ContainsFunc(ranges, func(r sourceRange) bool {
+		return r.start <= pos && pos < r.end && slices.Contains(r.features, feature)
 	})
 }
 
