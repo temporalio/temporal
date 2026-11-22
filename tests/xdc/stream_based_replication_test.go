@@ -1625,10 +1625,10 @@ func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_Sequences() {
 	}
 }
 
-// TestLaneKillSwitch_Flapping turns a sender kill switch on and off again several times while a
-// lane has a backlog, waiting for each restart, and ends with the switch on.
+// TestLaneKillSwitch_Flapping turns a sender or receiver kill switch on and off again several
+// times while a lane has a backlog, waiting for each restart, and ends with the switch on.
 func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_Flapping() {
-	for _, killSwitch := range []laneKillSwitch{s.senderLanesDisabled(), s.legacySender()} {
+	for _, killSwitch := range []laneKillSwitch{s.senderLanesDisabled(), s.legacySender(), s.receiverLanesDisabled(), s.legacyReceiver()} {
 		s.Run(killSwitch.name, func() {
 			workflowIDs, stopIsolating := s.startLaneBacklog()
 			defer stopIsolating()
