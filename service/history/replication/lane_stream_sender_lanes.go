@@ -61,6 +61,18 @@ func (t *laneSendTarget) accepts(task tasks.Task) bool {
 	return t == nil || t.accept == nil || t.accept(task)
 }
 
+// eventDetails names the lane in the replication lifecycle events of the tasks it sends, so
+// that a lane split or retirement can be checked task by task. The default lane adds nothing.
+func (t *laneSendTarget) eventDetails() map[string]any {
+	if t.getLaneInfo() == nil {
+		return nil
+	}
+	return map[string]any{
+		"replication_lane":    t.logicalKey,
+		"replication_lane_id": t.laneInfo.GetLaneId(),
+	}
+}
+
 // skippingOwner returns the lane that owns a task the default lane skips, or "".
 func (t *laneSendTarget) skippingOwner(task tasks.Task) string {
 	if t == nil || t.laneOwner == nil {

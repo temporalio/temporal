@@ -531,7 +531,8 @@ func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriorit
 	defer r.memberLaneMu.Unlock()
 	lane, ok := r.memberLanes[laneID]
 	if !ok {
-		if open := r.openLaneCount(); open >= r.maxLanes {
+		open := r.openLaneCount()
+		if open >= r.maxLanes {
 			return nil, serviceerror.NewInvalidArgumentf("sender opened a replication lane beyond max_lanes %d with %d lanes open", r.maxLanes, open)
 		}
 		lane = &memberLane{tracker: NewExecutableTaskTracker(r.logger, r.MetricsHandler)}
@@ -541,6 +542,7 @@ func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriorit
 			lane.tracker.Cancel()
 		}
 		r.memberLanes[laneID] = lane
+		r.logger.Info("Opened a replication lane.", tag.NewStringTag("lane", laneID), tag.NewInt("open-lanes", open+1))
 	}
 	if !retire && lane.retiring {
 		// Non-retire traffic on a retired lane means the sender reused the lane
@@ -548,6 +550,7 @@ func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriorit
 		// the stale retiring flag would delete an active lane at the first
 		// transient drain, dropping its watermark from the ack fold.
 		lane.retiring = false
+		r.logger.Warn("Reopened a retiring replication lane.", tag.NewStringTag("lane", laneID))
 	}
 	lane.tracking++
 	return lane.tracker, nil
@@ -579,8 +582,9 @@ func (r *laneStreamReceiver) finishLaneBatch(laneID string, retire bool) {
 		return
 	}
 	lane.tracking--
-	if retire {
+	if retire && !lane.retiring {
 		lane.retiring = true
+		r.logger.Info("Received the retirement marker of a replication lane.", tag.NewStringTag("lane", laneID))
 	}
 }
 
@@ -670,6 +674,7 @@ func (r *laneStreamReceiver) memberLaneWatermarks() map[string]WatermarkInfo {
 			delete(r.memberLanes, ns)
 			delete(r.pausedLanes, ns)
 			r.memberLaneMu.Unlock()
+			r.logger.Info("Dropped a drained replication lane.", tag.NewStringTag("lane", ns), tag.NewInt64("lane-watermark", wm.Watermark))
 			continue
 		}
 		if wm != nil {
