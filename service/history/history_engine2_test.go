@@ -2279,6 +2279,62 @@ func (s *engine2Suite) TestStartWorkflowExecution_UseExistingNexusContextMetric(
 				s.Require().Len(recordings, 1)
 				s.Require().Equal(tc.expectedOutcome, recordings[0].Tags["context_match"])
 			}
+			s.Require().Empty(capture.SnapshotMetric(metrics.NexusWorkflowStartWithContext.Name()))
+		})
+	}
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_StartWithNexusContextMetric() {
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	for _, tc := range []struct {
+		name            string
+		incomingContext *nexuspb.PropagatedSerializationContext
+		dedup           bool
+		expectRecorded  bool
+	}{
+		{
+			name:            "new workflow with context",
+			incomingContext: serializationContext,
+			expectRecorded:  true,
+		},
+		{
+			name: "new workflow without context",
+		},
+		{
+			name:            "deduped retry with context",
+			incomingContext: serializationContext,
+			dedup:           true,
+		},
+	} {
+		s.Run(tc.name, func() {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.mockShard.SetMetricsHandler(metricsHandler)
+
+			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+			startRequest.StartRequest.PropagatedNexusSerializationContext = tc.incomingContext
+			if tc.dedup {
+				s.setupStartWorkflowExecutionForRunning()
+				startRequest.StartRequest.RequestId = s.tv.RequestID()
+			} else {
+				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
+			}
+
+			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(s.T().Context()), startRequest)
+			s.Require().NoError(err)
+			s.Require().True(resp.GetStarted())
+			recordings := capture.SnapshotMetric(metrics.NexusWorkflowStartWithContext.Name())
+			if !tc.expectRecorded {
+				s.Require().Empty(recordings)
+				return
+			}
+			s.Require().Len(recordings, 1)
+			s.Require().Equal(tests.Namespace.String(), recordings[0].Tags[metrics.NamespaceTag("").Key])
 		})
 	}
 }

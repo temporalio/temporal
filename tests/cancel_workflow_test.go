@@ -110,7 +110,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -633,7 +633,7 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
   3 WorkflowExecutionCancelRequested
   4 WorkflowTaskStarted
   5 WorkflowTaskFailed
-  6 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+  6 WorkflowTaskScheduled`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 	}))
 
@@ -650,7 +650,7 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionCompleted`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+  9 WorkflowExecutionCompleted`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 	}))
 
@@ -661,7 +661,7 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		},
 	})
 	if err == nil {
-		s.PrintHistoryEvents(env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		s.PrintHistoryEvents(env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 		}))
 	}

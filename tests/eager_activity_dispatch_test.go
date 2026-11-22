@@ -11,7 +11,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -19,8 +19,16 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
-	env := testcore.NewEnv(t,
+type EagerActivityDispatchSuite struct {
+	parallelsuite.Suite[*EagerActivityDispatchSuite]
+}
+
+func TestEagerActivityDispatchSuite(t *testing.T) {
+	parallelsuite.Run(t, &EagerActivityDispatchSuite{})
+}
+
+func (s *EagerActivityDispatchSuite) TestEagerActivityWithMatchingGrant_Unversioned() {
+	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4),
@@ -30,33 +38,31 @@ func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
 
 	tv := env.Tv()
-	startEagerActivityTestWorkflow(t, env, tv)
+	startEagerActivityTestWorkflow(s.T(), env, tv)
 
 	poller := env.TaskPoller()
 	response, err := poller.PollAndHandleWorkflowTask(
 		tv,
-		scheduleActivityForEagerDispatchTest(t, tv, true),
+		scheduleActivityForEagerDispatchTest(s.T(), tv, true),
 	)
-	require.NoError(t, err)
-	require.Len(t, response.GetActivityTasks(), 1)
+	s.NoError(err)
+	s.Len(response.GetActivityTasks(), 1)
 
 	eagerActivity := response.GetActivityTasks()[0]
-	require.Equal(t, tv.ActivityID(), eagerActivity.GetActivityId())
+	s.Equal(tv.ActivityID(), eagerActivity.GetActivityId())
 	_, err = poller.HandleActivityTask(tv, eagerActivity, taskpoller.CompleteActivityTask(tv))
-	require.NoError(t, err)
+	s.NoError(err)
 
 	_, err = poller.PollAndHandleWorkflowTask(
 		tv,
 		taskpoller.CompleteWorkflowHandler,
 		taskpoller.WithTimeout(20*time.Second),
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 }
 
-func TestEagerActivityBatchWithRateLimit(t *testing.T) {
-	t.Parallel()
-
-	env := testcore.NewEnv(t,
+func (s *EagerActivityDispatchSuite) TestEagerActivityBatchWithRateLimit() {
+	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1),
@@ -67,7 +73,7 @@ func TestEagerActivityBatchWithRateLimit(t *testing.T) {
 	lowPriority := tv.WithActivityIDNumber(1)
 	mediumPriority := tv.WithActivityIDNumber(2)
 	highPriority := tv.WithActivityIDNumber(3)
-	startEagerActivityTestWorkflow(t, env, tv)
+	startEagerActivityTestWorkflow(s.T(), env, tv)
 	capture := env.StartNamespaceMetricCapture()
 	poller := env.TaskPoller()
 	response, err := poller.PollAndHandleWorkflowTask(tv,
@@ -81,34 +87,34 @@ func TestEagerActivityBatchWithRateLimit(t *testing.T) {
 			}, nil
 		},
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 	// A one-second burst at one task per second admits two initial grants.
-	require.Len(t, response.GetActivityTasks(), 2)
-	require.Equal(t, mediumPriority.ActivityID(), response.GetActivityTasks()[0].GetActivityId())
-	require.Equal(t, highPriority.ActivityID(), response.GetActivityTasks()[1].GetActivityId())
+	s.Len(response.GetActivityTasks(), 2)
+	s.Equal(mediumPriority.ActivityID(), response.GetActivityTasks()[0].GetActivityId())
+	s.Equal(highPriority.ActivityID(), response.GetActivityTasks()[1].GetActivityId())
 	for _, metric := range []string{metrics.EagerDispatchRequestsSent.Name(), metrics.EagerDispatchRequests.Name()} {
 		recordings := capture.Metric(metric)
-		require.Len(t, recordings, 1, "all three activities should share one grant RPC")
-		require.Equal(t, int64(3), recordings[0].Value)
+		s.Len(recordings, 1, "all three activities should share one grant RPC")
+		s.Equal(int64(3), recordings[0].Value)
 	}
 	for _, eagerActivity := range response.GetActivityTasks() {
 		_, err := poller.HandleActivityTask(tv, eagerActivity, taskpoller.CompleteActivityTask(tv))
-		require.NoError(t, err)
+		s.NoError(err)
 	}
 	_, err = poller.PollAndHandleActivityTask(lowPriority,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			require.Equal(t, lowPriority.ActivityID(), task.GetActivityId())
+			s.Equal(lowPriority.ActivityID(), task.GetActivityId())
 			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
 		},
 		taskpoller.WithTimeout(20*time.Second),
 	)
-	require.NoError(t, err)
+	s.NoError(err)
 	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.CompleteWorkflowHandler)
-	require.NoError(t, err)
+	s.NoError(err)
 }
 
-func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
-	env := testcore.NewEnv(t,
+func (s *EagerActivityDispatchSuite) TestEagerActivityFallsBackWhenBacklogExists() {
+	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
@@ -121,16 +127,16 @@ func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 	tvHighPriority := tvEager.WithActivityIDNumber(3)
 	poller := env.TaskPoller()
 
-	startEagerActivityTestWorkflow(t, env, tvBacklogged)
+	startEagerActivityTestWorkflow(s.T(), env, tvBacklogged)
 	response, err := poller.PollAndHandleWorkflowTask(
 		tvBacklogged,
-		scheduleActivityForEagerDispatchTest(t, tvBacklogged, false),
+		scheduleActivityForEagerDispatchTest(s.T(), tvBacklogged, false),
 	)
-	require.NoError(t, err)
-	require.Empty(t, response.GetActivityTasks())
+	s.NoError(err)
+	s.Empty(response.GetActivityTasks())
 
-	await.RequireTruef(t, func() bool {
-		response, err := env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
+	s.AwaitTruef(func() bool {
+		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tvBacklogged.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -139,11 +145,11 @@ func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 		return err == nil && response.GetStats().GetApproximateBacklogCount() >= 1
 	}, 10*time.Second, 100*time.Millisecond, "first activity never reached the matching backlog")
 
-	startEagerActivityTestWorkflow(t, env, tvEager)
+	startEagerActivityTestWorkflow(s.T(), env, tvEager)
 	response, err = poller.PollAndHandleWorkflowTask(
 		tvEager,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			require.Equal(t, tvEager.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+			s.Equal(tvEager.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{
 					eagerActivityDispatchTestCommand(tvEager, true, 5),
@@ -152,12 +158,12 @@ func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 			}, nil
 		},
 	)
-	require.NoError(t, err)
-	require.Len(t, response.GetActivityTasks(), 1, "only the high-priority activity may jump the backlog")
+	s.NoError(err)
+	s.Len(response.GetActivityTasks(), 1, "only the high-priority activity may jump the backlog")
 	eagerActivity := response.GetActivityTasks()[0]
-	require.Equal(t, tvHighPriority.ActivityID(), eagerActivity.GetActivityId())
+	s.Equal(tvHighPriority.ActivityID(), eagerActivity.GetActivityId())
 	_, err = poller.HandleActivityTask(tvHighPriority, eagerActivity, taskpoller.CompleteActivityTask(tvHighPriority))
-	require.NoError(t, err)
+	s.NoError(err)
 
 	activityIDs := make([]string, 0, 2)
 	for _, tv := range []*testvars.TestVars{tvBacklogged, tvEager} {
@@ -168,9 +174,9 @@ func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 			},
 			taskpoller.WithTimeout(20*time.Second),
 		)
-		require.NoError(t, err)
+		s.NoError(err)
 	}
-	require.Equal(t, []string{tvBacklogged.ActivityID(), tvEager.ActivityID()}, activityIDs)
+	s.Equal([]string{tvBacklogged.ActivityID(), tvEager.ActivityID()}, activityIDs)
 }
 
 func startEagerActivityTestWorkflow(t *testing.T, env *testcore.TestEnv, tv *testvars.TestVars) {

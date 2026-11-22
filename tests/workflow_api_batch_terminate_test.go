@@ -234,7 +234,7 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Su
 				})
 				s.NoError(err)
 				events := history.GetHistory().GetEvents()
-				s.Require().NotEmpty(events)
+				s.NotEmpty(events)
 				lastEvent := events[len(events)-1]
 				s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
 				attrs := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
