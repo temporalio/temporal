@@ -22,6 +22,8 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -438,10 +440,22 @@ func (s *laneStreamReceiverSuite) TestLaneFlowControlCommand() {
 		}
 	}
 
+	core, logs := observer.New(zap.InfoLevel)
+	s.streamReceiver.logger = log.NewZapLogger(zap.New(core))
+
 	trackTasks("lane-a", 2)
 	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, s.streamReceiver.laneFlowControlCommand("lane-a"))
 	trackTasks("lane-a", 1)
 	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, s.streamReceiver.laneFlowControlCommand("lane-a"))
+	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, s.streamReceiver.laneFlowControlCommand("lane-a"))
+	s.streamReceiver.Config.ReplicationReceiverLaneMaxOutstandingTaskCount = dynamicconfig.GetIntPropertyFn(10)
+	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, s.streamReceiver.laneFlowControlCommand("lane-a"))
+
+	// Only changes of a lane's command are logged.
+	s.Equal([]loggedEvent{
+		{message: "Pausing a replication lane.", fields: map[string]any{"lane": "lane-a", "limit": int64(2)}},
+		{message: "Resuming a replication lane.", fields: map[string]any{"lane": "lane-a", "limit": int64(10)}},
+	}, loggedEvents(logs, []string{"lane", "limit"}))
 }
 
 func (s *laneStreamReceiverSuite) TestHighPriorityFlowControlSignal() {

@@ -9,6 +9,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/queues"
@@ -17,7 +18,7 @@ import (
 )
 
 func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	laneB, created, err := registry.Create("namespace:b", namespaceLaneFilter("b"), 20, nil)
 	require.NoError(t, err)
@@ -40,7 +41,7 @@ func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
 	require.Equal(t, "namespace:b", state.Lanes[1].LogicalKey)
 	require.Equal(t, int64(25), state.Lanes[1].Scope.Range.InclusiveMin.TaskId)
 
-	restored, err := newSenderLaneRegistry(laneDefaultCursor(state), state.Lanes)
+	restored, err := newSenderLaneRegistry(laneDefaultCursor(state), state.Lanes, log.NewNoopLogger())
 	require.NoError(t, err)
 	require.Equal(t, int64(120), restored.DefaultReservedCursor())
 	restoredA, ok := restored.SnapshotByKey("namespace:a")
@@ -50,7 +51,7 @@ func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
 }
 
 func TestSenderLaneRegistryPersistsFilterAndPolicyState(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	filter := LaneFilter{NamespaceIDs: []namespace.ID{"b", "a"}}
 	_, _, err = registry.Create("account:x", filter, 10, []byte("rate=5"))
@@ -59,7 +60,7 @@ func TestSenderLaneRegistryPersistsFilterAndPolicyState(t *testing.T) {
 
 	state := registry.BuildReaderState(syncReplicationState(100, 120, 200))
 	require.Equal(t, []byte("rate=8"), state.Lanes[0].PolicyState)
-	restored, err := newSenderLaneRegistry(laneDefaultCursor(state), state.Lanes)
+	restored, err := newSenderLaneRegistry(laneDefaultCursor(state), state.Lanes, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, ok := restored.SnapshotByKey("account:x")
 	require.True(t, ok)
@@ -69,7 +70,7 @@ func TestSenderLaneRegistryPersistsFilterAndPolicyState(t *testing.T) {
 }
 
 func TestSenderLaneRegistryResumeFloorCarriesAckTime(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := registry.Create("namespace:a", namespaceLaneFilter("a"), 10, nil)
 	require.NoError(t, err)
@@ -91,7 +92,7 @@ func TestSenderLaneRegistryResumeFloorCarriesAckTime(t *testing.T) {
 }
 
 func TestSenderLaneRegistryRejectsInvalidPersistence(t *testing.T) {
-	_, err := newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{LogicalKey: "namespace:a"}})
+	_, err := newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{LogicalKey: "namespace:a"}}, log.NewNoopLogger())
 	require.Error(t, err)
 
 	// A lane is restored only with a namespace filter.
@@ -102,19 +103,19 @@ func TestSenderLaneRegistryRejectsInvalidPersistence(t *testing.T) {
 	_, err = newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{
 		LogicalKey: "namespace:a",
 		Scope:      queues.ToPersistenceScope(universal),
-	}})
+	}}, log.NewNoopLogger())
 	require.ErrorContains(t, err, "not a namespace filter")
 	invalidRange := queues.ToPersistenceScope(laneScope(namespaceLaneFilter("a"), 100))
 	invalidRange.Range.ExclusiveMax = queues.ToPersistenceTaskKey(tasks.NewImmediateKey(50))
-	_, err = newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: invalidRange}})
+	_, err = newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: invalidRange}}, log.NewNoopLogger())
 	require.ErrorContains(t, err, "inverted range")
 	invalidRange.Range = nil
-	_, err = newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: invalidRange}})
+	_, err = newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: invalidRange}}, log.NewNoopLogger())
 	require.ErrorContains(t, err, "missing its range")
 }
 
 func TestSenderLaneRegistryAvoidsActiveLaneIDCollision(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	generated := []string{"duplicate", "duplicate", "unique"}
 	registry.generateLaneID = func() string {
@@ -132,7 +133,7 @@ func TestSenderLaneRegistryAvoidsActiveLaneIDCollision(t *testing.T) {
 }
 
 func TestSenderLaneRegistryPausedLaneDoesNotRetire(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := registry.Create("namespace:a", namespaceLaneFilter("a"), 10, nil)
 	require.NoError(t, err)
@@ -159,7 +160,7 @@ func TestSenderLaneRegistryPausedLaneDoesNotRetire(t *testing.T) {
 }
 
 func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := registry.Create("namespace:a", namespaceLaneFilter("a"), 10, nil)
 	require.NoError(t, err)
@@ -196,7 +197,7 @@ func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 }
 
 func TestSenderLaneRegistryRetirementWaitsForInFlightLaneAck(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := registry.Create("namespace:a", namespaceLaneFilter("a"), 10, nil)
 	require.NoError(t, err)
@@ -222,7 +223,7 @@ func TestSenderLaneRegistryRetirementWaitsForInFlightLaneAck(t *testing.T) {
 }
 
 func TestSenderLaneRegistryCreationWaitsForDefaultLease(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 
 	_, acquired := registry.AcquireDefault(200)
@@ -244,7 +245,7 @@ func TestSenderLaneRegistryCreationWaitsForDefaultLease(t *testing.T) {
 }
 
 func TestSenderLaneRegistryRecoversFailedDefaultLeaseBeforeHandoff(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	_, _, err = registry.Create("namespace:a", namespaceLaneFilter("a"), 100, nil)
 	require.NoError(t, err)
@@ -296,7 +297,7 @@ func TestSenderLaneRegistryHandoffSurvivesCrashBeforeRetirementPersistence(t *te
 		TaskID:      handoffCursor,
 	}
 
-	registry, err := newSenderLaneRegistry(initialCursor, nil)
+	registry, err := newSenderLaneRegistry(initialCursor, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	sharedFilter, acquired := registry.AcquireDefault(handoffCursor)
 	require.True(t, acquired)
@@ -346,7 +347,7 @@ func TestSenderLaneRegistryHandoffSurvivesCrashBeforeRetirementPersistence(t *te
 
 	// The retirement marker is sent before the lane-free reader state is durable.
 	// Restarting from the previous state must restore the lane and safely resend its range.
-	restored, err := newSenderLaneRegistry(laneDefaultCursor(durableState), durableState.Lanes)
+	restored, err := newSenderLaneRegistry(laneDefaultCursor(durableState), durableState.Lanes, log.NewNoopLogger())
 	require.NoError(t, err)
 	restoredLane, ok := restored.SnapshotByKey(lane.logicalKey)
 	require.True(t, ok)
@@ -378,7 +379,7 @@ func TestSenderLaneRegistryHandoffSurvivesCrashBeforeRetirementPersistence(t *te
 }
 
 func TestSenderLaneRegistryAckNeverRewinds(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := registry.Create("namespace:a", namespaceLaneFilter("a"), 10, nil)
 	require.NoError(t, err)

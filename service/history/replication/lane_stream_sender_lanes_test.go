@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -158,7 +159,7 @@ func (l *fakeLaneLimiter) Reserve(time.Time) (bool, time.Duration) {
 // requestLane makes logicalKey the only lane in the policy's latest answer, paced by limiter.
 func (s *laneStreamSenderSuite) requestLane(logicalKey string, limiter LaneLimiter) {
 	if s.streamSender.laneRegistry == nil {
-		registry, err := newSenderLaneRegistry(0, nil)
+		registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 		s.NoError(err)
 		s.streamSender.laneRegistry = registry
 	}
@@ -245,7 +246,7 @@ func (s *laneStreamSenderSuite) TestPaceLane_HandoverWhileRefused() {
 
 func (s *laneStreamSenderSuite) TestSendDefaultTasks_SkipsLaneOwnedTasks() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
@@ -275,7 +276,7 @@ func (s *laneStreamSenderSuite) TestSendDefaultTasks_SkipsLaneOwnedTasks() {
 
 func (s *laneStreamSenderSuite) TestSendDefaultTasks_LowPriorityIgnoresLanes() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
@@ -301,7 +302,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_WithoutLaneSupp
 		LogicalKey: namespaceLaneKey("ns-a"),
 		Scope:      queues.ToPersistenceScope(laneScope(namespaceLaneFilter("ns-a"), 700)),
 	}
-	registry, err := newSenderLaneRegistry(950, []*persistencespb.QueueReaderLane{persistedLane})
+	registry, err := newSenderLaneRegistry(950, []*persistencespb.QueueReaderLane{persistedLane}, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	// Without lane support, the stream never creates a policy.
@@ -330,7 +331,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_WithoutLaneSupp
 
 func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	// The stream creates its policy on the first ack, once.
@@ -399,7 +400,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes
 
 func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_LaneSupportChange() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(gomock.Any()).AnyTimes()
@@ -444,7 +445,7 @@ func (s *laneStreamSenderSuite) TestLaneCatchupBeginWatermark() {
 }
 
 func (s *laneStreamSenderSuite) TestSendReadyLaneRetirements() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	lane, _, err := registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
@@ -479,7 +480,7 @@ func (s *laneStreamSenderSuite) TestIsValid_SenderLanesEnabledChanged() {
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_HandoverLiftsRateLimits() {
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	policy := NewMockLaneStreamPolicy(s.controller)
@@ -501,7 +502,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_HandoverLiftsRateLimits() {
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	s.streamSender.config.ReplicationStreamSenderMaxLanes = dynamicconfig.GetIntPropertyFn(2)
@@ -527,7 +528,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_PolicyErrorRetiresLanes() {
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 0, nil)
@@ -544,7 +545,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_PolicyErrorRetiresLanes() {
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_WithoutPolicy() {
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 0, nil)
@@ -613,7 +614,7 @@ func (s *laneStreamSenderSuite) TestAdmitDesiredLanes() {
 		},
 	} {
 		s.Run(tc.name, func() {
-			registry, err := newSenderLaneRegistry(0, nil)
+			registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 			s.NoError(err)
 			for _, lane := range tc.existing {
 				_, _, err := registry.Create(lane.Key, lane.Filter, 0, nil)
@@ -633,7 +634,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_FirstAckDropsRestoredLanesOve
 			Scope:      queues.ToPersistenceScope(laneScope(namespaceLaneFilter(namespaceID), 100)),
 		})
 	}
-	registry, err := newSenderLaneRegistry(100, persisted)
+	registry, err := newSenderLaneRegistry(100, persisted, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	policy := NewMockLaneStreamPolicy(s.controller)
@@ -833,7 +834,7 @@ func (s *laneStreamSenderSuite) TestStartLanePolicy_FactoryError() {
 }
 
 func (s *laneStreamSenderSuite) TestRecordLaneLag() {
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	behind, _, err := registry.Create(namespaceLaneKey("ns-behind"), namespaceLaneFilter("ns-behind"), 0, nil)
 	s.NoError(err)
@@ -857,6 +858,27 @@ func (s *laneStreamSenderSuite) TestRecordLaneLag() {
 	exceeded := capture.Snapshot()[metrics.ReplicationLaneMaxLagExceeded.Name()]
 	s.Len(exceeded, 1)
 	s.Equal(namespaceLaneKey("ns-behind"), exceeded[0].Tags["replication_lane"])
+	laneCount := capture.Snapshot()[metrics.ReplicationLaneCount.Name()]
+	s.Len(laneCount, 1)
+	s.Equal(int64(2), laneCount[0].Value)
+}
+
+func (s *laneStreamSenderSuite) TestRecordLanePauseChanges() {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	s.streamSender.metrics = captureHandler
+
+	s.streamSender.recordLanePauseChanges([]lanePauseChange{
+		{logicalKey: namespaceLaneKey("ns-a"), paused: true},
+		{logicalKey: namespaceLaneKey("ns-b"), paused: false},
+	})
+	paused := capture.Snapshot()[metrics.ReplicationLanePaused.Name()]
+	s.Len(paused, 1)
+	s.Equal(namespaceLaneKey("ns-a"), paused[0].Tags["replication_lane"])
+	resumed := capture.Snapshot()[metrics.ReplicationLaneResumed.Name()]
+	s.Len(resumed, 1)
+	s.Equal(namespaceLaneKey("ns-b"), resumed[0].Tags["replication_lane"])
 }
 
 func (s *laneStreamSenderSuite) TestRecordLaneLagBoundaries() {
@@ -873,7 +895,7 @@ func (s *laneStreamSenderSuite) TestRecordLaneLagBoundaries() {
 	} {
 		s.Run(tc.name, func() {
 			t := s.T()
-			registry, err := newSenderLaneRegistry(100, nil)
+			registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 			require.NoError(t, err)
 			lane, _, err := registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
 			require.NoError(t, err)

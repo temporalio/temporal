@@ -221,9 +221,19 @@ func (p *manualLaneStreamPolicy) Evaluate(LaneSignals) ([]DesiredLane, error) {
 	return lanes, nil
 }
 
+// setRates replaces the lane rates, and logs each lane whose rate changed. Lanes added or
+// withdrawn are logged by the sender lane registry when they are created or retire.
 func (p *manualLaneStreamPolicy) setRates(rates map[string]float64) {
 	p.ratesMu.Lock()
 	defer p.ratesMu.Unlock()
+	for key, tasksPerSecond := range rates {
+		if previous, ok := p.rates[key]; ok && previous != tasksPerSecond {
+			p.logger.Info("Changed the rate of a replication lane.",
+				tag.NewStringTag("lane-key", key),
+				tag.NewFloat64("previous-tasks-per-second", previous),
+				tag.NewFloat64("tasks-per-second", tasksPerSecond))
+		}
+	}
 	p.rates = rates
 }
 

@@ -8,6 +8,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -20,7 +21,7 @@ func retirementTask(namespaceID string, id int64) tasks.Task {
 
 func TestSenderLaneRegistryRetirementHasFixedBoundary(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 50, nil)
 	require.NoError(t, err)
@@ -69,7 +70,7 @@ func TestSenderLaneRegistryRetirementHasFixedBoundary(t *testing.T) {
 
 func TestSenderLaneRegistryRetirementIncludesInFlightSend(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 10, nil)
 	require.NoError(t, err)
@@ -102,7 +103,7 @@ func TestSenderLaneRegistryRestoresFiniteRetirement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			resume := tc.resume
-			r, err := newSenderLaneRegistry(100, nil)
+			r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 			require.NoError(t, err)
 			lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
 			require.NoError(t, err)
@@ -116,7 +117,7 @@ func TestSenderLaneRegistryRestoresFiniteRetirement(t *testing.T) {
 			require.True(t, r.RequestRetirement("a"))
 			r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: resume}})
 			state := r.BuildReaderState(syncReplicationState(350, 350, 350))
-			restored, err := newSenderLaneRegistry(laneDefaultCursor(state), state.Lanes)
+			restored, err := newSenderLaneRegistry(laneDefaultCursor(state), state.Lanes, log.NewNoopLogger())
 			require.NoError(t, err)
 			current, ok := restored.SnapshotByKey("a")
 			require.True(t, ok)
@@ -144,7 +145,7 @@ func TestSenderLaneRegistryRestoresFiniteRetirement(t *testing.T) {
 
 func TestSenderLaneRegistryRetirementWaitsForPendingHandoff(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	_, acquired := r.AcquireDefault(200)
 	require.True(t, acquired)
@@ -165,7 +166,7 @@ func TestSenderLaneRegistryRetirementWaitsForPendingHandoff(t *testing.T) {
 
 func TestSenderLaneRegistryRetirementWaitsWhileDefaultAdvances(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
 	require.NoError(t, err)
@@ -212,7 +213,7 @@ func TestSenderLaneRegistryRetirementWaitsWhileDefaultAdvances(t *testing.T) {
 
 func TestSenderLaneRegistryRetirementWaitsForResumeBeforeHandoff(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
 	require.NoError(t, err)
@@ -256,7 +257,7 @@ func TestSenderLaneRegistryRetirementWaitsForResumeBeforeHandoff(t *testing.T) {
 
 func TestSenderLaneRegistryPauseAfterFixedHandoff(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
 	require.NoError(t, err)

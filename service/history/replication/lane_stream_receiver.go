@@ -50,13 +50,15 @@ type laneStreamReceiver struct {
 	memberLaneMu      sync.Mutex
 	memberLanes       map[string]*memberLane
 	memberLanesClosed bool // set by Stop; late-created lanes are pre-cancelled
-	shutdownChan      channel.ShutdownOnce
-	logger            log.Logger
-	stream            Stream
-	taskConverter     ExecutableTaskConverter
-	receiverMode      ReceiverMode
-	flowController    ReceiverFlowController
-	recvSignalChan    chan struct{}
+	// pausedLanes holds the IDs of the lanes this receiver currently pauses.
+	pausedLanes    map[string]struct{}
+	shutdownChan   channel.ShutdownOnce
+	logger         log.Logger
+	stream         Stream
+	taskConverter  ExecutableTaskConverter
+	receiverMode   ReceiverMode
+	flowController ReceiverFlowController
+	recvSignalChan chan struct{}
 
 	slowSubmissionMu         sync.RWMutex
 	slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
@@ -90,6 +92,7 @@ func newLaneStreamReceiver(
 		maxLanes:                processToolBox.Config.ReplicationStreamReceiverMaxLanes(),
 		laneFeedback:            laneFeedback,
 		memberLanes:             make(map[string]*memberLane),
+		pausedLanes:             make(map[string]struct{}),
 		shutdownChan:            channel.NewShutdownOnce(),
 		logger:                  logger,
 		stream: newStream(
@@ -599,17 +602,33 @@ func (r *laneStreamReceiver) highPriorityFlowControlSignal() *FlowControlSignal 
 }
 
 // laneFlowControlCommand pauses a lane whose outstanding tasks pass
-// ReplicationReceiverLaneMaxOutstandingTaskCount, and resumes it otherwise.
+// ReplicationReceiverLaneMaxOutstandingTaskCount, and resumes it otherwise. It logs when a
+// lane's command changes.
 func (r *laneStreamReceiver) laneFlowControlCommand(laneID string) enumsspb.ReplicationFlowControlCommand {
+	limit := r.Config.ReplicationReceiverLaneMaxOutstandingTaskCount()
 	r.memberLaneMu.Lock()
 	lane, ok := r.memberLanes[laneID]
 	outstanding := 0
 	if ok {
 		outstanding = lane.tracker.Size()
 	}
+	pause := outstanding > limit
+	_, wasPaused := r.pausedLanes[laneID]
+	if pause {
+		r.pausedLanes[laneID] = struct{}{}
+	} else {
+		delete(r.pausedLanes, laneID)
+	}
 	r.memberLaneMu.Unlock()
-	if limit := r.Config.ReplicationReceiverLaneMaxOutstandingTaskCount(); outstanding > limit {
-		r.logger.Warn("Pausing a replication lane.", tag.NewStringTag("lane", laneID), tag.Counter(outstanding), tag.NewInt("limit", limit))
+	if pause != wasPaused {
+		tags := []tag.Tag{tag.NewStringTag("lane", laneID), tag.Counter(outstanding), tag.NewInt("limit", limit)}
+		if pause {
+			r.logger.Warn("Pausing a replication lane.", tags...)
+		} else {
+			r.logger.Info("Resuming a replication lane.", tags...)
+		}
+	}
+	if pause {
 		return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 	}
 	return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
@@ -649,6 +668,7 @@ func (r *laneStreamReceiver) memberLaneWatermarks() map[string]WatermarkInfo {
 		// ack fold.
 		if lane.retiring && lane.tracking == 0 && lane.tracker.Size() == 0 && wm != nil {
 			delete(r.memberLanes, ns)
+			delete(r.pausedLanes, ns)
 			r.memberLaneMu.Unlock()
 			continue
 		}
