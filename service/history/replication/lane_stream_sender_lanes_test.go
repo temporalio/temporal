@@ -471,12 +471,23 @@ func (s *laneStreamSenderSuite) TestSendReadyLaneRetirements() {
 
 func (s *laneStreamSenderSuite) TestIsValid_SenderLanesEnabledChanged() {
 	s.streamSender.status = common.DaemonStatusStarted
-	s.streamSender.lanesEnabledSetting = false
-	s.streamSender.config.ReplicationStreamSenderLanesEnabled = dynamicconfig.GetBoolPropertyFn(false)
-	s.True(s.streamSender.IsValid())
-
-	s.streamSender.config.ReplicationStreamSenderLanesEnabled = dynamicconfig.GetBoolPropertyFn(true)
-	s.False(s.streamSender.IsValid())
+	for _, tc := range []struct {
+		name    string
+		created bool
+		current bool
+		valid   bool
+	}{
+		{name: "StillDisabled", created: false, current: false, valid: true},
+		{name: "Enabled", created: false, current: true, valid: false},
+		{name: "StillEnabled", created: true, current: true, valid: true},
+		{name: "Disabled", created: true, current: false, valid: false},
+	} {
+		s.Run(tc.name, func() {
+			s.streamSender.lanesEnabledSetting = tc.created
+			s.streamSender.config.ReplicationStreamSenderLanesEnabled = dynamicconfig.GetBoolPropertyFn(tc.current)
+			s.Equal(tc.valid, s.streamSender.IsValid())
+		})
+	}
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_HandoverLiftsRateLimits() {

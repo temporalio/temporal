@@ -117,10 +117,10 @@ func (s *streamBasedReplicationTestSuite) TestLanePauseWithApplyBacklog() {
 	}, 30*time.Second, 100*time.Millisecond)
 	for _, id := range workflowIDs {
 		execution := &commonpb.WorkflowExecution{WorkflowId: id}
-		source, err := retirementHistory(s.T().Context(), active.FrontendClient(), s.namespaceName, execution)
+		source, err := completeHistory(s.T().Context(), active.FrontendClient(), s.namespaceName, execution)
 		s.Require().NoError(err)
 		await.Require(s.T().Context(), s.T(), func(t *await.T) {
-			target, err := retirementHistory(t.Context(), standby.FrontendClient(), s.namespaceName, execution)
+			target, err := completeHistory(t.Context(), standby.FrontendClient(), s.namespaceName, execution)
 			require.NoError(t, err)
 			protorequire.ProtoEqual(t, source, target)
 		}, 30*time.Second, 100*time.Millisecond)

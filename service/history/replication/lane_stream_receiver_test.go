@@ -751,14 +751,29 @@ func (s *laneStreamReceiverSuite) TestAckMessage_LaneProtocolVersion() {
 	}
 }
 
-func (s *laneStreamReceiverSuite) TestIsValid_LanesEnabledChanged() {
+func (s *laneStreamReceiverSuite) TestIsValid_LaneSettingsChanged() {
 	s.streamReceiver.status = common.DaemonStatusStarted
-	s.streamReceiver.lanesEnabled = false
-	s.streamReceiver.Config.ReplicationStreamReceiverLanesEnabled = dynamicconfig.GetBoolPropertyFn(false)
-	s.True(s.streamReceiver.IsValid())
-
-	s.streamReceiver.Config.ReplicationStreamReceiverLanesEnabled = dynamicconfig.GetBoolPropertyFn(true)
-	s.False(s.streamReceiver.IsValid())
+	for _, tc := range []struct {
+		name            string
+		createdLanes    bool
+		currentLanes    bool
+		createdMaxLanes int
+		currentMaxLanes int
+		valid           bool
+	}{
+		{name: "Unchanged", createdLanes: true, currentLanes: true, createdMaxLanes: 4, currentMaxLanes: 4, valid: true},
+		{name: "LanesEnabled", createdLanes: false, currentLanes: true, createdMaxLanes: 4, currentMaxLanes: 4, valid: false},
+		{name: "LanesDisabled", createdLanes: true, currentLanes: false, createdMaxLanes: 4, currentMaxLanes: 4, valid: false},
+		{name: "MaxLanesChanged", createdLanes: true, currentLanes: true, createdMaxLanes: 4, currentMaxLanes: 2, valid: false},
+	} {
+		s.Run(tc.name, func() {
+			s.streamReceiver.lanesEnabled = tc.createdLanes
+			s.streamReceiver.maxLanes = tc.createdMaxLanes
+			s.streamReceiver.Config.ReplicationStreamReceiverLanesEnabled = dynamicconfig.GetBoolPropertyFn(tc.currentLanes)
+			s.streamReceiver.Config.ReplicationStreamReceiverMaxLanes = dynamicconfig.GetIntPropertyFn(tc.currentMaxLanes)
+			s.Equal(tc.valid, s.streamReceiver.IsValid())
+		})
+	}
 }
 
 func (s *laneStreamReceiverSuite) TestProcessMessage_LaneBatchUsesLaneTracker() {
