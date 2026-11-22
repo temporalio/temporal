@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -526,6 +527,9 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(memoMap))
 		searchAttributes = getSearchAttributes(copyMapPayload(searchAttributesMap))
 	)
+	if mutableState.IsWorkflow() {
+		searchAttributes = withTimeSkippingSearchAttributes(searchAttributes, executionInfo.GetTimeSkippingInfo())
+	}
 
 	var parentExecution *commonpb.WorkflowExecution
 	if executionInfo.ParentWorkflowId != "" && executionInfo.ParentRunId != "" {
@@ -736,6 +740,32 @@ func getWorkflowMemo(
 		return nil
 	}
 	return &commonpb.Memo{Fields: memoFields}
+}
+
+// withTimeSkippingSearchAttributes sets the TemporalTimeSkipping* search attributes from TimeSkippingInfo.
+// Every visibility request must carry them because an upsert replaces the whole record.
+//
+// TODO: TemporalTimeSkippingAccumulatedSkippedDuration is only refreshed when a visibility record is
+// written (start, close, and upserts such as a TemporalTimeSkippingEnabled change), not on every skip.
+// Revisit if visibility needs it to be updated more often.
+func withTimeSkippingSearchAttributes(
+	searchAttributes *commonpb.SearchAttributes,
+	tsi *persistencespb.TimeSkippingInfo,
+) *commonpb.SearchAttributes {
+	if tsi == nil {
+		return searchAttributes
+	}
+	if searchAttributes == nil {
+		searchAttributes = &commonpb.SearchAttributes{}
+	}
+	if searchAttributes.IndexedFields == nil {
+		searchAttributes.IndexedFields = make(map[string]*commonpb.Payload, 2)
+	}
+	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingEnabled] = sadefs.MustEncodeValue(
+		tsi.GetConfig().GetEnabled(), enumspb.INDEXED_VALUE_TYPE_BOOL)
+	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingAccumulatedSkippedDuration] = sadefs.MustEncodeValue(
+		tsi.GetAccumulatedSkippedDuration().AsDuration().Nanoseconds(), enumspb.INDEXED_VALUE_TYPE_INT)
+	return searchAttributes
 }
 
 func getSearchAttributes(

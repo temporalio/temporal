@@ -6181,12 +6181,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	if attributes.GetTimeSkippingConfigUpdated() {
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+		previouslyEnabled := NewTimeSkippingInfoUtil(tsi).IsEnabled()
 		if tsi == nil {
 			// A workflow started without time skipping has no TimeSkippingInfo until an
 			// options-updated event first configures it.
 			ms.initTimeSkippingInfo(tsc, nil)
 		} else {
 			ms.updateTimeSkippingInfo(tsc)
+		}
+		if err := ms.upsertVisibilityOnTimeSkippingEnabledChange(previouslyEnabled); err != nil {
+			return err
 		}
 	}
 

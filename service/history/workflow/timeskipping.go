@@ -197,6 +197,17 @@ func propagateTimeSkippingToNextRun(
 	return newTSC, stateProp
 }
 
+// upsertVisibilityOnTimeSkippingEnabledChange keeps TemporalTimeSkippingEnabled accurate in visibility.
+// The visibility task executor reads the value from TimeSkippingInfo when the task runs.
+func (ms *MutableStateImpl) upsertVisibilityOnTimeSkippingEnabledChange(previouslyEnabled bool) error {
+	if !ms.IsWorkflow() ||
+		NewTimeSkippingInfoUtil(ms.executionInfo.GetTimeSkippingInfo()).IsEnabled() == previouslyEnabled {
+		return nil
+	}
+	ms.visibilityUpdated = true
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
 // =============================================================================
 // Time Skipping Runtime Time Impacts
 // =============================================================================
@@ -603,12 +614,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	if hasSkipTarget {
 		skippedDuration = attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
 	}
+	previouslyEnabled := NewTimeSkippingInfoUtil(tsi).IsEnabled()
 	ms.executeTimeSkippingTransition(
 		skippedDuration,
 		hasSkipTarget,
 		attr.GetDisabledAfterFastForward(),
 	)
-	return nil
+	return ms.upsertVisibilityOnTimeSkippingEnabledChange(previouslyEnabled)
 }
 
 func (ms *MutableStateImpl) regenerateTimerTasksForWorkflowTimeSkipping(

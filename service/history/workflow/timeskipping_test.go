@@ -2574,3 +2574,43 @@ func TestAdjustNowWithTimeSkipping(t *testing.T) {
 		})
 	}
 }
+
+func (s *mutableStateSuite) TestUpsertVisibilityOnTimeSkippingEnabledChange() {
+	eventTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	transitionEvent := func(targetTime *timestamppb.Timestamp, disabledAfterFastForward bool) *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
+			EventTime: timestamppb.New(eventTime),
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+				WorkflowExecutionTimeSkippingTransitionedEventAttributes: &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+					TargetTime:               targetTime,
+					DisabledAfterFastForward: disabledAfterFastForward,
+				},
+			},
+		}
+	}
+	setup := func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:          &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 10},
+			FastForwardInfo: &persistencespb.FastForwardInfo{TargetTime: timestamppb.New(eventTime.Add(time.Hour))},
+		}
+		s.mutableState.PopTasks()
+	}
+	visibilityTasks := func() []tasks.Task { return s.mutableState.PopTasks()[tasks.CategoryVisibility] }
+
+	s.Run("SkipWithoutEnabledChange_NoUpsert", func() {
+		setup()
+		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(), transitionEvent(timestamppb.New(eventTime.Add(30*time.Minute)), false)))
+		s.Empty(visibilityTasks())
+	})
+
+	s.Run("DisabledAfterFastForward_Upserts", func() {
+		setup()
+		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(), transitionEvent(nil, true)))
+		s.Len(visibilityTasks(), 1)
+		s.True(s.mutableState.visibilityUpdated)
+	})
+
+}
