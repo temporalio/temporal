@@ -12,6 +12,8 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -47,6 +49,12 @@ type senderLane struct {
 	pending bool
 }
 
+// lanePauseChange is a change, reported by a receiver ack, to whether a lane is paused.
+type lanePauseChange struct {
+	logicalKey string
+	paused     bool
+}
+
 // retirementReady is called with the registry mutex held.
 func (lane *senderLane) retirementReady() bool {
 	return lane.retiring && !lane.pending && lane.leases == 0 &&
@@ -59,6 +67,10 @@ func (lane *senderLane) retirementReady() bool {
 //
 // The registry owns the durable logical-key/scope association and the stream-local lane
 // ID. Restoring a durable lane always creates a new lane ID.
+//
+// The registry logs one event for each lane transition. Every event carries the lane's whole
+// state and the default lane's cursors, so that a split or a retirement handoff can be
+// checked from that one record.
 type senderLaneRegistry struct {
 	mu                     sync.Mutex
 	defaultReservedCursor  int64 // furthest default range reserved by a sender
@@ -70,9 +82,10 @@ type senderLaneRegistry struct {
 	byID                   map[string]*senderLane
 	generateLaneID         func() string
 	changed                chan struct{}
+	logger                 log.Logger
 }
 
-func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistencespb.QueueReaderLane) (*senderLaneRegistry, error) {
+func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistencespb.QueueReaderLane, logger log.Logger) (*senderLaneRegistry, error) {
 	r := &senderLaneRegistry{
 		defaultReservedCursor:  persistedDefaultCursor,
 		defaultCompletedCursor: persistedDefaultCursor,
@@ -80,6 +93,7 @@ func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistenc
 		byID:                   make(map[string]*senderLane, len(persisted)),
 		generateLaneID:         uuid.NewString,
 		changed:                make(chan struct{}),
+		logger:                 logger,
 	}
 	for i, persistedLane := range persisted {
 		if persistedLane.GetLogicalKey() == "" || persistedLane.GetScope() == nil {
@@ -107,6 +121,9 @@ func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistenc
 		lane := r.newLane(persistedLane.GetLogicalKey(), filter, scope, persistedLane.GetPolicyState())
 		r.byKey[lane.logicalKey] = lane
 		r.byID[lane.id] = lane
+	}
+	for _, persistedLane := range persisted {
+		r.logger.Info("Restored a replication lane.", r.laneEventTags(r.byKey[persistedLane.GetLogicalKey()])...)
 	}
 	return r, nil
 }
@@ -164,6 +181,7 @@ func (r *senderLaneRegistry) Create(logicalKey string, filter LaneFilter, floor 
 	r.byKey[logicalKey] = lane
 	r.byID[lane.id] = lane
 	r.notifyChanged()
+	r.logger.Info("Created a replication lane.", r.laneEventTags(lane)...)
 	return lane.senderLaneSnapshot, true, nil
 }
 
@@ -197,12 +215,14 @@ func (r *senderLaneRegistry) Snapshots() []senderLaneSnapshot {
 	return out
 }
 
-// ObserveAcks records the lane watermarks and pauses from a receiver ack. A lane's acked
-// position never moves backwards. A lane missing from the ack keeps its pause.
-func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.ReplicationState) {
+// ObserveAcks records the lane watermarks and pauses from a receiver ack, and returns the
+// lanes whose pause changed. A lane's acked position never moves backwards. A lane missing
+// from the ack keeps its pause.
+func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.ReplicationState) []lanePauseChange {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	changed := false
+	var pauseChanges []lanePauseChange
 	for laneID, state := range states {
 		lane, ok := r.byID[laneID]
 		if !ok {
@@ -216,6 +236,12 @@ func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.Repli
 		if paused := state.GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE; paused != lane.paused {
 			lane.paused = paused
 			changed = true
+			pauseChanges = append(pauseChanges, lanePauseChange{logicalKey: lane.logicalKey, paused: paused})
+			if paused {
+				r.logger.Info("Receiver paused a replication lane.", r.laneEventTags(lane)...)
+			} else {
+				r.logger.Info("Receiver resumed a replication lane.", r.laneEventTags(lane)...)
+			}
 		}
 		if r.boundRetiringLane(lane) {
 			changed = true
@@ -224,6 +250,7 @@ func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.Repli
 	if changed {
 		r.notifyChanged()
 	}
+	return pauseChanges
 }
 
 // Paused reports whether the receiver has paused a lane.
@@ -248,6 +275,7 @@ func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 		return false
 	}
 	lane.retiring = true
+	r.logger.Info("Requested retirement of a replication lane.", r.laneEventTags(lane)...)
 	r.boundRetiringLane(lane)
 	r.notifyChanged()
 	return true
@@ -261,6 +289,7 @@ func (r *senderLaneRegistry) boundRetiringLane(lane *senderLane) bool {
 		return false
 	}
 	lane.scope.Range.ExclusiveMax = tasks.NewImmediateKey(lane.cursor)
+	r.logger.Info("Fixed the retirement boundary of a replication lane.", r.laneEventTags(lane)...)
 	return true
 }
 
@@ -300,6 +329,7 @@ func (r *senderLaneRegistry) CompleteRetirement(laneID string) (senderLaneSnapsh
 	delete(r.byID, laneID)
 	delete(r.byKey, lane.logicalKey)
 	r.notifyChanged()
+	r.logger.Info("Retired a replication lane.", r.laneEventTags(lane)...)
 	return lane.senderLaneSnapshot, true
 }
 
@@ -408,6 +438,7 @@ func (r *senderLaneRegistry) ReleaseDefault(endExclusive int64, completed bool) 
 		if lane.pending {
 			lane.cursor = max(lane.cursor, r.defaultCompletedCursor)
 			lane.pending = false
+			r.logger.Info("Completed the default lane handoff to a replication lane.", r.laneEventTags(lane)...)
 			r.boundRetiringLane(lane)
 			changed = true
 		}
@@ -428,6 +459,9 @@ func (r *senderLaneRegistry) DefaultReservedCursor() int64 {
 func (r *senderLaneRegistry) RequireDefaultRecovery(floor int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.logger.Info("Required a default lane replay before any lane handoff.",
+		tag.NewInt64("default-replay-floor", floor),
+		tag.NewInt64("default-completed-cursor", r.defaultCompletedCursor))
 	r.defaultCompletedCursor = min(r.defaultCompletedCursor, floor)
 	r.defaultRecoveryPending = true
 	r.notifyChanged()
@@ -466,6 +500,7 @@ func (r *senderLaneRegistry) Forget(logicalKey string) {
 	delete(r.byKey, logicalKey)
 	delete(r.byID, lane.id)
 	r.notifyChanged()
+	r.logger.Info("Dropped a restored replication lane.", r.laneEventTags(lane)...)
 }
 
 // ClearLanes drops all lane state. The sender calls it when the receiver does not support
@@ -473,6 +508,9 @@ func (r *senderLaneRegistry) Forget(logicalKey string) {
 func (r *senderLaneRegistry) ClearLanes() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for _, lane := range r.byKey {
+		r.logger.Info("Cleared a replication lane.", r.laneEventTags(lane)...)
+	}
 	clear(r.byKey)
 	clear(r.byID)
 	r.notifyChanged()
@@ -517,6 +555,29 @@ func (r *senderLaneRegistry) BuildReaderState(attr *replicationspb.SyncReplicati
 		)
 	}
 	return state
+}
+
+// laneEventTags describes a lane and the default lane's cursors for a lane event. A scope end
+// of math.MaxInt64 means the lane's range is open. It is called with the registry mutex held.
+func (r *senderLaneRegistry) laneEventTags(lane *senderLane) []tag.Tag {
+	namespaceIDs := make([]string, len(lane.filter.NamespaceIDs))
+	for i, namespaceID := range lane.filter.NamespaceIDs {
+		namespaceIDs[i] = namespaceID.String()
+	}
+	return []tag.Tag{
+		tag.NewStringTag("lane", lane.id),
+		tag.NewStringTag("lane-key", lane.logicalKey),
+		tag.NewStringsTag("lane-namespace-ids", namespaceIDs),
+		tag.NewInt64("lane-scope-min", lane.scope.Range.InclusiveMin.TaskID),
+		tag.NewInt64("lane-scope-end", lane.scope.Range.ExclusiveMax.TaskID),
+		tag.NewInt64("lane-cursor", lane.cursor),
+		tag.NewInt64("lane-acked", lane.acked),
+		tag.NewBoolTag("lane-pending", lane.pending),
+		tag.NewBoolTag("lane-retiring", lane.retiring),
+		tag.NewBoolTag("lane-paused", lane.paused),
+		tag.NewInt64("default-reserved-cursor", r.defaultReservedCursor),
+		tag.NewInt64("default-completed-cursor", r.defaultCompletedCursor),
+	}
 }
 
 // laneScope is the scope of a lane that owns the tasks filter selects from floor.

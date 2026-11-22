@@ -1218,6 +1218,18 @@ var (
 		"replication_lane_tasks_skipped_by_default",
 		WithDescription("The number of HIGH priority replication tasks the default lane skipped because a replication lane owns them. Over time this should match replication_lane_tasks_sent, apart from re-sends after reconnects."),
 	)
+	ReplicationLanePaused = NewCounterDef(
+		"replication_lane_paused",
+		WithDescription("The number of times a receiver paused a replication lane, as seen by the lane stream sender."),
+	)
+	ReplicationLaneResumed = NewCounterDef(
+		"replication_lane_resumed",
+		WithDescription("The number of times a receiver resumed a paused replication lane, as seen by the lane stream sender."),
+	)
+	ReplicationLaneCount = NewDimensionlessHistogramDef(
+		"replication_lane_count",
+		WithDescription("The number of replication lanes a lane stream sender holds, including pending and retiring lanes, recorded at each receiver ack."),
+	)
 	ReplicationLaneFeedbackDropped = NewCounterDef(
 		"replication_lane_feedback_dropped",
 		WithDescription("The number of receiver lane feedback payloads omitted because their serialized size exceeds the configured byte limit."),

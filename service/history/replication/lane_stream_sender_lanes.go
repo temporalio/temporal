@@ -177,11 +177,11 @@ func (s *laneStreamSender) initLaneRegistry() {
 			s.laneRecoveryFloor = readerState.GetScopes()[laneReaderHighScopeIndex].GetRange().GetInclusiveMin().GetTaskId()
 		}
 	}
-	registry, err := newSenderLaneRegistry(persistedDefaultCursor, persistedLanes)
+	registry, err := newSenderLaneRegistry(persistedDefaultCursor, persistedLanes, s.logger)
 	if err != nil {
 		s.logger.Error("Unable to restore persisted replication lanes. Re-sending their tasks on the default lane.", tag.Error(err))
 		s.laneRestoreIncomplete = true
-		registry, _ = newSenderLaneRegistry(persistedDefaultCursor, nil)
+		registry, _ = newSenderLaneRegistry(persistedDefaultCursor, nil, s.logger)
 		registry.RequireDefaultRecovery(s.laneRecoveryFloor)
 	}
 	s.laneRegistry = registry
@@ -256,7 +256,7 @@ func (s *laneStreamSender) recvLaneSyncReplicationState(attr *replicationspb.Syn
 		if first {
 			s.startLanePolicy()
 		}
-		s.laneRegistry.ObserveAcks(attr.GetLaneStates())
+		s.recordLanePauseChanges(s.laneRegistry.ObserveAcks(attr.GetLaneStates()))
 		s.recordLaneLag()
 		if err := s.reconcileLanes(attr, first); err != nil {
 			return err
@@ -286,7 +286,14 @@ func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationSt
 	s.laneReconcileMu.Lock()
 	defer s.laneReconcileMu.Unlock()
 	if _, handovers, err := s.shardContext.GetReplicationStatus([]string{s.clientClusterName}); err == nil {
-		s.handoverInProgress.Store(len(handovers) > 0)
+		inProgress := len(handovers) > 0
+		if s.handoverInProgress.Swap(inProgress) != inProgress {
+			if inProgress {
+				s.logger.Info("Lifted replication lane rate limits during a namespace handover.", tag.NewInt("handover-namespaces", len(handovers)))
+			} else {
+				s.logger.Info("Restored replication lane rate limits after the namespace handover.")
+			}
+		}
 	}
 	signals := s.laneSignals(attr)
 	desired := s.evaluateLanes(signals)
@@ -826,6 +833,17 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 	}
 }
 
+// recordLanePauseChanges counts the lanes a receiver ack paused or resumed.
+func (s *laneStreamSender) recordLanePauseChanges(changes []lanePauseChange) {
+	for _, change := range changes {
+		counter := metrics.ReplicationLaneResumed
+		if change.paused {
+			counter = metrics.ReplicationLanePaused
+		}
+		counter.With(s.metrics).Record(1, metrics.ToClusterTag(s.clientClusterName), metrics.ReplicationLaneTag(change.logicalKey))
+	}
+}
+
 // recordLaneLag records how far each lane is behind, and reports lanes behind by more than
 // ReplicationLaneMaxLag. The report carries the lane's live state, which is otherwise only in
 // memory, so that a lagging lane can be told apart from a stuck one.
@@ -833,6 +851,7 @@ func (s *laneStreamSender) recordLaneLag() {
 	maxLag := s.config.ReplicationLaneMaxLag()
 	now := time.Now()
 	lanes := s.laneRegistry.Snapshots()
+	metrics.ReplicationLaneCount.With(s.metrics).Record(int64(len(lanes)), metrics.ToClusterTag(s.clientClusterName))
 	if len(lanes) == 0 {
 		return
 	}

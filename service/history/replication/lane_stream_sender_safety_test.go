@@ -108,7 +108,7 @@ func (s *streamSenderSuite) TestLegacyResumeCoversFiniteRetirement() {
 func (s *laneStreamSenderSuite) TestRestoredRetiringLaneSendsOnlyItsFinitePrefix() {
 	scope := laneScope(namespaceLaneFilter("ns-a"), 100)
 	scope.Range.ExclusiveMax = tasks.NewImmediateKey(200)
-	registry, err := newSenderLaneRegistry(200, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: queues.ToPersistenceScope(scope)}})
+	registry, err := newSenderLaneRegistry(200, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: queues.ToPersistenceScope(scope)}}, log.NewNoopLogger())
 	s.NoError(err)
 	lane := registry.Snapshots()[0]
 	current, acquired := registry.Acquire(lane.id)
@@ -131,7 +131,7 @@ func (s *laneStreamSenderSuite) TestRestoredRetiringLaneSendsOnlyItsFinitePrefix
 func (s *laneStreamSenderSuite) TestRestoredEmptyRetirementPrimesItsNewReceiverTracker() {
 	scope := laneScope(namespaceLaneFilter("ns-a"), 200)
 	scope.Range.ExclusiveMax = tasks.NewImmediateKey(200)
-	registry, err := newSenderLaneRegistry(500, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: queues.ToPersistenceScope(scope)}})
+	registry, err := newSenderLaneRegistry(500, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: queues.ToPersistenceScope(scope)}}, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	lane := registry.Snapshots()[0]
@@ -154,7 +154,7 @@ func (s *laneStreamSenderSuite) TestRestoredEmptyRetirementPrimesItsNewReceiverT
 
 func (s *laneStreamSenderSuite) TestReconcileRecreatesKeyAfterRetirementCompletes() {
 	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	key := namespaceLaneKey("ns-a")
 	lane, _, err := registry.Create(key, namespaceLaneFilter("ns-a"), 100, nil)
@@ -185,7 +185,7 @@ func (s *laneStreamSenderSuite) TestReconcileRecreatesKeyAfterRetirementComplete
 
 func (s *laneStreamSenderSuite) TestReconcileInstallsLimiterBeforePublishingLane() {
 	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	policy := NewMockLaneStreamPolicy(s.controller)
@@ -207,7 +207,7 @@ func (s *laneStreamSenderSuite) TestReconcileInstallsLimiterBeforePublishingLane
 }
 
 func (s *laneStreamSenderSuite) TestLaneSignalsPreserveRefusalTimeAndRetirementIntent() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	_, _, err = registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
@@ -264,7 +264,7 @@ func (s *laneStreamSenderSuite) TestStopWithHangingCloseAllowsStreamReplacement(
 
 func (s *laneStreamSenderSuite) TestRetirementSendDoesNotBlockAckProcessing() {
 	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	lane, _, err := registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
@@ -333,7 +333,7 @@ func (s *laneStreamSenderSuite) TestRetirementSendDoesNotBlockAckProcessing() {
 }
 
 func (s *laneStreamSenderSuite) TestPaceLaneRechecksPauseAfterLimiterRefuses() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	key := namespaceLaneKey("ns-a")
 	lane, _, err := registry.Create(key, namespaceLaneFilter("ns-a"), 100, nil)
@@ -357,7 +357,7 @@ func (s *laneStreamSenderSuite) TestPaceLaneRechecksPauseAfterLimiterRefuses() {
 
 func (s *laneStreamSenderSuite) TestRetirementSendsPrefixBeforeDefaultSuffix() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	lane, _, err := registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
