@@ -2,6 +2,7 @@ package replication
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/wideevents"
@@ -1422,6 +1424,10 @@ func (s *laneStreamSenderSuite) setupSingleFailingTask(convertErr error) (beginI
 }
 
 func (s *laneStreamSenderSuite) setupSingleTask() (beginInclusiveWatermark, endExclusiveWatermark int64, item *tasks.MockTask) {
+	return s.setupSingleTaskOfType(enumsspb.TASK_TYPE_REPLICATION_HISTORY)
+}
+
+func (s *laneStreamSenderSuite) setupSingleTaskOfType(taskType enumsspb.TaskType) (beginInclusiveWatermark, endExclusiveWatermark int64, item *tasks.MockTask) {
 	s.streamSender.isTieredStackEnabled = false
 	beginInclusiveWatermark = rand.Int63n(math.MaxInt32)
 	endExclusiveWatermark = beginInclusiveWatermark + 100
@@ -1431,7 +1437,7 @@ func (s *laneStreamSenderSuite) setupSingleTask() (beginInclusiveWatermark, endE
 	item.EXPECT().GetRunID().Return("run-1").AnyTimes()
 	item.EXPECT().GetTaskID().Return(beginInclusiveWatermark).AnyTimes()
 	item.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
-	item.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
+	item.EXPECT().GetType().Return(taskType).AnyTimes()
 
 	iter := collection.NewPagingIterator[tasks.Task](
 		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -1565,6 +1571,101 @@ func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_EmitsWideEvent() {
 	s.Equal(s.streamSender.clientClusterName, fields["target_cluster"].AsString())
 	s.Equal(int64(s.clientShardKey.ShardID), fields["target_shard"].AsInt64())
 	s.Equal(enumsspb.TASK_PRIORITY_UNSPECIFIED.String(), fields["priority"].AsString())
+}
+
+// TestSendTasks_LifecycleEventsNameTheLane checks that the lifecycle events of a task that a lane
+// sends name the lane, so that a lane split or retirement can be checked task by task, and that the
+// default lane's events name none.
+func (s *laneStreamSenderSuite) TestSendTasks_LifecycleEventsNameTheLane() {
+	s.config.EmitReplicationLifecycleEvents = func() bool { return true }
+	s.config.ReplicationStreamSenderErrorRetryWait = func() time.Duration { return time.Millisecond }
+	capture := &eventCaptureLogger{}
+	s.shardContext.EXPECT().GetEventLogger().Return(capture).AnyTimes()
+	s.shardContext.EXPECT().GetPayloadSerializer().Return(serialization.NewSerializer()).AnyTimes()
+	for _, tc := range []struct {
+		name   string
+		target *laneSendTarget
+		want   map[string]any
+	}{
+		{name: "DefaultLane"},
+		{name: "DefaultLaneOfALaneStream", target: &laneSendTarget{laneOwner: func(tasks.Task) string { return "" }}},
+		{
+			name: "Lane",
+			target: &laneSendTarget{
+				laneInfo:   &replicationspb.ReplicationLaneInfo{LaneId: "lane-1"},
+				logicalKey: "namespace:1",
+			},
+			want: map[string]any{"replication_lane": "namespace:1", "replication_lane_id": "lane-1"},
+		},
+	} {
+		s.Run(tc.name, func() {
+			capture.records = nil
+			begin, end, item := s.setupSingleTaskOfType(enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION)
+			// The first conversion fails, so the task has an error event before its sent event.
+			gomock.InOrder(
+				s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_HIGH, locks.PriorityLow).
+					Return(nil, serviceerror.NewUnavailable("history unavailable")),
+				s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_HIGH, locks.PriorityLow).
+					Return(&replicationspb.ReplicationTask{
+						TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK,
+						SourceTaskId: begin,
+					}, nil),
+			)
+			s.server.EXPECT().Send(gomock.Any()).Return(nil).Times(2)
+
+			s.NoError(s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_HIGH, begin, end, tc.target))
+
+			s.Require().Len(capture.records, 2)
+			for i, phase := range []wideevents.ReplicationPhase{wideevents.ReplicationError, wideevents.ReplicationSent} {
+				gotPhase, lane := s.lifecycleEventLane(capture.records[i])
+				s.Equal(string(phase), gotPhase)
+				s.Equal(tc.want, lane, phase)
+			}
+		})
+	}
+}
+
+func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTaskOnALane_NamesTheLane() {
+	s.config.ReplicationStreamSenderSkipStuckTask = func() bool { return true }
+	s.config.EmitReplicationLifecycleEvents = func() bool { return true }
+	capture := &eventCaptureLogger{}
+	s.shardContext.EXPECT().GetEventLogger().Return(capture).AnyTimes()
+	begin, end := s.setupSingleFailingTask(&unbuildableTaskError{err: serviceerror.NewInternal("version histories does not contains given item")})
+	s.server.EXPECT().Send(gomock.Any()).Return(nil).Times(1)
+
+	s.NoError(s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_UNSPECIFIED, begin, end, &laneSendTarget{
+		laneInfo:   &replicationspb.ReplicationLaneInfo{LaneId: "lane-1"},
+		logicalKey: "namespace:1",
+	}))
+
+	s.Require().Len(capture.records, 1)
+	phase, lane := s.lifecycleEventLane(capture.records[0])
+	s.Equal(string(wideevents.ReplicationSkipped), phase)
+	s.Equal(map[string]any{"replication_lane": "namespace:1", "replication_lane_id": "lane-1"}, lane)
+}
+
+// lifecycleEventLane returns a lifecycle event's phase and the lane fields of its details, or nil
+// when it names no lane.
+func (s *laneStreamSenderSuite) lifecycleEventLane(rec otellog.Record) (string, map[string]any) {
+	fields := map[string]otellog.Value{}
+	rec.WalkAttributes(func(kv otellog.KeyValue) bool {
+		fields[kv.Key] = kv.Value
+		return true
+	})
+	details := map[string]any{}
+	if raw := fields["details"].AsString(); raw != "" {
+		s.Require().NoError(json.Unmarshal([]byte(raw), &details))
+	}
+	var lane map[string]any
+	for _, key := range []string{"replication_lane", "replication_lane_id"} {
+		if v, ok := details[key]; ok {
+			if lane == nil {
+				lane = map[string]any{}
+			}
+			lane[key] = v
+		}
+	}
+	return fields["phase"].AsString(), lane
 }
 
 func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_Disabled() {

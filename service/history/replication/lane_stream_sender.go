@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"sync"
@@ -678,6 +679,7 @@ Loop:
 					attempt,
 					wideevents.ReplOperationTaskConversion,
 					&convertError{err: fmt.Errorf("convert: %w", err)},
+					target,
 				)
 			}
 			if task == nil {
@@ -710,17 +712,17 @@ Loop:
 					"",
 				))
 				if waitErr != nil {
-					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", waitErr))
+					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", waitErr), target)
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
 			if target != nil && target.rateLimit != nil {
 				if limitErr := target.rateLimit(s.server.Context()); limitErr != nil {
-					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("lane_rate_limit: %w", limitErr))
+					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("lane_rate_limit: %w", limitErr), target)
 				}
 			}
 			if s.config.EmitReplicationLifecycleEvents() {
-				s.emitReplicationSent(task, item)
+				s.emitReplicationSent(task, item, target)
 			}
 			sendErr := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -734,7 +736,7 @@ Loop:
 				},
 			})
 			if sendErr != nil {
-				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", sendErr))
+				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", sendErr), target)
 			}
 			skipCount = 0
 			if target.getLaneInfo() != nil {
@@ -785,7 +787,7 @@ Loop:
 			// Retry exhaustion alone does not establish that a task is unbuildable.
 			// Only explicitly identified task conversion failures may advance the watermark.
 			if s.config.ReplicationStreamSenderSkipStuckTask() && isSkippable(err) {
-				s.recordStuckTaskSkipped(item, attempt, priority, err)
+				s.recordStuckTaskSkipped(item, attempt, priority, err, target)
 				metrics.ReplicationTaskSendSkipped.With(s.metrics).Record(
 					int64(1),
 					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
@@ -933,6 +935,7 @@ func (s *laneStreamSender) recordRetry(
 	attempt int64,
 	operation string,
 	err error,
+	target *laneSendTarget,
 ) error {
 	s.shardContext.GetThrottledLogger().Warn("Replication task send retry",
 		tag.TaskID(item.GetTaskID()),
@@ -942,7 +945,7 @@ func (s *laneStreamSender) recordRetry(
 		tag.Error(err),
 	)
 	if s.config.EmitReplicationLifecycleEvents() {
-		s.emitReplicationSenderError(item, replicationTaskType, priority, attempt, operation, "Replication task send retry", err)
+		s.emitReplicationSenderError(item, replicationTaskType, priority, attempt, operation, "Replication task send retry", err, target)
 	}
 	return err
 }
@@ -956,6 +959,7 @@ func (s *laneStreamSender) recordStuckTaskSkipped(
 	attempt int64,
 	priority enumsspb.TaskPriority,
 	err error,
+	target *laneSendTarget,
 ) {
 	s.shardContext.GetThrottledLogger().Error("Replication task could not be built after exhausting retries, skipping task",
 		tag.TaskID(item.GetTaskID()),
@@ -968,7 +972,7 @@ func (s *laneStreamSender) recordStuckTaskSkipped(
 	// Emit a terminal "skipped" ReplicationLifecycle wide event so the drop is traceable alongside
 	// the task's sent/executing/applied events. Gated by the same config as the "sent" event.
 	if s.config.EmitReplicationLifecycleEvents() {
-		s.emitReplicationSkipped(item, attempt, priority, err)
+		s.emitReplicationSkipped(item, attempt, priority, err, target)
 	}
 }
 
@@ -980,6 +984,7 @@ func (s *laneStreamSender) emitReplicationSenderError(
 	operation string,
 	message string,
 	err error,
+	target *laneSendTarget,
 ) {
 	taskType, ok := stateBasedTaskTypeFromHistoryTask(item.GetType())
 	if !ok {
@@ -1003,6 +1008,7 @@ func (s *laneStreamSender) emitReplicationSenderError(
 		"target_cluster": s.clientClusterName,
 		"target_shard":   s.clientShardKey.ShardID,
 	}
+	maps.Copy(details, target.eventDetails())
 	wideevents.EmitReplicationError(
 		logger,
 		wideevents.ReplicationLifecyclePayload{
@@ -1028,6 +1034,7 @@ func (s *laneStreamSender) emitReplicationSenderError(
 func (s *laneStreamSender) emitReplicationSent(
 	task *replicationspb.ReplicationTask,
 	item tasks.Task,
+	target *laneSendTarget,
 ) {
 	logger := s.shardContext.GetEventLogger()
 	if logger == nil {
@@ -1069,6 +1076,7 @@ func (s *laneStreamSender) emitReplicationSent(
 		TargetCluster: s.clientClusterName,
 		TargetShard:   s.clientShardKey.ShardID,
 		Priority:      task.GetPriority().String(),
+		Details:       target.eventDetails(),
 	}
 	if vt := task.GetVersionedTransition(); vt != nil {
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
@@ -1112,6 +1120,7 @@ func (s *laneStreamSender) emitReplicationSkipped(
 	attempt int64,
 	priority enumsspb.TaskPriority,
 	err error,
+	target *laneSendTarget,
 ) {
 	logger := s.shardContext.GetEventLogger()
 	if logger == nil {
@@ -1143,6 +1152,7 @@ func (s *laneStreamSender) emitReplicationSkipped(
 		WorkflowID:    item.GetWorkflowID(),
 		RunID:         item.GetRunID(),
 		Attempt:       int32(attempt),
+		Details:       target.eventDetails(),
 	}
 	if err != nil {
 		payload.Error = err.Error()

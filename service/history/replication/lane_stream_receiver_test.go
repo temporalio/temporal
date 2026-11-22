@@ -255,6 +255,39 @@ func (s *laneStreamReceiverSuite) TestMemberLane_NonRetireTrafficRevivesRetiring
 	s.streamReceiver.finishLaneBatch("ns-a", false)
 }
 
+// TestMemberLane_LogsLaneLifecycle checks that the receiver logs each change of a lane once: opened,
+// retirement marker received, reopened while retiring, and dropped once drained.
+func (s *laneStreamReceiverSuite) TestMemberLane_LogsLaneLifecycle() {
+	core, logs := observer.New(zap.InfoLevel)
+	s.streamReceiver.logger = log.NewZapLogger(zap.New(core))
+
+	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("lane-a", false)
+	// A retirement marker, a duplicate marker, then traffic that reopens the lane.
+	for _, retire := range []bool{true, true, false} {
+		_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", retire)
+		s.NoError(err)
+		s.streamReceiver.finishLaneBatch("lane-a", retire)
+	}
+	// Retired again and drained, the lane is dropped.
+	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", true)
+	s.NoError(err)
+	tracker.TrackTasks(WatermarkInfo{Watermark: 200, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("lane-a", true)
+	s.streamReceiver.memberLaneWatermarks()
+	s.NotContains(s.streamReceiver.memberLanes, "lane-a")
+
+	s.Equal([]loggedEvent{
+		{message: "Opened a replication lane.", fields: map[string]any{"lane": "lane-a", "open-lanes": int64(1)}},
+		{message: "Received the retirement marker of a replication lane.", fields: map[string]any{"lane": "lane-a"}},
+		{message: "Reopened a retiring replication lane.", fields: map[string]any{"lane": "lane-a"}},
+		{message: "Received the retirement marker of a replication lane.", fields: map[string]any{"lane": "lane-a"}},
+		{message: "Dropped a drained replication lane.", fields: map[string]any{"lane": "lane-a", "lane-watermark": int64(200)}},
+	}, loggedEvents(logs, []string{"lane", "open-lanes", "lane-watermark"}))
+}
+
 func (s *laneStreamReceiverSuite) TestMemberLane_RetireBatchMidTrackSurvivesAckSnapshot() {
 	// A lane whose retire batch has been resolved but not yet tracked must survive
 	// the ack loop's snapshot; once the (watermark-only) retire batch is tracked
