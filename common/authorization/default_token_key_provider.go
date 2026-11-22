@@ -1,7 +1,9 @@
 package authorization
 
 import (
+	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
@@ -26,6 +28,7 @@ type defaultTokenKeyProvider struct {
 	config   config.JWTKeyProvider
 	rsaKeys  map[string]*rsa.PublicKey
 	ecKeys   map[string]*ecdsa.PublicKey
+	edKeys   map[string]ed25519.PublicKey
 	keysLock sync.RWMutex
 	ticker   *time.Ticker
 	logger   log.Logger
@@ -33,6 +36,7 @@ type defaultTokenKeyProvider struct {
 }
 
 var _ TokenKeyProvider = (*defaultTokenKeyProvider)(nil)
+var _ RawTokenKeyProvider = (*defaultTokenKeyProvider)(nil)
 
 func NewDefaultTokenKeyProvider(cfg *config.Authorization, logger log.Logger) *defaultTokenKeyProvider {
 	provider := defaultTokenKeyProvider{config: cfg.JWTKeyProvider, logger: logger}
@@ -43,6 +47,7 @@ func NewDefaultTokenKeyProvider(cfg *config.Authorization, logger log.Logger) *d
 func (a *defaultTokenKeyProvider) initialize() {
 	a.rsaKeys = make(map[string]*rsa.PublicKey)
 	a.ecKeys = make(map[string]*ecdsa.PublicKey)
+	a.edKeys = make(map[string]ed25519.PublicKey)
 	if a.config.HasSourceURIsConfigured() {
 		err := a.updateKeys()
 		if err != nil {
@@ -97,7 +102,32 @@ func (a *defaultTokenKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.Publi
 }
 
 func (a *defaultTokenKeyProvider) SupportedMethods() []string {
-	return []string{jwt.SigningMethodRS256.Name, jwt.SigningMethodES256.Name}
+	return []string{jwt.SigningMethodRS256.Name, jwt.SigningMethodES256.Name, jwt.SigningMethodEdDSA.Alg()}
+}
+
+// GetKey returns the verification key for the token's signing method and key ID.
+func (a *defaultTokenKeyProvider) GetKey(_ context.Context, token *jwt.Token) (any, error) {
+	kid, ok := token.Header["kid"].(string)
+	if !ok {
+		return nil, errors.New("malformed token - no \"kid\" header")
+	}
+
+	switch token.Method.(type) {
+	case *jwt.SigningMethodRSA:
+		return a.RsaKey(token.Method.Alg(), kid)
+	case *jwt.SigningMethodECDSA:
+		return a.EcdsaKey(token.Method.Alg(), kid)
+	case *jwt.SigningMethodEd25519:
+		a.keysLock.RLock()
+		key, found := a.edKeys[kid]
+		a.keysLock.RUnlock()
+		if !found {
+			return nil, fmt.Errorf("Ed25519 key not found for key ID: %s", kid)
+		}
+		return key, nil
+	default:
+		return nil, fmt.Errorf("unexpected signing algorithm: %s", token.Method.Alg())
+	}
 }
 
 func (a *defaultTokenKeyProvider) timerCallback() {
@@ -123,12 +153,13 @@ func (a *defaultTokenKeyProvider) updateKeys() error {
 
 	rsaKeys := make(map[string]*rsa.PublicKey)
 	ecKeys := make(map[string]*ecdsa.PublicKey)
+	edKeys := make(map[string]ed25519.PublicKey)
 
 	for _, uri := range a.config.KeySourceURIs {
 		if strings.TrimSpace(uri) == "" {
 			continue
 		}
-		err := a.updateKeysFromURI(uri, rsaKeys, ecKeys)
+		err := a.updateKeysFromURI(uri, rsaKeys, ecKeys, edKeys)
 		if err != nil {
 			return err
 		}
@@ -137,6 +168,7 @@ func (a *defaultTokenKeyProvider) updateKeys() error {
 	a.keysLock.Lock()
 	a.rsaKeys = rsaKeys
 	a.ecKeys = ecKeys
+	a.edKeys = edKeys
 	a.keysLock.Unlock()
 	return nil
 }
@@ -145,6 +177,7 @@ func (a *defaultTokenKeyProvider) updateKeysFromURI(
 	uri string,
 	rsaKeys map[string]*rsa.PublicKey,
 	ecKeys map[string]*ecdsa.PublicKey,
+	edKeys map[string]ed25519.PublicKey,
 ) (err error) {
 
 	resp, err := a.openURI(uri)
@@ -161,11 +194,13 @@ func (a *defaultTokenKeyProvider) updateKeysFromURI(
 	}
 
 	for _, k := range jwks.Keys {
-		switch k.Key.(type) {
+		switch key := k.Key.(type) {
 		case *rsa.PublicKey:
-			rsaKeys[k.KeyID] = k.Key.(*rsa.PublicKey)
+			rsaKeys[k.KeyID] = key
 		case *ecdsa.PublicKey:
-			ecKeys[k.KeyID] = k.Key.(*ecdsa.PublicKey)
+			ecKeys[k.KeyID] = key
+		case ed25519.PublicKey:
+			edKeys[k.KeyID] = key
 		default:
 			a.logger.Warn(fmt.Sprintf("unexpected type of JWKS public key %s", k.Algorithm))
 		}
