@@ -11,7 +11,7 @@
 //
 // Group 2 — Child workflows.
 //
-//  1. fast-forward is not propagated to children.
+//  1. fast-forward is not propagated to children unless EnableFastForwardPropagation is set.
 //  2. DisablePropagation disables propagation of the enabled flag.
 //  3. the child inherits the parent's accumulated skipped duration in all cases.
 //     Covered by:
@@ -20,6 +20,7 @@
 //     - TestTSPInChildWf_ThreeGenerations
 //     - TestTSPInChildWf_AdmissionTimestampsShifted
 //     - TestTSPInChildWf_PropagationDisabled
+//     - TestTSPInChildWf_FastForwardPropagated
 package tests
 
 import (
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -925,6 +927,70 @@ func (s *TimeSkippingPropagationTestSuite) getMutableStateByID(ctx context.Conte
 	})
 	s.NoError(err)
 	return s.getMutableState(env, workflowID, desc.WorkflowExecutionInfo.Execution.RunId)
+}
+
+// drivePollsUntil serves workflow tasks until done reports true or maxIterations is reached.
+func (s *TimeSkippingPropagationTestSuite) drivePollsUntil(
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+	handler wftHandler,
+	done func() bool,
+	maxIterations int,
+) {
+	for i := range maxIterations {
+		if done() {
+			return
+		}
+		if _, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, handler); err != nil {
+			s.T().Logf("iter %d: poll error (likely timeout): %v", i, err)
+		}
+	}
+	s.True(done(), "condition not reached after %d workflow task polls", maxIterations)
+}
+
+func (s *TimeSkippingPropagationTestSuite) fastForwardCompleted(ctx context.Context, env *testcore.TestEnv, workflowID string) bool {
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+	})
+	return err == nil && desc.GetWorkflowExtendedInfo().GetTimeSkippingInfo().GetFastForwardInfo().GetHasCompleted()
+}
+
+type fastForwardPollResult struct {
+	resp *workflowservice.PollWorkflowExecutionTimeSkippingResponse
+	err  error
+}
+
+// pollFastForwardAsync long-polls the fast-forward of the current run of workflowID in the
+// background, re-polling on POLL_TIMEOUT so the result is always terminal.
+func pollFastForwardAsync(ctx context.Context, env *testcore.TestEnv, workflowID, ffID string) <-chan fastForwardPollResult {
+	ch := make(chan fastForwardPollResult, 1)
+	go func() {
+		for {
+			resp, err := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+				Namespace:         env.Namespace().String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				FastForwardId:     ffID,
+			})
+			if err != nil || resp.GetFastForwardPollingResult() != enumspb.FAST_FORWARD_POLLING_RESULT_POLL_TIMEOUT {
+				ch <- fastForwardPollResult{resp: resp, err: err}
+				return
+			}
+		}
+	}()
+	return ch
+}
+
+func awaitFastForwardPoll(t *testing.T, ch <-chan fastForwardPollResult) *workflowservice.PollWorkflowExecutionTimeSkippingResponse {
+	t.Helper()
+	select {
+	case r := <-ch:
+		require.NoError(t, r.err)
+		return r.resp
+	case <-time.After(30 * time.Second):
+		require.FailNow(t, "fast-forward poll did not return")
+		return nil
+	}
 }
 
 // wftHandler is the signature of a per-workflow-type handler used by typeDispatch.
@@ -2031,4 +2097,118 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_PropagationDisabled(
 	s.Nil(initAttrs.GetTimeSkippingConfig(), "initiated event carries no TimeSkippingConfig when propagation is disabled")
 	s.approxDuration(time.Hour, initAttrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration(),
 		"initiated event InitialSkippedDuration == parent's AccumulatedSkippedDuration at command time (1h)")
+}
+
+// TestTSPInChildWf_FastForwardPropagated verifies that with EnableFastForwardPropagation the parent's
+// fast-forward target caps the child too, and that each execution's fast-forward is polled separately
+// by its own workflow ID under the same fast_forward_id.
+//
+// Scenario:
+//   - Parent starts with FastForward{3h, EnableFastForwardPropagation} and issues StartChild + StartTimer(t1, 10h).
+//     The pending child keeps the parent from skipping.
+//   - Child inherits the parent's fast-forward target (not a new 3h from its own start), skips to it at start,
+//     and disables time skipping. Its poll completes while the parent's poll is still blocked.
+//   - A signal completes the child; the parent becomes idle, skips to the same target, and its poll completes.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_FastForwardPropagated() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	parentWFType := tv.WorkflowType()
+	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
+	parentWFID := tv.WorkflowID()
+	childWFID := parentWFID + "-child"
+	ffID := uuid.NewString()
+
+	parentStart, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          parentWFID,
+		WorkflowType:        parentWFType,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:                           ffID,
+				Duration:                     durationpb.New(3 * time.Hour),
+				EnableFastForwardPropagation: true,
+			},
+		},
+	})
+	s.NoError(err)
+	parentRunID := parentStart.RunId
+	parentPoll := pollFastForwardAsync(ctx, env, parentWFID, ffID)
+
+	ns := env.Namespace().String()
+	tq := tv.TaskQueue()
+	parentStarted := false
+	parentHandler := func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		if !parentStarted {
+			parentStarted = true
+			return cmdsResponse(childCmd(ns, childWFID, childWFType, tq), timerCmd("t1", 10*time.Hour)), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	childHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		for _, e := range task.History.Events {
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+				return cmdsResponse(completeCmd()), nil
+			}
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	dispatch := typeDispatch(map[string]wftHandler{
+		parentWFType.Name: parentHandler,
+		childWFType.Name:  childHandler,
+	})
+
+	s.drivePollsUntil(env, tv, dispatch, func() bool { return s.fastForwardCompleted(ctx, env, childWFID) }, 10)
+
+	childPollResp := awaitFastForwardPoll(s.T(), pollFastForwardAsync(ctx, env, childWFID, ffID))
+	s.Equal(enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED, childPollResp.GetFastForwardPollingResult())
+	select {
+	case r := <-parentPoll:
+		s.Failf("parent poll returned while its pending child blocks skipping", "result=%v err=%v", r.resp.GetFastForwardPollingResult(), r.err)
+	case <-time.After(2 * time.Second):
+	}
+
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         ns,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: childWFID},
+		SignalName:        "complete",
+		Identity:          "test",
+		RequestId:         uuid.NewString(),
+	})
+	s.NoError(err)
+	s.drivePollsUntil(env, tv, dispatch, func() bool { return s.fastForwardCompleted(ctx, env, parentWFID) }, 10)
+
+	parentPollResp := awaitFastForwardPoll(s.T(), parentPoll)
+	s.Equal(enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED, parentPollResp.GetFastForwardPollingResult())
+	targetTime := parentPollResp.GetFastForwardInfo().GetTargetTime().AsTime()
+	s.Equal(targetTime, childPollResp.GetFastForwardInfo().GetTargetTime().AsTime(), "child inherits the parent's target, not a new duration")
+
+	// Both executions stop at the same 3h target; the parent's 10h timer never fires.
+	parentTSI := s.getMutableState(env, parentWFID, parentRunID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.False(parentTSI.GetConfig().GetEnabled())
+	s.approxDuration(3*time.Hour, parentTSI.GetAccumulatedSkippedDuration().AsDuration())
+	childMS := s.getMutableStateByID(ctx, env, childWFID)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, childMS.State.ExecutionState.State)
+	childTSI := childMS.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.False(childTSI.GetConfig().GetEnabled())
+	s.approxDuration(3*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration())
+
+	initEvents := s.initiatedChildEvents(ctx, env, parentWFID, parentRunID)
+	s.Len(initEvents, 1)
+	initAttrs := initEvents[0].GetStartChildWorkflowExecutionInitiatedEventAttributes()
+	s.Equal(ffID, initAttrs.GetTimeSkippingConfig().GetFastForwardConfig().GetId())
+	s.Equal(targetTime, initAttrs.GetTimeSkippingStatePropagation().GetFastForwardTargetTime().AsTime())
+
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         ns,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: parentWFID, RunId: parentRunID},
+		Reason:            "test cleanup",
+	})
 }

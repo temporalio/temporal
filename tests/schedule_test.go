@@ -544,6 +544,88 @@ func (s *ScheduleCHASMSuite) TestMaxSkipCapsScheduleTimeSkipping() {
 	}, awaitTimeout, pollInterval)
 }
 
+// TestTimeSkippingFastForwardPropagatedToWorkflows verifies that with EnableFastForwardPropagation the
+// schedule's fast-forward target caps every workflow it starts. Ticks land at +12h and +12h+1w, both
+// before the +1w+1d target, so two workflows start; each sleeps 30d but stops at the shared target, and
+// each one's fast-forward is polled by its own workflow ID.
+func (s *ScheduleCHASMSuite) TestTimeSkippingFastForwardPropagatedToWorkflows() {
+	t := s.T()
+	env := newScheduleEnv(t, append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true),
+	)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+	sid := testcore.RandomizeStr("sched-ff-propagation")
+	wt := testcore.RandomizeStr("sched-ff-propagation-wt")
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		return workflow.NewTimer(ctx, 30*24*time.Hour).Get(ctx, nil)
+	}, workflow.RegisterOptions{Name: wt})
+
+	week := 7 * 24 * time.Hour
+	firstTick := time.Now().UTC().Add(12 * time.Hour)
+	ffID := uuid.NewString()
+	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  env.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(week),
+				Phase:    durationpb.New(time.Duration(firstTick.UnixNano() % week.Nanoseconds())),
+			}}},
+			Action:   startWorkflowAction(env, testcore.RandomizeStr("sched-ff-propagation-wf"), wt),
+			Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
+		},
+		InitialPatch: &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:                           ffID,
+				Duration:                     durationpb.New(week + 24*time.Hour),
+				EnableFastForwardPropagation: true,
+			},
+		}},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	var desc *workflowservice.DescribeScheduleResponse
+	s.Await(func(s *ScheduleCHASMSuite) {
+		desc, err = env.FrontendClient().DescribeSchedule(chasmContextFactory(s.Context()), &workflowservice.DescribeScheduleRequest{
+			Namespace: env.Namespace().String(), ScheduleId: sid,
+		})
+		s.NoError(err)
+		s.True(desc.GetInfo().GetTimeSkippingInfo().GetFastForwardInfo().GetHasCompleted())
+		s.Len(desc.GetInfo().GetRecentActions(), 2)
+	}, awaitTimeout, pollInterval)
+	require.Equal(t, int64(2), desc.GetInfo().GetActionCount())
+	targetTime := desc.GetInfo().GetTimeSkippingInfo().GetFastForwardInfo().GetTargetTime().AsTime()
+
+	var polls []<-chan fastForwardPollResult
+	var workflowIDs []string
+	for _, action := range desc.GetInfo().GetRecentActions() {
+		workflowID := action.GetStartWorkflowResult().GetWorkflowId()
+		workflowIDs = append(workflowIDs, workflowID)
+		polls = append(polls, pollFastForwardAsync(ctx, env, workflowID, ffID))
+	}
+	require.NotEqual(t, workflowIDs[0], workflowIDs[1])
+	for i, poll := range polls {
+		resp := awaitFastForwardPoll(t, poll)
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED, resp.GetFastForwardPollingResult())
+		require.Equal(t, targetTime, resp.GetFastForwardInfo().GetTargetTime().AsTime(),
+			"workflow inherits the schedule's target, not a new duration from its own start")
+
+		wfDesc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowIDs[i]},
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, wfDesc.GetWorkflowExecutionInfo().GetStatus(),
+			"the 30d timer must not fire past the fast-forward target")
+		require.False(t, wfDesc.GetWorkflowExtendedInfo().GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled())
+	}
+}
+
 func testScheduleTimeSkippingWeekly(
 	t *testing.T,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,

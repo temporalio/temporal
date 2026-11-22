@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -44,18 +45,58 @@ func TestPropagateTimeSkippingToOtherExecution(t *testing.T) {
 		require.True(t, sourceConfig.GetEnabled(), "propagated config must be cloned")
 	})
 
-	t.Run("when propagation is disabled, only virtual time is propagated", func(t *testing.T) {
-		config, state := PropagateTimeSkippingToOtherExecution(&persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{
-				Enabled:            true,
-				DisablePropagation: true,
-			},
-			AccumulatedSkippedDuration: durationpb.New(time.Hour),
-		})
+	// Virtual time always propagates. The config propagates unless propagation is disabled, and it
+	// carries the fast-forward only while time skipping is enabled and fast-forward propagation is set.
+	testCases := []struct {
+		propagation     bool
+		ffPropagation   bool
+		enabled         bool
+		wantConfig      bool
+		wantFastForward bool
+	}{
+		{propagation: true, ffPropagation: true, enabled: true, wantConfig: true, wantFastForward: true},
+		{propagation: true, ffPropagation: true, enabled: false, wantConfig: true},
+		{propagation: true, ffPropagation: false, enabled: true, wantConfig: true},
+		{propagation: true, ffPropagation: false, enabled: false, wantConfig: true},
+		{propagation: false, ffPropagation: true, enabled: true},
+		{propagation: false, ffPropagation: true, enabled: false},
+		{propagation: false, ffPropagation: false, enabled: true},
+		{propagation: false, ffPropagation: false, enabled: false},
+	}
+	for _, tc := range testCases {
+		name := fmt.Sprintf("propagation=%v,ffPropagation=%v,enabled=%v", tc.propagation, tc.ffPropagation, tc.enabled)
+		t.Run(name, func(t *testing.T) {
+			targetTime := time.Date(2027, 1, 1, 17, 0, 0, 0, time.UTC)
+			config, state := PropagateTimeSkippingToOtherExecution(&persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:            tc.enabled,
+					DisablePropagation: !tc.propagation,
+					FastForwardConfig: &commonpb.FastForwardConfig{
+						Id:                           "source-fast-forward",
+						Duration:                     durationpb.New(5 * time.Hour),
+						EnableFastForwardPropagation: tc.ffPropagation,
+					},
+				},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				FastForwardInfo:            &persistencespb.FastForwardInfo{TargetTime: timestamppb.New(targetTime)},
+			})
 
-		require.Nil(t, config)
-		require.Equal(t, time.Hour, state.GetInitialSkippedDuration().AsDuration())
-	})
+			require.Equal(t, time.Hour, state.GetInitialSkippedDuration().AsDuration())
+			if tc.wantConfig {
+				require.NotNil(t, config)
+				require.Equal(t, tc.enabled, config.GetEnabled())
+			} else {
+				require.Nil(t, config)
+			}
+			if tc.wantFastForward {
+				require.Equal(t, "source-fast-forward", config.GetFastForwardConfig().GetId())
+				require.Equal(t, targetTime, state.GetFastForwardTargetTime().AsTime())
+			} else {
+				require.Nil(t, config.GetFastForwardConfig())
+				require.Nil(t, state.GetFastForwardTargetTime())
+			}
+		})
+	}
 }
 
 func TestTimeSkippingInfoForDescribe(t *testing.T) {
