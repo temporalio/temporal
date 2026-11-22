@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -2573,4 +2574,73 @@ func TestAdjustNowWithTimeSkipping(t *testing.T) {
 			require.Equal(t, tc.want, AdjustNowWithTimeSkipping(now, tc.statePropagation))
 		})
 	}
+}
+
+func (s *mutableStateSuite) TestTimeSkippingSearchAttributes() {
+	eventTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	transitionEvent := func(targetTime *timestamppb.Timestamp, disabledAfterFastForward bool) *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
+			EventTime: timestamppb.New(eventTime),
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+				WorkflowExecutionTimeSkippingTransitionedEventAttributes: &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+					TargetTime:               targetTime,
+					DisabledAfterFastForward: disabledAfterFastForward,
+				},
+			},
+		}
+	}
+	setup := func(searchAttributesEnabled bool) {
+		s.mockConfig.TimeSkippingSearchAttributesEnabled = func(string) bool { return searchAttributesEnabled }
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 10},
+			InitialSkippedDuration:     durationpb.New(time.Hour),
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			FastForwardInfo:            &persistencespb.FastForwardInfo{TargetTime: timestamppb.New(eventTime.Add(time.Hour))},
+		}
+		s.mutableState.PopTasks()
+	}
+	searchAttribute := func(key string, valueType enumspb.IndexedValueType) any {
+		value, err := sadefs.DecodeValue(s.mutableState.GetExecutionInfo().GetSearchAttributes()[key], valueType, false)
+		s.Require().NoError(err)
+		return value
+	}
+	visibilityTasks := func() []tasks.Task { return s.mutableState.PopTasks()[tasks.CategoryVisibility] }
+
+	s.Run("Transition_UpdatesSearchAttributesAndUpsertsVisibility", func() {
+		setup(true)
+		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(), transitionEvent(timestamppb.New(eventTime.Add(2*time.Hour)), false)))
+
+		s.Equal(true, searchAttribute(sadefs.TemporalTimeSkippingEnabled, enumspb.INDEXED_VALUE_TYPE_BOOL))
+		s.Equal(time.Hour.Nanoseconds(), searchAttribute(sadefs.TemporalTimeSkippingInitialSkippedDuration, enumspb.INDEXED_VALUE_TYPE_INT))
+		s.Equal((3 * time.Hour).Nanoseconds(), searchAttribute(sadefs.TemporalTimeSkippingAccumulatedSkippedDuration, enumspb.INDEXED_VALUE_TYPE_INT))
+		s.Require().Len(visibilityTasks(), 1)
+	})
+
+	s.Run("DisabledAfterFastForward_SetsEnabledFalse", func() {
+		setup(true)
+		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(), transitionEvent(nil, true)))
+
+		s.Equal(false, searchAttribute(sadefs.TemporalTimeSkippingEnabled, enumspb.INDEXED_VALUE_TYPE_BOOL))
+	})
+
+	s.Run("Unchanged_NoUpsert", func() {
+		setup(true)
+		s.Require().NoError(s.mutableState.upsertTimeSkippingSearchAttributes())
+		s.Require().Len(visibilityTasks(), 1)
+
+		s.Require().NoError(s.mutableState.upsertTimeSkippingSearchAttributes())
+		s.Empty(visibilityTasks())
+	})
+
+	s.Run("FeatureFlagOff_NoSearchAttributes", func() {
+		setup(false)
+		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(), transitionEvent(timestamppb.New(eventTime.Add(2*time.Hour)), false)))
+
+		s.Nil(s.mutableState.GetExecutionInfo().GetSearchAttributes()[sadefs.TemporalTimeSkippingAccumulatedSkippedDuration])
+		s.Empty(visibilityTasks())
+	})
 }

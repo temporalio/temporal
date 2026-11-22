@@ -4061,4 +4061,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		10*365*24*time.Hour,
 		"TimeSkippingMaxAccumulatedDuration caps the total time skipped by an execution.",
 	)
+	TimeSkippingSearchAttributesEnabled = NewNamespaceBoolSetting(
+		"system.timeSkippingSearchAttributesEnabled",
+		false,
+		`TimeSkippingSearchAttributesEnabled makes workflows write the TemporalTimeSkipping* search attributes.
+Enable it only after the visibility schema has been upgraded to include them (MySQL/PostgreSQL v1.16, Elasticsearch v16).`,
+	)
 )

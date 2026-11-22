@@ -3378,6 +3378,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	if tsc, stateProp := event.GetTimeSkippingConfig(), event.GetTimeSkippingStatePropagation(); tsc != nil || stateProp.GetInitialSkippedDuration().AsDuration() > 0 {
 		ms.initTimeSkippingInfo(tsc, stateProp)
+		// The started visibility task reads search attributes when it runs, so no upsert task is needed.
+		ms.updateTimeSkippingSearchAttributes()
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -6188,6 +6190,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			ms.initTimeSkippingInfo(tsc, nil)
 		} else {
 			ms.updateTimeSkippingInfo(tsc)
+		}
+		if err := ms.upsertTimeSkippingSearchAttributes(); err != nil {
+			return err
 		}
 	}
 

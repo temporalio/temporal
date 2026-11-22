@@ -6,6 +6,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -15,9 +16,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -195,6 +198,44 @@ func propagateTimeSkippingToNextRun(
 		FastForwardTargetTime:  util.GetFastForwardTargetTime(),
 	}
 	return newTSC, stateProp
+}
+
+// updateTimeSkippingSearchAttributes syncs the TemporalTimeSkipping* search attributes with
+// TimeSkippingInfo and reports whether they changed.
+func (ms *MutableStateImpl) updateTimeSkippingSearchAttributes() bool {
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if tsi == nil || !ms.IsWorkflow() ||
+		!ms.config.TimeSkippingSearchAttributesEnabled(ms.GetNamespaceEntry().Name().String()) {
+		return false
+	}
+	updated := map[string]*commonpb.Payload{
+		sadefs.TemporalTimeSkippingEnabled: sadefs.MustEncodeValue(
+			tsi.GetConfig().GetEnabled(), enumspb.INDEXED_VALUE_TYPE_BOOL),
+		sadefs.TemporalTimeSkippingInitialSkippedDuration: sadefs.MustEncodeValue(
+			tsi.GetInitialSkippedDuration().AsDuration().Nanoseconds(), enumspb.INDEXED_VALUE_TYPE_INT),
+		sadefs.TemporalTimeSkippingAccumulatedSkippedDuration: sadefs.MustEncodeValue(
+			tsi.GetAccumulatedSkippedDuration().AsDuration().Nanoseconds(), enumspb.INDEXED_VALUE_TYPE_INT),
+	}
+	current := ms.executionInfo.GetSearchAttributes()
+	unchanged := true
+	for key, value := range updated {
+		if !proto.Equal(current[key], value) {
+			unchanged = false
+			break
+		}
+	}
+	if unchanged {
+		return false
+	}
+	ms.updateSearchAttributes(updated)
+	return true
+}
+
+func (ms *MutableStateImpl) upsertTimeSkippingSearchAttributes() error {
+	if !ms.updateTimeSkippingSearchAttributes() {
+		return nil
+	}
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
 // =============================================================================
@@ -608,7 +649,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 		hasSkipTarget,
 		attr.GetDisabledAfterFastForward(),
 	)
-	return nil
+	return ms.upsertTimeSkippingSearchAttributes()
 }
 
 func (ms *MutableStateImpl) regenerateTimerTasksForWorkflowTimeSkipping(

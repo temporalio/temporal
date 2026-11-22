@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -2210,4 +2211,51 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 	s.Less(elapsed, maxTestDuration,
 		"the whole test took %v: %v of that is the fast-forward and settle waits, so the rest is RPC time — the 5min timer must be skipped, not waited out",
 		elapsed, fastForward+settleWindow)
+}
+
+// TestTimeSkipping_SearchAttributes verifies the TemporalTimeSkipping* search attributes are written
+// at start and kept in sync with a time-skipping transition and an options update.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_SearchAttributes() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingSearchAttributesEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	runID := s.startWorkflowWithTimeSkipping(env, tv, 24*time.Hour)
+	awaitVisible := func(condition string) {
+		query := fmt.Sprintf("WorkflowId = '%s' AND %s", tv.WorkflowID(), condition)
+		s.Await(func(s *TimeSkippingTestSuite) {
+			resp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     query,
+			})
+			s.NoError(err)
+			s.Len(resp.GetExecutions(), 1, query)
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+
+	awaitVisible("TemporalTimeSkippingEnabled = true AND TemporalTimeSkippingInitialSkippedDuration = 0 AND TemporalTimeSkippingAccumulatedSkippedDuration = 0")
+
+	// The idle workflow skips to its 1h timer.
+	_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{startTimerCmd("t1", time.Hour)}}, nil
+	})
+	s.NoError(err)
+	awaitVisible(fmt.Sprintf("TemporalTimeSkippingAccumulatedSkippedDuration > %d", (59 * time.Minute).Nanoseconds()))
+
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                env.Namespace().String(),
+		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: false}},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+	awaitVisible("TemporalTimeSkippingEnabled = false")
+
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		Reason:            "test cleanup",
+	})
 }
