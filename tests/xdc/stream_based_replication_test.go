@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
@@ -1824,6 +1825,82 @@ func (s *streamBasedReplicationTestSuite) TestLaneInvalidConfig() {
 	}, 60*time.Second, time.Second)
 }
 
+// TestLegacyIgnoresStaleIsolationEntries adds isolation entries for the suite's namespace while
+// the lane settings are unset, and restarts every stream. Every stream must select the legacy
+// implementation, no lane may be created, and the namespace must keep replicating.
+func (s *streamBasedReplicationTestSuite) TestLegacyIgnoresStaleIsolationEntries() {
+	if s.laneStreams {
+		s.T().Skip("checks the variants that leave the lane settings unset")
+	}
+	captures := make([]*metricstest.Capture, len(s.clusters))
+	for i, c := range s.clusters {
+		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		s.Require().True(ok, "cluster metrics handler does not support capture")
+		captures[i] = captureHandler.StartCapture()
+		s.T().Cleanup(func() { captureHandler.StopCapture(captures[i]) })
+	}
+	stopIsolating := s.isolateSuiteNamespace(0.2)
+	defer stopIsolating()
+	s.awaitStreamRestart(s.clusters[0], laneTestSenderOperation, s.reloadHistoryShards)
+	var workflowIDs []string
+	for range 10 {
+		workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(context.Background()))
+	}
+	s.requireWorkflowsReplicated(workflowIDs)
+
+	for i, capture := range captures {
+		recordings := capture.SnapshotMetric(metrics.ReplicationStreamImplementationSelected.Name())
+		s.NotEmpty(recordings, "cluster %s created no stream", s.clusters[i].ClusterName())
+		for _, recording := range recordings {
+			s.Equal("legacy", recording.Tags["replication_stream_implementation"], "cluster %s selected a lane stream", s.clusters[i].ClusterName())
+		}
+		s.Empty(capture.SnapshotMetric(metrics.ReplicationLaneCreated.Name()), "cluster %s created a lane", s.clusters[i].ClusterName())
+	}
+}
+
+// TestLaneReloadWhileSenderLanesOff turns sender lanes off while a lane holds a backlog,
+// restarts every stream while they are off, and turns them back on with the namespace still
+// isolated. Every workflow must replicate across each step.
+func (s *streamBasedReplicationTestSuite) TestLaneReloadWhileSenderLanesOff() {
+	active := s.clusters[0]
+	workflowIDs, stopSlowLane := s.startLaneBacklog()
+	revert := s.applyAndAwaitRestart(s.senderLanesDisabled())
+	s.awaitStreamRestart(active, laneTestSenderOperation, s.reloadHistoryShards)
+	s.requireWorkflowsReplicated(workflowIDs)
+
+	// A fast lane lets the workflows started after lanes return replicate within the wait.
+	stopSlowLane()
+	stopFastLane := s.isolateSuiteNamespace(1000)
+	defer stopFastLane()
+	s.awaitStreamRestart(active, laneTestSenderOperation, revert)
+	workflowIDs = append(workflowIDs, s.startWorkflowsUntilLaneSendsTasks()...)
+	s.requireWorkflowsReplicated(workflowIDs)
+}
+
+// TestLaneKillSwitch_InvalidImplementationRule makes the sender's implementation rule invalid
+// while a lane has a backlog. The invalid rule rolls only that sender back to the legacy
+// implementation.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_InvalidImplementationRule() {
+	s.runLaneKillSwitchDrill(func() {
+		active := s.clusters[0]
+		var senderRules, receiverRules []dynamicconfig.ReplicationStreamImplementationRule
+		for _, remote := range s.clusters[1:] {
+			senderRules = append(senderRules, dynamicconfig.ReplicationStreamImplementationRule{
+				RemoteCluster: remote.ClusterName(), Implementation: "unknown", ShardPercent: 100,
+			})
+			receiverRules = append(receiverRules, dynamicconfig.ReplicationStreamImplementationRule{
+				RemoteCluster: remote.ClusterName(), Implementation: "lane", ShardPercent: 100,
+			})
+		}
+		s.awaitStreamRestart(active, laneTestSenderOperation, func() {
+			active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamImplementation, dynamicconfig.ReplicationStreamImplementationSettings{
+				Sender:   senderRules,
+				Receiver: receiverRules,
+			})
+		})
+	})
+}
+
 // runLaneKillSwitchDrill isolates the suite's namespace on a slow lane, builds a backlog the
 // lane cannot send within the test's wait, applies a kill switch, and requires every
 // workflow started while isolated to replicate. That only happens if the default lane
@@ -2038,15 +2115,17 @@ func (s *streamBasedReplicationTestSuite) startLaneTestWorkflow(ctx context.Cont
 	return workflowID
 }
 
-// requireWorkflowsReplicated waits until every workflow exists on the standby cluster.
+// requireWorkflowsReplicated waits until the standby cluster has every workflow with the same
+// complete history as the active cluster.
 func (s *streamBasedReplicationTestSuite) requireWorkflowsReplicated(workflowIDs []string) {
 	await.Require(context.Background(), s.T(), func(t *await.T) {
 		for _, workflowID := range workflowIDs {
-			_, err := s.clusters[1].FrontendClient().DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: s.namespaceName,
-				Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-			})
+			execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
+			active, err := completeHistory(t.Context(), s.clusters[0].FrontendClient(), s.namespaceName, execution)
+			require.NoError(t, err)
+			standby, err := completeHistory(t.Context(), s.clusters[1].FrontendClient(), s.namespaceName, execution)
 			require.NoError(t, err, "workflow %s did not replicate", workflowID)
+			protorequire.ProtoEqual(t, active, standby)
 		}
 	}, 60*time.Second, time.Second)
 }

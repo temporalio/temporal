@@ -126,7 +126,7 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementWithContinuousWrites
 	finished = true
 	s.NoError(result.err)
 	s.Positive(result.signals)
-	source, err := retirementHistory(s.T().Context(), active.FrontendClient(), s.namespaceName, execution)
+	source, err := completeHistory(s.T().Context(), active.FrontendClient(), s.namespaceName, execution)
 	s.NoError(err)
 	var signalCount int64
 	for _, event := range source.Events {
@@ -136,7 +136,7 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementWithContinuousWrites
 	}
 	s.Equal(result.signals, signalCount)
 	await.Require(s.T().Context(), s.T(), func(t *await.T) {
-		target, err := retirementHistory(t.Context(), standby.FrontendClient(), s.namespaceName, execution)
+		target, err := completeHistory(t.Context(), standby.FrontendClient(), s.namespaceName, execution)
 		require.NoError(t, err)
 		protorequire.ProtoEqual(t, source, target)
 	}, 45*time.Second, 100*time.Millisecond)
@@ -157,7 +157,7 @@ func retirementMessages(cluster *testcore.TestCluster) []*replicationspb.Workflo
 	return messages
 }
 
-func retirementHistory(ctx context.Context, client workflowservice.WorkflowServiceClient, namespace string, execution *commonpb.WorkflowExecution) (*historypb.History, error) {
+func completeHistory(ctx context.Context, client workflowservice.WorkflowServiceClient, namespace string, execution *commonpb.WorkflowExecution) (*historypb.History, error) {
 	history := &historypb.History{}
 	var token []byte
 	for {
@@ -260,10 +260,10 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfi
 	// Wait for the newer event of every workflow; start events alone would miss the
 	// exact reordering that triggers recovery after a retirement handoff.
 	for _, execution := range executions {
-		source, err := retirementHistory(s.T().Context(), active.FrontendClient(), namespaceName, execution)
+		source, err := completeHistory(s.T().Context(), active.FrontendClient(), namespaceName, execution)
 		s.NoError(err)
 		await.Require(s.T().Context(), s.T(), func(t *await.T) {
-			target, err := retirementHistory(t.Context(), standby.FrontendClient(), namespaceName, execution)
+			target, err := completeHistory(t.Context(), standby.FrontendClient(), namespaceName, execution)
 			require.NoError(t, err)
 			protorequire.ProtoEqual(t, source, target)
 		}, 30*time.Second, 100*time.Millisecond)
