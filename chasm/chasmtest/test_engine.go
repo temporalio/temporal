@@ -37,11 +37,12 @@ type (
 	// well as blocking [PollComponent] with [NotifyExecution], matching the behavior
 	// of the production engine as closely as possible without persistence or shard logic.
 	Engine struct {
-		t          *testing.T
-		registry   *chasm.Registry
-		logger     log.Logger
-		metrics    metrics.Handler
-		timeSource clock.TimeSource
+		t              *testing.T
+		registry       *chasm.Registry
+		logger         log.Logger
+		metrics        metrics.Handler
+		timeSource     clock.TimeSource
+		namespaceNames map[string]string
 		// currentExecutions maps (namespaceID, businessID) to the latest run (running or closed).
 		currentExecutions map[businessKey]*execution
 		// allExecutions maps (namespaceID, businessID, runID) to any run, for lookups by specific RunID.
@@ -88,6 +89,16 @@ func WithTimeSource(ts clock.TimeSource) EngineOption {
 func WithMetricsHandler(handler metrics.Handler) EngineOption {
 	return func(e *Engine) {
 		e.metrics = handler
+	}
+}
+
+// WithNamespaceName supplies a name for the given namespace ID in test contexts.
+func WithNamespaceName(id, name string) EngineOption {
+	return func(e *Engine) {
+		if e.namespaceNames == nil {
+			e.namespaceNames = make(map[string]string)
+		}
+		e.namespaceNames[id] = name
 	}
 }
 
@@ -155,6 +166,9 @@ func (e *Engine) StartExecution(
 	opts ...chasm.TransitionOption,
 ) (chasm.StartExecutionResult, error) {
 	options := constructTransitionOptions(opts...)
+	if options.Speculative {
+		return chasm.StartExecutionResult{}, chasm.ErrSpeculativeStartExecution
+	}
 	bKey := newBusinessKey(ref.ExecutionKey)
 
 	current, hasCurrent := e.currentExecutions[bKey]
@@ -217,7 +231,7 @@ func (e *Engine) UpdateWithStartExecution(
 			if err := conflictPolicyAllowsUpdate(ref, current, options.ConflictPolicy); err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
-			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, options.RequestID)
+			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, options.RequestID, options.Speculative)
 			if err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
@@ -282,7 +296,7 @@ func (e *Engine) UpdateComponent(
 		}
 	}
 
-	return e.updateComponentInExecution(ctx, execution, ref, updateFn, options.RequestID)
+	return e.updateComponentInExecution(ctx, execution, ref, updateFn, options.RequestID, options.Speculative)
 }
 
 func (e *Engine) ReadComponent(
@@ -623,8 +637,12 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		},
 		HandleIsWorkflow: func() bool { return false },
 		HandleGetNamespaceEntry: func() *namespace.Namespace {
+			name := e.namespaceNames[key.NamespaceID]
+			if name == "" {
+				name = key.NamespaceID
+			}
 			return namespace.NewLocalNamespaceForTest(
-				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: key.NamespaceID},
+				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: name},
 				&persistencespb.NamespaceConfig{},
 				cluster.TestCurrentClusterName,
 			)
@@ -691,6 +709,39 @@ func (x *execution) recordRequestID(requestID string) {
 	x.requestIDs[requestID] = struct{}{}
 }
 
+// NodeForRef returns the CHASM tree node backing the execution identified by ref.
+// It is intended for test drivers that dispatch tasks at the node level
+// ([chasm.Node.ExecuteSideEffectTask]), which the [Engine] API does not expose.
+func (e *Engine) NodeForRef(ref chasm.ComponentRef) (*chasm.Node, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.node, nil
+}
+
+// BackendForRef returns the [chasm.MockNodeBackend] backing the execution
+// identified by ref, e.g. to read the earliest pending pure task time via
+// [chasm.MockNodeBackend.LastDeletePureTaskCall].
+func (e *Engine) BackendForRef(ref chasm.ComponentRef) (*chasm.MockNodeBackend, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.backend, nil
+}
+
+// CloseTransaction closes any open transaction on the execution identified by
+// ref, commits its transition count, and runs registered invariant checks.
+// Pair it with node-level dispatch done through [Engine.NodeForRef].
+func (e *Engine) CloseTransaction(ctx context.Context, ref chasm.ComponentRef) error {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return err
+	}
+	return e.closeTransaction(ctx, exec)
+}
+
 // executionForRef looks up an execution by the ref's RunID when present, or falls back
 // to the current run for the business ID when RunID is empty.
 func (e *Engine) executionForRef(ref chasm.ComponentRef) (*execution, error) {
@@ -718,6 +769,7 @@ func (e *Engine) updateComponentInExecution(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	requestID string,
+	speculative bool,
 ) ([]byte, error) {
 	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	component, err := execution.node.Component(mutableCtx, ref)
@@ -729,8 +781,21 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if err = e.closeTransaction(ctx, execution); err != nil {
-		return nil, err
+	decision := chasm.TransitionDecision{PersistNow: true}
+	if speculative {
+		if err = execution.node.ApplySpeculativeTransition(ctx); err != nil {
+			return nil, err
+		}
+		if decision, err = execution.node.SpeculativeTransitionDecision(ctx); err != nil {
+			return nil, err
+		}
+	}
+	// A speculative transition that isn't persisted leaves the transaction open: the next
+	// non-speculative transition closes it and generates the tasks.
+	if decision.PersistNow {
+		if err = e.closeTransaction(ctx, execution); err != nil {
+			return nil, err
+		}
 	}
 	execution.recordRequestID(requestID)
 
@@ -764,8 +829,6 @@ func constructTransitionOptions(opts ...chasm.TransitionOption) chasm.Transition
 	for _, opt := range opts {
 		opt(&options)
 	}
-	// NOTE: TransitionOptions.Speculative is intentionally not implemented here. It is also
-	// unimplemented in the production engine (see the TODO in service/history/chasm_engine.go).
 	return options
 }
 

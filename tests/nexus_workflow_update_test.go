@@ -484,7 +484,7 @@ func (s *NexusWorkflowUpdateTestSuite) assertCallerLinkToUpdate(
 ) {
 	env := caller.env
 	operationLinks := s.operationLinks(caller, op)
-	s.Require().Len(operationLinks, 1)
+	s.Len(operationLinks, 1)
 	targetLink := operationLinks[0].GetWorkflowEvent()
 	s.NotNil(targetLink)
 	s.Equal(env.Namespace().String(), targetLink.GetNamespace())
@@ -558,7 +558,7 @@ func (s *NexusWorkflowUpdateTestSuite) assertUpdateAcceptedCallbackLink(
 	acceptedEvent := s.findHistoryEvent(caller.env, targetWorkflowID, targetRunID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 	s.NotNil(acceptedEvent)
 	acceptedCallbacks := acceptedEvent.GetWorkflowExecutionUpdateAcceptedEventAttributes().GetAcceptedRequest().GetCompletionCallbacks()
-	s.Require().Len(acceptedCallbacks, 1)
+	s.Len(acceptedCallbacks, 1)
 	protorequire.ProtoSliceEqual(s.T(), []*commonpb.Link{wantCallerLink}, acceptedCallbacks[0].GetLinks())
 }
 
@@ -651,7 +651,7 @@ func (s *NexusWorkflowUpdateTestSuite) assertReappliedUpdateInNewRun(
 			if attrs.GetRequest().GetMeta().GetUpdateId() == updateID {
 				found = true
 				admittedCallbacks := attrs.GetRequest().GetCompletionCallbacks()
-				s.Require().Len(admittedCallbacks, 1, "reapplied update should preserve completion callbacks")
+				s.Len(admittedCallbacks, 1, "reapplied update should preserve completion callbacks")
 				protorequire.ProtoSliceEqual(s.T(), []*commonpb.Link{wantCallerLink}, admittedCallbacks[0].GetLinks())
 			}
 		}
@@ -1984,11 +1984,11 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowNexusHandlerCallbackLinks(sta
 
 	// TODO(https://github.com/temporalio/temporal/issues/11958): Callback invocations should have their own request ID, since its used as an idempotency key.
 	startRequestInfo, ok := desc.GetWorkflowExtendedInfo().GetRequestIdInfos()[cbInfo.GetRequestId()]
-	s.Require().True(ok, "callback request ID should be the one that started the workflow")
+	s.True(ok, "callback request ID should be the one that started the workflow")
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startRequestInfo.GetEventType())
 
 	gotLinks := s.Rcv(inboundLinks)
-	s.Require().Len(gotLinks, 1)
+	s.Len(gotLinks, 1)
 	gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
 	s.NoError(err)
 	protorequire.ProtoEqual(s.T(), &commonpb.Link_Callback{
@@ -2103,7 +2103,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateNexusHandlerCallbackLin
 	// Outbound half: the handler was handed a Link_Callback addressing the Update's callback. The
 	// component path is what distinguishes it from a callback attached to the workflow itself.
 	gotLinks := s.Rcv(inboundLinks)
-	s.Require().Len(gotLinks, 1)
+	s.Len(gotLinks, 1)
 	gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
 	s.NoError(err)
 
@@ -2179,7 +2179,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinkOnUpdateReadmittedAfterRegistryCl
 		wf,
 		"initial input",
 	)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// Delay starting the worker so the update cannot be accepted before the shard reload.
 
@@ -2236,9 +2236,9 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinkOnUpdateReadmittedAfterRegistryCl
 	case <-time.After(10 * time.Second):
 		s.FailNow("timed out waiting for the Update response")
 	}
-	s.Require().NoError(result.err)
+	s.NoError(result.err)
 	requestIDRef := result.response.GetLink().GetWorkflowEvent().GetRequestIdRef()
-	s.Require().NotNil(requestIDRef, "link should be a RequestIdRef")
+	s.NotNil(requestIDRef, "link should be a RequestIdRef")
 	s.Equal(requestID, requestIDRef.GetRequestId())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, requestIDRef.GetEventType())
 
@@ -2263,7 +2263,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates(standalone boo
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, wf, "initial input")
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	callbackLink := &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
@@ -2306,19 +2306,19 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates(standalone boo
 
 	firstRequestID := uuid.NewString()
 	firstResp, err := sendUpdate(firstRequestID, nil)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// Second call reuses the same update ID once the first is already accepted, so
 	// it resolves immediately as a duplicate rather than waiting on a new WFT.
 	secondRequestID := uuid.NewString()
 	secondResp, err := sendUpdate(secondRequestID, []*commonpb.Link{callbackLink})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	requireRequestIDLink := func(resp *workflowservice.UpdateWorkflowExecutionResponse, requestID string, eventType enumspb.EventType) {
 		requestIDRef := resp.GetLink().GetWorkflowEvent().GetRequestIdRef()
-		s.Require().NotNil(requestIDRef, "link should be a RequestIdReference")
-		s.Require().Equal(requestID, requestIDRef.GetRequestId())
-		s.Require().Equal(eventType, requestIDRef.GetEventType())
+		s.NotNil(requestIDRef, "link should be a RequestIdReference")
+		s.Equal(requestID, requestIDRef.GetRequestId())
+		s.Equal(eventType, requestIDRef.GetEventType())
 	}
 	requireRequestIDLink(firstResp, firstRequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 	requireRequestIDLink(secondResp, secondRequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
@@ -2336,15 +2336,15 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates(standalone boo
 		},
 		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// Verify history has the OptionsUpdated event with the second requestID attached.
 	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	updatedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
 	updateOptions := updatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetWorkflowUpdateOptions()
-	s.Require().Len(updateOptions, 1)
-	s.Require().Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
-	s.Require().Len(updateOptions[0].GetAttachedCompletionCallbacks(), 1)
+	s.Len(updateOptions, 1)
+	s.Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
+	s.Len(updateOptions[0].GetAttachedCompletionCallbacks(), 1)
 	protorequire.ProtoSliceEqual(
 		s.T(),
 		[]*commonpb.Link{callbackLink},
@@ -2353,13 +2353,13 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates(standalone boo
 
 	thirdRequestID := uuid.NewString()
 	thirdResp, err := sendUpdate(thirdRequestID, nil)
-	s.Require().NoError(err)
+	s.NoError(err)
 	eventRef := thirdResp.GetLink().GetWorkflowEvent().GetEventRef()
-	s.Require().NotNil(eventRef, "link should be an EventReference")
+	s.NotNil(eventRef, "link should be an EventReference")
 
 	updateAcceptedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
-	s.Require().Equal(updateAcceptedEvent.EventId, eventRef.EventId, "eventID should match the Accepted eventID of the original request")
-	s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, eventRef.EventType)
+	s.Equal(updateAcceptedEvent.EventId, eventRef.EventId, "eventID should match the Accepted eventID of the original request")
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, eventRef.EventType)
 
 	// Clean up.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
@@ -2391,7 +2391,7 @@ func (s *NexusWorkflowUpdateTestSuite) admitUpdateWithCallback(
 			},
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	return resp.GetResponse().GetStage()
 }
 
@@ -2411,13 +2411,13 @@ func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfAdmitt
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, wf, "initial input")
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	firstRequestID, secondRequestID := uuid.NewString(), uuid.NewString()
-	s.Require().Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
 		s.admitUpdateWithCallback(env, execution, updateID, firstRequestID, "http://localhost:9999/first"))
-	s.Require().Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
 		s.admitUpdateWithCallback(env, execution, updateID, secondRequestID, "http://localhost:9999/second"))
 
 	s.startWorker(env, taskQueue, wf)
@@ -2429,23 +2429,23 @@ func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfAdmitt
 		},
 		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// The first request's callbacks are in the UpdateAccepted event; the second request's are in an
 	// OptionsUpdated event.
 	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	acceptedRequest := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED).
 		GetWorkflowExecutionUpdateAcceptedEventAttributes().GetAcceptedRequest()
-	s.Require().Equal(firstRequestID, acceptedRequest.GetRequestId())
-	s.Require().Len(acceptedRequest.GetCompletionCallbacks(), 1)
-	s.Require().Equal("http://localhost:9999/first", acceptedRequest.GetCompletionCallbacks()[0].GetNexus().GetUrl())
+	s.Equal(firstRequestID, acceptedRequest.GetRequestId())
+	s.Len(acceptedRequest.GetCompletionCallbacks(), 1)
+	s.Equal("http://localhost:9999/first", acceptedRequest.GetCompletionCallbacks()[0].GetNexus().GetUrl())
 
 	updateOptions := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED).
 		GetWorkflowExecutionOptionsUpdatedEventAttributes().GetWorkflowUpdateOptions()
-	s.Require().Len(updateOptions, 1)
-	s.Require().Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
-	s.Require().Len(updateOptions[0].GetAttachedCompletionCallbacks(), 1)
-	s.Require().Equal("http://localhost:9999/second", updateOptions[0].GetAttachedCompletionCallbacks()[0].GetNexus().GetUrl())
+	s.Len(updateOptions, 1)
+	s.Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
+	s.Len(updateOptions[0].GetAttachedCompletionCallbacks(), 1)
+	s.Equal("http://localhost:9999/second", updateOptions[0].GetAttachedCompletionCallbacks()[0].GetNexus().GetUrl())
 
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
 }
@@ -2468,13 +2468,13 @@ func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfReappl
 	// admitted in the new run.
 	firstWorker := worker.New(env.SdkClient(), taskQueue, worker.Options{})
 	firstWorker.RegisterWorkflow(wf)
-	s.Require().NoError(firstWorker.Start())
+	s.NoError(firstWorker.Start())
 	s.T().Cleanup(firstWorker.Stop)
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        taskQueue,
 		TaskQueue: taskQueue,
 	}, wf, "initial input")
-	s.Require().NoError(err)
+	s.NoError(err)
 	firstRequestID := uuid.NewString()
 	s.admitUpdateWithCallback(env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
 		updateID, firstRequestID, "http://localhost:9999/first")
@@ -2488,14 +2488,14 @@ func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfReappl
 		RequestId:                 uuid.NewString(),
 		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, run.GetID(), run.GetRunID()),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	newRunID := resetResp.GetRunId()
 
 	newExecution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}
 	secondRequestID := uuid.NewString()
-	s.Require().Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
 		s.admitUpdateWithCallback(env, newExecution, updateID, secondRequestID, "http://localhost:9999/second"))
-	s.Require().Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
 		s.admitUpdateWithCallback(env, newExecution, updateID, firstRequestID, "http://localhost:9999/first"))
 
 	s.startWorker(env, taskQueue, wf)
@@ -2509,7 +2509,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfReappl
 		},
 		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// The new run attaches only the second request's callbacks, in a single OptionsUpdated event.
 	// The first request's callbacks were attached by the reapplied UpdateAdmitted event.
@@ -2518,10 +2518,10 @@ func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfReappl
 	for _, event := range hist {
 		updateOptions = append(updateOptions, event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetWorkflowUpdateOptions()...)
 	}
-	s.Require().Len(updateOptions, 1)
-	s.Require().Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
-	s.Require().Len(updateOptions[0].GetAttachedCompletionCallbacks(), 1)
-	s.Require().Equal("http://localhost:9999/second", updateOptions[0].GetAttachedCompletionCallbacks()[0].GetNexus().GetUrl())
+	s.Len(updateOptions, 1)
+	s.Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
+	s.Len(updateOptions[0].GetAttachedCompletionCallbacks(), 1)
+	s.Equal("http://localhost:9999/second", updateOptions[0].GetAttachedCompletionCallbacks()[0].GetNexus().GetUrl())
 
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), newRunID, "stop", nil))
 }

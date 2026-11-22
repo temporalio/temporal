@@ -2475,6 +2475,10 @@ func (ms *MutableStateImpl) HasAnyBufferedEvent(filter historybuilder.BufferedEv
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 
+func (ms *MutableStateImpl) NumBufferedEvents() int {
+	return ms.hBuilder.NumBufferedEvents()
+}
+
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
 // first event ID is the ID of a batch of events in a single history events record
 func (ms *MutableStateImpl) GetLastFirstEventIDTxnID() (int64, int64) {
@@ -7688,10 +7692,30 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 // However, certain in-memory changes (e.g. speculative workflow task) won't be cleared before releasing
 // the lock and have to be excluded from the check.
 func (ms *MutableStateImpl) IsDirty() bool {
+	if ms.isNonChasmDirty() {
+		return true
+	}
+	if !ms.chasmTree.IsDirty() {
+		return false
+	}
+	_, speculative := ms.chasmTree.SpeculativeTransitionFailoverVersion()
+	return !speculative
+}
+
+func (ms *MutableStateImpl) isNonChasmDirty() bool {
 	return ms.hBuilder.IsDirty() ||
 		len(ms.InsertTasks) > 0 ||
-		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty()
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+}
+
+// ValidateChasmSpeculativeTransition returns an error if the current transaction changed state outside the
+// CHASM tree. Only CHASM tree changes can stay in memory.
+func (ms *MutableStateImpl) ValidateChasmSpeculativeTransition() error {
+	if ms.isNonChasmDirty() {
+		// This line means there is a Dev error.
+		return serviceerror.NewInternal("speculative CHASM transition changed state outside the CHASM tree")
+	}
+	return nil
 }
 
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and

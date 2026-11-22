@@ -225,6 +225,7 @@ type (
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
 		HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool
+		NumBufferedEvents() int
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
@@ -355,6 +356,7 @@ type (
 		GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask
 
 		IsDirty() bool
+		ValidateChasmSpeculativeTransition() error
 		IsTransitionHistoryEnabled() bool
 		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)

@@ -506,13 +506,18 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	env := testcore.NewEnv(s.T())
 	testname := s.T().Name()
 	var failures atomic.Int32
+	handlerErrors := make(chan error, 1)
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		err := workflow.SetQueryHandler(ctx, testname, func() (string, error) {
 			return "", nil
 		})
 
 		if err != nil {
-			s.T().Fatalf("SetQueryHandler failed: %s", err.Error())
+			select {
+			case handlerErrors <- err:
+			default:
+			}
+			return "", err
 		}
 		failures.Add(1)
 		// force workflow task to fail
@@ -536,10 +541,17 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.NotEmpty(workflowRun.GetRunID())
 
+	var handlerErr error
 	s.AwaitTrue(func() bool {
 		// wait for workflow task to fail 3 times
-		return failures.Load() >= 3
+		select {
+		case handlerErr = <-handlerErrors:
+			return true
+		default:
+			return failures.Load() >= 3
+		}
 	}, 10*time.Second, 50*time.Millisecond)
+	s.NoError(handlerErr, "SetQueryHandler failed")
 
 	_, err = env.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)

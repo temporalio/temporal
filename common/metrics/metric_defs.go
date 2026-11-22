@@ -641,10 +641,29 @@ const (
 	ScheduleMissedReasonNotBuffered      = "not_buffered"
 	ScheduleMissedReasonBufferExpired    = "buffer_expired"
 	ScheduleActionRunningTag             = "action_running"
+	ScheduleActionRunningNone            = "none"
 	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
 	ScheduleMigrationDirectionToChasm    = "to_chasm"
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
+
+// ScheduleSDKCompatTags returns the tags the Go SDK attaches to every metric
+// emitted from a workflow (see RootTags in the SDK), set to the SDK's "none"
+// value. V1 schedules emit via the SDK workflow metrics handler while V2 emits
+// via the server handler; when both run in one process they share a Prometheus
+// registry, which rejects a metric name whose label set differs between
+// emissions. V2 attaches these so both backends share one label set.
+func ScheduleSDKCompatTags() []Tag {
+	return []Tag{
+		StringTag("workflow_type", scheduleSDKNoneValue),
+		StringTag("worker_type", scheduleSDKNoneValue),
+		StringTag("activity_type", scheduleSDKNoneValue),
+		StringTag("task_queue", scheduleSDKNoneValue),
+		StringTag("client_name", scheduleSDKNoneValue),
+	}
+}
+
+const scheduleSDKNoneValue = "none"
 
 // Matching task dropped reason tag values
 const (
@@ -1409,6 +1428,15 @@ var (
 	WorkflowTaskCompletionBufferLost = NewCounterDef(
 		"workflow_task_completion_buffer_lost",
 		WithDescription("Paginated workflow task completions aborted because the buffer was lost."),
+	)
+
+	WorkflowHeartbeatNotificationBufferedInput = NewCounterDef(
+		"workflow_heartbeat_notification_buffered_input",
+		WithDescription("Events buffered during a started workflow task that could trigger a workflow-heartbeat notification."),
+	)
+	WorkflowHeartbeatNotificationEstimatedFirstBufferedInput = NewCounterDef(
+		"workflow_heartbeat_notification_estimated_first_buffered_input",
+		WithDescription("The first buffered event to initiate a workflow-heartbeat notification."),
 	)
 
 	// Matching

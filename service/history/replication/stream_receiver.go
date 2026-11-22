@@ -224,12 +224,9 @@ func (r *StreamReceiverImpl) Key() ClusterShardKeyPair {
 
 func (r *StreamReceiverImpl) sendEventLoop() error {
 	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			metrics.ReplicationStreamPanic.With(r.MetricsHandler).Record(1)
-		}
-	}()
-	defer log.CapturePanic(r.logger, &panicErr)
+	defer log.CapturePanicWithHook(r.logger, &panicErr, func(error) {
+		metrics.ReplicationStreamPanic.With(r.MetricsHandler).Record(1)
+	})
 
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
@@ -255,12 +252,9 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 
 func (r *StreamReceiverImpl) recvEventLoop() error {
 	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			metrics.ReplicationStreamPanic.With(r.MetricsHandler).Record(1)
-		}
-	}()
-	defer log.CapturePanic(r.logger, &panicErr)
+	defer log.CapturePanicWithHook(r.logger, &panicErr, func(error) {
+		metrics.ReplicationStreamPanic.With(r.MetricsHandler).Record(1)
+	})
 
 	err := r.processMessages(r.stream)
 	if err == nil {

@@ -119,11 +119,11 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterWorkflowComp
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
-	s.Require().NoError(err)
-	s.Require().NoError(workflowRun.Get(ctx, nil))
+	s.NoError(err)
+	s.NoError(workflowRun.Get(ctx, nil))
 
 	err = env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false)
-	s.Require().ErrorContains(err, "workflow execution already completed")
+	s.ErrorContains(err, "workflow execution already completed")
 }
 
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry(apiName string) {
@@ -280,7 +280,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 		ID:        env.Tv().WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	await.Require(ctx, s.T(), func(t *await.T) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -294,7 +294,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()},
 		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	await.Require(ctx, s.T(), func(t *await.T) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -305,7 +305,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 		require.NotNil(t, description.PendingActivities[0].PauseInfo)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	s.Require().NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
+	s.NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	// keepPaused=false must clear both the paused flag and its associated metadata.
 	await.Require(ctx, s.T(), func(t *await.T) {
@@ -320,7 +320,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 
 	s.Snd(activityCompleteCh, struct{}{})
 
-	s.Require().NoError(workflowRun.Get(ctx, nil))
+	s.NoError(workflowRun.Get(ctx, nil))
 	s.Equal(int32(1), startedActivityCount.Load())
 }
 
@@ -349,7 +349,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 		ID:        env.Tv().WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	var activityStartedAt time.Time
 	await.Require(ctx, s.T(), func(t *await.T) {
@@ -367,7 +367,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()},
 		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	await.Require(ctx, s.T(), func(t *await.T) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -384,20 +384,20 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 	}, 5*time.Second, 100*time.Millisecond)
 
 	description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.Require().NoError(err)
-	s.Require().Len(description.GetPendingActivities(), 1)
+	s.NoError(err)
+	s.Len(description.GetPendingActivities(), 1)
 	s.True(description.PendingActivities[0].Paused)
 
-	s.Require().NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
+	s.NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	workflowResultCtx, workflowResultCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer workflowResultCancel()
 	err = workflowRun.Get(workflowResultCtx, nil)
-	s.Require().Error(err)
+	s.Error(err)
 	var activityErr *temporal.ActivityError
-	s.Require().ErrorAs(err, &activityErr)
+	s.ErrorAs(err, &activityErr)
 	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
-	s.Require().True(ok)
+	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
 }
 

@@ -3433,6 +3433,20 @@ func (mr *MockMutableStateMockRecorder) Now() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockMutableState)(nil).Now))
 }
 
+// NumBufferedEvents mocks base method.
+func (m *MockMutableState) NumBufferedEvents() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumBufferedEvents")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumBufferedEvents indicates an expected call of NumBufferedEvents.
+func (mr *MockMutableStateMockRecorder) NumBufferedEvents() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).NumBufferedEvents))
+}
+
 // PopTasks mocks base method.
 func (m *MockMutableState) PopTasks() map[tasks.Category][]tasks.Task {
 	m.ctrl.T.Helper()
@@ -3977,6 +3991,20 @@ func (m *MockMutableState) ValidateCallbackAddition(inFlight []workflow1.Callbac
 func (mr *MockMutableStateMockRecorder) ValidateCallbackAddition(inFlight, addition any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCallbackAddition", reflect.TypeOf((*MockMutableState)(nil).ValidateCallbackAddition), inFlight, addition)
+}
+
+// ValidateChasmSpeculativeTransition mocks base method.
+func (m *MockMutableState) ValidateChasmSpeculativeTransition() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateChasmSpeculativeTransition")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateChasmSpeculativeTransition indicates an expected call of ValidateChasmSpeculativeTransition.
+func (mr *MockMutableStateMockRecorder) ValidateChasmSpeculativeTransition() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateChasmSpeculativeTransition", reflect.TypeOf((*MockMutableState)(nil).ValidateChasmSpeculativeTransition))
 }
 
 // VisitUpdates mocks base method.
