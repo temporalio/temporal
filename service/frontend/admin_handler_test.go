@@ -3195,3 +3195,96 @@ func (s *adminHandlerSuite) TestCountExecutions() {
 		s.ErrorAs(err, &invalidArg)
 	})
 }
+
+func TestAdminBatchWorkflowID(t *testing.T) {
+	t.Parallel()
+
+	refresh := func(namespaceName string, allNamespaces bool) *adminservice.StartAdminBatchOperationRequest {
+		return &adminservice.StartAdminBatchOperationRequest{
+			Namespace: namespaceName,
+			JobId:     "repair",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{AllNamespaces: allNamespaces},
+			},
+		}
+	}
+
+	t.Run("single namespace", func(t *testing.T) {
+		require.Equal(t, "ns-1:repair", adminBatchWorkflowID(refresh("ns-1", false)))
+	})
+	t.Run("all namespaces", func(t *testing.T) {
+		require.Equal(t, "all-namespaces-repair", adminBatchWorkflowID(refresh("", true)))
+	})
+	t.Run("all namespaces differs from a namespace named all-namespaces", func(t *testing.T) {
+		require.NotEqual(t,
+			adminBatchWorkflowID(refresh("all-namespaces", false)),
+			adminBatchWorkflowID(refresh("", true)),
+		)
+	})
+}
+
+func TestValidateAdminBatchOperation_AllNamespaces(t *testing.T) {
+	t.Parallel()
+
+	request := func(modify func(*adminservice.StartAdminBatchOperationRequest)) *adminservice.StartAdminBatchOperationRequest {
+		req := &adminservice.StartAdminBatchOperationRequest{
+			VisibilityQuery: "WorkflowType='MyWorkflow'",
+			JobId:           "job",
+			Reason:          "reason",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{AllNamespaces: true},
+			},
+		}
+		modify(req)
+		return req
+	}
+
+	testCases := []struct {
+		name    string
+		request *adminservice.StartAdminBatchOperationRequest
+		wantErr string
+	}{
+		{name: "refresh across all namespaces", request: request(func(*adminservice.StartAdminBatchOperationRequest) {})},
+		{
+			name:    "namespace is ignored",
+			request: request(func(r *adminservice.StartAdminBatchOperationRequest) { r.Namespace = "ns-1" }),
+		},
+		{
+			name: "executions instead of query",
+			request: request(func(r *adminservice.StartAdminBatchOperationRequest) {
+				r.VisibilityQuery = ""
+				r.Executions = []*commonpb.WorkflowExecution{{WorkflowId: "wf"}}
+			}),
+			wantErr: "a query across all namespaces requires a visibility query",
+		},
+		{
+			name:    "whitespace-only query",
+			request: request(func(r *adminservice.StartAdminBatchOperationRequest) { r.VisibilityQuery = "  " }),
+			wantErr: "a query across all namespaces requires a visibility query",
+		},
+		{
+			name:    "custom search attribute in query",
+			request: request(func(r *adminservice.StartAdminBatchOperationRequest) { r.VisibilityQuery = "Keyword01='x'" }),
+			wantErr: "cannot filter on custom search attributes",
+		},
+		{
+			name: "neither namespace nor all namespaces",
+			request: request(func(r *adminservice.StartAdminBatchOperationRequest) {
+				r.GetRefreshTasksOperation().AllNamespaces = false
+			}),
+			wantErr: "must provide required parameters",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateAdminBatchOperation(tc.request)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}

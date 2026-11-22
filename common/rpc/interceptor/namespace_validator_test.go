@@ -1272,3 +1272,59 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_LifecycleRequest
 		})
 	s.ErrorIs(err, errBothNamespaceIDAndNameSet)
 }
+
+// Test_Intercept_StartAdminBatchOperation covers that a refresh across all namespaces ignores
+// Namespace, while any other admin batch still requires it.
+func (s *namespaceValidatorSuite) Test_Intercept_StartAdminBatchOperation() {
+	testCases := []struct {
+		name    string
+		req     *adminservice.StartAdminBatchOperationRequest
+		wantErr error
+	}{
+		{
+			name: "all namespaces without namespace",
+			req: &adminservice.StartAdminBatchOperationRequest{
+				Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+					RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{AllNamespaces: true},
+				},
+			},
+		},
+		{
+			name: "all namespaces with a namespace that is not checked",
+			req: &adminservice.StartAdminBatchOperationRequest{
+				Namespace: "not-registered",
+				Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+					RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{AllNamespaces: true},
+				},
+			},
+		},
+		{name: "neither namespace nor all namespaces", req: &adminservice.StartAdminBatchOperationRequest{}, wantErr: errNamespaceNotSet},
+	}
+	for _, testCase := range testCases {
+		s.Run(testCase.name, func() {
+			nvi := NewNamespaceValidatorInterceptor(
+				s.mockRegistry,
+				dynamicconfig.GetBoolPropertyFn(false),
+				dynamicconfig.GetIntPropertyFn(100),
+				nil,
+			)
+			handlerCalled := false
+			_, err := nvi.StateValidationIntercept(
+				context.Background(),
+				testCase.req,
+				&grpc.UnaryServerInfo{FullMethod: api.AdminServicePrefix + "StartAdminBatchOperation"},
+				func(context.Context, any) (any, error) {
+					handlerCalled = true
+					return nil, nil
+				},
+			)
+			if testCase.wantErr != nil {
+				s.ErrorIs(err, testCase.wantErr)
+				s.False(handlerCalled)
+				return
+			}
+			s.NoError(err)
+			s.True(handlerCalled)
+		})
+	}
+}

@@ -9,12 +9,15 @@ import (
 	"github.com/google/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -24,6 +27,7 @@ import (
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type AdminBatchRefreshWorkflowTasksTestSuite struct {
@@ -331,4 +335,57 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0
 		},
 	})
 	s.NoError(err, "admin batch operation should succeed because it uses a separate limit")
+}
+
+// TestTdbgRefreshTasks_AllNamespaces runs one batch job over all namespaces and verifies it
+// refreshes the matching executions in every namespace.
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_AllNamespaces() {
+	// The batch workflow runs on the system namespace's per-namespace worker.
+	env := s.newTestEnv(testcore.WithWorkerService("batch operations"))
+	workflowTypeName := "admin-batch-refresh-wf-" + uuid.NewString()
+	query := fmt.Sprintf("WorkflowType = '%s'", workflowTypeName)
+	startWorkflows := func(ns string, count int) {
+		for range count {
+			_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:          uuid.NewString(),
+				Namespace:          ns,
+				WorkflowId:         "admin-batch-refresh-" + uuid.NewString(),
+				WorkflowType:       &commonpb.WorkflowType{Name: workflowTypeName},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "admin-batch-refresh-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				WorkflowRunTimeout: durationpb.New(time.Hour),
+			})
+			s.NoError(err)
+		}
+		s.Await(func(s *AdminBatchRefreshWorkflowTasksTestSuite) {
+			resp, err := env.AdminClient().CountExecutions(s.Context(), &adminservice.CountExecutionsRequest{Namespace: ns, Query: query})
+			s.NoError(err)
+			s.Equal(int64(count), resp.GetCount())
+		}, 20*time.Second, 500*time.Millisecond)
+	}
+	ns, externalNS := env.Namespace().String(), env.ExternalNamespace().String()
+	startWorkflows(ns, 2)
+	startWorkflows(externalNS, 1)
+	startWorkflows(primitives.SystemLocalNamespace, 1)
+
+	jobID := uuid.NewString()
+	s.NoError(s.runTdbg(env,
+		"--"+tdbg.FlagYes,
+		"execution", "refresh-tasks",
+		"--"+tdbg.FlagAllNamespaces,
+		"--"+tdbg.FlagVisibilityQuery, query,
+		"--"+tdbg.FlagReason, "test refresh tasks across all namespaces",
+		"--"+tdbg.FlagJobID, jobID,
+	))
+
+	s.Await(func(s *AdminBatchRefreshWorkflowTasksTestSuite) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: primitives.SystemLocalNamespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: batcher.AllNamespacesJobIDPrefix + jobID},
+		})
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+		var stats batcher.BatchOperationStats
+		s.NoError(payload.Decode(resp.GetWorkflowExecutionInfo().GetMemo().GetFields()[batcher.BatchOperationStatsMemo], &stats))
+		s.Equal(batcher.BatchOperationStats{NumSuccess: 4}, stats)
+	}, 60*time.Second, time.Second)
 }

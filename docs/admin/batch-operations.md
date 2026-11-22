@@ -54,4 +54,21 @@ Batch Refresh Workflow Tasks started successfully for Job ID: payments:batch-ref
 
 This command can run in either the active or passive cluster of a global target namespace. Refreshing tasks on the passive cluster is an intended use: the batch operates on workflow state replicated to that cluster.
 
+### Refresh tasks across all namespaces
+
+Add `--all-namespaces` to refresh tasks for the workflows matching `--query` in every namespace, including `temporal-system`, with one batch job. `--query` is required, and `--workflow-id` and `--run-id` are rejected. `--namespace` is ignored, so a namespace set through `TEMPORAL_CLI_NAMESPACE` does not need to be unset. The query can only use system search attributes (such as `ExecutionStatus`, `StartTime`, `TaskQueue`) and predefined search attributes; tdbg and the Admin API reject a blank query or a query that uses any other field, including raw custom field names such as `Keyword01`. Set an accurate query so the job includes only the executions that need a refresh.
+
+Unlike a query in one namespace, an all-namespaces query also matches executions whose `TemporalNamespaceDivision` is set: schedules, batch jobs, worker deployments, and CHASM executions. Add `TemporalNamespaceDivision IS NULL` to skip them. It does not skip `temporal-system` workflows that leave `TemporalNamespaceDivision` unset, such as scanners, so the query can still match those:
+
+```sh
+tdbg execution refresh-tasks \
+  --all-namespaces \
+  --query "ExecutionStatus='Running' AND StartTime < '2026-11-20T00:00:00Z' AND TemporalNamespaceDivision IS NULL" \
+  --reason "recover stuck workflow tasks"
+```
+
+The confirmation prompt shows the number of matching executions across all namespaces and states that `temporal-system` is included. A successful response prints a workflow ID of the form `all-namespaces-<job-id>`.
+
+Only task refresh supports all namespaces: the Admin API field is `BatchOperationRefreshTasks.all_namespaces`. Delegated termination and deletion must run in each target namespace's active cluster; start one `delegated-batch` per namespace instead.
+
 Each command has one confirmation prompt. The global `--yes` flag skips it.

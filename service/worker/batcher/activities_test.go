@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -2219,4 +2220,69 @@ func (s *activitiesSuite) processSingleTaskForTest(batchOperation *batchspb.Batc
 	}
 	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
 	return a.processSingleTask(context.Background(), batchOperation, "ns", t, limiter, s.mockFrontendClient, log.NewTestLogger())
+}
+
+func (s *activitiesSuite) TestFetchAllNamespacesPage() {
+	ctx := context.Background()
+	config := batchProcessorConfig{adjustedQuery: "WorkflowType='MyWorkflow'"}
+	listRequest := func(pageToken []byte) *adminservice.ListExecutionsRequest {
+		return &adminservice.ListExecutionsRequest{Query: config.adjustedQuery, PageSize: pageSize, NextPageToken: pageToken}
+	}
+
+	s.Run("lists executions across all namespaces", func() {
+		mockAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+		executions := []*adminservice.VisibilityExecutionInfo{
+			{NamespaceId: "ns-1-id", BusinessId: "wf-1"},
+			{NamespaceId: "ns-2-id", BusinessId: "wf-2"},
+		}
+		mockAdminClient.EXPECT().ListExecutions(gomock.Any(), listRequest([]byte("page-2"))).Return(
+			&adminservice.ListExecutionsResponse{Executions: executions, NextPageToken: []byte("page-3")}, nil)
+
+		p, err := fetchAllNamespacesPage(ctx, mockAdminClient, config, []byte("page-2"), 1)
+		s.Require().NoError(err)
+		s.Equal(executions, p.adminExecutionInfos)
+		s.Equal([]byte("page-3"), p.nextPageToken)
+		s.Equal(1, p.pageNumber)
+	})
+
+	s.Run("invalid query is not retryable", func() {
+		mockAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+		mockAdminClient.EXPECT().ListExecutions(gomock.Any(), listRequest(nil)).Return(
+			nil, serviceerror.NewInvalidArgument("invalid search attribute: CustomerId"))
+
+		_, err := fetchAllNamespacesPage(ctx, mockAdminClient, config, nil, 0)
+		var appErr *temporal.ApplicationError
+		s.Require().ErrorAs(err, &appErr)
+		s.True(appErr.NonRetryable())
+	})
+}
+
+func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_AllNamespaces() {
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	a := &activities{activityDeps: activityDeps{HistoryClient: mockHistoryClient}}
+	batchOperation := &batchspb.BatchOperationInput{
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{AllNamespaces: true},
+			},
+		},
+	}
+	testTask := task{adminExecutionInfo: &adminservice.VisibilityExecutionInfo{
+		NamespaceId: "ns-2-id",
+		ArchetypeId: 7,
+		BusinessId:  "wf-id",
+		RunId:       "run-id",
+	}}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
+
+	mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: "ns-2-id",
+		ArchetypeId: 7,
+		Request: &adminservice.RefreshWorkflowTasksRequest{
+			NamespaceId: "ns-2-id",
+			Execution:   &commonpb.WorkflowExecution{WorkflowId: "wf-id", RunId: "run-id"},
+		},
+	}).Return(&historyservice.RefreshWorkflowTasksResponse{}, nil)
+
+	s.NoError(a.processAdminTask(context.Background(), batchOperation, testTask, limiter))
 }

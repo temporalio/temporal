@@ -68,6 +68,9 @@ type batchProcessorConfig struct {
 	// executions to process, set instead of initialExecutions when the request
 	// targets activity executions directly rather than via a visibility query.
 	initialTargetExecutions []*commonpb.Execution
+	// allNamespaces is set for a refresh tasks admin batch across all namespaces, which lists executions
+	// through the Visibility Admin API instead of in targetNamespace.
+	allNamespaces bool
 }
 
 // batchWorkerProcessor defines the interface for different worker processor types
@@ -88,6 +91,7 @@ type page struct {
 	// operations (terminate/cancel/delete activities). Exactly one is populated.
 	executionInfos      []*workflowpb.WorkflowExecutionInfo
 	targetExecutionInfo []*commonpb.Execution
+	adminExecutionInfos []*adminservice.VisibilityExecutionInfo
 	submittedCount      int
 	successCount        int
 	errorCount          int
@@ -109,6 +113,9 @@ func (p *page) length() int {
 	if len(p.targetExecutionInfo) > 0 {
 		return len(p.targetExecutionInfo)
 	}
+	if len(p.adminExecutionInfos) > 0 {
+		return len(p.adminExecutionInfos)
+	}
 	return len(p.executionInfos)
 }
 
@@ -127,9 +134,12 @@ func (p *page) nextTask() task {
 		attempts: 1,
 		page:     p,
 	}
-	if len(p.targetExecutionInfo) > 0 {
+	switch {
+	case len(p.targetExecutionInfo) > 0:
 		t.targetExecution = p.targetExecutionInfo[p.submittedCount]
-	} else {
+	case len(p.adminExecutionInfos) > 0:
+		t.adminExecutionInfo = p.adminExecutionInfos[p.submittedCount]
+	default:
 		t.executionInfo = p.executionInfos[p.submittedCount]
 	}
 	return t
@@ -227,6 +237,32 @@ func fetchPage(
 	}, nil
 }
 
+// fetchAllNamespacesPage fetches the next page of an admin batch across all namespaces.
+func fetchAllNamespacesPage(
+	ctx context.Context,
+	adminClient adminservice.AdminServiceClient,
+	config batchProcessorConfig,
+	pageToken []byte,
+	pageNumber int,
+) (*page, error) {
+	resp, err := adminClient.ListExecutions(ctx, &adminservice.ListExecutionsRequest{
+		Query:         config.adjustedQuery,
+		PageSize:      int32(pageSize),
+		NextPageToken: pageToken,
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+		}
+		return nil, err
+	}
+	return &page{
+		adminExecutionInfos: resp.GetExecutions(),
+		nextPageToken:       resp.GetNextPageToken(),
+		pageNumber:          pageNumber,
+	}, nil
+}
+
 // heartbeatInterval returns 1/4th fraction of the activity's heartbeat timeout.
 // By default, returns 10s/4 = 2.5s.
 func heartbeatInterval(heartbeatTimeout time.Duration) time.Duration {
@@ -250,6 +286,12 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 ) (HeartBeatDetails, error) {
 
 	concurrency := int(math.Max(1, float64(config.concurrency)))
+	fetchNextPage := func(pageToken []byte, pageNumber int) (*page, error) {
+		if config.allNamespaces {
+			return fetchAllNamespacesPage(ctx, a.AdminClient, config, pageToken, pageNumber)
+		}
+		return fetchPage(ctx, sdkClient, config, pageToken, pageNumber)
+	}
 
 	taskCh := make(chan task, concurrency)
 	respCh := make(chan taskResponse, concurrency)
@@ -321,7 +363,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	} else {
 		// Fetch page of executions if needed
 		var err error
-		p, err = fetchPage(ctx, sdkClient, config, config.initialPageToken, hbd.CurrentPage)
+		p, err = fetchNextPage(config.initialPageToken, hbd.CurrentPage)
 		if err != nil {
 			metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 			return HeartBeatDetails{}, fmt.Errorf("failed to fetch next page: %w", err)
@@ -331,7 +373,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	for {
 		// Check if we need to fetch next page
 		if p.hasNext() && p.allSubmitted() {
-			nextPage, err := fetchPage(ctx, sdkClient, config, p.nextPageToken, p.pageNumber+1)
+			nextPage, err := fetchNextPage(p.nextPageToken, p.pageNumber+1)
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				return HeartBeatDetails{}, fmt.Errorf("failed to fetch next page: %w", err)
@@ -400,6 +442,7 @@ func (a *activities) checkAndGetTargetNamespace(batchParams *batchspb.BatchOpera
 			return "", errAdminBatchNamespaceNotSystem
 		}
 		adminReq := batchParams.GetAdminRequest()
+		// Empty for a refresh across all namespaces.
 		return adminReq.Namespace, nil
 	}
 	// user batch
@@ -480,7 +523,13 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		if len(visibilityQuery) > 0 {
 			var count int64
 			var err error
-			if isActivityBatchType(batchParams.BatchType) {
+			if allNamespaces(batchParams) {
+				var resp *adminservice.CountExecutionsResponse
+				resp, err = a.AdminClient.CountExecutions(ctx, &adminservice.CountExecutionsRequest{Query: visibilityQuery})
+				if err == nil {
+					count = resp.GetCount()
+				}
+			} else if isActivityBatchType(batchParams.BatchType) {
 				// Activity batch types operate on activity executions, which are
 				// counted via CountActivityExecutions rather than CountWorkflow.
 				var resp *workflowservice.CountActivityExecutionsResponse
@@ -523,6 +572,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		initialPageToken:        hbd.PageToken,
 		initialExecutions:       executions,
 		initialTargetExecutions: targetExecutions,
+		allNamespaces:           allNamespaces(batchParams),
 	}
 
 	// Create a wrapper for the task processor
@@ -634,7 +684,7 @@ func (a *activities) startTaskProcessor(
 				return
 			}
 
-			if task.executionInfo == nil && task.targetExecution == nil {
+			if task.executionInfo == nil && task.targetExecution == nil && task.adminExecutionInfo == nil {
 				continue
 			}
 
@@ -1010,25 +1060,45 @@ func (a *activities) processAdminTask(
 	adminReq := batchOperation.AdminRequest
 	switch adminReq.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
+		if info := task.adminExecutionInfo; info != nil {
+			return processTask(ctx, limiter, task,
+				func(*workflowpb.WorkflowExecutionInfo) error {
+					execution := &commonpb.WorkflowExecution{WorkflowId: info.GetBusinessId(), RunId: info.GetRunId()}
+					return a.refreshWorkflowTasks(ctx, info.GetNamespaceId(), info.GetArchetypeId(), execution)
+				})
+		}
 		return processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
 				archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(executionInfo)
 				if err != nil {
 					return fmt.Errorf("archetypeID extraction error: %w", err)
 				}
-				_, err = a.HistoryClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-					NamespaceId: batchOperation.NamespaceId,
-					ArchetypeId: uint32(archetypeID),
-					Request: &adminservice.RefreshWorkflowTasksRequest{
-						NamespaceId: batchOperation.NamespaceId,
-						Execution:   executionInfo.Execution,
-					},
-				})
-				return err
+				return a.refreshWorkflowTasks(ctx, batchOperation.NamespaceId, uint32(archetypeID), executionInfo.Execution)
 			})
 	default:
 		return fmt.Errorf("unknown admin batch type: %T", adminReq.Operation)
 	}
+}
+
+func (a *activities) refreshWorkflowTasks(
+	ctx context.Context,
+	namespaceID string,
+	archetypeID uint32,
+	execution *commonpb.WorkflowExecution,
+) error {
+	_, err := a.HistoryClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: namespaceID,
+		ArchetypeId: archetypeID,
+		Request: &adminservice.RefreshWorkflowTasksRequest{
+			NamespaceId: namespaceID,
+			Execution:   execution,
+		},
+	})
+	return err
+}
+
+func allNamespaces(batchParams *batchspb.BatchOperationInput) bool {
+	return batchParams.GetAdminRequest().GetRefreshTasksOperation().GetAllNamespaces()
 }
 
 func processTask(

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -106,6 +107,8 @@ type (
 		// the activity target execution to process, set instead of
 		// executionInfo for activity batch operations (terminate/cancel/delete activities)
 		targetExecution *commonpb.Execution
+		// the execution to process for an admin batch across all namespaces, set instead of executionInfo
+		adminExecutionInfo *adminservice.VisibilityExecutionInfo
 		// the number of attempts to process the workflow execution
 		attempts int
 		// reference to the page this task belongs to (for tracking page completion)

@@ -6137,7 +6137,15 @@ func (x *StartAdminBatchOperationResponse) GetWorkflowId() string {
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.
 type BatchOperationRefreshTasks struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Refresh tasks for the executions matching `visibility_query` in all namespaces, including
+	// temporal-system, as one batch workflow. Requires `visibility_query`; `namespace` is ignored and
+	// `executions` must be empty.
+	// The query can only use system and predefined search attributes, not custom ones. Unlike a
+	// query in one namespace, it also matches executions with TemporalNamespaceDivision set, such as
+	// schedules and batch jobs; add `TemporalNamespaceDivision IS NULL` to skip them. That does not
+	// skip temporal-system workflows that leave it unset, such as scanners.
+	AllNamespaces bool `protobuf:"varint,1,opt,name=all_namespaces,json=allNamespaces,proto3" json:"all_namespaces,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6170,6 +6178,13 @@ func (x *BatchOperationRefreshTasks) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BatchOperationRefreshTasks.ProtoReflect.Descriptor instead.
 func (*BatchOperationRefreshTasks) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{96}
+}
+
+func (x *BatchOperationRefreshTasks) GetAllNamespaces() bool {
+	if x != nil {
+		return x.AllNamespaces
+	}
+	return false
 }
 
 type MigrateScheduleRequest struct {
@@ -7159,8 +7174,9 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\toperation\"C\n" +
 	" StartAdminBatchOperationResponse\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
-	"workflowId\"\x1c\n" +
-	"\x1aBatchOperationRefreshTasks\"\xe7\x02\n" +
+	"workflowId\"C\n" +
+	"\x1aBatchOperationRefreshTasks\x12%\n" +
+	"\x0eall_namespaces\x18\x01 \x01(\bR\rallNamespaces\"\xe7\x02\n" +
 	"\x16MigrateScheduleRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
