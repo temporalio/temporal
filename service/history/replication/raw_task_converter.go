@@ -280,6 +280,7 @@ func convertSyncHSMReplicationTask(
 			if mutableState.HasBufferedEvents() {
 				// we can't sync HSM when there's buffered events
 				// as current state could depend on those buffered events
+				emitBufferedEventsSkipped(shardContext, taskInfo, 0, mutableState)
 				return nil, nil
 			}
 
@@ -774,6 +775,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	if mutableState.HasBufferedEvents() {
 		// we can't sync state when there's buffered events
 		// as current state could depend on those buffered events
+		emitBufferedEventsSkipped(c.shardContext, taskInfo, targetClusterID, mutableState)
 		return nil, nil
 	}
 

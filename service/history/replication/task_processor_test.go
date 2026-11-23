@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -228,8 +229,14 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_Panic() {
 			panic("test replication task panic")
 		},
 	)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.replicationTaskProcessor.metricsHandler = metricsHandler
+
 	err := s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.Error(err)
+	s.Len(capture.Snapshot()[metrics.ReplicationTasksFailed.Name()], 1)
 }
 
 func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
