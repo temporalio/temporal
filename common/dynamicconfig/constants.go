@@ -976,6 +976,15 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		false,
 		`SendRawWorkflowHistory is whether to enable raw history retrieving`,
 	)
+	EnableElasticsearchNamespaceSearchAttributeAliases = NewGlobalBoolSetting(
+		"frontend.enableElasticsearchNamespaceSearchAttributeAliases",
+		false,
+		`EnableElasticsearchNamespaceSearchAttributeAliases makes AddSearchAttributes register custom search
+attributes of an Elasticsearch visibility store as namespace aliases of pre-allocated fields (eg: Keyword01),
+like SQL visibility stores, instead of adding them to the index mapping and cluster metadata. Namespace aliases
+are replicated, so only enable it once every cluster sharing global namespaces with this one supports namespace
+aliases and its Elasticsearch index maps the pre-allocated fields (visibility schema v16 or later).`,
+	)
 	SearchAttributesNumberOfKeysLimit = NewNamespaceIntSetting(
 		"frontend.searchAttributesNumberOfKeysLimit",
 		100,

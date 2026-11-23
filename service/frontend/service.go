@@ -118,6 +118,8 @@ type Config struct {
 	NamespaceMinRetentionLocal              dynamicconfig.DurationPropertyFn
 	NamespaceMinRetentionGlobal             dynamicconfig.DurationPropertyFn
 
+	EnableElasticsearchNamespaceSearchAttributeAliases dynamicconfig.BoolPropertyFn
+
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -474,6 +476,8 @@ func NewConfig(
 		CHASMSchedulerTimeSkippingEnabled:  dynamicconfig.CHASMSchedulerTimeSkippingEnabled.Get(dc),
 		TimeSkippingMaxSkipPerSession:      dynamicconfig.TimeSkippingMaxSkipPerSession.Get(dc),
 		TimeSkippingMaxAccumulatedDuration: dynamicconfig.TimeSkippingMaxAccumulatedDuration.Get(dc),
+
+		EnableElasticsearchNamespaceSearchAttributeAliases: dynamicconfig.EnableElasticsearchNamespaceSearchAttributeAliases.Get(dc),
 	}
 }
 

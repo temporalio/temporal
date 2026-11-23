@@ -13,6 +13,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -28,6 +29,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/deletenamespace"
@@ -804,10 +806,11 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 					})
 			}
 
-			err := s.handler.addSearchAttributesSQL(
+			err := s.handler.addSearchAttributeAliases(
 				ctx,
 				tc.request,
 				s.mockResource.VisibilityManager,
+				false,
 			)
 			if tc.expectedErrMsg == "" {
 				s.NoError(err)
@@ -834,6 +837,164 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_Elasticsearch() {
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.Require().Error(err)
 	s.Nil(resp)
+}
+
+// esTypeMapWithPreallocatedFields returns the custom search attributes of an Elasticsearch cluster
+// with legacy cluster-level search attributes and the pre-allocated fields in cluster metadata.
+func esTypeMapWithPreallocatedFields() searchattribute.NameTypeMap {
+	customSearchAttributes := maps.Clone(searchattribute.TestEsNameTypeMap().Custom())
+	maps.Copy(customSearchAttributes, searchattribute.TestNameTypeMap().Custom())
+	return searchattribute.NewNameTypeMap(customSearchAttributes)
+}
+
+func (s *operatorHandlerSuite) Test_AddSearchAttributes_ElasticsearchNamespaceAliases() {
+	ctx := context.Background()
+	s.handler.config.EnableElasticsearchNamespaceSearchAttributeAliases = func() bool { return true }
+
+	s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
+	s.mockResource.SearchAttributesManager.EXPECT().
+		GetSearchAttributes(testIndexName, true).
+		Return(esTypeMapWithPreallocatedFields(), nil)
+	s.mockResource.ClientFactory.EXPECT().
+		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
+		Return(nil, s.mockResource.GetFrontendClient(), nil)
+	s.mockResource.FrontendClient.EXPECT().
+		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
+		Return(&workflowservice.DescribeNamespaceResponse{Config: &namespacepb.NamespaceConfig{}}, nil)
+	// The legacy cluster-level CustomKeywordField is already usable by every namespace: only
+	// NewAttr gets an alias, and nothing is added to the index mapping or cluster metadata.
+	s.mockResource.FrontendClient.EXPECT().
+		UpdateNamespace(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(
+			_ context.Context,
+			r *workflowservice.UpdateNamespaceRequest,
+			_ ...any,
+		) (*workflowservice.UpdateNamespaceResponse, error) {
+			s.Equal([]string{"NewAttr"}, expmaps.Values(r.GetConfig().GetCustomSearchAttributeAliases()))
+			for field := range r.GetConfig().GetCustomSearchAttributeAliases() {
+				s.True(sadefs.IsPreallocatedCSAFieldName(field, enumspb.INDEXED_VALUE_TYPE_KEYWORD), field)
+			}
+			return &workflowservice.UpdateNamespaceResponse{}, nil
+		})
+
+	err := s.handler.addSearchAttributesInternal(
+		ctx,
+		&operatorservice.AddSearchAttributesRequest{
+			SearchAttributes: map[string]enumspb.IndexedValueType{
+				"NewAttr":            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			Namespace: testNamespace,
+		},
+		s.mockResource.VisibilityManager,
+	)
+	s.Require().NoError(err)
+}
+
+func (s *operatorHandlerSuite) Test_AddSearchAttributes_ElasticsearchNamespaceAliases_RejectsPreallocatedFieldNames() {
+	for _, searchAttributes := range []map[string]enumspb.IndexedValueType{
+		{"Keyword05": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+		// A different type than the pre-allocated field would conflict with its mapping.
+		{"Keyword05": enumspb.INDEXED_VALUE_TYPE_INT},
+		{"Text01": enumspb.INDEXED_VALUE_TYPE_TEXT, "CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+	} {
+		err := s.handler.addSearchAttributeAliases(
+			context.Background(),
+			&operatorservice.AddSearchAttributesRequest{SearchAttributes: searchAttributes, Namespace: testNamespace},
+			s.mockResource.VisibilityManager,
+			true,
+		)
+		var invalidArgumentErr *serviceerror.InvalidArgument
+		s.Require().ErrorAs(err, &invalidArgumentErr)
+		s.Contains(err.Error(), "pre-allocated custom search attribute field name")
+	}
+}
+
+func (s *operatorHandlerSuite) Test_SearchAttributeAliases_RejectedOnStandbyCluster() {
+	ctx := context.Background()
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
+	s.mockResource.SearchAttributesManager.EXPECT().
+		GetSearchAttributes(testIndexName, true).
+		Return(searchattribute.TestNameTypeMap(), nil).
+		Times(2)
+	s.mockResource.ClientFactory.EXPECT().
+		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
+		Return(nil, s.mockResource.GetFrontendClient(), nil).
+		Times(2)
+	s.mockResource.FrontendClient.EXPECT().
+		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
+		Return(&workflowservice.DescribeNamespaceResponse{
+			NamespaceInfo:     &namespacepb.NamespaceInfo{Name: testNamespace},
+			Config:            &namespacepb.NamespaceConfig{CustomSearchAttributeAliases: searchattribute.TestAliases},
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{ActiveClusterName: "other-cluster"},
+			IsGlobalNamespace: true,
+		}, nil).
+		Times(2)
+	// No UpdateNamespace call is expected.
+
+	var notActiveErr *serviceerror.NamespaceNotActive
+	err := s.handler.addSearchAttributeAliases(
+		ctx,
+		&operatorservice.AddSearchAttributesRequest{
+			SearchAttributes: map[string]enumspb.IndexedValueType{"NewAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+			Namespace:        testNamespace,
+		},
+		s.mockResource.VisibilityManager,
+		false,
+	)
+	s.Require().ErrorAs(err, &notActiveErr)
+
+	err = s.handler.removeSearchAttributeAliases(ctx, testNamespace, []string{"CustomKeywordField"})
+	s.Require().ErrorAs(err, &notActiveErr)
+}
+
+func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_ElasticsearchNamespaceAliases() {
+	ctx := context.Background()
+	s.handler.config.EnableElasticsearchNamespaceSearchAttributeAliases = func() bool { return true }
+	saTypeMap := esTypeMapWithPreallocatedFields()
+
+	s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
+	s.mockResource.SearchAttributesManager.EXPECT().
+		GetSearchAttributes(testIndexName, true).
+		Return(saTypeMap, nil).
+		AnyTimes()
+	s.mockResource.ClientFactory.EXPECT().
+		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
+		Return(nil, s.mockResource.GetFrontendClient(), nil)
+	s.mockResource.FrontendClient.EXPECT().
+		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
+		Return(&workflowservice.DescribeNamespaceResponse{
+			Config: &namespacepb.NamespaceConfig{
+				CustomSearchAttributeAliases: map[string]string{"Keyword05": "NewAttr"},
+			},
+		}, nil)
+	// The alias is removed from the namespace...
+	s.mockResource.FrontendClient.EXPECT().
+		UpdateNamespace(gomock.Any(), &workflowservice.UpdateNamespaceRequest{
+			Namespace: testNamespace,
+			Config: &namespacepb.NamespaceConfig{
+				CustomSearchAttributeAliases: map[string]string{"Keyword05": ""},
+			},
+		}).
+		Return(&workflowservice.UpdateNamespaceResponse{}, nil)
+	// ...and the legacy cluster-level search attribute from cluster metadata.
+	expectedCustomSearchAttributes := maps.Clone(saTypeMap.Custom())
+	delete(expectedCustomSearchAttributes, "CustomKeywordField")
+	s.mockResource.SearchAttributesManager.EXPECT().
+		SaveSearchAttributes(gomock.Any(), testIndexName, expectedCustomSearchAttributes).
+		Return(nil)
+
+	err := s.handler.removeSearchAttributesInternal(
+		ctx,
+		&operatorservice.RemoveSearchAttributesRequest{
+			SearchAttributes: []string{"NewAttr", "CustomKeywordField"},
+			Namespace:        testNamespace,
+		},
+		s.mockResource.VisibilityManager,
+	)
+	s.Require().NoError(err)
 }
 
 func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
