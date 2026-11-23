@@ -732,7 +732,7 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 		{
 			name:    "unimplemented",
 			err:     serviceerror.NewUnimplemented("unknown method GrantEagerDispatch"),
-			granted: []bool{true, true},
+			granted: []bool{false, false},
 		},
 		{
 			name:    "resource exhausted",

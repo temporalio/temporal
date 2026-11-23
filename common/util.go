@@ -336,6 +336,28 @@ func IsContextCanceledErr(err error) bool {
 		errors.As(err, &canceledSvcErr)
 }
 
+// IsUnhealthyError checks if the error means the service did not answer the call: the call was canceled, timed
+// out, or the service was unavailable.
+func IsUnhealthyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if IsContextCanceledErr(err) {
+		return true
+	}
+	if IsContextDeadlineExceededErr(err) {
+		return true
+	}
+
+	switch err.(type) {
+	case *serviceerror.Unavailable,
+		*serviceerror.DeadlineExceeded,
+		*serviceerror.Canceled:
+		return true
+	}
+	return false
+}
+
 // IsServiceClientTransientError checks if the error is a transient error.
 func IsServiceClientTransientError(err error) bool {
 	if IsServiceHandlerRetryableError(err) {
