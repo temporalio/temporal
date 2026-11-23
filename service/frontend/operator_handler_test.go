@@ -321,7 +321,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 			if tc.addVisManager2 {
 				s.mockResource.ClientFactory.EXPECT().
 					NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-					Return(nil, s.mockResource.GetFrontendClient(), nil)
+					Return(nil, s.mockResource.GetFrontendClient(), nil).AnyTimes()
 				s.mockResource.FrontendClient.EXPECT().
 					DescribeNamespace(
 						gomock.Any(),
@@ -475,7 +475,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 			if tc.addSQLCalled {
 				s.mockResource.ClientFactory.EXPECT().
 					NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-					Return(nil, s.mockResource.GetFrontendClient(), nil)
+					Return(nil, s.mockResource.GetFrontendClient(), nil).AnyTimes()
 
 				s.mockResource.FrontendClient.EXPECT().
 					DescribeNamespace(
@@ -773,7 +773,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 
 			s.mockResource.ClientFactory.EXPECT().
 				NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-				Return(nil, s.mockResource.GetFrontendClient(), tc.getFrontendClientErr)
+				Return(nil, s.mockResource.GetFrontendClient(), tc.getFrontendClientErr).AnyTimes()
 
 			if tc.describeNamespaceCalled {
 				s.mockResource.FrontendClient.EXPECT().
@@ -858,7 +858,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_ElasticsearchNamespaceAl
 		Return(esTypeMapWithPreallocatedFields(), nil)
 	s.mockResource.ClientFactory.EXPECT().
 		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-		Return(nil, s.mockResource.GetFrontendClient(), nil)
+		Return(nil, s.mockResource.GetFrontendClient(), nil).AnyTimes()
 	s.mockResource.FrontendClient.EXPECT().
 		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
 		Return(&workflowservice.DescribeNamespaceResponse{Config: &namespacepb.NamespaceConfig{}}, nil)
@@ -920,7 +920,7 @@ func (s *operatorHandlerSuite) Test_SearchAttributeAliases_RejectedOnStandbyClus
 		Times(2)
 	s.mockResource.ClientFactory.EXPECT().
 		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-		Return(nil, s.mockResource.GetFrontendClient(), nil).
+		Return(nil, s.mockResource.GetFrontendClient(), nil).AnyTimes().
 		Times(2)
 	s.mockResource.FrontendClient.EXPECT().
 		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
@@ -945,7 +945,7 @@ func (s *operatorHandlerSuite) Test_SearchAttributeAliases_RejectedOnStandbyClus
 	)
 	s.Require().ErrorAs(err, &notActiveErr)
 
-	err = s.handler.removeSearchAttributeAliases(ctx, testNamespace, []string{"CustomKeywordField"})
+	err = s.handler.removeSearchAttributeAliases(ctx, testNamespace, []string{"CustomKeywordField"}, s.mockResource.VisibilityManager)
 	s.Require().ErrorAs(err, &notActiveErr)
 }
 
@@ -962,7 +962,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_ElasticsearchNamespac
 		AnyTimes()
 	s.mockResource.ClientFactory.EXPECT().
 		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-		Return(nil, s.mockResource.GetFrontendClient(), nil)
+		Return(nil, s.mockResource.GetFrontendClient(), nil).AnyTimes()
 	s.mockResource.FrontendClient.EXPECT().
 		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
 		Return(&workflowservice.DescribeNamespaceResponse{
@@ -1005,7 +1005,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.ClientFactory.EXPECT().
 		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-		Return(nil, s.mockResource.GetFrontendClient(), nil).
+		Return(nil, s.mockResource.GetFrontendClient(), nil).AnyTimes().
 		AnyTimes()
 	s.mockResource.FrontendClient.EXPECT().
 		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
@@ -1153,7 +1153,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_SQL() {
 				Return(searchattribute.TestNameTypeMap(), nil)
 			s.mockResource.ClientFactory.EXPECT().
 				NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
-				Return(nil, s.mockResource.GetFrontendClient(), nil)
+				Return(nil, s.mockResource.GetFrontendClient(), nil).AnyTimes()
 			s.mockResource.FrontendClient.EXPECT().
 				DescribeNamespace(
 					gomock.Any(),
