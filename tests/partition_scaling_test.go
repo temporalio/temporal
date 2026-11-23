@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -16,7 +15,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -54,90 +53,99 @@ func scalerEnvOptions(dcPartitions int, shrink scalerShrink) []testcore.TestOpti
 	}
 }
 
-func TestPartitionScaling_Up(t *testing.T) {
+type PartitionScalingSuite struct {
+	parallelsuite.Suite[*PartitionScalingSuite]
+}
+
+func TestPartitionScalingSuite(t *testing.T) {
+	parallelsuite.Run(t, &PartitionScalingSuite{})
+}
+
+func (s *PartitionScalingSuite) TestPartitionScaling_Up() {
+	t := s.T()
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
+	env := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
 
 	t.Log("set to 2 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   2,
 	})
 
 	t.Log("start sending 10 tasks/s")
-	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	stopTasks := scalerBackgroundTasks(env, 10)
 	defer stopTasks()
 
 	t.Log("wait until partitions 0,1 have 5 tasks backlog")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 0, 1), 15*time.Second, time.Second)
 
 	t.Log("check that 2,3 have no tasks (leave 4,5 unloaded)")
-	s.True(scalerBacklogEmpty(s, s.Tv(), 2, 3)())
+	s.True(scalerBacklogEmpty(env, 2, 3)())
 
 	t.Log("set to 6 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   6,
 	})
 
 	t.Log("wait until partitions 2,3,4,5 have 5 tasks backlog")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 2, 3, 4, 5), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 2, 3, 4, 5), 15*time.Second, time.Second)
 
 	t.Log("stop sending tasks")
 	stopTasks()
 
 	t.Log("start background polls")
-	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	stopPolls := scalerBackgroundPolls(env, 3)
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogEmpty(env, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 }
 
-func TestPartitionScaling_Down(t *testing.T) {
+func (s *PartitionScalingSuite) TestPartitionScaling_Down() {
+	t := s.T()
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
+	env := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
 
 	t.Log("set to 6 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   6,
 	})
 
 	t.Log("start sending 10 tasks/s")
-	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	stopTasks := scalerBackgroundTasks(env, 10)
 	defer stopTasks()
 
 	t.Log("wait until partitions 0-5 have 5 tasks backlog")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 
 	t.Log("set to 4 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   4,
 	})
 
 	t.Log("wait until 4,5 see no new tasks over a 2s window")
-	// nolint:staticcheck // until we rewrite the test
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
+	s.Await(scalerBacklogUnchanged(env, 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()
 
 	t.Log("capture poll metrics")
-	capture := s.StartNamespaceMetricCapture()
+	capture := env.StartNamespaceMetricCapture()
 
 	t.Log("start background polls")
-	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	stopPolls := scalerBackgroundPolls(env, 3)
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogEmpty(env, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 
 	// We want to check that polls went to all 6 partitions directly, even though we decreased
 	// the target to 4. Note that tasks will be forwarded, so we'll still drain everything even
 	// if we don't poll all 6. So we have to look at metrics.
-	pollsByPartition := scalerCountPolls(s.Tv(), capture)
+	pollsByPartition := scalerCountPolls(env.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
 	s.Len(pollsByPartition, 6)
 
@@ -146,124 +154,126 @@ func TestPartitionScaling_Down(t *testing.T) {
 	// That's tested in TestPartitionScaling_Down_AndStopPolling.
 }
 
-func TestPartitionScaling_Up_FromDC(t *testing.T) {
+func (s *PartitionScalingSuite) TestPartitionScaling_Up_FromDC() {
+	t := s.T()
 	// default dynamic config to 3
-	s := testcore.NewEnv(t, scalerEnvOptions(3, scalerShrinkFast)...)
+	env := testcore.NewEnv(t, scalerEnvOptions(3, scalerShrinkFast)...)
 
 	t.Log("start sending 10 tasks/s")
-	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	stopTasks := scalerBackgroundTasks(env, 10)
 	defer stopTasks()
 
 	t.Log("wait until partitions 0,1,2 have 5 tasks backlog")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1, 2), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 0, 1, 2), 15*time.Second, time.Second)
 
 	t.Log("set to 6 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   6,
 	})
 
 	t.Log("wait until partitions 3,4,5 have 5 tasks backlog")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 3, 4, 5), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 3, 4, 5), 15*time.Second, time.Second)
 
 	t.Log("stop sending tasks")
 	stopTasks()
 
 	t.Log("start background polls")
-	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	stopPolls := scalerBackgroundPolls(env, 3)
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogEmpty(env, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 }
 
-func TestPartitionScaling_Down_FromDC(t *testing.T) {
+func (s *PartitionScalingSuite) TestPartitionScaling_Down_FromDC() {
+	t := s.T()
 	// default dynamic config to 6
-	s := testcore.NewEnv(t, scalerEnvOptions(6, scalerShrinkFast)...)
+	env := testcore.NewEnv(t, scalerEnvOptions(6, scalerShrinkFast)...)
 
 	t.Log("start sending 10 tasks/s")
-	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	stopTasks := scalerBackgroundTasks(env, 10)
 	defer stopTasks()
 
 	t.Log("wait until partitions 0-5 have 5 tasks backlog")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 
 	t.Log("set to 4 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   4,
 	})
 
 	t.Log("wait until 4,5 see no new tasks over a 2s window")
-	// nolint:staticcheck // until we rewrite the test
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
+	s.Await(scalerBacklogUnchanged(env, 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()
 
 	t.Log("capture poll metrics")
-	capture := s.StartNamespaceMetricCapture()
+	capture := env.StartNamespaceMetricCapture()
 
 	t.Log("start background polls")
-	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	stopPolls := scalerBackgroundPolls(env, 3)
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogEmpty(env, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 
 	// We want to check that polls went to all 6 partitions directly, even though we decreased
 	// the target to 4. Note that tasks will be forwarded, so we'll still drain everything even
 	// if we don't poll all 6. So we have to look at metrics.
-	pollsByPartition := scalerCountPolls(s.Tv(), capture)
+	pollsByPartition := scalerCountPolls(env.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
 	s.Len(pollsByPartition, 6)
 }
 
-func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
+func (s *PartitionScalingSuite) TestPartitionScaling_Down_AndStopPolling() {
+	t := s.T()
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
+	env := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
 
 	t.Log("set to 6 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   6,
 	})
 
 	t.Log("start sending 10 tasks/s")
-	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	stopTasks := scalerBackgroundTasks(env, 10)
 	defer stopTasks()
 
-	capture := s.StartNamespaceMetricCapture()
+	capture := env.StartNamespaceMetricCapture()
 
 	t.Log("start background polls")
-	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	stopPolls := scalerBackgroundPolls(env, 3)
 	defer stopPolls()
 
 	var polls map[int]int
 	t.Log("wait for 10 successful polls on each partition")
-	await.Require(s.Context(), t, func(c *await.T) {
-		polls = scalerCountPolls(s.Tv(), capture)
+	s.Await(func(s *PartitionScalingSuite) {
+		polls = scalerCountPolls(env.Tv(), capture)
 		t.Log("polls(6)", polls)
-		require.Len(c, polls, 6)
+		s.Len(polls, 6)
 		for _, v := range polls {
-			require.GreaterOrEqual(c, v, 10)
+			s.GreaterOrEqual(v, 10)
 		}
 	}, 15*time.Second, time.Second)
 
 	t.Log("set to 3 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   3,
 	})
 
 	// initially, polls should continue going to all 6, but new tasks should go to only 3
 	// eventually, the three will report that they are drained, and then new polls should only go to 3.
-	await.Require(s.Context(), t, func(c *await.T) {
-		polls2 := scalerCountPolls(s.Tv(), capture)
+	s.Await(func(s *PartitionScalingSuite) {
+		polls2 := scalerCountPolls(env.Tv(), capture)
 		diff := scalerSubtractPollCounts(polls2, polls)
 		polls = polls2
 		t.Log("polls(3)", diff)
-		require.Len(c, diff, 3)
+		s.Len(diff, 3)
 	}, 15*time.Second, time.Second)
 }
 
@@ -273,12 +283,13 @@ func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
 // regardless of how fast tasks arrive. We build a backlog by sending tasks
 // without polling, watch the scaler open partitions up to Max, then drain and
 // confirm everything empties out.
-func TestPartitionScaling_Backlog(t *testing.T) {
+func (s *PartitionScalingSuite) TestPartitionScaling_Backlog() {
+	t := s.T()
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
+	env := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
 
 	t.Log("enable backlog-based scaling (no fixed target, no add-rate windows)")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled:      true,
 		BacklogReset: 2,  // clear once backlog drops below 2
 		BacklogBase:  5,  // open a partition once backlog grows above 5
@@ -287,69 +298,69 @@ func TestPartitionScaling_Backlog(t *testing.T) {
 	})
 
 	t.Log("start sending 10 tasks/s without polling to build a backlog")
-	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	stopTasks := scalerBackgroundTasks(env, 10)
 	defer stopTasks()
 
 	t.Log("wait until backlog-based scaling has opened all 4 partitions (each has backlog)")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 1, 0, 1, 2, 3), 30*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 1, 0, 1, 2, 3), 30*time.Second, time.Second)
 
 	t.Log("stop sending tasks")
 	stopTasks()
 
 	t.Log("start background polls to drain")
-	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	stopPolls := scalerBackgroundPolls(env, 3)
 	defer stopPolls()
 
 	t.Log("wait until all partitions drain (backlog releases, scaler shrinks target)")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3), 30*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogEmpty(env, 0, 1, 2, 3), 30*time.Second, time.Second)
 }
 
 // TestPartitionScaling_Disable_ToFewerPartitions checks that disabling the scaler falls back
 // to the dynamic config settings, even when that's fewer partitions than the scaler had set.
-func TestPartitionScaling_Disable_ToFewerPartitions(t *testing.T) {
+func (s *PartitionScalingSuite) TestPartitionScaling_Disable_ToFewerPartitions() {
+	t := s.T()
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately.
 	// use slow shrinking so that a regression that leaves backlog state set on disable keeps
 	// write above 0, which this test detects. with fast shrinking, write would reach 0 either
 	// way and clients would fall back to dynamic config even with stale scale info.
-	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkSlow)...)
+	env := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkSlow)...)
 
 	t.Log("set to 4 partitions using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   4,
 	})
 
 	t.Log("start sending 10 tasks/s")
-	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	stopTasks := scalerBackgroundTasks(env, 10)
 	defer stopTasks()
 
 	t.Log("wait until partitions 0-3 have 5 tasks backlog")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1, 2, 3), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 0, 1, 2, 3), 15*time.Second, time.Second)
 
 	t.Log("disable scaler: tasks and polls should go to partition 0 only now")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: false,
 	})
 
 	t.Log("wait until 1,2,3 see no new tasks over a 2s window")
-	// nolint:staticcheck // until we rewrite the test
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 1, 2, 3), 15*time.Second, time.Millisecond)
+	s.Await(scalerBacklogUnchanged(env, 2*time.Second, 1, 2, 3), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()
 
 	t.Log("capture poll metrics")
-	capture := s.StartNamespaceMetricCapture()
+	capture := env.StartNamespaceMetricCapture()
 
 	t.Log("start background polls")
-	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	stopPolls := scalerBackgroundPolls(env, 3)
 	defer stopPolls()
 
 	t.Log("wait until all are drained (1,2,3 by forwarding to 0)")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogEmpty(env, 0, 1, 2, 3), 15*time.Second, time.Second)
 
 	t.Log("check that polls went to partition 0 only")
-	pollsByPartition := scalerCountPolls(s.Tv(), capture)
+	pollsByPartition := scalerCountPolls(env.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
 	s.Len(pollsByPartition, 1)
 	s.Contains(pollsByPartition, 0)
@@ -357,52 +368,53 @@ func TestPartitionScaling_Disable_ToFewerPartitions(t *testing.T) {
 
 // TestPartitionScaling_Disable_ToMorePartitions is the inverse of FewerPartitions: the scaler
 // sets the count below dynamic config count, and disabling it allows tasks/polls to all.
-func TestPartitionScaling_Disable_ToMorePartitions(t *testing.T) {
+func (s *PartitionScalingSuite) TestPartitionScaling_Disable_ToMorePartitions() {
+	t := s.T()
 	// default dynamic config to 4, which is what we should fall back to when disabling
-	s := testcore.NewEnv(t, scalerEnvOptions(4, scalerShrinkFast)...)
+	env := testcore.NewEnv(t, scalerEnvOptions(4, scalerShrinkFast)...)
 
 	t.Log("set to 1 partition using scaler")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   1,
 	})
 
 	t.Log("start sending 10 tasks/s")
-	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	stopTasks := scalerBackgroundTasks(env, 10)
 	defer stopTasks()
 
 	t.Log("wait until partition 0 has 5 tasks backlog")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 0), 15*time.Second, time.Second)
 
 	t.Log("disable scaler: tasks and polls should go to all 4 partitions now")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: false,
 	})
 
 	t.Log("wait until partitions 1,2,3 have 5 tasks backlog, i.e. tasks go to all 4 again")
-	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 1, 2, 3), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogAtLeast(env, 5, 1, 2, 3), 15*time.Second, time.Second)
 
 	t.Log("stop sending tasks")
 	stopTasks()
 
 	t.Log("capture poll metrics")
-	capture := s.StartNamespaceMetricCapture()
+	capture := env.StartNamespaceMetricCapture()
 
 	t.Log("start background polls")
-	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	stopPolls := scalerBackgroundPolls(env, 3)
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3), 15*time.Second, time.Second)
+	s.AwaitTrue(scalerBacklogEmpty(env, 0, 1, 2, 3), 15*time.Second, time.Second)
 
 	// As in TestPartitionScaling_Down, tasks get forwarded, so draining alone doesn't prove that
 	// polls reached 1,2,3 directly. Check metrics for that.
-	pollsByPartition := scalerCountPolls(s.Tv(), capture)
+	pollsByPartition := scalerCountPolls(env.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
 	s.Len(pollsByPartition, 4)
 }
 
-func scalerBackgroundTasks(s testcore.Env, tv *testvars.TestVars, rate float32) func() {
+func scalerBackgroundTasks(env *testcore.TestEnv, rate float32) func() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
@@ -412,12 +424,12 @@ func scalerBackgroundTasks(s testcore.Env, tv *testvars.TestVars, rate float32) 
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				_, _ = s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-					Namespace:    s.Namespace().String(),
+				_, _ = env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+					Namespace:    env.Namespace().String(),
 					WorkflowId:   uuid.NewString(),
-					WorkflowType: tv.WorkflowType(),
-					TaskQueue:    tv.TaskQueue(),
-					Identity:     tv.ClientIdentity(),
+					WorkflowType: env.Tv().WorkflowType(),
+					TaskQueue:    env.Tv().TaskQueue(),
+					Identity:     env.Tv().ClientIdentity(),
 					RequestId:    uuid.NewString(),
 				})
 			}
@@ -427,9 +439,10 @@ func scalerBackgroundTasks(s testcore.Env, tv *testvars.TestVars, rate float32) 
 	return cancel
 }
 
-func scalerBackgroundPolls(s testcore.Env, tv *testvars.TestVars, tp *taskpoller.TaskPoller, workers int) func() {
+func scalerBackgroundPolls(env *testcore.TestEnv, workers int) func() {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	tp, tv := env.TaskPoller(), env.Tv()
 	for range workers {
 		go func() {
 			for ctx.Err() == nil {
@@ -445,12 +458,12 @@ func scalerBackgroundPolls(s testcore.Env, tv *testvars.TestVars, tp *taskpoller
 	return cancel
 }
 
-func scalerGetBacklog(s testcore.Env, tv *testvars.TestVars, part int) (int, error) {
+func scalerGetBacklog(env *testcore.TestEnv, part int) (int, error) {
 	ctx := testcore.NewContext()
-	res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
-		Namespace: s.Namespace().String(),
+	res, err := env.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     tv.TaskQueue().Name,
+			TaskQueue:     env.Tv().TaskQueue().Name,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(part)},
 		},
@@ -468,10 +481,10 @@ func scalerGetBacklog(s testcore.Env, tv *testvars.TestVars, part int) (int, err
 	return count, nil
 }
 
-func scalerBacklogAtLeast(s testcore.Env, tv *testvars.TestVars, target int, parts ...int) func() bool {
+func scalerBacklogAtLeast(env *testcore.TestEnv, target int, parts ...int) func() bool {
 	return func() bool {
 		for _, part := range parts {
-			count, err := scalerGetBacklog(s, tv, part)
+			count, err := scalerGetBacklog(env, part)
 			if err != nil || count < target {
 				return false
 			}
@@ -480,10 +493,10 @@ func scalerBacklogAtLeast(s testcore.Env, tv *testvars.TestVars, target int, par
 	}
 }
 
-func scalerBacklogEmpty(s testcore.Env, tv *testvars.TestVars, parts ...int) func() bool {
+func scalerBacklogEmpty(env *testcore.TestEnv, parts ...int) func() bool {
 	return func() bool {
 		for _, part := range parts {
-			count, err := scalerGetBacklog(s, tv, part)
+			count, err := scalerGetBacklog(env, part)
 			if err != nil || count > 0 {
 				return false
 			}
@@ -492,21 +505,21 @@ func scalerBacklogEmpty(s testcore.Env, tv *testvars.TestVars, parts ...int) fun
 	}
 }
 
-func scalerBacklogUnchanged(s testcore.Env, tv *testvars.TestVars, sleep time.Duration, parts ...int) func(c *await.T) {
-	return func(c *await.T) {
+func scalerBacklogUnchanged(env *testcore.TestEnv, sleep time.Duration, parts ...int) func(s *PartitionScalingSuite) {
+	return func(s *PartitionScalingSuite) {
 		before := make([]int, len(parts))
 		for i, part := range parts {
 			var err error
-			before[i], err = scalerGetBacklog(s, tv, part)
-			require.NoError(c, err)
+			before[i], err = scalerGetBacklog(env, part)
+			s.NoError(err)
 		}
 
 		time.Sleep(sleep) //nolint:forbidigo // trying to test a negative
 
 		for i, part := range parts {
-			after, err := scalerGetBacklog(s, tv, part)
-			require.NoError(c, err)
-			require.Equal(c, before[i], after)
+			after, err := scalerGetBacklog(env, part)
+			s.NoError(err)
+			s.Equal(before[i], after)
 		}
 	}
 }

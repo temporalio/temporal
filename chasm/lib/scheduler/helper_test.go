@@ -247,6 +247,12 @@ func withEngineMetricsHandler(handler metrics.Handler) engineTestOption {
 	}
 }
 
+func withEngineNamespaceName(name string) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithNamespaceName(namespaceID, name))
+	}
+}
+
 func newEngineTestConfig(opts ...engineTestOption) *engineTestConfig {
 	config := &engineTestConfig{}
 	for _, opt := range opts {
@@ -594,7 +600,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
 
-	tv := testvars.New(t)
+	tv := testvars.New(t).WithNamespaceName(namespace).WithNamespaceID(namespaceID)
 	nodeBackend.HandleNow = timeSource.Now
 	nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }

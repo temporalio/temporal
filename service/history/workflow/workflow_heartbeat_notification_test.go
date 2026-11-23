@@ -1,13 +1,16 @@
 package workflow
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -34,7 +37,10 @@ func TestIsWorkflowHeartbeatNotificationInputType(t *testing.T) {
 		{"signal", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, true},
 		{"cancellation", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED, true},
 		{"timer", enumspb.EVENT_TYPE_TIMER_FIRED, true},
-		{"activity result", enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED, true},
+		{"activity completed", enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED, true},
+		{"activity failed", enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED, true},
+		{"activity timed out", enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT, true},
+		{"activity canceled", enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED, true},
 		{"child workflow result", enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED, true},
 		{"nexus result", enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, true},
 		{"child workflow started", enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED, true},
@@ -52,12 +58,54 @@ func TestIsWorkflowHeartbeatNotificationInputType(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.eligible, isWorkflowHeartbeatNotificationInputType(tc.eventType))
+			require.Equal(t, tc.eligible, IsWorkflowHeartbeatNotificationInputType(tc.eventType))
 		})
 	}
 }
 
-func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
+func TestIsWorkflowHeartbeatNotificationEnabled(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name    string
+		want    bool
+		percent int
+	}{
+		{"zero percent disables all", false, 0},
+		{"hundred percent enables all", true, 100},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			shard := historyi.NewMockShardContext(gomock.NewController(t))
+			shard.EXPECT().GetConfig().Return(&configs.Config{
+				WorkflowHeartbeatNotificationRolloutPercent: func(string) int { return tc.percent },
+			})
+			require.Equal(t, tc.want, isWorkflowHeartbeatNotificationEnabled(shard, "namespace", "workflow"))
+		})
+	}
+}
+
+func TestWorkflowHeartbeatNotificationRolloutIsSticky(t *testing.T) {
+	t.Parallel()
+	shard := historyi.NewMockShardContext(gomock.NewController(t))
+	shard.EXPECT().GetConfig().Return(&configs.Config{
+		WorkflowHeartbeatNotificationRolloutPercent: func(string) int { return 50 },
+	}).AnyTimes()
+
+	selected := 0
+	for i := range 100 {
+		workflowID := "workflow-" + strconv.Itoa(i)
+		first := isWorkflowHeartbeatNotificationEnabled(shard, "namespace", workflowID)
+		require.Equal(t, first, isWorkflowHeartbeatNotificationEnabled(shard, "namespace", workflowID))
+		if first {
+			selected++
+		}
+	}
+	require.Positive(t, selected)
+	require.Less(t, selected, 100)
+}
+
+func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		name          string
@@ -91,7 +139,7 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			bufferedTypes: []string{"TimerFired"},
 		},
 		{
-			name:          "multiple inputs in one transaction",
+			name:          "multiple events in one transaction",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED},
 			bufferedTypes: []string{"TimerFired", "ActivityTaskCompleted"},
@@ -118,7 +166,7 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			nilNamespace: true,
 		},
 		{
-			name:      "no eligible input",
+			name:      "no eligible event",
 			started:   true,
 			newEvents: []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED},
 		},
@@ -149,6 +197,7 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			defer metricsHandler.StopCapture(capture)
 			workflowContext := &ContextImpl{
 				MutableState:   mutableState,
+				workflowKey:    definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"),
 				metricsHandler: metricsHandler,
 				updateRegistry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{
 					hasOutgoing: tc.pendingUpdate,
@@ -158,7 +207,13 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			for _, eventType := range tc.newEvents {
 				newEvents = append(newEvents, &historypb.HistoryEvent{EventType: eventType})
 			}
-			workflowContext.emitWorkflowHeartbeatNotificationBufferedInputMetrics(newEvents)
+			shard := historyi.NewMockShardContext(controller)
+			if tc.firstType != "" {
+				shard.EXPECT().GetConfig().Return(&configs.Config{
+					WorkflowHeartbeatNotificationRolloutPercent: func(string) int { return 0 },
+				})
+			}
+			workflowContext.handleWorkflowHeartbeatNotification(shard, newEvents)
 
 			buffered := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 			require.Len(t, buffered, len(tc.bufferedTypes))

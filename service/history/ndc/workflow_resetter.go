@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -29,6 +30,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
@@ -938,8 +940,8 @@ func (r *workflowResetterImpl) reapplyEvents(
 	)
 }
 
-// canReapplyOnReset reports whether an events-reapplication reset would reapply the event.
-func canReapplyOnReset(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+// CanReapplyOnReset reports whether an events-reapplication reset would reapply the event.
+func CanReapplyOnReset(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
 	switch event.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
@@ -948,6 +950,55 @@ func canReapplyOnReset(stateMachineRegistry *hsm.Registry, event *historypb.Hist
 		return false
 	default:
 		return workflow.ShouldReapplyEvent(stateMachineRegistry, event)
+	}
+}
+
+// GetEventsReapplicationResetEventID returns the event to reset a closed workflow to before reapplying events,
+// or common.EmptyEventID if the workflow never had a workflow task.
+func GetEventsReapplicationResetEventID(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	mutableState historyi.MutableState,
+) (int64, error) {
+	if eventID := mutableState.GetLastCompletedWorkflowTaskStartedEventId(); eventID != common.EmptyEventID {
+		return eventID, nil
+	}
+	// A transient or speculative workflow task has no persisted WorkflowTaskScheduled event to reset to.
+	if workflowTask := mutableState.GetPendingWorkflowTask(); workflowTask != nil &&
+		!mutableState.IsTransientWorkflowTask() &&
+		workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		return workflowTask.ScheduledEventID, nil
+	}
+
+	// Failing or timing out a workflow task removes it from mutable state, so find its last event in history.
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
+	if err != nil {
+		return 0, err
+	}
+	resetEventID := common.EmptyEventID
+	var pageToken []byte
+	for {
+		resp, err := shardContext.GetExecutionManager().ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:       shardContext.GetShardID(),
+			BranchToken:   currentVersionHistory.GetBranchToken(),
+			MinEventID:    common.FirstEventID,
+			MaxEventID:    mutableState.GetNextEventID(),
+			PageSize:      defaultPageSize,
+			NextPageToken: pageToken,
+		})
+		if err != nil {
+			return 0, err
+		}
+		for _, event := range resp.HistoryEvents {
+			if eventType := event.GetEventType(); eventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED ||
+				eventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+				resetEventID = event.GetEventId()
+			}
+		}
+		if len(resp.NextPageToken) == 0 {
+			return resetEventID, nil
+		}
+		pageToken = resp.NextPageToken
 	}
 }
 

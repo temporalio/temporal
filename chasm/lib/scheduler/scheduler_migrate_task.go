@@ -81,14 +81,16 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.SchedulerMigrateToWorkflowTask,
 ) (retErr error) {
-	metricsHandler := h.metricsHandler.WithTags(
-		metrics.StringTag(metrics.ScheduleMigrationDirectionTag, metrics.ScheduleMigrationDirectionToWorkflow),
-	)
-	metricsHandler.Counter(metrics.ScheduleMigrationStarted.Name()).Record(1)
-
 	// logger is initialized after ReadComponent, once namespace/scheduleID are known.
 	var logger log.Logger
+	// Metrics are recorded on exit so they carry the namespace, which is only
+	// known after ReadComponent (_unknown_ if the read fails).
+	var namespaceName string
 	defer func() {
+		metricsHandler := newNamespaceTaggedMetricsHandler(h.metricsHandler, namespaceName).WithTags(
+			metrics.StringTag(metrics.ScheduleMigrationDirectionTag, metrics.ScheduleMigrationDirectionToWorkflow),
+		)
+		metricsHandler.Counter(metrics.ScheduleMigrationStarted.Name()).Record(1)
 		if retErr != nil {
 			metricsHandler.Counter(metrics.ScheduleMigrationFailed.Name()).Record(1)
 			if logger != nil {
@@ -167,6 +169,7 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read scheduler state: %w", err)
 	}
+	namespaceName = result.namespace
 
 	logger = log.With(
 		h.baseLogger,
