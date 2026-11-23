@@ -2169,11 +2169,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_FastForwardPropagate
 
 	childPollResp := awaitFastForwardPoll(s.T(), pollFastForwardAsync(ctx, env, childWFID, ffID))
 	s.Equal(enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED, childPollResp.GetFastForwardPollingResult())
-	select {
-	case r := <-parentPoll:
-		s.Failf("parent poll returned while its pending child blocks skipping", "result=%v err=%v", r.resp.GetFastForwardPollingResult(), r.err)
-	case <-time.After(2 * time.Second):
-	}
+	parentBeforeChildCompletion := s.getMutableState(env, parentWFID, parentRunID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.False(parentBeforeChildCompletion.GetFastForwardInfo().GetHasReached(), "pending child must block parent fast-forward")
 
 	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         ns,
