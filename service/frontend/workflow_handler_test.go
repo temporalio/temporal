@@ -2651,8 +2651,8 @@ func (s *WorkflowHandlerSuite) TestGetSearchAttributes_ElasticsearchHidesPreallo
 	s.NoError(err)
 	s.Contains(resp.GetKeys(), "CustomKeywordField")
 	s.Contains(resp.GetKeys(), "WorkflowId")
-	for name := range resp.GetKeys() {
-		s.False(sadefs.IsPreallocatedCSAFieldNameOfAnyType(name), name)
+	for name := range searchattribute.TestNameTypeMap().Custom() {
+		s.NotContains(resp.GetKeys(), name)
 	}
 }
 

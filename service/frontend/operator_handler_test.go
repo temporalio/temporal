@@ -877,24 +877,6 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_ElasticsearchHidesPreal
 	s.Equal(legacyOnly, resp.GetCustomAttributes())
 }
 
-func (s *operatorHandlerSuite) Test_AddSearchAttributesElasticsearch_RejectsPreallocatedFieldNames() {
-	for _, searchAttributes := range []map[string]enumspb.IndexedValueType{
-		{"Keyword05": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
-		// A different type than the pre-allocated field would conflict with its mapping.
-		{"Keyword05": enumspb.INDEXED_VALUE_TYPE_INT},
-		{"Text01": enumspb.INDEXED_VALUE_TYPE_TEXT, "CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
-	} {
-		err := s.handler.addSearchAttributesElasticsearch(
-			context.Background(),
-			&operatorservice.AddSearchAttributesRequest{SearchAttributes: searchAttributes},
-			s.mockResource.VisibilityManager,
-		)
-		var invalidArgumentErr *serviceerror.InvalidArgument
-		s.Require().ErrorAs(err, &invalidArgumentErr)
-		s.Contains(err.Error(), "pre-allocated custom search attribute field name")
-	}
-}
-
 func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 	handler := s.handler
 	ctx := context.Background()

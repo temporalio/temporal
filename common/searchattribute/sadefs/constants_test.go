@@ -153,12 +153,3 @@ func TestIsChasmOverridableSystem(t *testing.T) {
 
 	require.False(t, IsChasmOverridableSystem("NonExistent"))
 }
-
-func TestIsPreallocatedCSAFieldNameOfAnyType(t *testing.T) {
-	for _, name := range []string{"Keyword01", "Keyword99", "KeywordList03", "Text01", "Int02", "Double03", "Bool01", "Datetime10"} {
-		require.True(t, IsPreallocatedCSAFieldNameOfAnyType(name), name)
-	}
-	for _, name := range []string{"Keyword00", "Keyword100", "Keyword1", "CustomKeywordField", "keyword01", "TemporalKeyword01", "Float01"} {
-		require.False(t, IsPreallocatedCSAFieldNameOfAnyType(name), name)
-	}
-}

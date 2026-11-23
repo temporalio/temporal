@@ -200,14 +200,6 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	request *operatorservice.AddSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	// Pre-allocated field names (eg: Keyword01) are reserved for namespace aliases, and the
-	// Elasticsearch schema already maps them with a fixed type.
-	for saName := range request.GetSearchAttributes() {
-		if sadefs.IsPreallocatedCSAFieldNameOfAnyType(saName) {
-			return serviceerror.NewInvalidArgumentf(errSearchAttributeIsPreallocatedFieldMessage, saName)
-		}
-	}
-
 	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {

@@ -372,17 +372,6 @@ func IsPreallocatedCSAFieldName(name string, valueType enumspb.IndexedValueType)
 	return re != nil && re.MatchString(name)
 }
 
-// IsPreallocatedCSAFieldNameOfAnyType returns true if name is a pre-allocated custom search
-// attribute field name (eg: Keyword01) of any type.
-func IsPreallocatedCSAFieldNameOfAnyType(name string) bool {
-	for _, re := range dbCustomSearchAttributeFieldNameRE {
-		if re.MatchString(name) {
-			return true
-		}
-	}
-	return false
-}
-
 var chasmSearchAttributePattern = regexp.MustCompile(`^Temporal(Bool|Datetime|Int|Double|Text|Keyword|LowCardinalityKeyword|KeywordList)(0[1-9]|[1-9][0-9])$`)
 
 // IsChasmSearchAttribute checks if a field name matches the pattern for CHASM search attributes.

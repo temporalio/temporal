@@ -82,7 +82,6 @@ var (
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 
 	errSearchAttributeIsReservedMessage               = "Search attribute %s is reserved by system."
-	errSearchAttributeIsPreallocatedFieldMessage      = "Search attribute %s is a pre-allocated custom search attribute field name and cannot be registered."
 	errSearchAttributeAlreadyExistsMessage            = "Search attribute %s already exists."
 	errSearchAttributeDoesntExistMessage              = "Search attribute %s doesn't exist."
 	errUnknownSearchAttributeTypeMessage              = "Unknown search attribute type: %v."

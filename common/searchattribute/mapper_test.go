@@ -21,9 +21,10 @@ func Test_AliasFields(t *testing.T) {
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
+	// Fields without an alias are dropped, even when no other field is renamed.
 	sb, err := AliasFields(mapperProvider, sa, "error-namespace")
 	require.NoError(t, err)
-	require.Equal(t, sa, sb)
+	require.Empty(t, sb.GetIndexedFields())
 
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -33,7 +34,7 @@ func Test_AliasFields(t *testing.T) {
 	}
 	sb, err = AliasFields(mapperProvider, sa, "unknown-namespace")
 	require.NoError(t, err)
-	require.Equal(t, sa, sb)
+	require.Empty(t, sb.GetIndexedFields())
 
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -306,23 +307,46 @@ func Test_BackCompMapperPrefersLegacyCustomSearchAttributeOverNamespaceAlias(t *
 	require.NoError(t, err)
 	require.Equal(t, "NewAttr", alias)
 
-	// The field behind the ignored alias is not exposed under the legacy attribute's name.
+	// The field behind the shadowed alias has no alias, so it doesn't collide with the legacy
+	// attribute.
 	_, err = mapper.GetAlias("Keyword01", "ns")
 	require.ErrorAs(t, err, &invalidArgumentErr)
 
-	sa, err := AliasFields(
-		staticMapperProvider{mapper: mapper},
-		&commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-			"CustomerId": {Data: []byte(`"legacy"`)},
-			"Keyword01":  {Data: []byte(`"via-alias"`)},
-			"Keyword02":  {Data: []byte(`"new"`)},
-		}},
-		"ns",
-	)
-	require.NoError(t, err)
-	require.Len(t, sa.GetIndexedFields(), 2)
-	require.Equal(t, []byte(`"legacy"`), sa.GetIndexedFields()["CustomerId"].GetData())
-	require.Equal(t, []byte(`"new"`), sa.GetIndexedFields()["NewAttr"].GetData())
+	for _, tc := range []struct {
+		name     string
+		input    map[string]string
+		expected map[string]string
+	}{
+		{
+			name:     "with another renamed field",
+			input:    map[string]string{"CustomerId": "legacy", "Keyword01": "via-alias", "Keyword02": "new"},
+			expected: map[string]string{"CustomerId": "legacy", "NewAttr": "new"},
+		},
+		{
+			// The result doesn't depend on whether another field is renamed.
+			name:     "without another renamed field",
+			input:    map[string]string{"CustomerId": "legacy", "Keyword01": "via-alias"},
+			expected: map[string]string{"CustomerId": "legacy"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			indexedFields := make(map[string]*commonpb.Payload, len(tc.input))
+			for name, value := range tc.input {
+				indexedFields[name] = &commonpb.Payload{Data: []byte(value)}
+			}
+			sa, err := AliasFields(
+				staticMapperProvider{mapper: mapper},
+				&commonpb.SearchAttributes{IndexedFields: indexedFields},
+				"ns",
+			)
+			require.NoError(t, err)
+			result := make(map[string]string, len(sa.GetIndexedFields()))
+			for name, payload := range sa.GetIndexedFields() {
+				result[name] = string(payload.GetData())
+			}
+			require.Equal(t, tc.expected, result)
+		})
+	}
 }
 
 type staticMapperProvider struct {

@@ -59,9 +59,9 @@ func (*NoopMapper) GetFieldName(alias string, _ string) (string, error) {
 }
 
 // GetAlias returns the alias of fieldName. A legacy custom search attribute (registered
-// through cluster metadata) always maps to itself, and a namespace alias that has the same
-// name as a legacy custom search attribute is ignored, so both directions stay consistent
-// with GetFieldName.
+// through cluster metadata) always maps to itself. A namespace alias that has the same name as a
+// legacy custom search attribute is not used: GetFieldName resolves that name to the legacy
+// attribute. The field has no alias in that case, so that two fields never get the same alias.
 func (m *backCompMapper) GetAlias(fieldName string, namespaceName string) (string, error) {
 	if m.isLegacyCustomSearchAttribute(fieldName) {
 		return fieldName, nil
@@ -153,7 +153,8 @@ func WithoutPreallocatedFields(
 }
 
 // AliasFields returns SearchAttributes struct where each custom search attribute name is replaced with alias.
-// If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
+// Fields that have no alias are dropped. If no field was renamed or dropped, it returns the original
+// SearchAttributes struct.
 func AliasFields(
 	mapperProvider MapperProvider,
 	searchAttributes *commonpb.SearchAttributes,
@@ -182,6 +183,8 @@ func AliasFields(
 			// IMPORTANT: AliasFields should never return serviceerror.InvalidArgument because it is used by Poll API and the error
 			// goes through up to SDK, which shutdowns worker when it receives serviceerror.InvalidArgument as poll response.
 			if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+				// The field is dropped, so the original SearchAttributes can't be returned.
+				mapped = true
 				continue
 			}
 			return nil, err
@@ -192,7 +195,7 @@ func AliasFields(
 		newIndexedFields[aliasName] = saPayload
 	}
 
-	// If no field name was mapped, return nil to save on clone operation on caller side.
+	// If no field was renamed or dropped, return the original to save on clone operation on caller side.
 	if !mapped {
 		return searchAttributes, nil
 	}
