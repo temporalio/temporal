@@ -28,6 +28,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const errTypeMigrationDeferredBackfill = "migration_deferred_backfill"
+
 type (
 	activities struct {
 		activityDeps
@@ -39,6 +41,9 @@ type (
 		maxBlobSize              dynamicconfig.IntPropertyFn
 		localActivitySleepLimit  dynamicconfig.DurationPropertyFn
 		migrationEnabled         dynamicconfig.BoolPropertyFn
+		// autoMigrationSelected reports whether the CHASM auto-migration rollout currently
+		// selects the given schedule ID.
+		autoMigrationSelected func(scheduleID string) bool
 	}
 
 	errFollow string
@@ -403,6 +408,17 @@ func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerp
 		// asleep since well before the rollback. The caller just logs this
 		// like any other failure and keeps retrying at its normal cadence.
 		return errors.New("MigrateScheduleToChasm: migration is currently disabled")
+	}
+	// Converting an in-flight backfill can duplicate or drop slots (V1's backfill start is an
+	// exclusive cursor), so auto-migration waits for backfills to drain. The caller retries
+	// on its next iteration.
+	if len(req.GetState().GetBackfillers()) > 0 && a.autoMigrationSelected != nil &&
+		a.autoMigrationSelected(req.GetState().GetSchedulerState().GetScheduleId()) {
+		return temporal.NewNonRetryableApplicationError(
+			"MigrateScheduleToChasm: deferred while a backfill is in progress",
+			errTypeMigrationDeferredBackfill,
+			nil,
+		)
 	}
 	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
 	if err != nil {
