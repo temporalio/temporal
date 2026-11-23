@@ -49,11 +49,16 @@ func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 ) (any, error) {
 
 	resp, err := handler(ctx, req)
-
-	if err != nil && mi.shouldMaskErrors(req) {
-		err = mi.maskUnknownOrInternalErrors(req, info.FullMethod, err)
+	if err == nil {
+		return resp, nil
 	}
-	return resp, err
+
+	// Draft gate panics already produce a generic status. Masking could retry the lookup that panicked.
+	if invocation, ok := ctx.Value(draftInvocationKey{}).(*draftInvocation); ok && invocation.gateLookupPanicked {
+		return resp, err
+	}
+
+	return resp, mi.maskUnknownOrInternalErrors(req, info.FullMethod, err)
 }
 
 func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
@@ -70,6 +75,9 @@ func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(
 	statusCode := serviceerror.ToStatus(err).Code()
 
 	if statusCode != codes.Unknown && statusCode != codes.Internal {
+		return err
+	}
+	if !mi.shouldMaskErrors(req) {
 		return err
 	}
 

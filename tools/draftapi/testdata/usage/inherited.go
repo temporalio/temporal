@@ -25,13 +25,10 @@ func inherited(req *pb.Stable, cross *refs.References) {
 	_ = refs.References_Child{} // want "use of draft API .*message-feature"
 }
 
-func conjunction(req *pb.Stable) {
-	_ = req.GetBoth() // want "use of draft API .*field-feature, message-feature"
-	_ = req.GetBoth() // temporal:allow-draft-api field-feature // want "use of draft API .*field-feature, message-feature"
-	_ = req.GetBoth() // temporal:allow-draft-api field-feature message-feature
-	// temporal:allow-draft-api field-feature
-	// temporal:allow-draft-api message-feature
-	_ = req.GetBoth()
-	_ = req.GetNestedBoth() // want "use of draft API .*message-feature, nested-other-feature"
-	_ = req.GetNestedBoth() // temporal:allow-draft-api message-feature nested-other-feature
+func oneFeature(req *pb.Stable) {
+	_ = req.GetAlsoDraft()   // want "use of draft API .*message-feature"
+	_ = req.GetAlsoDraft()   // temporal:allow-draft-api field-feature // want "use of draft API .*message-feature"
+	_ = req.GetAlsoDraft()   // temporal:allow-draft-api message-feature
+	_ = req.GetNestedDraft() // want "use of draft API .*message-feature"
+	_ = req.GetNestedDraft() // temporal:allow-draft-api message-feature
 }

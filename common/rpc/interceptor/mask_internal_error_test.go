@@ -38,11 +38,13 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRepl
 	errorMaskInterceptor := NewMaskInternalErrorDetailsInterceptor(
 		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
 
+	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: "tenant"}
 	err := st.Err()
 	if expectReplace {
+		mockRegistry.EXPECT().GetNamespace(namespace.Name("tenant")).Return(&namespace.Namespace{}, nil).AnyTimes()
 		mockLogger.EXPECT().Error(gomock.Any(), gomock.Any()).Times(1)
 	}
-	gotError := errorMaskInterceptor.maskUnknownOrInternalErrors(nil, "test", err)
+	gotError := errorMaskInterceptor.maskUnknownOrInternalErrors(req, "test", err)
 	if expectReplace {
 		errorHash := common.ErrorHash(err)
 		expectedMessage := fmt.Sprintf(

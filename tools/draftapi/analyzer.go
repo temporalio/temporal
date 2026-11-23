@@ -1,3 +1,12 @@
+// Package draftapi provides a review aid for named references to draft protobuf
+// symbols. It skips files with a standard Code generated header. It cannot trace
+// draft data accessed through protoreflect, protojson or other serialization,
+// proto.Merge or proto.Clone, interface methods, or generic constraints. It also
+// misses fields initialized in unkeyed literals and draft types referenced only
+// through aliases declared in another server package.
+//
+// The runtime filter in common/rpc/interceptor/draft_fields.go and in the Nexus
+// handlers enforces draft API exposure.
 package draftapi
 
 import (
@@ -13,7 +22,7 @@ import (
 )
 
 // Analyzer requires an explicit opt-in for direct references to draft protobuf APIs and
-// limits draft annotations to locations supported by response filtering.
+// validates draft annotation feature names and containment.
 var Analyzer = &analysis.Analyzer{
 	Name:      "draftapi",
 	Doc:       "report references to draft Temporal protobuf APIs and unsupported draft annotations",
@@ -22,13 +31,13 @@ var Analyzer = &analysis.Analyzer{
 }
 
 type apiFact struct {
-	Features []string
-	Symbol   string
+	Feature string
+	Symbol  string
 }
 
 func (*apiFact) AFact() {}
 
-func (f *apiFact) String() string { return strings.Join(f.Features, ", ") }
+func (f *apiFact) String() string { return f.Feature }
 
 func run(pass *analysis.Pass) (any, error) {
 	checkAPIMetadata(pass)
@@ -50,11 +59,11 @@ func run(pass *analysis.Pass) (any, error) {
 				return true
 			}
 			var fact apiFact
-			if !pass.ImportObjectFact(obj, &fact) || suppressed(suppressions, id.Pos(), fact.Features) {
+			if !pass.ImportObjectFact(obj, &fact) || suppressed(suppressions, id.Pos(), fact.Feature) {
 				return true
 			}
 			pass.Reportf(id.Pos(), "use of draft API %s (%s); acknowledge with // temporal:allow-draft-api %s",
-				fact.Symbol, strings.Join(fact.Features, ", "), strings.Join(fact.Features, " "))
+				fact.Symbol, fact.Feature, fact.Feature)
 			return true
 		})
 	}
@@ -62,31 +71,25 @@ func run(pass *analysis.Pass) (any, error) {
 }
 
 func checkAPIMetadata(pass *analysis.Pass) {
+	if !strings.HasPrefix(pass.Pkg.Path(), "go.temporal.io/api/") {
+		return
+	}
 	var metadata optionsFact
 	var options []option
 	for _, pkg := range pass.Pkg.Imports() {
 		var imported optionsFact
 		if pass.ImportPackageFact(pkg, &imported) {
 			options = append(options, imported.Options...)
-			metadata.Errors = append(metadata.Errors, imported.Errors...)
 		}
 	}
-	if strings.HasPrefix(pass.Pkg.Path(), "go.temporal.io/api/") {
-		exportAPIs(pass, options, &metadata)
-	}
-	metadata.Errors = reportValidationErrors(pass, metadata.Errors)
-	if len(metadata.Options) > 0 || len(metadata.Errors) > 0 {
+	validationErrors := exportAPIs(pass, options, &metadata)
+	if len(metadata.Options) > 0 {
 		pass.ExportPackageFact(&metadata)
 	}
-}
-
-func reportValidationErrors(pass *analysis.Pass, errors []string) []string {
-	slices.Sort(errors)
-	errors = slices.Compact(errors)
-	for _, err := range errors {
+	slices.Sort(validationErrors)
+	for _, err := range slices.Compact(validationErrors) {
 		pass.Reportf(pass.Files[0].Pos(), "draft API validation failed: %s", err)
 	}
-	return errors
 }
 
 func objectName(obj types.Object) string {
@@ -110,11 +113,9 @@ type sourceRange struct {
 	features []string
 }
 
-func suppressed(ranges []sourceRange, pos token.Pos, features []string) bool {
-	return len(features) > 0 && !slices.ContainsFunc(features, func(feature string) bool {
-		return !slices.ContainsFunc(ranges, func(r sourceRange) bool {
-			return r.start <= pos && pos < r.end && slices.Contains(r.features, feature)
-		})
+func suppressed(ranges []sourceRange, pos token.Pos, feature string) bool {
+	return slices.ContainsFunc(ranges, func(r sourceRange) bool {
+		return r.start <= pos && pos < r.end && slices.Contains(r.features, feature)
 	})
 }
 
@@ -172,13 +173,17 @@ func lineRange(tf *token.File, line int, features []string) sourceRange {
 }
 
 func allowedFeatures(comment string) []string {
-	comment = strings.TrimSpace(strings.TrimPrefix(comment, "//"))
-	directive, _, _ := strings.Cut(comment, "//")
-	fields := strings.Fields(directive)
+	fields := strings.Fields(strings.TrimPrefix(comment, "//"))
 	if len(fields) < 2 || fields[0] != "temporal:allow-draft-api" {
 		return nil
 	}
-	return fields[1:]
+	// Feature names are any whitespace-free token, as in the generators, so they may
+	// contain "//"; only a separate token starting with "//" begins an explanation.
+	features := fields[1:]
+	if i := slices.IndexFunc(features, func(field string) bool { return strings.HasPrefix(field, "//") }); i >= 0 {
+		features = features[:i]
+	}
+	return features
 }
 
 func generatedProto(pass *analysis.Pass, file *ast.File) bool {

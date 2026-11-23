@@ -52,7 +52,6 @@ func TestResourceExhaustedRetryDelaySurvivesFrontendErrorInterceptors(t *testing
 				Message: tc.message,
 			}, 2*time.Second)
 			registry := namespace.NewMockRegistry(gomock.NewController(t))
-			registry.EXPECT().GetNamespace(namespace.Name(namespaceName)).Return(&namespace.Namespace{}, nil)
 			maskInterceptor := NewMaskInternalErrorDetailsInterceptor(
 				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true), registry, log.NewNoopLogger())
 			serviceErrorInterceptor := NewServiceErrorInterceptor(

@@ -12,12 +12,15 @@ func statements(req *pb.Stable) {
 	_ = req.Draft // temporal:allow-draft-api field-feature
 	// temporal:allow-draft-api field-feature
 	_ = req.GetDraft()
-	_ = req.Draft // temporal:allow-draft-api wrong-feature // want "use of draft API .*field-feature"
-	_ = req.Draft // temporal:allow-draft-api Field-Feature // want "use of draft API .*field-feature"
-	_ = req.Draft // temporal:allow-draft-api * // want "use of draft API .*field-feature"
-	_ = req.Draft //nolint:draftapi // want "use of draft API .*field-feature"
-	_ = req.Draft //nolint:all // want "use of draft API .*field-feature"
-	_ = req.Draft //nolint // want "use of draft API .*field-feature"
+	_ = req.Draft   // temporal:allow-draft-api wrong-feature // want "use of draft API .*field-feature"
+	_ = req.Draft   // temporal:allow-draft-api Field-Feature // want "use of draft API .*field-feature"
+	_ = req.Draft   // temporal:allow-draft-api * // want "use of draft API .*field-feature"
+	_ = req.Slashed // temporal:allow-draft-api qa//experimental
+	_ = req.Slashed // temporal:allow-draft-api qa//experimental // Gated by the caller.
+	_ = req.Slashed // temporal:allow-draft-api qa // want "use of draft API .*qa//experimental"
+	_ = req.Draft   //nolint:draftapi // want "use of draft API .*field-feature"
+	_ = req.Draft   //nolint:all // want "use of draft API .*field-feature"
+	_ = req.Draft   //nolint // want "use of draft API .*field-feature"
 	// Mentioning temporal:allow-draft-api field-feature in prose is not a directive.
 	_ = req.Draft // want "use of draft API .*field-feature"
 	// temporal:allow-draft-apix field-feature
