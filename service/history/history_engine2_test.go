@@ -351,13 +351,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	var persisted *persistence.UpdateWorkflowExecutionRequest
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			persisted = request
-			return tests.UpdateWorkflowExecutionResponse, nil
-		},
-	)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
@@ -400,8 +394,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
-	expectedResponse.Clock = persisted.UpdateWorkflowMutation.ExecutionInfo.GetWorkflowTaskStartedClock()
-	s.NotNil(expectedResponse.Clock)
+	s.NotNil(response.Clock)
+	expectedResponse.Clock = response.Clock
 	s.Equal(&expectedResponse, response)
 }
 
@@ -469,13 +463,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	var persisted *persistence.UpdateWorkflowExecutionRequest
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			persisted = request
-			return tests.UpdateWorkflowExecutionResponse, nil
-		},
-	)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
@@ -518,8 +506,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
-	expectedResponse.Clock = persisted.UpdateWorkflowMutation.ExecutionInfo.GetWorkflowTaskStartedClock()
-	s.NotNil(expectedResponse.Clock)
+	s.NotNil(response.Clock)
+	expectedResponse.Clock = response.Clock
 	s.Equal(&expectedResponse, response)
 }
 

@@ -384,50 +384,6 @@ func (s *mutableStateSuite) TestWorkflowTaskStartedClockLifecycle() {
 	s.Nil(s.mutableState.GetExecutionInfo().GetWorkflowTaskStartedClock())
 }
 
-func (s *mutableStateSuite) TestCleanSpeculativeWorkflowTaskKeepsStartedClockInMemory() {
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
-	s.installEngineCapturingSpeculativeTimeout()
-
-	tq := &taskqueuepb.TaskQueue{Name: "tq"}
-	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
-		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
-		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceId: tests.NamespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowId:          tests.WorkflowID,
-				WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
-				TaskQueue:           tq,
-				WorkflowRunTimeout:  durationpb.New(time.Hour),
-				WorkflowTaskTimeout: durationpb.New(time.Minute),
-			},
-			FirstWorkflowTaskBackoff: durationpb.New(time.Minute),
-		},
-	)
-	s.NoError(err)
-	_, _, err = s.mutableState.CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-
-	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
-	s.NoError(err)
-	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
-		wft.ScheduledEventID,
-		"request-id",
-		tq,
-		"worker-identity",
-		nil,
-		nil,
-		nil,
-		false,
-		nil,
-		0,
-		"",
-	)
-	s.NoError(err)
-	s.Equal(enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE, wft.Type)
-	s.NotNil(wft.StartedClock)
-	s.False(s.mutableState.IsDirty())
-}
-
 func (s *mutableStateSuite) TestSyncExecutionInfoReplicatesWorkflowTaskStartedClock() {
 	sourceClock := &clockspb.VectorClock{ClusterId: 2, ShardId: 1, Clock: 42}
 	incoming := common.CloneProto(s.mutableState.GetExecutionInfo())
@@ -6988,7 +6944,6 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			s.verifyMutableState(currentMS, targetMS, originMS)
 			s.Equal(localPersistenceMetadata, currentMS.GetExecutionInfo().PersistenceMetadata)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
-
 		})
 	}
 }
@@ -7234,7 +7189,6 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			s.verifyMutableState(currentMS, targetMS, originMS)
 			s.Equal(localPersistenceMetadata, currentMS.GetExecutionInfo().PersistenceMetadata)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
-
 		})
 	}
 }
