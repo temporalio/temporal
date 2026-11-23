@@ -1306,7 +1306,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		Attempt:                     m.ms.executionInfo.WorkflowTaskAttempt,
 		AttemptsSinceLastSuccess:    m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess,
 		StartedTime:                 m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
-		StartedClock:                m.ms.executionInfo.WorkflowTaskStartedClock,
+		StartedClock:                common.CloneProto(m.ms.executionInfo.WorkflowTaskStartedClock),
 		WorkerControlQueue:          m.ms.executionInfo.WorkflowTaskWorkerControlQueue,
 		ScheduledTime:               m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
 		TaskQueue:                   m.ms.CurrentTaskQueue(),
