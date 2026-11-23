@@ -114,7 +114,7 @@ func (c *customVisibilityArchiver) ValidateURI(uri archiver.URI) error {
 }
 
 func TestArchivalSuite(t *testing.T) {
-	parallelsuite.Run(t, &ArchivalSuite{})
+	testcore.Run(t, &ArchivalSuite{})
 }
 
 func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {

@@ -205,10 +205,14 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 // parallel. Any sequential setup must happen before calling Run.
 //
 // The suite must embed [Suite] and have no other fields.
-// TEST_TOTAL_SHARDS and TEST_SHARD_INDEX enable automatic sharding by full method name.
-// Nested subtests stay with their method. See [testshard.FromEnv] for configuration.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, true, args...)
+	run(t, s, testshard.Shard{}, true, args...)
+}
+
+// RunInShard runs the suite methods selected by shard using their full test names.
+// Nested subtests stay with their method. See [testshard.FromEnv] for configuration.
+func RunInShard[T TestingSuite](t *testing.T, shard testshard.Shard, s T, args ...any) {
+	run(t, s, shard, true, args...)
 }
 
 // RunLegacySequential behaves like [Run] but does not mark test methods as parallel.
@@ -216,14 +220,18 @@ func Run[T TestingSuite](t *testing.T, s T, args ...any) {
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
 func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, false, args...)
+	run(t, s, testshard.Shard{}, false, args...)
 }
 
-func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
-	t.Helper()
+// RunLegacySequentialInShard runs selected suite methods sequentially.
+//
+// Deprecated: use [RunInShard] for new tests.
+func RunLegacySequentialInShard[T TestingSuite](t *testing.T, shard testshard.Shard, s T, args ...any) {
+	run(t, s, shard, false, args...)
+}
 
-	shard, err := testshard.FromEnv()
-	require.NoError(t, err)
+func run[T TestingSuite](t *testing.T, s T, shard testshard.Shard, methodsParallel bool, args ...any) {
+	t.Helper()
 
 	typ := reflect.TypeFor[T]()
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {

@@ -23,7 +23,7 @@ type StickyTqTestSuite struct {
 }
 
 func TestStickyTqTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &StickyTqTestSuite{})
+	testcore.Run(t, &StickyTqTestSuite{})
 }
 
 func (s *StickyTqTestSuite) TestStickyTimeoutNonTransientWorkflowTask() {

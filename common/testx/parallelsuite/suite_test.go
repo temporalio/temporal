@@ -225,20 +225,6 @@ func (s *shardingSuite) TestA(ran chan string) {
 func (s *shardingSuite) TestB(ran chan string) { s.Snd(ran, "TestB") }
 func (s *shardingSuite) TestC(ran chan string) { s.Snd(ran, "TestC") }
 
-func TestMain(m *testing.M) {
-	if salt := os.Getenv("TESTX_SHARD_DEFAULT_SALT"); salt != "" {
-		testshard.SetDefaults(testshard.WithSalt(salt))
-	}
-	if os.Getenv("TESTX_SHARD_CUSTOM_ENV") == "true" {
-		testshard.SetDefaults(
-			testshard.WithTotalShardsEnv("CI_TOTAL_SHARDS"),
-			testshard.WithShardIndexEnv("CI_SHARD_INDEX"),
-			testshard.WithSaltEnv("CI_SHARD_SALT"),
-		)
-	}
-	m.Run()
-}
-
 func TestRunShardingProcess(t *testing.T) {
 	if os.Getenv("TESTX_SHARD_PROCESS") == "" {
 		return
@@ -254,10 +240,16 @@ func TestRunShardingProcess(t *testing.T) {
 		require.Equal(t, strings.Fields(os.Getenv("TESTX_SHARD_WANT")), got)
 	})
 	t.Run("suite", func(t *testing.T) {
-		if os.Getenv("TESTX_SHARD_LEGACY") == "true" {
-			RunLegacySequential(t, &shardingSuite{}, ran) //nolint:staticcheck // SA1019: sharding must also work in the legacy runner.
-		} else {
+		if os.Getenv("TESTX_SHARD_PLAIN_RUN") == "true" {
 			Run(t, &shardingSuite{}, ran)
+			return
+		}
+		shard, err := testshard.FromEnv("-test-salt")
+		require.NoError(t, err)
+		if os.Getenv("TESTX_SHARD_LEGACY") == "true" {
+			RunLegacySequentialInShard(t, shard, &shardingSuite{}, ran) //nolint:staticcheck // SA1019: sharding must also work in the legacy runner.
+		} else {
+			RunInShard(t, shard, &shardingSuite{}, ran)
 		}
 	})
 }
@@ -265,52 +257,34 @@ func TestRunShardingProcess(t *testing.T) {
 func TestRunSharding(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name        string
-		total       string
-		index       string
-		salt        string
-		defaultSalt string
-		legacy      bool
-		customEnv   bool
-		filter      string
-		want        string
-		wantErr     string
+		name     string
+		total    string
+		index    string
+		legacy   bool
+		plainRun bool
+		filter   string
+		want     string
 	}{
+		{name: "unsharded runner ignores environment", total: "4", index: "invalid", plainRun: true, want: "TestA TestB TestC nested"},
 		{name: "disabled", want: "TestA TestB TestC nested"},
-		{name: "one shard", total: "1", index: "0", salt: "-test-salt", want: "TestA TestB TestC nested"},
-		{name: "owns nested test", total: "4", index: "2", salt: "-test-salt", want: "TestA nested"},
-		{name: "last shard", total: "4", index: "3", salt: "-test-salt", want: "TestB"},
-		{name: "empty shard", total: "4", index: "0", salt: "-test-salt"},
-		{name: "default salt", total: "4", index: "2", defaultSalt: "-test-salt", want: "TestA nested"},
-		{name: "custom variables", total: "4", index: "2", defaultSalt: "-test-salt", customEnv: true, want: "TestA nested"},
-		{name: "legacy", total: "4", index: "2", salt: "-test-salt", legacy: true, want: "TestA nested"},
-		{name: "method filter", total: "4", index: "3", salt: "-test-salt", filter: "^TestB$", want: "TestB"},
-		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TEST_SHARD_SALT or use WithSalt"},
-		{name: "invalid total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
-		{name: "invalid index", total: "4", index: "4", wantErr: "TEST_SHARD_INDEX out of bounds: 4 must be in [0, 4)"},
+		{name: "one shard", total: "1", index: "0", want: "TestA TestB TestC nested"},
+		{name: "owns nested test", total: "4", index: "2", want: "TestA nested"},
+		{name: "last shard", total: "4", index: "3", want: "TestB"},
+		{name: "empty shard", total: "4", index: "0"},
+		{name: "legacy", total: "4", index: "2", legacy: true, want: "TestA nested"},
+		{name: "method filter", total: "4", index: "3", filter: "^TestB$", want: "TestB"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			executable, err := os.Executable()
 			require.NoError(t, err)
 			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestRunShardingProcess$", "-testify.m="+tc.filter)
-			totalEnv, indexEnv, saltEnv := tc.total, tc.index, tc.salt
-			if tc.customEnv {
-				totalEnv, indexEnv, saltEnv = "invalid", "invalid", "ignored"
-			}
 			cmd.Env = append(os.Environ(),
-				"TESTX_SHARD_PROCESS=1", "TEST_TOTAL_SHARDS="+totalEnv, "TEST_SHARD_INDEX="+indexEnv,
-				"TEST_SHARD_SALT="+saltEnv, "TESTX_SHARD_DEFAULT_SALT="+tc.defaultSalt,
+				"TESTX_SHARD_PROCESS=1", "TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index,
 				"TESTX_SHARD_WANT="+tc.want, "TESTX_SHARD_LEGACY="+strconv.FormatBool(tc.legacy),
-				"TESTX_SHARD_CUSTOM_ENV="+strconv.FormatBool(tc.customEnv),
-				"CI_TOTAL_SHARDS="+tc.total, "CI_SHARD_INDEX="+tc.index, "CI_SHARD_SALT="+tc.salt)
+				"TESTX_SHARD_PLAIN_RUN="+strconv.FormatBool(tc.plainRun))
 			output, err := cmd.CombinedOutput()
-			if tc.wantErr != "" {
-				require.Error(t, err, "%s", output)
-				require.Contains(t, string(output), tc.wantErr)
-			} else {
-				require.NoError(t, err, "%s", output)
-			}
+			require.NoError(t, err, "%s", output)
 		})
 	}
 }

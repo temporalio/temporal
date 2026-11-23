@@ -46,11 +46,11 @@ type ActivityClientTestSuite struct {
 }
 
 func TestActivityTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityTestSuite{})
+	testcore.Run(t, &ActivityTestSuite{})
 }
 
 func TestActivityClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityClientTestSuite{})
+	testcore.Run(t, &ActivityClientTestSuite{})
 }
 
 func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {

@@ -56,7 +56,7 @@ type TimeSkippingPropagationTestSuite struct {
 }
 
 func TestTimeSkippingPropagationTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &TimeSkippingPropagationTestSuite{})
+	testcore.Run(t, &TimeSkippingPropagationTestSuite{})
 }
 
 // TestTSPInChildWf_Basic exercises end-to-end

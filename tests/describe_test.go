@@ -28,7 +28,7 @@ type DescribeTestSuite struct {
 }
 
 func TestDescribeTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &DescribeTestSuite{})
+	testcore.Run(t, &DescribeTestSuite{})
 }
 
 func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {

@@ -68,7 +68,7 @@ type (
 )
 
 func TestDLQSuite(t *testing.T) {
-	parallelsuite.RunLegacySequential(t, &DLQSuite{}) //nolint:staticcheck // SA1019: DLQ tests use dedicated clusters with fault injection and worker-service DLQ jobs.
+	testcore.RunLegacySequential(t, &DLQSuite{}) //nolint:staticcheck // SA1019: DLQ tests use dedicated clusters with fault injection and worker-service DLQ jobs.
 }
 
 // newTestEnv starts a test env without persistence faults.

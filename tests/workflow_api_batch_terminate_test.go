@@ -27,7 +27,7 @@ type WorkflowAPIBatchTerminateClientTestSuite struct {
 }
 
 func TestWorkflowAPIBatchTerminateClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowAPIBatchTerminateClientTestSuite{})
+	testcore.Run(t, &WorkflowAPIBatchTerminateClientTestSuite{})
 }
 
 // newWorkflowBatchEnv builds a test env with the "batch operations" worker

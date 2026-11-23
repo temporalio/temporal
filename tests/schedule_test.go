@@ -904,7 +904,7 @@ type ScheduleV1Suite struct {
 }
 
 func TestScheduleV1Suite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleV1Suite{})
+	testcore.Run(t, &ScheduleV1Suite{})
 }
 
 func TestScheduleV1ActionDelayMetrics(t *testing.T) {
@@ -6499,11 +6499,11 @@ type ScheduleSuite struct {
 }
 
 func TestScheduleV1SharedSuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleSuite{}, false)
+	testcore.Run(t, &ScheduleSuite{}, false)
 }
 
 func TestScheduleCHASMSharedSuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleSuite{}, true)
+	testcore.Run(t, &ScheduleSuite{}, true)
 }
 
 // TestJitteredWakeupSurvivesCompletion runs the same public-API assertions against
@@ -6647,7 +6647,7 @@ type ScheduleCHASMSuite struct {
 }
 
 func TestScheduleCHASMSuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleCHASMSuite{})
+	testcore.Run(t, &ScheduleCHASMSuite{})
 }
 
 // TestScheduleNextActionTimeVisibility asserts that the CHASM scheduler's

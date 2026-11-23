@@ -21,7 +21,7 @@ type NilSearchAttributeSuite struct {
 }
 
 func TestNilSearchAttributeSuite(t *testing.T) {
-	parallelsuite.Run(t, &NilSearchAttributeSuite{})
+	testcore.Run(t, &NilSearchAttributeSuite{})
 }
 
 func (s *NilSearchAttributeSuite) TestWorkflowStart_NilSearchAttributesFiltered() {

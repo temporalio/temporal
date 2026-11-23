@@ -24,7 +24,7 @@ type WorkflowAPIBatchUpdateOptionsClientTestSuite struct {
 }
 
 func TestWorkflowAPIBatchUpdateOptionsClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowAPIBatchUpdateOptionsClientTestSuite{})
+	testcore.Run(t, &WorkflowAPIBatchUpdateOptionsClientTestSuite{})
 }
 
 func (s *WorkflowAPIBatchUpdateOptionsClientTestSuite) TestWorkflowBatchUpdateOptions_Success() {

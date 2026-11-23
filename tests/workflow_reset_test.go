@@ -45,7 +45,7 @@ type versioningConfig struct {
 }
 
 func TestWorkflowResetTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowResetSuite{})
+	testcore.Run(t, &WorkflowResetSuite{})
 }
 
 // No explicit base run provided. current run is still running.

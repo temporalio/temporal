@@ -52,7 +52,7 @@ const (
 )
 
 func TestVersioningFunctionalSuite(t *testing.T) {
-	parallelsuite.Run(t, &VersioningIntegSuite{})
+	testcore.Run(t, &VersioningIntegSuite{})
 }
 
 func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {

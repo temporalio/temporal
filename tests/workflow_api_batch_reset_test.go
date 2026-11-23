@@ -27,7 +27,7 @@ type WorkflowAPIBatchResetClientTestSuite struct {
 }
 
 func TestWorkflowAPIBatchResetClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowAPIBatchResetClientTestSuite{})
+	testcore.Run(t, &WorkflowAPIBatchResetClientTestSuite{})
 }
 
 // newResetTestActivityAndWorkflow returns an activity/workflow pair, sharing

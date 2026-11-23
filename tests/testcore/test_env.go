@@ -2,7 +2,6 @@ package testcore
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"net/http"
@@ -35,14 +34,7 @@ import (
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
-	"go.temporal.io/testx/testshard"
 )
-
-// shardSalt is used to distribute functional tests across shards.
-// This value is automatically updated by the optimize-test-sharding workflow.
-//
-//go:embed shard_salt.txt
-var shardSalt string
 
 var _ Env = (*TestEnv)(nil)
 
@@ -264,7 +256,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	// Test sharding is based on environment variables.
 	// This distributes tests across multiple CI shards for parallel execution.
-	testshard.SkipUnlessInShard(t, testshard.WithSalt(strings.TrimSpace(shardSalt)))
+	functionalTestShard(t).SkipUnlessInShard(t)
 
 	options := testOptions{t: t}
 	for _, opt := range opts {

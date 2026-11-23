@@ -21,6 +21,15 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`.
 - `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
 
+### Running a functional test shard locally
+
+Use `testcore.Run` for functional suites to select each method's shard before setup. The runner uses the checked-in salt. Pass the shard count and index on the test command to run a single shard.
+
+```bash
+TEST_TOTAL_SHARDS=5 TEST_SHARD_INDEX=0 \
+  go test -tags test_dep ./tests
+```
+
 ### Debugging via IDE
 
 #### GoLand

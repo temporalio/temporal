@@ -36,7 +36,7 @@ type NexusStandaloneCallbacksTestSuite struct {
 }
 
 func TestNexusStandaloneCallbacksTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &NexusStandaloneCallbacksTestSuite{})
+	testcore.Run(t, &NexusStandaloneCallbacksTestSuite{})
 }
 
 func (s *NexusStandaloneCallbacksTestSuite) newTestEnv(enableCallbacks bool) *NexusTestEnv {

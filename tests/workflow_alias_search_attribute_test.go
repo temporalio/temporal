@@ -27,8 +27,8 @@ type WorkflowAliasSearchAttributeTestSuite struct {
 }
 
 func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                                              //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	parallelsuite.RunLegacySequential(t, &WorkflowAliasSearchAttributeTestSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	testcore.UseSuiteScopedCluster(t)                                         //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	testcore.RunLegacySequential(t, &WorkflowAliasSearchAttributeTestSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {

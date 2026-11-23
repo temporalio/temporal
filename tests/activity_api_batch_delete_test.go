@@ -20,7 +20,7 @@ type ActivityAPIBatchDeleteClientTestSuite struct {
 }
 
 func TestActivityAPIBatchDeleteClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityAPIBatchDeleteClientTestSuite{})
+	testcore.Run(t, &ActivityAPIBatchDeleteClientTestSuite{})
 }
 
 func (s *ActivityAPIBatchDeleteClientTestSuite) TestActivityBatchDelete_Success() {

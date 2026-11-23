@@ -38,11 +38,11 @@ type CronTestClientSuite struct {
 }
 
 func TestCronTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &CronTestSuite{})
+	testcore.Run(t, &CronTestSuite{})
 }
 
 func TestCronTestClientSuite(t *testing.T) {
-	parallelsuite.Run(t, &CronTestClientSuite{})
+	testcore.Run(t, &CronTestClientSuite{})
 }
 
 func (s *CronTestSuite) TestCronWorkflow_Failed_Infinite() {

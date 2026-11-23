@@ -34,7 +34,7 @@ type UpdateWorkflowSdkSuite struct {
 }
 
 func TestUpdateWorkflowSdkSuite(t *testing.T) {
-	parallelsuite.Run(t, &UpdateWorkflowSdkSuite{})
+	testcore.Run(t, &UpdateWorkflowSdkSuite{})
 }
 
 func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAdmitted() {

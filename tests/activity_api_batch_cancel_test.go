@@ -21,7 +21,7 @@ type ActivityAPIBatchCancelClientTestSuite struct {
 }
 
 func TestActivityAPIBatchCancelClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityAPIBatchCancelClientTestSuite{})
+	testcore.Run(t, &ActivityAPIBatchCancelClientTestSuite{})
 }
 
 func (env *standaloneActivityEnv) eventuallyCanceled(ctx context.Context, t *testing.T, activityID, runID string) {

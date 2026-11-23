@@ -40,11 +40,11 @@ type adminRebuildNexusCallback struct {
 }
 
 func TestAdminRebuildMutableState_ChasmDisabled(t *testing.T) {
-	parallelsuite.Run(t, &AdminTestSuite{}, false)
+	testcore.Run(t, &AdminTestSuite{}, false)
 }
 
 func TestAdminRebuildMutableState_ChasmEnabled(t *testing.T) {
-	parallelsuite.Run(t, &AdminTestSuite{}, true)
+	testcore.Run(t, &AdminTestSuite{}, true)
 }
 
 func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {

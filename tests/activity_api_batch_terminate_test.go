@@ -26,7 +26,7 @@ type ActivityAPIBatchTerminateClientTestSuite struct {
 }
 
 func TestActivityAPIBatchTerminateClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityAPIBatchTerminateClientTestSuite{})
+	testcore.Run(t, &ActivityAPIBatchTerminateClientTestSuite{})
 }
 
 // newStandaloneActivityBatchEnv builds a standalone-activity test env that also

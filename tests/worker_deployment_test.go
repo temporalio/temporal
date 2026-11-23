@@ -39,8 +39,8 @@ type (
 )
 
 func TestWorkerDeploymentSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                              //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	parallelsuite.RunLegacySequential(t, &WorkerDeploymentSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	testcore.UseSuiteScopedCluster(t)                         //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	testcore.RunLegacySequential(t, &WorkerDeploymentSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.

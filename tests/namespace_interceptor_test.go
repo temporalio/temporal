@@ -23,7 +23,7 @@ type NamespaceInterceptorTestSuite struct {
 }
 
 func TestNamespaceInterceptorTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &NamespaceInterceptorTestSuite{})
+	testcore.Run(t, &NamespaceInterceptorTestSuite{})
 }
 
 func (s *NamespaceInterceptorTestSuite) TestNamespaceInterceptorServerRejectsInvalidRequests() {

@@ -23,7 +23,7 @@ type ActivityAPIBatchSecurityTestSuite struct {
 }
 
 func TestActivityAPIBatchSecurityTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityAPIBatchSecurityTestSuite{})
+	testcore.Run(t, &ActivityAPIBatchSecurityTestSuite{})
 }
 
 // TestScheduleActivityOnPerNSTQ_Blocked verifies that a normal workflow

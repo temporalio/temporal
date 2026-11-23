@@ -27,7 +27,7 @@ type TransientTaskSuite struct {
 }
 
 func TestTransientTaskSuite(t *testing.T) {
-	parallelsuite.Run(t, &TransientTaskSuite{})
+	testcore.Run(t, &TransientTaskSuite{})
 }
 
 func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {

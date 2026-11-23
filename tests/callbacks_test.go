@@ -42,13 +42,13 @@ type CallbacksSuite struct {
 }
 
 func TestCallbacksSuiteHSM(t *testing.T) {
-	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{
+	testcore.Run(t, &CallbacksSuite{}, []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false),
 	})
 }
 
 func TestCallbacksSuiteCHASM(t *testing.T) {
-	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{
+	testcore.Run(t, &CallbacksSuite{}, []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 	})

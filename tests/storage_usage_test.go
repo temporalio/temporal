@@ -31,7 +31,7 @@ type StorageUsageSuite struct {
 }
 
 func TestStorageUsageSuite(t *testing.T) {
-	parallelsuite.Run(t, &StorageUsageSuite{})
+	testcore.Run(t, &StorageUsageSuite{})
 }
 
 func (s *StorageUsageSuite) TestStorageUsage_Workflow() {

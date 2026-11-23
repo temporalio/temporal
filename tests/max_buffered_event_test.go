@@ -24,7 +24,7 @@ type MaxBufferedEventSuite struct {
 }
 
 func TestMaxBufferedEventSuite(t *testing.T) {
-	parallelsuite.Run(t, &MaxBufferedEventSuite{})
+	testcore.Run(t, &MaxBufferedEventSuite{})
 }
 
 func (s *MaxBufferedEventSuite) opts() []testcore.TestOption {

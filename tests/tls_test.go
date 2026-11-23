@@ -17,7 +17,7 @@ type TLSFunctionalSuite struct {
 }
 
 func TestTLSFunctionalSuite(t *testing.T) {
-	parallelsuite.Run(t, &TLSFunctionalSuite{})
+	testcore.Run(t, &TLSFunctionalSuite{})
 }
 
 func (s *TLSFunctionalSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {

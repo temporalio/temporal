@@ -36,7 +36,7 @@ type ContinueAsNewTestSuite struct {
 }
 
 func TestContinueAsNewTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ContinueAsNewTestSuite{})
+	testcore.Run(t, &ContinueAsNewTestSuite{})
 }
 
 func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {

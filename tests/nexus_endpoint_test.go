@@ -19,15 +19,15 @@ import (
 )
 
 func TestNexusEndpointsCommonSuite(t *testing.T) {
-	parallelsuite.Run(t, &CommonSuite{})
+	testcore.Run(t, &CommonSuite{})
 }
 
 func TestNexusEndpointsMatchingSuite(t *testing.T) {
-	parallelsuite.Run(t, &MatchingSuite{})
+	testcore.Run(t, &MatchingSuite{})
 }
 
 func TestNexusEndpointsOperatorSuite(t *testing.T) {
-	parallelsuite.Run(t, &OperatorSuite{})
+	testcore.Run(t, &OperatorSuite{})
 }
 
 type CommonSuite struct {

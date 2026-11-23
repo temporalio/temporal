@@ -28,7 +28,7 @@ type WorkflowBufferedEventsSuite struct {
 }
 
 func TestWorkflowBufferedEventsTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowBufferedEventsSuite{})
+	testcore.Run(t, &WorkflowBufferedEventsSuite{})
 }
 
 func (s *WorkflowBufferedEventsSuite) TestRateLimitBufferedEvents() {

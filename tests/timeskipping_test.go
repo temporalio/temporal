@@ -52,7 +52,7 @@ type TimeSkippingTestSuite struct {
 }
 
 func TestTimeSkippingTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &TimeSkippingTestSuite{})
+	testcore.Run(t, &TimeSkippingTestSuite{})
 }
 
 // TestTimeSkipping_FeatureDisabled verifies that starting a workflow with time skipping

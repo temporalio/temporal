@@ -33,7 +33,7 @@ type (
 )
 
 func TestAddTasksSuite(t *testing.T) {
-	parallelsuite.Run(t, &AddTasksSuite{})
+	testcore.Run(t, &AddTasksSuite{})
 }
 
 func (s *AddTasksSuite) TestAddTasks_Ok() {

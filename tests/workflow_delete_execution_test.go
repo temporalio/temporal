@@ -34,7 +34,7 @@ type WorkflowDeleteExecutionSuite struct {
 }
 
 func TestWorkflowDeleteExecutionSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowDeleteExecutionSuite{})
+	testcore.Run(t, &WorkflowDeleteExecutionSuite{})
 }
 
 func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkflow() {
