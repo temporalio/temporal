@@ -2992,6 +2992,16 @@ type nexusResult struct {
 	internalError            error
 }
 
+func (e *matchingEngineImpl) minDispatchTaskTimeout(nsName string, request *matchingservice.DispatchNexusTaskRequest) time.Duration {
+	// All worker commands allow the shorter dispatch buffer. Currently only WHN uses a
+	// short dispatch deadline: it is entirely in memory and fire-and-forget. Activity
+	// cancellation is persisted in the History task queue and keeps its longer dispatch timeout.
+	if request.GetTaskQueue().GetKind() == enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS {
+		return e.config.HighPerfMinDispatchTimeout(nsName)
+	}
+	return e.config.MinDispatchTaskTimeout(nsName)
+}
+
 func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
 	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS)
 	if err != nil {
@@ -3010,7 +3020,7 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return nil, err
 	}
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.minDispatchTaskTimeout(ns.Name().String(), request))
 	defer cancel()
 
 	// First allocate a result channel and register it so that when the task is completed locally (without forwarding) the

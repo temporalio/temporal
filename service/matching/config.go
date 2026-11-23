@@ -135,6 +135,7 @@ type (
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
 		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
 		MinDispatchTaskTimeout            dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		HighPerfMinDispatchTimeout        dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 		PollerScalingBacklogAgeScaleUp      dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingWaitTime               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -385,6 +386,7 @@ func NewConfig(
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
 		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
 		MinDispatchTaskTimeout:            nexusoperations.MinDispatchTaskTimeout.Get(dc),
+		HighPerfMinDispatchTimeout:        dynamicconfig.MatchingHighPerfMinDispatchTimeout.Get(dc),
 
 		PollerScalingBacklogAgeScaleUp:      dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
 		PollerScalingWaitTime:               dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),

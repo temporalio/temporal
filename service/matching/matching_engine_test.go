@@ -4194,11 +4194,13 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 	const ctxTimeout = 2 * time.Second
 	var defaultTimeoutBuffer = nexusoperations.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("my-nsid")
+	var highPerfTimeoutBuffer = dynamicconfig.MatchingHighPerfMinDispatchTimeout.Get(dynamicconfig.NewNoopCollection())("my-nsid")
 
 	type testCase struct {
-		name      string
-		sleepTime time.Duration
-		assertion func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error)
+		name           string
+		sleepTime      time.Duration
+		workerCommands bool
+		assertion      func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error)
 	}
 
 	testCases := []testCase{
@@ -4226,6 +4228,24 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 				require.NotNil(t, response.GetResponse())
 			},
 		},
+		{
+			name:           "worker_commands_buffer_replaces_default",
+			sleepTime:      ctxTimeout - defaultTimeoutBuffer,
+			workerCommands: true,
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response.GetResponse())
+			},
+		},
+		{
+			name:           "worker_commands_deadline_exceeded",
+			sleepTime:      ctxTimeout - highPerfTimeoutBuffer,
+			workerCommands: true,
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response.GetRequestTimeout())
+			},
+		},
 	}
 
 	testFn := func(t *testing.T, tc testCase) {
@@ -4241,6 +4261,9 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 						"request-timeout": "2s",
 					},
 				},
+			}
+			if tc.workerCommands {
+				nexusRequest.TaskQueue.Kind = enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS
 			}
 
 			mockPartitionManager := NewMocktaskQueuePartitionManager(s.controller)
@@ -4267,7 +4290,8 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 				},
 			).Times(1)
 
-			partition := newRootPartition("my-nsid", "my-tq", enumspb.TASK_QUEUE_TYPE_NEXUS)
+			partition, err := tqid.PartitionFromProto(nexusRequest.GetTaskQueue(), "my-nsid", enumspb.TASK_QUEUE_TYPE_NEXUS)
+			require.NoError(t, err)
 			s.matchingEngine.partitions[partition.Key()] = mockPartitionManager
 			s.matchingEngine.nexusResults = collection.NewSyncMap[taskResultKey, chan *nexusResult]()
 

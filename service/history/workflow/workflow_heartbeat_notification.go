@@ -229,8 +229,6 @@ func SendWorkflowHeartbeatNotification(
 			shardCtx.GetLogger().Error("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
 			return
 		}
-		// TODO(experimental@whn): relax WorkflowHeartbeatNotificationDispatchTimeout once Matching keeps a shorter
-		// buffer than the 1s Nexus MinDispatchTaskTimeout for WHN commands.
 		matchCtx, matchCancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
 			shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
