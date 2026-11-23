@@ -297,11 +297,11 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 }
 
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_FetchFails() {
-	namespaceId := namespace.ID("abc")
+	namespaceID := namespace.ID("abc")
 	expectedError := serviceerror.NewUnavailable("source unavailable")
 	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, expectedError).Times(1)
 
-	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceID, "currentCluster")
 	s.Equal(expectedError, err)
 	s.requireRefreshEvent(wideevents.NamespaceEagerRefreshFetchFailed)
 }
@@ -309,7 +309,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_FetchF
 // Membership is the cluster list reported by the namespace's replication resolver, which may differ
 // from the replication config's cluster list.
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_ResolverDecidesMembership() {
-	namespaceId := namespace.ID("abc")
+	namespaceID := namespace.ID("abc")
 	testCases := []struct {
 		name             string
 		configClusters   []string
@@ -338,7 +338,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Resolv
 			}
 			nsResponse := &adminservice.GetNamespaceResponse{
 				Info: &namespacepb.NamespaceInfo{
-					Id:    namespaceId.String(),
+					Id:    namespaceID.String(),
 					Name:  "ns-name",
 					State: enumspb.NAMESPACE_STATE_REGISTERED,
 				},
@@ -357,19 +357,19 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Resolv
 			})
 
 			if !tc.member {
-				_, err := refresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+				_, err := refresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceID, "currentCluster")
 				s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
 				s.requireRefreshEvent(wideevents.NamespaceEagerRefreshNotMember)
 				return
 			}
-			s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
+			s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceID).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
 			s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
 			s.NoError(err)
-			s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(nsFromResponse, nil).Times(1)
-			ns, err := refresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+			s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceID).Return(nsFromResponse, nil).Times(1)
+			ns, err := refresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceID, "currentCluster")
 			s.NoError(err)
-			s.Equal(namespaceId, ns.ID())
+			s.Equal(namespaceID, ns.ID())
 			s.requireRefreshEvent(wideevents.NamespaceEagerRefreshRefreshed)
 		})
 	}
