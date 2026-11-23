@@ -589,7 +589,10 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 	}
 
 	authInfo := c.AuthInterceptor.GetAuthInfo(tlsInfo, request.HTTPRequest.Header, func() string {
-		return "" // TODO: support audience getter
+		if !c.Config.NexusEnforceJWTAudience() {
+			return ""
+		}
+		return c.AuthInterceptor.HTTPAudience(ctx, request.HTTPRequest.Header)
 	})
 
 	var claims *authorization.Claims
