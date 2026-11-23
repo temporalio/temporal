@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/util"
@@ -411,9 +412,19 @@ func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerp
 	}
 	// Converting an in-flight backfill can duplicate or drop slots (V1's backfill start is an
 	// exclusive cursor), so auto-migration waits for backfills to drain. The caller retries
-	// on its next iteration.
+	// on its next iteration. Reported here rather than in the workflow to keep workflow code
+	// untouched; the workflow still counts this as schedule_migration_failed.
+	scheduleID := req.GetState().GetSchedulerState().GetScheduleId()
 	if len(req.GetState().GetBackfillers()) > 0 && a.autoMigrationSelected != nil &&
-		a.autoMigrationSelected(req.GetState().GetSchedulerState().GetScheduleId()) {
+		a.autoMigrationSelected(scheduleID) {
+		a.Logger.Info("schedule migration to CHASM deferred: backfill in progress",
+			tag.WorkflowNamespace(a.namespace.String()),
+			tag.ScheduleID(scheduleID),
+		)
+		metrics.ScheduleMigrationDeferred.With(a.MetricsHandler.WithTags(
+			metrics.NamespaceTag(a.namespace.String()),
+			metrics.StringTag(metrics.ScheduleMigrationDirectionTag, metrics.ScheduleMigrationDirectionToChasm),
+		)).Record(1)
 		return temporal.NewNonRetryableApplicationError(
 			"MigrateScheduleToChasm: deferred while a backfill is in progress",
 			errTypeMigrationDeferredBackfill,
