@@ -1120,23 +1120,23 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		}
 		// The delivery policy runs before any check that ends a delivery for good,
 		// so a receiver that cannot apply it yet defers it to a later retry.
-		trusted := false
+		policyTrusts := false
 		if adh.deliveryPolicy != nil {
 			var err error
-			if trusted, err = adh.deliveryPolicy(ctx, payloadTask); err != nil {
+			if policyTrusts, err = adh.deliveryPolicy(ctx, payloadTask); err != nil {
 				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeDeferred, err, startTime)
 				return nil, err
 			}
 		}
 		// A trusted delivery follows the membership decision the source made when
 		// it created the mutation, so the receiver neither re-checks a removal nor
-		// consults its admission policy.
-		addressed := request.GetTargetCluster() != "" && trusted
+		// consults its admission policy. Trust needs a delivery addressed here.
+		trusted := request.GetTargetCluster() != "" && policyTrusts
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after
 		// the source has stopped targeting this peer. Legacy never sets this marker.
-		if request.GetRemovedPeer() && !addressed {
+		if request.GetRemovedPeer() && !trusted {
 			clusters := payloadTask.GetReplicationConfig().GetClusters()
 			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
 				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
@@ -1159,7 +1159,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
 			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
-				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer(), Addressed: addressed},
+				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer(), Trusted: trusted},
 			})
 		}, policy, func(err error) bool {
 			_, retryable := errors.AsType[*serviceerror.Unavailable](err)

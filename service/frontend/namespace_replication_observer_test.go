@@ -72,7 +72,7 @@ func TestReceiverCreateRaceObservesOnlyCompletedOutcome(t *testing.T) {
 			defer mh.StopCapture(capture)
 			events := &captureRemoteClusterEventLogger{}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t), metricsHandler: mh, eventLogger: events, config: &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true)}}
-			handler.namespaceMutationExecutor = nsreplication.NewMutationTaskExecutor("cellB", metadata, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), handler.logger, testhooks.TestHooks{}, nsreplication.WithNamespaceReplicationMetrics(mh), nsreplication.WithNamespaceReplicationLifecycleEvents(events, handler.config.EmitNamespaceLifecycleEvents))
+			handler.namespaceMutationExecutor = nsreplication.NewMutationTaskExecutor("cellB", metadata, nsreplication.NewDefaultMutationDataMerger(nsreplication.NewNoopDataMerger()), nsreplication.NewDefaultAdmitter(), handler.logger, testhooks.TestHooks{}, nsreplication.WithNamespaceReplicationMetrics(mh), nsreplication.WithNamespaceReplicationLifecycleEvents(events, handler.config.EmitNamespaceLifecycleEvents))
 			payload, err := nsreplication.MarshalNamespaceTask(task)
 			require.NoError(t, err)
 			response, err := handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload, SourceCluster: "cellA", AttemptCount: 1})
@@ -169,7 +169,7 @@ func TestAuthoritativeObserverPanicsPreserveApplyResult(t *testing.T) {
 				handler.config.EmitNamespaceLifecycleEvents = func() bool { panic("event gate failed") }
 			}
 			handler.namespaceMutationExecutor = nsreplication.NewMutationTaskExecutor("cellB", metadata,
-				nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger, testhooks.TestHooks{},
+				nsreplication.NewDefaultMutationDataMerger(nsreplication.NewNoopDataMerger()), nsreplication.NewDefaultAdmitter(), logger, testhooks.TestHooks{},
 				nsreplication.WithNamespaceReplicationMetrics(metricsHandler),
 				nsreplication.WithNamespaceReplicationLifecycleEvents(handler.eventLogger, handler.config.EmitNamespaceLifecycleEvents))
 			task := shadowObservationTask()

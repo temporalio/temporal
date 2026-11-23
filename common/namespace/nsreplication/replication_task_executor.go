@@ -75,7 +75,7 @@ type (
 	taskExecutorImpl struct {
 		currentCluster               string
 		metadataManager              persistence.MetadataManager
-		dataMerger                   NamespaceDataMerger
+		dataMerger                   MutationDataMerger
 		admitter                     NamespaceReplicationAdmitter
 		logger                       log.Logger
 		metricsHandler               metrics.Handler
@@ -107,7 +107,7 @@ func NewTaskExecutor(
 	return newTaskExecutor(
 		currentCluster,
 		metadataManagerV2,
-		dataMerger,
+		NewDefaultMutationDataMerger(dataMerger),
 		admitter,
 		logger,
 		testHooks,
@@ -119,7 +119,7 @@ func NewTaskExecutor(
 func NewMutationTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
-	dataMerger NamespaceDataMerger,
+	dataMerger MutationDataMerger,
 	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
 	testHooks testhooks.TestHooks,
@@ -139,7 +139,7 @@ func NewMutationTaskExecutor(
 func newTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
-	dataMerger NamespaceDataMerger,
+	dataMerger MutationDataMerger,
 	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
 	testHooks testhooks.TestHooks,
@@ -288,7 +288,7 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
-		if options.Addressed {
+		if options.Trusted {
 			return true, nil
 		}
 		return h.admitter.Admit(ctx, h.currentCluster, task, options), nil
@@ -453,7 +453,9 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
-	mergedData, dataMerged := h.dataMerger.MergeData(
+	mergedData, dataMerged := h.dataMerger.MergeMutationData(
+		namespace.ID(task.GetId()),
+		namespace.Name(task.GetInfo().GetName()),
 		resp.Namespace.Info.Data,
 		task.Info.Data,
 		resp.Namespace.ConfigVersion,

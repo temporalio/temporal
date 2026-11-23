@@ -666,7 +666,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeNotAdmitted))
 }
 
-func (s *namespaceReplicationTaskExecutorSuite) TestExecute_AddressedTaskSkipsAdmitter() {
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_TrustedTaskSkipsAdmitter() {
 	// The admission policy would decline: this cluster is not in the snapshot.
 	task := &replicationspb.NamespaceTaskAttributes{
 		Id:                 uuid.NewString(),
@@ -688,7 +688,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_AddressedTaskSkipsAd
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{ID: task.GetId()}, nil)
 
 	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{
-		Admission: AdmissionOptions{Addressed: true},
+		Admission: AdmissionOptions{Trusted: true},
 	})
 	s.Require().NoError(err)
 	s.Equal(ApplyOutcomeCreated, outcome)
@@ -1128,7 +1128,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := int64(1)
 	updateFailoverVersion := int64(59)
-	s.namespaceReplicator.dataMerger = namespaceDataMergerFunc(func(
+	s.namespaceReplicator.dataMerger = NewDefaultMutationDataMerger(namespaceDataMergerFunc(func(
 		currentData map[string]string,
 		taskData map[string]string,
 		currentVersion int64,
@@ -1137,7 +1137,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		s.Equal(updateConfigVersion+1, currentVersion)
 		s.Equal(updateConfigVersion, taskVersion)
 		return currentData, false
-	})
+	}))
 	updateClusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: updateClusterActive,

@@ -21,10 +21,10 @@ type AdmissionOptions struct {
 	// The default policy retains the snapshot even if no namespace exists locally,
 	// fencing delayed older additions. Custom policies retain control of admission.
 	RemovedPeer bool
-	// Addressed marks a delivery whose source membership decision the receiver
-	// trusts (see DeliveryPolicy). It is admitted without consulting
-	// the admission policy. Legacy delivery never sets it.
-	Addressed bool
+	// Trusted marks a delivery addressed to this cluster whose source membership
+	// decision the receiver trusts (see DeliveryPolicy). It is admitted without
+	// consulting the admission policy. Legacy delivery never sets it.
+	Trusted bool
 }
 
 // DeliveryPolicy decides how a receiver handles an authoritative CHASM delivery

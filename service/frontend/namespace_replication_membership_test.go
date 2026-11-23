@@ -152,17 +152,17 @@ func TestDeliveryPolicy(t *testing.T) {
 		return true, serviceerror.NewFailedPrecondition("not ready")
 	}
 	for _, tc := range []struct {
-		name          string
-		policy        nsreplication.DeliveryPolicy
-		target        string
-		removedPeer   bool
-		wantCode      codes.Code
-		wantAddressed bool
+		name        string
+		policy      nsreplication.DeliveryPolicy
+		target      string
+		removedPeer bool
+		wantCode    codes.Code
+		wantTrusted bool
 	}{
 		{name: "delivery addressed to another cluster is rejected", policy: trustAll, target: "cellB", wantCode: codes.FailedPrecondition},
 		// The receiver is still in the payload's cluster list, so it disagrees with the source.
 		{name: "default policy keeps the removed-peer check", target: "cellC", removedPeer: true, wantCode: codes.InvalidArgument},
-		{name: "trusted delivery follows the source", policy: trustAll, target: "cellC", removedPeer: true, wantAddressed: true},
+		{name: "trusted delivery follows the source", policy: trustAll, target: "cellC", removedPeer: true, wantTrusted: true},
 		// Older sources do not address deliveries, so the receiver checks membership itself.
 		{name: "unaddressed delivery is not trusted", policy: trustAll, removedPeer: true, wantCode: codes.InvalidArgument},
 		{name: "default policy admits through the admission policy", target: "cellC"},
@@ -179,7 +179,7 @@ func TestDeliveryPolicy(t *testing.T) {
 			executor := nsreplication.NewMockMutationTaskExecutor(ctrl)
 			if tc.wantCode == codes.OK {
 				executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), nsreplication.MutationApplyOptions{
-					Admission: nsreplication.AdmissionOptions{RemovedPeer: tc.removedPeer, Addressed: tc.wantAddressed},
+					Admission: nsreplication.AdmissionOptions{RemovedPeer: tc.removedPeer, Trusted: tc.wantTrusted},
 				}).Return(nsreplication.ApplyOutcomeApplied, nil)
 			}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters, namespaceMutationExecutor: executor,
