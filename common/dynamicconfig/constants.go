@@ -238,7 +238,7 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 	)
 	WorkflowHeartbeatNotificationDispatchTimeout = NewNamespaceDurationSetting(
 		"history.workflowHeartbeatNotificationDispatchTimeout",
-		500*time.Millisecond,
+		600*time.Millisecond,
 		`WorkflowHeartbeatNotificationDispatchTimeout limits how long History waits for Matching to dispatch a Workflow Task heartbeat notification and receive a worker response.`,
 	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
@@ -1602,6 +1602,11 @@ duration since last poll exceeds this threshold.`,
 		true,
 		`When enabled, TaskDispatchLatencyPerTaskQueue is emitted when responding to poll requests (with extra tags
 like partition and worker-version) instead of being emitted at the matcher level.`,
+	)
+	MatchingWorkflowHeartbeatNotificationMinDispatchTaskTimeout = NewNamespaceDurationSetting(
+		"matching.workflowHeartbeatNotificationMinDispatchTaskTimeout",
+		200*time.Millisecond,
+		`MatchingWorkflowHeartbeatNotificationMinDispatchTaskTimeout replaces component.nexusoperations.limit.dispatch.task.timeout.min for worker commands that only carry Workflow Task heartbeat notifications, whose whole deadline is WorkflowHeartbeatNotificationDispatchTimeout.`,
 	)
 	MatchingListNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"matching.listNexusEndpointsLongPollTimeout",

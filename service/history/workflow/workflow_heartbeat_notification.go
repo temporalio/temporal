@@ -210,12 +210,9 @@ func SendWorkflowHeartbeatNotification(
 			shardCtx.GetLogger().Warn("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
 			return
 		}
-		// Matching keeps NexusMinDispatchTaskTimeout of the deadline to answer with RequestTimeout, so add it on top.
-		config := shardCtx.GetConfig()
 		matchCtx, matchCancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
-			config.WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName)+
-				config.NexusMinDispatchTaskTimeout(notification.namespaceName),
+			shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
 		)
 		defer matchCancel()
 		dispatchStart := time.Now()

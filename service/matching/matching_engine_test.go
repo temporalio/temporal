@@ -27,9 +27,11 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -77,6 +79,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -4194,11 +4197,19 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 	const ctxTimeout = 2 * time.Second
 	var defaultTimeoutBuffer = nexusoperations.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("my-nsid")
+	var whnTimeoutBuffer = dynamicconfig.MatchingWorkflowHeartbeatNotificationMinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("my-nsid")
+	whnCommand := &workerpb.WorkerCommand{Type: &workerpb.WorkerCommand_WorkflowHeartbeatNotification{
+		WorkflowHeartbeatNotification: &workerpb.WorkflowHeartbeatNotificationCommand{},
+	}}
+	cancelActivityCommand := &workerpb.WorkerCommand{Type: &workerpb.WorkerCommand_CancelActivity{
+		CancelActivity: &workerpb.CancelActivityCommand{},
+	}}
 
 	type testCase struct {
-		name      string
-		sleepTime time.Duration
-		assertion func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error)
+		name           string
+		sleepTime      time.Duration
+		workerCommands []*workerpb.WorkerCommand
+		assertion      func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error)
 	}
 
 	testCases := []testCase{
@@ -4226,6 +4237,42 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 				require.NotNil(t, response.GetResponse())
 			},
 		},
+		{
+			name:           "workflow_heartbeat_notification_buffer_replaces_default",
+			sleepTime:      ctxTimeout - defaultTimeoutBuffer,
+			workerCommands: []*workerpb.WorkerCommand{whnCommand},
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response.GetResponse())
+			},
+		},
+		{
+			name:           "workflow_heartbeat_notification_deadline_exceeded",
+			sleepTime:      ctxTimeout - whnTimeoutBuffer,
+			workerCommands: []*workerpb.WorkerCommand{whnCommand},
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response.GetRequestTimeout())
+			},
+		},
+		{
+			name:           "cancel_activity_keeps_default_buffer",
+			sleepTime:      ctxTimeout - defaultTimeoutBuffer,
+			workerCommands: []*workerpb.WorkerCommand{cancelActivityCommand},
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response.GetRequestTimeout())
+			},
+		},
+		{
+			name:           "mixed_commands_keep_default_buffer",
+			sleepTime:      ctxTimeout - defaultTimeoutBuffer,
+			workerCommands: []*workerpb.WorkerCommand{whnCommand, cancelActivityCommand},
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response.GetRequestTimeout())
+			},
+		},
 	}
 
 	testFn := func(t *testing.T, tc testCase) {
@@ -4241,6 +4288,14 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 						"request-timeout": "2s",
 					},
 				},
+			}
+			if tc.workerCommands != nil {
+				data, err := proto.Marshal(&workerservicepb.ExecuteCommandsRequest{Commands: tc.workerCommands})
+				require.NoError(t, err)
+				nexusRequest.TaskQueue.Kind = enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS
+				nexusRequest.Request.Variant = &nexuspb.Request_StartOperation{StartOperation: &nexuspb.StartOperationRequest{
+					Payload: &commonpb.Payload{Data: data},
+				}}
 			}
 
 			mockPartitionManager := NewMocktaskQueuePartitionManager(s.controller)
@@ -4267,7 +4322,8 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 				},
 			).Times(1)
 
-			partition := newRootPartition("my-nsid", "my-tq", enumspb.TASK_QUEUE_TYPE_NEXUS)
+			partition, err := tqid.PartitionFromProto(nexusRequest.GetTaskQueue(), "my-nsid", enumspb.TASK_QUEUE_TYPE_NEXUS)
+			require.NoError(t, err)
 			s.matchingEngine.partitions[partition.Key()] = mockPartitionManager
 			s.matchingEngine.nexusResults = collection.NewSyncMap[taskResultKey, chan *nexusResult]()
 

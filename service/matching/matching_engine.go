@@ -21,6 +21,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -69,6 +70,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -2992,6 +2994,26 @@ type nexusResult struct {
 	internalError            error
 }
 
+func (e *matchingEngineImpl) minDispatchTaskTimeout(nsName string, request *matchingservice.DispatchNexusTaskRequest) time.Duration {
+	if request.GetTaskQueue().GetKind() == enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS && onlyWorkflowHeartbeatNotifications(request) {
+		return e.config.WorkflowHeartbeatNotificationMinDispatchTaskTimeout(nsName)
+	}
+	return e.config.MinDispatchTaskTimeout(nsName)
+}
+
+func onlyWorkflowHeartbeatNotifications(request *matchingservice.DispatchNexusTaskRequest) bool {
+	var commands workerservicepb.ExecuteCommandsRequest
+	if err := proto.Unmarshal(request.GetRequest().GetStartOperation().GetPayload().GetData(), &commands); err != nil {
+		return false
+	}
+	for _, command := range commands.GetCommands() {
+		if command.GetWorkflowHeartbeatNotification() == nil {
+			return false
+		}
+	}
+	return len(commands.GetCommands()) > 0
+}
+
 func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
 	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS)
 	if err != nil {
@@ -3010,7 +3032,7 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return nil, err
 	}
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.minDispatchTaskTimeout(ns.Name().String(), request))
 	defer cancel()
 
 	// First allocate a result channel and register it so that when the task is completed locally (without forwarding) the

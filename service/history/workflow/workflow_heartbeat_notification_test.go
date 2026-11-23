@@ -150,7 +150,6 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			shard.EXPECT().GetConfig().Return(&configs.Config{
 				WorkflowHeartbeatNotificationRolloutPercent:  func(string) int { return 100 },
 				WorkflowHeartbeatNotificationDispatchTimeout: func(string) time.Duration { return 500 * time.Millisecond },
-				NexusMinDispatchTaskTimeout:                  func(string) time.Duration { return time.Second },
 			}).AnyTimes()
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()

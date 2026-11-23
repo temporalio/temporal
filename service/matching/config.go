@@ -132,9 +132,10 @@ type (
 		VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
-		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
-		MinDispatchTaskTimeout            dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		ListNexusEndpointsLongPollTimeout                   dynamicconfig.DurationPropertyFn
+		NexusEndpointsRefreshInterval                       dynamicconfig.DurationPropertyFn
+		MinDispatchTaskTimeout                              dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		WorkflowHeartbeatNotificationMinDispatchTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 		PollerScalingBacklogAgeScaleUp      dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingWaitTime               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -382,9 +383,10 @@ func NewConfig(
 		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 
-		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
-		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
-		MinDispatchTaskTimeout:            nexusoperations.MinDispatchTaskTimeout.Get(dc),
+		ListNexusEndpointsLongPollTimeout:                   dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
+		NexusEndpointsRefreshInterval:                       dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
+		MinDispatchTaskTimeout:                              nexusoperations.MinDispatchTaskTimeout.Get(dc),
+		WorkflowHeartbeatNotificationMinDispatchTaskTimeout: dynamicconfig.MatchingWorkflowHeartbeatNotificationMinDispatchTaskTimeout.Get(dc),
 
 		PollerScalingBacklogAgeScaleUp:      dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
 		PollerScalingWaitTime:               dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),

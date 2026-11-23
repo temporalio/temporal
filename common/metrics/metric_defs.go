@@ -1406,7 +1406,7 @@ var (
 	)
 	WorkflowHeartbeatNotificationDeliveryLatency = NewTimerDef(
 		"workflow_task_heartbeat_notification_delivery_latency",
-		WithDescription("Latency of the DispatchNexusTask call that delivers a workflow-heartbeat notification."),
+		WithDescription("End-to-end latency of delivering a workflow heartbeat notification to the worker and receiving its response."),
 	)
 
 	// Matching

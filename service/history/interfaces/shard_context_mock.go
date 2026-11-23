@@ -486,21 +486,6 @@ func (mr *MockShardContextMockRecorder) GetHistoryClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockShardContext)(nil).GetHistoryClient))
 }
 
-// GetMatchingClient mocks base method.
-func (m *MockShardContext) GetMatchingClient() (matchingservice.MatchingServiceClient, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMatchingClient")
-	ret0, _ := ret[0].(matchingservice.MatchingServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetMatchingClient indicates an expected call of GetMatchingClient.
-func (mr *MockShardContextMockRecorder) GetMatchingClient() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingClient", reflect.TypeOf((*MockShardContext)(nil).GetMatchingClient))
-}
-
 // GetHistoryTasks mocks base method.
 func (m *MockShardContext) GetHistoryTasks(ctx context.Context, request *persistence0.GetHistoryTasksRequest) (*persistence0.GetHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -542,6 +527,21 @@ func (m *MockShardContext) GetLogger() log0.Logger {
 func (mr *MockShardContextMockRecorder) GetLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogger", reflect.TypeOf((*MockShardContext)(nil).GetLogger))
+}
+
+// GetMatchingClient mocks base method.
+func (m *MockShardContext) GetMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMatchingClient")
+	ret0, _ := ret[0].(matchingservice.MatchingServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMatchingClient indicates an expected call of GetMatchingClient.
+func (mr *MockShardContextMockRecorder) GetMatchingClient() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingClient", reflect.TypeOf((*MockShardContext)(nil).GetMatchingClient))
 }
 
 // GetMetricsHandler mocks base method.
@@ -1389,21 +1389,6 @@ func (mr *MockControllableContextMockRecorder) GetHistoryClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryClient))
 }
 
-// GetMatchingClient mocks base method.
-func (m *MockControllableContext) GetMatchingClient() (matchingservice.MatchingServiceClient, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMatchingClient")
-	ret0, _ := ret[0].(matchingservice.MatchingServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetMatchingClient indicates an expected call of GetMatchingClient.
-func (mr *MockControllableContextMockRecorder) GetMatchingClient() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingClient", reflect.TypeOf((*MockControllableContext)(nil).GetMatchingClient))
-}
-
 // GetHistoryTasks mocks base method.
 func (m *MockControllableContext) GetHistoryTasks(ctx context.Context, request *persistence0.GetHistoryTasksRequest) (*persistence0.GetHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -1445,6 +1430,21 @@ func (m *MockControllableContext) GetLogger() log0.Logger {
 func (mr *MockControllableContextMockRecorder) GetLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogger", reflect.TypeOf((*MockControllableContext)(nil).GetLogger))
+}
+
+// GetMatchingClient mocks base method.
+func (m *MockControllableContext) GetMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMatchingClient")
+	ret0, _ := ret[0].(matchingservice.MatchingServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMatchingClient indicates an expected call of GetMatchingClient.
+func (mr *MockControllableContextMockRecorder) GetMatchingClient() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingClient", reflect.TypeOf((*MockControllableContext)(nil).GetMatchingClient))
 }
 
 // GetMetricsHandler mocks base method.
