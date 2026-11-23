@@ -333,7 +333,6 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 
 func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
 	c.root.backend.SetTimeSkippingConfig(config)
-	c.root.backendStateChanged = true
 }
 
 // ContextWithValue returns a new Context with the given key-value pair added.

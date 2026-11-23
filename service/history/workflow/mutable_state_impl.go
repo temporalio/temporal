@@ -236,6 +236,11 @@ type (
 		// timeSkippingInfoUpdated is used to track if executionInfo.TimeSkippingInfo is updated.
 		timeSkippingInfoUpdated bool
 
+		// verifyCleanTransaction is set when CloseTransactionIfClean judged the transaction clean in verify mode. The
+		// transaction is then closed as usual, and closing it reports a failed assertion if it persists anything that
+		// skipping it would have dropped.
+		verifyCleanTransaction bool
+
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
 		// event inside history builder. This is only for x-run reapply (from zombie wf to current wf)
@@ -7721,6 +7726,11 @@ func (ms *MutableStateImpl) ValidateChasmSpeculativeTransition() error {
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and
 // mutable state should move to a new versioned transition.
 func (ms *MutableStateImpl) isStateDirty() bool {
+	return ms.isNonChasmStateDirty() || ms.chasmTree.IsStateDirty()
+}
+
+// isNonChasmStateDirty is isStateDirty excluding the CHASM tree.
+func (ms *MutableStateImpl) isNonChasmStateDirty() bool {
 	// TODO: we need to track more workflow state changes
 	// e.g. changes to executionInfo.CancelRequested
 	// They are mostly covered by history builder check today.
@@ -7742,7 +7752,6 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsStateDirty() ||
 		ms.isResetStateUpdated ||
 		ms.timeSkippingInfoUpdated
 }
@@ -7782,6 +7791,46 @@ func (ms *MutableStateImpl) StartTransaction(
 	}
 
 	return flushBeforeReady, nil
+}
+
+func (ms *MutableStateImpl) CloseTransactionIfClean(verifyOnly bool) (bool, error) {
+	if ms.IsWorkflow() || len(ms.InsertTasks) > 0 || ms.isNonChasmStateDirty() {
+		return false, nil
+	}
+	clean, err := ms.chasmTree.CloseTransactionIfClean(verifyOnly)
+	if err != nil || !clean {
+		return false, err
+	}
+	if verifyOnly {
+		ms.verifyCleanTransaction = true
+		return false, nil
+	}
+	return true, nil
+}
+
+// cleanTransactionViolations lists what closing a transaction that CloseTransactionIfClean judged clean changed so
+// far. Skipping the transaction would have dropped all of it, so the list must be empty.
+func (ms *MutableStateImpl) cleanTransactionViolations(chasmNodesMutation chasm.NodesMutation) []string {
+	var violations []string
+	if len(chasmNodesMutation.UpdatedNodes) != 0 {
+		violations = append(violations, "updated CHASM nodes")
+	}
+	if len(chasmNodesMutation.DeletedNodes) != 0 {
+		violations = append(violations, "deleted CHASM nodes")
+	}
+	for _, categoryTasks := range ms.InsertTasks {
+		if len(categoryTasks) != 0 {
+			violations = append(violations, "tasks")
+			break
+		}
+	}
+	if ms.isNonChasmStateDirty() {
+		violations = append(violations, "state outside the CHASM tree")
+	}
+	if ms.executionState.State != ms.stateInDB {
+		violations = append(violations, "execution state")
+	}
+	return violations
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsMutation(
@@ -8017,6 +8066,13 @@ func (ms *MutableStateImpl) closeTransaction(
 	// Enforce the CHASM request-ID limit before the executionState blob is captured into the
 	// mutation/snapshot below. Gating (active + attached-this-transaction) lives in the helper.
 	ms.closeTransactionSweepChasmRequestIDs(transactionPolicy)
+
+	if ms.verifyCleanTransaction {
+		if violations := ms.cleanTransactionViolations(chasmNodesMutation); len(violations) != 0 {
+			softassert.Fail(ms.logger, "CHASM transaction judged clean has changes to persist",
+				tag.String("changes", strings.Join(violations, ", ")))
+		}
+	}
 
 	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(
@@ -8791,6 +8847,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.chasmRequestIDsAdded = false
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
+	ms.verifyCleanTransaction = false
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})

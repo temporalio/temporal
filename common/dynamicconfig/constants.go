@@ -3523,6 +3523,13 @@ hydrated ancestor components when applying child-node mutations.`,
 execution when the update made no durable change, e.g. because it only changed ephemeral components or didn't change
 anything.`,
 	)
+	VerifyCHASMSkipCleanUpdates = NewNamespaceBoolSetting(
+		"history.verifyCHASMSkipCleanUpdates",
+		false,
+		`VerifyCHASMSkipCleanUpdates makes a CHASM UpdateComponent call that would skip persisting a clean update persist
+it anyway, and report a failed assertion if the write changes anything that skipping it would have dropped. It's meant
+for tests, and takes precedence over history.enableCHASMSkipCleanUpdates.`,
+	)
 
 	ChasmDLQScheduledPureTaskOnValidation = NewNamespaceBoolSetting(
 		"history.chasmDLQScheduledPureTaskOnValidation",

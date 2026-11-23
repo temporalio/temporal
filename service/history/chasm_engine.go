@@ -515,12 +515,10 @@ func (e *ChasmEngine) applyUpdateWithLease(
 
 	// Record the accepted request ID so a later reuse is deduplicated. The dedup check itself runs
 	// earlier, before updateFn.
-	requestIDInMutableState := false
 	if transitionOptions.RequestID != "" {
 		if isStartRequestID {
 			mutableState.AttachChasmRequestID(transitionOptions.RequestID)
-			requestIDInMutableState = true
-		} else if requestIDInMutableState, err = e.recordUpdateRequestID(mutableState, chasmTree, transitionOptions); err != nil {
+		} else if err := e.recordUpdateRequestID(mutableState, chasmTree, transitionOptions); err != nil {
 			return nil, err
 		}
 	}
@@ -538,15 +536,15 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	}
 
 	if decision.PersistNow {
-		// Unless it's a workflow, the update only changes the mutable state through the CHASM tree, apart from a
-		// request ID recorded above. The write is then skipped if the tree has nothing to persist, e.g. when only
-		// ephemeral components changed. Pollers aren't notified then, just as for a persisted write without CHASM node
-		// changes: no persisted state changed, so no poll predicate can change.
+		// The write is skipped if the update has nothing to persist, e.g. when it only changed ephemeral components.
+		// Pollers aren't notified then, just as for a persisted write without CHASM node changes: no persisted state
+		// changed, so no poll predicate can change. In verify mode the write isn't skipped, but is checked to persist
+		// nothing that skipping it would have dropped.
+		nsName := mutableState.GetNamespaceEntry().Name().String()
+		verifyOnly := e.config.VerifyCHASMSkipCleanUpdates(nsName)
 		skipped := false
-		if !requestIDInMutableState &&
-			!mutableState.IsWorkflow() &&
-			e.config.EnableCHASMSkipCleanUpdates(mutableState.GetNamespaceEntry().Name().String()) {
-			if skipped, err = chasmTree.CloseTransactionIfClean(); err != nil {
+		if verifyOnly || e.config.EnableCHASMSkipCleanUpdates(nsName) {
+			if skipped, err = mutableState.CloseTransactionIfClean(verifyOnly); err != nil {
 				return nil, err
 			}
 		}
@@ -714,19 +712,17 @@ func (e *ChasmEngine) isUpdateRequestIDUsed(
 // It is only checked by UpdateComponent, so it is recorded in the CHASM tree's request IDs data node,
 // which is only written when an ID is added, when history.enableChasmRequestIDDataNode is on. While it is
 // off, hosts that don't keep the data node may still be running, so it is recorded in the execution state.
-// recordUpdateRequestID records the request ID of an update, and reports whether it was recorded in the mutable state
-// outside the CHASM tree.
 func (e *ChasmEngine) recordUpdateRequestID(
 	mutableState historyi.MutableState,
 	chasmTree *chasm.Node,
 	transitionOptions chasm.TransitionOptions,
-) (bool, error) {
+) error {
 	nsName := mutableState.GetNamespaceEntry().Name().String()
 	if !e.config.EnableChasmRequestIDDataNode(nsName) {
 		mutableState.AttachChasmRequestID(transitionOptions.RequestID)
-		return true, nil
+		return nil
 	}
-	return false, chasmTree.AttachRequestID(
+	return chasmTree.AttachRequestID(
 		transitionOptions.RequestID,
 		e.config.MaximumRequestIDsInChasmDataNode(nsName),
 		e.config.RequestIDMaxAge(nsName),

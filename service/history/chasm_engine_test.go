@@ -1170,6 +1170,26 @@ func (s *chasmEngineSuite) TestUpdateComponent_SkipCleanUpdatesDisabled() {
 	s.NoError(err)
 }
 
+func (s *chasmEngineSuite) TestUpdateComponent_VerifyCHASMSkipCleanUpdates() {
+	// Verify mode takes precedence over skipping.
+	s.config.EnableCHASMSkipCleanUpdates = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.VerifyCHASMSkipCleanUpdates = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	ref := s.loadRunningTestExecution(1)
+
+	// The clean update is persisted, but without the CHASM nodes skipping it would have dropped, so pollers aren't
+	// notified. The strict mock engine fails the test on NotifyChasmExecution.
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Empty(request.UpdateWorkflowMutation.UpsertChasmNodes)
+			s.Empty(request.UpdateWorkflowMutation.DeleteChasmNodes)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		}).Times(1)
+
+	_, err := s.engine.UpdateComponent(context.Background(), ref,
+		func(chasm.MutableContext, chasm.Component) error { return nil })
+	s.NoError(err)
+}
+
 func (s *chasmEngineSuite) TestUpdateComponent_SetsContextMetadata() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())

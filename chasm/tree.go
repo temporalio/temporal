@@ -144,9 +144,14 @@ type (
 		// This is a per-node field (not in nodeBase) and is reset after each transaction.
 		subtreeIsDirty bool
 
-		// encodedValue is the node's value as encoded by CloseTransactionIfClean, which CloseTransaction reuses instead
-		// of encoding the value again. It is reset whenever the value state changes, and after each transaction.
-		encodedValue *commonpb.DataBlob
+		// encodedNodeValue is the node's value as encoded by CloseTransactionIfClean, which CloseTransaction reuses
+		// instead of encoding the value again. It is reset whenever the value state changes, and after each transaction.
+		encodedNodeValue *commonpb.DataBlob
+
+		// verifiedUnchanged is set by CloseTransactionIfClean in verify mode for a node whose value matches the
+		// persisted value. CloseTransaction then doesn't write the node, just as skipping the transaction wouldn't. It is
+		// reset whenever the value state changes, and after each transaction.
+		verifiedUnchanged bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -192,10 +197,6 @@ type (
 		needsPointerResolution bool
 
 		totalTimeSkippedUpdatedInPassive bool
-
-		// backendStateChanged is set when the transaction changed state that the backend persists outside the tree,
-		// e.g. the time-skipping config.
-		backendStateChanged bool
 
 		// speculativeTransitionPending is set when a speculative transition left changes in the tree that
 		// aren't persisted. The next active CloseTransaction persists them.
@@ -437,7 +438,8 @@ func (n *Node) setValue(value any) {
 
 func (n *Node) setValueState(state valueState) {
 	n.valueState = state
-	n.encodedValue = nil
+	n.encodedNodeValue = nil
+	n.verifiedUnchanged = false
 	if state >= valueStateNeedSerialize {
 		n.markSubtreeDirty()
 	}
@@ -1342,8 +1344,8 @@ func (n *Node) serializeDataNode() error {
 // encodeValue encodes the value of a component's data field or of a data node, reusing the encoding from
 // CloseTransactionIfClean if the node's value hasn't changed since.
 func (n *Node) encodeValue(value proto.Message) (*commonpb.DataBlob, error) {
-	if n.encodedValue != nil {
-		return n.encodedValue, nil
+	if n.encodedNodeValue != nil {
+		return n.encodedNodeValue, nil
 	}
 	return encodeChasmBlob(value)
 }
@@ -2032,42 +2034,47 @@ func (n *Node) speculativeTransitionClosesExecution(ctx context.Context) (bool, 
 
 // CloseTransactionIfClean closes the transaction without a mutation if it has nothing to persist, e.g. because it only
 // read components or only changed ephemeral components. Otherwise it returns false and leaves the transaction open, in
-// which case the caller must close it with CloseTransaction, which reuses the values encoded here. Only changes made
-// through the tree are checked, so the caller must not have changed the backend's state directly. This method should
-// only be invoked on the root node.
-func (n *Node) CloseTransactionIfClean() (bool, error) {
+// which case the caller must close it with CloseTransaction, which reuses the values already encoded here. Only the
+// tree is checked: the caller must check its own state, including changes the tree made through the backend, such as
+// the time-skipping config. This method should only be invoked on the root node.
+//
+// With verifyOnly, a clean transaction is left open as well, and true is returned. The caller then closes it with
+// CloseTransaction, which writes none of the values verified here, so its mutation is what skipping the transaction
+// would have dropped.
+func (n *Node) CloseTransactionIfClean(verifyOnly bool) (bool, error) {
 	// Syncing the structure is repeatable, so CloseTransaction can still be called if the transaction isn't clean.
 	if err := n.syncSubComponents(); err != nil {
 		return false, err
 	}
+	if n.hasPendingWrites() {
+		return false, nil
+	}
 
-	// Encode every changed value even once the transaction is known not to be clean, so that CloseTransaction
-	// doesn't encode any value again.
-	clean := !n.hasPendingWrites()
+	// Return as soon as the transaction is known not to be clean. CloseTransaction encodes the values that weren't
+	// encoded here, so stopping early costs no extra encoding.
 	var unchangedNodes []*Node
 	for _, node := range n.andAllChildren() {
 		if node.terminated {
-			clean = false
+			return false, nil
 		}
 		if node.valueState < valueStateNeedSerialize {
 			continue
 		}
 		if node.shouldPersist() {
 			unchanged, err := node.encodeAndCompareValue()
-			if err != nil {
+			if err != nil || !unchanged {
 				return false, err
-			}
-			if !unchanged {
-				clean = false
-				continue
 			}
 		}
 		unchangedNodes = append(unchangedNodes, node)
 	}
-	if !clean {
-		return false, nil
-	}
 
+	if verifyOnly {
+		for _, node := range unchangedNodes {
+			node.verifiedUnchanged = true
+		}
+		return true, nil
+	}
 	for _, node := range unchangedNodes {
 		node.setValueState(valueStateSynced)
 	}
@@ -2123,7 +2130,7 @@ func (n *Node) encodeAndCompareData(value proto.Message) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	n.encodedValue = blob
+	n.encodedNodeValue = blob
 	return bytes.Equal(blob.GetData(), n.serializedNode.GetData().GetData()), nil
 }
 
@@ -2349,8 +2356,9 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
-		if !node.shouldPersist() {
-			// The in-memory value is the only copy of the node.
+		if !node.shouldPersist() || node.verifiedUnchanged {
+			// The in-memory value is the only copy of the node, or CloseTransactionIfClean verified that the
+			// persisted value matches it.
 			node.setValueState(valueStateSynced)
 			continue
 		}
@@ -2991,7 +2999,8 @@ func (n *Node) cleanupTransaction() {
 	// Reset per-node transaction state on all nodes in the tree.
 	for _, node := range n.andAllChildren() {
 		node.subtreeIsDirty = false
-		node.encodedValue = nil
+		node.encodedNodeValue = nil
+		node.verifiedUnchanged = false
 	}
 }
 
@@ -3039,7 +3048,6 @@ func (s *transactionState) clearTransactionState() {
 
 	s.needsPointerResolution = false
 	s.totalTimeSkippedUpdatedInPassive = false
-	s.backendStateChanged = false
 	s.speculativeTransitionPending = false
 	s.speculativeTransitionFailoverVersion = 0
 }
@@ -3056,7 +3064,6 @@ func (s *transactionState) hasPendingWrites() bool {
 		len(s.pendingUserMetadata) != 0 ||
 		s.needsPointerResolution ||
 		s.totalTimeSkippedUpdatedInPassive ||
-		s.backendStateChanged ||
 		s.speculativeTransitionPending
 }
 

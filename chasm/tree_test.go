@@ -6284,7 +6284,7 @@ func (s *nodeSuite) TestCloseTransactionIfClean() {
 		s.NoError(err)
 		fn(ctx, c.(*TestComponent))
 		s.True(root.IsDirty())
-		return root.CloseTransactionIfClean()
+		return root.CloseTransactionIfClean(false)
 	}
 
 	// Loading a component for update without changing it.
@@ -6392,10 +6392,27 @@ func (s *nodeSuite) TestCloseTransactionIfClean_NotClean() {
 			},
 		},
 		{
-			// The time-skipping config is persisted by the backend, outside the tree.
-			name: "time-skipping config set",
-			update: func(ctx MutableContext, _ *TestComponent) {
-				ctx.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true})
+			// CloseTransaction runs the task after the update, so it must persist the task's change rather than any
+			// value encoded before it.
+			name: "immediate pure task changes the component",
+			update: func(ctx MutableContext, tc *TestComponent) {
+				tc.ComponentData.RunId = "update"
+				ctx.AddTask(tc, TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}, &TestPureTask{})
+				s.testLibrary.mockPureTaskHandler.EXPECT().
+					Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(true, nil).AnyTimes()
+				s.testLibrary.mockPureTaskHandler.EXPECT().
+					Execute(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ MutableContext, component any, _ TaskAttributes, _ *TestPureTask) error {
+						component.(*TestComponent).ComponentData.RunId = "task"
+						return nil
+					}).Times(1)
+			},
+			verify: func(_ *Node, _ *commonpb.DataBlob, mutation NodesMutation) {
+				s.Contains(mutation.UpdatedNodes, "")
+				var persisted protoMessageType
+				s.NoError(proto.Unmarshal(mutation.UpdatedNodes[""].GetData().GetData(), &persisted))
+				s.Equal("task", persisted.GetRunId())
 			},
 		},
 	}
@@ -6412,12 +6429,12 @@ func (s *nodeSuite) TestCloseTransactionIfClean_NotClean() {
 			s.NoError(err)
 			tc.update(ctx, c.(*TestComponent))
 
-			clean, err := root.CloseTransactionIfClean()
+			clean, err := root.CloseTransactionIfClean(false)
 			s.NoError(err)
 			s.False(clean)
 			s.True(root.IsDirty())
 
-			encodedRoot := root.encodedValue
+			encodedRoot := root.encodedNodeValue
 			mutation, err := root.CloseTransaction(context.Background(), true)
 			s.NoError(err)
 			if tc.verify != nil {
@@ -6426,6 +6443,56 @@ func (s *nodeSuite) TestCloseTransactionIfClean_NotClean() {
 			s.False(root.IsDirty())
 		})
 	}
+}
+
+func (s *nodeSuite) TestCloseTransactionIfClean_VerifyOnly() {
+	update := func(root *Node) {
+		ctx := NewMutableContext(context.Background(), root)
+		_, err := root.Component(ctx, ComponentRef{})
+		s.NoError(err)
+	}
+
+	s.Run("clean transaction writes nothing", func() {
+		root := s.testComponentTree()
+		_, err := root.CloseTransaction(context.Background(), true)
+		s.NoError(err)
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+
+		update(root)
+		clean, err := root.CloseTransactionIfClean(true)
+		s.NoError(err)
+		s.True(clean)
+		s.True(root.IsDirty())
+
+		// Verified nodes aren't written even without skip-persistence, just as skipping the transaction wouldn't.
+		s.nodeBackend.HandleChasmSkipPersistenceEnabled = func() bool { return false }
+		mutation, err := root.CloseTransaction(context.Background(), true)
+		s.NoError(err)
+		s.Empty(mutation.UpdatedNodes)
+		s.Empty(mutation.DeletedNodes)
+		s.False(root.IsDirty())
+	})
+
+	s.Run("change after the check is written", func() {
+		root := s.testComponentTree()
+		_, err := root.CloseTransaction(context.Background(), true)
+		s.NoError(err)
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+
+		update(root)
+		clean, err := root.CloseTransactionIfClean(true)
+		s.NoError(err)
+		s.True(clean)
+
+		// A change made after the check, e.g. by a step of CloseTransaction, shows up in the mutation.
+		ctx := NewMutableContext(context.Background(), root)
+		c, err := root.Component(ctx, ComponentRef{})
+		s.NoError(err)
+		c.(*TestComponent).ComponentData.RunId = "changed-after-check"
+		mutation, err := root.CloseTransaction(context.Background(), true)
+		s.NoError(err)
+		s.Contains(mutation.UpdatedNodes, "")
+	})
 }
 
 func (s *nodeSuite) assertNoSubComponentsPaths(nodes any) {
@@ -7608,9 +7675,6 @@ func TestTransactionState_EveryFieldCovered(t *testing.T) {
 		}},
 		{name: "total time skipped updated in passive", field: "totalTimeSkippedUpdatedInPassive", change: func(s *transactionState) {
 			s.totalTimeSkippedUpdatedInPassive = true
-		}},
-		{name: "backend state changed", field: "backendStateChanged", change: func(s *transactionState) {
-			s.backendStateChanged = true
 		}},
 		{name: "speculative transition pending", field: "speculativeTransitionPending", change: func(s *transactionState) {
 			s.speculativeTransitionPending = true
