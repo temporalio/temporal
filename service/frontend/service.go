@@ -236,10 +236,8 @@ type Config struct {
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
+	NexusEnforceJWTAudience        dynamicconfig.BoolPropertyFn
 	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
-
-	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
@@ -440,10 +438,8 @@ func NewConfig(
 		MaxNexusOperationTokenLength:   nexusoperations.MaxOperationTokenLength.Get(dc),
 		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
 		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
+		NexusEnforceJWTAudience:        dynamicconfig.FrontendNexusEnforceJWTAudience.Get(dc),
 		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
-
-		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
-		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
 		CallbackEndpointConfigs:      chasmcallback.AllowedAddresses.Get(dc),
 		WorkflowEnabledCallbackKinds: chasmworkflow.EnabledCallbackKinds.Get(dc),

@@ -4,9 +4,44 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/temporalnexus"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
+
+// ConvertAndSanitizeHandlerLinks converts links returned by a remote Nexus handler or worker into proto
+// links, then filters them with [commonlinks.Validator.Sanitize]. Anything dropped is logged; links are
+// non-essential to execution, so they never fail the response that carried them.
+func ConvertAndSanitizeHandlerLinks(
+	nexusLinks []nexus.Link,
+	namespaceName string,
+	validator commonlinks.Validator,
+	logger log.Logger,
+) []*commonpb.Link {
+	return SanitizeHandlerLinks(ConvertNexusLinksToProtoLinks(nexusLinks, logger), namespaceName, validator, logger)
+}
+
+// SanitizeHandlerLinks is [ConvertAndSanitizeHandlerLinks] for links that are already in proto form.
+func SanitizeHandlerLinks(
+	links []*commonpb.Link,
+	namespaceName string,
+	validator commonlinks.Validator,
+	logger log.Logger,
+) []*commonpb.Link {
+	if len(links) == 0 {
+		return links
+	}
+	kept, err := validator.Sanitize(namespaceName, links)
+	if err != nil {
+		logger.Warn(
+			"dropped links returned by Nexus handler",
+			tag.WorkflowNamespace(namespaceName),
+			tag.NewInt("dropped-count", len(links)-len(kept)),
+			tag.Error(err),
+		)
+	}
+	return kept
+}
 
 // ConvertNexusLinksToProtoLinks converts a slice of Nexus SDK links into Temporal proto links,
 // supporting Link_Workflow, Link_WorkflowEvent, Link_Activity, and other variants. Unsupported

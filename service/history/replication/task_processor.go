@@ -331,15 +331,9 @@ func (p *taskProcessorImpl) handleReplicationTask(
 		return err
 	}
 
-	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			retErr = panicErr
-			p.emitTaskMetrics(operationTagValue, panicErr)
-		}
-	}()
-
-	defer log.CapturePanic(p.logger, &panicErr)
+	defer log.CapturePanicWithHook(p.logger, &retErr, func(err error) {
+		p.emitTaskMetrics(operationTagValue, err)
+	})
 
 	return backoff.ThrottleRetry(operation, p.taskRetryPolicy, p.isRetryableError)
 }
