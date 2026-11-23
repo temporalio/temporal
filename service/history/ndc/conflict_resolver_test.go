@@ -117,6 +117,9 @@ func (s *conflictResolverSuite) TestRebuild() {
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
 		LastBranchTime:   lastBranchTime,
+		ExecutionStats: &persistencespb.ExecutionStats{
+			StorageUsage: &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222},
+		},
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -134,7 +137,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		s.runID,
 	)
 	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
-	rebuiltExecutionInfo := &persistencespb.WorkflowExecutionInfo{
+	rebuildExecutionInfo := &persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionhistory.NewVersionHistories(
 			versionhistory.NewVersionHistory(
 				branchToken1,
@@ -142,7 +145,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 			),
 		),
 	}
-	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(rebuiltExecutionInfo).AnyTimes()
+	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(rebuildExecutionInfo).AnyTimes()
 	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
@@ -176,7 +179,9 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.NotNil(rebuiltMutableState)
 	s.Equal(int32(1), versionHistories.GetCurrentVersionHistoryIndex())
 	// Replay doesn't restore cluster-local branch state, so rebuild carries it over.
-	s.Equal(lastBranchTime, rebuiltExecutionInfo.LastBranchTime)
+	s.Equal(lastBranchTime, rebuildExecutionInfo.LastBranchTime)
+	s.Equal(int64(111), rebuildExecutionInfo.GetExecutionStats().GetStorageUsage().GetMutableStateByteSeconds())
+	s.Equal(int64(222), rebuildExecutionInfo.GetExecutionStats().GetStorageUsage().GetHistoryByteSeconds())
 }
 
 func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_NotCurrent() {

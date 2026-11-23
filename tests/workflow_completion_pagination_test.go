@@ -180,7 +180,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestLargeMergedCompletion() {
 
 	// All markers are recorded, exactly one WorkflowTaskCompleted event is
 	// written, the workflow completes, and nothing failed.
-	history := env.GetHistory(env.Namespace().String(), we)
+	history := env.RequireHistory(s, we)
 	s.Equal(totalMarkers, countEvents(history, enumspb.EVENT_TYPE_MARKER_RECORDED))
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
@@ -221,7 +221,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestLargeMergedContinueAsNew() {
 	})
 	s.NoError(err)
 
-	history := env.GetHistory(env.Namespace().String(), we)
+	history := env.RequireHistory(s, we)
 	s.Equal(totalMarkers, countEvents(history, enumspb.EVENT_TYPE_MARKER_RECORDED))
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
@@ -269,7 +269,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferLostOnShardClose() {
 	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
 	s.ErrorAs(err, &bufferLost)
 
-	history := env.GetHistory(env.Namespace().String(), we)
+	history := env.RequireHistory(s, we)
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 }
@@ -441,7 +441,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferOverflowFailsWorkflowT
 	})
 	s.Error(err)
 
-	history := env.GetHistory(env.Namespace().String(), we)
+	history := env.RequireHistory(s, we)
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 	for _, e := range history {
@@ -486,7 +486,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestOutOfOrderPagesReassemble() 
 	})
 	s.NoError(err)
 
-	history := env.GetHistory(env.Namespace().String(), we)
+	history := env.RequireHistory(s, we)
 	var names []string
 	for _, e := range history {
 		if e.GetEventType() == enumspb.EVENT_TYPE_MARKER_RECORDED {
@@ -542,7 +542,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestResendAfterBufferLost() {
 	bufferPage0()
 	s.NoError(completeFinalPage())
 
-	history := env.GetHistory(env.Namespace().String(), we)
+	history := env.RequireHistory(s, we)
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 }
@@ -601,7 +601,7 @@ func (s *WorkflowCompletionPaginationTestSuite) runBufferLimitCase(
 		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
 		s.ErrorAs(err, &bufferLost)
 
-		history := env.GetHistory(env.Namespace().String(), we)
+		history := env.RequireHistory(s, we)
 		s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 		s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 		return
@@ -625,7 +625,7 @@ func (s *WorkflowCompletionPaginationTestSuite) runBufferLimitCase(
 	})
 	s.NoError(err)
 
-	history := env.GetHistory(env.Namespace().String(), we)
+	history := env.RequireHistory(s, we)
 	s.Equal(2, countEvents(history, enumspb.EVENT_TYPE_MARKER_RECORDED))
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))

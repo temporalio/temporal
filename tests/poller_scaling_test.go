@@ -416,7 +416,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 }
 
 // The following tests cover the hold and scale-down branches of the poller scaling decision. Each
-// opts into the poller_scale_decision metric so the reason behind a decision (or a withheld one) can
+// enables the poller_scale_decision metric so the reason behind a decision (or a withheld one) can
 // be asserted, not just its presence.
 
 func (s *PollerScalingIntegSuite) TestPollerScalingScaleDownWhenIdle() {

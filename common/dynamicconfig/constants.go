@@ -17,6 +17,7 @@ import (
 const (
 	NamespaceReplicationTransportModeLegacy = "legacy"
 	NamespaceReplicationTransportModeShadow = "shadow"
+	NamespaceReplicationTransportModeCHASM  = "chasm"
 )
 
 var (
@@ -34,11 +35,12 @@ var (
 		true,
 		`AdminEnableListHistoryTasks is the key for enabling listing history tasks`,
 	)
-	AdminEnableDescribeMutableStateRateLimit = NewGlobalBoolSetting(
-		"admin.enableDescribeMutableStateRateLimit",
-		false,
-		`AdminEnableDescribeMutableStateRateLimit gates whether AdminService.DescribeMutableState is subject to
-pod-level rate limiting. Read once at process startup: changing this value requires a restart to take effect.`,
+	AdminEnablePodLevelRateLimit = NewGlobalBoolSetting(
+		"admin.enablePodLevelRateLimit",
+		true,
+		`AdminEnablePodLevelRateLimit gates whether AdminService.DescribeMutableState, GetWorkflowExecutionRawHistory
+and GetWorkflowExecutionRawHistoryV2 are subject to pod-level rate limiting. Read once at process startup:
+changing this value requires a restart to take effect.`,
 	)
 	AdminMatchingNamespaceToPartitionDispatchRate = NewNamespaceFloatSetting(
 		"admin.matchingNamespaceToPartitionDispatchRate",
@@ -86,9 +88,11 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 	)
 	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
 		"system.namespaceReplicationTransportMode",
-		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow, NamespaceReplicationTransportModeCHASM}),
 		NamespaceReplicationTransportModeLegacy,
-		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
+		`NamespaceReplicationTransportMode selects the outgoing namespace replication transport: legacy, shadow, or chasm.
+Enable chasm only after compatible frontend/history binaries and authoritative replication observability are deployed on every participating cluster.
+Changing this setting does not disable incoming authoritative deliveries or stop existing CHASM executions.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",
@@ -226,6 +230,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		"system.enableCancelActivityWorkerCommand",
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
+	)
+	WorkflowHeartbeatNotificationRolloutPercent = NewNamespaceIntSetting(
+		"history.workflowHeartbeatNotificationRolloutPercent",
+		0,
+		`WorkflowHeartbeatNotificationRolloutPercent selects a stable percentage of workflows per namespace for heartbeat notifications. Zero selects none; 100 selects all.`,
 	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
 		"system.workerCommandsDispatchTimeout",
@@ -1165,6 +1174,17 @@ dispatch type (by endpoint or by namespace + task queue) as the original request
 queue will always be used for forwarded requests. Defaults to false because Nexus endpoints do not support replication,
 so forwarding by endpoint ID will not work out of the box.`,
 	)
+	FrontendNexusEnforceJWTAudience = NewGlobalBoolSetting(
+		"frontend.nexusEnforceJWTAudience",
+		false,
+		`Controls whether the frontend Nexus HTTP handlers verify the "aud" claim of an inbound JWT bearer token against
+the server's expected audience. When true, requests whose token audience does not match fail claim extraction and are
+rejected the same way as any other invalid token: Nexus operation requests fail as unauthenticated (HTTP 401), and Nexus
+completion requests currently fail with an internal error (HTTP 500). Has no effect unless a JWT audience is configured (authorization.audience or a custom JWTAudienceMapper) and the claim mapper
+honors AuthInfo.Audience, as the default JWT claim mapper does. Requests without an Authorization header are unaffected.
+When enabling, keep this setting consistent across connected clusters: forwarded Nexus requests carry the original caller's
+token and are checked again by the receiving cluster.`,
+	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
@@ -1194,6 +1214,12 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"chasm.maxLinksPerComponent",
 		2000,
 		`MaxLinksPerComponent is the maximum number of links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.`,
+	)
+	TotalLinksMaxSizePerComponent = NewNamespaceIntSetting(
+		"chasm.totalLinksMaxSizePerComponent",
+		2*1024*1024,
+		`TotalLinksMaxSizePerComponent is the maximum total size, in bytes, of all links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.
+Links embedded in completion callbacks are not included; they count toward callback.totalMaxSizePerExecution instead.`,
 	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
@@ -1488,6 +1514,19 @@ backlog lag, count, and age for VERSIONED queues.`,
 		`MatchingAlignMembershipChange is a duration to align matching's membership changes to.
 This can help reduce effects of task queue movement.`,
 	)
+	MatchingGradualMembershipChange = NewGlobalDurationSetting(
+		"matching.gradualMembershipChange",
+		0*time.Second,
+		`MatchingGradualMembershipChange is the duration over which task queue partitions are
+moved due to a membership change. Requires matching.alignMembershipChange, which must be under
+about 12 seconds: a change scheduled 15 seconds or more ahead happens immediately, with no window.
+All of the cluster must be running a version that understands gradual membership changes before
+this is enabled, and it must be disabled before downgrading to a version that doesn't. Capped at
+4 minutes.
+Note: This extends the time for matching nodes to shut down by up to this duration, so the
+termination grace period in your deployment configuration must cover it.
+`,
+	)
 	MatchingShutdownDrainDuration = NewGlobalDurationSetting(
 		"matching.shutdownDrainDuration",
 		0*time.Second,
@@ -1615,6 +1654,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
 	)
+	MatchingEnableTaskQueueUserDataRevisionMerge = NewNamespaceBoolSetting(
+		"matching.enableTaskQueueUserDataRevisionMerge",
+		true,
+		`When enabled, merges incoming and current worker deployment data by revision when needed to preserve delayed updates.
+When disabled, always uses the deployment snapshot selected by the parent clock without merging.`,
+	)
 	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
 		"matching.maxVersionsInTaskQueue",
 		200,
@@ -1636,7 +1681,7 @@ will be issued.`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
 		"matching.pollerScalingWaitTime",
-		1*time.Second,
+		5*time.Second,
 		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
 a decision to scale down the number of pollers will be issued`,
 	)
@@ -1648,21 +1693,21 @@ second per poller by one physical queue manager`,
 	)
 	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
 		"matching.pollerScalingTaskAddToDispatchRatio",
-		1.2,
+		1.05,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
 dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
 is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
-		false,
+		true,
 		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
-metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
-scoped by namespace and/or task queue.`,
+metric describing why pollers are scaled up, down, or held for a physical task queue. Enabled by default; can be
+disabled or scoped by namespace and/or task queue.`,
 	)
 	MatchingUseSignalsV2ForPollerScaling = NewTaskQueueBoolSetting(
 		"matching.useSignalsV2ForPollerScaling",
-		false,
+		true,
 		`MatchingUseSignalsV2ForPollerScaling, when enabled, uses v2 scaling signals for poller autoscaling:
 (1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
 (2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
@@ -2228,10 +2273,18 @@ The actual count is calculated as base * (multiplier ^ level)`,
 	TaskThrottleController = NewGlobalTypedSetting(
 		"history.taskThrottleController",
 		DefaultTaskThrottleControllerSettings,
-		`TaskThrottleController tunes host level pacing of history task retries that a namespace
-APS or persistence rate limiter refused. Unset fields keep their defaults.
+		`TaskThrottleController tunes host level pacing of history task retries refused by namespace
+APS, persistence, or remote Nexus caller RPS limits. Outbound caller RPS retries also require
+history.enableOutboundTaskThrottleController. Unset fields keep their defaults.
 Fields: Enabled, MinRate, MaxRate, InitialRate, KeyTTL, Beta, IncreaseRatio, LossThreshold,
 Window, MaxKeys. See TaskThrottleControllerSettings comments for details.`,
+	)
+
+	EnableOutboundTaskThrottleController = NewGlobalBoolSetting(
+		"history.enableOutboundTaskThrottleController",
+		false,
+		`EnableOutboundTaskThrottleController retries namespace-scoped Nexus caller RPS rejections in memory
+through the shared TaskThrottleController. Both this flag and TaskThrottleController.Enabled must be true.`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
@@ -2795,7 +2848,7 @@ kept in the CHASM request IDs data node and capped by history.maximumRequestIDsI
 	)
 	EnableChasmRequestIDDataNode = NewNamespaceBoolSetting(
 		"history.enableChasmRequestIDDataNode",
-		false,
+		true,
 		`EnableChasmRequestIDDataNode enables recording request IDs in CHASM updates in the request IDs data node.`,
 	)
 	MaximumRequestIDsInChasmDataNode = NewNamespaceIntSetting(
@@ -3243,7 +3296,7 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
 		"history.ReplicationProgressCacheMaxSize",
 		128000,
-		`ReplicationProgressCacheMaxSize is the maximum number of entries in the replication progress cache`,
+		`ReplicationProgressCacheMaxSize is the maximum accounted payload size in bytes of the replication progress cache per history host. The size is checked every minute. Changes recreate the cache without a restart, discarding cached progress`,
 	)
 	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
 		"history.ReplicationProgressCacheTTL",

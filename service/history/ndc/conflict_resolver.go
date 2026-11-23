@@ -6,11 +6,13 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -163,6 +165,10 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.GetExecutionInfo().LastSupersedeTime = r.mutableState.GetExecutionInfo().LastSupersedeTime
 	rebuildMutableState.GetExecutionInfo().LastSupersededRunId = r.mutableState.GetExecutionInfo().LastSupersededRunId
 	rebuildMutableState.GetExecutionInfo().LastOrphanedOperationsTime = r.mutableState.GetExecutionInfo().LastOrphanedOperationsTime
+	workflow.SetStorageUsage(
+		rebuildMutableState.GetExecutionInfo(),
+		common.CloneProto(r.mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()),
+	)
 	if err != nil {
 		return nil, err
 	}

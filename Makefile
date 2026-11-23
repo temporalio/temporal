@@ -119,7 +119,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 MAIN_BRANCH    := main
 
 # If you update these dirs, please also update in CategoryDirs find_altered_tests.go
-TEST_DIRS       			  := $(filter-out ./common/testx/%,$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
+TEST_DIRS       			  := $(filter-out ./common/testx/% ./tests/mixedbrain/%,$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
@@ -430,6 +430,7 @@ comma := ,
 EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
 EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
 EXCLUDED_PACKAGES_temporal_with_s3store := github.com/aws/aws-sdk-go-v2/service/s3
+EXCLUDED_PACKAGES_temporal_with_cassandra := github.com/gocql/gocql
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)

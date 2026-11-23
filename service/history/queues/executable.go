@@ -925,11 +925,14 @@ func (e *executableImpl) reportThrottle(
 	if err != nil {
 		return
 	}
-	e.throttleKey = NewThrottleKey(cause, nsName)
+	key := NewThrottleKey(cause, nsName)
+	if cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT {
+		key.Destination = e.GetDestination()
+	}
+	e.throttleKey = key
 
 	// A metered rejection belongs to the class that issued the release, whichever budget
 	// refused it; an unmetered one is recorded against the new class but must not move it.
-	key := e.throttleKey
 	if metered {
 		key = issuer
 	}

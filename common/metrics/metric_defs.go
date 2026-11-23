@@ -641,10 +641,29 @@ const (
 	ScheduleMissedReasonNotBuffered      = "not_buffered"
 	ScheduleMissedReasonBufferExpired    = "buffer_expired"
 	ScheduleActionRunningTag             = "action_running"
+	ScheduleActionRunningNone            = "none"
 	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
 	ScheduleMigrationDirectionToChasm    = "to_chasm"
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
+
+// ScheduleSDKCompatTags returns the tags the Go SDK attaches to every metric
+// emitted from a workflow (see RootTags in the SDK), set to the SDK's "none"
+// value. V1 schedules emit via the SDK workflow metrics handler while V2 emits
+// via the server handler; when both run in one process they share a Prometheus
+// registry, which rejects a metric name whose label set differs between
+// emissions. V2 attaches these so both backends share one label set.
+func ScheduleSDKCompatTags() []Tag {
+	return []Tag{
+		StringTag("workflow_type", scheduleSDKNoneValue),
+		StringTag("worker_type", scheduleSDKNoneValue),
+		StringTag("activity_type", scheduleSDKNoneValue),
+		StringTag("task_queue", scheduleSDKNoneValue),
+		StringTag("client_name", scheduleSDKNoneValue),
+	}
+}
+
+const scheduleSDKNoneValue = "none"
 
 // Matching task dropped reason tag values
 const (
@@ -930,8 +949,12 @@ var (
 		WithDescription("The amount of time it took to successfully send a task to the DLQ. This only records the"+
 			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
 	)
-	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
-	TaskSkipped                     = NewCounterDef("task_skipped")
+	TaskDiscarded                 = NewCounterDef("task_errors_discarded")
+	TaskSkipped                   = NewCounterDef("task_skipped")
+	TaskDiscardedByNamespaceState = NewCounterDef(
+		"task_discarded_namespace_state",
+		WithDescription("The number of history tasks acked without running because their namespace is soft-deleted or deleted."),
+	)
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
 	TasksDependencyTaskNotCompleted = NewCounterDef("task_dependency_task_not_completed")
 	TaskStandbyRetryCounter         = NewCounterDef("task_errors_standby_retry_counter")
@@ -1092,6 +1115,9 @@ var (
 	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
 	NexusWorkflowUseExisting                      = NewCounterDef("nexus_workflow_use_existing", WithDescription("Successful callback attachments to existing workflows involving Nexus serialization context, tagged by context match or missing context."))
 	NexusActivityUseExisting                      = NewCounterDef("nexus_activity_use_existing", WithDescription("Successful callback attachments to existing standalone activities involving Nexus serialization context, tagged by context match or missing context."))
+	NexusWorkflowStartWithContext                 = NewCounterDef("nexus_workflow_start_with_context", WithDescription("New workflows started with a Nexus serialization context."))
+	NexusActivityStartWithContext                 = NewCounterDef("nexus_activity_start_with_context", WithDescription("New standalone activities started with a Nexus serialization context."))
+	NexusWorkflowUpdateWithContext                = NewCounterDef("nexus_workflow_update_with_context", WithDescription("New workflow updates admitted with a Nexus serialization context."))
 	OrphanedChildWorkflowReplacement              = NewCounterDef("orphaned_child_workflow_replacement")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
@@ -1367,6 +1393,15 @@ var (
 		WithDescription("Paginated workflow task completions aborted because the buffer was lost."),
 	)
 
+	WorkflowHeartbeatNotificationBufferedInput = NewCounterDef(
+		"workflow_heartbeat_notification_buffered_input",
+		WithDescription("Events buffered during a started workflow task that could trigger a workflow-heartbeat notification."),
+	)
+	WorkflowHeartbeatNotificationEstimatedFirstBufferedInput = NewCounterDef(
+		"workflow_heartbeat_notification_estimated_first_buffered_input",
+		WithDescription("The first buffered event to initiate a workflow-heartbeat notification."),
+	)
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
@@ -1526,8 +1561,8 @@ var (
 	PollerScaleDecisionCounter = NewCounterDef(
 		"poller_scale_decision",
 		WithDescription(
-			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
-				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
+			"Count of poller scaling decisions made by a physical task queue manager. Emitted unless the "+
+				"dynamic config matching.enablePollerScalingDecisionMetrics is disabled. Dimensions: namespace, taskqueue, "+
 				"task_type, partition, decision (scale_up/scale_down/hold), "+
 				"reason (idle/delay/ratio/rate_limited/task_queue_rate_limited)"),
 	)
@@ -1698,6 +1733,14 @@ var (
 		"namespace_replication_chasm_peer_pending_threshold_exceeded",
 		WithDescription("Persisted peer retries at or beyond the one-minute pending-age threshold."),
 	)
+	NamespaceReplicationCHASMLocalPendingAge = NewTimerDef(
+		"namespace_replication_chasm_local_pending_age",
+		WithDescription("Age of an unresolved authoritative CHASM local apply when a retry is durably scheduled."),
+	)
+	NamespaceReplicationCHASMLocalPendingThresholdExceeded = NewCounterDef(
+		"namespace_replication_chasm_local_pending_threshold_exceeded",
+		WithDescription("The number of authoritative CHASM local retries durably scheduled after the local apply has been pending for at least one minute."),
+	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",
 		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),
@@ -1816,6 +1859,10 @@ var (
 		"schedule_migration_failed",
 		WithDescription("The number of times a schedule migration fails"),
 	)
+	ScheduleMigrationDeferred = NewCounterDef(
+		"schedule_migration_deferred",
+		WithDescription("The number of times a schedule migration is deferred until a precondition (e.g. an in-progress backfill) clears"),
+	)
 	ScheduleOverlapSkipped = NewCounterDef(
 		"schedule_overlap_skipped",
 		WithDescription("The number of schedule actions skipped due to overlap policy"),
@@ -1834,6 +1881,10 @@ var (
 	)
 
 	// Worker Versioning
+	WorkerDeploymentLimitExceeded = NewCounterDef(
+		"worker_deployment_limit_exceeded",
+		WithDescription("Worker deployment requests rejected by a limit. limit_type is task_queues (per version), versions (per deployment), versions_per_task_queue, or deployments (per namespace)."),
+	)
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
 	WorkerDeploymentVersionCreated                    = NewCounterDef("worker_deployment_version_created")
 	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")

@@ -155,7 +155,8 @@ func newTestCluster(
 			resolver,
 			2*time.Second,
 			3*time.Second,
-			joinTime,
+			func() time.Time { return joinTime },
+			0,
 			100,
 		)
 		if i < len(evictBeforeStart) && evictBeforeStart[i] {
@@ -309,7 +310,8 @@ func newGatedTestMonitor(
 		resolver,
 		2*time.Second,
 		3*time.Second,
-		time.Time{},
+		func() time.Time { return time.Time{} },
+		0,
 		100,
 	)
 	t.Cleanup(func() {

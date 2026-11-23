@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 )
 
 type AdminTestSuite struct {
@@ -54,7 +55,13 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 		var randomUUID string
 		err := workflow.SideEffect(
 			ctx,
-			func(workflow.Context) any { return uuid.New().String() },
+			func(workflow.Context) any {
+				// Hold the first workflow task open so the execution accrues a non-zero storage usage
+				// before the rebuild. Adds no events or state transitions. Must stay under the SDK's
+				// 1s deadlock detection.
+				time.Sleep(250 * time.Millisecond) //nolint:forbidigo
+				return uuid.New().String()
+			},
 		).Get(&randomUUID)
 		s.NoError(err)
 
@@ -156,6 +163,13 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 	)
 	s.Nil(response1.DatabaseMutableState.ExecutionInfo.MutableStateRebuildTime)
 	s.NotNil(response2.DatabaseMutableState.ExecutionInfo.MutableStateRebuildTime)
+
+	// Rebuild recreates mutable state for the same run, so the storage usage accrued so far must survive it.
+	storageUsageBefore := response1.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage()
+	s.Positive(storageUsageBefore.GetMutableStateByteSeconds())
+	s.Positive(storageUsageBefore.GetHistoryByteSeconds())
+	s.True(proto.Equal(storageUsageBefore, response2.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage()),
+		"storage usage changed by rebuild: before %v, after %v", storageUsageBefore, response2.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage())
 }
 
 func (s *AdminTestSuite) TestAdminRebuildMutableStateRealignsMultipleNexusOperations(testWithChasm bool) {
@@ -253,7 +267,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableStateRealignsMultipleNexusOperat
 		s.Equal(expectedScheduled, scheduled)
 	}
 	s.Await(func(s *AdminTestSuite) {
-		history := env.GetHistory(env.Namespace().String(), execution)
+		history := env.RequireHistory(s, execution)
 		var scheduled, started int
 		for _, event := range history {
 			switch event.GetEventType() {
@@ -398,12 +412,12 @@ func (s *AdminTestSuite) testAdminRebuildMutableStateRealignsNexusCancellation(c
 
 	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	if cancelInFlight {
-		history := env.GetHistory(env.Namespace().String(), execution)
+		history := env.RequireHistory(parallelsuite.WithContext(ctx, s), execution)
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
 		s.RequireNoHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
 	} else {
 		s.Await(func(s *AdminTestSuite) {
-			history := env.GetHistory(env.Namespace().String(), execution)
+			history := env.RequireHistory(s, execution)
 			s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
 			s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
 		}, 10*time.Second, 50*time.Millisecond)
@@ -415,7 +429,7 @@ func (s *AdminTestSuite) testAdminRebuildMutableStateRealignsNexusCancellation(c
 	if cancelInFlight {
 		close(releaseCancel)
 		s.Await(func(s *AdminTestSuite) {
-			history := env.GetHistory(env.Namespace().String(), execution)
+			history := env.RequireHistory(s, execution)
 			s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
 		}, 10*time.Second, 50*time.Millisecond)
 	} else {
@@ -433,7 +447,7 @@ func (s *AdminTestSuite) testAdminRebuildMutableStateRealignsNexusCancellation(c
 		Error: nexus.NewOperationCanceledErrorf("operation canceled"),
 	})
 	s.Await(func(s *AdminTestSuite) {
-		history := env.GetHistory(env.Namespace().String(), execution)
+		history := env.RequireHistory(s, execution)
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED)
 	}, 10*time.Second, 50*time.Millisecond)
 
@@ -502,7 +516,7 @@ func (s *AdminTestSuite) assertAdminRebuildNexusOperationTrees(
 	expectHSM bool,
 ) []string {
 	s.T().Helper()
-	history := env.GetHistory(env.Namespace().String(), execution)
+	history := env.RequireHistory(parallelsuite.WithContext(ctx, s), execution)
 	var opIDs []string
 	for _, event := range history {
 		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {

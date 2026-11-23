@@ -108,33 +108,44 @@ func TestRetryPolicyForTask(t *testing.T) {
 }
 
 func TestHandleNamespaceReplicationTaskEmitsReceivedAndPassesProcessingContext(t *testing.T) {
-	p, task, executor, _, eventLogger := newReplicationEventTestProcessor(t, true, 2)
-	var processingContext wideevents.NamespaceReplicationTaskContext
-	var processingContextSet bool
-	executor.EXPECT().Execute(gomock.Any(), task.GetNamespaceTaskAttributes()).DoAndReturn(
-		func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes) error {
-			processingContext, processingContextSet = wideevents.NamespaceReplicationTaskContextFromContext(ctx)
-			return nil
-		},
-	)
+	for _, tc := range []struct {
+		name         string
+		sourceTaskID int64
+	}{
+		{name: "nonzero source task ID", sourceTaskID: 42},
+		{name: "zero source task ID", sourceTaskID: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, task, executor, _, eventLogger := newReplicationEventTestProcessor(t, true, 2)
+			task.SourceTaskId = tc.sourceTaskID
+			var processingContext wideevents.NamespaceReplicationTaskContext
+			var processingContextSet bool
+			executor.EXPECT().Execute(gomock.Any(), task.GetNamespaceTaskAttributes()).DoAndReturn(
+				func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes) error {
+					processingContext, processingContextSet = wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+					return nil
+				},
+			)
 
-	p.handleReplicationTasks()
-	require.Equal(t, []string{"received"}, replicationEventPhases(eventLogger.records))
+			p.handleReplicationTasks()
+			require.Equal(t, []string{"received"}, replicationEventPhases(eventLogger.records))
 
-	received := replicationEventDetails(t, eventLogger.records[0])
-	require.InDelta(t, float64(42), received["source_task_id"], 0)
-	require.Equal(t, "cluster-a", received["source_cluster"])
-	require.Equal(t, "cluster-b", received["target_cluster"])
-	require.True(t, processingContextSet)
-	eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(task)
-	require.True(t, ok)
-	require.Equal(t, wideevents.NamespaceReplicationTaskContext{
-		SourceCluster: "cluster-a",
-		TargetCluster: "cluster-b",
-		SourceTaskID:  42,
-		AttemptCount:  1,
-		EventData:     eventData,
-	}, processingContext)
+			received := replicationEventDetails(t, eventLogger.records[0])
+			require.InDelta(t, float64(tc.sourceTaskID), received["source_task_id"], 0)
+			require.Equal(t, "cluster-a", received["source_cluster"])
+			require.Equal(t, "cluster-b", received["target_cluster"])
+			require.True(t, processingContextSet)
+			eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(task)
+			require.True(t, ok)
+			require.Equal(t, wideevents.NamespaceReplicationTaskContext{
+				SourceCluster: "cluster-a",
+				TargetCluster: "cluster-b",
+				SourceTaskID:  &tc.sourceTaskID,
+				AttemptCount:  1,
+				EventData:     eventData,
+			}, processingContext)
+		})
+	}
 }
 
 func TestHandleNamespaceReplicationTaskCountsRetries(t *testing.T) {

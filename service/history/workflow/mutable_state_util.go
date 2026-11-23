@@ -74,6 +74,11 @@ func sanitizeExecutionInfo(
 	executionInfo.LastSupersededRunId = ""
 	executionInfo.LastOrphanedOperationsTime = nil
 	executionInfo.PersistenceMetadata = nil
+
+	// Storage usage is accrued by each cluster for the storage it holds, do not sync it.
+	if stats := executionInfo.GetExecutionStats(); stats != nil {
+		stats.StorageUsage = nil
+	}
 }
 
 func sanitizeChildExecutionInfo(

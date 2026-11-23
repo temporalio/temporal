@@ -131,12 +131,13 @@ func (mr *MockWorkflowContextMockRecorder) GetArchetypeID() *gomock.Call {
 }
 
 // GetMergedTaskCompletionPages mocks base method.
-func (m *MockWorkflowContext) GetMergedTaskCompletionPages(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) ([]*command.Command, error) {
+func (m *MockWorkflowContext) GetMergedTaskCompletionPages(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) ([]*command.Command, func(), error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMergedTaskCompletionPages", schedID, attempt, request)
 	ret0, _ := ret[0].([]*command.Command)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(func())
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetMergedTaskCompletionPages indicates an expected call of GetMergedTaskCompletionPages.

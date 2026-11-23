@@ -287,6 +287,17 @@ func (a *Interceptor) GetAuthInfo(tlsConnection *credentials.TLSInfo, header hea
 	}
 }
 
+// HTTPAudience returns the JWT audience the server expects for a non-gRPC (HTTP) request, or "" if no audience
+// mapper is configured or the request carries no auth token. As with streaming RPCs, the mapper is called with nil req
+// and info; it is skipped for tokenless requests so that custom implementations which don't nil-check those arguments
+// are not invoked on mTLS-only traffic.
+func (a *Interceptor) HTTPAudience(ctx context.Context, header headers.HeaderGetter) string {
+	if a.audienceGetter == nil || header == nil || header.Get(a.authHeaderName) == "" {
+		return ""
+	}
+	return a.audienceGetter.Audience(ctx, nil, nil)
+}
+
 // GetClaims uses the policy's claimMapper to map the provided authInfo to claims.
 func (a *Interceptor) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	return a.claimMapper.GetClaims(authInfo)

@@ -47,10 +47,12 @@ type (
 		// stop routing to this member while it can still serve them.
 		EvictSelf() error
 		// EvictSelfAt is similar to EvictSelf but causes the change to take effect on all
-		// hosts at that absolute time (assuming it's in the future). This process should stay
-		// alive for at least the returned duration after calling this, so that all membership
-		// information can be propagated correctly. The resolution of asOf is whole seconds.
-		EvictSelfAt(asOf time.Time) (time.Duration, error)
+		// hosts at that absolute time (assuming it's in the future). If window is non-zero,
+		// the change takes effect gradually: each key moves away from this host at a different
+		// time between asOf and asOf+window. This process should stay alive for at least the
+		// returned duration after calling this, so that all membership information can be
+		// propagated correctly. The resolution of asOf and window is whole seconds.
+		EvictSelfAt(asOf time.Time, window time.Duration) (time.Duration, error)
 		// GetResolver returns the service resolver for a service in the cluster.
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
 		// GetReachableMembers returns addresses of all members of the ring.
@@ -92,6 +94,13 @@ type (
 		AvailableMembers() []HostInfo
 		// RequestRefresh requests that the membership information be refreshed.
 		RequestRefresh()
+		// NextLookupChange returns the earliest time after now at which the result of
+		// LookupN(key, n) may change without a ChangedEvent being sent to listeners (due to a
+		// gradual membership change), or the zero time if there is none. Listeners that care
+		// about ownership of specific keys should re-check them at that time. The result may
+		// not actually change at that time, in which case the caller should call
+		// NextLookupChange again.
+		NextLookupChange(key string, n int) time.Time
 	}
 
 	HostInfoProvider interface {
