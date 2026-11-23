@@ -82,6 +82,59 @@ func EmitNamespaceMigrationWorkflowLifecycle(
 	})
 }
 
+// PhaseNamespaceEagerRefresh reports one attempt by a history replication task to refresh a
+// namespace from the task's source cluster.
+const PhaseNamespaceEagerRefresh = "namespace_eager_refresh"
+
+// Outcomes of a namespace eager refresh.
+const (
+	NamespaceEagerRefreshRefreshed   = "refreshed"
+	NamespaceEagerRefreshFetchFailed = "fetch_failed"
+	NamespaceEagerRefreshNotGlobal   = "not_global"
+	NamespaceEagerRefreshNotMember   = "not_member"
+	NamespaceEagerRefreshApplyFailed = "apply_failed"
+	NamespaceEagerRefreshFailed      = "failed"
+)
+
+// NamespaceEagerRefreshInput describes one namespace eager refresh attempt. Namespace and the
+// source versions are empty when the source cluster could not be read.
+type NamespaceEagerRefreshInput struct {
+	Namespace             string
+	NamespaceID           string
+	SourceCluster         string
+	CurrentCluster        string
+	Operation             string
+	Outcome               string
+	SourceFailoverVersion int64
+	SourceConfigVersion   int64
+	Duration              time.Duration
+	Err                   error
+}
+
+// EmitNamespaceEagerRefresh emits a namespace eager refresh event.
+func EmitNamespaceEagerRefresh(logger otellog.Logger, in NamespaceEagerRefreshInput) {
+	details := map[string]any{
+		"source_cluster":          in.SourceCluster,
+		"current_cluster":         in.CurrentCluster,
+		"outcome":                 in.Outcome,
+		"source_failover_version": in.SourceFailoverVersion,
+		"source_config_version":   in.SourceConfigVersion,
+		"duration_ms":             in.Duration.Milliseconds(),
+	}
+	if in.Operation != "" {
+		details["operation"] = in.Operation
+	}
+	if in.Err != nil {
+		details["error"] = in.Err.Error()
+	}
+	Emit(logger, NamespaceLifecyclePayload{
+		Phase:       PhaseNamespaceEagerRefresh,
+		Namespace:   in.Namespace,
+		NamespaceID: in.NamespaceID,
+		Details:     details,
+	})
+}
+
 // Why a shard took or advanced its watermark.
 const (
 	// WatermarkAdded: the namespace entered handover.

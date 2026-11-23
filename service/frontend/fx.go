@@ -562,11 +562,11 @@ func RateLimitInterceptorProvider(
 	for api := range configs.PodOnlyAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
 		mapping[api] = rateLimiters.Execution
 	}
-	// EnableDescribeMutableStateRateLimit is read once, here, at fx-graph construction time — toggling
-	// it in production requires bouncing frontend pods to pick up the new value. Once DescribeMutableState's
-	// rollout is complete, move its entry into PodOnlyAPIToPriority above and delete this branch.
-	if serviceConfig.EnableDescribeMutableStateRateLimit() {
-		for api := range configs.DescribeMutableStateAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+	// EnableAdminPodLevelRateLimit is read once, here, at fx-graph construction time — toggling
+	// it in production requires bouncing frontend pods to pick up the new value. Once the admin APIs'
+	// rollout is complete, move their entries into PodOnlyAPIToPriority above and delete this branch.
+	if serviceConfig.EnableAdminPodLevelRateLimit() {
+		for api := range configs.AdminAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
 			mapping[api] = rateLimiters.Execution
 		}
 	}

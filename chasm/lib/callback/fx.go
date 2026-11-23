@@ -47,8 +47,10 @@ func httpCallerProviderProvider(
 	if err != nil {
 		return nil, err
 	}
+	roundTripper := httpClientTransportInstrumenter.Instrument(externalTransport)
+	roundTripper = commonnexus.RejectRedirects(roundTripper)
 	externalClient := &http.Client{
-		Transport: httpClientTransportInstrumenter.Instrument(externalTransport),
+		Transport: roundTripper,
 	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
