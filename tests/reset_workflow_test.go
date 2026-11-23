@@ -166,7 +166,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 	s.NoError(err)
 
 	// Find reset point (last completed workflow task)
-	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -271,7 +271,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 
 	var historyEvents []*historypb.HistoryEvent
 	s.Eventually(func() bool {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
 		})
@@ -331,7 +331,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 
 	executions := s.runWorkflowWithPoller(env, tv)
 
-	events := env.GetHistory(env.Namespace().String(), executions[0])
+	events := env.RequireHistory(s, executions[0])
 
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted {"Attempt":1}
@@ -681,7 +681,7 @@ func (s *resetTest) run() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-`, s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution()))
+`, s.env.RequireHistory(s, s.tv.WorkflowExecution()))
 
 	// Trying to start workflow with same WorkflowID will attach the RequestID to the existing workflow.
 	onConflictOptions := &workflowpb.OnConflictOptions{AttachRequestId: true}
@@ -704,7 +704,7 @@ func (s *resetTest) run() {
 	s.True(s.commandsCompleted)
 	s.True(s.messagesCompleted)
 
-	events := s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
+	events := s.env.RequireHistory(s, s.tv.WorkflowExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -743,7 +743,7 @@ func (s *resetTest) run() {
 	resetToEventID := int64(4)
 	newRunID := s.reset(resetToEventID)
 	s.tv = s.tv.WithRunID(newRunID)
-	events = s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
+	events = s.env.RequireHistory(s, s.tv.WorkflowExecution())
 
 	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(s.reapplyExcludeTypes, s.reapplyType)
 	_, noSignals := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
@@ -799,7 +799,7 @@ func (s *resetTest) run() {
 		resetToEventID := int64(4)
 		newRunID = s.reset(resetToEventID)
 		s.tv = s.tv.WithRunID(newRunID)
-		events = s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
+		events = s.env.RequireHistory(s, s.tv.WorkflowExecution())
 		expectedHistory = `
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -827,7 +827,7 @@ func (s *resetTest) run() {
 	requireNotStartedButRunning(s.T(), resp)
 
 	// History events must be the same.
-	events = s.env.GetHistory(s.env.Namespace().String(), s.tv.WorkflowExecution())
+	events = s.env.RequireHistory(s, s.tv.WorkflowExecution())
 	s.EqualHistoryEvents(expectedHistory, events)
 }
 
@@ -922,7 +922,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: resetRunID})
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: resetRunID})
 	switch reapplyType { // nolint:exhaustive
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		s.EqualHistoryEvents(`
@@ -1110,7 +1110,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	}
 
 	// Find reset point (last completed workflow task)
-	events := env.GetHistory(env.Namespace().String(), wfExec)
+	events := env.RequireHistory(s, wfExec)
 	var lastWorkflowTask *historypb.HistoryEvent
 	for _, event := range events {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
@@ -1215,7 +1215,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissin
 
 	// Sanity: run A still exists and is addressable by its runId. Find its reset point (last completed
 	// workflow task) while we are here.
-	runAEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: baseRunID})
+	runAEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: baseRunID})
 	var lastWorkflowTask *historypb.HistoryEvent
 	for _, event := range runAEvents {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
@@ -1264,7 +1264,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissin
 
 	// The signal recorded on the surviving intermediate run B must be reapplied onto the reset run.
 	// Reapplying only run A's own events (the previous behavior) would drop it.
-	resetEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.GetRunId()})
+	resetEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.GetRunId()})
 	signalReapplied := false
 	for _, event := range resetEvents {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED &&
@@ -1398,7 +1398,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	s.Equal(workflowExternalPayloadSize+activityExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 
 	// Get history to find reset point (first completed workflow task)
-	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      we.GetRunId(),
 	})

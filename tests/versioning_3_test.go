@@ -452,7 +452,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			events := env.GetHistory(env.Namespace().String(), execution)
+			events := env.RequireHistory(s, execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
 				2 WorkflowTaskScheduled
@@ -482,7 +482,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 	s.Equal("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 	// Verify that events from the speculative task are written to the history since the update was accepted
-	events := env.GetHistory(env.Namespace().String(), execution)
+	events := env.RequireHistory(s, execution)
 	s.EqualHistoryEvents(`
 1 WorkflowExecutionStarted
 2 WorkflowTaskScheduled
@@ -539,7 +539,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			events := env.GetHistory(env.Namespace().String(), execution)
+			events := env.RequireHistory(s, execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
 				2 WorkflowTaskScheduled
@@ -575,7 +575,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 	s.Equal("rejection-of-"+tv2.UpdateID(), updateResult.GetOutcome().GetFailure().GetMessage())
 
 	// Verify events from the speculative task are *not* written to the workflow history since the update was rejected
-	events := env.GetHistory(env.Namespace().String(), execution)
+	events := env.RequireHistory(s, execution)
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
@@ -1668,6 +1668,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
+		// Because the wf task can get stuck behind a channel, we make sure sdk does not panic too early
+		DeadlockDetectionTimeout: 30 * time.Second,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf", VersioningBehavior: sdkParentBehavior})
 	if !crossTq {
@@ -1683,7 +1685,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 		ID:                  tv1.WorkflowID(),
 		TaskQueue:           tv1.TaskQueue().GetName(),
 		VersioningOverride:  nil,
-		WorkflowTaskTimeout: 10 * time.Second,
+		WorkflowTaskTimeout: 30 * time.Second,
 	}
 	if withOverride {
 		startOpts.VersioningOverride = &sdkclient.PinnedVersioningOverride{
@@ -1840,7 +1842,7 @@ func (s *Versioning3Suite) testChildWorkflowExplicitPinnedOverrideTakesPrecedenc
 			}, nil
 		})
 
-	parentHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	parentHistory := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tvParentV1.WorkflowID(),
 		RunId:      runID,
 	})
@@ -1863,7 +1865,7 @@ func (s *Versioning3Suite) testChildWorkflowExplicitPinnedOverrideTakesPrecedenc
 		})
 
 	env.verifyWorkflowVersioning(s, tvChildV2, vbPinned, tvChildV2.Deployment(), childOverride, nil)
-	childHistory := env.GetHistory(env.Namespace().String(), childExecution)
+	childHistory := env.RequireHistory(s, childExecution)
 	var startedAttributes *historypb.WorkflowExecutionStartedEventAttributes
 	for _, event := range childHistory {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -1942,7 +1944,7 @@ func (s *Versioning3Suite) TestChildWorkflowExplicitAutoUpgradeOverrideTakesPrec
 			}, nil
 		})
 
-	parentHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	parentHistory := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tv1.WorkflowID(),
 		RunId:      runID,
 	})
@@ -2101,7 +2103,7 @@ func (s *Versioning3Suite) TestChildWorkflowMalformedPinnedOverrideFailsWorkflow
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
 
-	parentHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	parentHistory := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tvParent.WorkflowID(),
 		RunId:      runID,
 	})
@@ -2418,7 +2420,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 				} else if transientTask {
 					s.verifyTransientTask(task)
 					// Get events from server-side history, this includes transient events.
-					historyEvents = env.GetHistory(env.Namespace().String(), execution)
+					historyEvents = env.RequireHistory(s, execution)
 				}
 
 				wfTaskStartedEvents := make([]*historypb.HistoryEvent, 0)
@@ -4907,7 +4909,7 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 	}
 
 	assertNoPersistedTargetChange := func(execution *commonpb.WorkflowExecution) {
-		for _, event := range env.GetHistory(env.Namespace().String(), execution) {
+		for _, event := range env.RequireHistory(parallelsuite.WithContext(ctx, s), execution) {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 				s.False(event.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
 					"persisted parent history should not expose targetWorkerDeploymentVersionChanged=true")
@@ -5722,7 +5724,7 @@ func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 	s.NoError(err)
 
 	// Sanity: full history should have no WFT-Started event with the flag.
-	events := env.GetHistory(env.Namespace().String(), execution)
+	events := env.RequireHistory(s, execution)
 	for _, e := range events {
 		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 			s.False(e.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
@@ -5849,7 +5851,7 @@ func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
 
 	// Verify: retry run's WFT started should have targetDeploymentVersionChanged=false
 	// because OnStart=v2 (preserved from CaN decision) == target=v2 (still current).
-	retryHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	retryHistory := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: wfID,
 		RunId:      retryRunID,
 	})
@@ -6266,7 +6268,7 @@ func (s *Versioning3Suite) TestVersioning3_NoWorkerVersionOnStartedEvents() {
 	<-updateResultCh2
 
 	// Verify: no WorkflowTaskStarted event should have WorkerVersion set.
-	events := env.GetHistory(env.Namespace().String(), execution)
+	events := env.RequireHistory(s, execution)
 	for _, event := range events {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 			s.Nil(

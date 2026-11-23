@@ -567,7 +567,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand(opts []testc
 	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForSignalSent:
 	for i := 1; i < 10; i++ {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -950,7 +950,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForSignalSent:
 	for i := 1; i < 10; i++ {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -1092,7 +1092,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -1215,7 +1215,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf(o
 	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -1791,7 +1791,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_DedupOnClosedExecu
 	s.Equal(runID1, descResp.WorkflowExecutionInfo.Execution.RunId)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      runID1,
 	})
