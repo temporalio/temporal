@@ -106,10 +106,16 @@ type (
 )
 
 func (pm *taskQueuePartitionManagerImpl) PutCache(key any, value any) {
+	if pm.cache == nil {
+		return
+	}
 	pm.cache.Put(key, value)
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetCache(key any) any {
+	if pm.cache == nil {
+		return nil
+	}
 	return pm.cache.Get(key)
 }
 

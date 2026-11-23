@@ -1941,6 +1941,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
+	// TODO (Shivam): loading a sticky partition locks the normal task queue name that was in the request, so describing an
+	// unloaded sticky queue with something like an empty normal name breaks single-session acquisition on it later on. Callers must set it
+	// and we must add validation for this edge case in the frontend.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseDescribe)
 	if err != nil {
 		return nil, err
@@ -1952,8 +1955,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	}
 
 	if req.ReportStats {
-		if !pm.Partition().IsRoot() {
-			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
+		// Note: we are not folding stats that are present in each and every sticky task queue partition on a describe task queue for a normal task
+		// queue. This code is specifically designed for enabling support for the WCI + Single Session workers, which query the stats for a specific sticky task queue
+		// partition.
+		sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+		if !pm.Partition().IsRoot() && !sticky {
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition or a sticky task queue")
 		}
 
 		var buildIds []string
@@ -1965,6 +1972,11 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 
 		// TODO(stephan): cache each version separately to allow re-use of cached stats
+		// TODO (Shivam): only root partitions have a stats cache, so sticky describes always miss it. Not worth it yet:
+		// a sticky task queue has a single partition, so there is no fan-out to save, and the worker controller asks
+		// at most about once a minute, well beyond the cache's 5s TTL (matching.TaskQueueInfoByBuildIdTTL), so a
+		// cache would rarely hit while adding one per sticky partition. Revisit as an optimization if sticky
+		// describes get frequent.
 		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
 		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
@@ -1975,8 +1987,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
 			taskQueueStatsByPriority := make(map[int32]*taskqueuepb.TaskQueueStats)
 
-			// No version was requested, so we need to query all versions.
-			if len(buildIds) == 0 {
+			// No version was requested, so we need to query all versions. A sticky task queue is unversioned.
+			if len(buildIds) == 0 && !sticky {
 				userData, _, err := pm.GetUserDataManager().GetUserData()
 				if err != nil {
 					return nil, err
@@ -2007,6 +2019,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				reportUnversioned = true
 			}
 
+			if sticky {
+				reportUnversioned = true
+			}
 			if reportUnversioned {
 				buildIds = append(buildIds, "")
 			}
@@ -2014,14 +2029,20 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			// query each partition for stats
 			// TODO(stephanos): don't query root partition again
 			for i := 0; i < pm.PartitionCount(); i++ {
+				taskQueuePartition := &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     req.TaskQueue.Name,
+					TaskQueueType: req.TaskQueueType,
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+				}
+				if sticky {
+					// A sticky task queue has a single partition.
+					taskQueuePartition.TaskQueue = req.TaskQueue.GetNormalName()
+					taskQueuePartition.PartitionId = &taskqueuespb.TaskQueuePartition_StickyName{StickyName: req.TaskQueue.Name}
+				}
 				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx,
 					&matchingservice.DescribeTaskQueuePartitionRequest{
-						NamespaceId: request.GetNamespaceId(),
-						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-							TaskQueue:     req.TaskQueue.Name,
-							TaskQueueType: req.TaskQueueType,
-							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
-						},
+						NamespaceId:        request.GetNamespaceId(),
+						TaskQueuePartition: taskQueuePartition,
 						Versions: &taskqueuepb.TaskQueueVersionSelection{
 							BuildIds:    buildIds,
 							Unversioned: reportUnversioned,
