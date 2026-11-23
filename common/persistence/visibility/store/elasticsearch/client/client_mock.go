@@ -132,6 +132,21 @@ func (mr *MockClientMockRecorder) Get(ctx, index, docID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockClient)(nil).Get), ctx, index, docID)
 }
 
+// GetIndexSettings mocks base method.
+func (m *MockClient) GetIndexSettings(ctx context.Context, index string) (map[string]map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIndexSettings", ctx, index)
+	ret0, _ := ret[0].(map[string]map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetIndexSettings indicates an expected call of GetIndexSettings.
+func (mr *MockClientMockRecorder) GetIndexSettings(ctx, index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIndexSettings", reflect.TypeOf((*MockClient)(nil).GetIndexSettings), ctx, index)
+}
+
 // GetMapping mocks base method.
 func (m *MockClient) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	m.ctrl.T.Helper()
@@ -363,6 +378,21 @@ func (m *MockCLIClient) Get(ctx context.Context, index, docID string) (*elastic.
 func (mr *MockCLIClientMockRecorder) Get(ctx, index, docID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockCLIClient)(nil).Get), ctx, index, docID)
+}
+
+// GetIndexSettings mocks base method.
+func (m *MockCLIClient) GetIndexSettings(ctx context.Context, index string) (map[string]map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIndexSettings", ctx, index)
+	ret0, _ := ret[0].(map[string]map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetIndexSettings indicates an expected call of GetIndexSettings.
+func (mr *MockCLIClientMockRecorder) GetIndexSettings(ctx, index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIndexSettings", reflect.TypeOf((*MockCLIClient)(nil).GetIndexSettings), ctx, index)
 }
 
 // GetMapping mocks base method.
@@ -611,6 +641,21 @@ func (m *MockIntegrationTestsClient) Get(ctx context.Context, index, docID strin
 func (mr *MockIntegrationTestsClientMockRecorder) Get(ctx, index, docID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockIntegrationTestsClient)(nil).Get), ctx, index, docID)
+}
+
+// GetIndexSettings mocks base method.
+func (m *MockIntegrationTestsClient) GetIndexSettings(ctx context.Context, index string) (map[string]map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIndexSettings", ctx, index)
+	ret0, _ := ret[0].(map[string]map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetIndexSettings indicates an expected call of GetIndexSettings.
+func (mr *MockIntegrationTestsClientMockRecorder) GetIndexSettings(ctx, index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIndexSettings", reflect.TypeOf((*MockIntegrationTestsClient)(nil).GetIndexSettings), ctx, index)
 }
 
 // GetMapping mocks base method.

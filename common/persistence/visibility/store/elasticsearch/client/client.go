@@ -32,6 +32,9 @@ type (
 		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
 		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
+		// GetIndexSettings returns the flat settings of each index the name resolves to, keyed by index name. An
+		// alias resolves to every index behind it.
+		GetIndexSettings(ctx context.Context, index string) (map[string]map[string]any, error)
 		IndexExists(ctx context.Context, indexName string) (bool, error)
 		CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error)
 		DeleteIndex(ctx context.Context, indexName string) (bool, error)

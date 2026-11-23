@@ -10,6 +10,8 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/olivere/elastic/v7"
@@ -59,6 +61,11 @@ type (
 		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
+
+		// The index sort can't change once the index exists, so the first List that reads it caches the result.
+		indexSortMu        sync.Mutex
+		indexSortKnown     atomic.Bool
+		namespaceFirstSort bool
 	}
 
 	visibilityPageToken struct {
@@ -123,6 +130,14 @@ var (
 		}
 		return ret
 	}()
+
+	// namespaceFirstSorter replaces defaultSorter on an index sorted by NamespaceId first. ES can stop a sorted
+	// search early only when the query sort is a prefix of the index sort, and every List filters on one namespace, so
+	// the extra field doesn't change the order of results.
+	namespaceFirstSorter = append(
+		[]elastic.Sorter{elastic.NewFieldSort(sadefs.NamespaceID).Asc().Missing("_last")},
+		defaultSorter...,
+	)
 
 	docSorter = []elastic.Sorter{
 		elastic.SortByDoc{},
@@ -398,7 +413,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.searchList(ctx, p, request.NamespaceID)
 	if err != nil {
 		return nil, ConvertElasticsearchClientError(
 			metrics.VisibilityPersistenceListWorkflowExecutionsScope,
@@ -443,7 +458,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 		return nil, err
 	}
 
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.searchList(ctx, p, namespace.ID(request.NamespaceId))
 	if err != nil {
 		return nil, ConvertElasticsearchClientError(
 			metrics.VisibilityPersistenceListChasmExecutionsScope,
@@ -693,6 +708,66 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	}
 
 	return searchParams, nil
+}
+
+// searchList runs a List search. On an index sorted by NamespaceId first, it searches with namespaceFirstSorter
+// instead of defaultSorter, and drops the NamespaceId sort value from each hit so page tokens keep the defaultSorter
+// format. A token from either sort then works with the other, which matters while a dual visibility setup reads one
+// store's tokens from the other.
+func (s *VisibilityStore) searchList(
+	ctx context.Context,
+	p *client.SearchParameters,
+	namespaceID namespace.ID,
+) (*elastic.SearchResult, error) {
+	// A search across namespaces, such as an admin List without one, would come back in a different order.
+	if namespaceID == namespace.EmptyID || !isDefaultSorter(p.Sorter) {
+		return s.esClient.Search(ctx, p)
+	}
+	namespaceFirst, err := s.isNamespaceFirstIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !namespaceFirst {
+		return s.esClient.Search(ctx, p)
+	}
+
+	nsp := *p
+	nsp.Sorter = namespaceFirstSorter
+	if len(p.SearchAfter) > 0 {
+		nsp.SearchAfter = append([]any{namespaceID.String()}, p.SearchAfter...)
+	}
+	result, err := s.esClient.Search(ctx, &nsp)
+	if err != nil || result == nil || result.Hits == nil {
+		return result, err
+	}
+	for _, hit := range result.Hits.Hits {
+		if len(hit.Sort) > 0 {
+			hit.Sort = hit.Sort[1:]
+		}
+	}
+	return result, nil
+}
+
+// isNamespaceFirstIndex reports whether the index sort starts with NamespaceId. Until a read of the index settings
+// succeeds, every List that asks fails, the same as it would if it couldn't reach ES.
+func (s *VisibilityStore) isNamespaceFirstIndex(ctx context.Context) (bool, error) {
+	if s.indexSortKnown.Load() {
+		return s.namespaceFirstSort, nil
+	}
+	s.indexSortMu.Lock()
+	defer s.indexSortMu.Unlock()
+	if s.indexSortKnown.Load() {
+		return s.namespaceFirstSort, nil
+	}
+	settings, err := s.esClient.GetIndexSettings(ctx, s.index)
+	if err != nil {
+		return false, fmt.Errorf("unable to read the index sort of %s: %w", s.index, err)
+	}
+	s.namespaceFirstSort = isNamespaceFirstIndexSort(settings)
+	s.indexSortKnown.Store(true)
+	s.logger.Info("Read the visibility index sort",
+		tag.ESIndex(s.index), tag.NewBoolTag("namespace-first", s.namespaceFirstSort))
+	return s.namespaceFirstSort, nil
 }
 
 func (s *VisibilityStore) processPageToken(
@@ -1349,6 +1424,46 @@ func shortErrorMessage(err error) string {
 	return err.Error()
 }
 
+// isNamespaceFirstIndexSort reports whether every index in settings sorts by NamespaceId ascending first, with missing
+// values last, which is what namespaceFirstSorter needs to match. Indexes behind one alias that disagree get the
+// default sort.
+func isNamespaceFirstIndexSort(settings map[string]map[string]any) bool {
+	if len(settings) == 0 {
+		return false
+	}
+	for _, idx := range settings {
+		fields := settingValues(idx["index.sort.field"])
+		if len(fields) == 0 || fields[0] != sadefs.NamespaceID {
+			return false
+		}
+		if order := settingValues(idx["index.sort.order"]); len(order) > 0 && order[0] != "asc" {
+			return false
+		}
+		if missing := settingValues(idx["index.sort.missing"]); len(missing) > 0 && missing[0] != "_last" {
+			return false
+		}
+	}
+	return true
+}
+
+// settingValues reads a flat setting that ES returns as a string for one value and a list for several.
+func settingValues(v any) []string {
+	switch v := v.(type) {
+	case string:
+		return []string{v}
+	case []any:
+		values := make([]string, 0, len(v))
+		for _, item := range v {
+			if str, ok := item.(string); ok {
+				values = append(values, str)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
+}
+
 func isDefaultSorter(sorter []elastic.Sorter) bool {
 	if len(sorter) != len(defaultSorter) {
 		return false
@@ -1583,7 +1698,7 @@ func (s *VisibilityStore) AdminListExecutions(
 		return nil, err
 	}
 
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.searchList(ctx, p, namespaceID)
 	if err != nil {
 		return nil, ConvertElasticsearchClientError(
 			metrics.VisibilityPersistenceListExecutionsScope,

@@ -111,3 +111,42 @@ func TestCount(t *testing.T) {
 		})
 	}
 }
+
+// TestGetIndexSettings verifies that the flat settings of every index behind a name come back keyed by index, and that
+// an ES error, such as a missing privilege, comes back as one.
+func TestGetIndexSettings(t *testing.T) {
+	t.Run("alias", func(t *testing.T) {
+		var reqPath, flat string
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			reqPath = r.URL.Path
+			flat = r.URL.Query().Get("flat_settings")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"index-1": {"settings": {"index.sort.field": ["NamespaceId", "CloseTime"], "index.number_of_shards": "20"}},
+				"index-2": {"settings": {"index.number_of_shards": "20"}}
+			}`))
+		})
+
+		settings, err := c.GetIndexSettings(t.Context(), "alias")
+		require.NoError(t, err)
+		require.Equal(t, "/alias/_settings", reqPath)
+		require.Equal(t, "true", flat)
+		require.Equal(t, map[string]map[string]any{
+			"index-1": {"index.sort.field": []any{"NamespaceId", "CloseTime"}, "index.number_of_shards": "20"},
+			"index-2": {"index.number_of_shards": "20"},
+		}, settings)
+	})
+
+	t.Run("forbidden", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error": {"type": "security_exception", "reason": "action [indices:monitor/settings/get] is unauthorized"}, "status": 403}`))
+		})
+
+		_, err := c.GetIndexSettings(t.Context(), "test-index")
+		var esErr *elastic.Error
+		require.ErrorAs(t, err, &esErr)
+		require.Equal(t, http.StatusForbidden, esErr.Status)
+	})
+}

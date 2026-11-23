@@ -296,6 +296,38 @@ func (c *clientImpl) GetMapping(ctx context.Context, index string) (map[string]s
 	return convertMappingBody(body, index), nil
 }
 
+func (c *clientImpl) GetIndexSettings(ctx context.Context, index string) (map[string]map[string]any, error) {
+	// Built by hand for the same reason as GetMapping.
+	path, err := uritemplates.Expand("/{index}/_settings", map[string]string{
+		"index": index,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+		Method:  "GET",
+		Path:    path,
+		Params:  url.Values{"flat_settings": []string{"true"}},
+		Headers: http.Header{},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var body map[string]struct {
+		Settings map[string]any `json:"settings"`
+	}
+	if err := json.Unmarshal(res.Body, &body); err != nil {
+		return nil, err
+	}
+	settings := make(map[string]map[string]any, len(body))
+	for name, idx := range body {
+		settings[name] = idx.Settings
+	}
+	return settings, nil
+}
+
 func (c *clientImpl) GetDateFieldType() string {
 	return "date_nanos"
 }

@@ -174,6 +174,8 @@ func (s *ESVisibilitySuite) SetupTest() {
 		metricsHandler:                 s.mockMetricsHandler,
 		logger:                         log.NewNoopLogger(),
 	}
+	// Most tests search an index with no sort. The index sort tests clear this to read the settings.
+	s.visibilityStore.indexSortKnown.Store(true)
 
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
 		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
