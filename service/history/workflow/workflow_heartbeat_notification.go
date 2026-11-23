@@ -1,18 +1,32 @@
 package workflow
 
 import (
+	"context"
+	"encoding/base64"
 	"slices"
+	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/workercommands"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"google.golang.org/protobuf/proto"
 )
 
 // WorkflowHeartbeatNotificationUpdateAdmittedMetricTag is a dummy event type: admitting an Update writes no history
@@ -96,6 +110,7 @@ func HasBufferedWorkflowHeartbeatNotificationInput(ms historyi.MutableState, new
 // handleWorkflowHeartbeatNotification handles buffered events waiting for the next Workflow Task to reach the worker.
 // Admitted Updates can also trigger WHN while waiting for that task, through the Update path.
 func (c *ContextImpl) handleWorkflowHeartbeatNotification(
+	ctx context.Context,
 	shardCtx historyi.ShardContext,
 	newBufferedEvents []*historypb.HistoryEvent,
 ) {
@@ -131,18 +146,185 @@ func (c *ContextImpl) handleWorkflowHeartbeatNotification(
 		}
 	}
 	if firstBufferedInput {
-		SendWorkflowHeartbeatNotification(shardCtx, namespaceName, c.workflowKey.WorkflowID)
+		notification, err := NewWorkflowHeartbeatNotification(c.MutableState, filteredNewBufferedEventTypes[0])
+		if err != nil {
+			c.logger.Warn("WHN: Unable to prepare workflow heartbeat notification", tag.Error(err))
+		} else {
+			SendWorkflowHeartbeatNotification(ctx, shardCtx, notification)
+		}
 	}
 }
 
-// SendWorkflowHeartbeatNotification applies the workflow-sticky rollout before notifying the worker.
-// Callers must first verify that an eligible input is waiting behind the started Workflow Task.
-// It runs on the critical path of customer-facing APIs, so it must be low latency.
-func SendWorkflowHeartbeatNotification(shardCtx historyi.ShardContext, namespaceName, workflowID string) {
-	if !isWorkflowHeartbeatNotificationEnabled(shardCtx, namespaceName, workflowID) {
+type WorkflowHeartbeatNotification struct {
+	workflowKey   definition.WorkflowKey
+	namespaceName string
+	controlQueue  string
+	taskToken     []byte
+	// inputEventTypeName is a history event name or UPDATE_ADMITTED for an admitted Update.
+	inputEventTypeName string
+}
+
+// NewWorkflowHeartbeatNotification snapshots the started task while the workflow lease is held.
+// It returns nil if the worker didn't register a control queue or the task token can't be rebuilt.
+func NewWorkflowHeartbeatNotification(ms historyi.MutableState, inputEventTypeName string) (*WorkflowHeartbeatNotification, error) {
+	info := ms.GetExecutionInfo()
+	controlQueue := info.GetWorkflowTaskWorkerControlQueue()
+	if controlQueue == "" {
+		return nil, nil
+	}
+	key := ms.GetWorkflowKey()
+	taskToken := RebuildCurrentWorkflowTaskToken(key, info)
+	if taskToken == nil {
+		return nil, nil
+	}
+	token, err := tasktoken.NewSerializer().Serialize(taskToken)
+	if err != nil {
+		return nil, err
+	}
+	return &WorkflowHeartbeatNotification{
+		workflowKey:        key,
+		namespaceName:      ms.GetNamespaceEntry().Name().String(),
+		controlQueue:       controlQueue,
+		taskToken:          token,
+		inputEventTypeName: inputEventTypeName,
+	}, nil
+}
+
+// SendWorkflowHeartbeatNotification is called after the input transaction succeeds and returns without blocking.
+// A background goroutine dispatches the notification to the worker's control queue through Matching and waits
+// asynchronously for the worker's response, up to WorkflowHeartbeatNotificationDispatchTimeout. It is best
+// effort: failures are only logged.
+func SendWorkflowHeartbeatNotification(
+	ctx context.Context,
+	shardCtx historyi.ShardContext,
+	notification *WorkflowHeartbeatNotification,
+) {
+	if notification == nil || !isWorkflowHeartbeatNotificationEnabled(shardCtx, notification.namespaceName, notification.workflowKey.WorkflowID) {
 		return
 	}
-	// TODO(whn): Dispatch asynchronously to the worker holding the started Workflow Task.
+	// TODO(experimental@whn): consider a bounded queue instead of a goroutine per notification, to cap
+	// concurrency and drop notifications when full. Options:
+	//   - The history in-memory task queue. It currently only supports timed history tasks (CategoryMemoryTimer),
+	//     so it would first need to support immediate tasks. Its timer fires at the task's exact visibility time,
+	//     but when all scheduler workers are busy it pushes the task back by 1s (workerBusyRescheduleDelay), which
+	//     is longer than WorkflowHeartbeatNotificationDispatchTimeout (500ms default). Check it is fast enough.
+	//   - A dedicated ctasks.FIFOScheduler with its own worker pool, where TrySubmit drops when the queue is full.
+	go func() {
+		matchingClient, err := shardCtx.GetMatchingClient()
+		if err != nil {
+			shardCtx.GetLogger().Warn("WHN: Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
+			return
+		}
+		command := &workerpb.WorkerCommand{Type: &workerpb.WorkerCommand_WorkflowHeartbeatNotification{
+			WorkflowHeartbeatNotification: &workerpb.WorkflowHeartbeatNotificationCommand{
+				TaskToken: notification.taskToken,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: notification.workflowKey.WorkflowID,
+					RunId:      notification.workflowKey.RunID,
+				},
+			},
+		}}
+		requestData, err := proto.Marshal(&workerservicepb.ExecuteCommandsRequest{Commands: []*workerpb.WorkerCommand{command}})
+		if err != nil {
+			shardCtx.GetLogger().Warn("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
+			return
+		}
+		// TODO(experimental@whn): relax WorkflowHeartbeatNotificationDispatchTimeout once Matching keeps a shorter
+		// buffer than the 1s Nexus MinDispatchTaskTimeout for WHN commands.
+		matchCtx, matchCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
+		)
+		defer matchCancel()
+		dispatchStart := time.Now()
+		resp, err := matchingClient.DispatchNexusTask(matchCtx, &matchingservice.DispatchNexusTaskRequest{
+			NamespaceId: notification.workflowKey.NamespaceID,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: notification.controlQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			},
+			Request: &nexuspb.Request{
+				Header: map[string]string{},
+				Variant: &nexuspb.Request_StartOperation{StartOperation: &nexuspb.StartOperationRequest{
+					Service:   workercommands.ServiceName,
+					Operation: workercommands.OperationName,
+					Payload: &commonpb.Payload{
+						Metadata: map[string][]byte{"encoding": []byte("binary/protobuf")},
+						Data:     requestData,
+					},
+				}},
+			},
+		})
+		handler := shardCtx.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(notification.namespaceName),
+			metrics.EventTypeTag(notification.inputEventTypeName),
+		)
+		metrics.WorkflowHeartbeatNotificationDeliveryLatency.With(handler).Record(time.Since(dispatchStart))
+		var result commonnexus.DispatchResult
+		if err == nil {
+			result = commonnexus.ClassifyStartOperationDispatch(resp)
+		}
+		resultTag := workflowHeartbeatNotificationResult(result, err)
+		var workerResult *workerpb.WorkflowHeartbeatNotificationResult
+		if result.Outcome == commonnexus.DispatchOutcomeSyncSuccess {
+			workerResult = decodeWorkflowHeartbeatNotificationResult(resp)
+			resultTag = "invalid_response"
+			if workerResult != nil {
+				resultTag = workerpb.WorkflowHeartbeatNotificationResult_Outcome_name[int32(workerResult.GetOutcome())]
+			}
+		}
+		metrics.WorkflowHeartbeatNotificationResults.With(handler).Record(1, metrics.StringTag("result", resultTag))
+		logger := log.With(shardCtx.GetLogger(),
+			tag.WorkflowNamespace(notification.namespaceName),
+			tag.WorkflowID(notification.workflowKey.WorkflowID),
+			tag.WorkflowRunID(notification.workflowKey.RunID),
+		)
+		switch {
+		case err != nil:
+			logger.Warn("WHN: Unable to dispatch workflow heartbeat notification", tag.Error(err))
+		case result.Outcome == commonnexus.DispatchOutcomeRequestTimeout:
+			// No worker took the notification in time, which is expected for best effort delivery.
+		case workerResult.GetOutcome() == workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH:
+			logger.Info("WHN: Workflow heartbeat notification task token mismatch",
+				tag.NewStringTag("event_type", notification.inputEventTypeName),
+				tag.NewStringTag("notification_task_token", base64.StdEncoding.EncodeToString(notification.taskToken)),
+				tag.NewStringTag("current_task_token", base64.StdEncoding.EncodeToString(workerResult.GetCurrentTaskToken())),
+			)
+		default:
+			if workerErr := commonnexus.DispatchResultToError(result); workerErr != nil {
+				logger.Warn("WHN: Worker failed workflow heartbeat notification", tag.Error(workerErr))
+			}
+		}
+	}()
+}
+
+// workflowHeartbeatNotificationResult reuses the Nexus dispatch outcome tag values for the worker's answer.
+func workflowHeartbeatNotificationResult(result commonnexus.DispatchResult, err error) string {
+	switch {
+	case err == nil:
+		return result.OutcomeTag().Value
+	case common.IsContextDeadlineExceededErr(err):
+		return "dispatch_timeout"
+	default:
+		return "dispatch_error"
+	}
+}
+
+// decodeWorkflowHeartbeatNotificationResult returns nil if the worker's sync answer isn't a single WHN result.
+func decodeWorkflowHeartbeatNotificationResult(resp *matchingservice.DispatchNexusTaskResponse) *workerpb.WorkflowHeartbeatNotificationResult {
+	payload := resp.GetResponse().GetStartOperation().GetSyncSuccess().GetPayload()
+	if payload == nil {
+		return nil
+	}
+	var commandResponse workerservicepb.ExecuteCommandsResponse
+	if err := proto.Unmarshal(payload.GetData(), &commandResponse); err != nil || len(commandResponse.GetResults()) != 1 {
+		return nil
+	}
+	result := commandResponse.GetResults()[0].GetWorkflowHeartbeatNotification()
+	if _, ok := workerpb.WorkflowHeartbeatNotificationResult_Outcome_name[int32(result.GetOutcome())]; result == nil || !ok {
+		return nil
+	}
+	return result
 }
 
 // hasPendingUpdateForWorkflowHeartbeatNotification checks for unsent Updates in the existing, current-version Registry.
