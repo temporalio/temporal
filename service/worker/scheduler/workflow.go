@@ -66,8 +66,8 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
-	// MigrationHandoffFixes bundles two V1<->V2 migration-handoff fixes under a
-	// single version so only one activation deploy is needed for both -- see
+	// MigrationHandoffFixes bundles three V1<->V2 migration-handoff fixes under a
+	// single version so only one activation deploy is needed for all of them -- see
 	// the TODO on CurrentTweakablePolicies below.
 	//   - Reconcile running-workflow status before evaluating CHASM migration
 	//     eligibility, so an actively-firing schedule can observe an empty
@@ -75,6 +75,7 @@ const (
 	//   - Preserve workflow/request IDs already assigned to starts migrated
 	//     from CHASM, preserving idempotency identity across the migration
 	//     handoff.
+	//   - Don't migrate to CHASM while backfills are in progress.
 	MigrationHandoffFixes = 13
 	// update the desired time for a buffered start when refresh discovers the prior action completed
 	RefreshCompletionDesiredTime = 14
@@ -408,14 +409,36 @@ func (s *scheduler) run() error {
 			}
 		}
 
+		// V1 stores an ongoing backfill's start time as an exclusive cursor. Converting an
+		// in-flight backfill to CHASM can duplicate or drop actions, so migration waits until
+		// all backfills drain. The deferred migration is retried on the next wakeup.
+		//
+		// This check was added to MigrationHandoffFixes after that version was already
+		// recordable through worker.schedulerV1VersionOverride. It changes the commands of a
+		// recorded history only if all of these hold for one iteration:
+		//   - The run recorded version MigrationHandoffFixes or newer.
+		//   - The run recorded EnableCHASMMigration as true, or had PendingMigration set by a
+		//     migrate-to-chasm signal.
+		//   - OngoingBackfills was non-empty when the migration check ran.
+		// Such a history recorded a migration attempt that this code skips, so replaying it
+		// fails with a nondeterminism error. If that attempt succeeded, the run closed when it
+		// migrated. A closed run gets no new workflow tasks, so only queries against it replay
+		// the history, until retention deletes it. If the attempt failed, the run is still open,
+		// and its next workflow task fails. No such history exists because no auto or manual V1
+		// migration was started before this check was added.
+		backfilling := s.hasMinVersion(MigrationHandoffFixes) && len(s.State.OngoingBackfills) > 0
+
 		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
-			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) {
+			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) &&
+			!backfilling {
 			s.State.PendingMigration = true
 		}
 		// CHASM migration markers are only safe to write at or after version TriggerImmediatelyTimestamp.
 		// A clamped run defers migration without dropping it: PendingMigration stays set, and the migration runs once the ceiling is lifted.
 		if s.State.PendingMigration && !s.hasMinVersion(TriggerImmediatelyTimestamp) {
 			s.logger.Debug("deferring schedule migration to CHASM: recorded version is clamped below migration support")
+		} else if s.State.PendingMigration && backfilling {
+			s.logger.Debug("deferring schedule migration to CHASM: backfill in progress")
 		} else if s.State.PendingMigration {
 			err := s.executeMigration()
 			if err == nil {
