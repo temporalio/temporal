@@ -175,8 +175,28 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 				start := s.startWorkflow(env, tv, false)
 				s.completeWorkflowTask(env, s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken(),
 					&workflowservice.RespondWorkflowTaskCompletedRequest{StickyAttributes: tv.StickyExecutionAttributes(10 * time.Second)})
-				stickyTask := make(chan *workflowservice.PollWorkflowTaskQueueResponse, 1)
-				go func() { stickyTask <- s.pollWorkflowTask(env, tv, tv.StickyTaskQueue()) }()
+				pollCtx, cancelPoll := context.WithCancel(s.Context())
+				defer cancelPoll()
+				client := env.FrontendClient()
+				pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{
+					Namespace:              env.Namespace().String(),
+					TaskQueue:              tv.StickyTaskQueue(),
+					Identity:               tv.WorkerIdentity(),
+					WorkerInstanceKey:      tv.WorkerInstanceKey(),
+					WorkerControlTaskQueue: tv.ControlQueueName(env.Namespace().String()),
+					Capabilities: &workflowservice.PollWorkflowTaskQueueRequest_Capabilities{
+						SupportsWorkflowHeartbeatNotification: true,
+					},
+				}
+				type pollResult struct {
+					task *workflowservice.PollWorkflowTaskQueueResponse
+					err  error
+				}
+				stickyTask := make(chan pollResult, 1)
+				go func() {
+					task, err := client.PollWorkflowTaskQueue(pollCtx, pollRequest)
+					stickyTask <- pollResult{task: task, err: err}
+				}()
 				// Matching sends the task to the normal queue unless the sticky queue has a poller.
 				s.Await(func(s *WorkflowHeartbeatNotificationSuite) {
 					resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
@@ -187,7 +207,15 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 					s.NotEmpty(resp.GetPollers())
 				}, 10*time.Second, 100*time.Millisecond)
 				s.signal(env, tv, start.GetRunId())
-				return start.GetRunId(), s.Rcv(stickyTask).GetTaskToken()
+				select {
+				case result := <-stickyTask:
+					s.NoError(result.err)
+					s.NotEmpty(result.task.GetTaskToken())
+					return start.GetRunId(), result.task.GetTaskToken()
+				case <-pollCtx.Done():
+					s.T().Fatalf("sticky workflow task poll did not finish: %v", pollCtx.Err())
+					return "", nil
+				}
 			},
 		},
 		{
