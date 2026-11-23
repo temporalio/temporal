@@ -937,6 +937,7 @@ func NamespaceMutationTaskExecutorProvider(
 	eventLogger otellog.Logger,
 	metricsHandler metrics.Handler,
 	testHooks testhooks.TestHooks,
+	repairPolicy nsreplication.RepairPolicy,
 ) nsreplication.MutationTaskExecutor {
 	return nsreplication.NewMutationTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -950,6 +951,7 @@ func NamespaceMutationTaskExecutorProvider(
 			eventLogger,
 			configuration.EmitNamespaceLifecycleEvents,
 		),
+		nsreplication.WithOperatorRepairPolicy(repairPolicy),
 	)
 }
 

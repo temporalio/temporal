@@ -1113,6 +1113,8 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		})
 		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
 		if request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
+			// Refuse what the payload shows. The executor also checks the stored
+			// namespace that the repair would update.
 			if err := adh.checkNamespaceRepairPolicy(ctx, payloadTask.GetId(), payloadTask.GetInfo().GetName(), payloadTask.GetInfo().GetData()); err != nil {
 				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 				return nil, err

@@ -85,6 +85,7 @@ type (
 		eventLogger                  otellog.Logger
 		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 		testHooks                    testhooks.TestHooks
+		repairPolicy                 RepairPolicy
 	}
 )
 
@@ -177,6 +178,15 @@ func WithNamespaceReplicationLifecycleEvents(
 	return func(executor *taskExecutorImpl) {
 		executor.eventLogger = eventLogger
 		executor.emitNamespaceLifecycleEvents = emitNamespaceLifecycleEvents
+	}
+}
+
+// WithOperatorRepairPolicy checks operator repairs of an existing namespace
+// against the stored namespace, not only the payload: a payload can omit what
+// the policy looks for.
+func WithOperatorRepairPolicy(policy RepairPolicy) TaskExecutorOption {
+	return func(executor *taskExecutorImpl) {
+		executor.repairPolicy = policy
 	}
 }
 
@@ -450,6 +460,15 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	recordUpdated := false
 	if options.OperatorRepair && resp.Namespace.GetInfo().GetId() != task.GetId() {
 		return ApplyOutcomeUnspecified, ErrNameUUIDCollision
+	}
+	if options.OperatorRepair && h.repairPolicy != nil {
+		// The update below is conditional on the notification version read before
+		// this namespace, so a namespace that changes after this check fails the
+		// write, and the retry checks it again.
+		info := resp.Namespace.GetInfo()
+		if err := h.repairPolicy(ctx, info.GetId(), info.GetName(), info.GetData()); err != nil {
+			return ApplyOutcomeUnspecified, err
+		}
 	}
 	request := &persistence.UpdateNamespaceRequest{
 		Namespace:           resp.Namespace,

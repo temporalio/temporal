@@ -2,10 +2,13 @@ package frontend
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -14,7 +17,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 // refusingRepairPolicy refuses namespaces whose data carries the given key and
@@ -89,6 +94,64 @@ func TestNamespaceRepairPolicyGuardsOperatorRepairApply(t *testing.T) {
 			} else {
 				require.Empty(t, policy.calls)
 			}
+		})
+	}
+}
+
+// TestNamespaceRepairPolicyChecksStoredNamespace sends a repair payload that
+// omits what the policy refuses. The stored namespace still carries it, so the
+// receiver refuses the repair before writing.
+func TestNamespaceRepairPolicyChecksStoredNamespace(t *testing.T) {
+	t.Parallel()
+	for _, storedRefused := range []bool{true, false} {
+		t.Run(fmt.Sprintf("stored refused=%v", storedRefused), func(t *testing.T) {
+			t.Parallel()
+			metadata := persistence.NewMockMetadataManager(gomock.NewController(t))
+			storedData := map[string]string{"team": "payments"}
+			if storedRefused {
+				storedData["membership"] = "elsewhere"
+			}
+			stored := &persistencespb.NamespaceDetail{
+				Info:   &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments", State: enumspb.NAMESPACE_STATE_REGISTERED, Data: storedData},
+				Config: &persistencespb.NamespaceConfig{}, ConfigVersion: 16, FailoverVersion: 23,
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "cellA", Clusters: []string{"cellA", "cellB"}},
+			}
+			metadata.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "payments"}).DoAndReturn(
+				func(context.Context, *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+					return &persistence.GetNamespaceResponse{Namespace: proto.CloneOf(stored), IsGlobalNamespace: true}, nil
+				}).AnyTimes()
+			metadata.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 30}, nil)
+			if !storedRefused {
+				metadata.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
+			}
+			policy := &refusingRepairPolicy{key: "membership"}
+			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t),
+				metricsHandler: metrics.NoopMetricsHandler, repairPolicy: policy.policy(),
+				namespaceMutationExecutor: nsreplication.NewMutationTaskExecutor("cellB", metadata, nsreplication.NewNoopDataMerger(),
+					nsreplication.NewDefaultAdmitter(), log.NewNoopLogger(), testhooks.TestHooks{}, nsreplication.WithOperatorRepairPolicy(policy.policy())),
+			}
+			task := shadowObservationTask()
+			task.Info.State = enumspb.NAMESPACE_STATE_REGISTERED
+			task.Info.Data = map[string]string{"team": "payments"}
+			task.Config = &namespacepb.NamespaceConfig{}
+			task.ReplicationConfig = &replicationpb.NamespaceReplicationConfig{ActiveClusterName: "cellA",
+				Clusters: []*replicationpb.ClusterReplicationConfig{{ClusterName: "cellA"}, {ClusterName: "cellB"}}}
+			request := repairPolicyTestMutation(t, nil)
+			payload, err := nsreplication.MarshalNamespaceTask(task)
+			require.NoError(t, err)
+			request.NamespaceTaskPayload = payload
+
+			response, err := handler.ApplyNamespaceMutation(t.Context(), request)
+			// The payload and then the stored namespace are checked.
+			require.Equal(t, []string{"namespace-id/payments", "namespace-id/payments"}, policy.calls)
+			if storedRefused {
+				var refused *serviceerror.FailedPrecondition
+				require.ErrorAs(t, err, &refused)
+				require.Nil(t, response)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
 		})
 	}
 }
