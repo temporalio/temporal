@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/draft"
 	"go.temporal.io/server/common/headers"
 	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
@@ -64,6 +65,7 @@ type nexusCompletionHandler struct {
 	LinkValidator                        commonlinks.Validator
 	clientVersionChecker                 headers.VersionChecker
 	preProcessErrorsCounter              metrics.CounterIface
+	omitDraftFields                      func(any, *draft.Selection) (bool, error)
 }
 
 type nexusCompletionHTTPHandler struct {
@@ -211,6 +213,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		}
 		return err
 	}
+	selection := newNexusDraftSelection(h.Config.EnabledDraftFeatureAPIs, ns.Name().String())
 	tokenLimit := h.Config.MaxNexusOperationTokenLength(ns.Name().String())
 	if len(r.OperationToken) > tokenLimit {
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
@@ -239,7 +242,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 
-	err = h.completeOperation(ctx, logger, completion, successPayload, r, links, h.Config.EnableChasm(ns.Name().String()))
+	err = h.completeOperation(ctx, logger, completion, successPayload, r, links, h.Config.EnableChasm(ns.Name().String()), selection)
 	if err == nil {
 		return nil
 	}
@@ -264,13 +267,14 @@ func (h *nexusCompletionHandler) completeOperation(
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
 	chasmEnabled bool,
+	selection *draft.Selection,
 ) error {
 	isChasm := len(completion.GetComponentRef()) > 0
 	var err error
 	if isChasm {
-		err = h.completeChasmOperation(ctx, logger, completion, successPayload, req, links)
+		err = h.completeChasmOperation(ctx, logger, completion, successPayload, req, links, selection)
 	} else {
-		err = h.completeHSMOperation(ctx, completion, successPayload, req, links)
+		err = h.completeHSMOperation(ctx, completion, successPayload, req, links, selection)
 	}
 	if _, notFound := errors.AsType[*serviceerror.NotFound](err); !notFound || completion.GetRequestId() == "" {
 		return err
@@ -290,9 +294,9 @@ func (h *nexusCompletionHandler) completeOperation(
 	}
 	var fallbackErr error
 	if isChasm {
-		fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
+		fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links, selection)
 	} else {
-		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
+		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links, selection)
 	}
 	// If the fallback also reports NotFound, the operation is gone in both frameworks.
 	// Return the error from the initial attempt.
@@ -328,7 +332,11 @@ func (h *nexusCompletionHandler) completeHSMOperation(
 	successPayload *commonpb.Payload,
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
+	selection *draft.Selection,
 ) error {
+	if err := h.omitCompletionRoots(selection, successPayload, links); err != nil {
+		return err
+	}
 	hr := &historyservice.CompleteNexusOperationRequest{
 		Completion:     completion,
 		State:          string(req.State),
@@ -339,8 +347,12 @@ func (h *nexusCompletionHandler) completeHSMOperation(
 
 	switch req.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
+		failure := commonnexus.NexusFailureToProtoFailure(*req.Error.OriginalFailure)
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, failure); err != nil {
+			return err
+		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
-			Failure: commonnexus.NexusFailureToProtoFailure(*req.Error.OriginalFailure),
+			Failure: failure,
 		}
 	case nexus.OperationStateSucceeded:
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
@@ -362,7 +374,11 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 	successPayload *commonpb.Payload,
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
+	selection *draft.Selection,
 ) error {
+	if err := h.omitCompletionRoots(selection, successPayload, links); err != nil {
+		return err
+	}
 	hr := &historyservice.CompleteNexusOperationChasmRequest{
 		Completion: &tokenspb.NexusOperationCompletion{
 			RequestId:    completion.GetRequestId(),
@@ -393,6 +409,9 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		if req.State == nexus.OperationStateCanceled {
 			failure = commonnexus.CoerceToCanceledFailure(failure)
 		}
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, failure); err != nil {
+			return err
+		}
 		hr.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
 			Failure: failure,
 		}
@@ -407,6 +426,20 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 
 	_, err := h.HistoryClient.CompleteNexusOperationChasm(ctx, hr)
 	return err
+}
+
+func (h *nexusCompletionHandler) omitCompletionRoots(selection *draft.Selection, payload *commonpb.Payload, links []*commonpb.Link) error {
+	if payload != nil {
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, payload); err != nil {
+			return err
+		}
+	}
+	for _, link := range links {
+		if err := omitNexusDraftFields(h.omitDraftFields, selection, link); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
