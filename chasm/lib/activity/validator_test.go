@@ -58,12 +58,6 @@ var (
 	defaultMaxUserMetadataDetailsSize = func(ns string) int {
 		return 20000
 	}
-	defaultMaxLinksPerRequest = func(ns string) int {
-		return 10
-	}
-	defaultLinkMaxSize = func(ns string) int {
-		return 4000
-	}
 )
 
 func TestValidateSuccess(t *testing.T) {
@@ -467,7 +461,7 @@ func TestValidateAndPopulateStartRequestNexusSerializationContextLength(t *testi
 			t.Parallel()
 			h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, maxLength)
 			h.config.DefaultActivityRetryPolicy = getDefaultRetrySettings
-			h.linkValidator = newLinkValidator(defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize)
+			h.linkValidator = test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 			req := &workflowservice.StartActivityExecutionRequest{
 				Namespace:                           defaultNamespaceID,
 				ActivityId:                          defaultActivityID,
@@ -506,12 +500,8 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 				MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
 				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 			},
-			linkValidator: newLinkValidator(
-				defaultMaxLinksPerRequest,
-				func(string) int { return 2000 },
-				defaultLinkMaxSize,
-			),
-			logger: logger,
+			linkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
+			logger:        logger,
 		}
 		req := &workflowservice.StartActivityExecutionRequest{
 			ActivityId:          defaultActivityID,
@@ -594,6 +584,8 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *testing.T) {
 	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), nil)
 	require.NoError(t, err)
+	linkCfg := test.NewLinksValidatorConfig()
+	linkCfg.MaxLinksPerRequest = func(string) int { return 1 }
 
 	h := &frontendHandler{
 		config: &Config{
@@ -609,12 +601,8 @@ func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *test
 			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
 		callbackValidator: callbackValidator,
-		linkValidator: newLinkValidator(
-			func(string) int { return 1 },
-			func(string) int { return 2000 },
-			defaultLinkMaxSize,
-		),
-		logger: log.NewNoopLogger(),
+		linkValidator:     test.NewLinksValidator(t, linkCfg),
+		logger:            log.NewNoopLogger(),
 	}
 	// The per-request limit is 1, so a single link from each source only trips the
 	// validator if both sources are forwarded.
@@ -848,12 +836,8 @@ func TestValidateStandaloneUserMetadata(t *testing.T) {
 					MaxUserMetadataSummarySize: func(string) int { return testCase.summaryLimit },
 					MaxUserMetadataDetailsSize: func(string) int { return testCase.detailsLimit },
 				},
-				linkValidator: newLinkValidator(
-					defaultMaxLinksPerRequest,
-					func(string) int { return 2000 },
-					defaultLinkMaxSize,
-				),
-				logger: log.NewNoopLogger(),
+				linkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
+				logger:        log.NewNoopLogger(),
 			}
 			req := &workflowservice.StartActivityExecutionRequest{
 				Namespace:           defaultNamespaceID,

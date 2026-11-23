@@ -68,7 +68,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 		ctx := newCallbackTestContext()
 
 		req := newStartReq(newNexusCallback())
-		op, err := newStandaloneOperation(ctx, req, cbValidator, newTestLinkValidator(10, 10))
+		op, err := newStandaloneOperation(ctx, req, cbValidator, test.NewLinksValidator(t, test.NewLinksValidatorConfig()))
 		require.NoError(t, err)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 
@@ -81,7 +81,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 	t.Run("WithoutCallbacks", func(t *testing.T) {
 		ctx := newCallbackTestContext()
 
-		op, err := newStandaloneOperation(ctx, newStartReq(), cbValidator, newTestLinkValidator(10, 10))
+		op, err := newStandaloneOperation(ctx, newStartReq(), cbValidator, test.NewLinksValidator(t, test.NewLinksValidatorConfig()))
 		require.NoError(t, err)
 		require.Nil(t, op.Callbacks)
 	})
@@ -96,7 +96,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 		_, err := newStandaloneOperation(ctx, newStartReq(
 			newNexusCallback(),
 			newNexusCallback(),
-		), max1CallbackValidator, newTestLinkValidator(10, 10))
+		), max1CallbackValidator, test.NewLinksValidator(t, test.NewLinksValidatorConfig()))
 
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
