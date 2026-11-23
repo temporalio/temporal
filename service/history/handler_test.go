@@ -539,6 +539,11 @@ func TestStartNexusOperation_SystemNexusEndpointRejectsNonProtoResponse(t *testi
 }
 
 func TestRecordWorkflowTaskStarted_Clock(t *testing.T) {
+	request := &historyservice.RecordWorkflowTaskStartedRequest{
+		NamespaceId:       tests.NamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		PollRequest:       &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "test-task-queue"}},
+	}
 	for _, tc := range []struct {
 		name        string
 		engineClock *clockspb.VectorClock
@@ -562,11 +567,7 @@ func TestRecordWorkflowTaskStarted_Clock(t *testing.T) {
 				controller:     controller,
 			}
 
-			resp, err := h.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
-				NamespaceId:       tests.NamespaceID.String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
-				PollRequest:       &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "test-task-queue"}},
-			})
+			resp, err := h.RecordWorkflowTaskStarted(context.Background(), request)
 			require.NoError(t, err)
 			if tc.engineClock != nil {
 				require.Same(t, tc.engineClock, resp.GetClock())
@@ -576,4 +577,21 @@ func TestRecordWorkflowTaskStarted_Clock(t *testing.T) {
 			require.Equal(t, shardContext.GetShardID(), resp.GetClock().GetShardId())
 		})
 	}
+
+	t.Run("fallback clock error is returned", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		controller := shard.NewMockController(ctrl)
+		shardContext := historyi.NewMockShardContext(ctrl)
+		engine := historyi.NewMockEngine(ctrl)
+		clockErr := serviceerror.NewUnavailable("clock unavailable")
+		controller.EXPECT().GetShardByNamespaceWorkflow(tests.NamespaceID, tests.WorkflowID).Return(shardContext, nil)
+		shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil)
+		engine.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any()).
+			Return(&historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}, nil)
+		shardContext.EXPECT().NewVectorClock().Return(nil, clockErr)
+		h := Handler{metricsHandler: metrics.NoopMetricsHandler, logger: log.NewNoopLogger(), controller: controller}
+
+		_, err := h.RecordWorkflowTaskStarted(context.Background(), request)
+		require.ErrorIs(t, err, clockErr)
+	})
 }
