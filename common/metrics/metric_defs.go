@@ -949,8 +949,12 @@ var (
 		WithDescription("The amount of time it took to successfully send a task to the DLQ. This only records the"+
 			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
 	)
-	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
-	TaskSkipped                     = NewCounterDef("task_skipped")
+	TaskDiscarded                 = NewCounterDef("task_errors_discarded")
+	TaskSkipped                   = NewCounterDef("task_skipped")
+	TaskDiscardedByNamespaceState = NewCounterDef(
+		"task_discarded_namespace_state",
+		WithDescription("The number of history tasks acked without running because their namespace is soft-deleted or deleted."),
+	)
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
 	TasksDependencyTaskNotCompleted = NewCounterDef("task_dependency_task_not_completed")
 	TaskStandbyRetryCounter         = NewCounterDef("task_errors_standby_retry_counter")
@@ -1110,6 +1114,9 @@ var (
 	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
 	NexusWorkflowUseExisting                      = NewCounterDef("nexus_workflow_use_existing", WithDescription("Successful callback attachments to existing workflows involving Nexus serialization context, tagged by context match or missing context."))
 	NexusActivityUseExisting                      = NewCounterDef("nexus_activity_use_existing", WithDescription("Successful callback attachments to existing standalone activities involving Nexus serialization context, tagged by context match or missing context."))
+	NexusWorkflowStartWithContext                 = NewCounterDef("nexus_workflow_start_with_context", WithDescription("New workflows started with a Nexus serialization context."))
+	NexusActivityStartWithContext                 = NewCounterDef("nexus_activity_start_with_context", WithDescription("New standalone activities started with a Nexus serialization context."))
+	NexusWorkflowUpdateWithContext                = NewCounterDef("nexus_workflow_update_with_context", WithDescription("New workflow updates admitted with a Nexus serialization context."))
 	OrphanedChildWorkflowReplacement              = NewCounterDef("orphaned_child_workflow_replacement")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")

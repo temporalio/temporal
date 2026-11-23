@@ -133,12 +133,11 @@ func TestUpdateNamespace_PassiveClusterFailoverVersionBump(t *testing.T) {
 				nsreplication.NewReplicator(replicationQueue, log.NewNoopLogger(), nil, dc.GetBoolPropertyFn(false), clusterB),
 				archiver.NewArchivalMetadata(dc.NewNoopCollection(), "", false, "", false, &config.ArchivalNamespaceDefaults{}),
 				provider.NewMockArchiverProvider(ctrl),
-				nil,
-				nil,
 				timeSource,
 				NewConfig(dc.NewNoopCollection(), 1024),
 				nil,
 				metrics.NoopMetricsHandler,
+				namespace.NewDefaultReplicationResolverFactory(),
 			)
 
 			metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{

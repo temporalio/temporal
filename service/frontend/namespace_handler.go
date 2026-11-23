@@ -34,8 +34,6 @@ import (
 	"go.temporal.io/server/common/namespace/nsmanager"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
-	vismanager "go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -57,12 +55,13 @@ type (
 		namespaceAttrValidator *nsmanager.Validator
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
-		clusterMetadataManager persistence.ClusterMetadataManager
-		visibilityMgr          vismanager.VisibilityManager
 		timeSource             clock.TimeSource
 		config                 *Config
 		chasmNsReplClient      namespacereplicationpb.NamespaceReplicationServiceClient
 		metricsHandler         metrics.Handler
+		// replicationResolverFactory resolves replica membership. Deployments can
+		// derive membership from namespace state other than ReplicationConfig.Clusters.
+		replicationResolverFactory namespace.ReplicationResolverFactory
 	}
 
 	namespaceReplicationTransportMode int
@@ -99,12 +98,11 @@ func newNamespaceHandler(
 	namespaceReplicator nsreplication.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
-	clusterMetadataManager persistence.ClusterMetadataManager,
-	visibilityMgr vismanager.VisibilityManager,
 	timeSource clock.TimeSource,
 	config *Config,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
 	metricsHandler metrics.Handler,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
@@ -116,13 +114,18 @@ func newNamespaceHandler(
 		namespaceAttrValidator: nsmanager.NewValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
-		clusterMetadataManager: clusterMetadataManager,
-		visibilityMgr:          visibilityMgr,
 		timeSource:             timeSource,
 		config:                 config,
 		chasmNsReplClient:      chasmNsReplClient,
 		metricsHandler:         metricsHandler,
+
+		replicationResolverFactory: replicationResolverFactory,
 	}
+}
+
+// replicationClusters returns the cells that hold a replica of the namespace.
+func (d *namespaceHandler) replicationClusters(detail *persistencespb.NamespaceDetail) []string {
+	return d.replicationResolverFactory(detail).ClusterNames(namespace.EmptyBusinessID)
 }
 
 // RegisterNamespace register a new namespace
@@ -237,9 +240,6 @@ func (d *namespaceHandler) RegisterNamespace(
 		BadBinaries:                  &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		CustomSearchAttributeAliases: nil,
 	}
-	if err := d.seedIdentitySearchAttributeAliases(ctx, config); err != nil {
-		return nil, err
-	}
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
 		Clusters:          clusters,
@@ -293,6 +293,7 @@ func (d *namespaceHandler) RegisterNamespace(
 			namespaceRequest.Namespace.Info,
 			namespaceRequest.Namespace.Config,
 			namespaceRequest.Namespace.ReplicationConfig,
+			d.replicationClusters(namespaceRequest.Namespace),
 			false,
 			namespaceRequest.Namespace.ConfigVersion,
 			namespaceRequest.Namespace.FailoverVersion,
@@ -478,6 +479,7 @@ func (d *namespaceHandler) UpdateNamespace(
 	if err != nil {
 		return nil, err
 	}
+	previousReplicationClusters := d.replicationClusters(common.CloneProto(getResponse.Namespace))
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
@@ -732,6 +734,10 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 	}
 
+	replicationClusters := d.replicationClusters(detail)
+	replicationClustersChanged := clusterListChanged ||
+		!slices.Equal(slices.Sorted(slices.Values(previousReplicationClusters)), slices.Sorted(slices.Values(replicationClusters)))
+
 	applyLegacy := func() error {
 		if updateReq != nil {
 			if err := d.metadataMgr.UpdateNamespace(ctx, updateReq); err != nil {
@@ -752,7 +758,8 @@ func (d *namespaceHandler) UpdateNamespace(
 			info,
 			config,
 			replicationConfig,
-			clusterListChanged,
+			replicationClusters,
+			replicationClustersChanged,
 			configVersion,
 			failoverVersion,
 			isGlobalNamespace,
@@ -1445,39 +1452,6 @@ func (d *namespaceHandler) validateRetentionDuration(retention *durationpb.Durat
 	if timestamp.DurationValue(retention) < minRetention {
 		return errInvalidRetentionPeriod
 	}
-	return nil
-}
-
-func (d *namespaceHandler) seedIdentitySearchAttributeAliases(
-	ctx context.Context,
-	config *persistencespb.NamespaceConfig,
-) error {
-	if d.visibilityMgr == nil || d.clusterMetadataManager == nil {
-		return nil
-	}
-	if !d.visibilityMgr.HasStoreName(esconfig.PersistenceName) {
-		return nil
-	}
-
-	clusterMetadataResponse, err := d.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
-	if err != nil {
-		return err
-	}
-
-	indexSearchAttrs := clusterMetadataResponse.IndexSearchAttributes[d.visibilityMgr.GetIndexName()]
-	if indexSearchAttrs == nil || len(indexSearchAttrs.CustomSearchAttributes) == 0 {
-		return nil
-	}
-
-	aliases := buildIdentitySearchAttributeAliases(
-		config.CustomSearchAttributeAliases,
-		indexSearchAttrs.CustomSearchAttributes,
-	)
-	if len(aliases) == 0 {
-		return nil
-	}
-
-	config.CustomSearchAttributeAliases = aliases
 	return nil
 }
 

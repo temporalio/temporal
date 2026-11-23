@@ -61,7 +61,7 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAdmitted() {
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
 
-	hist := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	hist := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled`, hist)
@@ -100,7 +100,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), env.Tv().WorkflowExecution()),
+		env.RequireHistoryFunc(s, env.Tv().WorkflowExecution()),
 		1*time.Second, 200*time.Millisecond)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(env, "my-update-arg")
@@ -127,7 +127,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
   8 WorkflowExecutionUpdateAccepted
-  9 WorkflowExecutionTimedOut`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+  9 WorkflowExecutionTimedOut`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 }
 
 // TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted executes an update, and while WF awaits
@@ -154,7 +154,7 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAccepted() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), env.Tv().WorkflowExecution()),
+		env.RequireHistoryFunc(s, env.Tv().WorkflowExecution()),
 		1*time.Second, 200*time.Millisecond)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(env, "my-update-arg")
@@ -183,7 +183,7 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAccepted() {
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
   8 WorkflowExecutionUpdateAccepted
-  9 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+  9 WorkflowExecutionTerminated`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 }
 
 func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
@@ -251,9 +251,9 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 MarkerRecorded
-  6 WorkflowExecutionContinuedAsNew`, env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+  6 WorkflowExecutionContinuedAsNew`, env.RequireHistory(s, env.Tv().WithRunID(firstRun.GetRunID()).WorkflowExecution()))
 
-	hist2 := env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(secondRunID).WorkflowExecution())
+	hist2 := env.RequireHistory(s, env.Tv().WithRunID(secondRunID).WorkflowExecution())
 	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -334,14 +334,14 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionTimedOut`, env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+  5 WorkflowExecutionTimedOut`, env.RequireHistory(s, env.Tv().WithRunID(firstRun.GetRunID()).WorkflowExecution()))
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionUpdateCompleted`, env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(secondRunID).WorkflowExecution()))
+  6 WorkflowExecutionUpdateCompleted`, env.RequireHistory(s, env.Tv().WithRunID(secondRunID).WorkflowExecution()))
 }
 
 func (s *UpdateWorkflowSdkSuite) startWorkflow(env *testcore.TestEnv, workflowFn any) sdkclient.WorkflowRun {
@@ -691,7 +691,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateCallbackCloseWhenWorkflowCloses() {
 WorkflowTaskCompleted
 WorkflowExecutionUpdateAccepted
 WorkflowExecutionUpdateCompleted
-WorkflowExecutionCompleted`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+WorkflowExecutionCompleted`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	}))
