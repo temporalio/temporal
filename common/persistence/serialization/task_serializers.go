@@ -33,6 +33,8 @@ func serializeTransferTask(
 		transferTask = transferChildWorkflowTaskToProto(task)
 	case *tasks.CloseExecutionTask:
 		transferTask = transferCloseTaskToProto(task)
+	case *tasks.ReleaseLimiterTask:
+		transferTask = transferReleaseLimiterTaskToProto(task)
 	case *tasks.ResetWorkflowTask:
 		transferTask = transferResetTaskToProto(task)
 	case *tasks.DeleteExecutionTask:
@@ -81,6 +83,8 @@ func deserializeTransferTask(
 		task = transferChildWorkflowTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		task = transferCloseTaskFromProto(transferTask)
+	case enumsspb.TASK_TYPE_TRANSFER_RELEASE_LIMITER:
+		task = transferReleaseLimiterTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		task = transferResetTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
@@ -450,6 +454,39 @@ func transferActivityTaskFromProto(
 		ScheduledEventID:    activityTask.ScheduledEventId,
 		Version:             activityTask.Version,
 		Stamp:               activityTask.Stamp,
+	}
+}
+
+func transferReleaseLimiterTaskToProto(
+	task *tasks.ReleaseLimiterTask,
+) *persistencespb.TransferTaskInfo {
+	return &persistencespb.TransferTaskInfo{
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_RELEASE_LIMITER,
+		TaskId:         task.TaskID,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		TaskDetails: &persistencespb.TransferTaskInfo_ReleaseLimiterTaskDetails_{
+			ReleaseLimiterTaskDetails: &persistencespb.TransferTaskInfo_ReleaseLimiterTaskDetails{
+				Limiters: task.Limiters,
+			},
+		},
+	}
+}
+
+func transferReleaseLimiterTaskFromProto(
+	task *persistencespb.TransferTaskInfo,
+) *tasks.ReleaseLimiterTask {
+	return &tasks.ReleaseLimiterTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			task.NamespaceId,
+			task.WorkflowId,
+			task.RunId,
+		),
+		VisibilityTimestamp: task.VisibilityTime.AsTime(),
+		TaskID:              task.TaskId,
+		Limiters:            task.GetReleaseLimiterTaskDetails().GetLimiters(),
 	}
 }
 

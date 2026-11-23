@@ -60,6 +60,7 @@ var (
 		"ReplicationDeleteExecution":         34,
 		"WorkerCommands":                     35,
 		"TimeskippingTimer":                  36,
+		"TransferReleaseLimiter":             37,
 	}
 )
 
