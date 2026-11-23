@@ -29,5 +29,6 @@ require.NoError(t, err)
 parallelsuite.RunInShard(t, shard, &MySuite{})
 ```
 
-Plain `parallelsuite.Run` runs every selected method regardless of the shard
-environment.
+By default, `parallelsuite.Run` ignores the shard environment. To opt a whole
+test binary into sharding, call `parallelsuite.ConfigureSharding` during package
+initialization.

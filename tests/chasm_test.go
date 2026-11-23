@@ -47,7 +47,7 @@ type ChasmSuite struct {
 }
 
 func TestChasmSuite(t *testing.T) {
-	testcore.Run(t, &ChasmSuite{})
+	parallelsuite.Run(t, &ChasmSuite{})
 }
 
 // chasmTestEnv bundles a TestEnv with the CHASM engine context derived from it.

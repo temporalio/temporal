@@ -25,7 +25,7 @@ type AcquireShardSuite struct {
 }
 
 func TestAcquireShardSuite(t *testing.T) {
-	testcore.Run(t, &AcquireShardSuite{})
+	parallelsuite.Run(t, &AcquireShardSuite{})
 }
 
 // logRecord represents a call to Info or Error.

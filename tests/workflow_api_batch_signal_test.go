@@ -28,7 +28,7 @@ type WorkflowAPIBatchSignalClientTestSuite struct {
 }
 
 func TestWorkflowAPIBatchSignalClientTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowAPIBatchSignalClientTestSuite{})
+	parallelsuite.Run(t, &WorkflowAPIBatchSignalClientTestSuite{})
 }
 
 const batchSignalTestSignalName = "workflow-batch-signal-test-signal"

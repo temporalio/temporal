@@ -44,7 +44,7 @@ type WorkflowTestSuite struct {
 }
 
 func TestWorkflowTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowTestSuite{})
+	parallelsuite.Run(t, &WorkflowTestSuite{})
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution() {

@@ -23,7 +23,7 @@ This document describes the project's testing setup, utilities and best practice
 
 ### Running a functional test shard locally
 
-Use `testcore.Run` for functional suites to select each method's shard before setup. The runner uses the checked-in salt. Pass the shard count and index on the test command to run a single shard.
+The functional test package uses the checked-in salt to select suite methods before setup. Pass the shard count and index on the test command to run a single shard.
 
 ```bash
 TEST_TOTAL_SHARDS=5 TEST_SHARD_INDEX=0 \

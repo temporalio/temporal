@@ -21,8 +21,8 @@ type Versioning3QuerySuite struct {
 }
 
 func TestVersioning3QueryFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                         //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
-	testcore.RunLegacySequential(t, &Versioning3QuerySuite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	testcore.UseSuiteScopedCluster(t)                              //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	parallelsuite.RunLegacySequential(t, &Versioning3QuerySuite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 }
 
 func (s *Versioning3QuerySuite) TestQueryWithPinnedOverride_NoSticky() {

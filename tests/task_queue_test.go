@@ -42,7 +42,7 @@ type TaskQueueSuite struct {
 }
 
 func TestTaskQueueSuite(t *testing.T) {
-	testcore.Run(t, &TaskQueueSuite{})
+	parallelsuite.Run(t, &TaskQueueSuite{})
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.

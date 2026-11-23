@@ -22,7 +22,7 @@ type WorkflowTaskTestSuite struct {
 }
 
 func TestWorkflowTaskTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowTaskTestSuite{})
+	parallelsuite.Run(t, &WorkflowTaskTestSuite{})
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {

@@ -23,7 +23,7 @@ type WFTFailureReportedProblemsTestSuite struct {
 }
 
 func TestWFTFailureReportedProblemsTestSuite(t *testing.T) {
-	testcore.Run(t, &WFTFailureReportedProblemsTestSuite{})
+	parallelsuite.Run(t, &WFTFailureReportedProblemsTestSuite{})
 }
 
 type internalWFTProblemsTestWorkflow struct {

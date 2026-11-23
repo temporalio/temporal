@@ -24,7 +24,7 @@ type WorkflowAPIBatchStopClientTestSuite struct {
 }
 
 func TestWorkflowAPIBatchStopClientTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowAPIBatchStopClientTestSuite{})
+	parallelsuite.Run(t, &WorkflowAPIBatchStopClientTestSuite{})
 }
 
 // TestWorkflowBatchStop_RejectsNonBatchWorkflow verifies that StopBatchOperation

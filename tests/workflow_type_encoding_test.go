@@ -28,7 +28,7 @@ type WorkflowTypeEncodingSuite struct {
 }
 
 func TestWorkflowTypeEncodingSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowTypeEncodingSuite{})
+	parallelsuite.Run(t, &WorkflowTypeEncodingSuite{})
 }
 
 func (s *WorkflowTypeEncodingSuite) runWithWorkflowType(env *testcore.TestEnv, workflowType string) error {

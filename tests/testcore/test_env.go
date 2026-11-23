@@ -256,7 +256,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	// Test sharding is based on environment variables.
 	// This distributes tests across multiple CI shards for parallel execution.
-	functionalTestShard(t).SkipUnlessInShard(t)
+	FunctionalTestShard(t).SkipUnlessInShard(t)
 
 	options := testOptions{t: t}
 	for _, opt := range opts {

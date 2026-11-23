@@ -23,7 +23,7 @@ type WorkflowAPIBatchCancelClientTestSuite struct {
 }
 
 func TestWorkflowAPIBatchCancelClientTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowAPIBatchCancelClientTestSuite{})
+	parallelsuite.Run(t, &WorkflowAPIBatchCancelClientTestSuite{})
 }
 
 // cancelableWorkflow blocks until its context is canceled, then returns the

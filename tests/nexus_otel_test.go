@@ -59,7 +59,7 @@ type NexusOTELSuite struct {
 }
 
 func TestNexusOTELSuite(t *testing.T) {
-	testcore.Run(t, &NexusOTELSuite{})
+	parallelsuite.Run(t, &NexusOTELSuite{})
 }
 
 func (s *NexusOTELSuite) newTestEnv(exporter sdktrace.SpanExporter) *NexusTestEnv {

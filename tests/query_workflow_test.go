@@ -38,7 +38,7 @@ type QueryWorkflowSuite struct {
 }
 
 func TestQueryWorkflowSuite(t *testing.T) {
-	testcore.Run(t, &QueryWorkflowSuite{})
+	parallelsuite.Run(t, &QueryWorkflowSuite{})
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {

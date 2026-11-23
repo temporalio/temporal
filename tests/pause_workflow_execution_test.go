@@ -53,7 +53,7 @@ type pauseWorkflowExecutionEnv struct {
 }
 
 func TestPauseWorkflowExecutionSuite(t *testing.T) {
-	testcore.Run(t, &PauseWorkflowExecutionSuite{})
+	parallelsuite.Run(t, &PauseWorkflowExecutionSuite{})
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs and

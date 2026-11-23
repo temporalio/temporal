@@ -31,7 +31,7 @@ type WorkflowCompletionPaginationTestSuite struct {
 }
 
 func TestWorkflowCompletionPaginationTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowCompletionPaginationTestSuite{})
+	parallelsuite.Run(t, &WorkflowCompletionPaginationTestSuite{})
 }
 
 const (

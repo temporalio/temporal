@@ -30,7 +30,7 @@ type TimeSkippingFastForwardFunctionalSuite struct {
 }
 
 func TestTimeSkippingFastForwardFunctionalSuite(t *testing.T) {
-	testcore.Run(t, &TimeSkippingFastForwardFunctionalSuite{})
+	parallelsuite.Run(t, &TimeSkippingFastForwardFunctionalSuite{})
 }
 
 func (s *TimeSkippingFastForwardFunctionalSuite) getMutableState(env *testcore.TestEnv, workflowID, runID string) *persistence.GetWorkflowExecutionResponse {

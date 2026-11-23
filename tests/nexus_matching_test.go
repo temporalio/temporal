@@ -25,7 +25,7 @@ type NexusMatchingTestSuite struct {
 }
 
 func TestNexusMatchingTestSuite(t *testing.T) {
-	testcore.Run(t, &NexusMatchingTestSuite{})
+	parallelsuite.Run(t, &NexusMatchingTestSuite{})
 }
 
 func (s *NexusMatchingTestSuite) TestDispatchNexusTaskWithMatchingBehaviors() {

@@ -26,7 +26,7 @@ type ClientDataConverterSuite struct {
 }
 
 func TestClientDataConverterTestSuite(t *testing.T) {
-	testcore.Run(t, &ClientDataConverterSuite{})
+	parallelsuite.Run(t, &ClientDataConverterSuite{})
 }
 
 func testActivity(_ workflow.Context, msg string) (string, error) {

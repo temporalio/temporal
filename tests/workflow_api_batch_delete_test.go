@@ -24,7 +24,7 @@ type WorkflowAPIBatchDeleteClientTestSuite struct {
 }
 
 func TestWorkflowAPIBatchDeleteClientTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowAPIBatchDeleteClientTestSuite{})
+	parallelsuite.Run(t, &WorkflowAPIBatchDeleteClientTestSuite{})
 }
 
 func (s *WorkflowAPIBatchDeleteClientTestSuite) TestWorkflowBatchDelete_Success() {

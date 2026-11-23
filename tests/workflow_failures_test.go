@@ -31,7 +31,7 @@ type WorkflowFailuresSuite struct {
 }
 
 func TestWorkflowFailuresTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowFailuresSuite{})
+	parallelsuite.Run(t, &WorkflowFailuresSuite{})
 }
 
 func (s *WorkflowFailuresSuite) TestWorkflowTimeout() {

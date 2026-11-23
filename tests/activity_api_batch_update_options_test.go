@@ -31,7 +31,7 @@ type ActivityAPIBatchUpdateOptionsSuite struct {
 }
 
 func TestActivityApiBatchUpdateOptionsClientTestSuite(t *testing.T) {
-	testcore.Run(t, &ActivityAPIBatchUpdateOptionsSuite{})
+	parallelsuite.Run(t, &ActivityAPIBatchUpdateOptionsSuite{})
 }
 
 func (s *ActivityAPIBatchUpdateOptionsSuite) createBatchUpdateOptionsWorkflow(env *testcore.TestEnv, workflowFn WorkflowFunction) sdkclient.WorkflowRun {

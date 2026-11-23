@@ -30,7 +30,7 @@ type CompletionCallbacksSuite struct {
 }
 
 func TestCompletionCallbacksSuite(t *testing.T) {
-	testcore.Run(t, &CompletionCallbacksSuite{})
+	parallelsuite.Run(t, &CompletionCallbacksSuite{})
 }
 
 // newTestEnv builds a test environment with completion callbacks configured for all supported

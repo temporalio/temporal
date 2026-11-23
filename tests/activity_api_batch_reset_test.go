@@ -30,7 +30,7 @@ type ActivityAPIBatchResetClientTestSuite struct {
 }
 
 func TestActivityAPIBatchResetClientTestSuite(t *testing.T) {
-	testcore.Run(t, &ActivityAPIBatchResetClientTestSuite{})
+	parallelsuite.Run(t, &ActivityAPIBatchResetClientTestSuite{})
 }
 
 func newBatchResetEnv(t *testing.T) *testcore.TestEnv {

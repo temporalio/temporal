@@ -41,7 +41,7 @@ type ClientMiscTestSuite struct {
 }
 
 func TestClientMiscTestSuite(t *testing.T) {
-	testcore.Run(t, &ClientMiscTestSuite{})
+	parallelsuite.Run(t, &ClientMiscTestSuite{})
 }
 
 func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {

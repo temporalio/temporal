@@ -28,7 +28,7 @@ type ActivityApiRulesClientTestSuite struct {
 }
 
 func TestActivityApiRulesClientTestSuite(t *testing.T) {
-	testcore.Run(t, &ActivityApiRulesClientTestSuite{})
+	parallelsuite.Run(t, &ActivityApiRulesClientTestSuite{})
 }
 
 type internalRulesTestWorkflow struct {

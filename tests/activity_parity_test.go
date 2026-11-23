@@ -31,7 +31,7 @@ type activityParityTestSuite struct {
 }
 
 func TestActivityParityTestSuite(t *testing.T) {
-	testcore.Run(t, &activityParityTestSuite{})
+	parallelsuite.Run(t, &activityParityTestSuite{})
 }
 
 func newActivityParityEnv(t *testing.T) *testcore.TestEnv {

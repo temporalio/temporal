@@ -56,7 +56,7 @@ type WorkflowUpdateSuite struct {
 }
 
 func TestWorkflowUpdateSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowUpdateSuite{})
+	parallelsuite.Run(t, &WorkflowUpdateSuite{})
 }
 
 func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() {
@@ -5105,7 +5105,7 @@ type UpdateWithStartSuite struct {
 }
 
 func TestUpdateWithStartSuite(t *testing.T) {
-	testcore.Run(t, &UpdateWithStartSuite{})
+	parallelsuite.Run(t, &UpdateWithStartSuite{})
 }
 
 type multiopsResponseErr struct {

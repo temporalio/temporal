@@ -27,7 +27,7 @@ type LinksSuite struct {
 }
 
 func TestLinksTestSuite(t *testing.T) {
-	testcore.Run(t, &LinksSuite{})
+	parallelsuite.Run(t, &LinksSuite{})
 }
 
 var links = []*commonpb.Link{

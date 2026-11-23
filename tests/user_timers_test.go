@@ -25,7 +25,7 @@ type UserTimersTestSuite struct {
 }
 
 func TestUserTimersTestSuite(t *testing.T) {
-	testcore.Run(t, &UserTimersTestSuite{})
+	parallelsuite.Run(t, &UserTimersTestSuite{})
 }
 
 func (s *UserTimersTestSuite) TestUserTimersSequential() {

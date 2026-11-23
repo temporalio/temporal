@@ -23,7 +23,7 @@ type WorkflowVisibilityTestSuite struct {
 }
 
 func TestWorkflowVisibilityTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowVisibilityTestSuite{})
+	parallelsuite.Run(t, &WorkflowVisibilityTestSuite{})
 }
 
 func (s *WorkflowVisibilityTestSuite) TestVisibility() {

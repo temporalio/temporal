@@ -36,11 +36,11 @@ type SignalWorkflowTestSuite struct {
 }
 
 func TestSignalWorkflowTestSuiteLegacy(t *testing.T) {
-	testcore.Run(t, &SignalWorkflowTestSuite{}, []testcore.TestOption{})
+	parallelsuite.Run(t, &SignalWorkflowTestSuite{}, []testcore.TestOption{})
 }
 
 func TestSignalWorkflowTestSuiteChasm(t *testing.T) {
-	testcore.Run(
+	parallelsuite.Run(
 		t,
 		&SignalWorkflowTestSuite{},
 		[]testcore.TestOption{

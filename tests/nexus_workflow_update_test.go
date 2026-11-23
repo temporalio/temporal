@@ -45,11 +45,11 @@ type NexusWorkflowUpdateTestSuite struct {
 }
 
 func TestNexusWorkflowUpdateTestSuiteWorkflowCaller(t *testing.T) {
-	testcore.Run(t, &NexusWorkflowUpdateTestSuite{}, false)
+	parallelsuite.Run(t, &NexusWorkflowUpdateTestSuite{}, false)
 }
 
 func TestNexusWorkflowUpdateTestSuiteStandaloneCaller(t *testing.T) {
-	testcore.Run(t, &NexusWorkflowUpdateTestSuite{}, true)
+	parallelsuite.Run(t, &NexusWorkflowUpdateTestSuite{}, true)
 }
 
 // updateNexusTestConfig holds configuration for workflow update + nexus integration tests.

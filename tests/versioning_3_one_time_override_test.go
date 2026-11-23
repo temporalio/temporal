@@ -26,8 +26,8 @@ type Versioning3OneTimeOverrideSuite struct {
 }
 
 func TestVersioning3OneTimeOverrideFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                                   //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
-	testcore.RunLegacySequential(t, &Versioning3OneTimeOverrideSuite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	testcore.UseSuiteScopedCluster(t)                                        //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	parallelsuite.RunLegacySequential(t, &Versioning3OneTimeOverrideSuite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 }
 
 func (s *Versioning3OneTimeOverrideSuite) setupEnv(opts ...testcore.TestOption) *VersioningTestEnv {

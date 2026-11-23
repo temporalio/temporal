@@ -30,7 +30,7 @@ type HistoryNodeCleanupSuite struct {
 }
 
 func TestHistoryNodeCleanupSuite(t *testing.T) {
-	testcore.Run(t, &HistoryNodeCleanupSuite{})
+	parallelsuite.Run(t, &HistoryNodeCleanupSuite{})
 }
 
 // TestDeletionOfSingleWorkflow runs a single workflow, force-deletes it via the

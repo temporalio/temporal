@@ -47,7 +47,7 @@ type ResetWorkflowTestSuite struct {
 }
 
 func TestResetWorkflowTestSuite(t *testing.T) {
-	testcore.Run(t, &ResetWorkflowTestSuite{})
+	parallelsuite.Run(t, &ResetWorkflowTestSuite{})
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow() {

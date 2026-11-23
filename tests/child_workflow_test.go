@@ -35,7 +35,7 @@ type ChildWorkflowSuite struct {
 }
 
 func TestChildWorkflowSuite(t *testing.T) {
-	testcore.Run(t, &ChildWorkflowSuite{})
+	parallelsuite.Run(t, &ChildWorkflowSuite{})
 }
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {

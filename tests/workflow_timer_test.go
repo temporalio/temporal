@@ -22,7 +22,7 @@ type WorkflowTimerTestSuite struct {
 }
 
 func TestWorkflowTimerTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowTimerTestSuite{})
+	parallelsuite.Run(t, &WorkflowTimerTestSuite{})
 }
 
 func (s *WorkflowTimerTestSuite) TestCancelTimer() {

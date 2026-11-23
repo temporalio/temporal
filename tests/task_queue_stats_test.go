@@ -90,8 +90,8 @@ type TaskQueueStatsSuite struct {
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                       //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	testcore.RunLegacySequential(t, &TaskQueueStatsSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	testcore.UseSuiteScopedCluster(t)                            //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &TaskQueueStatsSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 func (s *TaskQueueStatsSuite) newTaskQueueStatsContext(
@@ -184,7 +184,7 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached() {
 func (s *TaskQueueStatsSuite) TestVersioningSuite() {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
 		s.T().Run(behavior.Name()+"Suite", func(t *testing.T) { //nolint:testifylint // nested parallelsuite.Run needs raw *testing.T
-			testcore.RunLegacySequential(t, &TaskQueueStatsVersionSuite{}, behavior) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+			parallelsuite.RunLegacySequential(t, &TaskQueueStatsVersionSuite{}, behavior) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 		})
 	}
 }

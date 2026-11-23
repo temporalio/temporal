@@ -34,7 +34,7 @@ type SizeLimitSuite struct {
 }
 
 func TestSizeLimitFunctionalSuite(t *testing.T) {
-	testcore.Run(t, &SizeLimitSuite{})
+	parallelsuite.Run(t, &SizeLimitSuite{})
 }
 
 func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {

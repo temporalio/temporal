@@ -73,11 +73,11 @@ type NexusWorkflowTestSuite struct {
 }
 
 func TestNexusWorkflowTestSuiteHSM(t *testing.T) {
-	testcore.Run(t, &NexusWorkflowTestSuite{}, false)
+	parallelsuite.Run(t, &NexusWorkflowTestSuite{}, false)
 }
 
 func TestNexusWorkflowTestSuiteCHASM(t *testing.T) {
-	testcore.Run(t, &NexusWorkflowTestSuite{}, true)
+	parallelsuite.Run(t, &NexusWorkflowTestSuite{}, true)
 }
 
 func (s *NexusWorkflowTestSuite) newTestEnv(chasmEnabled bool, opts ...testcore.TestOption) *NexusTestEnv {

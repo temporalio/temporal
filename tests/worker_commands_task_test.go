@@ -28,7 +28,7 @@ type WorkerCommandsTaskSuite struct {
 }
 
 func TestWorkerCommandsTaskSuite(t *testing.T) {
-	testcore.Run(t, &WorkerCommandsTaskSuite{})
+	parallelsuite.Run(t, &WorkerCommandsTaskSuite{})
 }
 
 // TestDispatchCancelToWorker tests that when an activity cancellation is requested,

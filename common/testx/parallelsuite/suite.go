@@ -198,6 +198,14 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
 }
 
+var shardForTest = func(*testing.T) testshard.Shard { return testshard.Shard{} }
+
+// ConfigureSharding sets how Run and RunLegacySequential select a shard in this test binary.
+// Call it during package initialization, before running suites.
+func ConfigureSharding(resolve func(*testing.T) testshard.Shard) {
+	shardForTest = resolve
+}
+
 // Run discovers and runs all exported Test* methods on the given suite in parallel.
 //
 // Each method gets its own fresh suite instance initialized for the subtest's
@@ -206,7 +214,8 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 //
 // The suite must embed [Suite] and have no other fields.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, testshard.Shard{}, true, args...)
+	t.Helper()
+	run(t, s, shardForTest(t), true, args...)
 }
 
 // RunInShard runs the suite methods selected by shard using their full test names.
@@ -220,7 +229,8 @@ func RunInShard[T TestingSuite](t *testing.T, shard testshard.Shard, s T, args .
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
 func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, testshard.Shard{}, false, args...)
+	t.Helper()
+	run(t, s, shardForTest(t), false, args...)
 }
 
 // RunLegacySequentialInShard runs selected suite methods sequentially.

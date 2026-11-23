@@ -39,12 +39,12 @@ type activityResetTestEnv struct {
 
 // TestActivityApiResetClientTestSuiteLegacyAPI runs the suite with the legacy ResetActivity API.
 func TestActivityApiResetClientTestSuiteLegacyAPI(t *testing.T) {
-	testcore.Run(t, &ActivityApiResetClientTestSuite{}, "legacy-api")
+	parallelsuite.Run(t, &ActivityApiResetClientTestSuite{}, "legacy-api")
 }
 
 // TestActivityApiResetClientTestSuiteExecutionAPI runs the suite with the newer ResetActivityExecution API.
 func TestActivityApiResetClientTestSuiteExecutionAPI(t *testing.T) {
-	testcore.Run(t, &ActivityApiResetClientTestSuite{}, "execution-api")
+	parallelsuite.Run(t, &ActivityApiResetClientTestSuite{}, "execution-api")
 }
 
 // newActivityResetTestEnv returns an env whose resetFn calls ResetActivityExecution for

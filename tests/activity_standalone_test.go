@@ -105,7 +105,7 @@ type standaloneActivityTestSuite struct {
 }
 
 func TestStandaloneActivityTestSuite(t *testing.T) {
-	testcore.Run(t, &standaloneActivityTestSuite{})
+	parallelsuite.Run(t, &standaloneActivityTestSuite{})
 }
 
 type standaloneActivityEnv struct {

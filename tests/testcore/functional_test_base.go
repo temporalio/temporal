@@ -383,7 +383,7 @@ func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persist
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
 func (s *functionalTestBase) SetupTest() {
-	functionalTestShard(s.T()).SkipUnlessInShard(s.T())
+	FunctionalTestShard(s.T()).SkipUnlessInShard(s.T())
 	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 	s.setupSdk()

@@ -59,7 +59,7 @@ type AdvancedVisibilitySuite struct {
 }
 
 func TestAdvancedVisibilitySuite(t *testing.T) {
-	testcore.Run(t, &AdvancedVisibilitySuite{})
+	parallelsuite.Run(t, &AdvancedVisibilitySuite{})
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.

@@ -28,7 +28,7 @@ type AdminBatchDelegationTestSuite struct {
 }
 
 func TestAdminBatchDelegationTestSuite(t *testing.T) {
-	testcore.Run(t, &AdminBatchDelegationTestSuite{})
+	parallelsuite.Run(t, &AdminBatchDelegationTestSuite{})
 }
 
 func (s *AdminBatchDelegationTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {

@@ -53,11 +53,11 @@ type NexusApiTestSuite struct {
 }
 
 func TestNexusApiTestSuiteWithLegacyErrorPaths(t *testing.T) {
-	testcore.Run(t, &NexusApiTestSuite{}, false) // useTemporalFailures = false
+	parallelsuite.Run(t, &NexusApiTestSuite{}, false) // useTemporalFailures = false
 }
 
 func TestNexusApiTestSuiteWithTemporalFailures(t *testing.T) {
-	testcore.Run(t, &NexusApiTestSuite{}, true) // useTemporalFailures = true
+	parallelsuite.Run(t, &NexusApiTestSuite{}, true) // useTemporalFailures = true
 }
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures bool) {

@@ -27,7 +27,7 @@ type NexusAPIValidationTestSuite struct {
 }
 
 func TestNexusAPIValidationTestSuite(t *testing.T) {
-	testcore.Run(t, &NexusAPIValidationTestSuite{})
+	parallelsuite.Run(t, &NexusAPIValidationTestSuite{})
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceNotFound() {

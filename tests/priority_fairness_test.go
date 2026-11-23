@@ -36,7 +36,7 @@ type PrioritySuite struct {
 }
 
 func TestPrioritySuite(t *testing.T) {
-	testcore.Run(t, &PrioritySuite{})
+	parallelsuite.Run(t, &PrioritySuite{})
 }
 
 func (s *PrioritySuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
@@ -330,7 +330,7 @@ type FairnessSuite struct {
 }
 
 func TestFairnessSuite(t *testing.T) {
-	testcore.Run(t, &FairnessSuite{})
+	parallelsuite.Run(t, &FairnessSuite{})
 }
 
 // fairnessPartitions is the number of read/write partitions used by FairnessSuite.

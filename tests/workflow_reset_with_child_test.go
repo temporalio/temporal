@@ -43,7 +43,7 @@ type WorkflowResetWithChildSuite struct {
 }
 
 func TestWorkflowResetWithChildTestSuite(t *testing.T) {
-	testcore.Run(t, &WorkflowResetWithChildSuite{})
+	parallelsuite.Run(t, &WorkflowResetWithChildSuite{})
 }
 
 func (s *WorkflowResetWithChildSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {

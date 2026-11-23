@@ -31,7 +31,7 @@ type AdminBatchRefreshWorkflowTasksTestSuite struct {
 }
 
 func TestAdminBatchRefreshWorkflowTasksTestSuite(t *testing.T) {
-	testcore.Run(t, &AdminBatchRefreshWorkflowTasksTestSuite{})
+	parallelsuite.Run(t, &AdminBatchRefreshWorkflowTasksTestSuite{})
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.

@@ -23,7 +23,7 @@ type SignalWithStartOrphanPointerSuite struct {
 }
 
 func TestSignalWithStartOrphanPointerSuite(t *testing.T) {
-	testcore.Run(t, &SignalWithStartOrphanPointerSuite{})
+	parallelsuite.Run(t, &SignalWithStartOrphanPointerSuite{})
 }
 
 // Pointer exists, mutable state doesn't. Used to hang until the client deadline.
