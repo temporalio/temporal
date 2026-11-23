@@ -1973,9 +1973,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		// TODO(stephan): cache each version separately to allow re-use of cached stats
 		// TODO (Shivam): only root partitions have a stats cache, so sticky describes always miss it. Not worth it yet:
-		// a sticky task queue has a single partition, so there is no fan-out to save, and the worker controller asks
-		// at most about once a minute, well beyond the cache's 5s TTL (matching.TaskQueueInfoByBuildIdTTL), so a
-		// cache would rarely hit while adding one per sticky partition. Revisit as an optimization if sticky
+		// the intended caller is just the WCI workflow, which calls this on average once every 60 seconds, so a cache
+		// with a 5s TTL (matching.TaskQueueInfoByBuildIdTTL) would rarely hit. Revisit as an optimization if sticky
 		// describes get frequent.
 		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
 		if ts := pm.GetCache(cacheKey); ts != nil {
