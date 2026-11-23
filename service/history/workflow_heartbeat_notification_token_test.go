@@ -109,7 +109,7 @@ func (s *engine2Suite) TestWorkflowTaskTokenRebuild_RecordWorkflowTaskStarted() 
 
 	workerToken := matchingWorkflowTaskToken(we, s.recordWorkflowTaskStarted(we, scheduledEventID, "reqId"))
 	s.NotNil(workerToken.GetClock())
-	protorequire.ProtoEqual(s.T(), workerToken, workflow.NewStartedWorkflowTaskToken(workflowKeyOf(we), persisted()))
+	protorequire.ProtoEqual(s.T(), workerToken, workflow.RebuildCurrentWorkflowTaskToken(workflowKeyOf(we), persisted()))
 
 	// A retry with the same request ID must hand out the same token.
 	retryToken := matchingWorkflowTaskToken(we, s.recordWorkflowTaskStarted(we, scheduledEventID, "reqId"))
@@ -143,7 +143,7 @@ func (s *engine2Suite) TestWorkflowTaskTokenRebuild_TransientWorkflowTask() {
 	workerToken := matchingWorkflowTaskToken(we, s.recordWorkflowTaskStarted(we, wt.ScheduledEventID, "reqId"))
 	s.NotNil(workerToken.GetClock())
 	s.Equal(int32(2), workerToken.GetAttempt())
-	protorequire.ProtoEqual(s.T(), workerToken, workflow.NewStartedWorkflowTaskToken(workflowKeyOf(we), persisted()))
+	protorequire.ProtoEqual(s.T(), workerToken, workflow.RebuildCurrentWorkflowTaskToken(workflowKeyOf(we), persisted()))
 }
 
 func (s *engine2Suite) TestWorkflowTaskTokenRebuild_CleanSpeculativeWorkflowTaskInMemory() {
@@ -184,14 +184,14 @@ func (s *engine2Suite) TestWorkflowTaskTokenRebuild_CleanSpeculativeWorkflowTask
 
 	inMemory := s.getMutableState(tests.NamespaceID, we).GetExecutionInfo()
 	s.Equal(enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE, inMemory.GetWorkflowTaskType())
-	protorequire.ProtoEqual(s.T(), workerToken, workflow.NewStartedWorkflowTaskToken(workflowKeyOf(we), inMemory))
+	protorequire.ProtoEqual(s.T(), workerToken, workflow.RebuildCurrentWorkflowTaskToken(workflowKeyOf(we), inMemory))
 }
 
 func (s *engine2Suite) TestWorkflowTaskTokenRebuild_RespondWorkflowTaskCompletedReturnsNewWorkflowTask() {
 	we := &commonpb.WorkflowExecution{WorkflowId: "wId", RunId: tests.RunID}
 	ms := s.createExecutionStartedState(we, "testTaskQueue", "testIdentity", true, true)
 	completingToken, err := tasktoken.NewSerializer().Serialize(
-		workflow.NewStartedWorkflowTaskToken(workflowKeyOf(we), ms.GetExecutionInfo()),
+		workflow.RebuildCurrentWorkflowTaskToken(workflowKeyOf(we), ms.GetExecutionInfo()),
 	)
 	s.NoError(err)
 	persisted := s.expectWorkflowTaskStartPersisted(ms)
@@ -213,7 +213,7 @@ func (s *engine2Suite) TestWorkflowTaskTokenRebuild_RespondWorkflowTaskCompleted
 	workerToken, err := tasktoken.NewSerializer().Deserialize(resp.GetNewWorkflowTask().GetTaskToken())
 	s.NoError(err)
 	s.NotNil(workerToken.GetClock())
-	protorequire.ProtoEqual(s.T(), workerToken, workflow.NewStartedWorkflowTaskToken(workflowKeyOf(we), persisted()))
+	protorequire.ProtoEqual(s.T(), workerToken, workflow.RebuildCurrentWorkflowTaskToken(workflowKeyOf(we), persisted()))
 }
 
 func (s *engineSuite) TestWorkflowTaskTokenRebuild_EagerWorkflowStart() {
@@ -247,5 +247,5 @@ func (s *engineSuite) TestWorkflowTaskTokenRebuild_EagerWorkflowStart() {
 	s.NoError(err)
 	s.NotNil(workerToken.GetClock())
 	we := &commonpb.WorkflowExecution{WorkflowId: "test", RunId: resp.GetRunId()}
-	protorequire.ProtoEqual(s.T(), workerToken, workflow.NewStartedWorkflowTaskToken(workflowKeyOf(we), persisted))
+	protorequire.ProtoEqual(s.T(), workerToken, workflow.RebuildCurrentWorkflowTaskToken(workflowKeyOf(we), persisted))
 }

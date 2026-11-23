@@ -5,8 +5,13 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/tasktoken"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
@@ -146,4 +151,23 @@ func (c *ContextImpl) hasPendingUpdateForWorkflowHeartbeatNotification() bool {
 	return c.updateRegistry != nil &&
 		c.updateRegistry.FailoverVersion() == c.MutableState.GetCurrentVersion() &&
 		c.updateRegistry.HasOutgoingMessages(false)
+}
+
+// RebuildCurrentWorkflowTaskToken rebuilds the task token given to the worker for the started workflow task.
+// It returns nil if no workflow task is started or its started clock is unknown.
+func RebuildCurrentWorkflowTaskToken(key definition.WorkflowKey, info *persistencespb.WorkflowExecutionInfo) *tokenspb.Task {
+	if info.GetWorkflowTaskStartedEventId() == common.EmptyEventID || info.GetWorkflowTaskStartedClock() == nil {
+		return nil
+	}
+	return tasktoken.NewWorkflowTaskToken(
+		key.NamespaceID,
+		key.WorkflowID,
+		key.RunID,
+		info.GetWorkflowTaskScheduledEventId(),
+		info.GetWorkflowTaskStartedEventId(),
+		common.CloneProto(info.GetWorkflowTaskStartedTime()),
+		info.GetWorkflowTaskAttempt(),
+		common.CloneProto(info.GetWorkflowTaskStartedClock()),
+		info.GetWorkflowTaskVersion(),
+	)
 }
