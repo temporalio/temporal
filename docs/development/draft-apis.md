@@ -39,8 +39,8 @@ can retain their identity when all their fields are draft.
 
 Use `draft_service` for a whole service and `draft_method` for an RPC in a stable
 service. Both endpoints of a draft RPC must explicitly carry `draft_message`
-with the RPC's feature. A message can be used in only one RPC endpoint position,
-subject to the schema's allowlist for existing stable endpoints. The stable proto
+with the RPC's feature. A draft endpoint type can be used in only one RPC
+endpoint position; stable RPCs may share endpoint types. The stable proto
 projection removes draft declarations and retains their stable containers.
 
 Each declaration has one feature. Feature names are case-sensitive, nonempty
