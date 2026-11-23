@@ -75,8 +75,7 @@ const (
 	//   - Preserve workflow/request IDs already assigned to starts migrated
 	//     from CHASM, preserving idempotency identity across the migration
 	//     handoff.
-	//   - Don't migrate to CHASM while backfills are in progress, and wake up
-	//     soon after the last backfill drains to retry the deferred migration.
+	//   - Don't migrate to CHASM while backfills are in progress.
 	MigrationHandoffFixes = 13
 	// update the desired time for a buffered start when refresh discovers the prior action completed
 	RefreshCompletionDesiredTime = 14
@@ -162,10 +161,6 @@ type (
 		pendingPatch  *schedulepb.SchedulePatch
 		pendingUpdate *schedulespb.FullUpdateRequest
 		forceCAN      bool
-
-		// Set when this iteration held back CHASM migration because backfills were in progress.
-		// sleep uses it to wake up soon after the backfills drain.
-		migrationWaitingOnBackfill bool
 
 		uuidBatch []string
 
@@ -416,24 +411,22 @@ func (s *scheduler) run() error {
 
 		// V1 stores an ongoing backfill's start time as an exclusive cursor. Converting an
 		// in-flight backfill to CHASM can duplicate or drop actions, so migration waits until
-		// all backfills drain.
+		// all backfills drain. The deferred migration is retried on the next wakeup.
 		//
-		// This check and the wakeup in sleep were added to MigrationHandoffFixes after that
-		// version was already recordable through worker.schedulerV1VersionOverride. They change
-		// the commands of a recorded history only if all of these hold for one iteration:
+		// This check was added to MigrationHandoffFixes after that version was already
+		// recordable through worker.schedulerV1VersionOverride. It changes the commands of a
+		// recorded history only if all of these hold for one iteration:
 		//   - The run recorded version MigrationHandoffFixes or newer.
 		//   - The run recorded EnableCHASMMigration as true, or had PendingMigration set by a
 		//     migrate-to-chasm signal.
 		//   - OngoingBackfills was non-empty when the migration check ran.
-		// Such a history recorded a migration attempt or a different timer than this code makes,
-		// so replaying it fails with a nondeterminism error. If that attempt succeeded, the run
-		// closed when it migrated. A closed run gets no new workflow tasks, so only queries
-		// against it replay the history, until retention deletes it. If the attempt failed, the
-		// run is still open, and its next workflow task fails. No such history exists because no
-		// auto or manual V1 migration was started before this check was added.
+		// Such a history recorded a migration attempt that this code skips, so replaying it
+		// fails with a nondeterminism error. If that attempt succeeded, the run closed when it
+		// migrated. A closed run gets no new workflow tasks, so only queries against it replay
+		// the history, until retention deletes it. If the attempt failed, the run is still open,
+		// and its next workflow task fails. No such history exists because no auto or manual V1
+		// migration was started before this check was added.
 		backfilling := s.hasMinVersion(MigrationHandoffFixes) && len(s.State.OngoingBackfills) > 0
-		s.migrationWaitingOnBackfill = backfilling &&
-			(s.State.PendingMigration || s.tweakables.EnableCHASMMigration)
 
 		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
 			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) &&
@@ -940,14 +933,6 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	// if retention is not zero, it means there is no more job to schedule, so sleep for retention time and then exit if no signal is received
 	if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() {
 		nextWakeup = exp
-	}
-
-	// Retry the migration that this iteration deferred for backfills, without waiting for the
-	// next action or a signal. A paused schedule would otherwise sleep until the next signal.
-	if s.migrationWaitingOnBackfill && len(s.State.OngoingBackfills) == 0 {
-		if soon := s.now().Add(1 * time.Second); nextWakeup.IsZero() || soon.Before(nextWakeup) {
-			nextWakeup = soon
-		}
 	}
 
 	if !nextWakeup.IsZero() {

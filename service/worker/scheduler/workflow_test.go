@@ -3641,25 +3641,17 @@ func (s *workflowSuite) TestOperatorMigrateSignalSurvivesRolloutPercentZero() {
 }
 
 func (s *workflowSuite) TestAutoMigrateWaitsForBackfillToDrain() {
-	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(MigrationHandoffFixes, false)
+	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(MigrationHandoffFixes)
 
 	s.Equal(24, totalStarts)
 	s.Equal(totalStarts, startsBeforeMigration, "every backfill action must start in V1 before migration")
-	s.Less(migratedAt, baseStartTime.Add(time.Minute),
-		"migration should be retried soon after the backfill drains, not at the next scheduled action")
-}
-
-func (s *workflowSuite) TestAutoMigrateWaitsForBackfillToDrainWhilePaused() {
-	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(MigrationHandoffFixes, true)
-
-	s.Equal(24, totalStarts)
-	s.Equal(totalStarts, startsBeforeMigration, "every backfill action must start in V1 before migration")
-	s.Less(migratedAt, baseStartTime.Add(time.Minute),
-		"a paused schedule should not wait for a signal to retry the deferred migration")
+	// Nothing wakes the workflow when the backfill drains, so the migration is retried at the
+	// next scheduled action.
+	s.Equal(baseStartTime.Add(time.Hour), migratedAt)
 }
 
 func (s *workflowSuite) TestAutoMigrateDoesNotWaitForBackfillAtOldVersion() {
-	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(TriggerImmediatelyTimestamp, false)
+	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(TriggerImmediatelyTimestamp)
 
 	s.Zero(totalStarts)
 	s.Zero(startsBeforeMigration)
@@ -3671,7 +3663,6 @@ func (s *workflowSuite) TestAutoMigrateDoesNotWaitForBackfillAtOldVersion() {
 // started in total, and when the migration ran.
 func (s *workflowSuite) runAutoMigrateWithBackfill(
 	version SchedulerWorkflowVersion,
-	paused bool,
 ) (startsBeforeMigration, totalStarts int, migratedAt time.Time) {
 	previousTweakables := CurrentTweakablePolicies
 	defer func() { CurrentTweakablePolicies = previousTweakables }()
@@ -3703,7 +3694,6 @@ func (s *workflowSuite) runAutoMigrateWithBackfill(
 				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
 			},
 			Action: s.defaultAction("myid"),
-			State:  &schedulepb.ScheduleState{Paused: paused},
 		},
 		State: &schedulespb.InternalState{
 			Namespace:         "myns",
