@@ -3641,7 +3641,7 @@ func (s *workflowSuite) TestOperatorMigrateSignalSurvivesRolloutPercentZero() {
 }
 
 func (s *workflowSuite) TestAutoMigrateWaitsForBackfillToDrain() {
-	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(DeferMigrationForBackfill, false)
+	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(MigrationHandoffFixes, false)
 
 	s.Equal(24, totalStarts)
 	s.Equal(totalStarts, startsBeforeMigration, "every backfill action must start in V1 before migration")
@@ -3650,7 +3650,7 @@ func (s *workflowSuite) TestAutoMigrateWaitsForBackfillToDrain() {
 }
 
 func (s *workflowSuite) TestAutoMigrateWaitsForBackfillToDrainWhilePaused() {
-	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(DeferMigrationForBackfill, true)
+	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(MigrationHandoffFixes, true)
 
 	s.Equal(24, totalStarts)
 	s.Equal(totalStarts, startsBeforeMigration, "every backfill action must start in V1 before migration")
@@ -3659,11 +3659,11 @@ func (s *workflowSuite) TestAutoMigrateWaitsForBackfillToDrainWhilePaused() {
 }
 
 func (s *workflowSuite) TestAutoMigrateDoesNotWaitForBackfillAtOldVersion() {
-	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(RefreshCompletionDesiredTime, false)
+	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(TriggerImmediatelyTimestamp, false)
 
 	s.Zero(totalStarts)
 	s.Zero(startsBeforeMigration)
-	s.Equal(baseStartTime, migratedAt, "below DeferMigrationForBackfill the in-flight backfill is migrated as is")
+	s.Equal(baseStartTime, migratedAt, "below MigrationHandoffFixes the in-flight backfill is migrated as is")
 }
 
 // runAutoMigrateWithBackfill runs an auto-selected schedule whose state starts with a 24-action
