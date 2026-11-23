@@ -78,8 +78,11 @@ const (
 	MigrationHandoffFixes = 13
 	// update the desired time for a buffered start when refresh discovers the prior action completed
 	RefreshCompletionDesiredTime = 14
+	// don't migrate to CHASM while backfills are in progress, and wake up soon after the last
+	// backfill drains so the deferred migration is retried promptly
+	DeferMigrationForBackfill = 15
 	// LatestSchedulerWorkflowVersion is the newest workflow behavior this binary can activate.
-	LatestSchedulerWorkflowVersion SchedulerWorkflowVersion = RefreshCompletionDesiredTime
+	LatestSchedulerWorkflowVersion SchedulerWorkflowVersion = DeferMigrationForBackfill
 )
 
 const (
@@ -160,6 +163,10 @@ type (
 		pendingPatch  *schedulepb.SchedulePatch
 		pendingUpdate *schedulespb.FullUpdateRequest
 		forceCAN      bool
+
+		// Set when this iteration held back CHASM migration because backfills were in progress.
+		// sleep uses it to wake up soon after the backfills drain.
+		migrationWaitingOnBackfill bool
 
 		uuidBatch []string
 
@@ -408,14 +415,24 @@ func (s *scheduler) run() error {
 			}
 		}
 
+		// V1 stores an ongoing backfill's start time as an exclusive cursor. Converting an
+		// in-flight backfill to CHASM can duplicate or drop actions, so migration waits until
+		// all backfills drain.
+		backfilling := s.hasMinVersion(DeferMigrationForBackfill) && len(s.State.OngoingBackfills) > 0
+		s.migrationWaitingOnBackfill = backfilling &&
+			(s.State.PendingMigration || s.tweakables.EnableCHASMMigration)
+
 		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
-			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) {
+			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) &&
+			!backfilling {
 			s.State.PendingMigration = true
 		}
 		// CHASM migration markers are only safe to write at or after version TriggerImmediatelyTimestamp.
 		// A clamped run defers migration without dropping it: PendingMigration stays set, and the migration runs once the ceiling is lifted.
 		if s.State.PendingMigration && !s.hasMinVersion(TriggerImmediatelyTimestamp) {
 			s.logger.Debug("deferring schedule migration to CHASM: recorded version is clamped below migration support")
+		} else if s.State.PendingMigration && backfilling {
+			s.logger.Debug("deferring schedule migration to CHASM: backfill in progress")
 		} else if s.State.PendingMigration {
 			err := s.executeMigration()
 			if err == nil {
@@ -910,6 +927,14 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	// if retention is not zero, it means there is no more job to schedule, so sleep for retention time and then exit if no signal is received
 	if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() {
 		nextWakeup = exp
+	}
+
+	// Retry the migration that this iteration deferred for backfills, without waiting for the
+	// next action or a signal. A paused schedule would otherwise sleep until the next signal.
+	if s.migrationWaitingOnBackfill && len(s.State.OngoingBackfills) == 0 {
+		if soon := s.now().Add(1 * time.Second); nextWakeup.IsZero() || soon.Before(nextWakeup) {
+			nextWakeup = soon
+		}
 	}
 
 	if !nextWakeup.IsZero() {

@@ -3639,3 +3639,88 @@ func (s *workflowSuite) TestOperatorMigrateSignalSurvivesRolloutPercentZero() {
 	s.Equal(1, migrateCalls, "an operator-requested migration must not be discarded by the rollback reset")
 	s.Require().NoError(s.env.GetWorkflowError(), "workflow should complete after a successful migration")
 }
+
+func (s *workflowSuite) TestAutoMigrateWaitsForBackfillToDrain() {
+	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(DeferMigrationForBackfill, false)
+
+	s.Equal(24, totalStarts)
+	s.Equal(totalStarts, startsBeforeMigration, "every backfill action must start in V1 before migration")
+	s.Less(migratedAt, baseStartTime.Add(time.Minute),
+		"migration should be retried soon after the backfill drains, not at the next scheduled action")
+}
+
+func (s *workflowSuite) TestAutoMigrateWaitsForBackfillToDrainWhilePaused() {
+	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(DeferMigrationForBackfill, true)
+
+	s.Equal(24, totalStarts)
+	s.Equal(totalStarts, startsBeforeMigration, "every backfill action must start in V1 before migration")
+	s.Less(migratedAt, baseStartTime.Add(time.Minute),
+		"a paused schedule should not wait for a signal to retry the deferred migration")
+}
+
+func (s *workflowSuite) TestAutoMigrateDoesNotWaitForBackfillAtOldVersion() {
+	startsBeforeMigration, totalStarts, migratedAt := s.runAutoMigrateWithBackfill(RefreshCompletionDesiredTime, false)
+
+	s.Zero(totalStarts)
+	s.Zero(startsBeforeMigration)
+	s.Equal(baseStartTime, migratedAt, "below DeferMigrationForBackfill the in-flight backfill is migrated as is")
+}
+
+// runAutoMigrateWithBackfill runs an auto-selected schedule whose state starts with a 24-action
+// ALLOW_ALL backfill. It returns how many actions V1 started before migration, how many it
+// started in total, and when the migration ran.
+func (s *workflowSuite) runAutoMigrateWithBackfill(
+	version SchedulerWorkflowVersion,
+	paused bool,
+) (startsBeforeMigration, totalStarts int, migratedAt time.Time) {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = version
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+
+	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Maybe().Return(
+		func(context.Context, *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+			totalStarts++
+			return &schedulespb.StartWorkflowResponse{
+				RunId:         uuid.NewString(),
+				RealStartTime: timestamppb.New(s.now()),
+			}, nil
+		})
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			startsBeforeMigration = totalStarts
+			migratedAt = s.now()
+			return nil
+		})
+
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			schedulerDynamicConfig{enableCHASMMigration: func() bool { return true }, migrateWithRunningWorkflows: func() bool { return false }})
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+			},
+			Action: s.defaultAction("myid"),
+			State:  &schedulepb.ScheduleState{Paused: paused},
+		},
+		State: &schedulespb.InternalState{
+			Namespace:         "myns",
+			NamespaceId:       "mynsid",
+			ScheduleId:        "myschedule",
+			ConflictToken:     InitialConflictToken,
+			LastProcessedTime: timestamppb.New(baseStartTime),
+			// 24 hourly actions in (StartTime, EndTime].
+			OngoingBackfills: []*schedulepb.BackfillRequest{{
+				StartTime:     timestamppb.New(time.Date(2022, 5, 30, 0, 0, 0, 0, time.UTC)),
+				EndTime:       timestamppb.New(time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			}},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.Require().NoError(s.env.GetWorkflowError(), "schedule should migrate and complete")
+	return startsBeforeMigration, totalStarts, migratedAt
+}
