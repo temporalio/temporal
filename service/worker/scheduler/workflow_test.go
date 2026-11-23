@@ -3728,6 +3728,6 @@ func (s *workflowSuite) TestAutoMigrateDeferredUntilBackfillCompletes() {
 	// scheduled action (its start is handed to V2 as a buffered start, not issued by V1).
 	s.Require().Equal(baseStartTime.Add(time.Hour), migratedAt)
 	s.Require().Equal(3, deferrals, "BackfillsPerIteration=10 drains 24 slots in 3 iterations")
-	// Workflow code is unchanged, so deferrals still surface as migration failures there.
-	s.Require().Equal(int64(deferrals), s.metrics.counter(metrics.ScheduleMigrationFailed.Name()))
+	s.Require().Equal(int64(deferrals), s.metrics.counter(metrics.ScheduleMigrationDeferred.Name()))
+	s.Require().Zero(s.metrics.counter(metrics.ScheduleMigrationFailed.Name()))
 }
