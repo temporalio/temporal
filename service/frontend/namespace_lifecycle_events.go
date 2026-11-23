@@ -261,9 +261,8 @@ func clusterNames(clusters []*replicationpb.ClusterReplicationConfig) []string {
 }
 
 // legacyReplicationRoute describes a write the legacy path replicates, or
-// returns nil when it does not replicate the write. The legacy path decides
-// from ReplicationConfig.Clusters rather than the replication resolver, and in
-// CHASM mode it handles only writes CHASM does not replicate.
+// returns nil when it does not replicate the write. In CHASM mode the legacy
+// path handles only writes CHASM does not replicate.
 func legacyReplicationRoute(
 	mode namespaceReplicationTransportMode,
 	replicates bool,

@@ -282,10 +282,7 @@ func (d *namespaceHandler) RegisterNamespace(
 	transportMode := d.effectiveNamespaceReplicationTransportMode()
 	replicationClusters := d.replicationClusters(namespaceRequest.Namespace)
 	shouldReplicate := nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationClusters, false, info.GetState())
-	legacyRoute := legacyReplicationRoute(
-		transportMode,
-		nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationConfig.GetClusters(), false, info.GetState()),
-	)
+	legacyRoute := legacyReplicationRoute(transportMode, shouldReplicate)
 
 	applyLegacy := func() (string, error) {
 		response, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
@@ -301,6 +298,7 @@ func (d *namespaceHandler) RegisterNamespace(
 			namespaceRequest.Namespace.Info,
 			namespaceRequest.Namespace.Config,
 			namespaceRequest.Namespace.ReplicationConfig,
+			replicationClusters,
 			false,
 			namespaceRequest.Namespace.ConfigVersion,
 			namespaceRequest.Namespace.FailoverVersion,
@@ -750,10 +748,7 @@ func (d *namespaceHandler) UpdateNamespace(
 	replicationClustersChanged := clusterListChanged ||
 		!slices.Equal(slices.Sorted(slices.Values(previousReplicationClusters)), slices.Sorted(slices.Values(replicationClusters)))
 	shouldReplicate := nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationClusters, replicationClustersChanged, info.GetState())
-	legacyRoute := legacyReplicationRoute(
-		transportMode,
-		nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationConfig.GetClusters(), clusterListChanged, info.GetState()),
-	)
+	legacyRoute := legacyReplicationRoute(transportMode, shouldReplicate)
 
 	applyLegacy := func() error {
 		if updateReq != nil {
@@ -777,7 +772,8 @@ func (d *namespaceHandler) UpdateNamespace(
 			info,
 			config,
 			replicationConfig,
-			clusterListChanged,
+			replicationClusters,
+			replicationClustersChanged,
 			configVersion,
 			failoverVersion,
 			isGlobalNamespace,

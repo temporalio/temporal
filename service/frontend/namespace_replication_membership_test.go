@@ -74,12 +74,12 @@ func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
 			factory: dataMembershipFactory(), newMembers: "cell-a,cell-c", wantPeers: []string{"cell-b", "cell-c"}, wantRemoved: []string{"cell-b"}},
 		{name: "legacy/default factory", mode: dynamicconfig.NamespaceReplicationTransportModeLegacy,
 			factory: namespace.NewDefaultReplicationResolverFactory(), wantLocalWrite: true},
-		// The legacy path keeps its own ReplicationConfig.Clusters decision.
+		// The legacy path decides from the same membership.
 		{name: "legacy/membership factory", mode: dynamicconfig.NamespaceReplicationTransportModeLegacy,
-			factory: dataMembershipFactory(), wantLocalWrite: true},
-		// Shadow validates the membership peer list without changing the legacy path.
+			factory: dataMembershipFactory(), wantLocalWrite: true, wantPublish: true},
+		// Shadow validates the membership peer list while the legacy path replicates.
 		{name: "shadow/membership factory", mode: dynamicconfig.NamespaceReplicationTransportModeShadow,
-			factory: dataMembershipFactory(), wantLocalWrite: true, wantPeers: []string{"cell-b", "cell-c"}},
+			factory: dataMembershipFactory(), wantLocalWrite: true, wantPublish: true, wantPeers: []string{"cell-b", "cell-c"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
