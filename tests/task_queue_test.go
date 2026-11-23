@@ -935,9 +935,7 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	// Drain workflow tasks -> schedule activities with Priority.FairnessKey.
 	wfHandled := 0
 	for wfHandled < total {
-		if err := s.Context().Err(); err != nil {
-			s.T().Fatalf("context deadline while draining workflow tasks: handled=%d/%d: %v", wfHandled, total, err)
-		}
+		s.NoError(s.Context().Err(), "context deadline while draining workflow tasks: handled=%d/%d", wfHandled, total)
 		_, err := env.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -984,9 +982,7 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 
 	actsHandled := 0
 	for actsHandled < total {
-		if err := s.Context().Err(); err != nil {
-			s.T().Fatalf("context deadline while draining activity tasks: handled=%d/%d: %v", actsHandled, total, err)
-		}
+		s.NoError(s.Context().Err(), "context deadline while draining activity tasks: handled=%d/%d", actsHandled, total)
 		_, err := env.TaskPoller().PollAndHandleActivityTask(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
@@ -1607,6 +1603,37 @@ func (s *TaskQueueSuite) TestShutdownWorkerIsIdempotent() {
 	s.NotNil(resp)
 	s.Empty(resp.GetTaskToken(), "poll from shutdown worker should return empty response")
 	s.Less(time.Since(pollStart), 2*time.Minute, "poll should be rejected quickly by shutdown cache")
+}
+
+func (s *TaskQueueSuite) TestShutdownWorkerRefusesLaterPollOfUnloadedTaskQueue() {
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true))
+
+	tv := testvars.New(s.T())
+	workerInstanceKey := uuid.NewString()
+
+	// No poll has loaded the task queue yet, so matching skips the fan-out of the cancellation.
+	_, err := env.FrontendClient().ShutdownWorker(s.Context(), &workflowservice.ShutdownWorkerRequest{
+		Namespace:         env.Namespace().String(),
+		StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
+		Identity:          tv.WorkerIdentity(),
+		Reason:            "shutdown before the first poll",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         tv.TaskQueue().GetName(),
+		TaskQueueTypes:    []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_NEXUS},
+	})
+	s.NoError(err)
+
+	pollStart := time.Now()
+	resp, err := env.FrontendClient().PollNexusTaskQueue(s.Context(), &workflowservice.PollNexusTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		WorkerInstanceKey: workerInstanceKey,
+	})
+	s.NoError(err)
+	s.Empty(resp.GetTaskToken(), "poll from a shut down Worker should return an empty response")
+	// An accepted poll stays open for at least 50s, the long poll interval minus its jitter.
+	s.Less(time.Since(pollStart), 20*time.Second, "poll should be refused by the shutdown cache")
 }
 
 func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_RootPartition() {

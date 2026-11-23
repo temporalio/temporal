@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -41,7 +42,7 @@ type handler struct {
 	config            *Config
 	historyHandler    historyservice.HistoryServiceServer
 	callbackValidator callbacks.Validator
-	linkValidator     *linkValidator
+	linkValidator     commonlinks.Validator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
 	matchingClient    resource.MatchingClient
@@ -52,7 +53,7 @@ func newHandler(
 	config *Config,
 	historyHandler historyservice.HistoryServiceServer,
 	callbackValidator callbacks.Validator,
-	linkValidator *linkValidator,
+	linkValidator commonlinks.Validator,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	matchingClient resource.MatchingClient,
@@ -106,7 +107,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return newActivity, nil
 	}
 	startOpts := []chasm.TransitionOption{
-		chasm.WithStartRequestID(frontendReq.GetRequestId()),
+		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	}
 
@@ -194,6 +195,14 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		metrics.ActivityEagerExecutionCounter.With(eagerActivityMetricsHandler(h.metricsHandler, h.config, frontendReq)).Record(1)
 	}
 
+	if created && frontendReq.GetPropagatedNexusSerializationContext() != nil {
+		metrics.NexusActivityStartWithContext.With(h.metricsHandler).Record(1,
+			metrics.NamespaceTag(frontendReq.GetNamespace()),
+		)
+	}
+
+	// Count callback attachments involving Nexus context by whether that context matches or is missing.
+	// See: https://github.com/temporalio/temporal/issues/13153
 	if !created && nexusContextMatch != "" {
 		metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1,
 			metrics.NamespaceTag(frontendReq.GetNamespace()),
