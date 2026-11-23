@@ -63,20 +63,20 @@ func (s *WorkflowHeartbeatNotificationSuite) pollWorkflowTask(
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	taskQueue *taskqueuepb.TaskQueue,
+	background <-chan error,
 ) *workflowservice.PollWorkflowTaskQueueResponse {
-	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
-	defer cancel()
-	task, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace:              env.Namespace().String(),
-		TaskQueue:              taskQueue,
-		Identity:               tv.WorkerIdentity(),
-		WorkerInstanceKey:      tv.WorkerInstanceKey(),
-		WorkerControlTaskQueue: tv.ControlQueueName(env.Namespace().String()),
-		Capabilities: &workflowservice.PollWorkflowTaskQueueRequest_Capabilities{
-			SupportsWorkflowHeartbeatNotification: true,
-		},
+	task := callWatchingBackground(s, background, func(ctx context.Context) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
+		return env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:              env.Namespace().String(),
+			TaskQueue:              taskQueue,
+			Identity:               tv.WorkerIdentity(),
+			WorkerInstanceKey:      tv.WorkerInstanceKey(),
+			WorkerControlTaskQueue: tv.ControlQueueName(env.Namespace().String()),
+			Capabilities: &workflowservice.PollWorkflowTaskQueueRequest_Capabilities{
+				SupportsWorkflowHeartbeatNotification: true,
+			},
+		})
 	})
-	s.NoError(err)
 	s.NotEmpty(task.GetTaskToken())
 	return task
 }
@@ -103,11 +103,48 @@ func (s *WorkflowHeartbeatNotificationSuite) signal(env *testcore.TestEnv, tv *t
 	s.NoError(err)
 }
 
-// sendUpdate sends an Update that stays unanswered, so the call is left running in the background.
-func (s *WorkflowHeartbeatNotificationSuite) sendUpdate(env *testcore.TestEnv, tv *testvars.TestVars, runID string) {
+// sendUpdate sends an Update that stays unanswered. The returned channel gets the RPC error if the call ends.
+func (s *WorkflowHeartbeatNotificationSuite) sendUpdate(env *testcore.TestEnv, tv *testvars.TestVars, runID string) <-chan error {
+	return s.callInBackground(func(ctx context.Context) error {
+		_, err := env.FrontendClient().UpdateWorkflowExecution(ctx, s.updateRequest(env, tv, runID))
+		return err
+	})
+}
+
+func (s *WorkflowHeartbeatNotificationSuite) callInBackground(call func(context.Context) error) <-chan error {
+	errCh := make(chan error, 1)
+	go func() { errCh <- call(s.Context()) }()
+	return errCh
+}
+
+// callWatchingBackground runs call and fails early if the background RPC fails first, so the test reports that
+// error instead of a poll timeout. A nil background channel is never ready.
+func callWatchingBackground[T any](
+	s *WorkflowHeartbeatNotificationSuite,
+	background <-chan error,
+	call func(context.Context) (T, error),
+) T {
+	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+	defer cancel()
+	type result struct {
+		value T
+		err   error
+	}
+	done := make(chan result, 1)
 	go func() {
-		_, _ = env.FrontendClient().UpdateWorkflowExecution(s.Context(), s.updateRequest(env, tv, runID))
+		value, err := call(ctx)
+		done <- result{value: value, err: err}
 	}()
+	for {
+		select {
+		case r := <-done:
+			s.NoError(r.err)
+			return r.value
+		case err := <-background:
+			s.NoError(err, "background RPC failed")
+			background = nil
+		}
+	}
 }
 
 func (s *WorkflowHeartbeatNotificationSuite) updateRequest(env *testcore.TestEnv, tv *testvars.TestVars, runID string) *workflowservice.UpdateWorkflowExecutionRequest {
@@ -126,15 +163,15 @@ func (s *WorkflowHeartbeatNotificationSuite) updateRequest(env *testcore.TestEnv
 func (s *WorkflowHeartbeatNotificationSuite) receiveNotification(
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
+	background <-chan error,
 ) *workerservicepb.ExecuteCommandsRequest {
-	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
-	defer cancel()
-	resp, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tv.ControlQueueName(env.Namespace().String()), Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS},
-		Identity:  tv.WorkerIdentity(),
+	resp := callWatchingBackground(s, background, func(ctx context.Context) (*workflowservice.PollNexusTaskQueueResponse, error) {
+		return env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tv.ControlQueueName(env.Namespace().String()), Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS},
+			Identity:  tv.WorkerIdentity(),
+		})
 	})
-	s.NoError(err)
 	var request workerservicepb.ExecuteCommandsRequest
 	s.NoError(payload.Decode(resp.GetRequest().GetStartOperation().GetPayload(), &request))
 	return &request
@@ -166,14 +203,14 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 			name: "matching poll",
 			holdWorkflowTask: func(s *WorkflowHeartbeatNotificationSuite, env *testcore.TestEnv, tv *testvars.TestVars) (string, []byte) {
 				start := s.startWorkflow(env, tv, false)
-				return start.GetRunId(), s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken()
+				return start.GetRunId(), s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil).GetTaskToken()
 			},
 		},
 		{
 			name: "sticky poll",
 			holdWorkflowTask: func(s *WorkflowHeartbeatNotificationSuite, env *testcore.TestEnv, tv *testvars.TestVars) (string, []byte) {
 				start := s.startWorkflow(env, tv, false)
-				s.completeWorkflowTask(env, s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken(),
+				s.completeWorkflowTask(env, s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil).GetTaskToken(),
 					&workflowservice.RespondWorkflowTaskCompletedRequest{StickyAttributes: tv.StickyExecutionAttributes(10 * time.Second)})
 				pollCtx, cancelPoll := context.WithCancel(s.Context())
 				defer cancelPoll()
@@ -224,12 +261,12 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 				start := s.startWorkflow(env, tv, false)
 				_, err := env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
 					Namespace: env.Namespace().String(),
-					TaskToken: s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken(),
+					TaskToken: s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil).GetTaskToken(),
 					Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 					Identity:  tv.WorkerIdentity(),
 				})
 				s.NoError(err)
-				task := s.pollWorkflowTask(env, tv, tv.TaskQueue())
+				task := s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil)
 				s.Equal(int32(2), task.GetAttempt())
 				return start.GetRunId(), task.GetTaskToken()
 			},
@@ -238,11 +275,10 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 			name: "speculative",
 			holdWorkflowTask: func(s *WorkflowHeartbeatNotificationSuite, env *testcore.TestEnv, tv *testvars.TestVars) (string, []byte) {
 				start := s.startWorkflow(env, tv, false)
-				s.completeWorkflowTask(env, s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken(),
+				s.completeWorkflowTask(env, s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil).GetTaskToken(),
 					&workflowservice.RespondWorkflowTaskCompletedRequest{})
 				// The update stays unanswered; the test only needs the speculative task it creates.
-				s.sendUpdate(env, tv, start.GetRunId())
-				task := s.pollWorkflowTask(env, tv, tv.TaskQueue())
+				task := s.pollWorkflowTask(env, tv, tv.TaskQueue(), s.sendUpdate(env, tv, start.GetRunId()))
 				s.Len(task.GetMessages(), 1)
 				return start.GetRunId(), task.GetTaskToken()
 			},
@@ -251,7 +287,7 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 			name: "new workflow task returned inline",
 			holdWorkflowTask: func(s *WorkflowHeartbeatNotificationSuite, env *testcore.TestEnv, tv *testvars.TestVars) (string, []byte) {
 				start := s.startWorkflow(env, tv, false)
-				resp := s.completeWorkflowTask(env, s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken(),
+				resp := s.completeWorkflowTask(env, s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil).GetTaskToken(),
 					&workflowservice.RespondWorkflowTaskCompletedRequest{
 						ForceCreateNewWorkflowTask: true,
 						ReturnNewWorkflowTask:      true,
@@ -275,7 +311,7 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 			runID, heldToken := tc.holdWorkflowTask(s, env, tv)
 
 			s.signal(env, tv, runID)
-			s.requireNotificationToken(s.receiveNotification(env, tv), tv, runID, heldToken)
+			s.requireNotificationToken(s.receiveNotification(env, tv, nil), tv, runID, heldToken)
 		})
 	}
 }
@@ -284,7 +320,7 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 func (s *WorkflowHeartbeatNotificationSuite) TestUpdateAdmissionNotifiesHeldWorkflowTask() {
 	hold := func(s *WorkflowHeartbeatNotificationSuite, env *testcore.TestEnv, tv *testvars.TestVars) (string, []byte) {
 		start := s.startWorkflow(env, tv, false)
-		return start.GetRunId(), s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken()
+		return start.GetRunId(), s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil).GetTaskToken()
 	}
 
 	s.Run("update", func(s *WorkflowHeartbeatNotificationSuite) {
@@ -292,8 +328,8 @@ func (s *WorkflowHeartbeatNotificationSuite) TestUpdateAdmissionNotifiesHeldWork
 		tv := env.Tv()
 		runID, heldToken := hold(s, env, tv)
 
-		s.sendUpdate(env, tv, runID)
-		s.requireNotificationToken(s.receiveNotification(env, tv), tv, runID, heldToken)
+		updateErr := s.sendUpdate(env, tv, runID)
+		s.requireNotificationToken(s.receiveNotification(env, tv, updateErr), tv, runID, heldToken)
 	})
 
 	s.Run("update-with-start on a running workflow", func(s *WorkflowHeartbeatNotificationSuite) {
@@ -311,16 +347,17 @@ func (s *WorkflowHeartbeatNotificationSuite) TestUpdateAdmissionNotifiesHeldWork
 			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		}
 		updateRequest := s.updateRequest(env, tv, "")
-		go func() {
-			_, _ = env.FrontendClient().ExecuteMultiOperation(s.Context(), &workflowservice.ExecuteMultiOperationRequest{
+		multiOpErr := s.callInBackground(func(ctx context.Context) error {
+			_, err := env.FrontendClient().ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
 				Namespace: env.Namespace().String(),
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 					{Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{StartWorkflow: startRequest}},
 					{Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{UpdateWorkflow: updateRequest}},
 				},
 			})
-		}()
-		s.requireNotificationToken(s.receiveNotification(env, tv), tv, runID, heldToken)
+			return err
+		})
+		s.requireNotificationToken(s.receiveNotification(env, tv, multiOpErr), tv, runID, heldToken)
 	})
 }
 
@@ -334,7 +371,7 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNoPollerTimesOutAtDispatchTimeo
 	)
 	tv := env.Tv()
 	start := s.startWorkflow(env, tv, false)
-	s.pollWorkflowTask(env, tv, tv.TaskQueue())
+	s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil)
 	capture := env.StartNamespaceMetricCapture()
 
 	s.signal(env, tv, start.GetRunId())
