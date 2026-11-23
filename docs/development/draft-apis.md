@@ -219,6 +219,10 @@ set `api_go_commit` to its hash and run these commands from the server repo.
 `go mod tidy` records the canonical pseudo-version and checksums in
 `go.mod` and `go.sum`.
 
+For CI, the resolved stable API version and the draft replacement version must
+match. The initial draft pin is accepted with stable API `v1.64.3` while paired
+release tags are being introduced.
+
 ```sh
 api_go_commit=4bd28ec6
 go mod edit -replace="go.temporal.io/api=github.com/temporalio/api-go/api_next@${api_go_commit}"

@@ -58,6 +58,20 @@ jobs:
           minimum_release_age: 14d
           auto_update: true
 
+      - name: Check draft API version
+        run: |
+          api=$(go list -m -json go.temporal.io/api)
+          jq -e '
+            if .Replace.Path != "github.com/temporalio/api-go/api_next" or .Version == .Replace.Version then
+              true
+            # The initial draft pin predates paired release tags.
+            elif .Version == "v1.64.3" and .Replace.Version == "v0.0.0-20261121031856-4bd28ec65c9f" then
+              true
+            else
+              error("stable API version \(.Version) must match draft API version \(.Replace.Version)")
+            end
+          ' <<< "$api"
+
       - name: lint protobuf API definitions
         run: |
           make lint-api
