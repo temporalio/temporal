@@ -91,7 +91,7 @@ const (
 	NamespaceEagerRefreshRefreshed   = "refreshed"
 	NamespaceEagerRefreshFetchFailed = "fetch_failed"
 	NamespaceEagerRefreshNotGlobal   = "not_global"
-	NamespaceEagerRefreshNotAdmitted = "not_admitted"
+	NamespaceEagerRefreshNotMember   = "not_member"
 	NamespaceEagerRefreshApplyFailed = "apply_failed"
 	NamespaceEagerRefreshFailed      = "failed"
 )

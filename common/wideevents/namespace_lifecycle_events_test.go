@@ -286,11 +286,11 @@ func TestEmitNamespaceEagerRefresh(t *testing.T) {
 		SourceCluster:         "source",
 		CurrentCluster:        "current",
 		Operation:             "Create",
-		Outcome:               NamespaceEagerRefreshNotAdmitted,
+		Outcome:               NamespaceEagerRefreshNotMember,
 		SourceFailoverVersion: 12,
 		SourceConfigVersion:   3,
 		Duration:              1500 * time.Millisecond,
-		Err:                   errors.New("not admitted"),
+		Err:                   errors.New("not a member"),
 	})
 
 	require.Len(t, lg.records, 1)
@@ -301,10 +301,10 @@ func TestEmitNamespaceEagerRefresh(t *testing.T) {
 		"source_cluster":          "source",
 		"current_cluster":         "current",
 		"operation":               "Create",
-		"outcome":                 NamespaceEagerRefreshNotAdmitted,
+		"outcome":                 NamespaceEagerRefreshNotMember,
 		"source_failover_version": float64(12),
 		"source_config_version":   float64(3),
 		"duration_ms":             float64(1500),
-		"error":                   "not admitted",
+		"error":                   "not a member",
 	}, lagDetails(t, lg.records[0]))
 }

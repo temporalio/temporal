@@ -52,18 +52,15 @@ type (
 		eventCapture                *eventCaptureLogger
 	}
 
-	stubAdmitter struct {
-		admit bool
+	// fixedClustersResolver reports a fixed cluster list regardless of the namespace's replication config.
+	fixedClustersResolver struct {
+		namespace.ReplicationResolver
+		clusters []string
 	}
 )
 
-func (a stubAdmitter) Admit(
-	context.Context,
-	string,
-	*replicationspb.NamespaceTaskAttributes,
-	nsreplication.AdmissionOptions,
-) bool {
-	return a.admit
+func (r fixedClustersResolver) ClusterNames(string) []string {
+	return r.clusters
 }
 
 func (s *EagerNamespaceRefresherSuite) SetupTest() {
@@ -81,17 +78,17 @@ func (s *EagerNamespaceRefresherSuite) SetupTest() {
 	s.mockMetricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
 		metrics.ServiceNameTag("serviceName"))
 	s.eventCapture = &eventCaptureLogger{}
-	s.eagerNamespaceRefresher = s.newRefresher(nsreplication.NewDefaultAdmitter())
+	s.eagerNamespaceRefresher = s.newRefresher(namespace.NewDefaultReplicationResolverFactory())
 }
 
-func (s *EagerNamespaceRefresherSuite) newRefresher(admitter nsreplication.NamespaceReplicationAdmitter) EagerNamespaceRefresher {
+func (s *EagerNamespaceRefresherSuite) newRefresher(resolverFactory namespace.ReplicationResolverFactory) EagerNamespaceRefresher {
 	return NewEagerNamespaceRefresher(
 		s.mockMetadataManager,
 		s.mockNamespaceRegistry,
 		s.logger,
 		s.clientBean,
 		s.mockReplicationTaskExecutor,
-		admitter,
+		resolverFactory,
 		mockCurrentCuster,
 		s.mockMetricsHandler,
 		s.eventCapture,
@@ -238,11 +235,10 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 			Id: namespaceId.String(),
 		},
 	}).Return(nsResponse, nil).Times(1)
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
 
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
-	details := s.requireRefreshEvent(wideevents.NamespaceEagerRefreshNotAdmitted)
+	details := s.requireRefreshEvent(wideevents.NamespaceEagerRefreshNotMember)
 	s.Contains(details["error"], "Namespace does not belong to current cluster")
 }
 
@@ -310,23 +306,34 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_FetchF
 	s.requireRefreshEvent(wideevents.NamespaceEagerRefreshFetchFailed)
 }
 
-// The admitter, not the namespace's cluster list, decides whether the namespace belongs to the
-// current cluster.
-func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_AdmitterDecidesMembership() {
+// Membership is the cluster list reported by the namespace's replication resolver, which may differ
+// from the replication config's cluster list.
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_ResolverDecidesMembership() {
 	namespaceId := namespace.ID("abc")
 	testCases := []struct {
-		name     string
-		admit    bool
-		clusters []string
+		name             string
+		configClusters   []string
+		resolverClusters []string
+		member           bool
 	}{
-		{name: "admitted although cluster list excludes current", admit: true, clusters: []string{"not_current_cluster_1"}},
-		{name: "rejected although cluster list includes current", admit: false, clusters: []string{mockCurrentCuster}},
+		{
+			name:             "member although config cluster list excludes current",
+			configClusters:   []string{"not_current_cluster_1"},
+			resolverClusters: []string{"not_current_cluster_1", mockCurrentCuster},
+			member:           true,
+		},
+		{
+			name:             "not a member although config cluster list includes current",
+			configClusters:   []string{mockCurrentCuster},
+			resolverClusters: []string{"not_current_cluster_1"},
+			member:           false,
+		},
 	}
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			s.eventCapture.records = nil
 			var clusters []*replicationpb.ClusterReplicationConfig
-			for _, c := range tc.clusters {
+			for _, c := range tc.configClusters {
 				clusters = append(clusters, &replicationpb.ClusterReplicationConfig{ClusterName: c})
 			}
 			nsResponse := &adminservice.GetNamespaceResponse{
@@ -342,15 +349,20 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Admitt
 				IsGlobalNamespace: true,
 			}
 			s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nsResponse, nil).Times(1)
-			s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
-			refresher := s.newRefresher(stubAdmitter{admit: tc.admit})
+			refresher := s.newRefresher(func(detail *persistencespb.NamespaceDetail) namespace.ReplicationResolver {
+				return fixedClustersResolver{
+					ReplicationResolver: namespace.NewDefaultReplicationResolverFactory()(detail),
+					clusters:            tc.resolverClusters,
+				}
+			})
 
-			if !tc.admit {
+			if !tc.member {
 				_, err := refresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 				s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
-				s.requireRefreshEvent(wideevents.NamespaceEagerRefreshNotAdmitted)
+				s.requireRefreshEvent(wideevents.NamespaceEagerRefreshNotMember)
 				return
 			}
+			s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
 			s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
 			s.NoError(err)

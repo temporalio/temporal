@@ -2,6 +2,7 @@ package replication
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
@@ -33,7 +35,7 @@ type (
 		lock                    sync.Mutex
 		clientBean              client.Bean
 		replicationTaskExecutor nsreplication.TaskExecutor
-		admitter                nsreplication.NamespaceReplicationAdmitter
+		resolverFactory         namespace.ReplicationResolverFactory
 		currentCluster          string
 		metricsHandler          metrics.Handler
 		eventLogger             otellog.Logger
@@ -46,7 +48,7 @@ func NewEagerNamespaceRefresher(
 	logger log.Logger,
 	clientBean client.Bean,
 	replicationTaskExecutor nsreplication.TaskExecutor,
-	admitter nsreplication.NamespaceReplicationAdmitter,
+	resolverFactory namespace.ReplicationResolverFactory,
 	currentCluster string,
 	metricsHandler metrics.Handler,
 	eventLogger otellog.Logger,
@@ -57,7 +59,7 @@ func NewEagerNamespaceRefresher(
 		logger:                  logger,
 		clientBean:              clientBean,
 		replicationTaskExecutor: replicationTaskExecutor,
-		admitter:                admitter,
+		resolverFactory:         resolverFactory,
 		currentCluster:          currentCluster,
 		metricsHandler:          metricsHandler,
 		eventLogger:             eventLogger,
@@ -109,6 +111,25 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		event.Outcome = wideevents.NamespaceEagerRefreshNotGlobal
 		return nil, serviceerror.NewFailedPreconditionf("Not a global namespace: %v", namespaceId)
 	}
+	// Membership comes from the namespace's replication resolver, the same way the registry
+	// resolves the cluster list of a loaded namespace.
+	resolver := e.resolverFactory(&persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   resp.GetInfo().GetId(),
+			Name: resp.GetInfo().GetName(),
+			Data: resp.GetInfo().GetData(),
+		},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: resp.GetReplicationConfig().GetActiveClusterName(),
+			Clusters:          nsreplication.ConvertClusterReplicationConfigFromProto(resp.GetReplicationConfig().GetClusters()),
+		},
+		FailoverVersion: resp.GetFailoverVersion(),
+	})
+	if !slices.Contains(resolver.ClusterNames(""), e.currentCluster) {
+		metrics.ReplicationOutlierNamespace.With(e.metricsHandler).Record(1)
+		event.Outcome = wideevents.NamespaceEagerRefreshNotMember
+		return nil, serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
+	}
 	_, err = e.namespaceRegistry.GetNamespaceByID(namespaceId)
 	var operation enumsspb.NamespaceOperation
 	switch err.(type) {
@@ -130,13 +151,6 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		FailoverVersion:    resp.GetFailoverVersion(),
 		FailoverHistory:    resp.GetFailoverHistory(),
 		RestoreInfo:        resp.GetRestoreInfo(),
-	}
-	// The admitter decides whether the namespace belongs to the current cluster, so a refresh
-	// accepts exactly the namespaces that namespace replication would apply here.
-	if !e.admitter.Admit(ctx, e.currentCluster, task, nsreplication.AdmissionOptions{}) {
-		metrics.ReplicationOutlierNamespace.With(e.metricsHandler).Record(1)
-		event.Outcome = wideevents.NamespaceEagerRefreshNotAdmitted
-		return nil, serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
 	}
 	if err := e.replicationTaskExecutor.Execute(ctx, task); err != nil {
 		event.Outcome = wideevents.NamespaceEagerRefreshApplyFailed
