@@ -2,12 +2,14 @@ package replication
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -24,6 +26,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/shard"
 	"go.uber.org/mock/gomock"
 )
@@ -46,8 +49,22 @@ type (
 		currentCluster              string
 		mockMetricsHandler          metrics.Handler
 		remoteAdminClient           *adminservicemock.MockAdminServiceClient
+		eventCapture                *eventCaptureLogger
+	}
+
+	stubAdmitter struct {
+		admit bool
 	}
 )
+
+func (a stubAdmitter) Admit(
+	context.Context,
+	string,
+	*replicationspb.NamespaceTaskAttributes,
+	nsreplication.AdmissionOptions,
+) bool {
+	return a.admit
+}
 
 func (s *EagerNamespaceRefresherSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
@@ -63,15 +80,39 @@ func (s *EagerNamespaceRefresherSuite) SetupTest() {
 	s.mockReplicationTaskExecutor = nsreplication.NewMockTaskExecutor(s.controller)
 	s.mockMetricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
 		metrics.ServiceNameTag("serviceName"))
-	s.eagerNamespaceRefresher = NewEagerNamespaceRefresher(
+	s.eventCapture = &eventCaptureLogger{}
+	s.eagerNamespaceRefresher = s.newRefresher(nsreplication.NewDefaultAdmitter())
+}
+
+func (s *EagerNamespaceRefresherSuite) newRefresher(admitter nsreplication.NamespaceReplicationAdmitter) EagerNamespaceRefresher {
+	return NewEagerNamespaceRefresher(
 		s.mockMetadataManager,
 		s.mockNamespaceRegistry,
 		s.logger,
 		s.clientBean,
 		s.mockReplicationTaskExecutor,
+		admitter,
 		mockCurrentCuster,
 		s.mockMetricsHandler,
+		s.eventCapture,
 	)
+}
+
+// requireRefreshEvent asserts that exactly one eager refresh event was emitted and returns its details.
+func (s *EagerNamespaceRefresherSuite) requireRefreshEvent(outcome string) map[string]any {
+	s.Len(s.eventCapture.records, 1)
+	attrs := map[string]string{}
+	s.eventCapture.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value.AsString()
+		return true
+	})
+	s.Equal(wideevents.NamespaceLifecycleEventName, s.eventCapture.records[0].EventName())
+	s.Equal(wideevents.PhaseNamespaceEagerRefresh, attrs["phase"])
+	var details map[string]any
+	s.NoError(json.Unmarshal([]byte(attrs["details"]), &details))
+	s.Equal(outcome, details["outcome"])
+	s.Equal(mockCurrentCuster, details["current_cluster"])
+	return details
 }
 
 func TestEagerNamespaceRefresherSuite(t *testing.T) {
@@ -119,6 +160,10 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Create
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.NoError(err)
 	s.Equal(namespaceId, ns.ID())
+	details := s.requireRefreshEvent(wideevents.NamespaceEagerRefreshRefreshed)
+	s.Equal(enumsspb.NAMESPACE_OPERATION_CREATE.String(), details["operation"])
+	s.Equal("currentCluster", details["source_cluster"])
+	s.NotContains(details, "error")
 }
 
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_UpdateSuccess() {
@@ -193,10 +238,12 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 			Id: namespaceId.String(),
 		},
 	}).Return(nsResponse, nil).Times(1)
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
 
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
-	s.Error(err)
 	s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
+	details := s.requireRefreshEvent(wideevents.NamespaceEagerRefreshNotAdmitted)
+	s.Contains(details["error"], "Namespace does not belong to current cluster")
 }
 
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_ExecutorReturnsError() {
@@ -227,8 +274,8 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Execut
 	expectedError := errors.New("some error")
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(expectedError)
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
-	s.Error(err)
 	s.Equal(expectedError, err)
+	s.requireRefreshEvent(wideevents.NamespaceEagerRefreshApplyFailed)
 }
 
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_NamespaceIsNotGlobalNamespace() {
@@ -249,8 +296,71 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 	}).Return(nsResponse, nil).Times(1)
 
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
-	s.Error(err)
 	s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
+	s.requireRefreshEvent(wideevents.NamespaceEagerRefreshNotGlobal)
+}
+
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_FetchFails() {
+	namespaceId := namespace.ID("abc")
+	expectedError := serviceerror.NewUnavailable("source unavailable")
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, expectedError).Times(1)
+
+	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	s.Equal(expectedError, err)
+	s.requireRefreshEvent(wideevents.NamespaceEagerRefreshFetchFailed)
+}
+
+// The admitter, not the namespace's cluster list, decides whether the namespace belongs to the
+// current cluster.
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_AdmitterDecidesMembership() {
+	namespaceId := namespace.ID("abc")
+	testCases := []struct {
+		name     string
+		admit    bool
+		clusters []string
+	}{
+		{name: "admitted although cluster list excludes current", admit: true, clusters: []string{"not_current_cluster_1"}},
+		{name: "rejected although cluster list includes current", admit: false, clusters: []string{mockCurrentCuster}},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.eventCapture.records = nil
+			var clusters []*replicationpb.ClusterReplicationConfig
+			for _, c := range tc.clusters {
+				clusters = append(clusters, &replicationpb.ClusterReplicationConfig{ClusterName: c})
+			}
+			nsResponse := &adminservice.GetNamespaceResponse{
+				Info: &namespacepb.NamespaceInfo{
+					Id:    namespaceId.String(),
+					Name:  "ns-name",
+					State: enumspb.NAMESPACE_STATE_REGISTERED,
+				},
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+					ActiveClusterName: cluster.TestAlternativeClusterName,
+					Clusters:          clusters,
+				},
+				IsGlobalNamespace: true,
+			}
+			s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nsResponse, nil).Times(1)
+			s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
+			refresher := s.newRefresher(stubAdmitter{admit: tc.admit})
+
+			if !tc.admit {
+				_, err := refresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+				s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
+				s.requireRefreshEvent(wideevents.NamespaceEagerRefreshNotAdmitted)
+				return
+			}
+			s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
+			s.NoError(err)
+			s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(nsFromResponse, nil).Times(1)
+			ns, err := refresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+			s.NoError(err)
+			s.Equal(namespaceId, ns.ID())
+			s.requireRefreshEvent(wideevents.NamespaceEagerRefreshRefreshed)
+		})
+	}
 }
 
 func fromAdminClientAPIResponse(response *adminservice.GetNamespaceResponse) (*namespace.Namespace, error) {

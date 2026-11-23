@@ -3,7 +3,9 @@ package replication
 import (
 	"context"
 	"sync"
+	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -14,6 +16,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/wideevents"
 )
 
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination eager_namespace_refresher_mock.go
@@ -30,8 +33,10 @@ type (
 		lock                    sync.Mutex
 		clientBean              client.Bean
 		replicationTaskExecutor nsreplication.TaskExecutor
+		admitter                nsreplication.NamespaceReplicationAdmitter
 		currentCluster          string
 		metricsHandler          metrics.Handler
+		eventLogger             otellog.Logger
 	}
 )
 
@@ -41,16 +46,21 @@ func NewEagerNamespaceRefresher(
 	logger log.Logger,
 	clientBean client.Bean,
 	replicationTaskExecutor nsreplication.TaskExecutor,
+	admitter nsreplication.NamespaceReplicationAdmitter,
 	currentCluster string,
-	metricsHandler metrics.Handler) EagerNamespaceRefresher {
+	metricsHandler metrics.Handler,
+	eventLogger otellog.Logger,
+) EagerNamespaceRefresher {
 	return &eagerNamespaceRefresherImpl{
 		metadataManager:         metadataManager,
 		namespaceRegistry:       namespaceRegistry,
 		logger:                  logger,
 		clientBean:              clientBean,
 		replicationTaskExecutor: replicationTaskExecutor,
+		admitter:                admitter,
 		currentCluster:          currentCluster,
 		metricsHandler:          metricsHandler,
+		eventLogger:             eventLogger,
 	}
 }
 
@@ -58,11 +68,29 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 	ctx context.Context,
 	namespaceId namespace.ID,
 	sourceCluster string,
-) (*namespace.Namespace, error) {
+) (_ *namespace.Namespace, retErr error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
+
+	startTime := time.Now()
+	event := wideevents.NamespaceEagerRefreshInput{
+		NamespaceID:    namespaceId.String(),
+		SourceCluster:  sourceCluster,
+		CurrentCluster: e.currentCluster,
+		Outcome:        wideevents.NamespaceEagerRefreshFailed,
+	}
+	defer func() {
+		if retErr == nil {
+			event.Outcome = wideevents.NamespaceEagerRefreshRefreshed
+		}
+		event.Err = retErr
+		event.Duration = time.Since(startTime)
+		wideevents.EmitNamespaceEagerRefresh(e.eventLogger, event)
+	}()
+
 	adminClient, err := e.clientBean.GetRemoteAdminClient(sourceCluster)
 	if err != nil {
+		event.Outcome = wideevents.NamespaceEagerRefreshFetchFailed
 		return nil, err
 	}
 	resp, err := adminClient.GetNamespace(ctx, &adminservice.GetNamespaceRequest{
@@ -71,20 +99,15 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		},
 	})
 	if err != nil {
+		event.Outcome = wideevents.NamespaceEagerRefreshFetchFailed
 		return nil, err
 	}
+	event.Namespace = resp.GetInfo().GetName()
+	event.SourceFailoverVersion = resp.GetFailoverVersion()
+	event.SourceConfigVersion = resp.GetConfigVersion()
 	if !resp.GetIsGlobalNamespace() {
+		event.Outcome = wideevents.NamespaceEagerRefreshNotGlobal
 		return nil, serviceerror.NewFailedPreconditionf("Not a global namespace: %v", namespaceId)
-	}
-	hasCurrentCluster := false
-	for _, c := range resp.GetReplicationConfig().GetClusters() {
-		if e.currentCluster == c.GetClusterName() {
-			hasCurrentCluster = true
-		}
-	}
-	if !hasCurrentCluster {
-		metrics.ReplicationOutlierNamespace.With(e.metricsHandler).Record(1)
-		return nil, serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
 	}
 	_, err = e.namespaceRegistry.GetNamespaceByID(namespaceId)
 	var operation enumsspb.NamespaceOperation
@@ -96,6 +119,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 	default:
 		return nil, err
 	}
+	event.Operation = operation.String()
 	task := &replicationspb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
 		Id:                 resp.GetInfo().Id,
@@ -107,8 +131,15 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		FailoverHistory:    resp.GetFailoverHistory(),
 		RestoreInfo:        resp.GetRestoreInfo(),
 	}
-	err = e.replicationTaskExecutor.Execute(ctx, task)
-	if err != nil {
+	// The admitter decides whether the namespace belongs to the current cluster, so a refresh
+	// accepts exactly the namespaces that namespace replication would apply here.
+	if !e.admitter.Admit(ctx, e.currentCluster, task, nsreplication.AdmissionOptions{}) {
+		metrics.ReplicationOutlierNamespace.With(e.metricsHandler).Record(1)
+		event.Outcome = wideevents.NamespaceEagerRefreshNotAdmitted
+		return nil, serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
+	}
+	if err := e.replicationTaskExecutor.Execute(ctx, task); err != nil {
+		event.Outcome = wideevents.NamespaceEagerRefreshApplyFailed
 		return nil, err
 	}
 	return e.namespaceRegistry.RefreshNamespaceById(namespaceId)
