@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 )
 
 // Config represents configuration for history service
@@ -424,6 +425,7 @@ type Config struct {
 
 	WorkflowHeartbeatNotificationRolloutPercent  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	WorkflowHeartbeatNotificationDispatchTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	NexusMinDispatchTaskTimeout                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
@@ -870,6 +872,7 @@ func NewConfig(
 
 		WorkflowHeartbeatNotificationRolloutPercent:  dynamicconfig.WorkflowHeartbeatNotificationRolloutPercent.Get(dc),
 		WorkflowHeartbeatNotificationDispatchTimeout: dynamicconfig.WorkflowHeartbeatNotificationDispatchTimeout.Get(dc),
+		NexusMinDispatchTaskTimeout:                  nexusoperations.MinDispatchTaskTimeout.Get(dc),
 
 		// Archival related
 		ArchivalTaskBatchSize:                               dynamicconfig.ArchivalTaskBatchSize.Get(dc),

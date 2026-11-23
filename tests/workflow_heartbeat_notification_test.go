@@ -5,12 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
@@ -96,9 +98,28 @@ func (s *WorkflowHeartbeatNotificationSuite) signal(env *testcore.TestEnv, tv *t
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: tv.WithRunID(runID).WorkflowExecution(),
 		SignalName:        tv.SignalName(),
-		RequestId:         tv.Any().String(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err)
+}
+
+// sendUpdate sends an Update that stays unanswered, so the call is left running in the background.
+func (s *WorkflowHeartbeatNotificationSuite) sendUpdate(env *testcore.TestEnv, tv *testvars.TestVars, runID string) {
+	go func() {
+		_, _ = env.FrontendClient().UpdateWorkflowExecution(s.Context(), s.updateRequest(env, tv, runID))
+	}()
+}
+
+func (s *WorkflowHeartbeatNotificationSuite) updateRequest(env *testcore.TestEnv, tv *testvars.TestVars, runID string) *workflowservice.UpdateWorkflowExecutionRequest {
+	return &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: tv.WithRunID(runID).WorkflowExecution(),
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		Request: &updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input: &updatepb.Input{Name: tv.HandlerName()},
+		},
+	}
 }
 
 // receiveNotification polls the worker control queue like an SDK worker and returns the notification it carries.
@@ -117,6 +138,20 @@ func (s *WorkflowHeartbeatNotificationSuite) receiveNotification(
 	var request workerservicepb.ExecuteCommandsRequest
 	s.NoError(payload.Decode(resp.GetRequest().GetStartOperation().GetPayload(), &request))
 	return &request
+}
+
+func (s *WorkflowHeartbeatNotificationSuite) requireNotificationToken(
+	request *workerservicepb.ExecuteCommandsRequest,
+	tv *testvars.TestVars,
+	runID string,
+	heldToken []byte,
+) {
+	s.Len(request.GetCommands(), 1)
+	notification := request.GetCommands()[0].GetWorkflowHeartbeatNotification()
+	s.NotNil(notification)
+	s.Equal(heldToken, notification.GetTaskToken())
+	s.Equal(tv.WorkflowID(), notification.GetExecution().GetWorkflowId())
+	s.Equal(runID, notification.GetExecution().GetRunId())
 }
 
 // TestNotificationCarriesHeldWorkflowTaskToken checks, for each way a worker can get a Workflow Task, that the
@@ -177,18 +212,8 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 				start := s.startWorkflow(env, tv, false)
 				s.completeWorkflowTask(env, s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken(),
 					&workflowservice.RespondWorkflowTaskCompletedRequest{})
-				go func() {
-					// The update stays unanswered; the test only needs the speculative task it creates.
-					_, _ = env.FrontendClient().UpdateWorkflowExecution(s.Context(), &workflowservice.UpdateWorkflowExecutionRequest{
-						Namespace:         env.Namespace().String(),
-						WorkflowExecution: tv.WithRunID(start.GetRunId()).WorkflowExecution(),
-						WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
-						Request: &updatepb.Request{
-							Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
-							Input: &updatepb.Input{Name: tv.HandlerName()},
-						},
-					})
-				}()
+				// The update stays unanswered; the test only needs the speculative task it creates.
+				s.sendUpdate(env, tv, start.GetRunId())
 				task := s.pollWorkflowTask(env, tv, tv.TaskQueue())
 				s.Len(task.GetMessages(), 1)
 				return start.GetRunId(), task.GetTaskToken()
@@ -222,14 +247,82 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNotificationCarriesHeldWorkflow
 			runID, heldToken := tc.holdWorkflowTask(s, env, tv)
 
 			s.signal(env, tv, runID)
-			request := s.receiveNotification(env, tv)
-
-			s.Len(request.GetCommands(), 1)
-			notification := request.GetCommands()[0].GetWorkflowHeartbeatNotification()
-			s.NotNil(notification)
-			s.Equal(heldToken, notification.GetTaskToken())
-			s.Equal(tv.WorkflowID(), notification.GetExecution().GetWorkflowId())
-			s.Equal(runID, notification.GetExecution().GetRunId())
+			s.requireNotificationToken(s.receiveNotification(env, tv), tv, runID, heldToken)
 		})
+	}
+}
+
+// TestUpdateAdmissionNotifiesHeldWorkflowTask covers the Update admission path, which skips persistence.
+func (s *WorkflowHeartbeatNotificationSuite) TestUpdateAdmissionNotifiesHeldWorkflowTask() {
+	hold := func(s *WorkflowHeartbeatNotificationSuite, env *testcore.TestEnv, tv *testvars.TestVars) (string, []byte) {
+		start := s.startWorkflow(env, tv, false)
+		return start.GetRunId(), s.pollWorkflowTask(env, tv, tv.TaskQueue()).GetTaskToken()
+	}
+
+	s.Run("update", func(s *WorkflowHeartbeatNotificationSuite) {
+		env := s.newEnv()
+		tv := env.Tv()
+		runID, heldToken := hold(s, env, tv)
+
+		s.sendUpdate(env, tv, runID)
+		s.requireNotificationToken(s.receiveNotification(env, tv), tv, runID, heldToken)
+	})
+
+	s.Run("update-with-start on a running workflow", func(s *WorkflowHeartbeatNotificationSuite) {
+		env := s.newEnv()
+		tv := env.Tv()
+		runID, heldToken := hold(s, env, tv)
+
+		startRequest := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:                uuid.NewString(),
+			Namespace:                env.Namespace().String(),
+			WorkflowId:               tv.WorkflowID(),
+			WorkflowType:             tv.WorkflowType(),
+			TaskQueue:                tv.TaskQueue(),
+			Identity:                 tv.WorkerIdentity(),
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		}
+		updateRequest := s.updateRequest(env, tv, "")
+		go func() {
+			_, _ = env.FrontendClient().ExecuteMultiOperation(s.Context(), &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: env.Namespace().String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					{Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{StartWorkflow: startRequest}},
+					{Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{UpdateWorkflow: updateRequest}},
+				},
+			})
+		}()
+		s.requireNotificationToken(s.receiveNotification(env, tv), tv, runID, heldToken)
+	})
+}
+
+// TestNoPollerTimesOutAtDispatchTimeout checks that Matching answers with a RequestTimeout once
+// WorkflowHeartbeatNotificationDispatchTimeout passes, so the dispatch goroutine lives about that long.
+func (s *WorkflowHeartbeatNotificationSuite) TestNoPollerTimesOutAtDispatchTimeout() {
+	const dispatchTimeout = 500 * time.Millisecond
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowHeartbeatNotificationRolloutPercent, 100),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowHeartbeatNotificationDispatchTimeout, dispatchTimeout),
+	)
+	tv := env.Tv()
+	start := s.startWorkflow(env, tv, false)
+	s.pollWorkflowTask(env, tv, tv.TaskQueue())
+	capture := env.StartNamespaceMetricCapture()
+
+	s.signal(env, tv, start.GetRunId())
+
+	s.Await(func(s *WorkflowHeartbeatNotificationSuite) {
+		results := capture.Metric(metrics.WorkflowHeartbeatNotificationResults.Name())
+		s.Len(results, 1)
+		s.Equal("handler_timeout", results[0].Tags["result"])
+	}, 10*time.Second, 100*time.Millisecond)
+	latencies := capture.Metric(metrics.WorkflowHeartbeatNotificationDeliveryLatency.Name())
+	s.Len(latencies, 1)
+	if len(latencies) == 1 {
+		latency, ok := latencies[0].Value.(time.Duration)
+		s.True(ok)
+		s.GreaterOrEqual(latency, dispatchTimeout)
+		// Well under dispatchTimeout plus the deadline buffer Matching keeps.
+		s.Less(latency, dispatchTimeout+500*time.Millisecond)
 	}
 }

@@ -13,12 +13,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protomock"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -199,7 +201,13 @@ func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
 		ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
 		ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 		ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
-		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			WorkflowTaskScheduledEventId:   5,
+			WorkflowTaskStartedEventId:     6,
+			WorkflowTaskWorkerControlQueue: "control-queue",
+			WorkflowTaskStartedClock:       &clockspb.VectorClock{ShardId: 1, Clock: 1},
+		}).AnyTimes()
+		ms.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns"}, nil, "")).AnyTimes()
 		ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
 		ms.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 		ms.EXPECT().GetStartedWorkflowTask().Return(nil).AnyTimes()
@@ -232,6 +240,28 @@ func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
 		ms := newMutableState(t, 1)
 		registry := update.NewRegistry(ms)
 		require.False(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+	})
+
+	t.Run("re-applied request keeps the notification", func(t *testing.T) {
+		ms := newMutableState(t, 0)
+		registry := update.NewRegistry(ms)
+		updater := applyUpdate(t, registry, ms, "first")
+		require.NotNil(t, updater.whnNotification)
+		_, err := updater.ApplyRequest(context.Background(), registry, ms)
+		require.NoError(t, err)
+		require.True(t, updater.firstBufferedForWorkflowHeartbeatNotification)
+		require.NotNil(t, updater.whnNotification)
+	})
+
+	t.Run("duplicate request is not counted", func(t *testing.T) {
+		ms := newMutableState(t, 0)
+		registry := update.NewRegistry(ms)
+		applyUpdate(t, registry, ms, "first")
+		duplicate := &Updater{req: createUpdateRequest("first")}
+		_, err := duplicate.ApplyRequest(context.Background(), registry, ms)
+		require.NoError(t, err)
+		require.False(t, duplicate.bufferedForWorkflowHeartbeatNotification)
+		require.Nil(t, duplicate.whnNotification)
 	})
 }
 

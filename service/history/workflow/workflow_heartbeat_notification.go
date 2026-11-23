@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -127,7 +128,7 @@ func (c *ContextImpl) handleWorkflowHeartbeatNotification(
 	if firstBufferedInput {
 		notification, err := NewWorkflowHeartbeatNotification(c.MutableState, filteredNewBufferedEventTypes[0])
 		if err != nil {
-			c.logger.Warn("Unable to prepare workflow heartbeat notification", tag.Error(err))
+			c.logger.Warn("WHN: Unable to prepare workflow heartbeat notification", tag.Error(err))
 		} else {
 			SendWorkflowHeartbeatNotification(ctx, shardCtx, notification)
 		}
@@ -191,7 +192,7 @@ func SendWorkflowHeartbeatNotification(
 	go func() {
 		matchingClient, err := shardCtx.GetMatchingClient()
 		if err != nil {
-			shardCtx.GetLogger().Warn("Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
+			shardCtx.GetLogger().Warn("WHN: Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
 			return
 		}
 		command := &workerpb.WorkerCommand{Type: &workerpb.WorkerCommand_WorkflowHeartbeatNotification{
@@ -205,12 +206,15 @@ func SendWorkflowHeartbeatNotification(
 		}}
 		requestData, err := proto.Marshal(&workerservicepb.ExecuteCommandsRequest{Commands: []*workerpb.WorkerCommand{command}})
 		if err != nil {
-			shardCtx.GetLogger().Warn("Unable to encode workflow heartbeat notification", tag.Error(err))
+			shardCtx.GetLogger().Warn("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
 			return
 		}
+		// Matching keeps NexusMinDispatchTaskTimeout of the deadline to answer with RequestTimeout, so add it on top.
+		config := shardCtx.GetConfig()
 		matchCtx, matchCancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
-			shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
+			config.WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName)+
+				config.NexusMinDispatchTaskTimeout(notification.namespaceName),
 		)
 		defer matchCancel()
 		dispatchStart := time.Now()
@@ -237,23 +241,35 @@ func SendWorkflowHeartbeatNotification(
 			metrics.EventTypeTag(notification.inputEventTypeName),
 		)
 		metrics.WorkflowHeartbeatNotificationDeliveryLatency.With(handler).Record(time.Since(dispatchStart))
+		var result commonnexus.DispatchResult
+		if err == nil {
+			result = commonnexus.ClassifyStartOperationDispatch(resp)
+		}
 		metrics.WorkflowHeartbeatNotificationResults.With(handler).Record(1,
-			metrics.StringTag("result", workflowHeartbeatNotificationResult(resp, err)))
-		if err != nil {
-			shardCtx.GetLogger().Warn("Unable to dispatch workflow heartbeat notification",
-				tag.WorkflowNamespace(notification.namespaceName),
-				tag.WorkflowID(notification.workflowKey.WorkflowID),
-				tag.WorkflowRunID(notification.workflowKey.RunID),
-				tag.Error(err))
+			metrics.StringTag("result", workflowHeartbeatNotificationResult(result, err)))
+		logger := log.With(shardCtx.GetLogger(),
+			tag.WorkflowNamespace(notification.namespaceName),
+			tag.WorkflowID(notification.workflowKey.WorkflowID),
+			tag.WorkflowRunID(notification.workflowKey.RunID),
+		)
+		switch {
+		case err != nil:
+			logger.Warn("WHN: Unable to dispatch workflow heartbeat notification", tag.Error(err))
+		case result.Outcome == commonnexus.DispatchOutcomeRequestTimeout:
+			// No worker took the notification in time, which is expected for best effort delivery.
+		default:
+			if workerErr := commonnexus.DispatchResultToError(result); workerErr != nil {
+				logger.Warn("WHN: Worker failed workflow heartbeat notification", tag.Error(workerErr))
+			}
 		}
 	}()
 }
 
 // workflowHeartbeatNotificationResult reuses the Nexus dispatch outcome tag values for the worker's answer.
-func workflowHeartbeatNotificationResult(resp *matchingservice.DispatchNexusTaskResponse, err error) string {
+func workflowHeartbeatNotificationResult(result commonnexus.DispatchResult, err error) string {
 	switch {
 	case err == nil:
-		return commonnexus.ClassifyStartOperationDispatch(resp).OutcomeTag().Value
+		return result.OutcomeTag().Value
 	case common.IsContextDeadlineExceededErr(err):
 		return "dispatch_timeout"
 	default:

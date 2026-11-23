@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
@@ -19,6 +20,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/tasktoken"
@@ -77,10 +79,11 @@ func TestNewWorkflowHeartbeatNotification_StartedClockUnknown(t *testing.T) {
 
 func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 	for _, tc := range []struct {
-		name           string
-		resp           *matchingservice.DispatchNexusTaskResponse
-		err            error
-		expectedResult string
+		name            string
+		resp            *matchingservice.DispatchNexusTaskResponse
+		err             error
+		expectedResult  string
+		expectedWarning string
 	}{
 		{
 			name: "worker answered",
@@ -98,8 +101,31 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			}},
 			expectedResult: "handler_timeout",
 		},
-		{name: "dispatch timeout", err: context.DeadlineExceeded, expectedResult: "dispatch_timeout"},
-		{name: "dispatch error", err: serviceerror.NewUnavailable("unavailable"), expectedResult: "dispatch_error"},
+		{
+			name: "worker failed",
+			resp: &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
+				Failure: &failurepb.Failure{
+					Message: "unsupported command",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{Type: "NOT_IMPLEMENTED"},
+					},
+				},
+			}},
+			expectedResult:  "handler_error:NOT_IMPLEMENTED",
+			expectedWarning: "WHN: Worker failed workflow heartbeat notification",
+		},
+		{
+			name:            "dispatch timeout",
+			err:             context.DeadlineExceeded,
+			expectedResult:  "dispatch_timeout",
+			expectedWarning: "WHN: Unable to dispatch workflow heartbeat notification",
+		},
+		{
+			name:            "dispatch error",
+			err:             serviceerror.NewUnavailable("unavailable"),
+			expectedResult:  "dispatch_error",
+			expectedWarning: "WHN: Unable to dispatch workflow heartbeat notification",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
@@ -107,12 +133,16 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			shard.EXPECT().GetConfig().Return(&configs.Config{
 				WorkflowHeartbeatNotificationRolloutPercent:  func(string) int { return 100 },
 				WorkflowHeartbeatNotificationDispatchTimeout: func(string) time.Duration { return 500 * time.Millisecond },
+				NexusMinDispatchTaskTimeout:                  func(string) time.Duration { return time.Second },
 			}).AnyTimes()
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 			defer metricsHandler.StopCapture(capture)
 			shard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
-			shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+			warnings := make(chan string, 1)
+			logger := log.NewMockLogger(ctrl)
+			logger.EXPECT().Warn(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { warnings <- msg }).AnyTimes()
+			shard.EXPECT().GetLogger().Return(logger).AnyTimes()
 			delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)
 			shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered, resp: tc.resp, err: tc.err}, nil)
 			signaled := enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)]
@@ -150,6 +180,9 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			latencies := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationDeliveryLatency.Name())
 			require.Len(t, latencies, 1)
 			require.Equal(t, map[string]string{"namespace": "namespace-name", "event_type": signaled}, latencies[0].Tags)
+			if tc.expectedWarning != "" {
+				require.Equal(t, tc.expectedWarning, <-warnings)
+			}
 		})
 	}
 }
