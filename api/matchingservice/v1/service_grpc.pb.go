@@ -95,10 +95,10 @@ type MatchingServiceClient interface {
 	// A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
 	// history ends up not using is not refunded.
 	//
-	// DeadlineExceeded, Canceled, and Unavailable mean that no matching host answered, which is neither a grant nor a
+	// DeadlineExceeded and Canceled mean that no matching host answered in time, which is neither a grant nor a
 	// denial. On one of these, history dispatches the activity tasks of a RespondWorkflowTaskCompleted response
-	// eagerly. History treats every other error, such as ResourceExhausted from matching's rate limiter or
-	// Unimplemented from an older matching host, as "do not dispatch eagerly". For a workflow start or a standalone
+	// eagerly. History treats every other error, such as ResourceExhausted from matching's rate limiter, Unavailable,
+	// or Unimplemented from an older matching host, as "do not dispatch eagerly". For a workflow start or a standalone
 	// activity start, history treats every error as "do not dispatch eagerly".
 	GrantEagerDispatch(ctx context.Context, in *GrantEagerDispatchRequest, opts ...grpc.CallOption) (*GrantEagerDispatchResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
@@ -669,10 +669,10 @@ type MatchingServiceServer interface {
 	// A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
 	// history ends up not using is not refunded.
 	//
-	// DeadlineExceeded, Canceled, and Unavailable mean that no matching host answered, which is neither a grant nor a
+	// DeadlineExceeded and Canceled mean that no matching host answered in time, which is neither a grant nor a
 	// denial. On one of these, history dispatches the activity tasks of a RespondWorkflowTaskCompleted response
-	// eagerly. History treats every other error, such as ResourceExhausted from matching's rate limiter or
-	// Unimplemented from an older matching host, as "do not dispatch eagerly". For a workflow start or a standalone
+	// eagerly. History treats every other error, such as ResourceExhausted from matching's rate limiter, Unavailable,
+	// or Unimplemented from an older matching host, as "do not dispatch eagerly". For a workflow start or a standalone
 	// activity start, history treats every error as "do not dispatch eagerly".
 	GrantEagerDispatch(context.Context, *GrantEagerDispatchRequest) (*GrantEagerDispatchResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.

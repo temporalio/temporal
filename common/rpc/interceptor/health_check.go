@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -177,7 +178,7 @@ func NewHealthSignalAggregator(
 	windowSize time.Duration,
 	maxBufferSize int,
 ) *healthSignalAggregatorImpl {
-	signals := health.NewSignalAggregator(logger, getSettings, health.WithIsUnhealthy(common.IsUnhealthyError))
+	signals := health.NewSignalAggregator(logger, getSettings, health.WithIsUnhealthy(isUnhealthyError))
 	signals.Start()
 
 	return &healthSignalAggregatorImpl{
@@ -202,7 +203,7 @@ func (s *healthSignalAggregatorImpl) Record(rpcMethod string, latency time.Durat
 		s.healthSignals.Record(rpcMethod, latency, err)
 	}
 
-	if common.IsUnhealthyError(err) {
+	if isUnhealthyError(err) {
 		s.errorRatio.Record(1)
 	} else {
 		s.errorRatio.Record(0)
@@ -263,4 +264,24 @@ func (s *healthSignalAggregatorImpl) ErrorRatioByGroup(groupName string) (float6
 // Stop halts the underlying signal aggregator's settings refresh loop.
 func (s *healthSignalAggregatorImpl) Stop() {
 	s.healthSignals.Stop()
+}
+
+func isUnhealthyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if common.IsContextCanceledErr(err) {
+		return true
+	}
+	if common.IsContextDeadlineExceededErr(err) {
+		return true
+	}
+
+	switch err.(type) {
+	case *serviceerror.Unavailable,
+		*serviceerror.DeadlineExceeded,
+		*serviceerror.Canceled:
+		return true
+	}
+	return false
 }

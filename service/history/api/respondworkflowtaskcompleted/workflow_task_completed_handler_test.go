@@ -727,7 +727,7 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 		{
 			name:    "unavailable",
 			err:     serviceerror.NewUnavailable("matching unavailable"),
-			granted: []bool{true, true},
+			granted: []bool{false, false},
 		},
 		{
 			name:    "unimplemented",

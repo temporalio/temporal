@@ -670,7 +670,7 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
 		Items: items,
 	})
 	if err != nil {
-		if common.IsUnhealthyError(err) {
+		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 			// Matching did not answer, so it neither granted nor denied these activities. Dispatch them
 			// eagerly: an activity task generated here goes to the Matching that just failed.
 			for _, candidateIndex := range candidateIndexes {
