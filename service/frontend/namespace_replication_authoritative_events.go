@@ -12,13 +12,15 @@ import (
 )
 
 // observeAuthoritativeNamespaceMutation reports the final result of one
-// authoritative ApplyNamespaceMutation RPC.
+// authoritative ApplyNamespaceMutation RPC. details describe how the receiver
+// treated the delivery.
 func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
 	request *adminservice.ApplyNamespaceMutationRequest,
 	task *replicationspb.NamespaceTaskAttributes,
 	outcome string,
 	applyErr error,
 	startTime time.Time,
+	details map[string]any,
 ) {
 	var telemetryPanic error
 	defer log.CapturePanic(adh.logger, &telemetryPanic)
@@ -33,6 +35,7 @@ func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
 		AttemptCount:        int(request.GetAttemptCount()),
 		Duration:            time.Since(startTime),
 		Error:               applyErr,
+		Details:             details,
 	}
 	nsreplication.RecordCHASMAuthoritativeApply(adh.metricsHandler, observation)
 	// The executor emits successful receiver outcomes, including no-ops,
@@ -50,6 +53,7 @@ func (adh *AdminHandler) withAuthoritativeNamespaceMutationEvent(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
 	task *replicationspb.NamespaceTaskAttributes,
+	details map[string]any,
 ) (observationCtx context.Context) {
 	observationCtx = ctx
 	var telemetryPanic error
@@ -60,6 +64,7 @@ func (adh *AdminHandler) withAuthoritativeNamespaceMutationEvent(
 			Stage:               nsreplication.CHASMApplyStageReceive,
 			ComponentBusinessID: request.GetComponentBusinessId(),
 			ComponentRunID:      request.GetComponentRunId(),
+			Details:             details,
 		},
 	)
 	if !ok {

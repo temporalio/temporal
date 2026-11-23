@@ -180,7 +180,14 @@ func TestDeliveryPolicy(t *testing.T) {
 			if tc.wantCode == codes.OK {
 				executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), nsreplication.MutationApplyOptions{
 					Admission: nsreplication.AdmissionOptions{RemovedPeer: tc.removedPeer, Trusted: tc.wantTrusted},
-				}).Return(nsreplication.ApplyOutcomeApplied, nil)
+				}).DoAndReturn(func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes, _ nsreplication.MutationApplyOptions) (nsreplication.ApplyOutcome, error) {
+					// The executor reports the apply, so its events must say how the receiver treated the delivery.
+					taskContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+					require.True(t, ok)
+					require.Equal(t, tc.removedPeer, taskContext.EventData.Details["removed_peer"])
+					require.Equal(t, tc.wantTrusted, taskContext.EventData.Details["trusted"])
+					return nsreplication.ApplyOutcomeApplied, nil
+				})
 			}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters, namespaceMutationExecutor: executor,
 				metricsHandler: metrics.NoopMetricsHandler, eventLogger: wideevents.NoopLogger(),
@@ -234,4 +241,6 @@ func TestDeliveryPolicyDeferralIsNotRecordedAsError(t *testing.T) {
 	_, details := remoteClusterEventValues(t, events.records)
 	require.Equal(t, nsreplication.CHASMApplyOutcomeDeferred, details["outcome"])
 	require.Equal(t, err.Error(), details["error"])
+	require.Equal(t, false, details["removed_peer"])
+	require.NotContains(t, details, "trusted", "the policy deferred the delivery before deciding trust")
 }

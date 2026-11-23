@@ -1111,11 +1111,12 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
 			Transport: nsreplication.CHASMReplicationTransport,
 		})
-		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
+		// deliveryDetails records how the receiver treats the delivery on its events.
+		deliveryDetails := map[string]any{"removed_peer": request.GetRemovedPeer()}
 		currentCluster := adh.clusterMetadata.GetCurrentClusterName()
 		if target := request.GetTargetCluster(); target != "" && target != currentCluster {
 			err := serviceerror.NewFailedPreconditionf("namespace mutation addressed to cluster %q reached cluster %q", target, currentCluster)
-			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
 			return nil, err
 		}
 		// The delivery policy runs before any check that ends a delivery for good,
@@ -1124,7 +1125,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		if adh.deliveryPolicy != nil {
 			var err error
 			if policyTrusts, err = adh.deliveryPolicy(ctx, payloadTask); err != nil {
-				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeDeferred, err, startTime)
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeDeferred, err, startTime, deliveryDetails)
 				return nil, err
 			}
 		}
@@ -1132,6 +1133,8 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		// it created the mutation, so the receiver neither re-checks a removal nor
 		// consults its admission policy. Trust needs a delivery addressed here.
 		trusted := request.GetTargetCluster() != "" && policyTrusts
+		deliveryDetails["trusted"] = trusted
+		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask, deliveryDetails)
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after
@@ -1143,7 +1146,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 					return c.GetClusterName() == currentCluster
 				}) {
 				err := serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
-				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
 				return nil, err
 			}
 		}
@@ -1166,15 +1169,15 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			return retryable
 		})
 		if err != nil {
-			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
 			return nil, err
 		}
 		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
 		if err != nil {
-			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
 			return nil, err
 		}
-		adh.observeAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime)
+		adh.observeAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime, deliveryDetails)
 		return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
 	}
 	// Compare the byte payloads after decoding with the same schema. The typed
