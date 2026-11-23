@@ -79,20 +79,37 @@ func TestNewWorkflowHeartbeatNotification_StartedClockUnknown(t *testing.T) {
 
 func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 	for _, tc := range []struct {
-		name            string
-		resp            *matchingservice.DispatchNexusTaskResponse
-		err             error
-		expectedResult  string
-		expectedWarning string
+		name           string
+		resp           *matchingservice.DispatchNexusTaskResponse
+		err            error
+		expectedResult string
+		expectedLog    string
 	}{
 		{
-			name: "worker answered",
+			name:           "worker accepted",
+			resp:           whnWorkerResponse(t, workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_ACCEPTED, nil),
+			expectedResult: "OUTCOME_ACCEPTED",
+		},
+		{
+			name:           "task token mismatch",
+			resp:           whnWorkerResponse(t, workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH, []byte("current-token")),
+			expectedResult: "OUTCOME_TASK_TOKEN_MISMATCH",
+			expectedLog:    "WHN: Workflow heartbeat notification task token mismatch",
+		},
+		{
+			name:           "no current task",
+			resp:           whnWorkerResponse(t, workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH, nil),
+			expectedResult: "OUTCOME_TASK_TOKEN_MISMATCH",
+			expectedLog:    "WHN: Workflow heartbeat notification task token mismatch",
+		},
+		{
+			name: "invalid worker response",
 			resp: &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
 				Response: &nexuspb.Response{Variant: &nexuspb.Response_StartOperation{StartOperation: &nexuspb.StartOperationResponse{
 					Variant: &nexuspb.StartOperationResponse_SyncSuccess{SyncSuccess: &nexuspb.StartOperationResponse_Sync{}},
 				}}},
 			}},
-			expectedResult: "sync_success",
+			expectedResult: "invalid_response",
 		},
 		{
 			name: "matching request timeout",
@@ -111,20 +128,20 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 					},
 				},
 			}},
-			expectedResult:  "handler_error:NOT_IMPLEMENTED",
-			expectedWarning: "WHN: Worker failed workflow heartbeat notification",
+			expectedResult: "handler_error:NOT_IMPLEMENTED",
+			expectedLog:    "WHN: Worker failed workflow heartbeat notification",
 		},
 		{
-			name:            "dispatch timeout",
-			err:             context.DeadlineExceeded,
-			expectedResult:  "dispatch_timeout",
-			expectedWarning: "WHN: Unable to dispatch workflow heartbeat notification",
+			name:           "dispatch timeout",
+			err:            context.DeadlineExceeded,
+			expectedResult: "dispatch_timeout",
+			expectedLog:    "WHN: Unable to dispatch workflow heartbeat notification",
 		},
 		{
-			name:            "dispatch error",
-			err:             serviceerror.NewUnavailable("unavailable"),
-			expectedResult:  "dispatch_error",
-			expectedWarning: "WHN: Unable to dispatch workflow heartbeat notification",
+			name:           "dispatch error",
+			err:            serviceerror.NewUnavailable("unavailable"),
+			expectedResult: "dispatch_error",
+			expectedLog:    "WHN: Unable to dispatch workflow heartbeat notification",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -139,9 +156,10 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			capture := metricsHandler.StartCapture()
 			defer metricsHandler.StopCapture(capture)
 			shard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
-			warnings := make(chan string, 1)
+			logs := make(chan string, 1)
 			logger := log.NewMockLogger(ctrl)
-			logger.EXPECT().Warn(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { warnings <- msg }).AnyTimes()
+			logger.EXPECT().Warn(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { logs <- msg }).AnyTimes()
+			logger.EXPECT().Info(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { logs <- msg }).AnyTimes()
 			shard.EXPECT().GetLogger().Return(logger).AnyTimes()
 			delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)
 			shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered, resp: tc.resp, err: tc.err}, nil)
@@ -180,8 +198,8 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			latencies := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationDeliveryLatency.Name())
 			require.Len(t, latencies, 1)
 			require.Equal(t, map[string]string{"namespace": "namespace-name", "event_type": signaled}, latencies[0].Tags)
-			if tc.expectedWarning != "" {
-				require.Equal(t, tc.expectedWarning, <-warnings)
+			if tc.expectedLog != "" {
+				require.Equal(t, tc.expectedLog, <-logs)
 			}
 		})
 	}
@@ -196,6 +214,26 @@ func TestSendWorkflowHeartbeatNotificationDisabled(t *testing.T) {
 	SendWorkflowHeartbeatNotification(context.Background(), shard, &WorkflowHeartbeatNotification{
 		namespaceName: "namespace-name",
 	})
+}
+
+func whnWorkerResponse(
+	t *testing.T,
+	outcome workerpb.WorkflowHeartbeatNotificationResult_Outcome,
+	currentTaskToken []byte,
+) *matchingservice.DispatchNexusTaskResponse {
+	data, err := proto.Marshal(&workerservicepb.ExecuteCommandsResponse{Results: []*workerpb.WorkerCommandResult{{
+		Type: &workerpb.WorkerCommandResult_WorkflowHeartbeatNotification{
+			WorkflowHeartbeatNotification: &workerpb.WorkflowHeartbeatNotificationResult{Outcome: outcome, CurrentTaskToken: currentTaskToken},
+		},
+	}}})
+	require.NoError(t, err)
+	return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
+		Response: &nexuspb.Response{Variant: &nexuspb.Response_StartOperation{StartOperation: &nexuspb.StartOperationResponse{
+			Variant: &nexuspb.StartOperationResponse_SyncSuccess{SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+				Payload: &commonpb.Payload{Data: data},
+			}},
+		}}},
+	}}
 }
 
 type whnMatchingClient struct {

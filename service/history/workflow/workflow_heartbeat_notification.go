@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/base64"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -245,8 +246,16 @@ func SendWorkflowHeartbeatNotification(
 		if err == nil {
 			result = commonnexus.ClassifyStartOperationDispatch(resp)
 		}
-		metrics.WorkflowHeartbeatNotificationResults.With(handler).Record(1,
-			metrics.StringTag("result", workflowHeartbeatNotificationResult(result, err)))
+		resultTag := workflowHeartbeatNotificationResult(result, err)
+		var workerResult *workerpb.WorkflowHeartbeatNotificationResult
+		if result.Outcome == commonnexus.DispatchOutcomeSyncSuccess {
+			workerResult = decodeWorkflowHeartbeatNotificationResult(resp)
+			resultTag = "invalid_response"
+			if workerResult != nil {
+				resultTag = workerpb.WorkflowHeartbeatNotificationResult_Outcome_name[int32(workerResult.GetOutcome())]
+			}
+		}
+		metrics.WorkflowHeartbeatNotificationResults.With(handler).Record(1, metrics.StringTag("result", resultTag))
 		logger := log.With(shardCtx.GetLogger(),
 			tag.WorkflowNamespace(notification.namespaceName),
 			tag.WorkflowID(notification.workflowKey.WorkflowID),
@@ -257,6 +266,12 @@ func SendWorkflowHeartbeatNotification(
 			logger.Warn("WHN: Unable to dispatch workflow heartbeat notification", tag.Error(err))
 		case result.Outcome == commonnexus.DispatchOutcomeRequestTimeout:
 			// No worker took the notification in time, which is expected for best effort delivery.
+		case workerResult.GetOutcome() == workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH:
+			logger.Info("WHN: Workflow heartbeat notification task token mismatch",
+				tag.NewStringTag("event_type", notification.inputEventTypeName),
+				tag.NewStringTag("notification_task_token", base64.StdEncoding.EncodeToString(notification.taskToken)),
+				tag.NewStringTag("current_task_token", base64.StdEncoding.EncodeToString(workerResult.GetCurrentTaskToken())),
+			)
 		default:
 			if workerErr := commonnexus.DispatchResultToError(result); workerErr != nil {
 				logger.Warn("WHN: Worker failed workflow heartbeat notification", tag.Error(workerErr))
@@ -275,6 +290,23 @@ func workflowHeartbeatNotificationResult(result commonnexus.DispatchResult, err 
 	default:
 		return "dispatch_error"
 	}
+}
+
+// decodeWorkflowHeartbeatNotificationResult returns nil if the worker's sync answer isn't a single WHN result.
+func decodeWorkflowHeartbeatNotificationResult(resp *matchingservice.DispatchNexusTaskResponse) *workerpb.WorkflowHeartbeatNotificationResult {
+	payload := resp.GetResponse().GetStartOperation().GetSyncSuccess().GetPayload()
+	if payload == nil {
+		return nil
+	}
+	var commandResponse workerservicepb.ExecuteCommandsResponse
+	if err := proto.Unmarshal(payload.GetData(), &commandResponse); err != nil || len(commandResponse.GetResults()) != 1 {
+		return nil
+	}
+	result := commandResponse.GetResults()[0].GetWorkflowHeartbeatNotification()
+	if _, ok := workerpb.WorkflowHeartbeatNotificationResult_Outcome_name[int32(result.GetOutcome())]; result == nil || !ok {
+		return nil
+	}
+	return result
 }
 
 // hasPendingUpdateForWorkflowHeartbeatNotification checks for unsent Updates in the existing, current-version Registry.
