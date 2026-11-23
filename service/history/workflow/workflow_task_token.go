@@ -20,9 +20,9 @@ func NewStartedWorkflowTaskToken(key definition.WorkflowKey, info *persistencesp
 		key.RunID,
 		info.GetWorkflowTaskScheduledEventId(),
 		info.GetWorkflowTaskStartedEventId(),
-		info.GetWorkflowTaskStartedTime(),
+		common.CloneProto(info.GetWorkflowTaskStartedTime()),
 		info.GetWorkflowTaskAttempt(),
-		info.GetWorkflowTaskStartedClock(),
+		common.CloneProto(info.GetWorkflowTaskStartedClock()),
 		info.GetWorkflowTaskVersion(),
 	)
 }
