@@ -126,6 +126,12 @@ func TestServerStatsHandler(t *testing.T) {
 				workerTaskID: "activity/namespace-id/run-id/42",
 			},
 			{
+				name:         "ActivityHandoff",
+				method:       "RespondActivityTaskHandoff",
+				payload:      &workflowservice.RespondActivityTaskHandoffRequest{TaskToken: taskToken},
+				workerTaskID: "activity/namespace-id/run-id/42",
+			},
+			{
 				name:         "ActivityHeartbeat",
 				method:       "RecordActivityTaskHeartbeat",
 				payload:      &workflowservice.RecordActivityTaskHeartbeatRequest{TaskToken: taskToken},

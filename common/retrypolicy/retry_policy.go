@@ -1,6 +1,7 @@
 package retrypolicy
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -14,10 +15,8 @@ import (
 )
 
 const (
-	// TimeoutFailureTypePrefix is the prefix for timeout failure types
-	// used in retry policy
-	// the actual failure type will be prefix + enums.TimeoutType.String()
-	// e.g. "TemporalTimeout:StartToClose" or "TemporalTimeout:Heartbeat"
+	// TimeoutFailureTypePrefix identifies timeout exclusions followed by a short or protobuf enum
+	// name, e.g. "TemporalTimeout:Heartbeat" or "TemporalTimeout:TIMEOUT_TYPE_HEARTBEAT".
 	TimeoutFailureTypePrefix = "TemporalTimeout:"
 )
 
@@ -34,16 +33,7 @@ func IsRetryableFailure(failure *failurepb.Failure, nonRetryableTypes []string) 
 	}
 
 	if failure.GetTimeoutFailureInfo() != nil {
-		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
-		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return !slices.Contains(
-				nonRetryableTypes,
-				TimeoutFailureTypePrefix+timeoutType.String(),
-			)
-		}
-
-		return false
+		return IsRetryableTimeout(failure.GetTimeoutFailureInfo().GetTimeoutType(), nonRetryableTypes)
 	}
 
 	if failure.GetServerFailureInfo() != nil {
@@ -114,7 +104,11 @@ func Validate(policy *commonpb.RetryPolicy) error {
 	if err := timestamp.ValidateAndCapProtoDuration(policy.GetInitialInterval()); err != nil {
 		return serviceerror.NewInvalidArgumentf("invalid InitialInterval set on retry policy: %v", err)
 	}
-	if policy.GetBackoffCoefficient() < 1 {
+	backoffCoefficient := policy.GetBackoffCoefficient()
+	if math.IsNaN(backoffCoefficient) {
+		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be NaN on retry policy.")
+	}
+	if backoffCoefficient < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(policy.GetMaximumInterval()); err != nil {
@@ -138,4 +132,21 @@ func Validate(policy *commonpb.RetryPolicy) error {
 	}
 
 	return nil
+}
+
+// IsRetryableTimeout reports whether the timeout type permits retry under the policy's exclusions.
+func IsRetryableTimeout(timeoutType enumspb.TimeoutType, nonRetryableTypes []string) bool {
+	switch timeoutType {
+	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE, enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		enumspb.TIMEOUT_TYPE_START_TO_HANDOFF, enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE:
+		shortName := TimeoutFailureTypePrefix + timeoutType.String()
+		protoName := TimeoutFailureTypePrefix + enumspb.TimeoutType_name[int32(timeoutType)]
+
+		excluded := slices.Contains(nonRetryableTypes, shortName) ||
+			slices.Contains(nonRetryableTypes, protoName)
+
+		return !excluded
+	default:
+		return false
+	}
 }

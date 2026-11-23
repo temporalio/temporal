@@ -859,6 +859,16 @@ func (c *clientImpl) RespondActivityTaskFailedById(
 	return c.client.RespondActivityTaskFailedById(ctx, request, opts...)
 }
 
+func (c *clientImpl) RespondActivityTaskHandoff(
+	ctx context.Context,
+	request *workflowservice.RespondActivityTaskHandoffRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondActivityTaskHandoffResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.RespondActivityTaskHandoff(ctx, request, opts...)
+}
+
 func (c *clientImpl) RespondNexusTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondNexusTaskCompletedRequest,

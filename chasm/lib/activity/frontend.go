@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -36,6 +37,7 @@ type FrontendHandler interface {
 	UnpauseActivityExecution(context.Context, *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error)
 	ResetActivityExecution(context.Context, *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error)
 	UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error)
+	RespondActivityTaskHandoff(context.Context, *workflowservice.RespondActivityTaskHandoffRequest) (*workflowservice.RespondActivityTaskHandoffResponse, error)
 	IsStandaloneActivityEnabled(namespaceName string) bool
 }
 
@@ -397,6 +399,10 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		req.RequestEagerExecution = false
 	}
 
+	if req.GetHandoffOptions() != nil && !h.config.StandaloneHandoffEnabled(req.GetNamespace()) {
+		return nil, serviceerror.NewInvalidArgument("handoff is not enabled for this namespace")
+	}
+
 	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
@@ -456,6 +462,7 @@ func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecution
 		StartToCloseTimeout:    req.StartToCloseTimeout,
 		HeartbeatTimeout:       req.HeartbeatTimeout,
 		RetryPolicy:            req.RetryPolicy,
+		HandoffOptions:         req.HandoffOptions,
 	}
 }
 
@@ -565,6 +572,13 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 		return nil, ErrStandaloneActivityOperatorCommandsDisabled
 	}
 
+	updatesWorkflowHandoffOptions := req.GetWorkflowId() != "" && req.GetUpdateMask() != nil &&
+		util.FieldMaskHasPathOrSubPath(util.ParseFieldMask(req.GetUpdateMask()), "handoffOptions")
+	// Workflow activity updates do not yet persist handoff options, regardless of the feature flag.
+	if updatesWorkflowHandoffOptions {
+		return nil, serviceerror.NewInvalidArgument("handoff options are not supported for workflow activities")
+	}
+
 	if err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(
 		req,
 		h.config.DefaultActivityRetryPolicy,
@@ -598,4 +612,26 @@ func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req
 	req.StartToCloseTimeout = opts.StartToCloseTimeout
 	req.HeartbeatTimeout = opts.HeartbeatTimeout
 	req.RetryPolicy = opts.RetryPolicy
+	req.HandoffOptions = opts.HandoffOptions
+}
+
+func (h *frontendHandler) RespondActivityTaskHandoff(
+	ctx context.Context,
+	req *workflowservice.RespondActivityTaskHandoffRequest,
+) (*workflowservice.RespondActivityTaskHandoffResponse, error) {
+	token, businessID, err := validateAndExtractHandoffRequest(req, h.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := h.client.RespondActivityTaskHandoff(ctx, &activitypb.RespondActivityTaskHandoffRequest{
+		NamespaceId:     token.GetNamespaceId(),
+		BusinessId:      businessID,
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response.GetFrontendResponse(), nil
 }

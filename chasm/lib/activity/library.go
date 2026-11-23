@@ -83,13 +83,16 @@ func NewNilLibrary() chasm.Library {
 type library struct {
 	componentOnlyLibrary
 
-	handler                           *handler
-	activityDispatchTaskHandler       *activityDispatchTaskHandler
-	workerCommandDispatchTaskHandler  *workerCommandDispatchTaskHandler
-	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler
-	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler
-	startToCloseTimeoutTaskHandler    *startToCloseTimeoutTaskHandler
-	heartbeatTimeoutTaskHandler       *heartbeatTimeoutTaskHandler
+	handler                               *handler
+	activityDispatchTaskHandler           *activityDispatchTaskHandler
+	scheduleToStartTimeoutTaskHandler     *scheduleToStartTimeoutTaskHandler
+	scheduleToCloseTimeoutTaskHandler     *scheduleToCloseTimeoutTaskHandler
+	startToCloseTimeoutTaskHandler        *startToCloseTimeoutTaskHandler
+	heartbeatTimeoutTaskHandler           *heartbeatTimeoutTaskHandler
+	handoffStartToCloseTimeoutTaskHandler *handoffStartToCloseTimeoutTaskHandler
+	startToHandoffTimeoutTaskHandler      *startToHandoffTimeoutTaskHandler
+	handoffToCloseTimeoutTaskHandler      *handoffToCloseTimeoutTaskHandler
+	workerCommandDispatchTaskHandler      *workerCommandDispatchTaskHandler
 }
 
 func newLibrary(
@@ -100,17 +103,23 @@ func newLibrary(
 	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler,
 	startToCloseTimeoutTaskHandler *startToCloseTimeoutTaskHandler,
 	heartbeatTimeoutTaskHandler *heartbeatTimeoutTaskHandler,
+	handoffStartToCloseTimeoutTaskHandler *handoffStartToCloseTimeoutTaskHandler,
+	startToHandoffTimeoutTaskHandler *startToHandoffTimeoutTaskHandler,
+	handoffToCloseTimeoutTaskHandler *handoffToCloseTimeoutTaskHandler,
 	config *Config,
 ) *library {
 	return &library{
-		componentOnlyLibrary:              *newComponentOnlyLibrary(config),
-		handler:                           handler,
-		activityDispatchTaskHandler:       activityDispatchTaskHandler,
-		workerCommandDispatchTaskHandler:  workerCommandDispatchTaskHandler,
-		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,
-		scheduleToCloseTimeoutTaskHandler: scheduleToCloseTimeoutTaskHandler,
-		startToCloseTimeoutTaskHandler:    startToCloseTimeoutTaskHandler,
-		heartbeatTimeoutTaskHandler:       heartbeatTimeoutTaskHandler,
+		componentOnlyLibrary:                  *newComponentOnlyLibrary(config),
+		handler:                               handler,
+		activityDispatchTaskHandler:           activityDispatchTaskHandler,
+		scheduleToStartTimeoutTaskHandler:     scheduleToStartTimeoutTaskHandler,
+		scheduleToCloseTimeoutTaskHandler:     scheduleToCloseTimeoutTaskHandler,
+		startToCloseTimeoutTaskHandler:        startToCloseTimeoutTaskHandler,
+		heartbeatTimeoutTaskHandler:           heartbeatTimeoutTaskHandler,
+		handoffStartToCloseTimeoutTaskHandler: handoffStartToCloseTimeoutTaskHandler,
+		startToHandoffTimeoutTaskHandler:      startToHandoffTimeoutTaskHandler,
+		handoffToCloseTimeoutTaskHandler:      handoffToCloseTimeoutTaskHandler,
+		workerCommandDispatchTaskHandler:      workerCommandDispatchTaskHandler,
 	}
 }
 
@@ -143,6 +152,18 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrableSideEffectTask(
 			"workerCommandDispatch",
 			l.workerCommandDispatchTaskHandler,
+		),
+		chasm.NewRegistrablePureTask(
+			"handoffStartToCloseTimer",
+			l.handoffStartToCloseTimeoutTaskHandler,
+		),
+		chasm.NewRegistrablePureTask(
+			"startToHandoffTimer",
+			l.startToHandoffTimeoutTaskHandler,
+		),
+		chasm.NewRegistrablePureTask(
+			"handoffToCloseTimer",
+			l.handoffToCloseTimeoutTaskHandler,
 		),
 	}
 }
