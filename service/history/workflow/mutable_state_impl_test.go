@@ -401,9 +401,9 @@ func (s *mutableStateSuite) TestSyncExecutionInfoReplicatesWorkflowTaskStartedCl
 
 	s.NoError(s.mutableState.syncExecutionInfo(s.mutableState.executionInfo, incoming, false))
 
-	sourceToken := NewStartedWorkflowTaskToken(key, incoming)
+	sourceToken := RebuildCurrentWorkflowTaskToken(key, incoming)
 	s.NotNil(sourceToken)
-	protorequire.ProtoEqual(s.T(), sourceToken, NewStartedWorkflowTaskToken(key, s.mutableState.GetExecutionInfo()))
+	protorequire.ProtoEqual(s.T(), sourceToken, RebuildCurrentWorkflowTaskToken(key, s.mutableState.GetExecutionInfo()))
 }
 
 func (s *mutableStateSuite) TestWorkflowTaskStartedClockLostOnEventReplication() {
@@ -428,7 +428,7 @@ func (s *mutableStateSuite) TestWorkflowTaskStartedClockLostOnEventReplication()
 	s.NoError(err)
 	s.NotNil(s.mutableState.GetStartedWorkflowTask())
 	s.Nil(wft.StartedClock)
-	s.Nil(NewStartedWorkflowTaskToken(s.mutableState.GetWorkflowKey(), s.mutableState.GetExecutionInfo()))
+	s.Nil(RebuildCurrentWorkflowTaskToken(s.mutableState.GetWorkflowKey(), s.mutableState.GetExecutionInfo()))
 }
 
 func (s *mutableStateSuite) TestWorkflowTaskWorkerControlQueueLifecycle() {
