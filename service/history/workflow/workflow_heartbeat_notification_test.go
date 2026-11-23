@@ -1,21 +1,185 @@
 package workflow
 
 import (
+	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
+	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestNewWorkflowHeartbeatNotification(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	clock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		WorkflowTaskScheduledEventId:   5,
+		WorkflowTaskStartedEventId:     6,
+		WorkflowTaskStartedTime:        timestamppb.New(time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)),
+		WorkflowTaskAttempt:            2,
+		WorkflowTaskVersion:            9,
+		WorkflowTaskStartedClock:       clock,
+		WorkflowTaskWorkerControlQueue: "control-queue",
+	})
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"))
+	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+
+	notification, err := NewWorkflowHeartbeatNotification(ms, enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)])
+	require.NoError(t, err)
+	require.Equal(t, "control-queue", notification.controlQueue)
+	token, err := tasktoken.NewSerializer().Deserialize(notification.taskToken)
+	require.NoError(t, err)
+	require.Equal(t, "namespace-id", token.GetNamespaceId())
+	require.Equal(t, int64(5), token.GetScheduledEventId())
+	require.Equal(t, int64(6), token.GetStartedEventId())
+	require.True(t, proto.Equal(clock, token.GetClock()))
+}
+
+func TestNewWorkflowHeartbeatNotification_StartedClockUnknown(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		WorkflowTaskScheduledEventId:   5,
+		WorkflowTaskStartedEventId:     6,
+		WorkflowTaskWorkerControlQueue: "control-queue",
+	})
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"))
+
+	notification, err := NewWorkflowHeartbeatNotification(ms, enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)])
+	require.NoError(t, err)
+	require.Nil(t, notification)
+}
+
+func TestSendWorkflowHeartbeatNotification(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		resp           *matchingservice.DispatchNexusTaskResponse
+		err            error
+		expectedResult string
+	}{
+		{
+			name: "worker answered",
+			resp: &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
+				Response: &nexuspb.Response{Variant: &nexuspb.Response_StartOperation{StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_SyncSuccess{SyncSuccess: &nexuspb.StartOperationResponse_Sync{}},
+				}}},
+			}},
+			expectedResult: "sync_success",
+		},
+		{
+			name: "matching request timeout",
+			resp: &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
+				RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
+			}},
+			expectedResult: "handler_timeout",
+		},
+		{name: "dispatch timeout", err: context.DeadlineExceeded, expectedResult: "dispatch_timeout"},
+		{name: "dispatch error", err: serviceerror.NewUnavailable("unavailable"), expectedResult: "dispatch_error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			shard := historyi.NewMockShardContext(ctrl)
+			shard.EXPECT().GetConfig().Return(&configs.Config{
+				WorkflowHeartbeatNotificationRolloutPercent:  func(string) int { return 100 },
+				WorkflowHeartbeatNotificationDispatchTimeout: func(string) time.Duration { return 500 * time.Millisecond },
+			}).AnyTimes()
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			shard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
+			shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+			delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)
+			shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered, resp: tc.resp, err: tc.err}, nil)
+			signaled := enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)]
+
+			SendWorkflowHeartbeatNotification(context.Background(), shard, &WorkflowHeartbeatNotification{
+				workflowKey:        definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"),
+				namespaceName:      "namespace-name",
+				controlQueue:       "control-queue",
+				taskToken:          []byte("task-token"),
+				inputEventTypeName: signaled,
+			})
+
+			select {
+			case request := <-delivered:
+				require.Equal(t, "namespace-id", request.GetNamespaceId())
+				require.Equal(t, "control-queue", request.GetTaskQueue().GetName())
+				var commands workerservicepb.ExecuteCommandsRequest
+				require.NoError(t, proto.Unmarshal(request.GetRequest().GetStartOperation().GetPayload().GetData(), &commands))
+				require.Equal(t, &workerpb.WorkflowHeartbeatNotificationCommand{
+					TaskToken: []byte("task-token"),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"},
+				}, commands.GetCommands()[0].GetWorkflowHeartbeatNotification())
+			case <-time.After(time.Second):
+				t.Fatal("workflow heartbeat notification was not dispatched")
+			}
+			await.RequireTrue(t, func() bool {
+				return len(capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationResults.Name())) == 1
+			}, time.Second, 10*time.Millisecond)
+			results := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationResults.Name())
+			require.Equal(t, map[string]string{
+				"namespace":  "namespace-name",
+				"event_type": signaled,
+				"result":     tc.expectedResult,
+			}, results[0].Tags)
+			latencies := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationDeliveryLatency.Name())
+			require.Len(t, latencies, 1)
+			require.Equal(t, map[string]string{"namespace": "namespace-name", "event_type": signaled}, latencies[0].Tags)
+		})
+	}
+}
+
+func TestSendWorkflowHeartbeatNotificationDisabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	shard := historyi.NewMockShardContext(ctrl)
+	shard.EXPECT().GetConfig().Return(&configs.Config{
+		WorkflowHeartbeatNotificationRolloutPercent: func(string) int { return 0 },
+	})
+	SendWorkflowHeartbeatNotification(context.Background(), shard, &WorkflowHeartbeatNotification{
+		namespaceName: "namespace-name",
+	})
+}
+
+type whnMatchingClient struct {
+	matchingservice.MatchingServiceClient
+	delivered chan *matchingservice.DispatchNexusTaskRequest
+	resp      *matchingservice.DispatchNexusTaskResponse
+	err       error
+}
+
+func (c *whnMatchingClient) DispatchNexusTask(
+	_ context.Context,
+	request *matchingservice.DispatchNexusTaskRequest,
+	_ ...grpc.CallOption,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	c.delivered <- request
+	return c.resp, c.err
+}
 
 type bufferedWorkflowHeartbeatNotificationUpdateRegistry struct {
 	update.Registry
@@ -209,11 +373,9 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 			}
 			shard := historyi.NewMockShardContext(controller)
 			if tc.firstType != "" {
-				shard.EXPECT().GetConfig().Return(&configs.Config{
-					WorkflowHeartbeatNotificationRolloutPercent: func(string) int { return 0 },
-				})
+				mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
 			}
-			workflowContext.handleWorkflowHeartbeatNotification(shard, newEvents)
+			workflowContext.handleWorkflowHeartbeatNotification(context.Background(), shard, newEvents)
 
 			buffered := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 			require.Len(t, buffered, len(tc.bufferedTypes))
