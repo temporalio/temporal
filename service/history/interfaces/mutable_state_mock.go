@@ -1895,6 +1895,21 @@ func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(ctx, transact
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), ctx, transactionPolicy)
 }
 
+// CloseTransactionIfClean mocks base method.
+func (m *MockMutableState) CloseTransactionIfClean(verifyOnly bool) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseTransactionIfClean", verifyOnly)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CloseTransactionIfClean indicates an expected call of CloseTransactionIfClean.
+func (mr *MockMutableStateMockRecorder) CloseTransactionIfClean(verifyOnly any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionIfClean", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionIfClean), verifyOnly)
+}
+
 // ContinueAsNewMinBackoff mocks base method.
 func (m *MockMutableState) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	m.ctrl.T.Helper()
