@@ -211,6 +211,10 @@ func (f *Failpoint[T]) Panic(value any, times Recurrence) {
 	f.times = times
 }
 
+// Call configures the failpoint to call fn and return its result. fn runs without holding the
+// failpoint's lock: the callbacks of concurrent executions can run in parallel and must
+// synchronize their own state, and fn can call into the failpoint. Disable and reconfiguration
+// don't wait for callbacks that already started.
 func (f *Failpoint[T]) Call(fn func() T, times Recurrence) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -255,6 +259,8 @@ func (f *Failpoint[T]) UnblockOne() {
 	}
 }
 
+// Pause configures the failpoint to sleep for dur. Concurrent executions pause in parallel, and
+// Disable and reconfiguration don't end pauses that already started.
 func (f *Failpoint[T]) Pause(dur time.Duration, times Recurrence) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -319,25 +325,26 @@ func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 		return t, false
 	}
 
-	// Non-Block actions hold the lock for their full execution, so a deferred
-	// disableLocked is safe.
+	// Non-Block actions capture their arguments and consume a Once under the lock, and run without
+	// it, so concurrent executions don't wait for each other's pause or callback, and a callback
+	// can call into the failpoint.
 	if action != Block {
-		// Deferred functions run in reverse order, so report runs after the unlock.
-		defer report()
-		defer f.mu.Unlock()
+		value, panicValue, callback, pauseDur := f.t, f.panicValue, f.callback, f.pauseDur
 		if once {
-			defer f.disableLocked()
+			f.disableLocked()
 		}
+		f.mu.Unlock()
+		defer report()
 
 		switch action {
 		case Return:
-			return f.t, true
+			return value, true
 		case Panic:
-			panic(f.panicValue)
+			panic(panicValue)
 		case Call:
-			return f.callback(), true
+			return callback(), true
 		case Pause:
-			time.Sleep(f.pauseDur)
+			time.Sleep(pauseDur)
 		default:
 			panic(fmt.Sprintf("unknown failpoint action: %s", action))
 		}

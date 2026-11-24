@@ -306,6 +306,99 @@ func TestFailpointCall(t *testing.T) {
 	}
 }
 
+func TestFailpointCall_ConcurrentExecutionsOverlap(t *testing.T) {
+	t.Parallel()
+	f := failpoint.NewFailpoint[int](failpoint.KeyFromName("overlap", ""))
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	f.Call(func() int {
+		arrived <- struct{}{}
+		<-release
+		return 42
+	}, failpoint.Always)
+
+	results := make(chan int, 2)
+	for range 2 {
+		go func() {
+			v, _ := f.Execute()
+			results <- v
+		}()
+	}
+	// Both executions must be inside the callback at once; serialized executions would only
+	// let one arrive before release is closed.
+	for range 2 {
+		select {
+		case <-arrived:
+		case <-time.After(10 * time.Second):
+			t.Fatal("executions of the failpoint did not run concurrently")
+		}
+	}
+	close(release)
+	require.Equal(t, 42, <-results)
+	require.Equal(t, 42, <-results)
+}
+
+func TestFailpointCall_CallbackCallsIntoFailpoint(t *testing.T) {
+	t.Parallel()
+	f := failpoint.NewFailpoint[int](failpoint.KeyFromName("reentrant", ""))
+	f.Call(func() int {
+		f.Disable()
+		return 42
+	}, failpoint.Always)
+
+	done := make(chan int, 1)
+	go func() {
+		v, _ := f.Execute()
+		done <- v
+	}()
+	select {
+	case v := <-done:
+		require.Equal(t, 42, v)
+	case <-time.After(10 * time.Second):
+		t.Fatal("callback deadlocked on the failpoint")
+	}
+	require.False(t, f.Info().Enabled)
+}
+
+func TestFailpointCall_OnceReconfiguredDuringCallback(t *testing.T) {
+	t.Parallel()
+	f := failpoint.NewFailpoint[int](failpoint.KeyFromName("once-rearm", ""))
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	f.Call(func() int {
+		close(entered)
+		<-release
+		return 1
+	}, failpoint.Once)
+
+	first := make(chan int, 1)
+	go func() {
+		v, _ := f.Execute()
+		first <- v
+	}()
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first execution did not reach the callback")
+	}
+
+	// The running execution consumed the Once, so a concurrent execution doesn't fire.
+	_, fired := f.Execute()
+	require.False(t, fired)
+
+	// Re-arm while the first callback still runs.
+	f.Call(func() int { return 2 }, failpoint.Once)
+	close(release)
+	require.Equal(t, 1, <-first)
+
+	// The first callback's completion did not disable the replacement.
+	v, fired := f.Execute()
+	require.True(t, fired)
+	require.Equal(t, 2, v)
+	_, fired = f.Execute()
+	require.False(t, fired)
+}
+
 // === AwaitBlock ===
 
 func TestFailpointBlock_AwaitBlock(t *testing.T) {
