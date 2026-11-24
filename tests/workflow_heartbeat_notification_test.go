@@ -842,3 +842,35 @@ func (s *WorkflowHeartbeatNotificationSuite) TestNonInputBufferedEventsDoNotSupp
 		})
 	}
 }
+
+// #scenario-26: A saturated immediate pool drops WHN without blocking or losing the buffered signal.
+func (s *WorkflowHeartbeatNotificationSuite) TestImmediateQueueSaturation() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowHeartbeatNotificationRolloutPercent, 100),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowHeartbeatNotificationDispatchTimeout, 10*time.Second),
+		testcore.WithDynamicConfig(dynamicconfig.MemoryImmediateProcessorMaxConcurrentTasks, 1),
+	)
+	first := env.Tv()
+	second := first.WithWorkflowIDNumber(2)
+	firstStart := s.startWorkflow(env, first, true)
+	secondStart := s.startWorkflow(env, second, true)
+	capture := env.StartGlobalMetricCapture()
+	s.signal(env, first, firstStart.GetRunId())
+	notification, _ := s.pollNotification(env, first, nil)
+	// Holding the worker response keeps the single host-wide dispatch slot occupied.
+	s.signal(env, second, secondStart.GetRunId())
+	s.Await(func(s *WorkflowHeartbeatNotificationSuite) {
+		rejected := capture.Metric(metrics.DynamicWorkerPoolSchedulerRejectedTasks.Name())
+		s.Len(rejected, 1)
+		s.Equal("MemoryImmediateQueueProcessor", rejected[0].Tags["operation"])
+	}, 5*time.Second, 10*time.Millisecond)
+	s.respondNotification(env, first, notification.GetTaskToken(), &workerpb.WorkflowHeartbeatNotificationResult{
+		Outcome: workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_ACCEPTED,
+	})
+	// The signal remains durable and is delivered by the next Workflow Task without a notification retry.
+	next := s.completeWorkflowTask(env, secondStart.GetEagerWorkflowTask().GetTaskToken(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		ReturnNewWorkflowTask: true,
+	})
+	s.NotNil(next.GetWorkflowTask())
+	s.RequireHistoryEvent(next.GetWorkflowTask().GetHistory().GetEvents(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
+}

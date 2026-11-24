@@ -2449,7 +2449,7 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 	)
 	MemoryImmediateProcessorMaxConcurrentTasks = NewGlobalIntSetting(
 		"history.memoryImmediateProcessorMaxConcurrentTasks",
-		64,
+		512,
 		`MemoryImmediateProcessorMaxConcurrentTasks limits concurrently running in-memory immediate tasks per History host. Tasks are dropped when the limit is reached.`,
 	)
 

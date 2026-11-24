@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/workercommands"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -190,10 +191,8 @@ func NewWorkflowHeartbeatNotification(ms historyi.MutableState, inputEventTypeNa
 	}, nil
 }
 
-// SendWorkflowHeartbeatNotification is called after the input transaction succeeds and returns without blocking.
-// A background goroutine dispatches the notification to the worker's control queue through Matching and waits
-// asynchronously for the worker's response, up to WorkflowHeartbeatNotificationDispatchTimeout. It is best
-// effort: failures are only logged.
+// SendWorkflowHeartbeatNotification submits a best-effort in-memory task after the input transaction succeeds.
+// Admission never waits for a worker. Notifications are dropped when the host's immediate task pool is full.
 func SendWorkflowHeartbeatNotification(
 	ctx context.Context,
 	shardCtx historyi.ShardContext,
@@ -202,59 +201,81 @@ func SendWorkflowHeartbeatNotification(
 	if notification == nil || !isWorkflowHeartbeatNotificationEnabled(shardCtx, notification.namespaceName, notification.workflowKey.WorkflowID) {
 		return
 	}
-	// TODO(experimental@whn): consider a bounded queue instead of a goroutine per notification, to cap
-	// concurrency and drop notifications when full. Options:
-	//   - The history in-memory task queue. It currently only supports timed history tasks (CategoryMemoryTimer),
-	//     so it would first need to support immediate tasks. Its timer fires at the task's exact visibility time,
-	//     but when all scheduler workers are busy it pushes the task back by 1s (workerBusyRescheduleDelay), which
-	//     is longer than WorkflowHeartbeatNotificationDispatchTimeout (500ms default). Check it is fast enough.
-	//   - A dedicated ctasks.FIFOScheduler with its own worker pool, where TrySubmit drops when the queue is full.
-	go func() {
-		matchingClient, err := shardCtx.GetMatchingClient()
-		if err != nil {
-			shardCtx.GetLogger().Error("WHN: Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
-			return
-		}
-		command := &workerpb.WorkerCommand{Type: &workerpb.WorkerCommand_WorkflowHeartbeatNotification{
-			WorkflowHeartbeatNotification: &workerpb.WorkflowHeartbeatNotificationCommand{
-				TaskToken: notification.taskToken,
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: notification.workflowKey.WorkflowID,
-					RunId:      notification.workflowKey.RunID,
+	// The engine is already running. Avoid waiting during shard shutdown or initialization.
+	lookupCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	engine, err := shardCtx.GetEngine(lookupCtx)
+	if err != nil {
+		shardCtx.GetLogger().Error("WHN: Unable to get History engine for workflow heartbeat notification", tag.Error(err))
+		return
+	}
+	// Preserve request metadata without retaining its cancellation or deadline after the RPC returns.
+	requestCtx := context.WithoutCancel(ctx)
+	task := &tasks.MemoryImmediateTask{
+		WorkflowKey: notification.workflowKey,
+		Callback: func(queueCtx context.Context) {
+			dispatchCtx, cancel := context.WithCancel(requestCtx)
+			stop := context.AfterFunc(queueCtx, cancel)
+			defer stop()
+			defer cancel()
+			if queueCtx.Err() != nil {
+				return
+			}
+			dispatchWorkflowHeartbeatNotification(dispatchCtx, shardCtx, notification)
+		},
+	}
+	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{tasks.CategoryMemoryImmediate: {task}})
+}
+
+func dispatchWorkflowHeartbeatNotification(
+	ctx context.Context,
+	shardCtx historyi.ShardContext,
+	notification *WorkflowHeartbeatNotification,
+) {
+	matchingClient, err := shardCtx.GetMatchingClient()
+	if err != nil {
+		shardCtx.GetLogger().Error("WHN: Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
+		return
+	}
+	command := &workerpb.WorkerCommand{Type: &workerpb.WorkerCommand_WorkflowHeartbeatNotification{
+		WorkflowHeartbeatNotification: &workerpb.WorkflowHeartbeatNotificationCommand{
+			TaskToken: notification.taskToken,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: notification.workflowKey.WorkflowID,
+				RunId:      notification.workflowKey.RunID,
+			},
+		},
+	}}
+	requestData, err := proto.Marshal(&workerservicepb.ExecuteCommandsRequest{Commands: []*workerpb.WorkerCommand{command}})
+	if err != nil {
+		shardCtx.GetLogger().Error("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
+		return
+	}
+	matchCtx, matchCancel := context.WithTimeout(
+		ctx,
+		shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
+	)
+	defer matchCancel()
+	dispatchStart := time.Now()
+	resp, err := matchingClient.DispatchNexusTask(matchCtx, &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: notification.workflowKey.NamespaceID,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: notification.controlQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		Request: &nexuspb.Request{
+			Header: map[string]string{},
+			Variant: &nexuspb.Request_StartOperation{StartOperation: &nexuspb.StartOperationRequest{
+				Service:   workercommands.ServiceName,
+				Operation: workercommands.OperationName,
+				Payload: &commonpb.Payload{
+					Metadata: map[string][]byte{"encoding": []byte("binary/protobuf")},
+					Data:     requestData,
 				},
-			},
-		}}
-		requestData, err := proto.Marshal(&workerservicepb.ExecuteCommandsRequest{Commands: []*workerpb.WorkerCommand{command}})
-		if err != nil {
-			shardCtx.GetLogger().Error("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
-			return
-		}
-		matchCtx, matchCancel := context.WithTimeout(
-			context.WithoutCancel(ctx),
-			shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
-		)
-		defer matchCancel()
-		dispatchStart := time.Now()
-		resp, err := matchingClient.DispatchNexusTask(matchCtx, &matchingservice.DispatchNexusTaskRequest{
-			NamespaceId: notification.workflowKey.NamespaceID,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: notification.controlQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
-			},
-			Request: &nexuspb.Request{
-				Header: map[string]string{},
-				Variant: &nexuspb.Request_StartOperation{StartOperation: &nexuspb.StartOperationRequest{
-					Service:   workercommands.ServiceName,
-					Operation: workercommands.OperationName,
-					Payload: &commonpb.Payload{
-						Metadata: map[string][]byte{"encoding": []byte("binary/protobuf")},
-						Data:     requestData,
-					},
-				}},
-			},
-		})
-		recordWorkflowHeartbeatNotificationResult(shardCtx, notification, resp, err, time.Since(dispatchStart))
-	}()
+			}},
+		},
+	})
+	recordWorkflowHeartbeatNotificationResult(shardCtx, notification, resp, err, time.Since(dispatchStart))
 }
 
 func recordWorkflowHeartbeatNotificationResult(

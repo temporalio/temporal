@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
@@ -161,6 +162,13 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			logger.EXPECT().Error(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { logs <- msg }).AnyTimes()
 			logger.EXPECT().Info(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { logs <- msg }).AnyTimes()
 			shard.EXPECT().GetLogger().Return(logger).AnyTimes()
+			engine := historyi.NewMockEngine(ctrl)
+			shard.EXPECT().GetEngine(gomock.Any()).Return(engine, nil)
+			engine.EXPECT().NotifyNewTasks(gomock.Any()).Do(func(batch map[tasks.Category][]tasks.Task) {
+				for _, task := range batch[tasks.CategoryMemoryImmediate] {
+					task.(*tasks.MemoryImmediateTask).Run(context.Background())
+				}
+			})
 			delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)
 			shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered, resp: tc.resp, err: tc.err}, nil)
 			signaled := enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)]
@@ -593,4 +601,63 @@ func TestHasPendingUpdateForWorkflowHeartbeatNotification(t *testing.T) {
 			require.Equal(t, tc.wantPendingUpdate, workflowContext.hasPendingUpdateForWorkflowHeartbeatNotification())
 		})
 	}
+}
+
+func TestWorkflowHeartbeatNotificationQueueContext(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	shard := historyi.NewMockShardContext(ctrl)
+	shard.EXPECT().GetConfig().Return(&configs.Config{
+		WorkflowHeartbeatNotificationRolloutPercent:  func(string) int { return 100 },
+		WorkflowHeartbeatNotificationDispatchTimeout: func(string) time.Duration { return time.Minute },
+	}).AnyTimes()
+	shard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
+	shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+	engine := historyi.NewMockEngine(ctrl)
+	shard.EXPECT().GetEngine(gomock.Any()).Return(engine, nil)
+	var task *tasks.MemoryImmediateTask
+	engine.EXPECT().NotifyNewTasks(gomock.Any()).Do(func(batch map[tasks.Category][]tasks.Task) {
+		task = batch[tasks.CategoryMemoryImmediate][0].(*tasks.MemoryImmediateTask)
+	})
+	started := make(chan context.Context, 1)
+	shard.EXPECT().GetMatchingClient().Return(&whnBlockingMatchingClient{started: started}, nil)
+	type contextKey struct{}
+	key := contextKey{}
+	requestCtx, requestCancel := context.WithCancel(context.WithValue(t.Context(), key, "request metadata"))
+	requestCancel()
+	SendWorkflowHeartbeatNotification(requestCtx, shard, &WorkflowHeartbeatNotification{namespaceName: "namespace"})
+	require.NotNil(t, task)
+	queueCtx, queueCancel := context.WithCancel(t.Context())
+	defer queueCancel()
+	finished := make(chan struct{}, 1)
+	go func() { task.Run(queueCtx); finished <- struct{}{} }()
+	dispatchCtx := await.Rcv(t, started)
+	require.NoError(t, dispatchCtx.Err())
+	require.Equal(t, "request metadata", dispatchCtx.Value(key))
+	queueCancel()
+	await.Rcv(t, finished)
+	require.ErrorIs(t, dispatchCtx.Err(), context.Canceled)
+}
+
+type whnBlockingMatchingClient struct {
+	matchingservice.MatchingServiceClient
+	started chan context.Context
+}
+
+func (c *whnBlockingMatchingClient) DispatchNexusTask(ctx context.Context, _ *matchingservice.DispatchNexusTaskRequest, _ ...grpc.CallOption) (*matchingservice.DispatchNexusTaskResponse, error) {
+	c.started <- ctx
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestWorkflowHeartbeatNotificationUnavailableEngine(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	shard := historyi.NewMockShardContext(ctrl)
+	shard.EXPECT().GetConfig().Return(&configs.Config{
+		WorkflowHeartbeatNotificationRolloutPercent: func(string) int { return 100 },
+	})
+	shard.EXPECT().GetEngine(gomock.Any()).Return(nil, context.Canceled)
+	shard.EXPECT().GetLogger().Return(log.NewNoopLogger())
+	SendWorkflowHeartbeatNotification(t.Context(), shard, &WorkflowHeartbeatNotification{namespaceName: "namespace"})
 }
