@@ -1216,27 +1216,52 @@ func (s *visibilityQueueTaskExecutorSuite) TestCopyMapPayload() {
 func TestWithTimeSkippingSearchAttributes(t *testing.T) {
 	t.Parallel()
 
-	t.Run("without TimeSkippingInfo, search attributes are unchanged", func(t *testing.T) {
-		require.Nil(t, withTimeSkippingSearchAttributes(nil, nil))
-	})
+	for _, tc := range []struct {
+		name        string
+		info        *persistencespb.TimeSkippingInfo
+		enabled     bool
+		onceEnabled bool
+	}{
+		{name: "no time-skipping info"},
+		{name: "never enabled", info: &persistencespb.TimeSkippingInfo{}},
+		{
+			name:    "enabled before any skip",
+			info:    &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}},
+			enabled: true, onceEnabled: true,
+		},
+		{
+			name:        "disabled after enabling without a skip",
+			info:        &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{}, OnceEnabled: true},
+			onceEnabled: true,
+		},
+		{
+			name:        "config cleared after enabling",
+			info:        &persistencespb.TimeSkippingInfo{OnceEnabled: true},
+			onceEnabled: true,
+		},
+		{
+			name: "inherited skipped time does not imply enabled in this run",
+			info: &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(time.Hour)},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			existing := payload.EncodeString("value")
+			attributes := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": existing}}
+			expected := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": existing}}
+			if tc.info != nil {
+				expected.IndexedFields[sadefs.TemporalTimeSkippingEnabled] = sadefs.MustEncodeValue(tc.enabled, enumspb.INDEXED_VALUE_TYPE_BOOL)
+				expected.IndexedFields[sadefs.TemporalTimeSkippingOnceEnabled] = sadefs.MustEncodeValue(tc.onceEnabled, enumspb.INDEXED_VALUE_TYPE_BOOL)
+			}
+			require.Equal(t, expected, withTimeSkippingSearchAttributes(attributes, tc.info))
+		})
+	}
 
-	t.Run("sets time-skipping search attributes and keeps existing ones", func(t *testing.T) {
-		existing := payload.EncodeString("value")
-		searchAttributes := withTimeSkippingSearchAttributes(
-			&commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": existing}},
-			&persistencespb.TimeSkippingInfo{
-				Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
-				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-			},
-		)
-
-		fields := searchAttributes.GetIndexedFields()
-		require.Equal(t, existing, fields["CustomKeywordField"])
-		enabled, err := sadefs.DecodeValue(fields[sadefs.TemporalTimeSkippingEnabled], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
-		require.NoError(t, err)
-		require.Equal(t, true, enabled)
-		accumulated, err := sadefs.DecodeValue(fields[sadefs.TemporalTimeSkippingAccumulatedSkippedDuration], enumspb.INDEXED_VALUE_TYPE_INT, false)
-		require.NoError(t, err)
-		require.Equal(t, time.Hour.Nanoseconds(), accumulated)
+	t.Run("allocates search attributes", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalTimeSkippingEnabled:     sadefs.MustEncodeValue(false, enumspb.INDEXED_VALUE_TYPE_BOOL),
+			sadefs.TemporalTimeSkippingOnceEnabled: sadefs.MustEncodeValue(false, enumspb.INDEXED_VALUE_TYPE_BOOL),
+		}}, withTimeSkippingSearchAttributes(nil, &persistencespb.TimeSkippingInfo{}))
 	})
 }

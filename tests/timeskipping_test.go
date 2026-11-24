@@ -2214,68 +2214,57 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 		elapsed, fastForward+settleWindow)
 }
 
-// TestTimeSkipping_SearchAttributes verifies the TemporalTimeSkipping* search attributes are written at
-// start, on a TemporalTimeSkippingEnabled change, and at close, and are returned by ListWorkflowExecutions.
-// TemporalTimeSkippingAccumulatedSkippedDuration has no dedicated update on a skip; it is refreshed by
-// those visibility writes.
+// TestTimeSkipping_SearchAttributes verifies both attributes are returned by visibility and
+// OnceEnabled remains true after disabling time skipping without skipping any time.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_SearchAttributes() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
-	skippedThreshold := (59 * time.Minute).Nanoseconds()
 
-	runID := s.startWorkflowWithTimeSkipping(env, tv, 24*time.Hour)
+	start, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId: tv.RequestID(), Namespace: env.Namespace().String(),
+		WorkflowId: tv.WorkflowID(), WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+		WorkflowRunTimeout: durationpb.New(24 * time.Hour),
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{},
+	})
+	s.NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: start.GetRunId()}
 	awaitVisible := func(condition string) *workflowpb.WorkflowExecutionInfo {
 		query := fmt.Sprintf("WorkflowId = '%s' AND %s", tv.WorkflowID(), condition)
-		var execution *workflowpb.WorkflowExecutionInfo
+		var result *workflowpb.WorkflowExecutionInfo
 		s.Await(func(s *TimeSkippingTestSuite) {
 			resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: env.Namespace().String(),
-				Query:     query,
+				Namespace: env.Namespace().String(), Query: query,
 			})
 			s.NoError(err)
 			s.Len(resp.GetExecutions(), 1, query)
-			if len(resp.GetExecutions()) == 1 {
-				execution = resp.GetExecutions()[0]
-			}
+			result = resp.GetExecutions()[0]
 		}, 10*time.Second, 100*time.Millisecond)
-		return execution
+		return result
 	}
 
-	awaitVisible("TemporalTimeSkippingEnabled = true AND TemporalTimeSkippingAccumulatedSkippedDuration = 0")
-
-	// The idle workflow skips to its 1h timer.
-	_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{startTimerCmd("t1", time.Hour)}}, nil
-	})
-	s.NoError(err)
-
-	// Disabling time skipping upserts visibility, which also carries the current accumulated duration.
-	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                env.Namespace().String(),
-		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
-		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: false}},
-		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
-	})
-	s.NoError(err)
-	execution := awaitVisible(fmt.Sprintf(
-		"TemporalTimeSkippingEnabled = false AND TemporalTimeSkippingAccumulatedSkippedDuration > %d", skippedThreshold))
-
-	fields := execution.GetSearchAttributes().GetIndexedFields()
-	enabled, err := sadefs.DecodeValue(fields[sadefs.TemporalTimeSkippingEnabled], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
-	s.NoError(err)
-	s.Equal(false, enabled)
-	accumulated, err := sadefs.DecodeValue(fields[sadefs.TemporalTimeSkippingAccumulatedSkippedDuration], enumspb.INDEXED_VALUE_TYPE_INT, false)
-	s.NoError(err)
-	s.Greater(accumulated, skippedThreshold)
+	awaitVisible("TemporalTimeSkippingEnabled = false AND TemporalTimeSkippingOnceEnabled = false")
+	for _, enabled := range []bool{true, false, true, false} {
+		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			Namespace: env.Namespace().String(), WorkflowExecution: execution,
+			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: enabled}},
+			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+		})
+		s.NoError(err)
+		visible := awaitVisible(fmt.Sprintf("TemporalTimeSkippingEnabled = %t AND TemporalTimeSkippingOnceEnabled = true", enabled))
+		fields := visible.GetSearchAttributes().GetIndexedFields()
+		actual, err := sadefs.DecodeValue(fields[sadefs.TemporalTimeSkippingEnabled], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
+		s.NoError(err)
+		s.Equal(enabled, actual)
+		onceEnabled, err := sadefs.DecodeValue(fields[sadefs.TemporalTimeSkippingOnceEnabled], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
+		s.NoError(err)
+		s.Equal(true, onceEnabled)
+	}
 
 	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
-		Reason:            "test cleanup",
+		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "test cleanup",
 	})
 	s.NoError(err)
-	awaitVisible(fmt.Sprintf(
-		"ExecutionStatus = 'Terminated' AND TemporalTimeSkippingAccumulatedSkippedDuration > %d", skippedThreshold))
+	awaitVisible("ExecutionStatus = 'Terminated' AND TemporalTimeSkippingEnabled = false AND TemporalTimeSkippingOnceEnabled = true")
 }

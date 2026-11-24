@@ -59,6 +59,7 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 		AccumulatedSkippedDuration: initialSkip,
 		InitialSkippedDuration:     initialSkip,
 		SessionSkipCount:           propagatedState.GetInitialSkipCount(),
+		OnceEnabled:                config.GetEnabled(),
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.applyFastForward(propagatedState.GetFastForwardTargetTime())
@@ -73,7 +74,8 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 		return
 	}
 	// we allow setting config to nil in updating tsc
-	ms.executionInfo.TimeSkippingInfo.Config = config
+	tsi.OnceEnabled = tsi.GetOnceEnabled() || tsi.GetConfig().GetEnabled() || config.GetEnabled()
+	tsi.Config = config
 	tsi.SessionSkipCount = 0
 	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
@@ -197,7 +199,7 @@ func propagateTimeSkippingToNextRun(
 	return newTSC, stateProp
 }
 
-// upsertVisibilityOnTimeSkippingEnabledChange keeps TemporalTimeSkippingEnabled accurate in visibility.
+// upsertVisibilityOnTimeSkippingEnabledChange keeps the time-skipping search attributes accurate in visibility.
 // The visibility task executor reads the value from TimeSkippingInfo when the task runs.
 func (ms *MutableStateImpl) upsertVisibilityOnTimeSkippingEnabledChange(previouslyEnabled bool) error {
 	if !ms.IsWorkflow() ||
@@ -670,6 +672,7 @@ func (ms *MutableStateImpl) executeTimeSkippingTransition(
 	disabledAfterFastForward bool,
 ) {
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	tsi.OnceEnabled = tsi.GetOnceEnabled() || tsi.GetConfig().GetEnabled()
 	if hasSkipTarget {
 		tsi.AccumulatedSkippedDuration = durationpb.New(
 			ms.accumulatedSkippedDuration() + skippedDuration)

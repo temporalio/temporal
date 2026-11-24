@@ -1216,8 +1216,10 @@ type TimeSkippingInfo struct {
 	// Skipped duration inherited when this execution started. Unlike accumulated_skipped_duration,
 	// this value remains fixed and can be used to calculate the execution's wall-clock start time.
 	InitialSkippedDuration *durationpb.Duration `protobuf:"bytes,8,opt,name=initial_skipped_duration,json=initialSkippedDuration,proto3" json:"initial_skipped_duration,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Whether time skipping has ever been enabled for this run. Remains true after disabling it.
+	OnceEnabled   bool `protobuf:"varint,9,opt,name=once_enabled,json=onceEnabled,proto3" json:"once_enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TimeSkippingInfo) Reset() {
@@ -1297,6 +1299,13 @@ func (x *TimeSkippingInfo) GetInitialSkippedDuration() *durationpb.Duration {
 		return x.InitialSkippedDuration
 	}
 	return nil
+}
+
+func (x *TimeSkippingInfo) GetOnceEnabled() bool {
+	if x != nil {
+		return x.OnceEnabled
+	}
+	return false
 }
 
 type FastForwardInfo struct {
@@ -5302,7 +5311,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xe4\x05\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\x87\x06\n" +
 	"\x10TimeSkippingInfo\x12B\n" +
 	"\x06config\x18\x01 \x01(\v2*.temporal.api.common.v1.TimeSkippingConfigR\x06config\x12[\n" +
 	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12_\n" +
@@ -5310,7 +5319,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"2fast_forward_info_last_update_versioned_transition\x18\a \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR,fastForwardInfoLastUpdateVersionedTransition\x12\x80\x01\n" +
 	" last_update_versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransition\x12,\n" +
 	"\x12session_skip_count\x18\x06 \x01(\x05R\x10sessionSkipCount\x12S\n" +
-	"\x18initial_skipped_duration\x18\b \x01(\v2\x19.google.protobuf.DurationR\x16initialSkippedDurationJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\xae\x01\n" +
+	"\x18initial_skipped_duration\x18\b \x01(\v2\x19.google.protobuf.DurationR\x16initialSkippedDuration\x12!\n" +
+	"\fonce_enabled\x18\t \x01(\bR\vonceEnabledJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\xae\x01\n" +
 	"\x0fFastForwardInfo\x12;\n" +
 	"\vtarget_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"targetTime\x12\x1f\n" +

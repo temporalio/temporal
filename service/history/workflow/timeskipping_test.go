@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -697,6 +698,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
 		s.False(tsi.GetConfig().GetEnabled(), "a due fast-forward at init disables time skipping")
+		s.True(tsi.GetOnceEnabled())
 		s.Require().NotNil(tsi.GetFastForwardInfo())
 		s.True(tsi.GetFastForwardInfo().GetHasReached())
 		s.Empty(s.mutableState.PopTasks()[tasks.CategoryTimer], "a reached target schedules no timer")
@@ -717,6 +719,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
 		s.Nil(tsi.GetConfig())
+		s.False(tsi.GetOnceEnabled())
 		s.Equal(hasSkipped, tsi.GetAccumulatedSkippedDuration().AsDuration())
 		s.Equal(hasSkipped, tsi.GetInitialSkippedDuration().AsDuration())
 		s.Equal(baseTime.Add(hasSkipped), s.mutableState.Now(), "inherited skip still shifts the virtual clock")
@@ -2603,6 +2606,7 @@ func (s *mutableStateSuite) TestUpsertVisibilityOnTimeSkippingEnabledChange() {
 		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 			context.Background(), transitionEvent(timestamppb.New(eventTime.Add(30*time.Minute)), false)))
 		s.Empty(visibilityTasks())
+		s.True(s.mutableState.executionInfo.GetTimeSkippingInfo().GetOnceEnabled())
 	})
 
 	s.Run("DisabledAfterFastForward_Upserts", func() {
@@ -2611,6 +2615,36 @@ func (s *mutableStateSuite) TestUpsertVisibilityOnTimeSkippingEnabledChange() {
 			context.Background(), transitionEvent(nil, true)))
 		s.Len(visibilityTasks(), 1)
 		s.True(s.mutableState.visibilityUpdated)
+		s.True(s.mutableState.executionInfo.GetTimeSkippingInfo().GetOnceEnabled())
 	})
 
+}
+
+func (s *mutableStateSuite) TestTimeSkippingOnceEnabledPersists() {
+	for _, tc := range []struct {
+		name            string
+		initialEnabled  bool
+		updates         []*commonpb.TimeSkippingConfig
+		wantOnceEnabled bool
+	}{
+		{name: "never enabled", updates: []*commonpb.TimeSkippingConfig{{Enabled: false}, nil}},
+		{name: "enabled at start", initialEnabled: true, updates: []*commonpb.TimeSkippingConfig{{Enabled: false}, nil}, wantOnceEnabled: true},
+		{name: "enabled later", updates: []*commonpb.TimeSkippingConfig{{Enabled: true}, {Enabled: false}, nil, {Enabled: true}, {Enabled: false}}, wantOnceEnabled: true},
+	} {
+		s.Run(tc.name, func() {
+			s.mutableState.timeSource = clock.NewEventTimeSource()
+			s.mutableState.executionInfo.TimeSkippingInfo = nil
+			s.mutableState.initTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: tc.initialEnabled}, nil)
+			for _, config := range tc.updates {
+				data, err := proto.Marshal(s.mutableState.executionInfo.GetTimeSkippingInfo())
+				s.Require().NoError(err)
+				reloaded := &persistencespb.TimeSkippingInfo{}
+				s.Require().NoError(proto.Unmarshal(data, reloaded))
+				s.mutableState.executionInfo.TimeSkippingInfo = reloaded
+				s.mutableState.updateTimeSkippingInfo(config)
+			}
+			expected := &persistencespb.TimeSkippingInfo{Config: tc.updates[len(tc.updates)-1], OnceEnabled: tc.wantOnceEnabled}
+			protorequire.ProtoEqual(s.T(), expected, s.mutableState.executionInfo.GetTimeSkippingInfo())
+		})
+	}
 }

@@ -744,10 +744,6 @@ func getWorkflowMemo(
 
 // withTimeSkippingSearchAttributes sets the TemporalTimeSkipping* search attributes from TimeSkippingInfo.
 // Every visibility request must carry them because an upsert replaces the whole record.
-//
-// TODO: TemporalTimeSkippingAccumulatedSkippedDuration is only refreshed when a visibility record is
-// written (start, close, and upserts such as a TemporalTimeSkippingEnabled change), not on every skip.
-// Revisit if visibility needs it to be updated more often.
 func withTimeSkippingSearchAttributes(
 	searchAttributes *commonpb.SearchAttributes,
 	tsi *persistencespb.TimeSkippingInfo,
@@ -763,8 +759,8 @@ func withTimeSkippingSearchAttributes(
 	}
 	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingEnabled] = sadefs.MustEncodeValue(
 		tsi.GetConfig().GetEnabled(), enumspb.INDEXED_VALUE_TYPE_BOOL)
-	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingAccumulatedSkippedDuration] = sadefs.MustEncodeValue(
-		tsi.GetAccumulatedSkippedDuration().AsDuration().Nanoseconds(), enumspb.INDEXED_VALUE_TYPE_INT)
+	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingOnceEnabled] = sadefs.MustEncodeValue(
+		tsi.GetOnceEnabled() || tsi.GetConfig().GetEnabled(), enumspb.INDEXED_VALUE_TYPE_BOOL)
 	return searchAttributes
 }
 
