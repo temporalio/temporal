@@ -74,9 +74,9 @@ func (s *quotasSuite) TestPodOnlyAPIToPriorityMapping() {
 	}
 }
 
-// temporary test while DescribeMutableState API rate limiting is rolled out.
-func (s *quotasSuite) TestDescribeMutableStateAPIToPriorityMapping() {
-	for _, priority := range DescribeMutableStateAPIToPriority {
+// temporary test while admin API rate limiting is rolled out.
+func (s *quotasSuite) TestAdminAPIToPriorityMapping() {
+	for _, priority := range AdminAPIToPriority {
 		index := slices.Index(ExecutionAPIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}

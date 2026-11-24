@@ -1550,7 +1550,7 @@ func (env *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 		s.Len(resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {
-			if info.Name == tqName || info.Type == tqType {
+			if info.Name == tqName && info.Type == tqType {
 				label := "DescribeWorkerDeploymentVersion[" + tqType.String() + "]"
 				validateTaskQueueStats(s, label, info.Stats, expectation)
 				if expectation.BacklogCount > 0 {

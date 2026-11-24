@@ -66,7 +66,7 @@ type Config struct {
 	GlobalRPS          dynamicconfig.IntPropertyFn
 	OperatorRPSRatio   dynamicconfig.FloatPropertyFn
 
-	EnableDescribeMutableStateRateLimit                               dynamicconfig.BoolPropertyFn
+	EnableAdminPodLevelRateLimit                                      dynamicconfig.BoolPropertyFn
 	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -236,6 +236,7 @@ type Config struct {
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
+	NexusEnforceJWTAudience        dynamicconfig.BoolPropertyFn
 	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
@@ -330,7 +331,7 @@ func NewConfig(
 		RPS:                                 dynamicconfig.FrontendRPS.Get(dc),
 		GlobalRPS:                           dynamicconfig.FrontendGlobalRPS.Get(dc),
 		OperatorRPSRatio:                    dynamicconfig.OperatorRPSRatio.Get(dc),
-		EnableDescribeMutableStateRateLimit: dynamicconfig.AdminEnableDescribeMutableStateRateLimit.Get(dc),
+		EnableAdminPodLevelRateLimit:        dynamicconfig.AdminEnablePodLevelRateLimit.Get(dc),
 		NamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Get(dc),
 
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
@@ -437,6 +438,7 @@ func NewConfig(
 		MaxNexusOperationTokenLength:   nexusoperations.MaxOperationTokenLength.Get(dc),
 		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
 		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
+		NexusEnforceJWTAudience:        dynamicconfig.FrontendNexusEnforceJWTAudience.Get(dc),
 		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
 
 		CallbackEndpointConfigs:      chasmcallback.AllowedAddresses.Get(dc),

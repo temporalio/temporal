@@ -145,8 +145,10 @@ func clientProviderFactory(
 	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
+		roundTripper := httpClientTransportInstrumenter.Instrument(responseSizeLimiter{transport})
+		roundTripper = commonnexus.RejectRedirects(roundTripper)
 		return &http.Client{
-			Transport: httpClientTransportInstrumenter.Instrument(responseSizeLimiter{transport}),
+			Transport: roundTripper,
 		}, nil
 	})
 

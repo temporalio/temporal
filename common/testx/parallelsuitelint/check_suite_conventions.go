@@ -10,7 +10,7 @@ import (
 // checkSuiteConventions enforces suite names and direct use of suite methods while preserving Scope helper APIs.
 func checkSuiteConventions(pass *analysis.Pass) {
 	for _, file := range pass.Files {
-		ast.Inspect(file, func(node ast.Node) bool {
+		for node := range ast.Preorder(file) {
 			switch node := node.(type) {
 			case *ast.FuncDecl:
 				if node.Recv != nil {
@@ -20,14 +20,13 @@ func checkSuiteConventions(pass *analysis.Pass) {
 				checkSuiteCall(pass, node)
 			default:
 			}
-			return true
-		})
+		}
 	}
 }
 
 func checkSuiteNames(pass *analysis.Pass, fields []*ast.Field, message string) {
 	for _, field := range fields {
-		if !embedsSuite(pass.TypesInfo.TypeOf(field.Type), make(map[types.Type]bool)) {
+		if !suiteExpression(pass, field.Type) {
 			continue
 		}
 		if len(field.Names) == 0 {
@@ -46,19 +45,18 @@ func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr) {
 	if fn == nil || fn.Pkg() == nil {
 		return
 	}
-	path := fn.Pkg().Path()
-	isAssertion := path == "github.com/stretchr/testify/require" || path == "github.com/stretchr/testify/assert"
-	if isAssertion && packageFunction(fn) && firstArgumentIsSuiteHandle(pass, call) {
-		pass.Reportf(call.Pos(), "use suite assertion methods directly")
-	}
-	if path == "go.temporal.io/testx/await" || path == "go.temporal.io/server/common/testing/await" {
-		checkSuiteAwaitCall(pass, call, fn.Name())
-	}
-	sel, ok := callTarget(call.Fun).(*ast.SelectorExpr)
-	if !ok {
-		return
-	}
-	if path == suitePath && suiteExpression(pass, sel.X) {
+	sel, isSelector := callTarget(call.Fun).(*ast.SelectorExpr)
+	switch fn.Pkg().Path() {
+	case "github.com/stretchr/testify/require", "github.com/stretchr/testify/assert":
+		passesSuiteHandle := fn.Signature().Recv() == nil && len(call.Args) > 0 && suiteHandle(pass, call.Args[0])
+		usesAssertionAccessor := isSelector && assertionAccessor(pass, sel.X)
+		if passesSuiteHandle || usesAssertionAccessor {
+			pass.Reportf(call.Pos(), "use suite assertion methods directly")
+		}
+	case suitePath:
+		if !isSelector || !suiteExpression(pass, sel.X) {
+			break
+		}
 		switch fn.Name() {
 		case "Run", "RunSequential", "Await", "Awaitf":
 			for _, arg := range call.Args {
@@ -70,26 +68,22 @@ func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr) {
 			pass.Reportf(call.Pos(), "%s is unsupported by parallelsuite", fn.Name())
 		default:
 		}
+	default:
+		checkSuiteAwaitCall(pass, call, fn)
 	}
-	if isAssertion && assertionAccessor(pass, sel.X) {
-		pass.Reportf(call.Pos(), "use suite assertion methods directly")
-	}
-	if suiteHandle(pass, sel.X) {
-		switch fn.Name() {
-		case "Run":
-			pass.Reportf(call.Pos(), "use suite Run or RunSequential instead of the test handle's Run")
-		case "Parallel":
-			pass.Reportf(call.Pos(), "do not call Parallel on a suite test handle; the suite runner controls parallelism")
-		case "Error", "Errorf", "Fatal", "Fatalf", "Fail", "FailNow":
-			pass.Reportf(call.Pos(), "use suite assertion methods directly")
-		default:
-		}
-	}
-}
 
-func packageFunction(fn *types.Func) bool {
-	signature, ok := fn.Type().(*types.Signature)
-	return ok && signature.Recv() == nil
+	if !isSelector || !suiteHandle(pass, sel.X) {
+		return
+	}
+	switch fn.Name() {
+	case "Run":
+		pass.Reportf(call.Pos(), "use suite Run or RunSequential instead of the test handle's Run")
+	case "Parallel":
+		pass.Reportf(call.Pos(), "do not call Parallel on a suite test handle; the suite runner controls parallelism")
+	case "Error", "Errorf", "Fatal", "Fatalf", "Fail", "FailNow":
+		pass.Reportf(call.Pos(), "use suite assertion methods directly")
+	default:
+	}
 }
 
 func suiteHandle(pass *analysis.Pass, expr ast.Expr) bool {
@@ -118,7 +112,8 @@ func suiteAccessor(pass *analysis.Pass, expr ast.Expr) *ast.SelectorExpr {
 }
 
 // checkSuiteAwaitCall flags standalone await calls that already use the suite's scope.
-func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, name string) {
+func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, fn *types.Func) {
+	name := fn.Name()
 	var method string
 	handleIndex := 0
 	switch name {
@@ -135,7 +130,7 @@ func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, name string) {
 	default:
 		return
 	}
-	if len(call.Args) <= handleIndex {
+	if len(call.Args) <= handleIndex || !isAwaitFunction(fn) {
 		return
 	}
 	handle := suiteAccessor(pass, call.Args[handleIndex])
@@ -151,14 +146,40 @@ func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, name string) {
 	pass.Reportf(call.Pos(), "use suite %s instead of await.%s", method, name)
 }
 
+func isAwaitFunction(fn *types.Func) bool {
+	if fn.Signature().Recv() != nil {
+		return false
+	}
+
+	const awaitPath = "go.temporal.io/testx/await"
+	pkg := fn.Pkg()
+	if pkg.Path() == awaitPath {
+		return true
+	}
+
+	alias, ok := pkg.Scope().Lookup("T").(*types.TypeName)
+	if !ok || !alias.IsAlias() {
+		return false
+	}
+	awaitType, ok := types.Unalias(alias.Type()).(*types.Named)
+	if !ok {
+		return false
+	}
+	obj := awaitType.Obj()
+	if obj.Pkg() == nil || obj.Pkg().Path() != awaitPath || obj.Name() != "T" {
+		return false
+	}
+
+	if original, ok := obj.Pkg().Scope().Lookup(fn.Name()).(*types.Func); ok {
+		return types.Identical(fn.Signature(), original.Signature())
+	}
+	return matchesAwaitSignature(fn, awaitType)
+}
+
 func sameSuiteReceiver(pass *analysis.Pass, a, b ast.Expr) bool {
 	left, leftOK := ast.Unparen(a).(*ast.Ident)
 	right, rightOK := ast.Unparen(b).(*ast.Ident)
 	return leftOK && rightOK && pass.TypesInfo.ObjectOf(left) == pass.TypesInfo.ObjectOf(right)
-}
-
-func firstArgumentIsSuiteHandle(pass *analysis.Pass, call *ast.CallExpr) bool {
-	return len(call.Args) > 0 && suiteHandle(pass, call.Args[0])
 }
 
 func assertionAccessor(pass *analysis.Pass, expr ast.Expr) bool {
@@ -166,11 +187,8 @@ func assertionAccessor(pass *analysis.Pass, expr ast.Expr) bool {
 	case *ast.SelectorExpr:
 		return expr.Sel.Name == "Assertions" && suiteExpression(pass, expr.X)
 	case *ast.CallExpr:
-		sel, fn := selectedFunction(pass, expr)
-		if fn == nil || fn.Pkg() == nil {
-			return false
-		}
-		return fn.Pkg().Path() == suitePath && fn.Name() == "Require" && suiteExpression(pass, sel.X)
+		accessor := suiteAccessor(pass, expr)
+		return accessor != nil && accessor.Sel.Name == "Require"
 	default:
 		return false
 	}
