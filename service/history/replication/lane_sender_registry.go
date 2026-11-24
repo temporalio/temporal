@@ -83,6 +83,17 @@ type senderLaneRegistry struct {
 	generateLaneID         func() string
 	changed                chan struct{}
 	logger                 log.Logger
+	// plantedRetired is part of the PLANTED BUG in AcquireDefault: the scope each lane owned and
+	// when its stale ownership ends, kept plantedOwnershipLag past its retirement.
+	plantedRetired map[string]plantedRetirement
+}
+
+// plantedOwnershipLag is how long the PLANTED BUG keeps a retired lane's namespace skipped.
+const plantedOwnershipLag = 10 * time.Second
+
+type plantedRetirement struct {
+	scope queues.Scope
+	until time.Time
 }
 
 func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistencespb.QueueReaderLane, logger log.Logger) (*senderLaneRegistry, error) {
@@ -328,6 +339,10 @@ func (r *senderLaneRegistry) CompleteRetirement(laneID string) (senderLaneSnapsh
 	}
 	delete(r.byID, laneID)
 	delete(r.byKey, lane.logicalKey)
+	if r.plantedRetired == nil {
+		r.plantedRetired = map[string]plantedRetirement{}
+	}
+	r.plantedRetired[lane.logicalKey] = plantedRetirement{scope: lane.scope, until: time.Now().Add(plantedOwnershipLag)}
 	r.notifyChanged()
 	r.logger.Info("Retired a replication lane.", r.laneEventTags(lane)...)
 	return lane.senderLaneSnapshot, true
@@ -402,7 +417,23 @@ func (r *senderLaneRegistry) AcquireDefault(endExclusive int64) (func(tasks.Task
 			// Recovery must re-cover pending scopes on the default lane before handoff.
 			continue
 		}
-		scopes = append(scopes, ownedScope{logicalKey: lane.logicalKey, scope: lane.scope})
+		// PLANTED BUG, for the replication chaos framework's acceptance only; never merge. The
+		// default lane ignores a retiring lane's fixed boundary and keeps skipping the lane's
+		// namespace past it, until plantedOwnershipLag after the lane retires, so the tasks
+		// written in between are never sent.
+		scope := lane.scope
+		scope.Range.ExclusiveMax = tasks.NewImmediateKey(math.MaxInt64)
+		scopes = append(scopes, ownedScope{logicalKey: lane.logicalKey, scope: scope})
+	}
+	now := time.Now()
+	for logicalKey, retired := range r.plantedRetired {
+		if _, ok := r.byKey[logicalKey]; ok || now.After(retired.until) {
+			delete(r.plantedRetired, logicalKey)
+			continue
+		}
+		scope := retired.scope
+		scope.Range.ExclusiveMax = tasks.NewImmediateKey(math.MaxInt64)
+		scopes = append(scopes, ownedScope{logicalKey: logicalKey, scope: scope})
 	}
 	if len(scopes) == 0 {
 		return nil, true
