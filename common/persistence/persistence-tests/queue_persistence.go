@@ -125,6 +125,20 @@ func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
 	s.Len(clusterAckLevels, 2)
 	s.Equal(int64(20), clusterAckLevels["test1"])
 	s.Equal(int64(25), clusterAckLevels["test2"])
+
+	err = s.NamespaceReplicationQueue.DeleteAckLevel(s.ctx, "test1")
+	s.Require().NoError(err)
+
+	clusterAckLevels, err = s.GetAckLevels(s.ctx)
+	s.Require().NoError(err)
+	s.Equal(map[string]int64{"test2": 25}, clusterAckLevels)
+
+	err = s.NamespaceReplicationQueue.DeleteAckLevel(s.ctx, "missing")
+	s.Require().NoError(err)
+
+	clusterAckLevels, err = s.GetAckLevels(s.ctx)
+	s.Require().NoError(err)
+	s.Equal(map[string]int64{"test2": 25}, clusterAckLevels)
 }
 
 // TestNamespaceReplicationDLQ tests namespace DLQ operations
