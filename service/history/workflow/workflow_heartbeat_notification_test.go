@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"slices"
 	"strconv"
 	"testing"
 
@@ -105,6 +106,55 @@ func TestWorkflowHeartbeatNotificationRolloutIsSticky(t *testing.T) {
 	require.Less(t, selected, 100)
 }
 
+func TestHasBufferedWorkflowHeartbeatNotificationInput(t *testing.T) {
+	t.Parallel()
+	input := &historypb.HistoryEvent{EventType: enumspb.EVENT_TYPE_TIMER_FIRED}
+	newInput := &historypb.HistoryEvent{EventType: enumspb.EVENT_TYPE_TIMER_FIRED}
+	nonInput := &historypb.HistoryEvent{EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED}
+	newEvents := make([]*historypb.HistoryEvent, 5)
+	for i := range newEvents {
+		eventType := enumspb.EVENT_TYPE_TIMER_FIRED
+		if i%2 == 0 {
+			eventType = enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED
+		}
+		newEvents[i] = &historypb.HistoryEvent{EventType: eventType}
+	}
+	for _, tc := range []struct {
+		name      string
+		buffered  []*historypb.HistoryEvent
+		newEvents []*historypb.HistoryEvent
+		found     bool
+		checked   int
+	}{
+		{name: "empty buffer"},
+		{name: "prior input", buffered: []*historypb.HistoryEvent{input, nonInput}, found: true, checked: 1},
+		{name: "only non-input events", buffered: []*historypb.HistoryEvent{nonInput}, checked: 1},
+		{name: "only new input", buffered: []*historypb.HistoryEvent{newInput}, newEvents: []*historypb.HistoryEvent{newInput}, checked: 1},
+		{name: "prior and new inputs of the same type", buffered: []*historypb.HistoryEvent{newInput, input}, newEvents: []*historypb.HistoryEvent{newInput}, found: true, checked: 2},
+		{name: "only new events", buffered: newEvents, newEvents: newEvents, checked: 5},
+		{name: "new events before prior input", buffered: append(slices.Clone(newEvents), input), newEvents: newEvents, found: true, checked: 6},
+		{name: "new events before input at prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5)...), input), newEvents: newEvents, found: true, checked: 11},
+		{name: "new events before input beyond prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6)...), input), newEvents: newEvents, checked: 11},
+		{name: "input at scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5), input), found: true, checked: 6},
+		{name: "input beyond scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6), input), checked: 6},
+		{name: "non-input events beyond scan limit", buffered: slices.Repeat([]*historypb.HistoryEvent{nonInput}, 7), checked: 6},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ms := historyi.NewMockMutableState(gomock.NewController(t))
+			checked := 0
+			ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).DoAndReturn(func(filter func(*historypb.HistoryEvent) bool) bool {
+				return slices.ContainsFunc(tc.buffered, func(event *historypb.HistoryEvent) bool {
+					checked++
+					return filter(event)
+				})
+			})
+			require.Equal(t, tc.found, HasBufferedWorkflowHeartbeatNotificationInput(ms, tc.newEvents))
+			require.Equal(t, tc.checked, checked)
+		})
+	}
+}
+
 func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -151,6 +201,38 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED},
 			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED},
 			bufferedTypes: []string{"NexusOperationCompleted"},
+			firstType:     "NexusOperationCompleted",
+		},
+		{
+			name:          "activity start before signal",
+			started:       true,
+			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED},
+			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED},
+			bufferedTypes: []string{"WorkflowExecutionSignaled"},
+			firstType:     "WorkflowExecutionSignaled",
+		},
+		{
+			name:          "activity start before completion",
+			started:       true,
+			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED},
+			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED},
+			bufferedTypes: []string{"ActivityTaskCompleted"},
+			firstType:     "ActivityTaskCompleted",
+		},
+		{
+			name:          "activity start with pending update",
+			started:       true,
+			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED},
+			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED},
+			pendingUpdate: true,
+			bufferedTypes: []string{"WorkflowExecutionSignaled"},
+		},
+		{
+			name:          "prior input of the same type",
+			started:       true,
+			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
+			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED, enumspb.EVENT_TYPE_TIMER_FIRED},
+			bufferedTypes: []string{"TimerFired"},
 		},
 		{
 			name:      "workflow task not started",
@@ -175,19 +257,30 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			newEvents := make([]*historypb.HistoryEvent, 0, len(tc.newEvents))
+			for _, eventType := range tc.newEvents {
+				newEvents = append(newEvents, &historypb.HistoryEvent{EventType: eventType})
+			}
+			var bufferedEvents []*historypb.HistoryEvent
+			for _, eventType := range tc.priorEvents {
+				bufferedEvents = append(bufferedEvents, &historypb.HistoryEvent{EventType: eventType})
+			}
+			bufferedEvents = append(bufferedEvents, newEvents...)
 			controller := gomock.NewController(t)
 			mutableState := historyi.NewMockMutableState(controller)
 			if len(tc.newEvents) > 0 {
 				mutableState.EXPECT().HasStartedWorkflowTask().Return(tc.started)
 			}
 			if tc.started && (len(tc.bufferedTypes) > 0 || tc.nilNamespace) {
-				mutableState.EXPECT().NumBufferedEvents().Return(len(tc.priorEvents) + len(tc.newEvents))
+				mutableState.EXPECT().HasAnyBufferedEvent(gomock.Any()).DoAndReturn(func(filter func(*historypb.HistoryEvent) bool) bool {
+					return slices.ContainsFunc(bufferedEvents, filter)
+				})
 				namespaceEntry := tests.GlobalNamespaceEntry
 				if tc.nilNamespace {
 					namespaceEntry = nil
 				}
 				mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry)
-				if len(tc.priorEvents) == 0 || tc.firstType != "" || tc.pendingUpdate {
+				if !slices.ContainsFunc(tc.priorEvents, IsWorkflowHeartbeatNotificationInputType) {
 					mutableState.EXPECT().GetCurrentVersion().Return(int64(1))
 				}
 			}
@@ -202,10 +295,6 @@ func TestHandleWorkflowHeartbeatNotification(t *testing.T) {
 				updateRegistry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{
 					hasOutgoing: tc.pendingUpdate,
 				},
-			}
-			newEvents := make([]*historypb.HistoryEvent, 0, len(tc.newEvents))
-			for _, eventType := range tc.newEvents {
-				newEvents = append(newEvents, &historypb.HistoryEvent{EventType: eventType})
 			}
 			shard := historyi.NewMockShardContext(controller)
 			if tc.firstType != "" {
