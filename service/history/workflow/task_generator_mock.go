@@ -102,6 +102,20 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateChildWorkflowTasks(childInitiat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateChildWorkflowTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateChildWorkflowTasks), childInitiatedEventId)
 }
 
+// GenerateCloseExecutionVisibilityTask mocks base method.
+func (m *MockTaskGenerator) GenerateCloseExecutionVisibilityTask() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateCloseExecutionVisibilityTask")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateCloseExecutionVisibilityTask indicates an expected call of GenerateCloseExecutionVisibilityTask.
+func (mr *MockTaskGeneratorMockRecorder) GenerateCloseExecutionVisibilityTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateCloseExecutionVisibilityTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateCloseExecutionVisibilityTask))
+}
+
 // GenerateDelayedWorkflowTasks mocks base method.
 func (m *MockTaskGenerator) GenerateDelayedWorkflowTasks(startEvent *history.HistoryEvent) error {
 	m.ctrl.T.Helper()

@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -41,6 +43,10 @@ type (
 		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 		externalPayloadsEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		// Used to re-record a closed workflow after close cleanup moved its memo and search
+		// attributes out of mutable state.
+		relocatableAttributesFetcher          workflow.RelocatableAttributesFetcher
+		disableFetchRelocatableFromVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -56,6 +62,8 @@ func newVisibilityQueueTaskExecutor(
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	externalPayloadsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	relocatableAttributesFetcher workflow.RelocatableAttributesFetcher,
+	disableFetchRelocatableFromVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) queues.Executor {
 	return &visibilityQueueTaskExecutor{
 		shardContext:   shardContext,
@@ -68,6 +76,9 @@ func newVisibilityQueueTaskExecutor(
 		enableCloseWorkflowCleanup:    enableCloseWorkflowCleanup,
 		relocateAttributesMinBlobSize: relocateAttributesMinBlobSize,
 		externalPayloadsEnabled:       externalPayloadsEnabled,
+
+		relocatableAttributesFetcher:          relocatableAttributesFetcher,
+		disableFetchRelocatableFromVisibility: disableFetchRelocatableFromVisibility,
 	}
 }
 
@@ -270,12 +281,49 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return err
 	}
 
+	memo := mutableState.GetExecutionInfo().Memo
+	searchAttributes := mutableState.GetExecutionInfo().SearchAttributes
+	// Attributes present despite the flag were replicated in after cleanup, e.g. by state-based
+	// replication switching to another branch, and supersede the local record.
+	if mutableState.GetExecutionInfo().GetRelocatableAttributesRemoved() && len(memo) == 0 && len(searchAttributes) == 0 {
+		// The close record was already written and cleanup moved memo and search attributes into
+		// it. Re-recording from mutable state would wipe them, so read them back from visibility.
+		if t.disableFetchRelocatableFromVisibility(namespaceEntry.Name().String()) {
+			metrics.VisibilityCloseRecordSkipped.With(t.metricProvider).Record(1, metrics.NamespaceTag(namespaceEntry.Name().String()))
+			t.logger.Warn("Skipping close visibility re-record: relocated attributes cannot be fetched",
+				tag.WorkflowNamespaceID(task.GetNamespaceID()),
+				tag.WorkflowID(task.GetWorkflowID()),
+				tag.WorkflowRunID(task.GetRunID()),
+			)
+			return nil
+		}
+		relocated, err := t.relocatableAttributesFetcher.Fetch(ctx, mutableState)
+		if _, notFound := errors.AsType[*serviceerror.NotFound](err); notFound {
+			// No record to preserve, e.g. a closed run created here from a snapshot inherits the
+			// source's flag. Record from mutable state as before.
+		} else if err != nil {
+			return err
+		} else {
+			// Visibility returns aliases, but writes take field names.
+			unaliased, err := searchattribute.UnaliasFields(
+				t.shardContext.GetSearchAttributesMapperProvider(),
+				relocated.SearchAttributes,
+				namespaceEntry.Name().String(),
+			)
+			if err != nil {
+				return err
+			}
+			memo = relocated.Memo.GetFields()
+			searchAttributes = unaliased.GetIndexedFields()
+		}
+	}
+
 	requestBase := t.getVisibilityRequestBase(
 		task,
 		namespaceEntry,
 		mutableState,
-		mutableState.GetExecutionInfo().Memo,
-		mutableState.GetExecutionInfo().SearchAttributes,
+		memo,
+		searchAttributes,
 	)
 	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
@@ -526,6 +574,23 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(memoMap))
 		searchAttributes = getSearchAttributes(copyMapPayload(searchAttributesMap))
 	)
+
+	// Derived from cluster-local state rather than stored in SearchAttributes, which replication
+	// overwrites from the source cluster. Any other value (e.g. read back from visibility) is dropped.
+	for name, value := range map[string]*timestamppb.Timestamp{
+		sadefs.TemporalLastBranchTime:             executionInfo.GetLastBranchTime(),
+		sadefs.TemporalLastSupersedeTime:          executionInfo.GetLastSupersedeTime(),
+		sadefs.TemporalLastOrphanedOperationsTime: executionInfo.GetLastOrphanedOperationsTime(),
+	} {
+		if value != nil {
+			if searchAttributes == nil {
+				searchAttributes = &commonpb.SearchAttributes{IndexedFields: make(map[string]*commonpb.Payload, 3)}
+			}
+			searchAttributes.IndexedFields[name] = sadefs.MustEncodeValue(value.AsTime(), enumspb.INDEXED_VALUE_TYPE_DATETIME)
+		} else if searchAttributes != nil {
+			delete(searchAttributes.IndexedFields, name)
+		}
+	}
 
 	var parentExecution *commonpb.WorkflowExecution
 	if executionInfo.ParentWorkflowId != "" && executionInfo.ParentRunId != "" {

@@ -215,6 +215,10 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	targetWorkflow Workflow,
 ) error {
 
+	// A run superseded on the cluster that wrote it arrives here already terminated, with nothing
+	// left to suppress; the current run still superseded it.
+	targetSuperseded := targetWorkflow.GetMutableState().IsWorkflowExecutionRunning() ||
+		terminatedByVersionConflict(ctx, targetWorkflow.GetMutableState())
 	targetWorkflowPolicy, err := targetWorkflow.SuppressBy(
 		currentWorkflow,
 		r.shardContext.GetMetricsHandler(),
@@ -224,6 +228,15 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	}
 	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
+	}
+	// Only workflows record supersedes, so skip the write for other archetypes.
+	if targetSuperseded && currentWorkflow.GetMutableState().IsWorkflow() {
+		if err := recordSupersede(currentWorkflow, targetWorkflow, targetSuperseded); err != nil {
+			return err
+		}
+		if err := persistLocalState(ctx, r.shardContext, currentWorkflow); err != nil {
+			return err
+		}
 	}
 
 	// release lock on current workflow, since current cluster maybe the active cluster
@@ -356,6 +369,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 	targetWorkflow Workflow,
 ) error {
 
+	currentWasRunning := currentWorkflow.GetMutableState().IsWorkflowExecutionRunning()
 	currentWorkflowPolicy, err := currentWorkflow.SuppressBy(
 		targetWorkflow,
 		r.shardContext.GetMetricsHandler(),
@@ -364,6 +378,10 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 		return err
 	}
 	if err := targetWorkflow.Revive(ctx, r.taskRefresher); err != nil {
+		return err
+	}
+	// After Revive, so a target revived from zombie gets a visibility update for the stamp.
+	if err := recordSupersede(targetWorkflow, currentWorkflow, currentWasRunning); err != nil {
 		return err
 	}
 

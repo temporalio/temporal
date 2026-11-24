@@ -161,6 +161,10 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
 	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
 	rebuildMutableState.GetExecutionInfo().MutableStateRebuildTime = r.mutableState.GetExecutionInfo().MutableStateRebuildTime
+	rebuildMutableState.GetExecutionInfo().LastBranchTime = r.mutableState.GetExecutionInfo().LastBranchTime
+	rebuildMutableState.GetExecutionInfo().LastSupersedeTime = r.mutableState.GetExecutionInfo().LastSupersedeTime
+	rebuildMutableState.GetExecutionInfo().LastSupersededRunId = r.mutableState.GetExecutionInfo().LastSupersededRunId
+	rebuildMutableState.GetExecutionInfo().LastOrphanedOperationsTime = r.mutableState.GetExecutionInfo().LastOrphanedOperationsTime
 	workflow.SetStorageUsage(
 		rebuildMutableState.GetExecutionInfo(),
 		common.CloneProto(r.mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()),
@@ -183,6 +187,14 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.AddExternalPayloadCount(externalPayloadCount)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
+	if err := rebuildMutableState.RecordHistoryBranch(); err != nil {
+		return nil, err
+	}
+	if hasOrphanedOperations(r.mutableState, replayVersionHistory) {
+		if err := rebuildMutableState.RecordOrphanedOperations(); err != nil {
+			return nil, err
+		}
+	}
 
 	r.context.Clear()
 	return rebuildMutableState, nil

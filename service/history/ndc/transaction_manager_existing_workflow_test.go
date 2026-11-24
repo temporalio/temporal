@@ -154,6 +154,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
 	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: currentRunID}).AnyTimes()
+	// The target's successor becomes current, so it records the run it superseded.
+	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "new run ID"}).AnyTimes()
+	newMutableState.EXPECT().RecordRunSuperseded(currentRunID).Return(nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
@@ -622,6 +626,9 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
 	newWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	newMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.expectCurrentSupersedes(currentWorkflow, targetRunID, newRunID)
 
 	targetContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
@@ -697,6 +704,9 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
 	newWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	newMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.expectCurrentSupersedes(currentWorkflow, targetRunID, "")
 
 	targetContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
@@ -825,6 +835,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow, gomock.Any()).Return(historyi.TransactionPolicyActive, nil)
 	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: currentRunID}).AnyTimes()
+	// The target's successor becomes current, so it records the run it superseded.
+	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "new run ID"}).AnyTimes()
+	newMutableState.EXPECT().RecordRunSuperseded(currentRunID).Return(nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
@@ -903,6 +917,9 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
 	newWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	newMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.expectCurrentSupersedes(currentWorkflow, targetRunID, newRunID)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
@@ -981,6 +998,9 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
 	newWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	newMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.expectCurrentSupersedes(currentWorkflow, targetRunID, "")
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
@@ -1001,4 +1021,24 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
 	s.True(currentReleaseCalled)
+}
+
+// expectCurrentSupersedes expects the current run to record the target and successor runs that
+// suppression turned into zombies, and to be persisted on its own since it is not part of the
+// zombie transaction.
+// expectCurrentSupersedes expects the current run to record the target, then the successor unless
+// newRunID is empty because the successor already existed.
+func (s *transactionMgrForExistingWorkflowSuite) expectCurrentSupersedes(currentWorkflow *MockWorkflow, targetRunID string, newRunID string) {
+	currentContext := historyi.NewMockWorkflowContext(s.controller)
+	currentMutableState := historyi.NewMockMutableState(s.controller)
+	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
+	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "current run ID"}).AnyTimes()
+	targetCall := currentMutableState.EXPECT().RecordRunSuperseded(targetRunID).Return(nil)
+	if newRunID != "" {
+		currentMutableState.EXPECT().RecordRunSuperseded(newRunID).Return(nil).After(targetCall)
+	}
+	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	currentContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 }
