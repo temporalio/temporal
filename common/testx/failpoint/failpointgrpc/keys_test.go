@@ -1,6 +1,6 @@
 //go:build test_dep
 
-package failpointserver_test
+package failpointgrpc_test
 
 import "go.temporal.io/testx/failpoint"
 

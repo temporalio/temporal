@@ -1,14 +1,13 @@
 //go:build test_dep
 
-package failpointserver
+package failpointgrpc
 
 import (
 	"context"
 	"time"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/failpointservice/v1"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/failpointpb"
 )
 
 // Handle is a per-key view of a failpoint behind a FailpointService. The same Handle works for an
@@ -21,21 +20,21 @@ import (
 // The methods cover the per-key slice of FailpointService. Cross-failpoint ops
 // (DisableAllFailpoints, ListFailpoints) stay on the service itself.
 type Handle struct {
-	service failpointservice.FailpointServiceServer
+	service failpointpb.FailpointServiceServer
 	key     failpoint.Key
 }
 
 // NewHandle constructs a Handle for the failpoint at the given key behind the given service.
-func NewHandle(service failpointservice.FailpointServiceServer, key failpoint.Key) *Handle {
+func NewHandle(service failpointpb.FailpointServiceServer, key failpoint.Key) *Handle {
 	return &Handle{service: service, key: key}
 }
 
 // Block configures the failpoint to block until disabled. Mirrors InjectBlock.
 func (h *Handle) Block(ctx context.Context, recurrence failpoint.Recurrence) error {
-	_, err := h.service.InjectBlock(ctx, &failpointservice.InjectBlockRequest{
+	_, err := h.service.InjectBlock(ctx, &failpointpb.InjectBlockRequest{
 		Key:         h.key.Name(),
 		NamespaceId: h.key.NamespaceID(),
-		Recurrence:  enumsspb.FailpointRecurrence(recurrence),
+		Recurrence:  failpointpb.Recurrence(recurrence),
 	})
 	return err
 }
@@ -43,22 +42,22 @@ func (h *Handle) Block(ctx context.Context, recurrence failpoint.Recurrence) err
 // Return configures the failpoint to return an error with the given message. Mirrors
 // InjectReturn.
 func (h *Handle) Return(ctx context.Context, errMsg string, recurrence failpoint.Recurrence) error {
-	_, err := h.service.InjectReturn(ctx, &failpointservice.InjectReturnRequest{
+	_, err := h.service.InjectReturn(ctx, &failpointpb.InjectReturnRequest{
 		Key:          h.key.Name(),
 		NamespaceId:  h.key.NamespaceID(),
 		ErrorMessage: errMsg,
-		Recurrence:   enumsspb.FailpointRecurrence(recurrence),
+		Recurrence:   failpointpb.Recurrence(recurrence),
 	})
 	return err
 }
 
 // Panic configures the failpoint to panic with the given value. Mirrors InjectPanic.
 func (h *Handle) Panic(ctx context.Context, panicValue string, recurrence failpoint.Recurrence) error {
-	_, err := h.service.InjectPanic(ctx, &failpointservice.InjectPanicRequest{
+	_, err := h.service.InjectPanic(ctx, &failpointpb.InjectPanicRequest{
 		Key:         h.key.Name(),
 		NamespaceId: h.key.NamespaceID(),
 		PanicValue:  panicValue,
-		Recurrence:  enumsspb.FailpointRecurrence(recurrence),
+		Recurrence:  failpointpb.Recurrence(recurrence),
 	})
 	return err
 }
@@ -66,7 +65,7 @@ func (h *Handle) Panic(ctx context.Context, panicValue string, recurrence failpo
 // Wait blocks until the failpoint's Block action is hit by application code, or ctx is done.
 // Returns nil if it was hit, or the context error otherwise. Mirrors WaitForBlock.
 func (h *Handle) Wait(ctx context.Context) error {
-	_, err := h.service.WaitForBlock(ctx, &failpointservice.WaitForBlockRequest{Key: h.key.Name(), NamespaceId: h.key.NamespaceID()})
+	_, err := h.service.WaitForBlock(ctx, &failpointpb.WaitForBlockRequest{Key: h.key.Name(), NamespaceId: h.key.NamespaceID()})
 	return err
 }
 
@@ -79,6 +78,6 @@ func (h *Handle) Wait(ctx context.Context) error {
 func (h *Handle) Disable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, err := h.service.DisableFailpoint(ctx, &failpointservice.DisableFailpointRequest{Key: h.key.Name(), NamespaceId: h.key.NamespaceID()})
+	_, err := h.service.DisableFailpoint(ctx, &failpointpb.DisableFailpointRequest{Key: h.key.Name(), NamespaceId: h.key.NamespaceID()})
 	return err
 }

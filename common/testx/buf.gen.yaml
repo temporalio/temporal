@@ -1,0 +1,10 @@
+version: v1
+plugins:
+  - name: go
+    path: .bin/protoc-gen-go
+    out: .
+    opt: module=go.temporal.io/testx
+  - name: go-grpc
+    path: .bin/protoc-gen-go-grpc
+    out: .
+    opt: module=go.temporal.io/testx

@@ -186,12 +186,13 @@ func TestErrorCatalog(t *testing.T) {
 		return errors.Join(injected, errors.New(msg))
 	})
 
-	err, ok := failpoint.NewError("TestErrorCatalog", "detail")
+	newError, ok := failpoint.LookupError("TestErrorCatalog")
 	require.True(t, ok)
+	err := newError("detail")
 	require.ErrorIs(t, err, injected)
 	require.ErrorContains(t, err, "detail")
 
-	_, ok = failpoint.NewError("TestErrorCatalog_Unknown", "detail")
+	_, ok = failpoint.LookupError("TestErrorCatalog_Unknown")
 	require.False(t, ok)
 
 	require.Contains(t, failpoint.ErrorNames(), "TestErrorCatalog")

@@ -26,16 +26,13 @@ func RegisterError(name string, newError func(msg string) error) {
 	errorsByName[name] = newError
 }
 
-// NewError returns the named error with the message msg. It returns false if no error is
+// LookupError returns the constructor of the named error. It returns false if no error is
 // registered under the name.
-func NewError(name string, msg string) (error, bool) {
+func LookupError(name string) (func(msg string) error, bool) {
 	errorsMu.RLock()
+	defer errorsMu.RUnlock()
 	newError, ok := errorsByName[name]
-	errorsMu.RUnlock()
-	if !ok {
-		return nil, false
-	}
-	return newError(msg), true
+	return newError, ok
 }
 
 // ErrorNames returns the names of the registered errors, sorted.

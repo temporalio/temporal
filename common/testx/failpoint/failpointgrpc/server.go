@@ -1,30 +1,29 @@
 //go:build test_dep
 
-// Package failpointserver serves the FailpointService gRPC API for a failpoint registry, so tests
+// Package failpointgrpc serves the FailpointService gRPC API for a failpoint registry, so tests
 // can configure failpoints in another process.
-package failpointserver
+package failpointgrpc
 
 import (
 	"context"
 	"errors"
 	"sync"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/failpointservice/v1"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/failpointpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type server struct {
-	failpointservice.UnimplementedFailpointServiceServer
+	failpointpb.UnimplementedFailpointServiceServer
 	registry failpoint.Registry
 	// mu makes the lookup and update of the registry within one request atomic.
 	mu sync.Mutex
 }
 
 // NewServer returns a FailpointService that configures the failpoints in registry.
-func NewServer(registry failpoint.Registry) failpointservice.FailpointServiceServer {
+func NewServer(registry failpoint.Registry) failpointpb.FailpointServiceServer {
 	return &server{registry: registry}
 }
 
@@ -43,8 +42,8 @@ func validateKey(key failpoint.Key) error {
 	return nil
 }
 
-func requestRecurrence(recurrence enumsspb.FailpointRecurrence) failpoint.Recurrence {
-	if recurrence == enumsspb.FAILPOINT_RECURRENCE_UNSPECIFIED {
+func requestRecurrence(recurrence failpointpb.Recurrence) failpoint.Recurrence {
+	if recurrence == failpointpb.Recurrence_RECURRENCE_UNSPECIFIED {
 		return failpoint.Always
 	}
 	return failpoint.Recurrence(recurrence)
@@ -66,7 +65,7 @@ func (s *server) errorFailpoint(key failpoint.Key) (*failpoint.Failpoint[error],
 	return f, nil
 }
 
-func (s *server) DisableFailpoint(ctx context.Context, req *failpointservice.DisableFailpointRequest) (*failpointservice.DisableFailpointResponse, error) {
+func (s *server) DisableFailpoint(ctx context.Context, req *failpointpb.DisableFailpointRequest) (*failpointpb.DisableFailpointResponse, error) {
 	key := requestKey(req.Key, req.NamespaceId)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,7 +74,7 @@ func (s *server) DisableFailpoint(ctx context.Context, req *failpointservice.Dis
 	if fp == nil {
 		// Disable is idempotent: a missing key means there's nothing to do, not an error.
 		// Tests that disable in cleanup hooks would otherwise see flaky NotFound errors.
-		return &failpointservice.DisableFailpointResponse{}, nil
+		return &failpointpb.DisableFailpointResponse{}, nil
 	}
 
 	switch f := fp.(type) {
@@ -86,10 +85,10 @@ func (s *server) DisableFailpoint(ctx context.Context, req *failpointservice.Dis
 	}
 
 	s.registry.Delete(key)
-	return &failpointservice.DisableFailpointResponse{}, nil
+	return &failpointpb.DisableFailpointResponse{}, nil
 }
 
-func (s *server) DisableAllFailpoints(ctx context.Context, req *failpointservice.DisableAllFailpointsRequest) (*failpointservice.DisableAllFailpointsResponse, error) {
+func (s *server) DisableAllFailpoints(ctx context.Context, req *failpointpb.DisableAllFailpointsRequest) (*failpointpb.DisableAllFailpointsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -103,10 +102,10 @@ func (s *server) DisableAllFailpoints(ctx context.Context, req *failpointservice
 		s.registry.Delete(key)
 	}
 
-	return &failpointservice.DisableAllFailpointsResponse{}, nil
+	return &failpointpb.DisableAllFailpointsResponse{}, nil
 }
 
-func (s *server) InjectPanic(ctx context.Context, req *failpointservice.InjectPanicRequest) (*failpointservice.InjectPanicResponse, error) {
+func (s *server) InjectPanic(ctx context.Context, req *failpointpb.InjectPanicRequest) (*failpointpb.InjectPanicResponse, error) {
 	key := requestKey(req.Key, req.NamespaceId)
 	if err := validateKey(key); err != nil {
 		return nil, err
@@ -119,10 +118,10 @@ func (s *server) InjectPanic(ctx context.Context, req *failpointservice.InjectPa
 		return nil, err
 	}
 	f.Panic(errors.New(req.PanicValue), requestRecurrence(req.Recurrence))
-	return &failpointservice.InjectPanicResponse{}, nil
+	return &failpointpb.InjectPanicResponse{}, nil
 }
 
-func (s *server) InjectBlock(ctx context.Context, req *failpointservice.InjectBlockRequest) (*failpointservice.InjectBlockResponse, error) {
+func (s *server) InjectBlock(ctx context.Context, req *failpointpb.InjectBlockRequest) (*failpointpb.InjectBlockResponse, error) {
 	key := requestKey(req.Key, req.NamespaceId)
 	if err := validateKey(key); err != nil {
 		return nil, err
@@ -135,13 +134,21 @@ func (s *server) InjectBlock(ctx context.Context, req *failpointservice.InjectBl
 		return nil, err
 	}
 	f.Block(requestRecurrence(req.Recurrence))
-	return &failpointservice.InjectBlockResponse{}, nil
+	return &failpointpb.InjectBlockResponse{}, nil
 }
 
-func (s *server) InjectReturn(ctx context.Context, req *failpointservice.InjectReturnRequest) (*failpointservice.InjectReturnResponse, error) {
+func (s *server) InjectReturn(ctx context.Context, req *failpointpb.InjectReturnRequest) (*failpointpb.InjectReturnResponse, error) {
 	key := requestKey(req.Key, req.NamespaceId)
 	if err := validateKey(key); err != nil {
 		return nil, err
+	}
+	injected := errors.New(req.ErrorMessage)
+	if req.ErrorName != "" {
+		newError, ok := failpoint.LookupError(req.ErrorName)
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "unknown failpoint error %q", req.ErrorName)
+		}
+		injected = newError(req.ErrorMessage)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -150,11 +157,11 @@ func (s *server) InjectReturn(ctx context.Context, req *failpointservice.InjectR
 	if err != nil {
 		return nil, err
 	}
-	f.Return(errors.New(req.ErrorMessage), requestRecurrence(req.Recurrence))
-	return &failpointservice.InjectReturnResponse{}, nil
+	f.Return(injected, requestRecurrence(req.Recurrence))
+	return &failpointpb.InjectReturnResponse{}, nil
 }
 
-func (s *server) WaitForBlock(ctx context.Context, req *failpointservice.WaitForBlockRequest) (*failpointservice.WaitForBlockResponse, error) {
+func (s *server) WaitForBlock(ctx context.Context, req *failpointpb.WaitForBlockRequest) (*failpointpb.WaitForBlockResponse, error) {
 	key := requestKey(req.Key, req.NamespaceId)
 	s.mu.Lock()
 	fp := s.registry.Get(key)
@@ -174,18 +181,18 @@ func (s *server) WaitForBlock(ctx context.Context, req *failpointservice.WaitFor
 
 	select {
 	case <-waitCh:
-		return &failpointservice.WaitForBlockResponse{}, nil
+		return &failpointpb.WaitForBlockResponse{}, nil
 	case <-ctx.Done():
 		return nil, status.FromContextError(ctx.Err()).Err()
 	}
 }
 
-func (s *server) ListFailpoints(ctx context.Context, req *failpointservice.ListFailpointsRequest) (*failpointservice.ListFailpointsResponse, error) {
+func (s *server) ListFailpoints(ctx context.Context, req *failpointpb.ListFailpointsRequest) (*failpointpb.ListFailpointsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	keys := s.registry.Keys()
-	failpoints := make([]*failpointservice.FailpointInfo, 0, len(keys))
+	failpoints := make([]*failpointpb.FailpointInfo, 0, len(keys))
 	for _, key := range keys {
 		fp := s.registry.Get(key)
 		if fp == nil {
@@ -194,7 +201,7 @@ func (s *server) ListFailpoints(ctx context.Context, req *failpointservice.ListF
 		failpoints = append(failpoints, infoProto(key, fp))
 	}
 
-	return &failpointservice.ListFailpointsResponse{
+	return &failpointpb.ListFailpointsResponse{
 		Failpoints: failpoints,
 	}, nil
 }
@@ -204,16 +211,16 @@ type infoProvider interface {
 	Info() failpoint.Info
 }
 
-func infoProto(key failpoint.Key, fp any) *failpointservice.FailpointInfo {
+func infoProto(key failpoint.Key, fp any) *failpointpb.FailpointInfo {
 	info := failpoint.Info{Key: key, Action: failpoint.Off}
 	if ip, ok := fp.(infoProvider); ok {
 		info = ip.Info()
 	}
-	return &failpointservice.FailpointInfo{
+	return &failpointpb.FailpointInfo{
 		Key:         info.Key.Name(),
 		NamespaceId: info.Key.NamespaceID(),
 		Enabled:     info.Enabled,
-		Action:      enumsspb.FailpointAction(info.Action),
-		Recurrence:  enumsspb.FailpointRecurrence(info.Recurrence),
+		Action:      failpointpb.Action(info.Action),
+		Recurrence:  failpointpb.Recurrence(info.Recurrence),
 	}
 }

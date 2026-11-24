@@ -41,6 +41,11 @@ jobs:
       - name: Check testx go.mod is tidy
         run: go mod tidy -diff
 
+      - name: Check testx generated protos are up to date
+        run: |
+          make proto
+          git diff --exit-code -- . || { echo "::error::run 'make proto' in common/testx and commit the result"; exit 1; }
+
       - name: Test testx
         run: make test
 
