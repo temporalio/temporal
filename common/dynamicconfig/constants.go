@@ -234,12 +234,14 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 	WorkflowHeartbeatNotificationRolloutPercent = NewNamespaceIntSetting(
 		"history.workflowHeartbeatNotificationRolloutPercent",
 		0,
-		`WorkflowHeartbeatNotificationRolloutPercent selects a stable percentage of workflows per namespace for heartbeat notifications. Zero selects none; 100 selects all.`,
+		`WorkflowHeartbeatNotificationRolloutPercent selects a stable percentage of workflows per namespace for heartbeat notifications. Zero selects none; 100 selects all.
+Keep at zero until all Matching hosts support matching.highPerfMinDispatchTimeout. Disable before rolling Matching back to a version without that support.`,
 	)
 	WorkflowHeartbeatNotificationDispatchTimeout = NewNamespaceDurationSetting(
 		"history.workflowHeartbeatNotificationDispatchTimeout",
-		1500*time.Millisecond,
-		`WorkflowHeartbeatNotificationDispatchTimeout limits how long History waits for Matching to dispatch a Workflow Task heartbeat notification and receive a worker response.`,
+		600*time.Millisecond,
+		`WorkflowHeartbeatNotificationDispatchTimeout limits how long History waits for Matching to dispatch a Workflow Task heartbeat notification and receive a worker response.
+While any Matching host uses the legacy 1s dispatch buffer, keep this timeout above 1s with enough additional time for dispatch and response delivery.`,
 	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
 		"system.workerCommandsDispatchTimeout",
@@ -1602,6 +1604,13 @@ duration since last poll exceeds this threshold.`,
 		true,
 		`When enabled, TaskDispatchLatencyPerTaskQueue is emitted when responding to poll requests (with extra tags
 like partition and worker-version) instead of being emitted at the matcher level.`,
+	)
+	MatchingHighPerfMinDispatchTimeout = NewNamespaceDurationSetting(
+		"matching.highPerfMinDispatchTimeout",
+		100*time.Millisecond,
+		`MatchingHighPerfMinDispatchTimeout is the minimum time remaining for a short-lived request to be dispatched to the handler worker,
+used in place of component.nexusoperations.limit.dispatch.task.timeout.min. Matching keeps this much of the request deadline to
+respond with a timeout. Used for worker commands, including Workflow Task heartbeat notifications.`,
 	)
 	MatchingListNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"matching.listNexusEndpointsLongPollTimeout",
