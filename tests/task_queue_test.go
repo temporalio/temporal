@@ -264,8 +264,10 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 // from below. Latency can only lengthen the span, so the upper bound is loose.
 func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 	const (
-		apiRPS            = 5.0
-		taskCount         = 25
+		apiRPS    = 5.0
+		taskCount = 25
+		// Tasks dispatched without waiting: matching allows a 1s burst (apiRPS tasks) on top of
+		// the first task. They don't count toward the throttled span.
 		burst             = int(apiRPS) + 1
 		activityTaskQueue = "RateLimitTest"
 	)
