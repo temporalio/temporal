@@ -9867,6 +9867,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			AttemptsSinceLastSuccess: incoming.WorkflowTaskAttemptsSinceLastSuccess,
 			Stamp:                    incoming.WorkflowTaskStamp,
 			StartedTime:              incoming.WorkflowTaskStartedTime.AsTime(),
+			StartedClock:             incoming.WorkflowTaskStartedClock,
 			WorkerControlQueue:       incoming.WorkflowTaskWorkerControlQueue,
 			ScheduledTime:            incoming.WorkflowTaskScheduledTime.AsTime(),
 
@@ -9906,6 +9907,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.WorkflowTaskTimeout,
 			&info.WorkflowTaskAttempt,
 			&info.WorkflowTaskStartedTime,
+			&info.WorkflowTaskStartedClock,
 			&info.WorkflowTaskWorkerControlQueue,
 			&info.WorkflowTaskScheduledTime,
 			&info.WorkflowTaskOriginalScheduledTime,
