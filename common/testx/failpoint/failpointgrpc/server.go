@@ -7,7 +7,6 @@ package failpointgrpc
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/failpointpb"
@@ -15,16 +14,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// server synchronizes through the registry, not a lock of its own: several servers can serve the
+// same registry, such as the services of one process.
 type server struct {
 	failpointpb.UnimplementedFailpointServiceServer
 	registry failpoint.Registry
-	// mu makes the lookup and update of the registry within one request atomic.
-	mu sync.Mutex
 }
 
-// NewServer returns a FailpointService that configures the failpoints in registry.
+// NewServer returns a FailpointService that configures the failpoints in registry. Without a
+// registry, every request fails with FailedPrecondition.
 func NewServer(registry failpoint.Registry) failpointpb.FailpointServiceServer {
 	return &server{registry: registry}
+}
+
+// errNoRegistry is returned by a server without a registry.
+var errNoRegistry = status.Error(codes.FailedPrecondition, "the process has no failpoint registry")
+
+// disabler is implemented by Failpoint[T] for every T.
+type disabler interface {
+	Disable()
 }
 
 // requestKey returns the key named by a request. Requests address failpoints by name, so the key
@@ -49,95 +57,113 @@ func requestRecurrence(recurrence failpointpb.Recurrence) failpoint.Recurrence {
 	return failpoint.Recurrence(recurrence)
 }
 
-// errorFailpoint returns the error failpoint for key, creating and registering it if needed.
-// The caller must hold s.mu.
-func (s *server) errorFailpoint(key failpoint.Key) (*failpoint.Failpoint[error], error) {
-	fp := s.registry.Get(key)
-	if fp == nil {
-		f := failpoint.NewFailpoint[error](key)
-		s.registry.Set(key, f)
-		return f, nil
-	}
-	f, ok := fp.(*failpoint.Failpoint[error])
-	if !ok {
-		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
-	}
-	return f, nil
+// configure applies configure to the error failpoint for key, creating and registering it if
+// needed.
+func (s *server) configure(key failpoint.Key, configure func(*failpoint.Failpoint[error])) error {
+	var err error
+	// Configure serializes this with the removals, also those of other servers of the registry,
+	// so a failpoint is never configured after a concurrent disable removed it.
+	s.registry.Configure(func() {
+		fp := s.registry.GetOrSet(key, failpoint.NewFailpoint[error](key))
+		f, ok := fp.(*failpoint.Failpoint[error])
+		if !ok {
+			err = status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
+			return
+		}
+		configure(f)
+	})
+	return err
+}
+
+// remove disables the failpoint for key and removes it from the registry, serialized with
+// configure. An entry that is not a failpoint is left in place.
+func (s *server) remove(key failpoint.Key) error {
+	var err error
+	s.registry.Configure(func() {
+		fp := s.registry.Get(key)
+		if fp == nil {
+			return
+		}
+		f, ok := fp.(disabler)
+		if !ok {
+			err = status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
+			return
+		}
+		s.registry.CompareAndDelete(key, fp)
+		f.Disable()
+	})
+	return err
 }
 
 func (s *server) DisableFailpoint(ctx context.Context, req *failpointpb.DisableFailpointRequest) (*failpointpb.DisableFailpointResponse, error) {
+	if s.registry == nil {
+		return nil, errNoRegistry
+	}
 	key := requestKey(req.Key, req.NamespaceId)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	fp := s.registry.Get(key)
-	if fp == nil {
-		// Disable is idempotent: a missing key means there's nothing to do, not an error.
-		// Tests that disable in cleanup hooks would otherwise see flaky NotFound errors.
-		return &failpointpb.DisableFailpointResponse{}, nil
+	// Disable is idempotent: a missing key means there's nothing to do, not an error.
+	// Tests that disable in cleanup hooks would otherwise see flaky NotFound errors.
+	if err := s.remove(key); err != nil {
+		return nil, err
 	}
-
-	switch f := fp.(type) {
-	case *failpoint.Failpoint[error]:
-		f.Disable()
-	default:
-		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
-	}
-
-	s.registry.Delete(key)
 	return &failpointpb.DisableFailpointResponse{}, nil
 }
 
 func (s *server) DisableAllFailpoints(ctx context.Context, req *failpointpb.DisableAllFailpointsRequest) (*failpointpb.DisableAllFailpointsResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, key := range s.registry.Keys() {
-		switch f := s.registry.Get(key).(type) {
-		case *failpoint.Failpoint[error]:
-			f.Disable()
-		default:
-			// Unknown type — skip Disable; we still drop the entry below.
-		}
-		s.registry.Delete(key)
+	if s.registry == nil {
+		return nil, errNoRegistry
 	}
+	// Detach all entries at once, so an injection either happened before and is disabled, or
+	// happens after and is kept.
+	s.registry.Configure(func() {
+		for _, fp := range s.registry.DeleteAll() {
+			if f, ok := fp.(disabler); ok {
+				f.Disable()
+			}
+			// Unknown type — skip Disable; the entry is dropped above.
+		}
+	})
 
 	return &failpointpb.DisableAllFailpointsResponse{}, nil
 }
 
 func (s *server) InjectPanic(ctx context.Context, req *failpointpb.InjectPanicRequest) (*failpointpb.InjectPanicResponse, error) {
+	if s.registry == nil {
+		return nil, errNoRegistry
+	}
 	key := requestKey(req.Key, req.NamespaceId)
 	if err := validateKey(key); err != nil {
 		return nil, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	f, err := s.errorFailpoint(key)
+	err := s.configure(key, func(f *failpoint.Failpoint[error]) {
+		f.Panic(errors.New(req.PanicValue), requestRecurrence(req.Recurrence))
+	})
 	if err != nil {
 		return nil, err
 	}
-	f.Panic(errors.New(req.PanicValue), requestRecurrence(req.Recurrence))
 	return &failpointpb.InjectPanicResponse{}, nil
 }
 
 func (s *server) InjectBlock(ctx context.Context, req *failpointpb.InjectBlockRequest) (*failpointpb.InjectBlockResponse, error) {
+	if s.registry == nil {
+		return nil, errNoRegistry
+	}
 	key := requestKey(req.Key, req.NamespaceId)
 	if err := validateKey(key); err != nil {
 		return nil, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	f, err := s.errorFailpoint(key)
+	err := s.configure(key, func(f *failpoint.Failpoint[error]) {
+		f.Block(requestRecurrence(req.Recurrence))
+	})
 	if err != nil {
 		return nil, err
 	}
-	f.Block(requestRecurrence(req.Recurrence))
 	return &failpointpb.InjectBlockResponse{}, nil
 }
 
 func (s *server) InjectReturn(ctx context.Context, req *failpointpb.InjectReturnRequest) (*failpointpb.InjectReturnResponse, error) {
+	if s.registry == nil {
+		return nil, errNoRegistry
+	}
 	key := requestKey(req.Key, req.NamespaceId)
 	if err := validateKey(key); err != nil {
 		return nil, err
@@ -150,47 +176,51 @@ func (s *server) InjectReturn(ctx context.Context, req *failpointpb.InjectReturn
 		}
 		injected = newError(req.ErrorMessage)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	f, err := s.errorFailpoint(key)
+	err := s.configure(key, func(f *failpoint.Failpoint[error]) {
+		f.Return(injected, requestRecurrence(req.Recurrence))
+	})
 	if err != nil {
 		return nil, err
 	}
-	f.Return(injected, requestRecurrence(req.Recurrence))
 	return &failpointpb.InjectReturnResponse{}, nil
 }
 
 func (s *server) WaitForBlock(ctx context.Context, req *failpointpb.WaitForBlockRequest) (*failpointpb.WaitForBlockResponse, error) {
+	if s.registry == nil {
+		return nil, errNoRegistry
+	}
 	key := requestKey(req.Key, req.NamespaceId)
-	s.mu.Lock()
 	fp := s.registry.Get(key)
-	s.mu.Unlock()
-
 	if fp == nil {
 		return nil, status.Errorf(codes.NotFound, "failpoint %s not found", key)
 	}
 
-	var waitCh chan struct{}
-	switch f := fp.(type) {
-	case *failpoint.Failpoint[error]:
-		waitCh = f.WaitCh()
-	default:
+	f, ok := fp.(*failpoint.Failpoint[error])
+	if !ok {
 		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
 	}
-
-	select {
-	case <-waitCh:
+	err := f.AwaitBlock(ctx)
+	switch {
+	case err == nil:
 		return &failpointpb.WaitForBlockResponse{}, nil
-	case <-ctx.Done():
-		return nil, status.FromContextError(ctx.Err()).Err()
+	case errors.Is(err, failpoint.ErrNotBlocking):
+		return nil, status.Errorf(codes.FailedPrecondition, "failpoint %s: %v", key, err)
+	default:
+		return nil, status.FromContextError(err).Err()
 	}
 }
 
-func (s *server) ListFailpoints(ctx context.Context, req *failpointpb.ListFailpointsRequest) (*failpointpb.ListFailpointsResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *server) DescribeRegistry(ctx context.Context, req *failpointpb.DescribeRegistryRequest) (*failpointpb.DescribeRegistryResponse, error) {
+	if s.registry == nil {
+		return nil, errNoRegistry
+	}
+	return &failpointpb.DescribeRegistryResponse{RegistryId: s.registry.ID()}, nil
+}
 
+func (s *server) ListFailpoints(ctx context.Context, req *failpointpb.ListFailpointsRequest) (*failpointpb.ListFailpointsResponse, error) {
+	if s.registry == nil {
+		return nil, errNoRegistry
+	}
 	keys := s.registry.Keys()
 	failpoints := make([]*failpointpb.FailpointInfo, 0, len(keys))
 	for _, key := range keys {

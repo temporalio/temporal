@@ -348,6 +348,31 @@ gRPC and HTTP failpoints are scoped to the namespace ID of the request when it h
 requests carry no namespace, so persistence failpoints apply to all namespaces; inject them with
 `testcore.InjectGlobalFailpoint`, which requires a dedicated cluster.
 
+With `-tags=test_dep`, every server process also serves the `FailpointService` gRPC API
+(`common/testx/proto`) on its gRPC port, so tests and tools outside the process can configure
+failpoints by key name. Only system admins may call it on a frontend. History, matching, and
+worker serve their own failpoints. Frontends fan each request out: they apply it locally and
+forward it to every member of the frontend, history, matching, and worker services, so one call
+toggles a failpoint in the whole cluster. Services that share a registry, such as the services of
+a test cluster, get each request once.
+
+- Inject and disable requests fail if any host fails, but the hosts that succeeded keep the
+  change, so a failed request can be partially applied.
+- `WaitForBlock` succeeds as soon as any host reports that an execution reached the block. It
+  fails only if every host fails, such as with `NotFound` or `FailedPrecondition` where the
+  failpoint is not registered or not configured to block.
+- `ListFailpoints` reports the hosts that serve the registry of each failpoint.
+
+`testcore.FailpointClient(env)` returns a client for the test cluster's frontend:
+
+```go
+client := testcore.FailpointClient(env)
+_, err := client.InjectReturn(ctx, &failpointpb.InjectReturnRequest{
+	Key:       failpoint.GRPCKey(historyservice.HistoryService_StartWorkflowExecution_FullMethodName).Name(),
+	ErrorName: "InvalidArgument", // A name from the failpoint error catalog.
+})
+```
+
 ### softassert package
 
 `softassert.That` is a "soft" assertion that logs an error if the given condition is false.

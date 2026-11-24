@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/failpointserver"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service"
@@ -122,6 +123,8 @@ var Module = fx.Options(
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
 	fx.Provide(PerNamespaceWorkerManagerProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	// After ServiceLifetimeHooks, so failpoint waits are cancelled before the gRPC server drains.
+	failpointserver.Module,
 )
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {

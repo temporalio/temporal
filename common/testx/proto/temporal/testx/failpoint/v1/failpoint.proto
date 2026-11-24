@@ -22,11 +22,18 @@ service FailpointService {
   // InjectReturn configures a failpoint to return an error.
   rpc InjectReturn(InjectReturnRequest) returns (InjectReturnResponse);
 
-  // WaitForBlock waits for a block failpoint to be triggered.
+  // WaitForBlock waits until an execution reaches a block failpoint. It fails with NotFound if
+  // the failpoint is not registered, and with FailedPrecondition if it is not configured to block
+  // or is disabled or reconfigured before an execution reaches the block.
   rpc WaitForBlock(WaitForBlockRequest) returns (WaitForBlockResponse);
 
   // ListFailpoints returns information about all registered failpoints.
   rpc ListFailpoints(ListFailpointsRequest) returns (ListFailpointsResponse);
+
+  // DescribeRegistry returns the identity of the failpoint registry behind the service. Services
+  // in one process can share a registry; a fan-out uses the identity to apply each request to
+  // every registry once.
+  rpc DescribeRegistry(DescribeRegistryRequest) returns (DescribeRegistryResponse);
 }
 
 // Action defines what a failpoint should do when triggered.
@@ -152,4 +159,17 @@ message FailpointInfo {
   Action action = 4;
   // recurrence indicates whether it triggers once or always.
   Recurrence recurrence = 5;
+  // hosts are the hosts that serve the registry the failpoint is registered in. A server that
+  // only reports its own failpoints leaves it empty; a fan-out fills it in for every entry.
+  repeated string hosts = 6;
+}
+
+// DescribeRegistryRequest requests the identity of the failpoint registry.
+message DescribeRegistryRequest {}
+
+// DescribeRegistryResponse identifies a failpoint registry.
+message DescribeRegistryResponse {
+  // registry_id is a random identifier of the registry. Services that return the same
+  // registry_id share the registry.
+  string registry_id = 1;
 }

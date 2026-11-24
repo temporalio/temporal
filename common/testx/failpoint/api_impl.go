@@ -39,8 +39,15 @@ func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 // registered for the namespace.
 // Returns the failpoint's return value and a boolean indicating whether the failpoint
 // provided a return value.
+//
+// A Source without a registry, such as a zero-value test hooks struct in a unit test, has no
+// failpoints.
 func Execute[T any](src Source, key Key) (T, bool) {
+	var zero T
 	registry := src.Failpoints()
+	if registry == nil {
+		return zero, false
+	}
 	if fpAny := registry.Get(key); fpAny != nil {
 		return execute[T](registry, key, fpAny)
 	}
@@ -49,7 +56,6 @@ func Execute[T any](src Source, key Key) (T, bool) {
 			return execute[T](registry, key, fpAny)
 		}
 	}
-	var zero T
 	return zero, false
 }
 

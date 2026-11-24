@@ -16,7 +16,27 @@ func (r *registryNoop) Get(key Key) any {
 func (r *registryNoop) Set(key Key, fp any) {
 }
 
+func (r *registryNoop) GetOrSet(key Key, fp any) any {
+	return fp
+}
+
 func (r *registryNoop) Delete(key Key) {
+}
+
+func (r *registryNoop) CompareAndDelete(key Key, fp any) bool {
+	return false
+}
+
+func (r *registryNoop) DeleteAll() []any {
+	return nil
+}
+
+func (r *registryNoop) Configure(fn func()) {
+	fn()
+}
+
+func (r *registryNoop) ID() string {
+	return ""
 }
 
 func (r *registryNoop) Keys() []Key {

@@ -69,3 +69,10 @@ func (r *remote) ListFailpoints(
 ) (*failpointpb.ListFailpointsResponse, error) {
 	return r.client.ListFailpoints(ctx, req)
 }
+
+func (r *remote) DescribeRegistry(
+	ctx context.Context,
+	req *failpointpb.DescribeRegistryRequest,
+) (*failpointpb.DescribeRegistryResponse, error) {
+	return r.client.DescribeRegistry(ctx, req)
+}

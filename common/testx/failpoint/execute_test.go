@@ -160,3 +160,10 @@ func TestCheckpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestExecute_SourceWithoutRegistry(t *testing.T) {
+	got, fired := failpoint.Execute[error](registrySource{}, key1)
+	require.False(t, fired)
+	require.NoError(t, got)
+	require.NoError(t, failpoint.Checkpoint(registrySource{}, key1))
+}

@@ -9,6 +9,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
@@ -61,6 +62,10 @@ var (
 	HTTPRequestFaultGeneratorByNamespaceName  = testxhooks.NewKey[httpfaults.RequestCallback, namespace.Name]()
 	HTTPResponseFaultGeneratorByNamespaceID   = testxhooks.NewKey[httpfaults.ResponseCallback, namespace.ID]()
 	HTTPResponseFaultGeneratorByNamespaceName = testxhooks.NewKey[httpfaults.ResponseCallback, namespace.Name]()
+	// FailpointFanOutServices limits the services that a frontend forwards failpoint requests to.
+	// Test clusters whose static membership lists services that they don't start set it to the
+	// services they start.
+	FailpointFanOutServices = testxhooks.NewGlobalKey[[]primitives.ServiceName]()
 )
 
 const (

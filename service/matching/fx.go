@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/testing/failpointserver"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
 	"go.temporal.io/server/service/matching/workers"
@@ -51,6 +52,8 @@ var Module = fx.Options(
 	fx.Provide(simplePartitionScalerFactoryProvider),
 	fx.Provide(taskQueueRateLimitFractionProviderProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	// After ServiceLifetimeHooks, so failpoint waits are cancelled before the gRPC server drains.
+	failpointserver.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {

@@ -4,8 +4,11 @@ package failpoint_test
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/testx/failpoint"
 )
 
@@ -303,4 +306,68 @@ func TestFailpointCall(t *testing.T) {
 			t.Errorf("expected 44, got %d", ret)
 		}
 	}
+}
+
+// === AwaitBlock ===
+
+func TestFailpointBlock_AwaitBlock(t *testing.T) {
+	t.Parallel()
+	// The subtests run after this function returns, so each uses a context of its own.
+	awaitCtx := func(t *testing.T) context.Context {
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+		return ctx
+	}
+
+	t.Run("arrival before and after the wait", func(t *testing.T) {
+		t.Parallel()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Block(failpoint.Always)
+		executeDone := make(chan struct{})
+		t.Cleanup(func() {
+			fp.Disable()
+			<-executeDone
+		})
+		go func() {
+			defer close(executeDone)
+			_, _ = fp.Execute()
+		}()
+		require.NoError(t, fp.AwaitBlock(awaitCtx(t)))
+		// The execution is still at the block.
+		require.NoError(t, fp.AwaitBlock(awaitCtx(t)))
+	})
+
+	t.Run("once failpoint holding an execution", func(t *testing.T) {
+		t.Parallel()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Block(failpoint.Once)
+		executeDone := make(chan struct{})
+		t.Cleanup(func() {
+			fp.Disable()
+			<-executeDone
+		})
+		go func() {
+			defer close(executeDone)
+			_, _ = fp.Execute()
+		}()
+		require.NoError(t, fp.AwaitBlock(awaitCtx(t)))
+		require.NoError(t, fp.AwaitBlock(awaitCtx(t)))
+	})
+
+	t.Run("not configured to block", func(t *testing.T) {
+		t.Parallel()
+		fp := failpoint.NewFailpoint[error](key1)
+		require.ErrorIs(t, fp.AwaitBlock(awaitCtx(t)), failpoint.ErrNotBlocking)
+		fp.Return(errors.New("x"), failpoint.Always)
+		require.ErrorIs(t, fp.AwaitBlock(awaitCtx(t)), failpoint.ErrNotBlocking)
+	})
+
+	t.Run("context done", func(t *testing.T) {
+		t.Parallel()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Block(failpoint.Always)
+		ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+		defer cancel()
+		require.ErrorIs(t, fp.AwaitBlock(ctx), context.DeadlineExceeded)
+	})
 }

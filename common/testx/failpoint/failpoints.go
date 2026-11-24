@@ -11,6 +11,7 @@ package failpoint
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -61,21 +62,32 @@ type Failpoint[T any] struct {
 	blockCh    chan struct{}
 	times      Recurrence
 
-	// Block synchronization: blockCh, arrivedCh, and currentlyBlocked work together.
+	// Block synchronization: blockCh, arrivedCh, and blocked work together.
 	//
 	// When Execute fires a Block failpoint it:
-	//   1. Sets currentlyBlocked = true.
+	//   1. Counts itself in blocked.
 	//   2. Closes arrivedCh (waking any WaitCh/Wait callers) and replaces it
 	//      with a fresh channel for the next arrival.
 	//   3. Blocks on blockCh until Disable (close) or UnblockOne (send) is called.
-	//   4. Sets currentlyBlocked = false before returning.
+	//   4. Uncounts itself from blocked before returning.
 	//
-	// WaitCh/Wait use currentlyBlocked to handle the race where the goroutine
+	// WaitCh/Wait use blocked to handle the race where the goroutine
 	// reaches the failpoint before the test calls WaitCh/Wait: if
-	// currentlyBlocked is already true, WaitCh returns a pre-closed channel
+	// an execution is already blocked, WaitCh returns a pre-closed channel
 	// and Wait returns immediately without consulting arrivedCh at all.
-	currentlyBlocked bool
-	arrivedCh        chan struct{}
+	//
+	// blocked counts the executions blocked at the current block configuration. It is replaced
+	// with each configuration, so an execution released from an earlier configuration doesn't
+	// uncount one that is blocked at the current one.
+	blocked *int
+	// afterRelease is called by an execution after its block is released, before it updates the
+	// failpoint. Tests use it to order executions.
+	afterRelease func()
+	arrivedCh    chan struct{}
+	// arrived is set when an execution reaching the block closes arrivedCh, as opposed to a
+	// Disable or reconfiguration, so AwaitBlock can tell them apart. It is replaced together with
+	// arrivedCh, so an arrival at a later block configuration doesn't affect an earlier one.
+	arrived *bool
 
 	// trigger limits which executions fire; rng is set when trigger has a probability.
 	trigger Trigger
@@ -163,8 +175,15 @@ func (f *Failpoint[T]) disableLocked() {
 	if f.arrivedCh != nil {
 		close(f.arrivedCh)
 		f.arrivedCh = nil
+		f.arrived = nil
 	}
-	f.currentlyBlocked = false
+	f.blocked = nil
+}
+
+// currentlyBlocked reports whether an execution is blocked at the current block configuration.
+// The caller must hold f.mu.
+func (f *Failpoint[T]) currentlyBlocked() bool {
+	return f.blocked != nil && *f.blocked > 0
 }
 
 func (f *Failpoint[T]) Disable() {
@@ -214,6 +233,8 @@ func (f *Failpoint[T]) Block(times Recurrence) {
 	// Store up to _one_ unlock. Be careful with this
 	f.blockCh = make(chan struct{}, 1)
 	f.arrivedCh = make(chan struct{})
+	f.arrived = new(bool)
+	f.blocked = new(int)
 }
 
 // UnblockOne unblocks one goroutine waiting on the failpoint.
@@ -332,11 +353,14 @@ func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 	// drop the lock for the wait. After re-acquiring the lock, only run
 	// channel cleanup if blockCh is still ours; otherwise leave the new
 	// failpoint's state alone.
-	f.currentlyBlocked = true
+	blocked := f.blocked
+	*blocked++
 	if f.arrivedCh != nil {
+		*f.arrived = true
 		close(f.arrivedCh)
 	}
 	f.arrivedCh = make(chan struct{}) // fresh channel for the next arrival
+	f.arrived = new(bool)
 	blockCh := f.blockCh
 	if once {
 		// Subsequent Execute calls (and any concurrent Inject) must observe
@@ -348,9 +372,12 @@ func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 	report()
 
 	<-blockCh
+	if f.afterRelease != nil {
+		f.afterRelease()
+	}
 
 	f.mu.Lock()
-	f.currentlyBlocked = false
+	*blocked--
 	if once && f.blockCh == blockCh {
 		// No one re-injected while we were waiting, so finish cleaning up.
 		f.disableLocked()
@@ -374,7 +401,7 @@ func (f *Failpoint[T]) WaitCh() chan struct{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if f.action != Block || f.currentlyBlocked {
+	if f.action != Block || f.currentlyBlocked() {
 		return closedCh
 	}
 	return f.arrivedCh
@@ -386,7 +413,7 @@ func (f *Failpoint[T]) WaitCh() chan struct{} {
 // immediately (mirroring WaitCh's tolerant semantics).
 func (f *Failpoint[T]) Wait(ctx context.Context) error {
 	f.mu.Lock()
-	if f.action != Block || f.currentlyBlocked {
+	if f.action != Block || f.currentlyBlocked() {
 		f.mu.Unlock()
 		return nil
 	}
@@ -399,4 +426,55 @@ func (f *Failpoint[T]) Wait(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// ErrNotBlocking is returned by AwaitBlock when the failpoint is not configured to block, or is
+// disabled or reconfigured before an execution reaches the block.
+var ErrNotBlocking = errors.New("failpoint is not configured to block")
+
+// AwaitBlock is Wait that only succeeds when an execution actually reaches the block. Unlike
+// Wait, it returns ErrNotBlocking instead of nil if the failpoint is not configured to block and
+// holds no execution at the block, or if it is disabled or reconfigured during the wait.
+func (f *Failpoint[T]) AwaitBlock(ctx context.Context) error {
+	w, err := f.beginAwaitBlock()
+	if err != nil || w == nil {
+		return err
+	}
+	return f.finishAwaitBlock(ctx, w)
+}
+
+// blockWaiter is a wait for the next arrival at one block configuration.
+type blockWaiter struct {
+	ch      chan struct{}
+	arrived *bool
+}
+
+// beginAwaitBlock starts AwaitBlock. It returns a nil waiter if an execution is already at the
+// block.
+func (f *Failpoint[T]) beginAwaitBlock() (*blockWaiter, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.currentlyBlocked() {
+		return nil, nil
+	}
+	if f.action != Block {
+		return nil, ErrNotBlocking
+	}
+	return &blockWaiter{ch: f.arrivedCh, arrived: f.arrived}, nil
+}
+
+// finishAwaitBlock waits for the arrival that w waits for.
+func (f *Failpoint[T]) finishAwaitBlock(ctx context.Context, w *blockWaiter) error {
+	select {
+	case <-w.ch:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !*w.arrived {
+		return ErrNotBlocking
+	}
+	return nil
 }

@@ -3,8 +3,11 @@
 package failpointgrpc_test
 
 import (
+	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -376,7 +379,8 @@ func TestServer_Inject_RejectsUnsetKey(t *testing.T) {
 
 // TestRegistry_WaitForBlock_DisabledMidWait verifies that the gRPC WaitForBlock
 // path tolerates a concurrent Disable: the wait completes (via the closed
-// arrivedCh that disableLocked produces) instead of panicking inside WaitCh.
+// arrivedCh that disableLocked produces) instead of panicking, and reports that
+// no execution reached the block.
 func TestServer_WaitForBlock_DisabledMidWait(t *testing.T) {
 	registry := failpoint.NewRegistry()
 	server := failpointgrpc.NewServer(registry)
@@ -418,7 +422,151 @@ func TestServer_WaitForBlock_DisabledMidWait(t *testing.T) {
 			return false
 		}
 	}, time.Second, 10*time.Millisecond)
-	require.NoError(t, waitErr)
+	require.Equal(t, codes.FailedPrecondition, status.Code(waitErr))
+}
+
+func TestServer_WaitForBlock_NotBlocking(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	server := failpointgrpc.NewServer(registry)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	_, err := server.WaitForBlock(ctx, &failpointpb.WaitForBlockRequest{Key: "1"})
+	require.Equal(t, codes.NotFound, status.Code(err))
+
+	_, err = server.InjectReturn(ctx, &failpointpb.InjectReturnRequest{Key: "1", ErrorMessage: "x"})
+	require.NoError(t, err)
+	_, err = server.WaitForBlock(ctx, &failpointpb.WaitForBlockRequest{Key: "1"})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+// TestServer_SharedRegistry covers servers that serve the same registry, as the services of one
+// process do: an injection through the second server, after an execution reached the block that
+// the first server injected, configures the same failpoint, so it reaches the blocked execution
+// instead of stranding it on a failpoint that is no longer registered.
+func TestServer_SharedRegistry(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	servers := []failpointpb.FailpointServiceServer{failpointgrpc.NewServer(registry), failpointgrpc.NewServer(registry)}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	_, err := servers[0].InjectBlock(ctx, &failpointpb.InjectBlockRequest{Key: "1"})
+	require.NoError(t, err)
+	installed, ok := registry.Get(key1).(*failpoint.Failpoint[error])
+	require.True(t, ok)
+	executeDone := make(chan struct{})
+	t.Cleanup(func() {
+		installed.Disable()
+		<-executeDone
+	})
+	go func() {
+		defer close(executeDone)
+		_, _ = installed.Execute()
+	}()
+	_, err = servers[0].WaitForBlock(ctx, &failpointpb.WaitForBlockRequest{Key: "1"})
+	require.NoError(t, err)
+
+	// Re-arming the installed failpoint releases the execution that is blocked on it.
+	_, err = servers[1].InjectBlock(ctx, &failpointpb.InjectBlockRequest{Key: "1"})
+	require.NoError(t, err)
+	require.Same(t, installed, registry.Get(key1))
+	select {
+	case <-executeDone:
+	case <-ctx.Done():
+		require.FailNow(t, "the second injection did not reach the blocked execution")
+	}
+
+	_, err = servers[1].DisableFailpoint(ctx, &failpointpb.DisableFailpointRequest{Key: "1"})
+	require.NoError(t, err)
+	require.Empty(t, registry.Keys())
+}
+
+// recordingRegistry records the failpoints that GetOrSet returns and the state of the failpoint
+// for key1 after each Configure call, and holds GetOrSet calls until started is closed.
+type recordingRegistry struct {
+	failpoint.Registry
+	started    chan struct{}
+	mu         sync.Mutex
+	got        []any
+	configured []any
+	actions    []failpoint.Action
+}
+
+func (r *recordingRegistry) Configure(fn func()) {
+	r.Registry.Configure(func() {
+		fn()
+		fp := r.Get(key1)
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.configured = append(r.configured, fp)
+		r.actions = append(r.actions, fp.(*failpoint.Failpoint[error]).Info().Action)
+	})
+}
+
+func (r *recordingRegistry) GetOrSet(key failpoint.Key, fp any) any {
+	<-r.started
+	got := r.Registry.GetOrSet(key, fp)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.got = append(r.got, got)
+	return got
+}
+
+// TestServer_SharedRegistry_CompetingFirstInjections covers the first injections of a key through
+// two servers of one registry at the same time: both must configure the one failpoint that gets
+// installed.
+func TestServer_SharedRegistry_CompetingFirstInjections(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	for range 20 {
+		registry := &recordingRegistry{Registry: failpoint.NewRegistry(), started: make(chan struct{})}
+		servers := []failpointpb.FailpointServiceServer{failpointgrpc.NewServer(registry), failpointgrpc.NewServer(registry)}
+
+		// Both requests are in flight before either reaches the registry.
+		var ready sync.WaitGroup
+		ready.Add(len(servers))
+		errs := make([]error, len(servers))
+		var wg sync.WaitGroup
+		for i, server := range servers {
+			wg.Go(func() {
+				ready.Done()
+				_, errs[i] = server.InjectReturn(ctx, &failpointpb.InjectReturnRequest{Key: "1", ErrorMessage: "injected"})
+			})
+		}
+		ready.Wait()
+		close(registry.started)
+		wg.Wait()
+		require.NoError(t, errors.Join(errs...))
+
+		require.Len(t, registry.Keys(), 1)
+		installed := registry.Get(key1)
+		require.Len(t, registry.got, 2)
+		require.Same(t, installed, registry.got[0])
+		require.Same(t, installed, registry.got[1])
+		// Each request configured the installed failpoint: the first one turned it on from off.
+		require.Len(t, registry.configured, 2)
+		require.Same(t, installed, registry.configured[0])
+		require.Same(t, installed, registry.configured[1])
+		require.Equal(t, []failpoint.Action{failpoint.Return, failpoint.Return}, registry.actions)
+	}
+}
+
+func TestServer_DescribeRegistry(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	resp1, err := failpointgrpc.NewServer(registry).DescribeRegistry(t.Context(), &failpointpb.DescribeRegistryRequest{})
+	require.NoError(t, err)
+	resp2, err := failpointgrpc.NewServer(registry).DescribeRegistry(t.Context(), &failpointpb.DescribeRegistryRequest{})
+	require.NoError(t, err)
+	resp3, err := failpointgrpc.NewServer(failpoint.NewRegistry()).DescribeRegistry(t.Context(), &failpointpb.DescribeRegistryRequest{})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, resp1.RegistryId)
+	require.Equal(t, resp1.RegistryId, resp2.RegistryId)
+	require.NotEqual(t, resp1.RegistryId, resp3.RegistryId)
 }
 
 func TestServer_NamespaceScopedRequest(t *testing.T) {
@@ -448,7 +596,9 @@ func TestServer_NamespaceScopedRequest(t *testing.T) {
 
 func TestServer_InjectReturnErrorName(t *testing.T) {
 	sentinel := errors.New("sentinel")
-	failpoint.RegisterError("TestServer_InjectReturnErrorName", func(msg string) error {
+	// The catalog is global, so each run registers a name of its own.
+	name := "TestServer_InjectReturnErrorName_" + rand.Text()
+	failpoint.RegisterError(name, func(msg string) error {
 		return fmt.Errorf("%s: %w", msg, sentinel)
 	})
 	registry := failpoint.NewRegistry()
@@ -456,7 +606,7 @@ func TestServer_InjectReturnErrorName(t *testing.T) {
 
 	_, err := server.InjectReturn(t.Context(), &failpointpb.InjectReturnRequest{
 		Key:          "1",
-		ErrorName:    "TestServer_InjectReturnErrorName",
+		ErrorName:    name,
 		ErrorMessage: "injected",
 	})
 	require.NoError(t, err)
@@ -467,4 +617,68 @@ func TestServer_InjectReturnErrorName(t *testing.T) {
 
 	_, err = server.InjectReturn(t.Context(), &failpointpb.InjectReturnRequest{Key: "1", ErrorName: "NoSuchError"})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestServer_WithoutRegistry(t *testing.T) {
+	t.Parallel()
+	server := failpointgrpc.NewServer(nil)
+	ctx := t.Context()
+
+	_, err := server.DescribeRegistry(ctx, &failpointpb.DescribeRegistryRequest{})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	_, err = server.InjectReturn(ctx, &failpointpb.InjectReturnRequest{Key: "1"})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	_, err = server.ListFailpoints(ctx, &failpointpb.ListFailpointsRequest{})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	_, err = server.DisableAllFailpoints(ctx, &failpointpb.DisableAllFailpointsRequest{})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestServer_DisableEntryTypes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("failpoint of another type is disabled and removed", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		server := failpointgrpc.NewServer(registry)
+		fp := failpoint.NewFailpoint[int](key1)
+		fp.Block(failpoint.Always)
+		registry.Set(key1, fp)
+		executeDone := make(chan struct{})
+		t.Cleanup(func() {
+			fp.Disable()
+			<-executeDone
+		})
+		go func() {
+			defer close(executeDone)
+			_, _ = fp.Execute()
+		}()
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		require.NoError(t, fp.AwaitBlock(ctx))
+
+		_, err := server.DisableFailpoint(ctx, &failpointpb.DisableFailpointRequest{Key: "1"})
+		require.NoError(t, err)
+		select {
+		case <-executeDone: // The blocked execution is released.
+		case <-ctx.Done():
+			require.FailNow(t, "disable did not release the blocked execution")
+		}
+		require.Nil(t, registry.Get(key1))
+	})
+
+	t.Run("unsupported entry is rejected and kept", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		server := failpointgrpc.NewServer(registry)
+		registry.Set(key1, []string{"not a failpoint"})
+
+		_, err := server.DisableFailpoint(t.Context(), &failpointpb.DisableFailpointRequest{Key: "1"})
+		require.Equal(t, codes.Internal, status.Code(err))
+		require.NotNil(t, registry.Get(key1))
+
+		_, err = server.DisableAllFailpoints(t.Context(), &failpointpb.DisableAllFailpointsRequest{})
+		require.NoError(t, err)
+		require.Empty(t, registry.Keys())
+	})
 }

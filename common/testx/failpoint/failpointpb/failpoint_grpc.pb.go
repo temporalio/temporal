@@ -26,6 +26,7 @@ const (
 	FailpointService_InjectReturn_FullMethodName         = "/temporal.testx.failpoint.v1.FailpointService/InjectReturn"
 	FailpointService_WaitForBlock_FullMethodName         = "/temporal.testx.failpoint.v1.FailpointService/WaitForBlock"
 	FailpointService_ListFailpoints_FullMethodName       = "/temporal.testx.failpoint.v1.FailpointService/ListFailpoints"
+	FailpointService_DescribeRegistry_FullMethodName     = "/temporal.testx.failpoint.v1.FailpointService/DescribeRegistry"
 )
 
 // FailpointServiceClient is the client API for FailpointService service.
@@ -42,10 +43,16 @@ type FailpointServiceClient interface {
 	InjectBlock(ctx context.Context, in *InjectBlockRequest, opts ...grpc.CallOption) (*InjectBlockResponse, error)
 	// InjectReturn configures a failpoint to return an error.
 	InjectReturn(ctx context.Context, in *InjectReturnRequest, opts ...grpc.CallOption) (*InjectReturnResponse, error)
-	// WaitForBlock waits for a block failpoint to be triggered.
+	// WaitForBlock waits until an execution reaches a block failpoint. It fails with NotFound if
+	// the failpoint is not registered, and with FailedPrecondition if it is not configured to block
+	// or is disabled or reconfigured before an execution reaches the block.
 	WaitForBlock(ctx context.Context, in *WaitForBlockRequest, opts ...grpc.CallOption) (*WaitForBlockResponse, error)
 	// ListFailpoints returns information about all registered failpoints.
 	ListFailpoints(ctx context.Context, in *ListFailpointsRequest, opts ...grpc.CallOption) (*ListFailpointsResponse, error)
+	// DescribeRegistry returns the identity of the failpoint registry behind the service. Services
+	// in one process can share a registry; a fan-out uses the identity to apply each request to
+	// every registry once.
+	DescribeRegistry(ctx context.Context, in *DescribeRegistryRequest, opts ...grpc.CallOption) (*DescribeRegistryResponse, error)
 }
 
 type failpointServiceClient struct {
@@ -119,6 +126,15 @@ func (c *failpointServiceClient) ListFailpoints(ctx context.Context, in *ListFai
 	return out, nil
 }
 
+func (c *failpointServiceClient) DescribeRegistry(ctx context.Context, in *DescribeRegistryRequest, opts ...grpc.CallOption) (*DescribeRegistryResponse, error) {
+	out := new(DescribeRegistryResponse)
+	err := c.cc.Invoke(ctx, FailpointService_DescribeRegistry_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FailpointServiceServer is the server API for FailpointService service.
 // All implementations must embed UnimplementedFailpointServiceServer
 // for forward compatibility
@@ -133,10 +149,16 @@ type FailpointServiceServer interface {
 	InjectBlock(context.Context, *InjectBlockRequest) (*InjectBlockResponse, error)
 	// InjectReturn configures a failpoint to return an error.
 	InjectReturn(context.Context, *InjectReturnRequest) (*InjectReturnResponse, error)
-	// WaitForBlock waits for a block failpoint to be triggered.
+	// WaitForBlock waits until an execution reaches a block failpoint. It fails with NotFound if
+	// the failpoint is not registered, and with FailedPrecondition if it is not configured to block
+	// or is disabled or reconfigured before an execution reaches the block.
 	WaitForBlock(context.Context, *WaitForBlockRequest) (*WaitForBlockResponse, error)
 	// ListFailpoints returns information about all registered failpoints.
 	ListFailpoints(context.Context, *ListFailpointsRequest) (*ListFailpointsResponse, error)
+	// DescribeRegistry returns the identity of the failpoint registry behind the service. Services
+	// in one process can share a registry; a fan-out uses the identity to apply each request to
+	// every registry once.
+	DescribeRegistry(context.Context, *DescribeRegistryRequest) (*DescribeRegistryResponse, error)
 	mustEmbedUnimplementedFailpointServiceServer()
 }
 
@@ -164,6 +186,9 @@ func (UnimplementedFailpointServiceServer) WaitForBlock(context.Context, *WaitFo
 }
 func (UnimplementedFailpointServiceServer) ListFailpoints(context.Context, *ListFailpointsRequest) (*ListFailpointsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListFailpoints not implemented")
+}
+func (UnimplementedFailpointServiceServer) DescribeRegistry(context.Context, *DescribeRegistryRequest) (*DescribeRegistryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeRegistry not implemented")
 }
 func (UnimplementedFailpointServiceServer) mustEmbedUnimplementedFailpointServiceServer() {}
 
@@ -304,6 +329,24 @@ func _FailpointService_ListFailpoints_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FailpointService_DescribeRegistry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeRegistryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FailpointServiceServer).DescribeRegistry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FailpointService_DescribeRegistry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FailpointServiceServer).DescribeRegistry(ctx, req.(*DescribeRegistryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FailpointService_ServiceDesc is the grpc.ServiceDesc for FailpointService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -338,6 +381,10 @@ var FailpointService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListFailpoints",
 			Handler:    _FailpointService_ListFailpoints_Handler,
+		},
+		{
+			MethodName: "DescribeRegistry",
+			Handler:    _FailpointService_DescribeRegistry_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

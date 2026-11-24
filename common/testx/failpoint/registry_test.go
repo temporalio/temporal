@@ -192,3 +192,57 @@ func TestFailpoint_OnceBlock_ConcurrentReinject(t *testing.T) {
 		t.Fatal("new Always failpoint did not unblock — state was clobbered")
 	}
 }
+
+func TestRegistry_GetOrSet(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp2 := failpoint.NewFailpoint[error](key1)
+
+	require.Same(t, fp1, registry.GetOrSet(key1, fp1))
+	require.Same(t, fp1, registry.GetOrSet(key1, fp2))
+	require.Same(t, fp1, registry.Get(key1))
+}
+
+func TestRegistry_CompareAndDelete(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp2 := failpoint.NewFailpoint[error](key1)
+	registry.Set(key1, fp1)
+
+	require.False(t, registry.CompareAndDelete(key1, fp2))
+	require.Same(t, fp1, registry.Get(key1))
+	require.True(t, registry.CompareAndDelete(key1, fp1))
+	require.Nil(t, registry.Get(key1))
+	require.False(t, registry.CompareAndDelete(key1, fp1))
+}
+
+func TestRegistry_CompareAndDelete_NotComparable(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	entry := []string{"not", "comparable"}
+	registry.Set(key1, entry)
+
+	require.False(t, registry.CompareAndDelete(key1, entry))
+	require.False(t, registry.CompareAndDelete(key1, struct{ s []string }{}))
+	require.NotNil(t, registry.Get(key1))
+}
+
+func TestRegistry_DeleteAll(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp2 := failpoint.NewFailpoint[int](key2)
+	registry.Set(key1, fp1)
+	registry.Set(key2, fp2)
+
+	require.ElementsMatch(t, []any{fp1, fp2}, registry.DeleteAll())
+	require.Empty(t, registry.Keys())
+	require.Empty(t, registry.DeleteAll())
+}
+
+func TestRegistry_ID(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	id := registry.ID()
+	require.NotEmpty(t, id)
+	registry.Set(key1, failpoint.NewFailpoint[error](key1))
+	require.Equal(t, id, registry.ID())
+	require.NotEqual(t, id, failpoint.NewRegistry().ID())
+}

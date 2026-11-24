@@ -3,6 +3,7 @@
 package failpoint_test
 
 import (
+	"crypto/rand"
 	"errors"
 	"sync"
 	"testing"
@@ -182,21 +183,23 @@ func TestErrorCatalog(t *testing.T) {
 	t.Parallel()
 
 	injected := errors.New("base")
-	failpoint.RegisterError("TestErrorCatalog", func(msg string) error {
+	// The catalog is global, so each run registers a name of its own.
+	name := "TestErrorCatalog_" + rand.Text()
+	failpoint.RegisterError(name, func(msg string) error {
 		return errors.Join(injected, errors.New(msg))
 	})
 
-	newError, ok := failpoint.LookupError("TestErrorCatalog")
+	newError, ok := failpoint.LookupError(name)
 	require.True(t, ok)
 	err := newError("detail")
 	require.ErrorIs(t, err, injected)
 	require.ErrorContains(t, err, "detail")
 
-	_, ok = failpoint.LookupError("TestErrorCatalog_Unknown")
+	_, ok = failpoint.LookupError(name + "_Unknown")
 	require.False(t, ok)
 
-	require.Contains(t, failpoint.ErrorNames(), "TestErrorCatalog")
+	require.Contains(t, failpoint.ErrorNames(), name)
 	require.Panics(t, func() {
-		failpoint.RegisterError("TestErrorCatalog", func(string) error { return nil })
+		failpoint.RegisterError(name, func(string) error { return nil })
 	})
 }
