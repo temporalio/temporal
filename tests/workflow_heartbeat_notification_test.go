@@ -766,3 +766,79 @@ func (s *WorkflowHeartbeatNotificationSuite) TestActivityResultNotifiesHeldWorkf
 		})
 	}
 }
+
+func (s *WorkflowHeartbeatNotificationSuite) TestNonInputBufferedEventsDoNotSuppressNotification() {
+	for _, input := range []string{
+		// #scenario-23: Buffered pause/unpause events do not suppress a later signal notification.
+		"signal",
+		// #scenario-24: Buffered pause/unpause events do not suppress an activity completion notification.
+		"activity completion",
+		// #scenario-25: Buffered pause/unpause events do not suppress an Update admission notification.
+		"update",
+	} {
+		s.Run(input, func(s *WorkflowHeartbeatNotificationSuite) {
+			env := s.newEnv()
+			env.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
+			tv := env.Tv()
+			start := s.startWorkflow(env, tv, false)
+			task := s.pollWorkflowTask(env, tv, tv.TaskQueue(), nil)
+			var activity *workflowservice.PollActivityTaskQueueResponse
+			if input == "activity completion" {
+				task = s.completeWorkflowTask(env, task.GetTaskToken(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:          tv.ActivityID(),
+							ActivityType:        tv.ActivityType(),
+							TaskQueue:           tv.TaskQueue(),
+							StartToCloseTimeout: durationpb.New(30 * time.Second),
+						}},
+					}},
+					ForceCreateNewWorkflowTask: true,
+					ReturnNewWorkflowTask:      true,
+				}).GetWorkflowTask()
+				var err error
+				activity, err = env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+					Namespace: env.Namespace().String(),
+					TaskQueue: tv.TaskQueue(),
+					Identity:  tv.WorkerIdentity(),
+				})
+				s.NoError(err)
+				s.NotEmpty(activity.GetTaskToken())
+			}
+			s.NotEmpty(task.GetTaskToken())
+			_, err := env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: tv.WorkflowID(),
+				RunId:      start.GetRunId(),
+				RequestId:  uuid.NewString(),
+			})
+			s.NoError(err)
+			_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: tv.WorkflowID(),
+				RunId:      start.GetRunId(),
+				RequestId:  uuid.NewString(),
+			})
+			s.NoError(err)
+			capture := env.StartNamespaceMetricCapture()
+			var background <-chan error
+			switch input {
+			case "signal":
+				s.signal(env, tv, start.GetRunId())
+			case "activity completion":
+				_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: activity.GetTaskToken(),
+				})
+				s.NoError(err)
+			case "update":
+				background = s.sendUpdate(env, tv, start.GetRunId())
+			default:
+				s.T().Fatalf("unknown input: %s", input)
+			}
+			s.requireNotificationToken(s.receiveNotification(env, tv, background), tv, start.GetRunId(), task.GetTaskToken())
+			s.Len(capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name()), 1)
+		})
+	}
+}
