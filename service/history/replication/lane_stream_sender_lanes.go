@@ -823,10 +823,9 @@ func laneRetryDelay(retryAfter time.Duration) time.Duration {
 
 // paceLane returns once the lane may send its next task, or with the context's error once the
 // stream ends, so that the send is not retried. A lane the receiver has paused waits until it
-// resumes, even during a handover, because the pause protects the receiver. A lane the policy
-// requests is paced by the policy's limiter, and a withdrawn lane by the drain cap; a namespace
-// handover lifts both. Neither limiter blocks: when one refuses a send, the lane waits here for
-// laneRetryDelay and asks again.
+// resumes, even during a handover, because the pause protects the receiver. A namespace handover
+// lifts every lane limit, the drain cap included. Otherwise the lane waits as reserveLaneSend
+// says, and asks again.
 func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) error {
 	for {
 		changed := s.laneRegistry.Changed()
@@ -841,35 +840,11 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 		if s.handoverInProgress.Load() {
 			return nil
 		}
-		requested := s.laneShouldBeRateLimited(logicalKey)
-		var limiter LaneLimiter
-		if requested {
-			limiter = s.laneLimiter(logicalKey)
-		} else {
-			limiter = s.laneDrainLimiter(logicalKey)
-		}
-		if limiter == nil {
+		wait := s.reserveLaneSend(logicalKey)
+		if wait == 0 {
 			return nil
 		}
-		now := s.shardContext.GetTimeSource().Now()
-		var ok bool
-		var retryAfter time.Duration
-		if requested {
-			if !s.callLanePolicy("Reserve", func() { ok, retryAfter = limiter.Reserve(now) }) {
-				return nil
-			}
-		} else {
-			ok, retryAfter = limiter.Reserve(now)
-		}
-		if ok {
-			return nil
-		}
-		if requested {
-			s.markLaneRefused(logicalKey, now)
-		} else {
-			metrics.ReplicationLaneDrainCapped.With(s.metrics).Record(1, metrics.ToClusterTag(s.clientClusterName))
-		}
-		timer := time.NewTimer(laneRetryDelay(retryAfter))
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -879,6 +854,33 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 		case <-timer.C:
 		}
 	}
+}
+
+// reserveLaneSend asks for one of the lane's sends from the limiter that paces it: the policy's
+// while the policy requests the lane, and the drain cap once the policy withdraws it. It returns
+// zero when the lane may send now, and otherwise how long to wait, laneRetryDelay of what the
+// limiter asked. Neither limiter blocks.
+func (s *laneStreamSender) reserveLaneSend(logicalKey string) time.Duration {
+	now := s.shardContext.GetTimeSource().Now()
+	if !s.laneShouldBeRateLimited(logicalKey) {
+		ok, retryAfter := s.laneDrainLimiter(logicalKey).Reserve(now)
+		if ok {
+			return 0
+		}
+		metrics.ReplicationLaneDrainCapped.With(s.metrics).Record(1, metrics.ToClusterTag(s.clientClusterName))
+		return laneRetryDelay(retryAfter)
+	}
+	limiter := s.laneLimiter(logicalKey)
+	if limiter == nil {
+		return 0
+	}
+	var ok bool
+	var retryAfter time.Duration
+	if !s.callLanePolicy("Reserve", func() { ok, retryAfter = limiter.Reserve(now) }) || ok {
+		return 0
+	}
+	s.markLaneRefused(logicalKey, now)
+	return laneRetryDelay(retryAfter)
 }
 
 // recordLanePauseChanges counts the lanes a receiver ack paused or resumed.
