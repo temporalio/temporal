@@ -90,6 +90,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClientFactory(),
 		s.mockResource.NamespaceCache,
 		endpointClient,
+		s.mockResource.GetNamespaceReplicationQueue(),
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()

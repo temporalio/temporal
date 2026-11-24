@@ -950,6 +950,16 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	default:
 		return nil, err
 	}
+	err = resetNamespaceReplicationAckForFreshConnect(
+		ctx,
+		adh.namespaceReplicationQueue,
+		persistedBefore,
+		resp.GetClusterName(),
+		request.GetEnableRemoteClusterConnection(),
+	)
+	if err != nil {
+		return nil, err
+	}
 	saveRequest := &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
@@ -1205,11 +1215,22 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 	if adh.namespaceReplicationQueue == nil {
 		return nil, errors.New("namespace replication queue not enabled for cluster")
 	}
+	clusterName := request.GetClusterName()
+	if clusterName == "" {
+		return nil, errClusterNameNotSet
+	}
+	clusterInfo, ok := adh.clusterMetadata.GetAllClusterInfo()[clusterName]
+	if clusterName == adh.clusterMetadata.GetCurrentClusterName() || !ok || !clusterInfo.Enabled {
+		return nil, serviceerror.NewFailedPreconditionf(
+			"cluster %q is not an enabled remote cluster",
+			clusterName,
+		)
+	}
 
 	lastMessageID := request.GetLastRetrievedMessageId()
 	if request.GetLastRetrievedMessageId() == defaultLastMessageID {
 		if clusterAckLevels, err := adh.namespaceReplicationQueue.GetAckLevels(ctx); err == nil {
-			if ackLevel, ok := clusterAckLevels[request.GetClusterName()]; ok {
+			if ackLevel, ok := clusterAckLevels[clusterName]; ok {
 				lastMessageID = ackLevel
 			}
 		}
@@ -1228,11 +1249,11 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 		if err := adh.namespaceReplicationQueue.UpdateAckLevel(
 			ctx,
 			request.GetLastProcessedMessageId(),
-			request.GetClusterName(),
+			clusterName,
 		); err != nil {
 			adh.logger.Warn("Failed to update namespace replication queue ack level",
 				tag.TaskID(request.GetLastProcessedMessageId()),
-				tag.ClusterName(request.GetClusterName()))
+				tag.ClusterName(clusterName))
 		}
 	}
 

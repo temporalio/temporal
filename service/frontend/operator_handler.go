@@ -51,37 +51,39 @@ type (
 
 		status int32
 
-		logger                 log.Logger
-		eventLogger            otellog.Logger
-		config                 *Config
-		sdkClientFactory       sdk.ClientFactory
-		metricsHandler         metrics.Handler
-		visibilityMgr          manager.VisibilityManager
-		saManager              searchattribute.Manager
-		healthServer           *health.Server
-		historyClient          resource.HistoryClient
-		clusterMetadataManager persistence.ClusterMetadataManager
-		clusterMetadata        clustermetadata.Metadata
-		clientFactory          svc.Factory
-		namespaceRegistry      namespace.Registry
-		nexusEndpointClient    *NexusEndpointClient
+		logger                    log.Logger
+		eventLogger               otellog.Logger
+		config                    *Config
+		sdkClientFactory          sdk.ClientFactory
+		metricsHandler            metrics.Handler
+		visibilityMgr             manager.VisibilityManager
+		saManager                 searchattribute.Manager
+		healthServer              *health.Server
+		historyClient             resource.HistoryClient
+		clusterMetadataManager    persistence.ClusterMetadataManager
+		clusterMetadata           clustermetadata.Metadata
+		clientFactory             svc.Factory
+		namespaceRegistry         namespace.Registry
+		nexusEndpointClient       *NexusEndpointClient
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		config                 *Config
-		Logger                 log.Logger
-		EventLogger            otellog.Logger
-		sdkClientFactory       sdk.ClientFactory
-		MetricsHandler         metrics.Handler
-		VisibilityMgr          manager.VisibilityManager
-		SaManager              searchattribute.Manager
-		healthServer           *health.Server
-		historyClient          resource.HistoryClient
-		clusterMetadataManager persistence.ClusterMetadataManager
-		clusterMetadata        clustermetadata.Metadata
-		clientFactory          svc.Factory
-		namespaceRegistry      namespace.Registry
-		nexusEndpointClient    *NexusEndpointClient
+		config                    *Config
+		Logger                    log.Logger
+		EventLogger               otellog.Logger
+		sdkClientFactory          sdk.ClientFactory
+		MetricsHandler            metrics.Handler
+		VisibilityMgr             manager.VisibilityManager
+		SaManager                 searchattribute.Manager
+		healthServer              *health.Server
+		historyClient             resource.HistoryClient
+		clusterMetadataManager    persistence.ClusterMetadataManager
+		clusterMetadata           clustermetadata.Metadata
+		clientFactory             svc.Factory
+		namespaceRegistry         namespace.Registry
+		nexusEndpointClient       *NexusEndpointClient
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 	}
 )
 
@@ -97,21 +99,22 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:                 args.Logger,
-		eventLogger:            args.EventLogger,
-		status:                 common.DaemonStatusInitialized,
-		config:                 args.config,
-		sdkClientFactory:       args.sdkClientFactory,
-		metricsHandler:         args.MetricsHandler,
-		visibilityMgr:          args.VisibilityMgr,
-		saManager:              args.SaManager,
-		healthServer:           args.healthServer,
-		historyClient:          args.historyClient,
-		clusterMetadataManager: args.clusterMetadataManager,
-		clusterMetadata:        args.clusterMetadata,
-		clientFactory:          args.clientFactory,
-		namespaceRegistry:      args.namespaceRegistry,
-		nexusEndpointClient:    args.nexusEndpointClient,
+		logger:                    args.Logger,
+		eventLogger:               args.EventLogger,
+		status:                    common.DaemonStatusInitialized,
+		config:                    args.config,
+		sdkClientFactory:          args.sdkClientFactory,
+		metricsHandler:            args.MetricsHandler,
+		visibilityMgr:             args.VisibilityMgr,
+		saManager:                 args.SaManager,
+		healthServer:              args.healthServer,
+		historyClient:             args.historyClient,
+		clusterMetadataManager:    args.clusterMetadataManager,
+		clusterMetadata:           args.clusterMetadata,
+		clientFactory:             args.clientFactory,
+		namespaceRegistry:         args.namespaceRegistry,
+		nexusEndpointClient:       args.nexusEndpointClient,
+		namespaceReplicationQueue: args.namespaceReplicationQueue,
 	}
 
 	return handler
@@ -686,6 +689,16 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 		updateRequestVersion = 0
 	default:
 		return nil, serviceerror.NewInternalf(errUnableToStoreClusterInfo, err)
+	}
+	err = resetNamespaceReplicationAckForFreshConnect(
+		ctx,
+		h.namespaceReplicationQueue,
+		persistedBefore,
+		resp.GetClusterName(),
+		request.GetEnableRemoteClusterConnection(),
+	)
+	if err != nil {
+		return nil, err
 	}
 	saveRequest := &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
