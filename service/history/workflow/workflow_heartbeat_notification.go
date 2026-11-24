@@ -66,6 +66,21 @@ func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool 
 	}
 }
 
+// HasBufferedWorkflowHeartbeatNotificationInput reports whether a prior WHN-eligible event is buffered.
+// Events in newBufferedEvents are excluded by pointer identity.
+func HasBufferedWorkflowHeartbeatNotificationInput(ms historyi.MutableState, newBufferedEvents []*historypb.HistoryEvent) bool {
+	newEventSet := make(map[*historypb.HistoryEvent]struct{}, len(newBufferedEvents))
+	for _, event := range newBufferedEvents {
+		newEventSet[event] = struct{}{}
+	}
+	return ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
+		if _, ok := newEventSet[event]; ok {
+			return false
+		}
+		return IsWorkflowHeartbeatNotificationInputType(event.GetEventType())
+	})
+}
+
 // handleWorkflowHeartbeatNotification handles buffered events waiting for the next Workflow Task to reach the worker.
 // Admitted Updates can also trigger WHN while waiting for that task, through the Update path.
 func (c *ContextImpl) handleWorkflowHeartbeatNotification(
@@ -86,9 +101,7 @@ func (c *ContextImpl) handleWorkflowHeartbeatNotification(
 		return
 	}
 
-	// TODO(whn): Distinguish prior WHN-eligible events from other buffered events. Counting all buffered
-	// events avoids a scan but can miss the first-input metric and suppress WHN for a later eligible event.
-	hadBufferedInput := c.MutableState.NumBufferedEvents() > len(newBufferedEvents)
+	hadBufferedInput := HasBufferedWorkflowHeartbeatNotificationInput(c.MutableState, newBufferedEvents)
 	firstBufferedInput := !hadBufferedInput && !c.hasPendingUpdateForWorkflowHeartbeatNotification()
 	namespaceEntry := c.MutableState.GetNamespaceEntry()
 	if namespaceEntry == nil {
