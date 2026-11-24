@@ -6,3 +6,4 @@ Collection of general-purpose Go test helpers.
 - `freeport`: reserve available ports for tests.
 - `parallelsuite`: isolated parallel test suites with fail-fast assertions.
 - `testcontext`: shared test contexts with deadlines and decorators.
+- `testlogger`: backend-independent test logging with expectations, captures, and failure diagnostics.

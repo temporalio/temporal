@@ -6,8 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/testx/testlogger"
 )
 
 // mockT wraps a testing.T such that we can know if a test is failed.
@@ -53,8 +52,8 @@ func (m *mockT) Fatalf(format string, args ...any) {
 
 var _ testlogger.TestingT = (*mockT)(nil)
 
-func assertMatches(t *testing.T, level testlogger.Level, msg string, tags []tag.Tag) {
-	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+func assertMatches(t *testing.T, level testlogger.Level, msg string, tags []field) {
+	tl := newEngine(t, testlogger.FailOnAnyUnexpectedError)
 	tl.Expect(level, msg, tags...)
 
 	switch level {
@@ -82,13 +81,13 @@ func TestTestLogger_ExpectationsMatch(t *testing.T) {
 
 	for _, level := range []testlogger.Level{testlogger.Error, testlogger.DPanic, testlogger.Panic, testlogger.Fatal} {
 		t.Run(level.String()+" with tags", func(t *testing.T) {
-			assertMatches(t, level, "message with tags", []tag.Tag{tag.String("key", "value")})
+			assertMatches(t, level, "message with tags", []field{field{"key", "value"}})
 		})
 		t.Run(level.String()+" without tags", func(t *testing.T) {
 			assertMatches(t, level, "message without tags", nil)
 		})
 		t.Run(level.String()+" no message only tags", func(t *testing.T) {
-			assertMatches(t, level, "", []tag.Tag{tag.String("key", "value")})
+			assertMatches(t, level, "", []field{field{"key", "value"}})
 		})
 	}
 
@@ -97,26 +96,26 @@ func TestTestLogger_ExpectationsMatch(t *testing.T) {
 func TestTestLogger_InfoExpectationMatchCount(t *testing.T) {
 	t.Parallel()
 
-	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-	expected := tl.Expect(testlogger.Info, "expected info", tag.String("key", "value"))
+	tl := newEngine(t, testlogger.FailOnAnyUnexpectedError)
+	expected := tl.Expect(testlogger.Info, "expected info", field{"key", "value"})
 	require.False(t, expected.Matched())
 	require.Zero(t, expected.MatchCount())
 
-	tl.Info("expected info", tag.String("key", "other"))
+	tl.Info("expected info", field{"key", "other"})
 	require.False(t, expected.Matched())
 	require.Zero(t, expected.MatchCount())
 
-	tl.Info("expected info", tag.String("key", "value"))
+	tl.Info("expected info", field{"key", "value"})
 	require.True(t, expected.Matched())
 	require.Equal(t, int64(1), expected.MatchCount())
 
-	tl.Info("expected info", tag.String("key", "value"))
+	tl.Info("expected info", field{"key", "value"})
 	require.Equal(t, int64(2), expected.MatchCount())
 }
 
-func assertFails(t *testing.T, level testlogger.Level, msg string, tags []tag.Tag) {
+func assertFails(t *testing.T, level testlogger.Level, msg string, tags []field) {
 	mt := &mockT{T: t}
-	tl := testlogger.NewTestLogger(mt, testlogger.FailOnAnyUnexpectedError)
+	tl := newEngine(mt, testlogger.FailOnAnyUnexpectedError)
 
 	switch level {
 	case testlogger.Error:
@@ -142,20 +141,20 @@ func TestTestLogger_Uncaught(t *testing.T) {
 	// Non-panicking levels
 	for _, level := range []testlogger.Level{testlogger.Error, testlogger.DPanic} {
 		t.Run(level.String()+" with tags", func(t *testing.T) {
-			assertFails(t, level, "message with tags", []tag.Tag{tag.String("key", "value")})
+			assertFails(t, level, "message with tags", []field{field{"key", "value"}})
 		})
 		t.Run(level.String()+" without tags", func(t *testing.T) {
 			assertFails(t, level, "message without tags", nil)
 		})
 		t.Run(level.String()+" no message only tags", func(t *testing.T) {
-			assertFails(t, level, "", []tag.Tag{tag.String("key", "value")})
+			assertFails(t, level, "", []field{field{"key", "value"}})
 		})
 	}
 	// Panicking levels
 	for _, level := range []testlogger.Level{testlogger.Panic, testlogger.Fatal} {
 		t.Run(level.String()+" with tags", func(t *testing.T) {
 			require.Panics(t, func() {
-				assertFails(t, level, "message with tags", []tag.Tag{tag.String("key", "value")})
+				assertFails(t, level, "message with tags", []field{field{"key", "value"}})
 			})
 		})
 		t.Run(level.String()+" without tags", func(t *testing.T) {
@@ -165,7 +164,7 @@ func TestTestLogger_Uncaught(t *testing.T) {
 		})
 		t.Run(level.String()+" no message only tags", func(t *testing.T) {
 			require.Panics(t, func() {
-				assertFails(t, level, "", []tag.Tag{tag.String("key", "value")})
+				assertFails(t, level, "", []field{field{"key", "value"}})
 			})
 		})
 	}
@@ -178,32 +177,35 @@ func TestTestLogger_Failure_StickyOnAnyUnexpected(t *testing.T) {
 	t.Parallel()
 
 	mt := &mockT{T: t}
-	tl := testlogger.NewTestLogger(mt, testlogger.FailOnAnyUnexpectedError)
+	tl := newEngine(mt, testlogger.FailOnAnyUnexpectedError)
 	require.Nil(t, tl.Failure())
 
-	tl.Error("first")
+	fields := []field{{"code", 400}}
+	tl.Error("first", fields...)
 	first := tl.Failure()
 	require.NotNil(t, first)
 	require.Equal(t, testlogger.Error, first.Level)
 	require.Equal(t, "first", first.Msg)
 	require.NotEmpty(t, first.Stack)
 
-	tl.Error("second")
+	fields[0] = field{"code", 500}
+	tl.Error("second", fields...)
 	require.Same(t, first, tl.Failure(), "first failure should win")
+	require.Equal(t, []field{{"code", 400}}, first.Tags)
 }
 
 // TestTestLogger_Failure_OnExpectedMatch is the soft-assert path: in
 // FailOnExpectedErrorOnly mode, an Error matching a registered expectation
-// (e.g. tag.FailedAssertion) should mark Failure().
+// (e.g. a failed assertion tag) should mark Failure().
 func TestTestLogger_Failure_OnExpectedMatch(t *testing.T) {
 	t.Parallel()
 
 	mt := &mockT{T: t}
-	tl := testlogger.NewTestLogger(mt, testlogger.FailOnExpectedErrorOnly)
-	tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+	tl := newEngine(mt, testlogger.FailOnExpectedErrorOnly)
+	tl.Expect(testlogger.Error, ".*", field{"failed-assertion", true})
 	require.Nil(t, tl.Failure())
 
-	tl.Error("failed assertion: bad", tag.FailedAssertion)
+	tl.Error("failed assertion: bad", field{"failed-assertion", true})
 
 	f := tl.Failure()
 	require.NotNil(t, f)
@@ -216,7 +218,7 @@ func TestTestLogger_Failure_NoMatch(t *testing.T) {
 	t.Parallel()
 
 	mt := &mockT{T: t}
-	tl := testlogger.NewTestLogger(mt, testlogger.FailOnExpectedErrorOnly)
+	tl := newEngine(mt, testlogger.FailOnExpectedErrorOnly)
 	require.Nil(t, tl.Failure())
 
 	tl.Error("ignored")
