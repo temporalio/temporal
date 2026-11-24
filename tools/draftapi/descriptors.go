@@ -1,13 +1,13 @@
 package draftapi
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"go/ast"
 	"go/constant"
 	"go/types"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -30,31 +30,29 @@ var draftOptionExtendees = map[string]string{
 	"draft": "FieldOptions", "draft_message": "MessageOptions",
 	"draft_enum": "EnumOptions", "draft_enum_value": "EnumValueOptions",
 	"draft_service": "ServiceOptions", "draft_method": "MethodOptions",
-	"draft_file": "FileOptions", "draft_oneof": "OneofOptions", "draft_extension": "FieldOptions",
+	"draft_oneof": "OneofOptions",
 }
 
 type optionsFact struct {
 	Options []option
-	// Dependency-only vet runs discard diagnostics and Run errors.
-	Errors []string
 }
 
 func (*optionsFact) AFact() {}
 
 type catalog struct {
-	pass          *analysis.Pass
-	options       []option
-	facts         map[types.Object][]string
-	seen          map[proto.Message]bool
-	symbols       map[types.Object]string
-	oneofWrappers map[*types.Named]*types.Var
+	pass    *analysis.Pass
+	options []option
+	facts   map[types.Object]string
+	seen    map[proto.Message]bool
+	symbols map[types.Object]string
 }
 
 // exportAPIs validates the package's draft declarations and exports facts for its draft
 // APIs. Declaration and Go-mapping errors are independent, so both are recorded.
-func exportAPIs(pass *analysis.Pass, imported []option, metadata *optionsFact) {
+func exportAPIs(pass *analysis.Pass, imported []option, metadata *optionsFact) []string {
+	var validationErrors []string
 	fail := func(err error) {
-		metadata.Errors = append(metadata.Errors, fmt.Sprintf("%s: %v", pass.Pkg.Path(), err))
+		validationErrors = append(validationErrors, fmt.Sprintf("%s: %v", pass.Pkg.Path(), err))
 	}
 	files, err := readDescriptors(pass)
 	if err == nil {
@@ -62,18 +60,18 @@ func exportAPIs(pass *analysis.Pass, imported []option, metadata *optionsFact) {
 	}
 	if err != nil {
 		fail(err)
-		return
+		return validationErrors
 	}
 	c := &catalog{
-		pass: pass, options: append(imported, metadata.Options...), facts: make(map[types.Object][]string),
+		pass: pass, options: append(imported, metadata.Options...), facts: make(map[types.Object]string),
 		seen: make(map[proto.Message]bool), symbols: make(map[types.Object]string),
-		oneofWrappers: make(map[*types.Named]*types.Var),
 	}
 	for _, err := range []error{c.checkDeclarations(files), c.addAPIs(files)} {
 		if err != nil {
 			fail(err)
 		}
 	}
+	return validationErrors
 }
 
 func (c *catalog) addAPIs(files map[string]*descriptorpb.FileDescriptorProto) error {
@@ -84,7 +82,6 @@ func (c *catalog) addAPIs(files map[string]*descriptorpb.FileDescriptorProto) er
 			}
 		}
 	}
-	c.addReferencedTypes()
 	c.addGetters()
 	for _, fd := range files {
 		if err := c.checkMappings(fd); err != nil {
@@ -92,13 +89,12 @@ func (c *catalog) addAPIs(files map[string]*descriptorpb.FileDescriptorProto) er
 		}
 		c.addServices(fd)
 	}
-	for obj, features := range c.facts {
-		slices.Sort(features)
+	for obj, feature := range c.facts {
 		symbol := c.symbols[obj]
 		if symbol == "" {
 			symbol = objectName(obj)
 		}
-		c.pass.ExportObjectFact(obj, &apiFact{Features: slices.Compact(features), Symbol: symbol})
+		c.pass.ExportObjectFact(obj, &apiFact{Feature: feature, Symbol: symbol})
 	}
 	return nil
 }
@@ -263,8 +259,12 @@ func namedType(typ types.Type) *types.Named {
 	return named
 }
 
-func (c *catalog) features(opts proto.Message) []string {
-	return slices.DeleteFunc(c.draftValues(opts), func(feature string) bool { return feature == "" })
+func (c *catalog) feature(opts proto.Message) string {
+	values := c.draftValues(opts)
+	if len(values) != 1 {
+		return ""
+	}
+	return values[0]
 }
 
 func (c *catalog) draftValues(opts proto.Message) []string {
@@ -298,47 +298,47 @@ func (c *catalog) draftValues(opts proto.Message) []string {
 	return features
 }
 
-func (c *catalog) mark(obj types.Object, features []string) {
-	if obj != nil && len(features) > 0 {
-		c.facts[obj] = append(c.facts[obj], features...)
+func (c *catalog) mark(obj types.Object, feature string) {
+	if obj != nil && obj.Pkg() == c.pass.Pkg && feature != "" {
+		c.facts[obj] = feature
 	}
 }
 
-func (c *catalog) markType(typ *types.Named, features []string) {
-	c.mark(typ.Obj(), features)
-	for i := 0; i < typ.NumMethods(); i++ {
-		c.mark(typ.Method(i), features)
+func (c *catalog) markType(typ *types.Named, feature string) {
+	c.mark(typ.Obj(), feature)
+	for method := range typ.Methods() {
+		c.mark(method, feature)
 	}
 }
 
 func (c *catalog) addType(file *ast.File, fd *descriptorpb.FileDescriptorProto, path []int, typ *types.Named, enum bool) error {
 	messages := fd.MessageType
 	enums := fd.EnumType
-	var features []string
+	var feature string
 	for i, index := range path {
 		if enum && i == len(path)-1 {
 			if index >= len(enums) {
 				return fmt.Errorf("invalid enum descriptor path for %s", typ.Obj().Name())
 			}
-			c.addEnum(file, typ, enums[index], features)
+			c.addEnum(file, typ, enums[index], feature)
 			return nil
 		}
 		if index >= len(messages) {
 			return fmt.Errorf("invalid message descriptor path for %s", typ.Obj().Name())
 		}
 		message := messages[index]
-		features = append(features, c.features(message.Options)...)
+		feature = cmp.Or(feature, c.feature(message.Options))
 		if i == len(path)-1 {
-			c.addMessage(typ, message, features)
+			c.addMessage(typ, message, feature)
 		}
 		messages, enums = message.NestedType, message.EnumType
 	}
 	return nil
 }
 
-func (c *catalog) addMessage(typ *types.Named, message *descriptorpb.DescriptorProto, features []string) {
+func (c *catalog) addMessage(typ *types.Named, message *descriptorpb.DescriptorProto, feature string) {
 	c.seen[message] = true
-	c.markType(typ, features)
+	c.markType(typ, feature)
 	structure, ok := typ.Underlying().(*types.Struct)
 	if !ok {
 		return
@@ -348,68 +348,62 @@ func (c *catalog) addMessage(typ *types.Named, message *descriptorpb.DescriptorP
 		c.symbols[field] = objectName(typ.Obj()) + "." + field.Name()
 		tag := reflect.StructTag(structure.Tag(i))
 		if oneof := tag.Get("protobuf_oneof"); oneof != "" {
-			for j, decl := range message.OneofDecl {
+			for _, decl := range message.OneofDecl {
 				if decl.GetName() == oneof {
-					c.mark(field, append(slices.Clone(features), c.features(decl.Options)...))
-					c.addOneof(field.Type(), message, j, features)
+					oneofFeature := cmp.Or(feature, c.feature(decl.Options))
+					c.mark(field, oneofFeature)
+					c.addOneof(field.Type(), message, oneofFeature)
+					break
 				}
 			}
 			continue
 		}
-		c.mark(field, append(slices.Clone(features), c.fieldFeatures(tag, message)...))
+		c.mark(field, cmp.Or(feature, c.fieldFeature(tag, message)))
 	}
 }
 
-func (c *catalog) fieldFeatures(tag reflect.StructTag, message *descriptorpb.DescriptorProto) []string {
+func (c *catalog) fieldFeature(tag reflect.StructTag, message *descriptorpb.DescriptorProto) string {
 	parts := strings.Split(tag.Get("protobuf"), ",")
 	if len(parts) < 2 {
-		return nil
+		return ""
 	}
 	for _, field := range message.Field {
 		if strconv.Itoa(int(field.GetNumber())) == parts[1] {
-			features := c.features(field.Options)
-			if field.OneofIndex != nil {
-				features = append(features, c.features(message.OneofDecl[field.GetOneofIndex()].Options)...)
-			}
-			return features
+			return c.feature(field.Options)
 		}
 	}
-	return nil
+	return ""
 }
 
-func (c *catalog) addOneof(typ types.Type, message *descriptorpb.DescriptorProto, index int, inherited []string) {
+func (c *catalog) addOneof(typ types.Type, message *descriptorpb.DescriptorProto, inherited string) {
 	iface, ok := typ.Underlying().(*types.Interface)
 	if !ok {
 		return
 	}
 	for _, name := range c.pass.Pkg.Scope().Names() {
 		obj, ok := c.pass.Pkg.Scope().Lookup(name).(*types.TypeName)
-		if !ok {
+		if !ok || obj.IsAlias() {
 			continue
 		}
 		wrapper := namedType(obj.Type())
-		if wrapper == nil || !types.Implements(types.NewPointer(wrapper), iface) {
+		if wrapper == nil || wrapper.Obj().Pkg() != c.pass.Pkg || !types.Implements(types.NewPointer(wrapper), iface) {
 			continue
 		}
 		structure, ok := wrapper.Underlying().(*types.Struct)
 		if !ok || structure.NumFields() != 1 {
 			continue
 		}
-		features := append(slices.Clone(inherited), c.features(message.OneofDecl[index].Options)...)
-		features = append(features, c.fieldFeatures(reflect.StructTag(structure.Tag(0)), message)...)
-		if c.oneofWrappers != nil {
-			c.oneofWrappers[wrapper] = structure.Field(0)
-		}
-		c.markType(wrapper, features)
-		c.mark(structure.Field(0), features)
+		feature := cmp.Or(inherited, c.fieldFeature(reflect.StructTag(structure.Tag(0)), message))
+		c.markType(wrapper, feature)
+		c.mark(structure.Field(0), feature)
 		c.symbols[structure.Field(0)] = objectName(wrapper.Obj()) + "." + structure.Field(0).Name()
 	}
 }
 
-func (c *catalog) addEnum(file *ast.File, typ *types.Named, enum *descriptorpb.EnumDescriptorProto, inherited []string) {
+func (c *catalog) addEnum(file *ast.File, typ *types.Named, enum *descriptorpb.EnumDescriptorProto, inherited string) {
 	c.seen[enum] = true
-	features := append(slices.Clone(inherited), c.features(enum.Options)...)
-	c.markType(typ, features)
+	feature := cmp.Or(inherited, c.feature(enum.Options))
+	c.markType(typ, feature)
 	index := 0
 	ast.Inspect(file, func(node ast.Node) bool {
 		id, ok := node.(*ast.Ident)
@@ -420,7 +414,7 @@ func (c *catalog) addEnum(file *ast.File, typ *types.Named, enum *descriptorpb.E
 		if !ok || !types.Identical(obj.Type(), typ) || index >= len(enum.Value) {
 			return true
 		}
-		c.mark(obj, append(slices.Clone(features), c.features(enum.Value[index].Options)...))
+		c.mark(obj, cmp.Or(feature, c.feature(enum.Value[index].Options)))
 		index++
 		return true
 	})
@@ -441,9 +435,9 @@ func (c *catalog) checkMappings(fd *descriptorpb.FileDescriptorProto) error {
 }
 
 func (c *catalog) checkEnumMapping(enum *descriptorpb.EnumDescriptorProto, inherited bool) error {
-	draft := inherited || len(c.features(enum.Options)) > 0
+	draft := inherited || c.feature(enum.Options) != ""
 	for _, value := range enum.Value {
-		draft = draft || len(c.features(value.Options)) > 0
+		draft = draft || c.feature(value.Options) != ""
 	}
 	if draft && !c.seen[enum] {
 		return fmt.Errorf("cannot map draft enum %s to Go; unsupported generated descriptor accessors", enum.GetName())
@@ -452,13 +446,13 @@ func (c *catalog) checkEnumMapping(enum *descriptorpb.EnumDescriptorProto, inher
 }
 
 func (c *catalog) checkMessageMapping(message *descriptorpb.DescriptorProto, inherited bool) error {
-	draft := inherited || len(c.features(message.Options)) > 0
+	draft := inherited || c.feature(message.Options) != ""
 	needsMapping := draft
 	for _, field := range message.Field {
-		needsMapping = needsMapping || len(c.features(field.Options)) > 0
+		needsMapping = needsMapping || c.feature(field.Options) != ""
 	}
 	for _, oneof := range message.OneofDecl {
-		needsMapping = needsMapping || len(c.features(oneof.Options)) > 0
+		needsMapping = needsMapping || c.feature(oneof.Options) != ""
 	}
 	if needsMapping && !message.GetOptions().GetMapEntry() && !c.seen[message] {
 		return fmt.Errorf("cannot map draft message %s to Go; unsupported generated descriptor accessors", message.GetName())
@@ -476,53 +470,7 @@ func (c *catalog) checkMessageMapping(message *descriptorpb.DescriptorProto, inh
 	return nil
 }
 
-func (c *catalog) referenceFeatures(typ types.Type) []string {
-	switch typ := types.Unalias(typ).(type) {
-	case *types.Pointer:
-		return c.referenceFeatures(typ.Elem())
-	case *types.Slice:
-		return c.referenceFeatures(typ.Elem())
-	case *types.Map:
-		return c.referenceFeatures(typ.Elem())
-	case *types.Named:
-		if typ.Obj().Pkg() == c.pass.Pkg {
-			return c.facts[typ.Obj()]
-		}
-		var fact apiFact
-		if c.pass.ImportObjectFact(typ.Obj(), &fact) {
-			return fact.Features
-		}
-		return nil
-	default:
-		return nil
-	}
-}
-
-// All declarations must be classified before local forward references are inspected.
-func (c *catalog) addReferencedTypes() {
-	for _, name := range c.pass.Pkg.Scope().Names() {
-		obj, ok := c.pass.Pkg.Scope().Lookup(name).(*types.TypeName)
-		if !ok {
-			continue
-		}
-		typ := namedType(obj.Type())
-		if typ == nil {
-			continue
-		}
-		structure, ok := typ.Underlying().(*types.Struct)
-		if !ok {
-			continue
-		}
-		for i := 0; i < structure.NumFields(); i++ {
-			field := structure.Field(i)
-			c.mark(field, c.referenceFeatures(field.Type()))
-		}
-	}
-	for wrapper, field := range c.oneofWrappers {
-		c.markType(wrapper, c.referenceFeatures(field.Type()))
-	}
-}
-
+// addGetters uses the field and wrapper declarations after they have been classified.
 func (c *catalog) addGetters() {
 	for _, file := range c.pass.Files {
 		if !generatedProto(c.pass, file) {

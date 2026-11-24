@@ -1,9 +1,9 @@
 package draft
 
 import (
+	"slices"
 	"testing"
 
-	"github.com/bufbuild/prototransform"
 	"github.com/stretchr/testify/require"
 	protometapb "go.temporal.io/api/protometa/v1"
 	"go.temporal.io/server/common/draft/testfixture"
@@ -44,9 +44,9 @@ func TestOmitSelections(t *testing.T) {
 			item := m.Items[0]
 			reads := 0
 			selection := NewSelection(func() []string { reads++; return tc.features })
-			affected, err := Omit(m, selection)
+			removedEnumValue, err := Omit(m, selection)
 			require.NoError(t, err)
-			require.True(t, affected)
+			require.False(t, removedEnumValue)
 			require.Same(t, pointer, m)
 			require.Same(t, item, m.Items[0])
 			require.Equal(t, "stable", m.Stable)
@@ -78,20 +78,17 @@ func TestOmitOracleAndNilElements(t *testing.T) {
 	for _, features := range [][]string{nil, {"feature-a"}, {"feature-b"}, {"feature-a", "feature-b"}} {
 		selection := NewSelection(func() []string { return features })
 		source := populatedMessage()
-		redact := prototransform.Redact(func(f protoreflect.FieldDescriptor) bool {
-			feature, _ := proto.GetExtension(f.Options(), protometapb.E_Draft).(string)
-			return feature != "" && !selection.Enabled(feature)
-		})
-		expected := redact(proto.Clone(source).ProtoReflect()).Interface()
+		expected := proto.Clone(source)
+		stripDisabled(expected.ProtoReflect(), features)
 		_, err := Omit(source, selection)
 		require.NoError(t, err)
 		require.True(t, proto.Equal(expected, source))
 	}
 	selection := NewSelection(func() []string { return nil })
 	var typedNil *testfixture.Message
-	affected, err := Omit(typedNil, selection)
+	removedEnumValue, err := Omit(typedNil, selection)
 	require.NoError(t, err)
-	require.True(t, affected)
+	require.False(t, removedEnumValue)
 	message := &testfixture.Message{Items: []*testfixture.Message{nil}, ByName: map[string]*testfixture.Message{"nil": nil}, Choice: &testfixture.Message_ChoiceChild{ChoiceChild: &testfixture.Message{Stable: "kept", FeatureA: "a"}}}
 	_, err = Omit(message, selection)
 	require.NoError(t, err)
@@ -111,17 +108,81 @@ func TestOmitOracleAndNilElements(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// typeDraftFeatures returns the draft_message features of a message or enum and of the
+// messages it is nested in.
+func typeDraftFeatures(descriptor protoreflect.Descriptor) []string {
+	var features []string
+	for ; descriptor != nil; descriptor = descriptor.Parent() {
+		if message, ok := descriptor.(protoreflect.MessageDescriptor); ok {
+			if feature, _ := proto.GetExtension(message.Options(), protometapb.E_DraftMessage).(string); feature != "" {
+				features = append(features, feature)
+			}
+		}
+	}
+	return features
+}
+
+// fieldDraftFeatures returns the features a field needs: its own and those of the
+// message or enum it holds, or of a map field's value.
+func fieldDraftFeatures(field protoreflect.FieldDescriptor) []string {
+	var features []string
+	if feature, _ := proto.GetExtension(field.Options(), protometapb.E_Draft).(string); feature != "" {
+		features = append(features, feature)
+	}
+	if field.IsMap() {
+		field = field.MapValue()
+	}
+	if field.Message() != nil {
+		features = append(features, typeDraftFeatures(field.Message())...)
+	} else if field.Enum() != nil {
+		features = append(features, typeDraftFeatures(field.Enum())...)
+	}
+	return features
+}
+
+// stripDisabled clears every field that needs a feature outside enabled, at any depth.
+func stripDisabled(m protoreflect.Message, enabled []string) {
+	var disabled []protoreflect.FieldDescriptor
+	m.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+		for _, feature := range fieldDraftFeatures(field) {
+			if !slices.Contains(enabled, feature) {
+				disabled = append(disabled, field)
+				return true
+			}
+		}
+		switch {
+		case field.IsList() && field.Message() != nil:
+			for i := 0; i < value.List().Len(); i++ {
+				stripDisabled(value.List().Get(i).Message(), enabled)
+			}
+		case field.IsMap() && field.MapValue().Message() != nil:
+			value.Map().Range(func(_ protoreflect.MapKey, entry protoreflect.Value) bool {
+				stripDisabled(entry.Message(), enabled)
+				return true
+			})
+		case field.Message() != nil && !field.IsList() && !field.IsMap():
+			stripDisabled(value.Message(), enabled)
+		default:
+			// Scalars and lists, maps of scalars hold no draft fields.
+		}
+		return true
+	})
+	for _, field := range disabled {
+		m.Clear(field)
+	}
+}
+
 type panickingOmitter struct{}
 
-func (panickingOmitter) OmitDraftFields(func(string) bool) { panic("sensitive payload") }
+func (panickingOmitter) OmitDraftFields(func(string) bool) bool { panic("sensitive payload") }
 
 func TestOmitLazySelectionAndRecovery(t *testing.T) {
 	reads := 0
 	selection := NewSelection(func() []string { reads++; return []string{"feature-a", "feature-a", "Feature-A", ""} })
 	for _, value := range []any{nil, "not a proto", &testfixture.StableMessage{Stable: "stable"}} {
-		affected, err := Omit(value, selection)
+		removedEnumValue, err := Omit(value, selection)
 		require.NoError(t, err)
-		require.False(t, affected)
+		require.False(t, removedEnumValue)
 	}
 	require.Zero(t, reads)
 	require.True(t, selection.Enabled("feature-a"))
@@ -131,20 +192,23 @@ func TestOmitLazySelectionAndRecovery(t *testing.T) {
 	for _, tc := range []struct {
 		message   any
 		selection *Selection
+		name      string
+		recovered string
 	}{
-		{panickingOmitter{}, selection},
-		{&testfixture.Message{}, NewSelection(func() []string { panic("config contents") })},
+		{panickingOmitter{}, selection, "draft.panickingOmitter", "sensitive payload"},
+		{&testfixture.Message{}, NewSelection(func() []string { panic("config contents") }), "temporal.api.drafttest.v1.Message", "config contents"},
 	} {
-		affected, err := Omit(tc.message, tc.selection)
-		require.True(t, affected)
-		require.EqualError(t, err, "draft field omission failed")
+		removedEnumValue, err := Omit(tc.message, tc.selection)
+		require.False(t, removedEnumValue)
+		require.ErrorContains(t, err, tc.name)
+		require.ErrorContains(t, err, tc.recovered)
 	}
 }
 
 func BenchmarkOmit(b *testing.B) {
 	for _, tc := range []struct {
 		name    string
-		message any
+		message proto.Message
 	}{
 		{"unaffected", &testfixture.StableMessage{Stable: "stable"}},
 		{"small", populatedMessage()},
@@ -152,11 +216,13 @@ func BenchmarkOmit(b *testing.B) {
 		{"blob-limit", &testfixture.Message{Stable: "stable", FeatureA: "a", Raw: make([]byte, 2*1024*1024)}},
 	} {
 		b.Run(tc.name, func(b *testing.B) {
-			selection := NewSelection(func() []string { return nil })
 			b.ReportAllocs()
-			b.ResetTimer()
 			for b.Loop() {
-				if _, err := Omit(tc.message, selection); err != nil {
+				b.StopTimer()
+				message := proto.Clone(tc.message)
+				selection := NewSelection(func() []string { return nil })
+				b.StartTimer()
+				if _, err := Omit(message, selection); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -169,24 +235,36 @@ func TestOmitWholeMessages(t *testing.T) {
 		s := NewSelection(func() []string { return features })
 		m := &testfixture.DraftReferences{
 			Stable: "kept", Child: &testfixture.WholeDraft{Value: "a"},
-			Items:  []*testfixture.WholeDraft{{Value: "a"}},
-			Values: map[string]*testfixture.WholeDraft{"a": {Value: "a"}},
-			State:  testfixture.WholeDraft_ONE,
-			Nested: &testfixture.WholeDraft_Nested{Value: "ab"},
-			Both:   &testfixture.WholeDraft{Value: "ab"},
-			Choice: &testfixture.DraftReferences_DraftChild{DraftChild: &testfixture.WholeDraft{Value: "a"}},
+			Items:     []*testfixture.WholeDraft{{Value: "a"}},
+			Values:    map[string]*testfixture.WholeDraft{"a": {Value: "a"}},
+			State:     testfixture.WholeDraft_ONE,
+			Nested:    &testfixture.WholeDraft_Nested{Value: "ab"},
+			AlsoDraft: &testfixture.WholeDraft{Value: "a"},
+			Choice:    &testfixture.DraftReferences_DraftChild{DraftChild: &testfixture.WholeDraft{Value: "a"}},
 		}
 		_, err := Omit(m, s)
 		require.NoError(t, err)
 		require.Equal(t, "kept", m.Stable)
 		a := s.Enabled("feature-a")
-		both := a && s.Enabled("feature-b")
 		require.Equal(t, a, m.Child != nil)
 		require.Equal(t, a, m.Items != nil)
 		require.Equal(t, a, m.Values != nil)
 		require.Equal(t, a, m.Choice != nil)
 		require.Equal(t, a, m.State == testfixture.WholeDraft_ONE)
-		require.Equal(t, both, m.Nested != nil)
-		require.Equal(t, both, m.Both != nil)
+		require.Equal(t, a, m.Nested != nil)
+		require.Equal(t, a, m.AlsoDraft != nil)
 	}
+}
+
+func TestOmitEnumValuesInDisabledContainers(t *testing.T) {
+	t.Parallel()
+	message := &testfixture.EnumRequest{
+		DraftField:    testfixture.StableEnum_STABLE_ENUM_PREVIEW,
+		PreviewChoice: &testfixture.EnumRequest_Preview{Preview: testfixture.StableEnum_STABLE_ENUM_PREVIEW},
+	}
+	selection := NewSelection(func() []string { return nil })
+	removedEnumValue, err := Omit(message, selection)
+	require.NoError(t, err)
+	require.False(t, removedEnumValue)
+	require.True(t, proto.Equal(&testfixture.EnumRequest{}, message))
 }

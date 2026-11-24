@@ -429,6 +429,7 @@ func newDraftNexusHandler(t *testing.T) (*nexusHandler, context.Context) {
 	h := &nexusHandler{
 		logger: oc.logger, metricsHandler: oc.metricsHandler, clusterMetadata: oc.clusterMetadata, namespaceRegistry: draftNexusRegistry{ns: oc.namespace}, auth: oc.auth, telemetryInterceptor: oc.telemetryInterceptor, requestErrorHandler: oc.requestErrorHandler, redirectionInterceptor: oc.redirectionInterceptor, forwardingEnabledForNamespace: oc.forwardingEnabledForNamespace, headersBlacklist: oc.headersBlacklist,
 		payloadSizeLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024), metricTagConfig: dynamicconfig.GetTypedPropertyFn(chasmnexus.NexusMetricTagConfig{}),
+		omitDraftFields: draft.Omit,
 	}
 	oc.requestStartTime = time.Now()
 	oc.taskQueue = "task-queue"
@@ -478,7 +479,7 @@ func TestNexusDraftOperationSelections(t *testing.T) {
 					default:
 						t.Fatalf("unexpected root %T", root)
 					}
-					return true, nil
+					return false, nil
 				}
 				h.matchingClient = draftNexusMatching{dispatch: func(r *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
 					require.Equal(t, "task-queue", r.TaskQueue.Name)
@@ -518,7 +519,8 @@ type draftNexusOutcome struct {
 	startOnly  bool
 	cancelOnly bool
 	// success outcomes convert to a successful result instead of an error.
-	success bool
+	success        bool
+	operationState nexus.OperationState
 }
 
 // draftNexusOutcomes covers every worker outcome that has its own omission root.
@@ -534,7 +536,7 @@ func draftNexusOutcomes() []draftNexusOutcome {
 			//nolint:staticcheck // Exercise deprecated worker outcomes retained for backward compatibility.
 			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{HandlerError: &nexuspb.HandlerError{ErrorType: string(nexus.HandlerErrorTypeBadRequest), Failure: &nexuspb.Failure{Message: "original"}}}}
 		}, types: []any{&nexuspb.Request{}, &nexuspb.Failure{}}},
-		{name: "operation error", startOnly: true, outcome: func() *matchingservice.DispatchNexusTaskResponse {
+		{name: "operation error", startOnly: true, operationState: nexus.OperationStateFailed, outcome: func() *matchingservice.DispatchNexusTaskResponse {
 			//nolint:staticcheck // Exercise deprecated worker outcomes retained for backward compatibility.
 			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{Response: &nexuspb.Response{Variant: &nexuspb.Response_StartOperation{StartOperation: &nexuspb.StartOperationResponse{Variant: &nexuspb.StartOperationResponse_OperationError{OperationError: &nexuspb.UnsuccessfulOperationError{OperationState: string(nexus.OperationStateFailed), Failure: &nexuspb.Failure{Message: "original"}}}}}}}}
 		}, types: []any{&nexuspb.Request{}, &nexuspb.Response{}, &nexuspb.Failure{}}},
@@ -596,6 +598,7 @@ func TestNexusDraftOperationOutcomeRoots(t *testing.T) {
 							async.OperationToken = "omitted"
 						}
 					case *nexuspb.Request:
+						return false, nil
 					default:
 						t.Fatalf("unexpected root %T", root)
 					}
@@ -613,7 +616,16 @@ func TestNexusDraftOperationOutcomeRoots(t *testing.T) {
 					}
 					return
 				}
-				require.Error(t, err)
+				require.Nil(t, result)
+				if tc.operationState != "" {
+					var operationErr *nexus.OperationError
+					require.ErrorAs(t, err, &operationErr)
+					require.Equal(t, tc.operationState, operationErr.State)
+				} else {
+					var handlerErr *nexus.HandlerError
+					require.ErrorAs(t, err, &handlerErr)
+					require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+				}
 				converted, convErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(err)
 				require.NoError(t, convErr)
 				serialized, marshalErr := json.Marshal(converted)
@@ -637,9 +649,9 @@ func TestNexusDraftOmissionError(t *testing.T) {
 						calls++
 						require.IsType(t, tc.types[calls-1], root)
 						if calls == failAt {
-							return true, errors.New("private payload")
+							return false, errors.New("private payload")
 						}
-						return true, nil
+						return false, nil
 					}
 					dispatched := false
 					h.matchingClient = draftNexusMatching{dispatch: func(*matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
@@ -714,10 +726,7 @@ func TestNexusDraftOperationForwarding(t *testing.T) {
 			}
 			result, err := h.StartOperation(ctx, "service", "operation", draftNexusInput(), nexus.StartOperationOptions{Header: nexus.Header{}})
 			require.NoError(t, err)
-			links := nexus.HandlerLinks(ctx)
-			require.Len(t, links, 1)
-			require.Equal(t, "https://example.test/retained", links[0].URL.String())
-			require.Equal(t, "example.retained", links[0].Type)
+			require.Empty(t, nexus.HandlerLinks(ctx))
 			if mode == "sync" {
 				reader := result.(*nexus.HandlerStartOperationResultSync[any]).Value.(*nexus.Reader)
 				data, err := io.ReadAll(reader)
@@ -728,6 +737,29 @@ func TestNexusDraftOperationForwarding(t *testing.T) {
 			} else {
 				require.Equal(t, "retained-token", result.(*nexus.HandlerStartOperationResultAsync).OperationToken)
 			}
+		})
+	}
+}
+
+func TestNexusDraftEnumRejectsInput(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"start", "cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			h, ctx := newDraftNexusHandler(t)
+			h.omitDraftFields = func(root any, selection *draft.Selection) (bool, error) {
+				require.IsType(t, &nexuspb.Request{}, root)
+				return draft.Omit(&testfixture.EnumValues{Value: testfixture.StableEnum_STABLE_ENUM_PREVIEW}, selection)
+			}
+			h.matchingClient = draftNexusMatching{dispatch: func(*matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
+				t.Fatal("invalid request reached matching")
+				return nil, nil
+			}}
+			_, err := runDraftNexusOperation(ctx, h, mode == "cancel")
+			var handlerErr *nexus.HandlerError
+			require.ErrorAs(t, err, &handlerErr)
+			require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+			require.Equal(t, "request contains a disabled draft enum value", handlerErr.Message)
 		})
 	}
 }

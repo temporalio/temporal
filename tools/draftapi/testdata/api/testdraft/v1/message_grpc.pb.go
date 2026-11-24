@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	StableService_StableCall_FullMethodName = "/temporal.api.testdraft.v1.StableService/StableCall"
+	StableService_Stream_FullMethodName     = "/temporal.api.testdraft.v1.StableService/Stream"
 	StableService_DraftCall_FullMethodName  = "/temporal.api.testdraft.v1.StableService/DraftCall"
 )
 
@@ -27,8 +28,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StableServiceClient interface {
-	StableCall(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error)
-	DraftCall(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error)
+	StableCall(ctx context.Context, in *StableRequest, opts ...grpc.CallOption) (*StableResponse, error)
+	Stream(ctx context.Context, in *StreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamResponse], error)
+	DraftCall(ctx context.Context, in *MethodRequest, opts ...grpc.CallOption) (*MethodResponse, error)
 }
 
 type stableServiceClient struct {
@@ -39,9 +41,9 @@ func NewStableServiceClient(cc grpc.ClientConnInterface) StableServiceClient {
 	return &stableServiceClient{cc}
 }
 
-func (c *stableServiceClient) StableCall(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error) {
+func (c *stableServiceClient) StableCall(ctx context.Context, in *StableRequest, opts ...grpc.CallOption) (*StableResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Stable)
+	out := new(StableResponse)
 	err := c.cc.Invoke(ctx, StableService_StableCall_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -49,9 +51,28 @@ func (c *stableServiceClient) StableCall(ctx context.Context, in *Stable, opts .
 	return out, nil
 }
 
-func (c *stableServiceClient) DraftCall(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error) {
+func (c *stableServiceClient) Stream(ctx context.Context, in *StreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Stable)
+	stream, err := c.cc.NewStream(ctx, &StableService_ServiceDesc.Streams[0], StableService_Stream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamRequest, StreamResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type StableService_StreamClient = grpc.ServerStreamingClient[StreamResponse]
+
+func (c *stableServiceClient) DraftCall(ctx context.Context, in *MethodRequest, opts ...grpc.CallOption) (*MethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MethodResponse)
 	err := c.cc.Invoke(ctx, StableService_DraftCall_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -63,8 +84,9 @@ func (c *stableServiceClient) DraftCall(ctx context.Context, in *Stable, opts ..
 // All implementations must embed UnimplementedStableServiceServer
 // for forward compatibility.
 type StableServiceServer interface {
-	StableCall(context.Context, *Stable) (*Stable, error)
-	DraftCall(context.Context, *Stable) (*Stable, error)
+	StableCall(context.Context, *StableRequest) (*StableResponse, error)
+	Stream(*StreamRequest, grpc.ServerStreamingServer[StreamResponse]) error
+	DraftCall(context.Context, *MethodRequest) (*MethodResponse, error)
 	mustEmbedUnimplementedStableServiceServer()
 }
 
@@ -75,10 +97,13 @@ type StableServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedStableServiceServer struct{}
 
-func (UnimplementedStableServiceServer) StableCall(context.Context, *Stable) (*Stable, error) {
+func (UnimplementedStableServiceServer) StableCall(context.Context, *StableRequest) (*StableResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StableCall not implemented")
 }
-func (UnimplementedStableServiceServer) DraftCall(context.Context, *Stable) (*Stable, error) {
+func (UnimplementedStableServiceServer) Stream(*StreamRequest, grpc.ServerStreamingServer[StreamResponse]) error {
+	return status.Error(codes.Unimplemented, "method Stream not implemented")
+}
+func (UnimplementedStableServiceServer) DraftCall(context.Context, *MethodRequest) (*MethodResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DraftCall not implemented")
 }
 func (UnimplementedStableServiceServer) mustEmbedUnimplementedStableServiceServer() {}
@@ -103,7 +128,7 @@ func RegisterStableServiceServer(s grpc.ServiceRegistrar, srv StableServiceServe
 }
 
 func _StableService_StableCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Stable)
+	in := new(StableRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -115,13 +140,24 @@ func _StableService_StableCall_Handler(srv interface{}, ctx context.Context, dec
 		FullMethod: StableService_StableCall_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StableServiceServer).StableCall(ctx, req.(*Stable))
+		return srv.(StableServiceServer).StableCall(ctx, req.(*StableRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StableService_Stream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(StableServiceServer).Stream(m, &grpc.GenericServerStream[StreamRequest, StreamResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type StableService_StreamServer = grpc.ServerStreamingServer[StreamResponse]
+
 func _StableService_DraftCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Stable)
+	in := new(MethodRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -133,7 +169,7 @@ func _StableService_DraftCall_Handler(srv interface{}, ctx context.Context, dec 
 		FullMethod: StableService_DraftCall_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StableServiceServer).DraftCall(ctx, req.(*Stable))
+		return srv.(StableServiceServer).DraftCall(ctx, req.(*MethodRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -154,7 +190,13 @@ var StableService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _StableService_DraftCall_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Stream",
+			Handler:       _StableService_Stream_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "message.proto",
 }
 
@@ -166,7 +208,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DraftServiceClient interface {
-	Call(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error)
+	Call(ctx context.Context, in *ServiceRequest, opts ...grpc.CallOption) (*ServiceResponse, error)
 }
 
 type draftServiceClient struct {
@@ -177,9 +219,9 @@ func NewDraftServiceClient(cc grpc.ClientConnInterface) DraftServiceClient {
 	return &draftServiceClient{cc}
 }
 
-func (c *draftServiceClient) Call(ctx context.Context, in *Stable, opts ...grpc.CallOption) (*Stable, error) {
+func (c *draftServiceClient) Call(ctx context.Context, in *ServiceRequest, opts ...grpc.CallOption) (*ServiceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Stable)
+	out := new(ServiceResponse)
 	err := c.cc.Invoke(ctx, DraftService_Call_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -191,7 +233,7 @@ func (c *draftServiceClient) Call(ctx context.Context, in *Stable, opts ...grpc.
 // All implementations must embed UnimplementedDraftServiceServer
 // for forward compatibility.
 type DraftServiceServer interface {
-	Call(context.Context, *Stable) (*Stable, error)
+	Call(context.Context, *ServiceRequest) (*ServiceResponse, error)
 	mustEmbedUnimplementedDraftServiceServer()
 }
 
@@ -202,7 +244,7 @@ type DraftServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedDraftServiceServer struct{}
 
-func (UnimplementedDraftServiceServer) Call(context.Context, *Stable) (*Stable, error) {
+func (UnimplementedDraftServiceServer) Call(context.Context, *ServiceRequest) (*ServiceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Call not implemented")
 }
 func (UnimplementedDraftServiceServer) mustEmbedUnimplementedDraftServiceServer() {}
@@ -227,7 +269,7 @@ func RegisterDraftServiceServer(s grpc.ServiceRegistrar, srv DraftServiceServer)
 }
 
 func _DraftService_Call_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Stable)
+	in := new(ServiceRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -239,7 +281,7 @@ func _DraftService_Call_Handler(srv interface{}, ctx context.Context, dec func(i
 		FullMethod: DraftService_Call_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DraftServiceServer).Call(ctx, req.(*Stable))
+		return srv.(DraftServiceServer).Call(ctx, req.(*ServiceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
