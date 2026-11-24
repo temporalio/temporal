@@ -1,6 +1,7 @@
 package interceptor
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -39,10 +41,14 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRepl
 		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
 
 	err := st.Err()
+	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"}
 	if expectReplace {
+		mockRegistry.EXPECT().GetNamespace(namespace.Name(req.Namespace)).Return(&namespace.Namespace{}, nil).AnyTimes()
 		mockLogger.EXPECT().Error(gomock.Any(), gomock.Any()).Times(1)
 	}
-	gotError := errorMaskInterceptor.maskUnknownOrInternalErrors(nil, "test", err)
+	_, gotError := errorMaskInterceptor.Intercept(t.Context(), req, &grpc.UnaryServerInfo{FullMethod: "/test"}, func(context.Context, any) (any, error) {
+		return nil, err
+	})
 	if expectReplace {
 		errorHash := common.ErrorHash(err)
 		expectedMessage := fmt.Sprintf(

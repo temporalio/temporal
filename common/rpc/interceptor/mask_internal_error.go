@@ -50,7 +50,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 
 	resp, err := handler(ctx, req)
 
-	if err != nil && mi.shouldMaskErrors(req) {
+	if err != nil {
 		err = mi.maskUnknownOrInternalErrors(req, info.FullMethod, err)
 	}
 	return resp, err
@@ -70,6 +70,9 @@ func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(
 	statusCode := serviceerror.ToStatus(err).Code()
 
 	if statusCode != codes.Unknown && statusCode != codes.Internal {
+		return err
+	}
+	if !mi.shouldMaskErrors(req) {
 		return err
 	}
 
