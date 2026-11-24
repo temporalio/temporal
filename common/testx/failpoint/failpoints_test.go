@@ -3,10 +3,12 @@ package failpoint_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/testx/await"
 	"go.temporal.io/testx/failpoint"
 )
 
@@ -275,6 +277,82 @@ func TestFailpointBlock_BlockCalledTwice_StillFunctional(t *testing.T) {
 	}
 }
 
+// TestFailpoint_UnblockOne_AfterDisable_DoesNotPanic guards against a prior
+// race where UnblockOne snapshotted blockCh outside the lock and then sent on
+// it after a concurrent Disable closed the channel.
+func TestFailpoint_UnblockOne_AfterDisable_DoesNotPanic(t *testing.T) {
+	for range 100 {
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Block(failpoint.Always)
+
+		var wg sync.WaitGroup
+		wg.Go(fp.Disable)
+		wg.Go(fp.UnblockOne)
+		wg.Wait()
+	}
+}
+
+// TestFailpoint_OnceBlock_ConcurrentReinject guards against a prior race where
+// the deferred disableLocked in Execute would clobber state belonging to a
+// fresh Block() that landed during the wait.
+func TestFailpoint_OnceBlock_ConcurrentReinject(t *testing.T) {
+	fp := failpoint.NewFailpoint[error](key1)
+	fp.Block(failpoint.Once)
+
+	executed := make(chan struct{})
+	go func() {
+		defer close(executed)
+		_, _ = fp.Execute()
+	}()
+
+	// Wait for the goroutine to park inside Execute.
+	await.RequireTrue(t, func() bool {
+		select {
+		case <-fp.WaitCh():
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+
+	// Re-inject Block(Always) while the original goroutine is parked. The
+	// original goroutine's Once cleanup must not close the new channels.
+	fp.Block(failpoint.Always)
+
+	// Release the original goroutine via Disable on the OLD blockCh. We do
+	// this by issuing a UnblockOne on the new state... but the new state has
+	// a fresh blockCh. The original is parked on the old (now-closed via
+	// disableLocked invoked from the new Block()). So it should already have
+	// returned.
+	select {
+	case <-executed:
+	case <-time.After(time.Second):
+		t.Fatal("original Once goroutine did not return after re-inject")
+	}
+
+	// The new Always failpoint must still be usable: a fresh goroutine should
+	// be parkable on it, and UnblockOne should release it.
+	parked := make(chan struct{})
+	go func() {
+		defer close(parked)
+		_, _ = fp.Execute()
+	}()
+	await.RequireTrue(t, func() bool {
+		select {
+		case <-fp.WaitCh():
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+	fp.UnblockOne()
+	select {
+	case <-parked:
+	case <-time.After(time.Second):
+		t.Fatal("new Always failpoint did not unblock — state was clobbered")
+	}
+}
+
 // === Call ===
 // Note: these are lame uses of call, but they exercise the functionality nonetheless
 
@@ -461,4 +539,195 @@ func TestFailpointBlock_AwaitBlock(t *testing.T) {
 		defer cancel()
 		require.ErrorIs(t, fp.AwaitBlock(ctx), context.DeadlineExceeded)
 	})
+}
+
+// TestAwaitBlock_Reconfigured covers a wait that is parked on a block configuration when the
+// failpoint is disabled or reconfigured. The wait must fail even if an execution reaches the
+// replacement block before the waiter runs again.
+func TestAwaitBlock_Reconfigured(t *testing.T) {
+	t.Parallel()
+	key := failpoint.KeyFromName("await-block-reconfigured", "")
+	tests := []struct {
+		name        string
+		reconfigure func(*failpoint.Failpoint[error])
+		// arrive reports whether an execution reaches the block after the reconfiguration.
+		arrive bool
+	}{
+		{name: "disabled", reconfigure: (*failpoint.Failpoint[error]).Disable},
+		{name: "re-armed", reconfigure: func(f *failpoint.Failpoint[error]) { f.Block(failpoint.Always) }},
+		{name: "re-armed and reached", reconfigure: func(f *failpoint.Failpoint[error]) { f.Block(failpoint.Always) }, arrive: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			fp := failpoint.NewFailpoint[error](key)
+			fp.Block(failpoint.Always)
+
+			// The waiter is parked on the first configuration.
+			w, err := fp.BeginAwaitBlock()
+			require.NoError(t, err)
+			require.NotNil(t, w)
+
+			tc.reconfigure(fp)
+			if tc.arrive {
+				executeDone := make(chan struct{})
+				t.Cleanup(func() {
+					fp.Disable()
+					<-executeDone
+				})
+				go func() {
+					defer close(executeDone)
+					_, _ = fp.Execute()
+				}()
+				// The replacement configuration sees the arrival.
+				require.NoError(t, fp.AwaitBlock(ctx))
+			}
+
+			require.ErrorIs(t, fp.FinishAwaitBlock(ctx, w), failpoint.ErrNotBlocking)
+		})
+	}
+}
+
+func TestAwaitBlock_Arrival(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	fp := failpoint.NewFailpoint[error](failpoint.KeyFromName("await-block-arrival", ""))
+	fp.Block(failpoint.Always)
+	w, err := fp.BeginAwaitBlock()
+	require.NoError(t, err)
+
+	executeDone := make(chan struct{})
+	t.Cleanup(func() {
+		fp.Disable()
+		<-executeDone
+	})
+	go func() {
+		defer close(executeDone)
+		_, _ = fp.Execute()
+	}()
+	require.NoError(t, fp.FinishAwaitBlock(ctx, w))
+}
+
+// TestAwaitBlock_ReleasedFromEarlierConfiguration covers an execution that is released from a
+// Once block by re-arming, and updates the failpoint only after an execution blocked at the new
+// configuration: the new execution must still count as blocked.
+func TestAwaitBlock_ReleasedFromEarlierConfiguration(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	fp := failpoint.NewFailpoint[error](failpoint.KeyFromName("await-block-released-earlier", ""))
+	fp.Block(failpoint.Once)
+
+	released := make(chan struct{})
+	proceed := make(chan struct{})
+	var first sync.Once
+	fp.SetAfterRelease(func() {
+		first.Do(func() {
+			close(released)
+			<-proceed
+		})
+	})
+
+	execute := func() chan struct{} {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, _ = fp.Execute()
+		}()
+		return done
+	}
+	firstDone := execute()
+	require.NoError(t, fp.AwaitBlock(ctx))
+
+	fp.Block(failpoint.Once) // Releases the first execution, which waits in afterRelease.
+	select {
+	case <-released:
+	case <-ctx.Done():
+		require.FailNow(t, "the first execution was not released")
+	}
+	secondDone := execute()
+	var proceedOnce sync.Once
+	releaseFirst := func() { proceedOnce.Do(func() { close(proceed) }) }
+	t.Cleanup(func() {
+		releaseFirst()
+		fp.Disable()
+		<-firstDone
+		<-secondDone
+	})
+	require.NoError(t, fp.AwaitBlock(ctx))
+
+	releaseFirst()
+	select {
+	case <-firstDone:
+	case <-ctx.Done():
+		require.FailNow(t, "the first execution did not finish")
+	}
+	// The second execution is still blocked at the current configuration.
+	require.NoError(t, fp.AwaitBlock(ctx))
+	require.True(t, fp.CurrentlyBlocked())
+}
+
+// === Trigger ===
+func fires(fp *failpoint.Failpoint[error], executions int) []bool {
+	out := make([]bool, executions)
+	for i := range out {
+		_, out[i] = fp.Execute()
+	}
+	return out
+}
+
+func TestTrigger(t *testing.T) {
+	t.Parallel()
+
+	injected := errors.New("injected")
+	tests := []struct {
+		name    string
+		trigger failpoint.Trigger
+		want    []bool
+	}{
+		{name: "zero value fires always", trigger: failpoint.Trigger{}, want: []bool{true, true, true, true}},
+		{name: "after skips first executions", trigger: failpoint.Trigger{After: 2}, want: []bool{false, false, true, true}},
+		{name: "max limits fires", trigger: failpoint.Trigger{Max: 2}, want: []bool{true, true, false, false}},
+		{name: "after and max", trigger: failpoint.Trigger{After: 1, Max: 1}, want: []bool{false, true, false, false}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fp := failpoint.NewFailpoint[error](key1)
+			fp.Return(injected, failpoint.Always)
+			fp.SetTrigger(tc.trigger)
+			require.Equal(t, tc.want, fires(fp, len(tc.want)))
+		})
+	}
+}
+
+func TestTrigger_ProbabilityIsDeterministicForSeed(t *testing.T) {
+	t.Parallel()
+
+	run := func() []bool {
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Return(errors.New("injected"), failpoint.Always)
+		fp.SetTrigger(failpoint.Trigger{Probability: 0.5, Seed: 42})
+		return fires(fp, 50)
+	}
+	first := run()
+	require.Equal(t, first, run())
+	require.Contains(t, first, true)
+	require.Contains(t, first, false)
+}
+
+func TestTrigger_SkippedExecutionDoesNotConsumeOnce(t *testing.T) {
+	t.Parallel()
+
+	fp := failpoint.NewFailpoint[error](key1)
+	fp.Return(errors.New("injected"), failpoint.Once)
+	fp.SetTrigger(failpoint.Trigger{After: 1})
+	require.Equal(t, []bool{false, true, false}, fires(fp, 3))
+
+	executions, fired := fp.Stats()
+	require.Equal(t, int64(2), executions)
+	require.Equal(t, int64(1), fired)
 }

@@ -145,82 +145,6 @@ func TestRegistry_ExecuteCtxWithoutFailpoints(t *testing.T) {
 	require.False(t, ok)
 }
 
-// TestFailpoint_UnblockOne_AfterDisable_DoesNotPanic guards against a prior
-// race where UnblockOne snapshotted blockCh outside the lock and then sent on
-// it after a concurrent Disable closed the channel.
-func TestFailpoint_UnblockOne_AfterDisable_DoesNotPanic(t *testing.T) {
-	for range 100 {
-		fp := failpoint.NewFailpoint[error](key1)
-		fp.Block(failpoint.Always)
-
-		var wg sync.WaitGroup
-		wg.Go(fp.Disable)
-		wg.Go(fp.UnblockOne)
-		wg.Wait()
-	}
-}
-
-// TestFailpoint_OnceBlock_ConcurrentReinject guards against a prior race where
-// the deferred disableLocked in Execute would clobber state belonging to a
-// fresh Block() that landed during the wait.
-func TestFailpoint_OnceBlock_ConcurrentReinject(t *testing.T) {
-	fp := failpoint.NewFailpoint[error](key1)
-	fp.Block(failpoint.Once)
-
-	executed := make(chan struct{})
-	go func() {
-		defer close(executed)
-		_, _ = fp.Execute()
-	}()
-
-	// Wait for the goroutine to park inside Execute.
-	await.RequireTrue(t, func() bool {
-		select {
-		case <-fp.WaitCh():
-			return true
-		default:
-			return false
-		}
-	}, time.Second, 5*time.Millisecond)
-
-	// Re-inject Block(Always) while the original goroutine is parked. The
-	// original goroutine's Once cleanup must not close the new channels.
-	fp.Block(failpoint.Always)
-
-	// Release the original goroutine via Disable on the OLD blockCh. We do
-	// this by issuing a UnblockOne on the new state... but the new state has
-	// a fresh blockCh. The original is parked on the old (now-closed via
-	// disableLocked invoked from the new Block()). So it should already have
-	// returned.
-	select {
-	case <-executed:
-	case <-time.After(time.Second):
-		t.Fatal("original Once goroutine did not return after re-inject")
-	}
-
-	// The new Always failpoint must still be usable: a fresh goroutine should
-	// be parkable on it, and UnblockOne should release it.
-	parked := make(chan struct{})
-	go func() {
-		defer close(parked)
-		_, _ = fp.Execute()
-	}()
-	await.RequireTrue(t, func() bool {
-		select {
-		case <-fp.WaitCh():
-			return true
-		default:
-			return false
-		}
-	}, time.Second, 5*time.Millisecond)
-	fp.UnblockOne()
-	select {
-	case <-parked:
-	case <-time.After(time.Second):
-		t.Fatal("new Always failpoint did not unblock — state was clobbered")
-	}
-}
-
 func TestRegistry_GetOrSet(t *testing.T) {
 	registry := failpoint.NewRegistry()
 	fp1 := failpoint.NewFailpoint[error](key1)
@@ -277,4 +201,58 @@ func TestRegistry_ID(t *testing.T) {
 	registry.Set(key1, failpoint.NewFailpoint[error](key1))
 	require.Equal(t, id, registry.ID())
 	require.NotEqual(t, id, failpoint.NewRegistry().ID())
+}
+
+func TestRegistry_Subscribe(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reports fired and skipped executions", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Return(errors.New("injected"), failpoint.Always)
+		fp.SetTrigger(failpoint.Trigger{After: 1})
+		registry.Set(key1, fp)
+		var events []failpoint.Event
+		unsubscribe := registry.Subscribe(func(e failpoint.Event) { events = append(events, e) })
+
+		src := registrySource{registry: registry}
+		_, _ = failpoint.Execute[error](src, key1)
+		_, _ = failpoint.Execute[error](src, key1)
+		unsubscribe()
+		_, _ = failpoint.Execute[error](src, key1)
+
+		require.Equal(t, []failpoint.Event{
+			{Key: key1, Action: failpoint.Return, Fired: false, Execution: 1},
+			{Key: key1, Action: failpoint.Return, Fired: true, Execution: 2},
+		}, events)
+	})
+
+	t.Run("reports a block before it waits", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Block(failpoint.Always)
+		registry.Set(key1, fp)
+		var mu sync.Mutex
+		var events []failpoint.Event
+		registry.Subscribe(func(e failpoint.Event) {
+			mu.Lock()
+			defer mu.Unlock()
+			events = append(events, e)
+		})
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, _ = failpoint.Execute[error](registrySource{registry: registry}, key1)
+		}()
+		await.RequireTrue(t, func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			return len(events) == 1
+		}, 5*time.Second, 10*time.Millisecond)
+		fp.Disable()
+		<-done
+	})
 }

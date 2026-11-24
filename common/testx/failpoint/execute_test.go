@@ -8,38 +8,6 @@ import (
 	"go.temporal.io/testx/failpoint"
 )
 
-type registrySource struct {
-	registry failpoint.Registry
-}
-
-func (s registrySource) Failpoints() failpoint.Registry { return s.registry }
-
-func TestKey(t *testing.T) {
-	t.Parallel()
-
-	scoped := key1.ForScope("ns-1")
-	require.Equal(t, "1", key1.Name())
-	require.Empty(t, key1.Scope())
-	require.Equal(t, "1", key1.String())
-	require.Equal(t, "1", scoped.Name())
-	require.Equal(t, "ns-1", scoped.Scope())
-	require.Equal(t, "1@ns-1", scoped.String())
-	require.NotEqual(t, key1, scoped)
-}
-
-func TestBoundaryKeys(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "grpc:/test.Service/Method", failpoint.GRPCKey("/test.Service/Method").Name())
-	require.Equal(t, "http:POST /callback", failpoint.HTTPKey("POST /callback").Name())
-}
-
-func TestNewKey_PanicsOnDuplicateName(t *testing.T) {
-	t.Parallel()
-
-	require.Panics(t, func() { failpoint.NewKey("1") })
-}
-
 func TestExecute(t *testing.T) {
 	t.Parallel()
 
@@ -163,4 +131,54 @@ func TestExecute_SourceWithoutRegistry(t *testing.T) {
 	require.False(t, fired)
 	require.NoError(t, got)
 	require.NoError(t, failpoint.Checkpoint(registrySource{}, key1))
+}
+
+func TestExecute_OtherTypes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("return value of another type does not fire", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Return(errors.New("injected"), failpoint.Always)
+		registry.Set(key1, fp)
+		var events []failpoint.Event
+		registry.Subscribe(func(e failpoint.Event) { events = append(events, e) })
+
+		got, fired := failpoint.Execute[int](registrySource{registry: registry}, key1)
+		require.False(t, fired)
+		require.Zero(t, got)
+		require.Equal(t, []failpoint.Event{
+			{Key: key1, Action: failpoint.Return, Fired: true, Execution: 1},
+			{Key: key1, Action: failpoint.Return, Fired: true, TypeMismatch: true},
+		}, events)
+	})
+
+	t.Run("nil return value fires with zero value", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Return(nil, failpoint.Always)
+		registry.Set(key1, fp)
+
+		_, fired := failpoint.Execute[struct{}](registrySource{registry: registry}, key1)
+		require.True(t, fired)
+	})
+
+	t.Run("block holds call sites of another type", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Block(failpoint.Always)
+		registry.Set(key1, fp)
+
+		done := make(chan bool, 1)
+		go func() {
+			_, fired := failpoint.Execute[struct{}](registrySource{registry: registry}, key1)
+			done <- fired
+		}()
+		require.NoError(t, fp.Wait(t.Context()))
+		fp.Disable()
+		require.False(t, <-done)
+	})
 }
