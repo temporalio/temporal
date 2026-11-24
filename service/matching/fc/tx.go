@@ -112,6 +112,7 @@ func (tx *Tx) Reserve(ctx context.Context) (retErr error) {
 	}
 	defer func() {
 		if retErr != nil {
+			// TODO(fc): use disconnected context in case this one is canceled/deadline exceeded
 			tx.Rollback(ctx)
 		}
 	}()
