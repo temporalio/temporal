@@ -493,7 +493,7 @@ func (c failingNamespaceReplicationClient) TriggerNamespaceMutation(
 
 func TestTriggerNamespaceMutationLogsAuthoritativeFailure(t *testing.T) {
 	t.Parallel()
-	const message = "namespace replication authoritative trigger RPC did not complete"
+	const message = "namespace replication authoritative trigger returned an error"
 	for _, shadow := range []bool{false, true} {
 		name := "authoritative"
 		if shadow {
@@ -507,7 +507,7 @@ func TestTriggerNamespaceMutationLogsAuthoritativeFailure(t *testing.T) {
 			handler := &namespaceHandler{logger: logger, chasmNsReplClient: failingNamespaceReplicationClient{err: triggerErr}}
 			err := handler.triggerNamespaceMutation(t.Context(), "namespace-id:mutation-id", &namespacereplicationpb.NamespaceMutation{
 				Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
-				NamespaceDetail:   &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}},
+				NamespaceDetail:   &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "my-namespace"}},
 				IsGlobalNamespace: true,
 				Shadow:            shadow,
 			})
@@ -524,6 +524,7 @@ func TestTriggerNamespaceMutationLogsAuthoritativeFailure(t *testing.T) {
 				Message: message,
 				Tags: map[string]any{
 					"wf-namespace-id": "namespace-id",
+					"wf-namespace":    "my-namespace",
 					"business_id":     "namespace-id:mutation-id",
 					"operation":       enumsspb.NAMESPACE_OPERATION_UPDATE.String(),
 				},

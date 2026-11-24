@@ -148,16 +148,19 @@ func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
 func TestDeliveryPolicy(t *testing.T) {
 	t.Parallel()
 	trustAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) { return true, nil }
-	deferAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) {
-		return true, serviceerror.NewFailedPrecondition("not ready")
+	policyErr := serviceerror.NewInvalidArgument("invalid payload data")
+	rejectAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) {
+		return false, policyErr
 	}
 	for _, tc := range []struct {
-		name        string
-		policy      nsreplication.DeliveryPolicy
-		target      string
-		removedPeer bool
-		wantCode    codes.Code
-		wantTrusted bool
+		name            string
+		policy          nsreplication.DeliveryPolicy
+		target          string
+		removedPeer     bool
+		excludeReceiver bool
+		wantCode        codes.Code
+		wantPolicyError bool
+		wantTrusted     bool
 	}{
 		{name: "delivery addressed to another cluster is rejected", policy: trustAll, target: "cellB", wantCode: codes.FailedPrecondition},
 		// The receiver is still in the payload's cluster list, so it disagrees with the source.
@@ -166,9 +169,9 @@ func TestDeliveryPolicy(t *testing.T) {
 		// Older sources do not address deliveries, so the receiver checks membership itself.
 		{name: "unaddressed delivery is not trusted", policy: trustAll, removedPeer: true, wantCode: codes.InvalidArgument},
 		{name: "default policy admits through the admission policy", target: "cellC"},
-		// A deferral wins over the removed-peer check, which would end the delivery for good.
-		{name: "deferred delivery returns before the removed-peer check", policy: deferAll, target: "cellC", removedPeer: true, wantCode: codes.FailedPrecondition},
-		{name: "unaddressed delivery can be deferred", policy: deferAll, wantCode: codes.FailedPrecondition},
+		{name: "policy rejects an otherwise valid removal", policy: rejectAll, target: "cellC", removedPeer: true, excludeReceiver: true, wantCode: codes.InvalidArgument, wantPolicyError: true},
+		{name: "policy rejects before the removed-peer check", policy: rejectAll, target: "cellC", removedPeer: true, wantCode: codes.InvalidArgument, wantPolicyError: true},
+		{name: "policy can reject an unaddressed delivery", policy: rejectAll, wantCode: codes.InvalidArgument, wantPolicyError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -194,13 +197,18 @@ func TestDeliveryPolicy(t *testing.T) {
 				config:         &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(false)},
 				deliveryPolicy: tc.policy}
 			task := removalTestTask(true)
-			task.ReplicationConfig.Clusters = append(task.ReplicationConfig.Clusters, &replicationpb.ClusterReplicationConfig{ClusterName: "cellC"})
+			if !tc.excludeReceiver {
+				task.ReplicationConfig.Clusters = append(task.ReplicationConfig.Clusters, &replicationpb.ClusterReplicationConfig{ClusterName: "cellC"})
+			}
 			payload, err := nsreplication.MarshalNamespaceTask(task)
 			require.NoError(t, err)
 			resp, err := handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
 				NamespaceTaskPayload: payload, RemovedPeer: tc.removedPeer, TargetCluster: tc.target,
 			})
 			require.Equal(t, tc.wantCode, serviceerror.ToStatus(err).Code(), "error: %v", err)
+			if tc.wantPolicyError {
+				require.ErrorIs(t, err, policyErr)
+			}
 			if tc.wantCode != codes.OK {
 				return
 			}
@@ -209,7 +217,7 @@ func TestDeliveryPolicy(t *testing.T) {
 	}
 }
 
-func TestDeliveryPolicyDeferralIsNotRecordedAsError(t *testing.T) {
+func TestDeliveryPolicyRejectionIsRecordedAsError(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	clusters := cluster.NewMockMetadata(ctrl)
@@ -224,7 +232,7 @@ func TestDeliveryPolicyDeferralIsNotRecordedAsError(t *testing.T) {
 		metricsHandler:            mh, eventLogger: events,
 		config: &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true)},
 		deliveryPolicy: func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) {
-			return false, serviceerror.NewFailedPrecondition("not ready")
+			return false, serviceerror.NewInvalidArgument("invalid payload data")
 		}}
 	payload, err := nsreplication.MarshalNamespaceTask(removalTestTask(false))
 	require.NoError(t, err)
@@ -232,15 +240,14 @@ func TestDeliveryPolicyDeferralIsNotRecordedAsError(t *testing.T) {
 	_, err = handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
 		SourceCluster: "cellA", NamespaceTaskPayload: payload, TargetCluster: "cellC",
 	})
-	require.Equal(t, codes.FailedPrecondition, serviceerror.ToStatus(err).Code())
+	require.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 
-	// The source retries a deferred delivery, so it is told apart from a failed apply.
 	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
 	require.Len(t, recordings, 1)
-	require.Equal(t, nsreplication.CHASMApplyOutcomeDeferred, recordings[0].Tags["outcome"])
+	require.Equal(t, nsreplication.CHASMApplyOutcomeError, recordings[0].Tags["outcome"])
 	_, details := remoteClusterEventValues(t, events.records)
-	require.Equal(t, nsreplication.CHASMApplyOutcomeDeferred, details["outcome"])
+	require.Equal(t, nsreplication.CHASMApplyOutcomeError, details["outcome"])
 	require.Equal(t, err.Error(), details["error"])
 	require.Equal(t, false, details["removed_peer"])
-	require.NotContains(t, details, "trusted", "the policy deferred the delivery before deciding trust")
+	require.NotContains(t, details, "trusted")
 }

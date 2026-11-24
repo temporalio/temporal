@@ -162,8 +162,8 @@ type (
 		CategoryRegistry tasks.TaskCategoryRegistry
 		matchingClient   matchingservice.MatchingServiceClient
 
-		// DeliveryPolicy decides which CHASM deliveries the receiver defers, and
-		// which addressed ones skip its own membership checks. Nil does neither.
+		// DeliveryPolicy checks CHASM deliveries and decides whether to trust
+		// the source's membership decision for an addressed delivery.
 		DeliveryPolicy nsreplication.DeliveryPolicy
 	}
 )
@@ -1119,13 +1119,12 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
 			return nil, err
 		}
-		// The delivery policy runs before any check that ends a delivery for good,
-		// so a receiver that cannot apply it yet defers it to a later retry.
+		// The delivery policy validates the payload before any namespace membership check.
 		policyTrusts := false
 		if adh.deliveryPolicy != nil {
 			var err error
 			if policyTrusts, err = adh.deliveryPolicy(ctx, payloadTask); err != nil {
-				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeDeferred, err, startTime, deliveryDetails)
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
 				return nil, err
 			}
 		}

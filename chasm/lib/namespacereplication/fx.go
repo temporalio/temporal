@@ -2,6 +2,7 @@ package namespacereplication
 
 import (
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.uber.org/fx"
 )
 
@@ -22,6 +23,7 @@ var Module = fx.Module(
 	fx.Provide(newAdminClientPeerApplier),
 	fx.Provide(newApplyPeerTaskHandler),
 	fx.Provide(newApplyPeerBackoffTaskHandler),
+	fx.Provide(nsreplication.NewDefaultMutationDataValidator),
 	fx.Provide(newServiceHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),

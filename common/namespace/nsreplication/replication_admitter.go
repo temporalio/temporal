@@ -6,6 +6,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/namespace"
 )
 
 // NamespaceReplicationAdmitter decides whether to process a namespace
@@ -31,10 +32,10 @@ type AdmissionOptions struct {
 // before applying it. trust reports whether the receiver follows the source's
 // membership decision: it then skips its own removed-peer check and admits the
 // snapshot because the source addressed it. Trust is honored only for a
-// delivery addressed to this cluster. A non-nil error is returned to the
-// source, so a retryable one (prefer FailedPrecondition; Unavailable marks the
-// destination down) defers a delivery the receiver cannot apply yet instead of
-// letting it succeed partially. The default trusts nothing and defers nothing.
+// delivery addressed to this cluster. A non-nil error rejects the delivery
+// before it can apply. The source treats InvalidArgument as a terminal peer
+// failure and handles other codes according to its peer retry rules. The
+// default leaves the receiver's membership checks in place.
 // An untrusted removal is checked against ReplicationConfig.Clusters, so a
 // deployment whose replication resolver decides membership differently must
 // trust the deliveries that resolver addressed.
@@ -43,6 +44,16 @@ type DeliveryPolicy func(ctx context.Context, task *replicationspb.NamespaceTask
 // NewDefaultDeliveryPolicy creates the default DeliveryPolicy.
 func NewDefaultDeliveryPolicy() DeliveryPolicy {
 	return func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) { return false, nil }
+}
+
+// MutationDataValidator checks the final data of an authoritative namespace
+// replication snapshot. A returned error rejects the mutation before it starts.
+// Shadow mutations skip validation. Implementations treat the data map as read-only.
+type MutationDataValidator func(ctx context.Context, namespaceID namespace.ID, namespaceName namespace.Name, data map[string]string) error
+
+// NewDefaultMutationDataValidator creates a validator that accepts all data.
+func NewDefaultMutationDataValidator() MutationDataValidator {
+	return func(context.Context, namespace.ID, namespace.Name, map[string]string) error { return nil }
 }
 
 // DefaultAdmitter accepts member snapshots and explicit removal deliveries.

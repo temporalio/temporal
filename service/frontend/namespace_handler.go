@@ -1649,18 +1649,21 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 	businessID string,
 	mutation *namespacereplicationpb.NamespaceMutation,
 ) error {
+	info := mutation.GetNamespaceDetail().GetInfo()
 	_, err := d.chasmNsReplClient.TriggerNamespaceMutation(ctx, &namespacereplicationpb.TriggerNamespaceMutationRequest{
-		NamespaceId:       mutation.GetNamespaceDetail().GetInfo().GetId(),
+		NamespaceId:       info.GetId(),
 		SystemNamespaceId: primitives.SystemNamespaceID,
 		BusinessId:        businessID,
 		Mutation:          mutation,
 	})
 	if err != nil && !mutation.GetShadow() {
-		// A start or poll error does not prove the mutation failed: the component
-		// may still commit locally and fan out. The business ID correlates it.
+		// A timeout or Unavailable can leave the local commit outcome unknown.
+		// Snapshot validation rejects before the execution starts. The business
+		// ID links this error to the source validation log or execution.
 		d.logger.Warn(
-			"namespace replication authoritative trigger RPC did not complete",
-			tag.WorkflowNamespaceID(mutation.GetNamespaceDetail().GetInfo().GetId()),
+			"namespace replication authoritative trigger returned an error",
+			tag.WorkflowNamespaceID(info.GetId()),
+			tag.WorkflowNamespace(info.GetName()),
 			tag.NewStringTag("business_id", businessID),
 			tag.Operation(mutation.GetOperation().String()),
 			tag.Error(err),
