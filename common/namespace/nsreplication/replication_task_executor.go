@@ -85,6 +85,10 @@ type (
 	}
 )
 
+// noLocalConfigVersion is the config version a data merger sees for a namespace
+// this cluster does not have yet, lower than any real one.
+const noLocalConfigVersion int64 = -1
+
 const (
 	ApplyOutcomeUnspecified ApplyOutcome = iota
 	ApplyOutcomeCreated
@@ -309,6 +313,21 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 		return ApplyOutcomeUnspecified, err
 	}
 
+	// Nothing is local yet, but the data merger still runs so a deployment can
+	// normalize the data this cluster adopts.
+	data := task.Info.GetData()
+	merged, dataMerged := h.dataMerger.MergeMutationData(
+		namespace.ID(task.GetId()),
+		namespace.Name(task.Info.GetName()),
+		nil,
+		data,
+		noLocalConfigVersion,
+		task.GetConfigVersion(),
+	)
+	if dataMerged {
+		data = merged
+	}
+
 	request := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
@@ -317,7 +336,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				State:       task.Info.GetState(),
 				Description: task.Info.GetDescription(),
 				Owner:       task.Info.GetOwnerEmail(),
-				Data:        task.Info.Data,
+				Data:        data,
 				RestoreInfo: task.GetRestoreInfo(),
 			},
 			Config: &persistencespb.NamespaceConfig{

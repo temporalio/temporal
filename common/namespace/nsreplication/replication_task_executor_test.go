@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"testing"
 	"time"
 
@@ -1372,4 +1373,50 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
 
 	s.NoError(s.namespaceReplicator.Execute(s.T().Context(), task))
+}
+
+// TestExecute_CreateNamespaceTask_MergerNormalizesAdoptedData creates a
+// namespace this cluster does not have yet. The data merger still runs, with
+// nothing local, so a deployment can normalize the data it adopts.
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_CreateNamespaceTask_MergerNormalizesAdoptedData() {
+	s.namespaceReplicator.dataMerger = NewDefaultMutationDataMerger(namespaceDataMergerFunc(func(
+		currentData map[string]string,
+		taskData map[string]string,
+		currentVersion int64,
+		taskVersion int64,
+	) (map[string]string, bool) {
+		s.Nil(currentData, "nothing is local yet")
+		s.Less(currentVersion, taskVersion, "any incoming config version is newer than none")
+		merged := maps.Clone(taskData)
+		merged["adopted"] = "normalized"
+		return merged, true
+	}))
+	task := &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
+		Id:                 uuid.NewString(),
+		Info: &namespacepb.NamespaceInfo{
+			Name:  "adopted namespace",
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+			Data:  map[string]string{"k": "v"},
+		},
+		Config: &namespacepb.NamespaceConfig{WorkflowExecutionRetentionTtl: durationpb.New(24 * time.Hour)},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: "active",
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: "active"},
+				{ClusterName: s.namespaceReplicator.currentCluster},
+			},
+		},
+	}
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: task.Info.Name}).Return(
+		nil, &serviceerror.NamespaceNotFound{}).Times(1)
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
+			s.Equal(map[string]string{"k": "v", "adopted": "normalized"}, request.Namespace.Info.Data)
+			return &persistence.CreateNamespaceResponse{ID: task.GetId()}, nil
+		})
+
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
+	s.Require().NoError(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 }

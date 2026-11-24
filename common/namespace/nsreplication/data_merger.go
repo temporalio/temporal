@@ -5,7 +5,9 @@ import "go.temporal.io/server/common/namespace"
 // NamespaceDataMerger provides custom merge logic for namespace data
 // during replication task execution.
 type NamespaceDataMerger interface {
-	// MergeData performs a business specific merge of namespace data.
+	// MergeData performs a business specific merge of namespace data. When this
+	// cluster does not have the namespace yet, currentData is nil and
+	// currentConfigVersion is -1.
 	MergeData(
 		currentData map[string]string,
 		taskData map[string]string,
@@ -22,7 +24,8 @@ type NamespaceDataMerger interface {
 type MutationDataMerger interface {
 	// MergeMutationData performs a business specific merge of the data of the
 	// namespace the snapshot describes, which it names so the merger can report
-	// on it.
+	// on it. When this cluster does not have the namespace yet, currentData is
+	// nil and currentConfigVersion is -1.
 	MergeMutationData(
 		namespaceID namespace.ID,
 		namespaceName namespace.Name,
