@@ -1,5 +1,5 @@
 // Package softassert adapts [go.temporal.io/testx/softassert] to Temporal's logger
-// and attaches [tag.FailedAssertion] to each failed assertion.
+// and attaches the shared failure marker to each failed assertion.
 package softassert
 
 import (
@@ -16,7 +16,7 @@ func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.T
 	return condition
 }
 
-// Fail logs a failed assertion with [tag.FailedAssertion]. Pass dynamic details as tags.
+// Fail logs a failed assertion with the shared failure marker. Pass dynamic details as tags.
 func Fail(logger log.Logger, staticMessage string, tags ...tag.Tag) {
-	softassert.Fail(logger, staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
+	softassert.Fail(logger, staticMessage, append([]tag.Tag{softassert.FailedAssertion}, tags...)...)
 }
