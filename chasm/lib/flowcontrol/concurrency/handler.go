@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/streambatcher"
 )
 
@@ -162,7 +163,15 @@ func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.C
 func (h *Handler) applyBatch(
 	key batchKey,
 	items []batchReq,
-) []batchRes {
+) (retBatchRes []batchRes) {
+	defer func() {
+		if r := recover(); r != nil {
+			// log, then fill results with an Internal error for each item
+			h.logger.Error("panic in applyBatch", tag.Value(r))
+			retBatchRes = makeBatchResults(len(items), nil, serviceerror.NewInternal("panic in applyBatch"))
+		}
+	}()
+
 	needStart := false
 	canSpeculate := true
 
