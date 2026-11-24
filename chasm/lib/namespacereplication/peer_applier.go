@@ -27,6 +27,9 @@ type PeerApplyRequest struct {
 	Shadow                  bool
 	RemovedPeer             bool
 	ShadowLegacyTaskPayload []byte
+	// MembershipRecorded indicates the persisted mutation has a removed-peer
+	// set, including an empty set.
+	MembershipRecorded bool
 }
 
 // PeerApplyResult is the transport-neutral terminal, non-error outcome of
@@ -103,6 +106,12 @@ func (a *adminClientPeerApplier) Apply(
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
+	// The receiver can bypass admission for an addressed delivery. Mutations
+	// that predate recorded membership retain their original admission rules.
+	wireTarget := ""
+	if request.MembershipRecorded {
+		wireTarget = request.TargetCluster
+	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:           namespaceTask,
 		Shadow:                  request.Shadow,
@@ -113,7 +122,7 @@ func (a *adminClientPeerApplier) Apply(
 		ComponentRunId:          request.ComponentRunID,
 		AttemptCount:            request.AttemptCount,
 		RemovedPeer:             request.RemovedPeer,
-		TargetCluster:           request.TargetCluster,
+		TargetCluster:           wireTarget,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err

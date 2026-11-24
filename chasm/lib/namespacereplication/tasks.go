@@ -977,6 +977,7 @@ func (h *applyPeerTaskHandler) Execute(
 		RemovedPeer: !loaded.Shadow && loaded.Operation == enumsspb.NAMESPACE_OPERATION_UPDATE &&
 			removedPeer(loaded.RemovedPeers, loaded.Detail, task.GetTargetCell()),
 		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
+		MembershipRecorded:      loaded.RemovedPeers != nil,
 	}
 	result, applyErr := h.peerApplier.Apply(callCtx, request)
 	record := func(outcome namespacereplicationpb.PeerApplyOutcome, outcomeErr error) error {

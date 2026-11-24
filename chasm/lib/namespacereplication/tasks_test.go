@@ -2241,9 +2241,10 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 			return proto.Equal(want, request)
 		})).Return(&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil)
 		result, err := applier.Apply(t.Context(), PeerApplyRequest{
-			TargetCluster: "cellB",
-			Operation:     enumsspb.NAMESPACE_OPERATION_UPDATE,
-			Detail:        detail,
+			TargetCluster:      "cellB",
+			Operation:          enumsspb.NAMESPACE_OPERATION_UPDATE,
+			Detail:             detail,
+			MembershipRecorded: true,
 		})
 		require.NoError(t, err)
 		require.Equal(t, PeerApplyResultApplied, result)

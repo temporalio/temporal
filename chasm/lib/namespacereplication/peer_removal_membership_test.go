@@ -17,14 +17,15 @@ func TestPeerRemoval(t *testing.T) {
 		clusters    []string
 		recorded    *namespacereplicationpb.RemovedPeers
 		wantRemoved bool
+		wantTarget  string
 	}{
 		// The cluster list still names cellB, e.g. because membership comes from
 		// elsewhere, but the source recorded the removal.
 		{name: "recorded removal wins over the cluster list", clusters: []string{"cellA", "cellB"},
-			recorded: &namespacereplicationpb.RemovedPeers{Cells: []string{"cellB"}}, wantRemoved: true},
+			recorded: &namespacereplicationpb.RemovedPeers{Cells: []string{"cellB"}}, wantRemoved: true, wantTarget: "cellB"},
 		{name: "recorded member wins over the cluster list", clusters: []string{"cellA"},
-			recorded: &namespacereplicationpb.RemovedPeers{}},
-		// Mutations created before the record keep the cluster-list rule.
+			recorded: &namespacereplicationpb.RemovedPeers{}, wantTarget: "cellB"},
+		// Older mutations use the cluster list and send an unaddressed request.
 		{name: "unrecorded removal follows the cluster list", clusters: []string{"cellA"}, wantRemoved: true},
 		{name: "unrecorded member follows the cluster list", clusters: []string{"cellA", "cellB"}},
 	} {
@@ -39,7 +40,7 @@ func TestPeerRemoval(t *testing.T) {
 			})
 			env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
 			env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Cond(func(req *adminservice.ApplyNamespaceMutationRequest) bool {
-				return req.GetRemovedPeer() == tc.wantRemoved && req.GetTargetCluster() == "cellB"
+				return req.GetRemovedPeer() == tc.wantRemoved && req.GetTargetCluster() == tc.wantTarget
 			})).Return(&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil)
 			require.NoError(t, env.peerHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"}))
 		})
