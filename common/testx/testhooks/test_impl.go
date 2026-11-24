@@ -72,3 +72,36 @@ var keyCounter atomic.Int64
 func NewKey[T any, S any]() Key[T, S] {
 	return Key[T, S]{id: keyCounter.Add(1)}
 }
+
+// Hook bundles a key and value for callers that supply the scope at runtime.
+type Hook struct {
+	scopeType ScopeType
+	apply     func(TestHooks, any) func()
+}
+
+// Scope reports whether the hook uses a value or global scope.
+func (h Hook) Scope() ScopeType { return h.scopeType }
+
+// Apply registers the hook in the given scope and returns its cleanup function.
+func (h Hook) Apply(th TestHooks, scope any) func() { return h.apply(th, scope) }
+
+// NewHook binds a value to a key without choosing a scope value.
+func NewHook[T any, S any](key Key[T, S], value T) Hook {
+	var zero S
+	scopeType := ScopeValue
+	if _, global := any(zero).(globalScope); global {
+		scopeType = ScopeGlobal
+	}
+
+	return Hook{
+		scopeType: scopeType,
+		apply: func(th TestHooks, scope any) func() {
+			typedScope, ok := scope.(S)
+			if !ok {
+				//nolint:forbidigo // A mismatched scope is a test configuration error.
+				panic("testhooks: scope type mismatch")
+			}
+			return Set(th, key, value, typedScope)
+		},
+	}
+}

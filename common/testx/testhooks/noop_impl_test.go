@@ -18,3 +18,12 @@ func TestHooksDisabled(t *testing.T) {
 	require.False(t, ok)
 	require.Panics(t, func() { Set(hooks, key, 42, "scope") })
 }
+
+func TestHookDisabled(t *testing.T) {
+	t.Parallel()
+
+	var hook Hook
+	require.Panics(t, func() { NewHook(NewGlobalKey[int](), 42) })
+	require.Panics(t, func() { hook.Scope() })
+	require.Panics(t, func() { hook.Apply(NewTestHooks(), GlobalScope) })
+}

@@ -39,3 +39,24 @@ func Set[T any, S any](_ TestHooks, _ Key[T, S], _ T, _ S) func() {
 func NewKey[T any, S any]() Key[T, S] {
 	return Key[T, S]{}
 }
+
+// Hook is an empty stub in production mode. NewHook and its methods are only available with -tags=test_dep.
+type Hook struct{}
+
+// NewHook requires the test_dep build tag.
+func NewHook[T any, S any](_ Key[T, S], _ T) Hook {
+	//nolint:forbidigo // Using a hook without test_dep is a test configuration error.
+	panic("testhooks.NewHook called but TestHooks are not enabled: use -tags=test_dep when running `go test`")
+}
+
+// Scope requires the test_dep build tag.
+func (h Hook) Scope() ScopeType {
+	//nolint:forbidigo // Using a hook without test_dep is a test configuration error.
+	panic("testhooks.Hook used but TestHooks are not enabled: use -tags=test_dep when running `go test`")
+}
+
+// Apply requires the test_dep build tag.
+func (h Hook) Apply(_ TestHooks, _ any) func() {
+	//nolint:forbidigo // Using a hook without test_dep is a test configuration error.
+	panic("testhooks.Hook used but TestHooks are not enabled: use -tags=test_dep when running `go test`")
+}
