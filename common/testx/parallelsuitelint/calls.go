@@ -7,6 +7,10 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+func packageFunction(fn *types.Func) bool {
+	return fn.Signature().Recv() == nil
+}
+
 func selectedFunction(pass *analysis.Pass, call *ast.CallExpr) (*ast.SelectorExpr, *types.Func) {
 	sel, ok := callTarget(call.Fun).(*ast.SelectorExpr)
 	if !ok {
