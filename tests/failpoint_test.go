@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 )
 
 func TestFailpoint(t *testing.T) {

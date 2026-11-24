@@ -475,7 +475,7 @@ func (c *temporalImpl) overrideDynamicConfigForTest(t *testing.T, name dynamicco
 }
 
 func (c *temporalImpl) injectHook(t *testing.T, hook testhooks.Hook, scope any) func() {
-	cleanup := hook.Apply(c.testHooks.TestHooks, scope)
+	cleanup := hook.Apply(c.testHooks, scope)
 	t.Cleanup(cleanup)
 	return cleanup
 }

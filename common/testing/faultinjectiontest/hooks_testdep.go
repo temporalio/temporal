@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 )
 
 // Keys identifies namespace-scoped hooks.
@@ -62,7 +62,7 @@ func (a Adapter[Req, Resp]) GenerateRequest(
 	if a.failpointKey != nil {
 		key := a.failpointKey(operation)
 		if scope.NamespaceID != "" {
-			key = key.ForNamespace(scope.NamespaceID)
+			key = key.ForNamespace(scope.NamespaceID.String())
 		}
 		if err := failpoint.Checkpoint(a.testHooks, key); err != nil {
 			return &faultinjection.Outcome[Resp]{Error: err}

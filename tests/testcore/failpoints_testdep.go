@@ -3,14 +3,14 @@
 package testcore
 
 import (
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 )
 
 // InjectFailpoint registers a failpoint for key in the test cluster, scoped to the test's
 // namespace, and returns it for the test to configure. The failpoint is disabled and removed when
 // the test ends.
 func InjectFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Failpoint[T] {
-	return injectFailpoint[T](env, key.ForNamespace(env.nsID))
+	return injectFailpoint[T](env, key.ForNamespace(env.nsID.String()))
 }
 
 // InjectGlobalFailpoint is InjectFailpoint for a failpoint that applies to all namespaces, such as

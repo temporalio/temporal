@@ -6,7 +6,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/rpc/faultinjection"
 	commontesthooks "go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 )
 
 // WithFailpoints returns a copy of fiConfig whose injector also executes the failpoint for each
@@ -30,7 +30,7 @@ func WithFailpoints(fiConfig *config.FaultInjection, testHooks commontesthooks.T
 		}
 		key := failpoint.PersistenceKey(string(target.Store), target.Method)
 		if nsID := faultinjection.ScopeFromRequest(target.Request).NamespaceID; nsID != "" {
-			key = key.ForNamespace(nsID)
+			key = key.ForNamespace(nsID.String())
 		}
 		return failpoint.Checkpoint(testHooks, key)
 	}

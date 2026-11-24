@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/grpc"
 )
 

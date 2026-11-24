@@ -3,15 +3,13 @@ package failpoint
 import (
 	"fmt"
 	"sync"
-
-	"go.temporal.io/server/common/namespace"
 )
 
 // Key identifies a failpoint by name. A key applies to all namespaces unless it is scoped to one
 // with ForNamespace.
 type Key struct {
 	name        string
-	namespaceID namespace.ID
+	namespaceID string
 }
 
 // Failpoints in server code. Each key documents where it fires and what tests use it for.
@@ -64,14 +62,20 @@ func PersistenceKey(store, method string) Key {
 	return Key{name: "persistence:" + store + "." + method}
 }
 
+// KeyFromName returns the key for a failpoint name received from outside the process, for example
+// in a remote request. Unlike NewKey, it does not declare the name.
+func KeyFromName(name string, namespaceID string) Key {
+	return Key{name: name, namespaceID: namespaceID}
+}
+
 // Name returns the failpoint name.
 func (k Key) Name() string { return k.name }
 
 // NamespaceID returns the namespace the key is scoped to, or "" for all namespaces.
-func (k Key) NamespaceID() namespace.ID { return k.namespaceID }
+func (k Key) NamespaceID() string { return k.namespaceID }
 
 // ForNamespace returns the key scoped to a namespace.
-func (k Key) ForNamespace(nsID namespace.ID) Key {
+func (k Key) ForNamespace(nsID string) Key {
 	return Key{name: k.name, namespaceID: nsID}
 }
 

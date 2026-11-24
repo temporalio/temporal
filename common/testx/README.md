@@ -3,6 +3,7 @@
 Collection of general-purpose Go test helpers.
 
 - `await`: context-bounded polling assertions and channel operations.
+- `failpoint`: inject faults and timing control at named points in code under test.
 - `freeport`: reserve available ports for tests.
 - `parallelsuite`: isolated parallel test suites with fail-fast assertions.
 - `softassert`: log failed invariants without stopping execution.

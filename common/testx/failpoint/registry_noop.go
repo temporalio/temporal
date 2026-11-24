@@ -2,13 +2,7 @@
 
 package failpoint
 
-import (
-	"go.temporal.io/server/api/failpointservice/v1"
-)
-
-type registryNoop struct {
-	failpointservice.UnimplementedFailpointServiceServer
-}
+type registryNoop struct{}
 
 // NewRegistry creates a no-op failpoint registry for production builds.
 func NewRegistry() Registry {
@@ -23,4 +17,8 @@ func (r *registryNoop) Set(key Key, fp any) {
 }
 
 func (r *registryNoop) Delete(key Key) {
+}
+
+func (r *registryNoop) Keys() []Key {
+	return nil
 }

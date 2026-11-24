@@ -2,16 +2,11 @@ package failpoint
 
 import (
 	"context"
-
-	"go.temporal.io/server/api/failpointservice/v1"
 )
 
-// Registry manages failpoint instances for remote configuration.
-// It provides thread-safe operations to register, configure, and query failpoints.
-// Registry embeds the gRPC service interface and adds low-level access methods.
+// Registry manages failpoint instances.
+// It provides thread-safe operations to register and query failpoints.
 type Registry interface {
-	failpointservice.FailpointServiceServer
-
 	// Get retrieves a failpoint by key. Returns nil if not found.
 	Get(key Key) any
 
@@ -20,6 +15,9 @@ type Registry interface {
 
 	// Delete removes a failpoint from the registry.
 	Delete(key Key)
+
+	// Keys returns the keys of all registered failpoints.
+	Keys() []Key
 }
 
 // Source provides the registry that Execute uses. Servers use their testhooks.TestHooks, so each

@@ -23,7 +23,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 )
 
 var multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
@@ -144,7 +144,7 @@ func Invoke(
 			return nil, err
 		}
 
-		if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartClosingWorkflowRetry.ForNamespace(uws.namespaceId)); err != nil {
+		if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartClosingWorkflowRetry.ForNamespace(uws.namespaceId.String())); err != nil {
 			return nil, err
 		}
 
@@ -246,7 +246,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartBetweenLockAndStart.ForNamespace(uws.namespaceId)); err != nil {
+	if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartBetweenLockAndStart.ForNamespace(uws.namespaceId.String())); err != nil {
 		return nil, err
 	}
 

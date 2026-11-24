@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 )
 
 // === Return ===

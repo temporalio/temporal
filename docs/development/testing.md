@@ -311,7 +311,7 @@ The `failpoint` package injects faults and timing control at named points in ser
 it over a new testhooks key when the test only needs to fail, delay, block, or run a callback at
 a point in the code.
 
-A failpoint is declared once as a `failpoint.Key` in `testx/failpoint/keys.go`, with a
+A failpoint is declared once as a `failpoint.Key` in `common/testx/failpoint/keys.go`, with a
 comment that says where it fires and what tests use it for. Server code executes it through the
 server's test hooks, scoped to a namespace:
 

@@ -5,6 +5,8 @@ package testhooks
 import (
 	"sync"
 	"sync/atomic"
+
+	"go.temporal.io/testx/failpoint"
 )
 
 type hookKey struct {
@@ -24,12 +26,18 @@ type hookEntry[T any] struct {
 // concerns into production code. In general you should prefer other ways of writing tests
 // wherever possible, and only use TestHooks sparingly, as a last resort.
 type TestHooks struct {
-	data *sync.Map
+	data       *sync.Map
+	failpoints failpoint.Registry
 }
 
 // NewTestHooks returns an empty registry.
 func NewTestHooks() TestHooks {
-	return TestHooks{data: &sync.Map{}}
+	return TestHooks{data: &sync.Map{}, failpoints: failpoint.NewRegistry()}
+}
+
+// Failpoints returns the failpoint registry, so TestHooks can be used as a failpoint.Source.
+func (th TestHooks) Failpoints() failpoint.Registry {
+	return th.failpoints
 }
 
 // Get gets the value of a test hook from the registry.

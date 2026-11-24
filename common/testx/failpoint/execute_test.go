@@ -7,10 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/failpointservice/v1"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 )
 
 type registrySource struct {
@@ -24,10 +21,10 @@ func TestKey(t *testing.T) {
 
 	scoped := key1.ForNamespace("ns-1")
 	require.Equal(t, "1", key1.Name())
-	require.Equal(t, namespace.ID(""), key1.NamespaceID())
+	require.Empty(t, key1.NamespaceID())
 	require.Equal(t, "1", key1.String())
 	require.Equal(t, "1", scoped.Name())
-	require.Equal(t, namespace.ID("ns-1"), scoped.NamespaceID())
+	require.Equal(t, "ns-1", scoped.NamespaceID())
 	require.Equal(t, "1@ns-1", scoped.String())
 	require.NotEqual(t, key1, scoped)
 }
@@ -122,33 +119,6 @@ func TestExecute_PanicsOnTypeMismatch(t *testing.T) {
 	registry := failpoint.NewRegistry()
 	registry.Set(key1, failpoint.NewFailpoint[int](key1))
 	require.Panics(t, func() { _, _ = failpoint.Execute[error](registrySource{registry: registry}, key1) })
-}
-
-func TestRegistry_NamespaceScopedRequest(t *testing.T) {
-	t.Parallel()
-
-	registry := failpoint.NewRegistry()
-	_, err := registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
-		Key:          "1",
-		NamespaceId:  "ns-1",
-		ErrorMessage: "scoped",
-		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ALWAYS,
-	})
-	require.NoError(t, err)
-	src := registrySource{registry: registry}
-
-	got, fired := failpoint.Execute[error](src, key1.ForNamespace("ns-1"))
-	require.True(t, fired)
-	require.EqualError(t, got, "scoped")
-
-	_, fired = failpoint.Execute[error](src, key1.ForNamespace("ns-2"))
-	require.False(t, fired)
-
-	resp, err := registry.ListFailpoints(t.Context(), &failpointservice.ListFailpointsRequest{})
-	require.NoError(t, err)
-	require.Len(t, resp.Failpoints, 1)
-	require.Equal(t, "1", resp.Failpoints[0].Key)
-	require.Equal(t, "ns-1", resp.Failpoints[0].NamespaceId)
 }
 
 func TestCheckpoint(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	commontesthooks "go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 )
 
 // NewCallbackGenerator creates a CallbackGenerator connected to namespace-scoped test hooks.

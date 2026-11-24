@@ -174,3 +174,13 @@ func TestHookScopes(t *testing.T) {
 		require.Equal(t, 42, value)
 	})
 }
+
+func TestFailpoints(t *testing.T) {
+	th1 := NewTestHooks()
+	th2 := NewTestHooks()
+
+	registry := th1.Failpoints()
+	require.NotNil(t, registry)
+	require.Same(t, registry, th1.Failpoints())
+	require.NotSame(t, registry, th2.Failpoints())
+}

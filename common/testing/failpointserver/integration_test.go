@@ -1,6 +1,6 @@
 //go:build test_dep
 
-package failpoint_test
+package failpointserver_test
 
 import (
 	"net"
@@ -10,8 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/failpointservice/v1"
-	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/server/common/testing/failpointserver"
+	"go.temporal.io/testx/await"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -23,7 +24,7 @@ func TestFailpointIntegration_InjectAndExecutePanic(t *testing.T) {
 	defer func() { _ = listener.Close() }()
 
 	grpcServer := grpc.NewServer()
-	failpointservice.RegisterFailpointServiceServer(grpcServer, registry)
+	failpointservice.RegisterFailpointServiceServer(grpcServer, failpointserver.NewServer(registry))
 	go func() { _ = grpcServer.Serve(listener) }()
 	defer grpcServer.Stop()
 
@@ -60,7 +61,7 @@ func TestFailpointIntegration_InjectAndExecuteReturn(t *testing.T) {
 	defer func() { _ = listener.Close() }()
 
 	grpcServer := grpc.NewServer()
-	failpointservice.RegisterFailpointServiceServer(grpcServer, registry)
+	failpointservice.RegisterFailpointServiceServer(grpcServer, failpointserver.NewServer(registry))
 	go func() { _ = grpcServer.Serve(listener) }()
 	defer grpcServer.Stop()
 
@@ -96,7 +97,7 @@ func TestFailpointIntegration_InjectBlockAndWait(t *testing.T) {
 	defer func() { _ = listener.Close() }()
 
 	grpcServer := grpc.NewServer()
-	failpointservice.RegisterFailpointServiceServer(grpcServer, registry)
+	failpointservice.RegisterFailpointServiceServer(grpcServer, failpointserver.NewServer(registry))
 	go func() { _ = grpcServer.Serve(listener) }()
 	defer grpcServer.Stop()
 
@@ -159,7 +160,7 @@ func TestFailpointIntegration_ListFailpoints(t *testing.T) {
 	defer func() { _ = listener.Close() }()
 
 	grpcServer := grpc.NewServer()
-	failpointservice.RegisterFailpointServiceServer(grpcServer, registry)
+	failpointservice.RegisterFailpointServiceServer(grpcServer, failpointserver.NewServer(registry))
 	go func() { _ = grpcServer.Serve(listener) }()
 	defer grpcServer.Stop()
 
@@ -209,7 +210,7 @@ func TestFailpointIntegration_DisableFailpoint(t *testing.T) {
 	defer func() { _ = listener.Close() }()
 
 	grpcServer := grpc.NewServer()
-	failpointservice.RegisterFailpointServiceServer(grpcServer, registry)
+	failpointservice.RegisterFailpointServiceServer(grpcServer, failpointserver.NewServer(registry))
 	go func() { _ = grpcServer.Serve(listener) }()
 	defer grpcServer.Stop()
 
@@ -249,7 +250,7 @@ func TestFailpointIntegration_ContextPropagation(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	// Inject a failpoint via registry
-	_, err := registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
+	_, err := failpointserver.NewServer(registry).InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
 		Key:          "1",
 		ErrorMessage: "context test",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ONCE,
@@ -278,14 +279,14 @@ func TestFailpointIntegration_MultipleServerInstances(t *testing.T) {
 	registry2 := failpoint.NewRegistry()
 
 	// Configure different failpoints in each registry
-	_, err := registry1.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
+	_, err := failpointserver.NewServer(registry1).InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
 		Key:          "1",
 		ErrorMessage: "from registry 1",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
 	require.NoError(t, err)
 
-	_, err = registry2.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
+	_, err = failpointserver.NewServer(registry2).InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
 		Key:          "1",
 		ErrorMessage: "from registry 2",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ONCE,

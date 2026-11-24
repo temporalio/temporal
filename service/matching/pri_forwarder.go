@@ -12,10 +12,9 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
-	"go.temporal.io/server/testx/failpoint"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -61,7 +60,7 @@ func newPriForwarder(
 
 // ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
 func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) error {
-	if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNamespace(namespace.ID(task.event.Data.GetNamespaceId()))); err != nil {
+	if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNamespace(task.event.Data.GetNamespaceId())); err != nil {
 		return err
 	}
 
@@ -152,7 +151,7 @@ func (f *priForwarder) ForwardQueryTask(
 	ctx context.Context,
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNamespace(namespace.ID(task.query.request.GetNamespaceId()))); err != nil {
+	if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNamespace(task.query.request.GetNamespaceId())); err != nil {
 		return nil, err
 	}
 
@@ -179,7 +178,7 @@ func (f *priForwarder) ForwardQueryTask(
 
 // ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
 func (f *priForwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNamespace(namespace.ID(task.nexus.request.GetNamespaceId()))); err != nil {
+	if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNamespace(task.nexus.request.GetNamespaceId())); err != nil {
 		return nil, err
 	}
 

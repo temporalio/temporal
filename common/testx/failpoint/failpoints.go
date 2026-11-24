@@ -13,28 +13,48 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/failpointservice/v1"
 )
 
-type (
-	Action     = enumsspb.FailpointAction
-	Recurrence = enumsspb.FailpointRecurrence
-)
+// Action is what a failpoint does when it executes. The values match the FailpointAction proto
+// enum.
+type Action int32
 
 const (
-	Unspecified = enumsspb.FAILPOINT_ACTION_UNSPECIFIED
-	Off         = enumsspb.FAILPOINT_ACTION_OFF
-	Return      = enumsspb.FAILPOINT_ACTION_RETURN
-	Panic       = enumsspb.FAILPOINT_ACTION_PANIC
-	Block       = enumsspb.FAILPOINT_ACTION_BLOCK
-	Pause       = enumsspb.FAILPOINT_ACTION_PAUSE
-	Call        = enumsspb.FAILPOINT_ACTION_CALL
-
-	Once   = enumsspb.FAILPOINT_RECURRENCE_ONCE
-	Always = enumsspb.FAILPOINT_RECURRENCE_ALWAYS
+	Unspecified Action = iota
+	Off
+	Return
+	Panic
+	Block
+	Pause
+	Call
 )
+
+var actionNames = [...]string{"Unspecified", "Off", "Return", "Panic", "Block", "Pause", "Call"}
+
+func (a Action) String() string {
+	if a >= 0 && int(a) < len(actionNames) {
+		return actionNames[a]
+	}
+	return fmt.Sprintf("Action(%d)", int32(a))
+}
+
+// Recurrence is how often a failpoint executes. The values match the FailpointRecurrence proto
+// enum.
+type Recurrence int32
+
+const (
+	RecurrenceUnspecified Recurrence = iota
+	Once
+	Always
+)
+
+// Info describes the state of a failpoint.
+type Info struct {
+	Key        Key
+	Enabled    bool
+	Action     Action
+	Recurrence Recurrence
+}
 
 // closedCh is a pre-closed channel returned by WaitCh when the goroutine is
 // already blocked at the failpoint. It is immediately readable.
@@ -87,16 +107,15 @@ func NewFailpoint[T any](key Key) *Failpoint[T] {
 	}
 }
 
-// Info returns the failpoint's current state as a FailpointInfo proto.
-func (f *Failpoint[T]) Info() *failpointservice.FailpointInfo {
+// Info returns the failpoint's current state.
+func (f *Failpoint[T]) Info() Info {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return &failpointservice.FailpointInfo{
-		Key:         f.key.name,
-		NamespaceId: f.key.namespaceID.String(),
-		Enabled:     f.action > Off,
-		Action:      f.action,
-		Recurrence:  f.times,
+	return Info{
+		Key:        f.key,
+		Enabled:    f.action > Off,
+		Action:     f.action,
+		Recurrence: f.times,
 	}
 }
 

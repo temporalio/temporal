@@ -17,6 +17,7 @@ func TestHooksDisabled(t *testing.T) {
 	require.Zero(t, value)
 	require.False(t, ok)
 	require.Panics(t, func() { Set(hooks, key, 42, "scope") })
+	require.Nil(t, hooks.Failpoints())
 }
 
 func TestHookDisabled(t *testing.T) {
