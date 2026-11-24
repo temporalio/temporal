@@ -133,11 +133,11 @@ func TestHasBufferedWorkflowHeartbeatNotificationInput(t *testing.T) {
 		{name: "prior and new inputs of the same type", buffered: []*historypb.HistoryEvent{newInput, input}, newEvents: []*historypb.HistoryEvent{newInput}, found: true, checked: 2},
 		{name: "only new events", buffered: newEvents, newEvents: newEvents, checked: 5},
 		{name: "new events before prior input", buffered: append(slices.Clone(newEvents), input), newEvents: newEvents, found: true, checked: 6},
-		{name: "new events before input at prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 4)...), input), newEvents: newEvents, found: true, checked: 10},
-		{name: "new events before input beyond prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5)...), input), newEvents: newEvents, checked: 10},
-		{name: "input at scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 4), input), found: true, checked: 5},
-		{name: "input beyond scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5), input), checked: 5},
-		{name: "non-input events beyond scan limit", buffered: slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6), checked: 5},
+		{name: "new events before input at prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5)...), input), newEvents: newEvents, found: true, checked: 11},
+		{name: "new events before input beyond prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6)...), input), newEvents: newEvents, checked: 11},
+		{name: "input at scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5), input), found: true, checked: 6},
+		{name: "input beyond scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6), input), checked: 6},
+		{name: "non-input events beyond scan limit", buffered: slices.Repeat([]*historypb.HistoryEvent{nonInput}, 7), checked: 6},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
