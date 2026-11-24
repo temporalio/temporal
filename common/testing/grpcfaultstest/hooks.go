@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package grpcfaultstest
 
 import (
@@ -10,12 +8,20 @@ import (
 )
 
 // NewCallbackGenerator creates a CallbackGenerator connected to namespace-scoped test hooks.
+// Without test hooks, it creates a CallbackGenerator without them.
 func NewCallbackGenerator(testHooks commontesthooks.TestHooks) *grpcfaults.CallbackGenerator {
+	if !testHooks.Enabled() {
+		return grpcfaults.NewCallbackGenerator()
+	}
 	return grpcfaults.NewCallbackGeneratorWithHooks(newAdapter(testHooks))
 }
 
-// NewGenerator creates a Generator backed by namespace-scoped test hooks.
+// NewGenerator creates a Generator backed by namespace-scoped test hooks. It returns nil without
+// test hooks, so no fault interceptor is installed.
 func NewGenerator(testHooks commontesthooks.TestHooks) grpcfaults.Generator {
+	if !testHooks.Enabled() {
+		return nil
+	}
 	return newAdapter(testHooks)
 }
 

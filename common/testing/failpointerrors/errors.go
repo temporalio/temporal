@@ -1,5 +1,3 @@
-//go:build test_dep
-
 // Package failpointerrors registers the server's errors in the failpoint error catalog, so that
 // failpoints configured from outside the process can return them.
 package failpointerrors

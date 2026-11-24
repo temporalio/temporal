@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package persistencefaultstest
 
 import (
@@ -12,7 +10,9 @@ import (
 // WithFailpoints returns a copy of fiConfig whose injector also executes the failpoint for each
 // persistence store method, scoped to the request's namespace ID if it has one. An error from the
 // failpoint fails the method. The failpoint runs after the injector of fiConfig, if any.
-// Without a failpoint registry, for example for zero TestHooks, fiConfig is returned unchanged.
+// Without a failpoint registry, for example for zero TestHooks or a build without the test_dep
+// tag, fiConfig is returned unchanged. Fault injection configured in fiConfig is a feature of all
+// builds, so the caller still installs it; only the failpoints require test_dep.
 func WithFailpoints(fiConfig *config.FaultInjection, testHooks commontesthooks.TestHooks) *config.FaultInjection {
 	if testHooks.Failpoints() == nil {
 		return fiConfig

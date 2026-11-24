@@ -1,5 +1,3 @@
-//go:build test_dep
-
 // Package failpointgrpc serves the FailpointService gRPC API for a failpoint registry, so tests
 // can configure failpoints in another process.
 package failpointgrpc

@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package failpointgrpc
 
 import (

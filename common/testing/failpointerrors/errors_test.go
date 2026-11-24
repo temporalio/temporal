@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package failpointerrors_test
 
 import (

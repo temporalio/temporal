@@ -35,6 +35,12 @@ func NewTestHooks() TestHooks {
 	return TestHooks{data: &sync.Map{}, failpoints: failpoint.NewRegistry()}
 }
 
+// Enabled reports whether the test hooks were created with NewTestHooks. Zero-value test hooks are
+// disabled.
+func (th TestHooks) Enabled() bool {
+	return th.data != nil
+}
+
 // Failpoints returns the failpoint registry, so TestHooks can be used as a failpoint.Source.
 func (th TestHooks) Failpoints() failpoint.Registry {
 	return th.failpoints

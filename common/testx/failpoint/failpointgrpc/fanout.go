@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package failpointgrpc
 
 import (
@@ -139,7 +137,7 @@ func (p plan) size() int {
 // plan resolves the targets of the request in ctx and groups them by registry.
 func (f *fanOut) plan(ctx context.Context) (plan, error) {
 	if forwarded(ctx) {
-		return plan{request: request{ctx: ctx}, groups: []registryGroup{{target: f.local}}}, nil
+		return plan{ctx: ctx, groups: []registryGroup{{target: f.local}}}, nil
 	}
 	peers, err := f.resolvePeers(ctx)
 	if err != nil {

@@ -38,6 +38,15 @@ jobs:
             exit 1
           fi
 
+      - name: Check failpoint has no build tags
+        run: |
+          # The failpoint packages must behave the same in every build; consumers enable them.
+          files=$(grep -rlE --include='*.go' '^[[:space:]]*//[[:space:]]*(go:build|\+build)' failpoint) || [ $? -eq 1 ]
+          if [ -n "$files" ]; then
+            echo "::error::failpoint must not use build tags: $(echo "$files" | tr "\n" " ")"
+            exit 1
+          fi
+
       - name: Check testx go.mod is tidy
         run: go mod tidy -diff
 

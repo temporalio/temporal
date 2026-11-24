@@ -1,5 +1,3 @@
-//go:build test_dep
-
 // In-process failpoints for testing. Unlike Pingcap's failpoints package[1]
 // these are meant for use in injected code paths. For better performance
 // (interfaces have overhead) you can use [1] below but it requires build-time

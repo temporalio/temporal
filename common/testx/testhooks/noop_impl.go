@@ -17,6 +17,11 @@ func NewTestHooks() TestHooks {
 	return TestHooks{}
 }
 
+// Enabled returns false. Test hooks are only enabled with -tags=test_dep.
+func (TestHooks) Enabled() bool {
+	return false
+}
+
 // Failpoints returns nil. Failpoints never fire in production mode.
 func (TestHooks) Failpoints() failpoint.Registry {
 	return nil

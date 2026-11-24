@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package failpoint
 
 import (
@@ -15,7 +13,7 @@ func InjectReturn[T any](
 ) (context.Context, *Failpoint[T]) {
 	fp := NewFailpoint[T](key)
 	fp.Return(ret, recur)
-	return context.WithValue(ctx, ctxKey{key}, fp), fp
+	return injectFailpoint(ctx, key, fp), fp
 }
 
 func InjectPanic[T any](
@@ -26,7 +24,7 @@ func InjectPanic[T any](
 ) (context.Context, *Failpoint[T]) {
 	fp := NewFailpoint[T](key)
 	fp.Panic(v, recur)
-	return context.WithValue(ctx, ctxKey{key}, fp), fp
+	return injectFailpoint(ctx, key, fp), fp
 }
 
 func InjectBlock[T any](
@@ -36,7 +34,7 @@ func InjectBlock[T any](
 ) (context.Context, *Failpoint[T]) {
 	fp := NewFailpoint[T](key)
 	fp.Block(recur)
-	return context.WithValue(ctx, ctxKey{key}, fp), fp
+	return injectFailpoint(ctx, key, fp), fp
 }
 
 func InjectCall[T any](
@@ -47,7 +45,7 @@ func InjectCall[T any](
 ) (context.Context, *Failpoint[T]) {
 	fp := NewFailpoint[T](key)
 	fp.Call(fn, recur)
-	return context.WithValue(ctx, ctxKey{key}, fp), fp
+	return injectFailpoint(ctx, key, fp), fp
 }
 
 func InjectPause[T any](
@@ -58,5 +56,5 @@ func InjectPause[T any](
 ) (context.Context, *Failpoint[T]) {
 	fp := NewFailpoint[T](key)
 	fp.Pause(dur, recur)
-	return context.WithValue(ctx, ctxKey{key}, fp), fp
+	return injectFailpoint(ctx, key, fp), fp
 }

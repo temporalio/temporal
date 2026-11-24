@@ -184,3 +184,8 @@ func TestFailpoints(t *testing.T) {
 	require.Same(t, registry, th1.Failpoints())
 	require.NotSame(t, registry, th2.Failpoints())
 }
+
+func TestEnabled(t *testing.T) {
+	require.True(t, NewTestHooks().Enabled())
+	require.False(t, TestHooks{}.Enabled())
+}

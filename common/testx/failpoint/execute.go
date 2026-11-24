@@ -1,15 +1,9 @@
-//go:build test_dep
-
 package failpoint
 
 import (
 	"context"
 	"fmt"
 )
-
-type ctxKey struct {
-	key Key
-}
 
 // ExecuteCtx executes a failpoint if registered and enabled.
 // It first checks for a registry in the context, then falls back to
@@ -18,20 +12,25 @@ type ctxKey struct {
 // provided a return value.
 func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 	var zero T
+	state := stateFromContext(ctx)
+	if state == nil {
+		return zero, false
+	}
 
 	// Check registry first
-	if registry, ok := GetRegistry(ctx); ok {
-		if fpAny := registry.Get(key); fpAny != nil {
-			return execute[T](registry, key, fpAny)
+	if state.registry != nil {
+		if fpAny := state.registry.Get(key); fpAny != nil {
+			return execute[T](state.registry, key, fpAny)
 		}
 	}
 
 	// Fall back to directly-injected failpoint
-	v := ctx.Value(ctxKey{key})
-	if v == nil {
-		return zero, false
+	for injected := state.injected; injected != nil; injected = injected.next {
+		if injected.key == key {
+			return execute[T](nil, key, injected.fp)
+		}
 	}
-	return execute[T](nil, key, v)
+	return zero, false
 }
 
 // Execute executes the failpoint for key in the registry of src, if registered and enabled. For a

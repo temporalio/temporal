@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package testcore
 
 import (
@@ -30,6 +28,9 @@ func InjectGlobalFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Fa
 
 func injectFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Failpoint[T] {
 	registry := env.cluster.host.testHooks.Failpoints()
+	if registry == nil {
+		env.t.Fatal("InjectFailpoint: failpoints require test hooks; use -tags test_dep")
+	}
 	fp := failpoint.NewFailpoint[T](key)
 	registry.Set(key, fp)
 	env.t.Cleanup(func() {

@@ -322,7 +322,8 @@ if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNam
 ```
 
 `Checkpoint` returns an error only if the failpoint returns one. Use `failpoint.Execute[T]` when
-the failpoint must return a value of another type. Without `-tags=test_dep`, both do nothing.
+the failpoint must return a value of another type. Without `-tags=test_dep`, the test hooks have
+no failpoint registry, so both do nothing.
 
 Tests configure the failpoint for the test's namespace. It is removed when the test ends:
 

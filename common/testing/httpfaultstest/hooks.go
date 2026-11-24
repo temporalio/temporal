@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package httpfaultstest
 
 import (
@@ -11,13 +9,21 @@ import (
 	"go.temporal.io/testx/failpoint"
 )
 
-// NewCallbackGenerator returns a generator that uses namespace-scoped test hooks.
+// NewCallbackGenerator returns a generator that uses namespace-scoped test hooks. Without test
+// hooks, it returns a callback generator without them.
 func NewCallbackGenerator(testHooks commontesthooks.TestHooks) *httpfaults.CallbackGenerator {
+	if !testHooks.Enabled() {
+		return httpfaults.NewCallbackGenerator()
+	}
 	return httpfaults.NewCallbackGeneratorWithHooks(newAdapter(testHooks))
 }
 
-// NewGenerator returns a generator that uses namespace-scoped test hooks.
+// NewGenerator returns a generator that uses namespace-scoped test hooks. It returns nil without
+// test hooks, so no HTTP faults are injected.
 func NewGenerator(testHooks commontesthooks.TestHooks) httpfaults.Generator {
+	if !testHooks.Enabled() {
+		return nil
+	}
 	return newAdapter(testHooks)
 }
 

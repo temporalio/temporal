@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package failpoint_test
 
 import (
@@ -115,6 +113,36 @@ func TestRegistry_ExecuteCtxRegistryTakesPrecedence(t *testing.T) {
 	require.True(t, executed)
 	require.Error(t, result)
 	require.Equal(t, "from registry", result.Error())
+}
+
+func TestRegistry_ExecuteCtxKeepsDirectInjectionOfParent(t *testing.T) {
+	ctx, _ := failpoint.InjectReturn(t.Context(), key1, errors.New("outer"), failpoint.Always)
+	ctx = failpoint.InjectRegistry(ctx, failpoint.NewRegistry())
+	ctx, _ = failpoint.InjectReturn(ctx, key2, errors.New("inner"), failpoint.Always)
+
+	result, executed := failpoint.ExecuteCtx[error](ctx, key1)
+	require.True(t, executed)
+	require.EqualError(t, result, "outer")
+	result, executed = failpoint.ExecuteCtx[error](ctx, key2)
+	require.True(t, executed)
+	require.EqualError(t, result, "inner")
+
+	// A later injection for the same key replaces the earlier one.
+	ctx, _ = failpoint.InjectReturn(ctx, key1, errors.New("replaced"), failpoint.Always)
+	result, executed = failpoint.ExecuteCtx[error](ctx, key1)
+	require.True(t, executed)
+	require.EqualError(t, result, "replaced")
+}
+
+func TestRegistry_ExecuteCtxWithoutFailpoints(t *testing.T) {
+	_, executed := failpoint.ExecuteCtx[error](t.Context(), key1)
+	require.False(t, executed)
+
+	_, executed = failpoint.ExecuteCtx[error](failpoint.InjectRegistry(t.Context(), failpoint.NewRegistry()), key1)
+	require.False(t, executed)
+
+	_, ok := failpoint.GetRegistry(failpoint.InjectRegistry(t.Context(), nil))
+	require.False(t, ok)
 }
 
 // TestFailpoint_UnblockOne_AfterDisable_DoesNotPanic guards against a prior
@@ -235,7 +263,11 @@ func TestRegistry_DeleteAll(t *testing.T) {
 
 	require.ElementsMatch(t, []any{fp1, fp2}, registry.DeleteAll())
 	require.Empty(t, registry.Keys())
+	require.Nil(t, registry.Get(key1))
 	require.Empty(t, registry.DeleteAll())
+
+	registry.Set(key1, fp1)
+	require.Same(t, fp1, registry.Get(key1))
 }
 
 func TestRegistry_ID(t *testing.T) {
