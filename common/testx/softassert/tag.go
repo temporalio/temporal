@@ -1,8 +1,8 @@
 package softassert
 
-// Field supplies a key and value for structured logging.
+// Tag supplies a key and value for structured logging.
 // The alias lets loggers declare the same field interface without importing this package.
-type Field = interface {
+type Tag = interface {
 	Key() string
 	Value() any
 }

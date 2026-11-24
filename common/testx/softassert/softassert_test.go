@@ -19,13 +19,13 @@ func (d detail) Value() any {
 
 type recordingLogger struct {
 	message string
-	fields  []softassert.Field
+	tags    []softassert.Tag
 	calls   int
 }
 
-func (l *recordingLogger) Error(message string, fields ...softassert.Field) {
+func (l *recordingLogger) Error(message string, tags ...softassert.Tag) {
 	l.message = message
-	l.fields = fields
+	l.tags = tags
 	l.calls++
 }
 
@@ -36,7 +36,7 @@ func TestThat(t *testing.T) {
 		condition   bool
 		wantCalls   int
 		wantMessage string
-		wantFields  []softassert.Field
+		wantTags    []softassert.Tag
 	}{
 		{
 			name:      "pass",
@@ -47,7 +47,7 @@ func TestThat(t *testing.T) {
 			condition:   false,
 			wantCalls:   1,
 			wantMessage: "failed assertion: invariant",
-			wantFields:  []softassert.Field{softassert.FailedAssertion, detail("value")},
+			wantTags:    []softassert.Tag{softassert.FailedAssertion, detail("value")},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestThat(t *testing.T) {
 			require.Equal(t, tc.condition, softassert.That(logger, tc.condition, "invariant", detail("value")))
 			require.Equal(t, tc.wantCalls, logger.calls)
 			require.Equal(t, tc.wantMessage, logger.message)
-			require.Equal(t, tc.wantFields, logger.fields)
+			require.Equal(t, tc.wantTags, logger.tags)
 		})
 	}
 }
@@ -67,5 +67,5 @@ func TestFail(t *testing.T) {
 	softassert.Fail(logger, "unreachable", detail("value"))
 	require.Equal(t, 1, logger.calls)
 	require.Equal(t, "failed assertion: unreachable", logger.message)
-	require.Equal(t, []softassert.Field{softassert.FailedAssertion, detail("value")}, logger.fields)
+	require.Equal(t, []softassert.Tag{softassert.FailedAssertion, detail("value")}, logger.tags)
 }
