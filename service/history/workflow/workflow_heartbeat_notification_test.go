@@ -111,6 +111,14 @@ func TestHasBufferedWorkflowHeartbeatNotificationInput(t *testing.T) {
 	input := &historypb.HistoryEvent{EventType: enumspb.EVENT_TYPE_TIMER_FIRED}
 	newInput := &historypb.HistoryEvent{EventType: enumspb.EVENT_TYPE_TIMER_FIRED}
 	nonInput := &historypb.HistoryEvent{EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED}
+	newEvents := make([]*historypb.HistoryEvent, 5)
+	for i := range newEvents {
+		eventType := enumspb.EVENT_TYPE_TIMER_FIRED
+		if i%2 == 0 {
+			eventType = enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED
+		}
+		newEvents[i] = &historypb.HistoryEvent{EventType: eventType}
+	}
 	for _, tc := range []struct {
 		name      string
 		buffered  []*historypb.HistoryEvent
@@ -123,6 +131,10 @@ func TestHasBufferedWorkflowHeartbeatNotificationInput(t *testing.T) {
 		{name: "only non-input events", buffered: []*historypb.HistoryEvent{nonInput}, checked: 1},
 		{name: "only new input", buffered: []*historypb.HistoryEvent{newInput}, newEvents: []*historypb.HistoryEvent{newInput}, checked: 1},
 		{name: "prior and new inputs of the same type", buffered: []*historypb.HistoryEvent{newInput, input}, newEvents: []*historypb.HistoryEvent{newInput}, found: true, checked: 2},
+		{name: "only new events", buffered: newEvents, newEvents: newEvents, checked: 5},
+		{name: "new events before prior input", buffered: append(slices.Clone(newEvents), input), newEvents: newEvents, found: true, checked: 6},
+		{name: "new events before input at prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 4)...), input), newEvents: newEvents, found: true, checked: 10},
+		{name: "new events before input beyond prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5)...), input), newEvents: newEvents, checked: 10},
 		{name: "input at scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 4), input), found: true, checked: 5},
 		{name: "input beyond scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5), input), checked: 5},
 		{name: "non-input events beyond scan limit", buffered: slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6), checked: 5},

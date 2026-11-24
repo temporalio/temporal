@@ -68,17 +68,21 @@ func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool 
 	}
 }
 
-// HasBufferedWorkflowHeartbeatNotificationInput checks at most 5 buffered events, excluding newBufferedEvents.
+// HasBufferedWorkflowHeartbeatNotificationInput checks at most 5 prior buffered events.
+// Events in newBufferedEvents are skipped without consuming the limit.
 // Of the 31 implemented bufferable event types, 25 are WHN-eligible. Assuming independent, uniformly
 // distributed prior event types, five checks find an eligible type with probability 1-(6/31)^5 = 99.97%,
-// exceeding the 99.9% target. This is an estimate, not a guarantee for actual event ordering or excluded new events.
+// exceeding the 99.9% target. This is an estimate, not a guarantee for actual event ordering.
 // If no eligible input is found within the limit, another best-effort notification is allowed.
 func HasBufferedWorkflowHeartbeatNotificationInput(ms historyi.MutableState, newBufferedEvents []*historypb.HistoryEvent) bool {
 	checked := 0
 	found := false
 	ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
+		if slices.Contains(newBufferedEvents, event) {
+			return false
+		}
 		checked++
-		found = IsWorkflowHeartbeatNotificationInputType(event.GetEventType()) && !slices.Contains(newBufferedEvents, event)
+		found = IsWorkflowHeartbeatNotificationInputType(event.GetEventType())
 		return found || checked == 5
 	})
 	return found
