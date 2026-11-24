@@ -173,7 +173,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 			s.Equal(1, commits)
 			s.Equal(0, rollbacks)
 
-			events := env.GetHistory(env.Namespace().String(), tv.WorkflowExecution())
+			events := env.RequireHistory(s, tv.WorkflowExecution())
 
 			s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -296,7 +296,7 @@ func (s *WorkflowUpdateSuite) TestNotEmptySpeculativeWorkflowTask_AcceptComplete
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
 
-			events := env.GetHistory(env.Namespace().String(), tv.WorkflowExecution())
+			events := env.RequireHistory(s, tv.WorkflowExecution())
 
 			s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -400,7 +400,7 @@ func (s *WorkflowUpdateSuite) TestFirstNormalScheduledWorkflowTask_AcceptComplet
 			s.Equal(1, wtHandlerCalls)
 			s.Equal(1, msgHandlerCalls)
 
-			events := env.GetHistory(env.Namespace().String(), tv.WorkflowExecution())
+			events := env.RequireHistory(s, tv.WorkflowExecution())
 
 			s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -500,7 +500,7 @@ func (s *WorkflowUpdateSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 			s.NoError(err)
 
 			// Send signal to schedule new WT.
-			err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+			err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 			s.NoError(err)
 
 			updateResultCh := sendUpdateNoError(env, tv)
@@ -517,7 +517,7 @@ func (s *WorkflowUpdateSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
 
-			events := env.GetHistory(env.Namespace().String(), tv.WorkflowExecution())
+			events := env.RequireHistory(s, tv.WorkflowExecution())
 
 			s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -652,7 +652,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_RejectedWithBufferedCa
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
-	  4 WorkflowTaskCompleted`, env.GetHistory(env.Namespace().String(), tv.WorkflowExecution()))
+	  4 WorkflowTaskCompleted`, env.RequireHistory(s, tv.WorkflowExecution()))
 		})
 	}
 }
@@ -745,7 +745,7 @@ func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflo
 	s.EqualValues(3, wt2Resp.ResetHistoryEventId)
 
 	// Send signal to create WT.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Complete workflow.
@@ -760,7 +760,7 @@ func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflo
 	s.Equal(0, commits)
 	s.Equal(1, rollbacks)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -893,7 +893,7 @@ func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewNotEmptySpeculativeWork
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -992,7 +992,7 @@ func (s *WorkflowUpdateSuite) TestCompletedWorkflow() {
 		s.NotNil(updateResult1.GetOutcome().GetSuccess())
 
 		acceptedEvent := s.RequireHistoryEvent(
-			env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()),
+			env.RequireHistory(s, env.Tv().WorkflowExecution()),
 			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		)
 		// The Update was pending when requested and had no callbacks, so it links directly to the Accepted event.
@@ -1523,7 +1523,7 @@ func (s *WorkflowUpdateSuite) TestStickySpeculativeWorkflowTask_AcceptComplete()
 		  7 WorkflowTaskCompleted
 		  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
 		  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
-		`, env.GetHistory(env.Namespace().String(), tv.WorkflowExecution()))
+		`, env.RequireHistory(s, tv.WorkflowExecution()))
 		})
 	}
 }
@@ -1598,7 +1598,7 @@ func (s *WorkflowUpdateSuite) TestStickySpeculativeWorkflowTask_AcceptComplete_S
 	  7 WorkflowTaskCompleted
 	  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
 	  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
-	`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+	`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 }
 
 func (s *WorkflowUpdateSuite) TestFirstNormalScheduledWorkflowTask_Reject() {
@@ -1665,7 +1665,7 @@ func (s *WorkflowUpdateSuite) TestFirstNormalScheduledWorkflowTask_Reject() {
 	s.Equal(1, wtHandlerCalls)
 	s.Equal(1, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -1713,7 +1713,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_Reject() {
 	s.EqualValues(3, res.ResetHistoryEventId)
 
 	// Send signal to create WT.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Process signal and complete workflow.
@@ -1742,7 +1742,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_Reject() {
 	s.NoError(err)
 	s.NotNil(res)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	 1 WorkflowExecutionStarted
 	 2 WorkflowTaskScheduled
@@ -1873,7 +1873,7 @@ func (s *WorkflowUpdateSuite) TestNotEmptySpeculativeWorkflowTask_Reject() {
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -2072,7 +2072,7 @@ func (s *WorkflowUpdateSuite) Test1stAccept_2ndAccept_2ndComplete_1stComplete() 
 	s.Equal(4, wtHandlerCalls)
 	s.Equal(4, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -2237,7 +2237,7 @@ func (s *WorkflowUpdateSuite) Test1stAccept_2ndReject_1stComplete() {
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -2311,7 +2311,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_Fail() {
 	s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due to unexpected workflow task failure.")
 
 	// New transient WFT is created and is now included in the history.
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -2355,7 +2355,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_Fail() {
 	s.Nil(updateResult.response)
 
 	// This WFT failure wasn't recorded because WFT was transient, but the scheduled event is included.
-	events = env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events = env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -2381,7 +2381,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_Fail() {
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
 	s.NoError(err)
 
-	events = env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events = env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -2417,7 +2417,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_Fail() {
 		})
 	s.NoError(err)
 
-	events = env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events = env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -2455,7 +2455,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_ConvertToNormal
 	  6 WorkflowTaskStarted
 	`, task.History)
 			// Send signal which will be buffered. This will persist MS and speculative WT must be converted to normal.
-			err := env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+			err := env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 			s.NoError(err)
 			return nil, nil
 		case 3:
@@ -2529,7 +2529,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_ConvertToNormal
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -2614,7 +2614,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_ConvertToNorm
 
 	// Send signal which will NOT be buffered because speculative WT is not started yet (only scheduled).
 	// This will persist MS and speculative WT must be converted to normal.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Process update in workflow.
@@ -2628,7 +2628,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_ConvertToNorm
 	s.Equal(2, wtHandlerCalls)
 	s.Equal(2, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -2778,7 +2778,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() 
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -2838,7 +2838,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_ScheduleToStartTimeout
 	s.NoError(err)
 	s.NotNil(res)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
@@ -2939,7 +2939,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_ScheduleToStartTimeout
 	s.Equal(2, wtHandlerCalls)
 	s.Equal(2, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -3050,7 +3050,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_TerminateWorkfl
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
 
-			events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+			events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 			s.EqualHistoryEvents(`
 			  1 WorkflowExecutionStarted
@@ -3140,7 +3140,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_TerminateWork
 	s.Equal(1, wtHandlerCalls)
 	s.Equal(1, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -3438,7 +3438,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_Heartbeat() {
 	s.Equal("rejection-of-"+env.Tv().UpdateID(), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId, "no reset of event ID should happened after update rejection because of heartbeat")
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -3537,7 +3537,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_LostUpdate() 
 	s.Nil(pollResponse.Messages, "there should not be new WFT with messages")
 
 	// Send signal to schedule new WT.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Complete workflow and check that there is update messages.
@@ -3548,7 +3548,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_LostUpdate() 
 	s.Equal(2, wtHandlerCalls)
 	s.Equal(2, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -3659,7 +3659,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_LostUpdate() {
 	s.Nil(updateResult.response)
 
 	// Send signal to schedule new WFT.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Complete workflow.
@@ -3670,7 +3670,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_LostUpdate() {
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -3766,7 +3766,7 @@ func (s *WorkflowUpdateSuite) TestFirstNormalWorkflowTask_UpdateResurrectedAfter
 	s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 	// Signal to create new WFT which shouldn't get any updates.
-	err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+	err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 	s.NoError(err)
 
 	// Complete workflow.
@@ -3777,7 +3777,7 @@ func (s *WorkflowUpdateSuite) TestFirstNormalWorkflowTask_UpdateResurrectedAfter
 	s.Equal(2, wtHandlerCalls)
 	s.Equal(2, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -3871,7 +3871,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_DeduplicateID
 	s.Equal(2, wtHandlerCalls)
 	s.Equal(2, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -3965,7 +3965,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_DeduplicateID()
 	s.Equal(2, wtHandlerCalls)
 	s.Equal(2, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -4100,7 +4100,7 @@ func (s *WorkflowUpdateSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID
 				"results of the first update must be available")
 
 			// Send signal to schedule new WT.
-			err = env.SendSignal(env.Namespace().String(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
+			err = env.SendSignal(env.Namespace(), env.Tv().WorkflowExecution(), env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
 			s.NoError(err)
 
 			// Complete workflow.
@@ -4111,7 +4111,7 @@ func (s *WorkflowUpdateSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID
 			s.Equal(3, wtHandlerCalls)
 			s.Equal(3, msgHandlerCalls)
 
-			events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+			events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 			s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -4263,7 +4263,7 @@ func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDif
 	})
 	s.NoError(err)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -4386,7 +4386,7 @@ func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDif
 	})
 	s.NoError(err, "2nd speculative WT should be completed because it has same WT scheduled/started Id and startTime matches the accepted message is valid (same update Id)")
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -4510,7 +4510,7 @@ func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_NewWorkflowT
 	s.NoError(err)
 	s.NotNil(wt4Resp)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -4634,7 +4634,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_WorkerSkippedProcessin
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -4690,7 +4690,7 @@ func (s *WorkflowUpdateSuite) TestLastWorkflowTask_HasUpdateMessage() {
 	4 WorkflowTaskCompleted
 	5 WorkflowExecutionUpdateAccepted
 	6 WorkflowExecutionCompleted
-	`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+	`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 }
 
 func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryBufferFullDoesNotBreakPendingUpdate() {
@@ -4837,7 +4837,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryBufferFullDoesNot
 	s.Equal(2, wtHandlerCalls)
 	s.Equal(2, msgHandlerCalls)
 
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	events := env.RequireHistory(s, env.Tv().WorkflowExecution())
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -4917,7 +4917,7 @@ func (s *WorkflowUpdateSuite) TestUpdatesAreSentToWorkerInOrderOfAdmission() {
 			6+2*i, tvi.UpdateID()))
 	}
 
-	history := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	history := env.RequireHistory(s, env.Tv().WorkflowExecution())
 	s.EqualHistoryEvents(expectedHistory.String(), history)
 }
 
@@ -4957,7 +4957,7 @@ func (s *WorkflowUpdateSuite) TestWaitAccepted_GotCompleted() {
 	4 WorkflowTaskCompleted
 	5 WorkflowExecutionUpdateAccepted
 	6 WorkflowExecutionUpdateCompleted
-	`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+	`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 }
 
 func (s *WorkflowUpdateSuite) TestContinueAsNew_UpdateIsNotCarriedOver() {
@@ -5043,13 +5043,13 @@ func (s *WorkflowUpdateSuite) TestContinueAsNew_UpdateIsNotCarriedOver() {
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
 	  5 WorkflowExecutionUpdateAccepted
-	  6 WorkflowExecutionContinuedAsNew`, env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(firstRunID).WorkflowExecution()))
+	  6 WorkflowExecutionContinuedAsNew`, env.RequireHistory(s, env.Tv().WithRunID(firstRunID).WorkflowExecution()))
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
-	  4 WorkflowTaskCompleted`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+	  4 WorkflowTaskCompleted`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 }
 
 func (s *WorkflowUpdateSuite) TestContinueAsNew_Suggestion() {
@@ -5266,7 +5266,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 				requireWorkflowEventLink(s.T(), startResp.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 				acceptedEvent := s.RequireHistoryEvent(
-					env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp.GetRunId()}),
+					env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp.GetRunId()}),
 					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 				)
 				requireWorkflowEventLink(s.T(), updateRep.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
@@ -5283,7 +5283,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				  3 WorkflowTaskStarted
 				  4 WorkflowTaskCompleted
 				  5 WorkflowExecutionUpdateAccepted
-				  6 WorkflowExecutionUpdateCompleted`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+				  6 WorkflowExecutionUpdateCompleted`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 			})
 
 			s.Run("and reject", func(s *UpdateWithStartSuite) {
@@ -5320,7 +5320,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				  1 WorkflowExecutionStarted
 				  2 WorkflowTaskScheduled
 				  3 WorkflowTaskStarted
-				  4 WorkflowTaskCompleted`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+				  4 WorkflowTaskCompleted`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 			})
 		})
 	}
@@ -5367,7 +5367,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 			acceptedEvent := s.RequireHistoryEvent(
-				env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp.GetRunId()}),
+				env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp.GetRunId()}),
 				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 			)
 			requireWorkflowEventLink(s.T(), updateRep.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
@@ -5387,7 +5387,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			  6 WorkflowTaskStarted
 			  7 WorkflowTaskCompleted
 			  8 WorkflowExecutionUpdateAccepted
-			  9 WorkflowExecutionUpdateCompleted`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+			  9 WorkflowExecutionUpdateCompleted`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 		})
 
 		s.Run("and reject", func(s *UpdateWithStartSuite) {
@@ -5441,7 +5441,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			  2 WorkflowTaskScheduled
 			  3 WorkflowTaskStarted
 			  4 WorkflowTaskCompleted
-			`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
+			`, env.RequireHistory(s, env.Tv().WorkflowExecution()))
 		})
 	})
 
@@ -5592,7 +5592,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 				s.Equal(uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String(), uwsRes2.response.Responses[1].GetUpdateWorkflow().Outcome.String())
 				runID := uwsRes2.response.Responses[0].GetStartWorkflow().GetRunId()
 				acceptedEvent := s.RequireHistoryEvent(
-					env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: runID}),
+					env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: runID}),
 					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 				)
 				s.Nil(uwsRes2.response.Responses[0].GetStartWorkflow().GetLink())
@@ -5695,7 +5695,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsClosed() {
 		s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 		// ensure terminated workflow is not locked by update-with-start
-		err = env.SendSignal(env.Namespace().String(), &commonpb.WorkflowExecution{
+		err = env.SendSignal(env.Namespace(), &commonpb.WorkflowExecution{
 			WorkflowId: env.Tv().WorkflowID(),
 			RunId:      initialWorkflow.RunId,
 		}, env.Tv().Any().String(), env.Tv().Any().Payloads(), env.Tv().Any().String())
@@ -5774,7 +5774,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsClosed() {
 				_ = uwsRes.response.Responses[1].GetUpdateWorkflow()
 				requireStartedAndRunning(s.T(), startResp1)
 				acceptedEvent := s.RequireHistoryEvent(
-					env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp1.GetRunId()}),
+					env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp1.GetRunId()}),
 					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 				)
 

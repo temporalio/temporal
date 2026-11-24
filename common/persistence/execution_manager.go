@@ -25,6 +25,18 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+// workflowExecutionNotFoundMessage is the NotFound text GetWorkflowExecution returns when the execution is absent.
+const workflowExecutionNotFoundMessage = "workflow execution not found for workflow ID %q and run ID %q"
+
+// IsWorkflowExecutionNotFound reports whether err is the NotFound GetWorkflowExecution returns when the named execution is absent.
+func IsWorkflowExecutionNotFound(err error, workflowID string, runID string) bool {
+	notFound, ok := errors.AsType[*serviceerror.NotFound](err)
+	if !ok {
+		return false
+	}
+	return notFound.Message == fmt.Sprintf(workflowExecutionNotFoundMessage, workflowID, runID)
+}
+
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
@@ -528,8 +540,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 
 	if _, ok := errors.AsType[*serviceerror.NotFound](respErr); ok {
 		// strip persistence-specific error message
-		respErr = serviceerror.NewNotFoundf(
-			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID)
+		respErr = serviceerror.NewNotFoundf(workflowExecutionNotFoundMessage, request.WorkflowID, request.RunID)
 	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API

@@ -188,8 +188,7 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 // update request IDs are recorded in the CHASM request IDs data node and start request IDs in the execution
 // state, and the two are deduplicated independently.
 func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
-	cenv := newChasmTestEnv(s.Context(), s.T(),
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, true))
+	cenv := newChasmTestEnv(s.Context(), s.T())
 	tv := testvars.New(s.T())
 
 	ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
@@ -257,12 +256,56 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
 	s.NoError(err)
 	dbState := adminDescResp.GetDatabaseMutableState()
 	requestIDsNode, ok := dbState.GetChasmNodes()["__chasm_requestIDs"]
-	s.Require().True(ok)
+	s.True(ok)
 	requestIDs := &persistencespb.ChasmRequestIDs{}
 	s.NoError(serialization.Decode(requestIDsNode.GetData(), requestIDs))
 	s.ElementsMatch([]string{requestID1, requestID2, startRequestID}, slices.Collect(maps.Keys(requestIDs.GetRequestIds())))
 	executionRequestIDs := slices.Collect(maps.Keys(dbState.GetExecutionState().GetRequestIds()))
 	s.ElementsMatch([]string{startRequestID}, executionRequestIDs)
+}
+
+func (s *ChasmSuite) TestPayloadStoreRequestIDDedupAcrossFlagChanges() {
+	for _, enabledOnRecord := range []bool{false, true} {
+		s.Run(fmt.Sprintf("EnabledOnRecord=%t", enabledOnRecord), func(s *ChasmSuite) {
+			cenv := newChasmTestEnv(s.Context(), s.T())
+			tv := testvars.New(s.T())
+			cenv.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, enabledOnRecord)
+
+			storeID := tv.WorkflowID()
+			requestID := tv.RequestID()
+			_, err := tests.NewPayloadStoreHandler(cenv.chasmCtx, tests.NewPayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+
+			addPayload := func(key string) error {
+				_, err := tests.AddPayloadHandler(cenv.chasmCtx, tests.AddPayloadRequest{
+					NamespaceID: cenv.NamespaceID(),
+					StoreID:     storeID,
+					PayloadKey:  key,
+					Payload:     payload.EncodeString(key),
+					RequestID:   requestID,
+				})
+				return err
+			}
+			s.NoError(addPayload("first"))
+
+			cenv.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, !enabledOnRecord)
+			cenv.CloseShard(cenv.NamespaceID().String(), storeID)
+
+			err = addPayload("retry")
+			var failedPrecondition *serviceerror.FailedPrecondition
+			s.ErrorAs(err, &failedPrecondition)
+
+			descResp, err := tests.DescribePayloadStoreHandler(cenv.chasmCtx, tests.DescribePayloadStoreRequest{
+				NamespaceID: cenv.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+			s.Equal(int64(1), descResp.State.TotalCount)
+		})
+	}
 }
 
 func (s *ChasmSuite) TestPayloadStore_PureTask() {
@@ -970,6 +1013,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_UpdateExisting() {
 			return nil, nil
 		},
 		nil,
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),
 	)
 	s.NoError(err)
 	s.False(newFnCalled, "newFn should not be called")
@@ -1096,7 +1140,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_CreateNew_PersistsUpdateNodesA
 	s.NoError(err)
 	persistedNodes := adminDescResp.GetDatabaseMutableState().GetChasmNodes()
 	keptNode, ok := persistedNodes["Payloads#kept"]
-	s.Require().True(ok, "payload node added by updateFn must be persisted, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
+	s.True(ok, "payload node added by updateFn must be persisted, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
 	persistedPayload := &commonpb.Payload{}
 	s.NoError(serialization.Decode(keptNode.GetData(), persistedPayload))
 	s.Equal(keptPayload.GetData(), persistedPayload.GetData())
@@ -1197,7 +1241,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_ExistingClosed() {
 	s.NoError(err)
 	persistedNodes := adminDescResp.GetDatabaseMutableState().GetChasmNodes()
 	node, ok := persistedNodes["Payloads#new-run-key"]
-	s.Require().True(ok, "payload node added by updateFn must be persisted on the new run, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
+	s.True(ok, "payload node added by updateFn must be persisted on the new run, found nodes: %v", slices.Collect(maps.Keys(persistedNodes)))
 	persistedPayload := &commonpb.Payload{}
 	s.NoError(serialization.Decode(node.GetData(), persistedPayload))
 	s.Equal(newPayload.GetData(), persistedPayload.GetData())

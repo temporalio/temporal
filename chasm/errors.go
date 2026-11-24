@@ -12,6 +12,14 @@ import (
 // WithRequestID has already been recorded on the execution.
 var ErrRequestIDAlreadyUsed = serviceerror.NewFailedPrecondition("request ID has already been used for this execution")
 
+// ErrSpeculativeStartExecution is returned by StartExecution when WithSpeculative is set. Creating an
+// execution must persist it to claim the business ID.  TODO Add support.
+var ErrSpeculativeStartExecution = serviceerror.NewInvalidArgument("WithSpeculative is not supported for StartExecution")
+
+// ErrSpeculativeComponentRef is returned by Ref for a component created by a speculative transition that
+// isn't persisted yet. Ref succeeds once a normal transition persists the component.
+var ErrSpeculativeComponentRef = serviceerror.NewFailedPrecondition("component created by a speculative transition has no reference until it is persisted")
+
 type ExecutionAlreadyStartedError struct {
 	Message          string
 	CurrentRequestID string

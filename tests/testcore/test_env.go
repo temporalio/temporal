@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
@@ -30,10 +31,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
 )
@@ -63,8 +66,11 @@ type Env interface {
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
 
+type HistoryReader = historyrequire.Reader
+
 type TestEnv struct {
 	*functionalTestBase
+	HistoryReader
 
 	// Shadows functionalTestBase.Assertions with a per-test instance bound to
 	// this TestEnv's own *testing.T, avoiding data races when parallel tests
@@ -92,6 +98,7 @@ type TestEnv struct {
 type TestOption func(*testOptions)
 
 type testOptions struct {
+	testTimeout              time.Duration
 	dedicatedCluster         bool
 	needWorkerService        bool
 	dedicatedReason          string
@@ -113,6 +120,13 @@ type dynamicConfigOverride struct {
 }
 
 type versionHeadersContextKey struct{}
+
+// WithTestTimeout sets the timeout for the environment's test context.
+func WithTestTimeout(timeout time.Duration) TestOption {
+	return func(o *testOptions) {
+		o.testTimeout = timeout
+	}
+}
 
 // WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
 // Use this for tests that have cluster-global side effects.
@@ -256,14 +270,18 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
 
-	// Create the test context before any expensive setup, so that the deadline
-	// extension below can compensate for the time setup takes.
-	ctx := testcontext.For(t)
-
 	options := testOptions{t: t}
 	for _, opt := range opts {
 		opt(&options)
 	}
+
+	// Create the test context before any expensive setup, so that the deadline
+	// extension below can compensate for the time setup takes.
+	// Must precede decorator registration, which otherwise fixes the default timeout.
+	testcontext.For(t, testcontext.WithTimeout(options.testTimeout))
+	testtelemetry.AttachTestName(t)
+	ctx := testcontext.For(t)
+
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 	if options.dedicatedReason != "" {
 		dedicatedGuard.record(options.dedicatedReason)
@@ -318,14 +336,16 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// allows, now that setup is done.
 	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
 
+	frontendClient := cluster.FrontendClient()
 	env := &TestEnv{
 		functionalTestBase: base,
+		HistoryReader:      historyrequire.NewReader(frontendClient, ns),
 		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
 		nsID:               nsID,
 		Logger:             base.Logger,
-		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
+		taskPoller:         taskpoller.New(t, frontendClient, ns.String()),
 		t:                  t,
 		tv:                 tv,
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
