@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	serverawait "go.temporal.io/server/common/testing/await"
-	poll "go.temporal.io/testx/await"
+	"go.temporal.io/testx/await"
 	ps "go.temporal.io/testx/parallelsuite"
 )
 
@@ -37,21 +37,21 @@ func attempts(s *testSuite) {
 }
 
 func awaiting(s, other *testSuite, t *testing.T, ctx context.Context, ch chan int) {
-	attempt := func(*poll.T) {}
+	attempt := func(*await.T) {}
 	ready := func() bool { return true }
 
-	poll.Require(s.Context(), s.T(), attempt, time.Second, time.Millisecond)                       // want "use suite Await instead of await.Require"
+	await.Require(s.Context(), s.T(), attempt, time.Second, time.Millisecond)                      // want "use suite Await instead of await.Require"
 	serverawait.Requiref((s).Context(), s.TB(), attempt, time.Second, time.Millisecond, "waiting") // want "use suite Awaitf instead of await.Requiref"
-	poll.RequireTrue(s.TB(), ready, time.Second, time.Millisecond)                                 // want "use suite AwaitTrue instead of await.RequireTrue"
-	poll.RequireTruef(s.T(), ready, time.Second, time.Millisecond, "waiting")                      // want "use suite AwaitTruef instead of await.RequireTruef"
-	poll.Rcv[int](s.T(), ch)                                                                       // want "use suite Rcv instead of await.Rcv"
-	poll.Snd(s.TB(), ch, 1)                                                                        // want "use suite Snd instead of await.Snd"
+	await.RequireTrue(s.TB(), ready, time.Second, time.Millisecond)                                // want "use suite AwaitTrue instead of await.RequireTrue"
+	await.RequireTruef(s.T(), ready, time.Second, time.Millisecond, "waiting")                     // want "use suite AwaitTruef instead of await.RequireTruef"
+	await.Rcv[int](s.T(), ch)                                                                      // want "use suite Rcv instead of await.Rcv"
+	await.Snd(s.TB(), ch, 1)                                                                       // want "use suite Snd instead of await.Snd"
 
-	poll.Require(ctx, s.T(), attempt, time.Second, time.Millisecond)
-	poll.Require(other.Context(), s.T(), attempt, time.Second, time.Millisecond)
-	poll.Require(s.Context(), t, attempt, time.Second, time.Millisecond)
-	poll.RequireTrue(t, ready, time.Second, time.Millisecond)
-	poll.Rcv(t, ch)
+	await.Require(ctx, s.T(), attempt, time.Second, time.Millisecond)
+	await.Require(other.Context(), s.T(), attempt, time.Second, time.Millisecond)
+	await.Require(s.Context(), t, attempt, time.Second, time.Millisecond)
+	await.RequireTrue(t, ready, time.Second, time.Millisecond)
+	await.Rcv(t, ch)
 	s.Await(func(s *testSuite) {}, time.Second, time.Millisecond)
 	s.AwaitTrue(ready, time.Second, time.Millisecond)
 	s.Rcv(ch)
