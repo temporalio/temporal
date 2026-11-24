@@ -134,7 +134,7 @@ func (s *StickyTqTestSuite) TestStickyTimeoutNonTransientWorkflowTask() {
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
 	for range 10 {
-		events := env.GetHistory(env.Namespace().String(), workflowExecution)
+		events := env.RequireHistory(s, workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
 				s.EqualHistoryEvents(`
@@ -177,7 +177,7 @@ WaitForStickyTimeoutLoop:
 		s.NoError(err)
 	}
 
-	events := env.GetHistory(env.Namespace().String(), workflowExecution)
+	events := env.RequireHistory(s, workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -200,7 +200,7 @@ WaitForStickyTimeoutLoop:
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(3))
 	s.NoError(err)
 
-	events = env.GetHistory(env.Namespace().String(), workflowExecution)
+	events = env.RequireHistory(s, workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -324,7 +324,7 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
 	for range 10 {
-		events := env.GetHistory(env.Namespace().String(), workflowExecution)
+		events := env.RequireHistory(s, workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
 				s.EqualHistoryEvents(`
@@ -367,7 +367,7 @@ WaitForStickyTimeoutLoop:
 		s.NoError(err)
 	}
 
-	events := env.GetHistory(env.Namespace().String(), workflowExecution)
+	events := env.RequireHistory(s, workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -390,7 +390,7 @@ WaitForStickyTimeoutLoop:
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(3))
 	s.NoError(err)
 
-	events = env.GetHistory(env.Namespace().String(), workflowExecution)
+	events = env.RequireHistory(s, workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

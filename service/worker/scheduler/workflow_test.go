@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,6 +45,9 @@ type (
 
 	capturingMetricsHandler struct {
 		timers []capturedTimer
+		// The SDK increments counters from local-activity goroutines.
+		countersMu sync.Mutex
+		counters   map[string]int64
 	}
 
 	capturedTimer struct {
@@ -51,7 +55,10 @@ type (
 		value time.Duration
 	}
 
-	noopMetricsCounter    struct{}
+	capturingMetricsCounter struct {
+		handler *capturingMetricsHandler
+		name    string
+	}
 	noopMetricsGauge      struct{}
 	capturingMetricsTimer struct {
 		handler *capturingMetricsHandler
@@ -77,8 +84,8 @@ func (h *capturingMetricsHandler) WithTags(map[string]string) sdkclient.MetricsH
 	return h
 }
 
-func (h *capturingMetricsHandler) Counter(string) sdkclient.MetricsCounter {
-	return noopMetricsCounter{}
+func (h *capturingMetricsHandler) Counter(name string) sdkclient.MetricsCounter {
+	return capturingMetricsCounter{handler: h, name: name}
 }
 
 func (h *capturingMetricsHandler) Gauge(string) sdkclient.MetricsGauge {
@@ -87,6 +94,12 @@ func (h *capturingMetricsHandler) Gauge(string) sdkclient.MetricsGauge {
 
 func (h *capturingMetricsHandler) Timer(name string) sdkclient.MetricsTimer {
 	return capturingMetricsTimer{handler: h, name: name}
+}
+
+func (h *capturingMetricsHandler) counter(name string) int64 {
+	h.countersMu.Lock()
+	defer h.countersMu.Unlock()
+	return h.counters[name]
 }
 
 func (h *capturingMetricsHandler) timerValues(name string) []time.Duration {
@@ -99,7 +112,14 @@ func (h *capturingMetricsHandler) timerValues(name string) []time.Duration {
 	return values
 }
 
-func (noopMetricsCounter) Inc(int64) {}
+func (c capturingMetricsCounter) Inc(delta int64) {
+	c.handler.countersMu.Lock()
+	defer c.handler.countersMu.Unlock()
+	if c.handler.counters == nil {
+		c.handler.counters = make(map[string]int64)
+	}
+	c.handler.counters[c.name] += delta
+}
 
 func (noopMetricsGauge) Update(float64) {}
 
@@ -3638,4 +3658,76 @@ func (s *workflowSuite) TestOperatorMigrateSignalSurvivesRolloutPercentZero() {
 
 	s.Equal(1, migrateCalls, "an operator-requested migration must not be discarded by the rollback reset")
 	s.Require().NoError(s.env.GetWorkflowError(), "workflow should complete after a successful migration")
+}
+
+// An auto-selected schedule with an in-progress backfill must not migrate until the backfill
+// has drained, since converting an in-flight backfill can duplicate or drop slots.
+func (s *workflowSuite) TestAutoMigrateDeferredUntilBackfillCompletes() {
+	backfillStart := time.Date(2022, 5, 30, 0, 0, 0, 0, time.UTC)
+	backfillEnd := time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)
+
+	var starts []time.Time
+	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+			starts = append(starts, s.now())
+			return &schedulespb.StartWorkflowResponse{RunId: uuid.NewString(), RealStartTime: timestamppb.New(s.now())}, nil
+		})
+
+	// Run the real gate against the request the workflow actually builds.
+	gate := newTestActivities(&mockSchedulerClient{}, "mynsid")
+	gate.autoMigrationSelected = func(string) bool { return true }
+	deferrals := 0
+	var migratedAt time.Time
+	var startsAtMigration int
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) error {
+			err := gate.MigrateScheduleToChasm(ctx, req)
+			if err != nil {
+				deferrals++
+				return err
+			}
+			migratedAt = s.now()
+			startsAtMigration = len(starts)
+			return nil
+		})
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			schedulerDynamicConfig{enableCHASMMigration: func() bool { return true }, migrateWithRunningWorkflows: func() bool { return true }})
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:         "myns",
+			NamespaceId:       "mynsid",
+			ScheduleId:        "myschedule",
+			ConflictToken:     InitialConflictToken,
+			LastProcessedTime: timestamppb.New(baseStartTime),
+			OngoingBackfills: []*schedulepb.BackfillRequest{{
+				StartTime:     timestamppb.New(backfillStart),
+				EndTime:       timestamppb.New(backfillEnd),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			}},
+		},
+	})
+
+	s.Require().True(s.env.IsWorkflowCompleted())
+	s.Require().NoError(s.env.GetWorkflowError())
+	s.Require().False(migratedAt.IsZero(), "schedule should eventually migrate")
+	s.Require().Positive(deferrals, "migration should be deferred while the backfill is in progress")
+	// 24 hourly slots in (backfillStart, backfillEnd]; all must be started by V1 before handoff.
+	s.Require().Len(starts, 24)
+	s.Require().Equal(len(starts), startsAtMigration, "no backfill start may happen after migration")
+	// Nothing re-wakes the workflow once the backfill drains, so the retry waits for the next
+	// scheduled action (its start is handed to V2 as a buffered start, not issued by V1).
+	s.Require().Equal(baseStartTime.Add(time.Hour), migratedAt)
+	s.Require().Equal(3, deferrals, "BackfillsPerIteration=10 drains 24 slots in 3 iterations")
+	s.Require().Equal(int64(deferrals), s.metrics.counter(metrics.ScheduleMigrationDeferred.Name()))
+	s.Require().Zero(s.metrics.counter(metrics.ScheduleMigrationFailed.Name()))
 }

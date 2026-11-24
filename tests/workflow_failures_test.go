@@ -65,7 +65,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTimeout() {
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for range 10 {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -165,9 +165,9 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 
 		// Send signals during workflow task
 		if sendSignal {
-			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalC", nil, identity))
-			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalD", nil, identity))
-			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalE", nil, identity))
+			s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "signalC", nil, identity))
+			s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "signalD", nil, identity))
+			s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "signalE", nil, identity))
 			sendSignal = false
 		}
 
@@ -243,7 +243,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 		s.NoError(err)
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signalA", nil, identity)
+	err = env.SendSignal(env.Namespace(), workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
@@ -253,7 +253,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 	s.Equal(1, signalCount)
 
 	// send another signal to trigger workflow task
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signalB", nil, identity)
+	err = env.SendSignal(env.Namespace(), workflowExecution, "signalB", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// fail workflow task 2 more times
@@ -283,7 +283,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
 
-	events := env.GetHistory(env.Namespace().String(), workflowExecution)
+	events := env.RequireHistory(s, workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -372,7 +372,7 @@ func (s *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfIn
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on RecordMarkerCommand.", err.Error())
 
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we0.GetRunId(),
 	})

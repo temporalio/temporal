@@ -146,7 +146,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	})
 	s.NoError(err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 2)
 
@@ -283,7 +283,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	// Snapshot history while still paused: exactly two transitions — skip-to-timer1
 	// (from WT1 close-tx) and fast-forward-disable (from the timer task that just fired).
 	// No spurious third transition from any close-tx evaluated under pause.
-	histDuringPause := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	histDuringPause := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(), RunId: runID,
 	})
 	s.Len(s.findTransitionedEvents(histDuringPause), 2,
@@ -315,7 +315,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	})
 	s.NoError(err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 2, "expected exactly two transitions across the entire lifecycle")
 
@@ -784,7 +784,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	s.NoError(err)
 	startTime := desc.WorkflowExecutionInfo.GetStartTime().AsTime()
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 1)
 	attrs := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
@@ -844,7 +844,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	var timeoutErr *sdktemporal.TimeoutError
 	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	indexOfEventType := func(history []*historypb.HistoryEvent, t enumspb.EventType) int {
 		for i, e := range history {
 			if e.GetEventType() == t {
@@ -914,7 +914,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTim
 			}, nil
 		}, taskpoller.WithTimeout(90*time.Second))
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 
 	// A fast-forward disable transition (DisabledAfterFastForward) must be present.
 	sawDisableTransition := false

@@ -189,7 +189,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 	s.NoError(err)
 
 	// verify history
-	historyEvents := env.GetHistory(env.Namespace().String(), execution)
+	historyEvents := env.RequireHistory(s, execution)
 	s.EqualHistoryEvents(expectedHistory, historyEvents)
 
 	// verify DescribeWorkflowExecution result: workflow closed, but close visibility task not completed

@@ -557,6 +557,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		true,
 		nil,
 		gomock.Any(),
+		"",
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart,
@@ -1890,6 +1891,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		true,
 		nil,
 		gomock.Any(),
+		"",
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 
 	resetMutableState.EXPECT().AddWorkflowTaskFailedEvent(
@@ -2492,7 +2494,7 @@ func TestCanReapplyOnReset(t *testing.T) {
 	} {
 		t.Run(eventType.String(), func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, expected, canReapplyOnReset(smReg, &historypb.HistoryEvent{EventType: eventType}))
+			require.Equal(t, expected, CanReapplyOnReset(smReg, &historypb.HistoryEvent{EventType: eventType}))
 		})
 	}
 }
