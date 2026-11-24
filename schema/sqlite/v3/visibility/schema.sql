@@ -41,8 +41,6 @@ CREATE TABLE executions_visibility (
   TemporalPriorityKey BIGINT GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalPriorityKey")) STORED,
   TemporalFairnessKey VARCHAR(255) GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalFairnessKey")) STORED,
   TemporalTimeSkippingEnabled BOOLEAN GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalTimeSkippingEnabled")) STORED,
-  -- Writers must keep this true once time skipping has been enabled for this run.
-  TemporalTimeSkippingOnceEnabled BOOLEAN GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalTimeSkippingOnceEnabled")) STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.Bool01")),

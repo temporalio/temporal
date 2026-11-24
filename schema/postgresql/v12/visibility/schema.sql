@@ -61,8 +61,6 @@ CREATE TABLE executions_visibility (
   TemporalPriorityKey BIGINT GENERATED ALWAYS AS ((search_attributes->'TemporalPriorityKey')::bigint) STORED,
   TemporalFairnessKey VARCHAR(255) GENERATED ALWAYS AS (search_attributes->>'TemporalFairnessKey') STORED,
   TemporalTimeSkippingEnabled BOOLEAN GENERATED ALWAYS AS ((search_attributes->'TemporalTimeSkippingEnabled')::boolean) STORED,
-  -- Writers must keep this true once time skipping has been enabled for this run.
-  TemporalTimeSkippingOnceEnabled BOOLEAN GENERATED ALWAYS AS ((search_attributes->'TemporalTimeSkippingOnceEnabled')::boolean) STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
@@ -149,7 +147,6 @@ CREATE INDEX by_temporal_external_payload_count ON executions_visibility (namesp
 CREATE INDEX by_temporal_priority_key ON executions_visibility (namespace_id, TemporalPriorityKey, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_fairness_key ON executions_visibility (namespace_id, TemporalFairnessKey, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_time_skipping_enabled ON executions_visibility (namespace_id, TemporalTimeSkippingEnabled, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_temporal_time_skipping_once_enabled ON executions_visibility (namespace_id, TemporalTimeSkippingOnceEnabled, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 
 -- Indexes for the pre-allocated custom search attributes
 CREATE INDEX by_bool_01         ON executions_visibility (namespace_id, Bool01,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
