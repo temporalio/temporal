@@ -79,17 +79,16 @@ func TestFailureReportsCaller(t *testing.T) {
 	}
 }
 
-func TestWrappedOutputPreservesCaller(t *testing.T) {
-	t.Parallel()
+func (s *compatibilitySuite) TestWrappedOutputPreservesCaller() {
 	core, records := observer.New(zap.InfoLevel)
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError,
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError,
 		testlogger.WrapLogger(log.NewZapLogger(zap.New(core)).Skip(1)),
 	)
 	_, file, line, _ := runtime.Caller(0)
 	logger.Info("visible")
 
-	require.Len(t, records.All(), 1)
-	require.Equal(t, map[string]any{"logging-call-at": fmt.Sprintf("%s:%d", file, line+1)}, records.All()[0].ContextMap())
+	s.Len(records.All(), 1)
+	s.Equal(map[string]any{"logging-call-at": fmt.Sprintf("%s:%d", file, line+1)}, records.All()[0].ContextMap())
 }
 
 type customTag struct{}
@@ -97,33 +96,31 @@ type customTag struct{}
 func (customTag) Key() string { return "custom" }
 func (customTag) Value() any  { return "value" }
 
-func TestCustomTagsSurviveAdapter(t *testing.T) {
-	t.Parallel()
+func (s *compatibilitySuite) TestCustomTagsSurviveAdapter() {
 	core, records := observer.New(zap.InfoLevel)
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError,
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError,
 		testlogger.WrapLogger(log.NewZapLogger(zap.New(core))),
 	)
 	expected := logger.Expect(testlogger.Info, "message", customTag{})
 	capture := logger.StartCapture(customTag{})
 	logger.Info("message", customTag{})
 
-	require.Len(t, records.All(), 1)
-	require.Equal(t, "value", records.All()[0].ContextMap()["custom"])
-	require.True(t, expected.Matched())
-	require.Len(t, capture.Snapshot(), 1)
-	require.Equal(t, "value", capture.Snapshot()[0].Tags[0].Value())
+	s.Len(records.All(), 1)
+	s.Equal("value", records.All()[0].ContextMap()["custom"])
+	s.True(expected.Matched())
+	s.Len(capture.Snapshot(), 1)
+	s.Equal("value", capture.Snapshot()[0].Tags[0].Value())
 }
 
-func TestOptionsReceiveInitializedLogger(t *testing.T) {
-	t.Parallel()
+func (s *compatibilitySuite) TestOptionsReceiveInitializedLogger() {
 	var expected *testlogger.Expectation
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError, func(logger *testlogger.TestLogger) {
-		require.Same(t, t, logger.T())
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError, func(logger *testlogger.TestLogger) {
+		s.Same(s.T(), logger.T())
 		logger.FailOnFatal(false)
 		expected = logger.Expect(testlogger.Info, "configured")
 	})
 	logger.Info("configured")
-	require.True(t, expected.Matched())
+	s.True(expected.Matched())
 }
 
 func TestExpectationOutputPreservesCaller(t *testing.T) {
