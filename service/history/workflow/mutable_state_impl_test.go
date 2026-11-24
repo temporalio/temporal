@@ -9873,21 +9873,30 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}}
 
 	testCases := []struct {
-		name              string
-		existing          *commonpb.TimeSkippingConfig
-		eventConfig       *commonpb.TimeSkippingConfig
-		wantConfig        *commonpb.TimeSkippingConfig
-		updatedFlag       bool
-		wantInfoIsNil     bool
-		targetTimeRenewal bool
+		name                 string
+		existing             *commonpb.TimeSkippingConfig
+		eventConfig          *commonpb.TimeSkippingConfig
+		wantConfig           *commonpb.TimeSkippingConfig
+		updatedFlag          bool
+		wantInfoIsNil        bool
+		targetTimeRenewal    bool
+		wantVisibilityUpdate bool
 	}{
 		{
-			name:              "sets when none exists",
-			existing:          nil,
-			eventConfig:       initialConfig,
-			wantConfig:        initialConfig,
-			updatedFlag:       true,
-			targetTimeRenewal: true,
+			name:                 "first configuration enabled",
+			existing:             nil,
+			eventConfig:          initialConfig,
+			wantConfig:           initialConfig,
+			updatedFlag:          true,
+			targetTimeRenewal:    true,
+			wantVisibilityUpdate: true,
+		},
+		{
+			name:                 "first configuration disabled",
+			eventConfig:          &commonpb.TimeSkippingConfig{Enabled: false},
+			wantConfig:           &commonpb.TimeSkippingConfig{Enabled: false},
+			updatedFlag:          true,
+			wantVisibilityUpdate: true,
 		},
 		{
 			name:              "overwrites existing",
@@ -9907,13 +9916,14 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 			updatedFlag:       false,
 		},
 		{
-			name:              "nil with updated flag set to true",
-			existing:          initialConfig,
-			eventConfig:       nil,
-			wantConfig:        nil,
-			wantInfoIsNil:     false,
-			targetTimeRenewal: true, // nil config clears FastForwardInfo, so target time changes from timestamp → nil
-			updatedFlag:       true,
+			name:                 "nil with updated flag set to true",
+			existing:             initialConfig,
+			eventConfig:          nil,
+			wantConfig:           nil,
+			wantInfoIsNil:        false,
+			targetTimeRenewal:    true, // nil config clears FastForwardInfo, so target time changes from timestamp → nil
+			updatedFlag:          true,
+			wantVisibilityUpdate: true,
 		},
 		{
 			name:              "same config will trigger target time renewal",
@@ -9943,6 +9953,11 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 			err := s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(initialEvent)
 			s.NoError(err)
 			initialTSI := common.CloneProto(s.mutableState.executionInfo.GetTimeSkippingInfo())
+			if tc.existing == nil {
+				s.Nil(initialTSI)
+			}
+			s.mutableState.InsertTasks[tasks.CategoryVisibility] = nil
+			s.mutableState.visibilityUpdated = false
 			// apply the event config
 			updatedEvent := &historypb.HistoryEvent{
 				EventId:   int64(3),
@@ -9958,6 +9973,14 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 			err = s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(updatedEvent)
 			s.NoError(err)
 			updatedTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
+			s.Equal(tc.wantVisibilityUpdate, s.mutableState.visibilityUpdated)
+			var wantVisibilityTasks []tasks.Task
+			if tc.wantVisibilityUpdate {
+				wantVisibilityTasks = []tasks.Task{&tasks.UpsertExecutionVisibilityTask{
+					WorkflowKey: s.mutableState.GetWorkflowKey(),
+				}}
+			}
+			s.Equal(wantVisibilityTasks, s.mutableState.InsertTasks[tasks.CategoryVisibility])
 
 			if tc.wantConfig != nil {
 				s.True(proto.Equal(tc.wantConfig, updatedTSI.GetConfig()))

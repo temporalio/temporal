@@ -2593,6 +2593,7 @@ func (s *mutableStateSuite) TestUpsertVisibilityOnTimeSkippingEnabledChange() {
 		}
 	}
 	setup := func() {
+		s.Assertions = require.New(s.T())
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config:          &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 10},
 			FastForwardInfo: &persistencespb.FastForwardInfo{TargetTime: timestamppb.New(eventTime.Add(time.Hour))},
