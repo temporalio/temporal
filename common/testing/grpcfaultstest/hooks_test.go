@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/buggify"
 	"go.temporal.io/testx/failpoint/failpointpb"
 	"google.golang.org/grpc"
 )
@@ -46,7 +47,7 @@ func TestNewGenerator_BuggifyByService(t *testing.T) {
 		primitives.WorkerService:           true,
 	} {
 		testHooks := testhooks.NewTestHooks()
-		require.NoError(t, testHooks.Failpoints().SetBuggify(failpoint.BuggifyConfig{
+		require.NoError(t, buggify.For(testHooks.Failpoints()).Set(buggify.Config{
 			Seed: 1, Activation: 1, Fire: 1, Error: "Unavailable",
 		}))
 		interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks, nil, service))

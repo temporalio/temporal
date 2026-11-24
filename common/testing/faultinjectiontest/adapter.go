@@ -67,9 +67,10 @@ type operationKeys struct {
 // same with a faultinjection.Result as the argument. An error replaces the result of the handler;
 // nil keeps it. Exempt operations run no failpoints.
 //
-// BUGGIFY (see failpoint.BuggifyConfig) can inject an error for the key of the operation at either
-// stage, but only if no failpoint is registered for the operation or for any operation, enabled or
-// not, so registered failpoints always take precedence.
+// The registry's fallback, such as BUGGIFY (see go.temporal.io/testx/failpoint/buggify), can
+// inject an error for the key of the operation at either stage, but only if no failpoint is
+// registered for the operation or for any operation, enabled or not, so registered failpoints
+// always take precedence.
 type Adapter[Req, Resp any] struct {
 	source     failpoint.Source
 	keys       Keys
@@ -137,7 +138,7 @@ func (a *Adapter[Req, Resp]) execute(operationKey, anyKey failpoint.Key, req Req
 	if a.keys.NoBuggify {
 		return nil
 	}
-	return failpoint.BuggifyError(a.source, operationKey, anyKey)
+	return failpoint.FallbackError(a.source, operationKey, anyKey)
 }
 
 // namespaceID returns the namespace ID of req, or "" if it has none.

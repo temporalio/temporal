@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/buggify"
 	"google.golang.org/grpc"
 )
 
@@ -56,7 +56,7 @@ func BenchmarkUnaryServerInterceptor_Buggify(b *testing.B) {
 	} {
 		b.Run(bc.name, func(b *testing.B) {
 			testHooks := testhooks.NewTestHooks()
-			if err := testHooks.Failpoints().SetBuggify(failpoint.BuggifyConfig{Seed: 1, Activation: bc.activation, Fire: 0}); err != nil {
+			if err := buggify.For(testHooks.Failpoints()).Set(buggify.Config{Seed: 1, Activation: bc.activation, Fire: 0}); err != nil {
 				b.Fatal(err)
 			}
 			interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks, nil, primitives.HistoryService))

@@ -255,10 +255,13 @@ func (s *server) ListFailpoints(ctx context.Context, req *failpointpb.ListFailpo
 		failpoints = append(failpoints, infoProto(key, fp))
 	}
 
-	stats := s.registry.BuggifyStats()
-	buggifyKeys := make([]*failpointpb.BuggifyKeyInfo, 0, len(stats))
+	var stats []failpoint.FallbackKeyStats
+	if reporter, ok := s.registry.Fallback().(failpoint.FallbackStatsReporter); ok {
+		stats = reporter.FallbackStats()
+	}
+	fallbackKeys := make([]*failpointpb.FallbackKeyInfo, 0, len(stats))
 	for _, st := range stats {
-		buggifyKeys = append(buggifyKeys, &failpointpb.BuggifyKeyInfo{
+		fallbackKeys = append(fallbackKeys, &failpointpb.FallbackKeyInfo{
 			Key:       protoString(st.Name),
 			Activated: st.Activated,
 			Hits:      st.Hits,
@@ -266,20 +269,20 @@ func (s *server) ListFailpoints(ctx context.Context, req *failpointpb.ListFailpo
 		})
 	}
 	resp := &failpointpb.ListFailpointsResponse{Failpoints: failpoints}
-	resp.BuggifyKeys, resp.BuggifyKeysOmitted = limitBuggifyKeys(buggifyKeys, maxListFailpointsSize-proto.Size(resp)-11)
+	resp.FallbackKeys, resp.FallbackKeysOmitted = limitFallbackKeys(fallbackKeys, maxListFailpointsSize-proto.Size(resp)-11)
 	return resp, nil
 }
 
-// maxListFailpointsSize bounds the encoded size of a ListFailpoints response with BUGGIFY counters,
+// maxListFailpointsSize bounds the encoded size of a ListFailpoints response with fallback counters,
 // well below gRPC's default limit of 4 MiB, since key names, such as those of HTTP operations,
 // contain text chosen by callers. The counters only take the room that the registered failpoints
 // leave, so they can't make a response too large that would fit without them.
 const maxListFailpointsSize = 2 << 20
 
-// limitBuggifyKeys sorts keys, activated ones first and then by name, and keeps those that fit in
+// limitFallbackKeys sorts keys, activated ones first and then by name, and keeps those that fit in
 // budget bytes. It returns them and the number it left out.
-func limitBuggifyKeys(keys []*failpointpb.BuggifyKeyInfo, budget int) ([]*failpointpb.BuggifyKeyInfo, int64) {
-	slices.SortStableFunc(keys, func(a, b *failpointpb.BuggifyKeyInfo) int {
+func limitFallbackKeys(keys []*failpointpb.FallbackKeyInfo, budget int) ([]*failpointpb.FallbackKeyInfo, int64) {
+	slices.SortStableFunc(keys, func(a, b *failpointpb.FallbackKeyInfo) int {
 		if a.Activated != b.Activated {
 			if a.Activated {
 				return -1

@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/testx/failpoint"
+	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 )
 
 func TestConvertValue(t *testing.T) {
@@ -39,7 +40,7 @@ func TestConvertValue(t *testing.T) {
 				Disabled: true,
 				Fire:     &fire,
 				Error:    &errorName,
-				Prefixes: []failpoint.BuggifyPrefix{{Prefix: "grpc:", Activation: 1, Fire: 0.5, Error: "Internal"}},
+				Prefixes: []fpbuggify.Prefix{{Prefix: "grpc:", Activation: 1, Fire: 0.5, Error: "Internal"}},
 				Include:  &include,
 				Exclude:  &exclude,
 			},
@@ -73,12 +74,12 @@ func env(vars map[string]string) func(string) (string, bool) {
 	}
 }
 
-const seedEnv = failpoint.BuggifySeedEnv
+const seedEnv = fpbuggify.SeedEnv
 
 func TestResolve(t *testing.T) {
 	t.Parallel()
 
-	withSeed := func(seed uint64) failpoint.BuggifyConfig {
+	withSeed := func(seed uint64) fpbuggify.Config {
 		config := Defaults()
 		config.Seed = seed
 		return config
@@ -91,38 +92,38 @@ func TestResolve(t *testing.T) {
 		name       string
 		value      Value
 		env        map[string]string
-		want       failpoint.BuggifyConfig
+		want       fpbuggify.Config
 		wantSource string
 		wantErr    string
 	}{
-		{name: "no seed", want: failpoint.BuggifyConfig{}},
+		{name: "no seed", want: fpbuggify.Config{}},
 		{name: "setting seed", value: Value{Seed: 5}, env: map[string]string{seedEnv: "6"}, want: withSeed(5), wantSource: "dynamic config testing.buggify"},
 		{name: "env seed", env: map[string]string{seedEnv: "6"}, want: withSeed(6), wantSource: "FAILPOINT_BUGGIFY_SEED=6"},
 		{
 			name: "env probabilities",
-			env:  map[string]string{seedEnv: "6", failpoint.BuggifyActivationEnv: "0.5", failpoint.BuggifyFireEnv: "0.1"},
-			want: func() failpoint.BuggifyConfig {
+			env:  map[string]string{seedEnv: "6", fpbuggify.ActivationEnv: "0.5", fpbuggify.FireEnv: "0.1"},
+			want: func() fpbuggify.Config {
 				config := withSeed(6)
 				config.Activation, config.Fire = 0.5, 0.1
 				return config
 			}(),
 			wantSource: "FAILPOINT_BUGGIFY_SEED=6",
 		},
-		{name: "gomad seed alone", env: map[string]string{failpoint.GomadSeedEnv: "7"}, want: failpoint.BuggifyConfig{}},
-		{name: "disabled", value: Value{Seed: 5, Disabled: true}, env: map[string]string{seedEnv: "6"}, want: failpoint.BuggifyConfig{}},
+		{name: "gomad seed alone", env: map[string]string{fpbuggify.GomadSeedEnv: "7"}, want: fpbuggify.Config{}},
+		{name: "disabled", value: Value{Seed: 5, Disabled: true}, env: map[string]string{seedEnv: "6"}, want: fpbuggify.Config{}},
 		{name: "invalid env seed", env: map[string]string{seedEnv: "x"}, wantErr: `invalid FAILPOINT_BUGGIFY_SEED "x"`},
 		{
 			name: "overrides",
-			value: Value{Seed: 5, Activation: &activation, Exclude: &exclude, Prefixes: []failpoint.BuggifyPrefix{
+			value: Value{Seed: 5, Activation: &activation, Exclude: &exclude, Prefixes: []fpbuggify.Prefix{
 				{Prefix: "grpc:", Activation: 1, Fire: 1, Error: "Internal"},
 				{Prefix: "matching.", Activation: 0},
 			}},
-			env: map[string]string{seedEnv: "6", failpoint.BuggifyActivationEnv: "0.9"},
-			want: failpoint.BuggifyConfig{
+			env: map[string]string{seedEnv: "6", fpbuggify.ActivationEnv: "0.9"},
+			want: fpbuggify.Config{
 				Seed:       5,
 				Activation: 0.5,
 				Fire:       0.25,
-				Prefixes: []failpoint.BuggifyPrefix{
+				Prefixes: []fpbuggify.Prefix{
 					{Prefix: "grpc:", Activation: 1, Fire: 1, Error: "Internal"},
 					{Prefix: "http:", Activation: 0.1, Fire: 0.01, Error: "Unavailable"},
 					{Prefix: "matching.", Activation: 0},
@@ -131,16 +132,16 @@ func TestResolve(t *testing.T) {
 			},
 			wantSource: "dynamic config testing.buggify",
 		},
-		{name: "invalid override", value: Value{Seed: 5, Prefixes: []failpoint.BuggifyPrefix{{Prefix: "grpc:", Error: "Oops"}}}, wantErr: `unknown error "Oops"`},
+		{name: "invalid override", value: Value{Seed: 5, Prefixes: []fpbuggify.Prefix{{Prefix: "grpc:", Error: "Oops"}}}, wantErr: `unknown error "Oops"`},
 		{name: "invalid but disabled", value: Value{Disabled: true, Fire: &invalidProbability}, wantErr: "probability 2"},
-		{name: "invalid without a seed", value: Value{Prefixes: []failpoint.BuggifyPrefix{{Prefix: "grpc:", Error: "Oops"}}}, wantErr: `unknown error "Oops"`},
+		{name: "invalid without a seed", value: Value{Prefixes: []fpbuggify.Prefix{{Prefix: "grpc:", Error: "Oops"}}}, wantErr: `unknown error "Oops"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			e, err := ReadEnv(env(tc.env))
 			if err == nil {
-				var config failpoint.BuggifyConfig
+				var config fpbuggify.Config
 				var source string
 				config, source, err = Resolve(tc.value, e)
 				if err == nil {
@@ -197,11 +198,11 @@ func TestDefaults(t *testing.T) {
 
 func TestGomadLine(t *testing.T) {
 	t.Parallel()
-	line, ok := GomadLine(failpoint.Event{Kind: failpoint.BuggifyActivationEvent, Key: failpoint.KeyFromName("http:POST /cb", ""), Activated: true})
+	line, ok := GomadLine(failpoint.Event{Kind: failpoint.FallbackActivationEvent, Key: failpoint.KeyFromName("http:POST /cb", ""), Activated: true})
 	require.True(t, ok)
 	require.Equal(t, `GOMAD failpoint buggify-activation key="http:POST /cb" active=true`, line)
 
-	line, ok = GomadLine(failpoint.Event{Kind: failpoint.BuggifyFireEvent, Key: failpoint.KeyFromName("grpc:/a.B/C", "ns"), Action: failpoint.Return, Execution: 3})
+	line, ok = GomadLine(failpoint.Event{Kind: failpoint.FallbackFireEvent, Key: failpoint.KeyFromName("grpc:/a.B/C", "ns"), Action: failpoint.Return, Execution: 3})
 	require.True(t, ok)
 	require.Equal(t, `GOMAD failpoint hit key="grpc:/a.B/C" scope="ns" n=3 action=Return buggify=true`, line)
 

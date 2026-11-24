@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
+	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
@@ -73,9 +74,9 @@ func TestModule(t *testing.T) {
 
 		app.RequireStart()
 		require.ErrorContains(t, errAtStart, "BUGGIFY: injected by failpoint always")
-		require.Equal(t, uint64(5), testHooks.Failpoints().BuggifyConfig().Seed)
+		require.Equal(t, uint64(5), fpbuggify.For(testHooks.Failpoints()).Config().Seed)
 		app.RequireStop()
-		require.False(t, testHooks.Failpoints().BuggifyConfig().Enabled())
+		require.False(t, fpbuggify.For(testHooks.Failpoints()).Config().Enabled())
 	})
 
 	t.Run("fails to start with an invalid initial value", func(t *testing.T) {
@@ -101,16 +102,16 @@ func TestSource(t *testing.T) {
 		client := dynamicconfig.NewMemoryClient()
 		registry := failpoint.NewRegistry()
 		fatalErrs := make(chan error, 1)
-		s := newSource(registry, newCollection(t, client), log.NewNoopLogger(), env(map[string]string{failpoint.BuggifySeedEnv: "9"}), nil,
+		s := newSource(registry, newCollection(t, client), log.NewNoopLogger(), env(map[string]string{fpbuggify.SeedEnv: "9"}), nil,
 			func(err error) { fatalErrs <- err })
 		require.NoError(t, s.start(t.Context()))
 		t.Cleanup(func() { _ = s.stop(context.Background()) })
 		want := Defaults()
 		want.Seed = 9
-		require.Equal(t, want, registry.BuggifyConfig())
+		require.Equal(t, want, fpbuggify.For(registry).Config())
 
 		client.OverrideSetting(Setting, map[string]any{"disabled": true})
-		await.RequireTrue(t, func() bool { return !registry.BuggifyConfig().Enabled() }, 5*time.Second, 10*time.Millisecond)
+		await.RequireTrue(t, func() bool { return !fpbuggify.For(registry).Config().Enabled() }, 5*time.Second, 10*time.Millisecond)
 
 		client.OverrideSetting(Setting, map[string]any{"seed": "x"})
 		require.ErrorContains(t, await.Rcv(t, fatalErrs), "invalid dynamic config setting testing.buggify")
@@ -199,7 +200,7 @@ func TestSource_StartsWithTheStartupConfiguration(t *testing.T) {
 
 	start := func(t *testing.T, client *dynamicconfig.MemoryClient, startup Startup) (failpoint.Registry, error) {
 		registry := failpoint.NewRegistry()
-		s := newSource(registry, newCollection(t, client), log.NewNoopLogger(), env(map[string]string{failpoint.BuggifySeedEnv: "9"}), nil,
+		s := newSource(registry, newCollection(t, client), log.NewNoopLogger(), env(map[string]string{fpbuggify.SeedEnv: "9"}), nil,
 			func(err error) { t.Error(err) })
 		s.startup = startup
 		err := s.start(t.Context())
@@ -208,7 +209,7 @@ func TestSource_StartsWithTheStartupConfiguration(t *testing.T) {
 	}
 	resolve := func(t *testing.T, client *dynamicconfig.MemoryClient) Startup {
 		// The environment changes after the dynamic config client resolved the configuration.
-		_, startup, err := wrapDynamicConfigClient(client, log.NewNoopLogger(), env(map[string]string{failpoint.BuggifySeedEnv: "8"}))
+		_, startup, err := wrapDynamicConfigClient(client, log.NewNoopLogger(), env(map[string]string{fpbuggify.SeedEnv: "8"}))
 		require.NoError(t, err)
 		return startup
 	}
@@ -218,10 +219,10 @@ func TestSource_StartsWithTheStartupConfiguration(t *testing.T) {
 		client := dynamicconfig.NewMemoryClient()
 		registry, err := start(t, client, resolve(t, client))
 		require.NoError(t, err)
-		require.Equal(t, uint64(8), registry.BuggifyConfig().Seed)
+		require.Equal(t, uint64(8), fpbuggify.For(registry).Config().Seed)
 
 		client.OverrideSetting(Setting, map[string]any{"seed": 5})
-		await.RequireTrue(t, func() bool { return registry.BuggifyConfig().Seed == 5 }, 5*time.Second, 10*time.Millisecond)
+		await.RequireTrue(t, func() bool { return fpbuggify.For(registry).Config().Seed == 5 }, 5*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("applies a change between resolution and start", func(t *testing.T) {
@@ -232,7 +233,7 @@ func TestSource_StartsWithTheStartupConfiguration(t *testing.T) {
 		client.OverrideSetting(Setting, map[string]any{"seed": 4})
 		registry, err := start(t, client, startup)
 		require.NoError(t, err)
-		require.Equal(t, uint64(4), registry.BuggifyConfig().Seed)
+		require.Equal(t, uint64(4), fpbuggify.For(registry).Config().Seed)
 	})
 
 	t.Run("applies a disable between resolution and start", func(t *testing.T) {
@@ -243,7 +244,7 @@ func TestSource_StartsWithTheStartupConfiguration(t *testing.T) {
 		client.OverrideSetting(Setting, map[string]any{"disabled": true})
 		registry, err := start(t, client, startup)
 		require.NoError(t, err)
-		require.False(t, registry.BuggifyConfig().Enabled())
+		require.False(t, fpbuggify.For(registry).Config().Enabled())
 	})
 
 	t.Run("fails to start with a malformed value set between resolution and start", func(t *testing.T) {
@@ -269,4 +270,29 @@ func TestSource_InvalidValueReplacedBeforeItsCallback(t *testing.T) {
 	client.OverrideSetting(Setting, map[string]any{"disabled": true, "fire": 2})
 	client.OverrideSetting(Setting, map[string]any{"seed": 1})
 	require.ErrorContains(t, await.Rcv(t, fatalErrs), "probability 2")
+}
+
+// otherFallback is a fallback that isn't BUGGIFY.
+type otherFallback struct{}
+
+func (otherFallback) Error(failpoint.Key) error { return nil }
+
+func TestSource_LeavesAReplacementFallbackAlone(t *testing.T) {
+	t.Parallel()
+	client := dynamicconfig.NewMemoryClient()
+	client.OverrideSetting(Setting, map[string]any{"seed": 3})
+	registry := failpoint.NewRegistry()
+	s := newSource(registry, newCollection(t, client), log.NewNoopLogger(), env(nil), nil, func(err error) { t.Error(err) })
+	require.NoError(t, s.start(t.Context()))
+	require.True(t, registry.Armed())
+
+	registry.SetFallback(otherFallback{})
+	// A change of the setting and the shutdown neither panic nor turn the replacement on.
+	client.OverrideSetting(Setting, map[string]any{"seed": 4})
+	await.RequireTrue(t, func() bool { return s.buggify.Config().Seed == 4 },
+		5*time.Second, 10*time.Millisecond)
+	require.False(t, registry.Armed())
+	require.NoError(t, s.stop(t.Context()))
+	require.Equal(t, otherFallback{}, registry.Fallback())
+	require.False(t, registry.Armed())
 }

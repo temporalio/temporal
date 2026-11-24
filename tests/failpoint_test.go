@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/testx/failpoint"
+	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 	"go.temporal.io/testx/failpoint/failpointpb"
 )
 
@@ -175,7 +176,7 @@ func TestBuggify(t *testing.T) {
 	var mu sync.Mutex
 	activations := map[string]bool{}
 	unsubscribe := registry.Subscribe(func(e failpoint.Event) {
-		if e.Kind == failpoint.BuggifyActivationEvent {
+		if e.Kind == failpoint.FallbackActivationEvent {
 			mu.Lock()
 			defer mu.Unlock()
 			activations[e.Key.Name()] = e.Activated
@@ -206,7 +207,7 @@ func TestBuggify(t *testing.T) {
 		require.NoError(t, err)
 		want, _, err := buggify.Resolve(parsed, buggify.Env{})
 		require.NoError(t, err)
-		require.Equal(t, want, registry.BuggifyConfig())
+		require.Equal(t, want, fpbuggify.For(registry).Config())
 
 		// The started workflow's task reaches matching's sync match, a Buggify call site.
 		await.Require(t.Context(), t, func(t *await.T) {
@@ -233,8 +234,8 @@ func TestBuggify(t *testing.T) {
 	t.Run("ListFailpoints reports the BUGGIFY counters of reached keys", func(t *testing.T) {
 		list, err := testcore.FailpointClient(env).ListFailpoints(testcontext.For(t), &failpointpb.ListFailpointsRequest{})
 		require.NoError(t, err)
-		counters := map[string]*failpointpb.BuggifyKeyInfo{}
-		for _, info := range list.BuggifyKeys {
+		counters := map[string]*failpointpb.FallbackKeyInfo{}
+		for _, info := range list.FallbackKeys {
 			counters[info.Key] = info
 		}
 		// The first subtest's call fired; the second subtest's calls had a failpoint registered.

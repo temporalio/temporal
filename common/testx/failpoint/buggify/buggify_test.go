@@ -1,16 +1,21 @@
-package failpoint_test
+package buggify_test
 
 import (
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/buggify"
+	"go.temporal.io/testx/failpoint/failpointgrpc"
+	"go.temporal.io/testx/failpoint/failpointpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // buggifyErr is the error that the BUGGIFY tests configure. The catalog is global, so each run
@@ -30,16 +35,16 @@ func registerBuggifyError() {
 }
 
 // alwaysConfig activates every selected key and fires every execution with errBuggify.
-func alwaysConfig() failpoint.BuggifyConfig {
+func alwaysConfig() buggify.Config {
 	registerBuggifyError()
-	return failpoint.BuggifyConfig{Seed: 1, Activation: 1, Fire: 1, Error: buggifyErrName}
+	return buggify.Config{Seed: 1, Activation: 1, Fire: 1, Error: buggifyErrName}
 }
 
 // newBuggifyRegistry returns a registry with BUGGIFY configured, and the events it reports.
-func newBuggifyRegistry(t *testing.T, config failpoint.BuggifyConfig) (failpoint.Registry, func() []failpoint.Event) {
+func newBuggifyRegistry(t *testing.T, config buggify.Config) (failpoint.Registry, func() []failpoint.Event) {
 	t.Helper()
 	registry := failpoint.NewRegistry()
-	require.NoError(t, registry.SetBuggify(config))
+	require.NoError(t, buggify.For(registry).Set(config))
 	var mu sync.Mutex
 	var events []failpoint.Event
 	registry.Subscribe(func(e failpoint.Event) {
@@ -54,131 +59,10 @@ func newBuggifyRegistry(t *testing.T, config failpoint.BuggifyConfig) (failpoint
 	}
 }
 
-func TestBuggifyConfig_Validate(t *testing.T) {
-	t.Parallel()
-	registerBuggifyError()
-
-	tests := []struct {
-		name    string
-		config  failpoint.BuggifyConfig
-		wantErr string
-	}{
-		{name: "zero", config: failpoint.BuggifyConfig{}},
-		{
-			name: "valid",
-			config: failpoint.BuggifyConfig{
-				Seed: 1, Activation: 0.25, Fire: 1, Error: buggifyErrName,
-				Prefixes: []failpoint.BuggifyPrefix{{Prefix: "a:", Activation: 0, Fire: 0.5}},
-				Include:  []string{"a:*"},
-				Exclude:  []string{"a:b"},
-			},
-		},
-		{name: "activation out of range", config: failpoint.BuggifyConfig{Activation: 1.5}, wantErr: "probability 1.5"},
-		{name: "fire negative", config: failpoint.BuggifyConfig{Fire: -0.1}, wantErr: "probability -0.1"},
-		{name: "unknown error", config: failpoint.BuggifyConfig{Error: "Oops"}, wantErr: `unknown error "Oops"`},
-		{name: "empty prefix", config: failpoint.BuggifyConfig{Prefixes: []failpoint.BuggifyPrefix{{}}}, wantErr: "prefix must not be empty"},
-		{
-			name:    "duplicate prefix",
-			config:  failpoint.BuggifyConfig{Prefixes: []failpoint.BuggifyPrefix{{Prefix: "a"}, {Prefix: "a"}}},
-			wantErr: `duplicate buggify prefix "a"`,
-		},
-		{
-			name:    "prefix probability",
-			config:  failpoint.BuggifyConfig{Prefixes: []failpoint.BuggifyPrefix{{Prefix: "a", Fire: 2}}},
-			wantErr: `probability 2 for prefix "a"`,
-		},
-		{name: "empty pattern", config: failpoint.BuggifyConfig{Exclude: []string{""}}, wantErr: "must not be empty"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := tc.config.Validate()
-			if tc.wantErr == "" {
-				require.NoError(t, err)
-				return
-			}
-			require.ErrorContains(t, err, tc.wantErr)
-			require.ErrorContains(t, failpoint.NewRegistry().SetBuggify(tc.config), tc.wantErr)
-		})
-	}
-}
-
-func TestBuggifyConfig_Activated(t *testing.T) {
-	t.Parallel()
-
-	names := make([]string, 2000)
-	for i := range names {
-		names[i] = fmt.Sprintf("key.%d", i)
-	}
-	activated := func(config failpoint.BuggifyConfig) map[string]bool {
-		set := map[string]bool{}
-		for _, name := range names {
-			if config.Activated(name) {
-				set[name] = true
-			}
-		}
-		return set
-	}
-	config := failpoint.BuggifyConfig{Seed: 42, Activation: 0.25}
-
-	t.Run("is a function of the seed", func(t *testing.T) {
-		t.Parallel()
-		set := activated(config)
-		require.Equal(t, set, activated(config))
-		require.InDelta(t, 0.25, float64(len(set))/float64(len(names)), 0.03)
-		require.NotEqual(t, set, activated(failpoint.BuggifyConfig{Seed: 43, Activation: 0.25}))
-	})
-
-	t.Run("is off without a seed", func(t *testing.T) {
-		t.Parallel()
-		require.Empty(t, activated(failpoint.BuggifyConfig{Activation: 1}))
-	})
-
-	t.Run("applies the longest prefix and the patterns", func(t *testing.T) {
-		t.Parallel()
-		config := failpoint.BuggifyConfig{
-			Seed:       7,
-			Activation: 1,
-			Prefixes: []failpoint.BuggifyPrefix{
-				{Prefix: "grpc:", Activation: 0},
-				{Prefix: "grpc:/svc.A/", Activation: 1},
-			},
-			Include: []string{"grpc:*", "queue.*"},
-			Exclude: []string{"grpc:/svc.A/Skip*", "*.internal"},
-		}
-		for name, want := range map[string]bool{
-			"grpc:/svc.B/Call":     false, // grpc: prefix
-			"grpc:/svc.A/Call":     true,  // longer prefix
-			"grpc:/svc.A/SkipThis": false, // excluded
-			"queue.forward":        true,  // base probability
-			"queue.internal":       false, // excluded by a pattern with a leading *
-			"store.update":         false, // not included
-		} {
-			require.Equal(t, want, config.Activated(name), name)
-		}
-	})
-}
-
-func TestBuggifyConfig_Draw(t *testing.T) {
-	t.Parallel()
-	config := failpoint.BuggifyConfig{Seed: 1}
-	seen := map[float64]bool{}
-	for n := range uint64(100) {
-		d := config.Draw("key", n)
-		require.GreaterOrEqual(t, d, 0.0)
-		require.Less(t, d, 1.0)
-		require.Equal(t, math.Float64bits(d), math.Float64bits(config.Draw("key", n)))
-		seen[d] = true
-	}
-	require.Len(t, seen, 100)
-	require.NotEqual(t, config.Draw("key", 1), config.Draw("other", 1))
-	require.NotEqual(t, config.Draw("key", 1), failpoint.BuggifyConfig{Seed: 2}.Draw("key", 1))
-}
-
 func TestBuggify_Determinism(t *testing.T) {
 	t.Parallel()
 	registerBuggifyError()
-	config := failpoint.BuggifyConfig{Seed: 99, Activation: 0.5, Fire: 0.5, Error: buggifyErrName}
+	config := buggify.Config{Seed: 99, Activation: 0.5, Fire: 0.5, Error: buggifyErrName}
 
 	// run executes each key a few times and returns which executions failed.
 	run := func() (failed []string, events []failpoint.Event) {
@@ -202,7 +86,7 @@ func TestBuggify_Determinism(t *testing.T) {
 	require.Equal(t, events, againEvents)
 
 	for _, e := range events {
-		if e.Kind == failpoint.BuggifyActivationEvent {
+		if e.Kind == failpoint.FallbackActivationEvent {
 			require.Equal(t, config.Activated(e.Key.Name()), e.Activated)
 		}
 	}
@@ -229,10 +113,10 @@ func TestBuggify_Execute(t *testing.T) {
 		require.True(t, set)
 
 		require.Equal(t, []failpoint.Event{
-			{Kind: failpoint.BuggifyActivationEvent, Key: failpoint.KeyFromName("1", ""), Activated: true},
-			{Kind: failpoint.BuggifyFireEvent, Key: key, Action: failpoint.Return, Fired: true, Execution: 1},
-			{Kind: failpoint.BuggifyFireEvent, Key: key, Action: failpoint.Return, Fired: true, Execution: 2},
-			{Kind: failpoint.BuggifyFireEvent, Key: key, Action: failpoint.Return, Fired: true, Execution: 3},
+			{Kind: failpoint.FallbackActivationEvent, Key: failpoint.KeyFromName("1", ""), Activated: true},
+			{Kind: failpoint.FallbackFireEvent, Key: key, Action: failpoint.Return, Fired: true, Execution: 1},
+			{Kind: failpoint.FallbackFireEvent, Key: key, Action: failpoint.Return, Fired: true, Execution: 2},
+			{Kind: failpoint.FallbackFireEvent, Key: key, Action: failpoint.Return, Fired: true, Execution: 3},
 		}, events())
 	})
 
@@ -252,13 +136,13 @@ func TestBuggify_Execute(t *testing.T) {
 	t.Run("does not inject without an error for the key", func(t *testing.T) {
 		t.Parallel()
 		config := alwaysConfig()
-		config.Prefixes = []failpoint.BuggifyPrefix{{Prefix: "2", Activation: 1, Fire: 1}}
+		config.Prefixes = []buggify.Prefix{{Prefix: "2", Activation: 1, Fire: 1}}
 		registry, _ := newBuggifyRegistry(t, config)
 		src := registrySource{registry: registry}
 
 		require.NoError(t, failpoint.Checkpoint(src, key2))
 		require.ErrorIs(t, failpoint.Checkpoint(src, key1), errBuggify)
-		require.True(t, failpoint.Buggify(src, key2))
+		require.True(t, buggify.Fires(src, key2))
 	})
 
 	t.Run("ExecuteRegistered ignores BUGGIFY", func(t *testing.T) {
@@ -292,13 +176,13 @@ func TestBuggify_Precedence(t *testing.T) {
 			registry.Set(tc.registeredKey, fp)
 
 			require.ErrorIs(t, failpoint.Checkpoint(src, key), registered)
-			require.True(t, failpoint.Buggify(src, key))
+			require.True(t, buggify.Fires(src, key))
 
 			// A disabled failpoint still keeps BUGGIFY away from the key.
 			fp.Disable()
 			require.NoError(t, failpoint.Checkpoint(src, key))
-			require.NoError(t, failpoint.BuggifyError(src, key))
-			require.False(t, failpoint.Buggify(src, key))
+			require.NoError(t, failpoint.FallbackError(src, key))
+			require.False(t, buggify.Fires(src, key))
 
 			for _, e := range events() {
 				require.Equal(t, failpoint.ExecutionEvent, e.Kind)
@@ -325,45 +209,45 @@ func TestBuggify_Branch(t *testing.T) {
 
 	t.Run("fires with the configured probability", func(t *testing.T) {
 		t.Parallel()
-		config := failpoint.BuggifyConfig{Seed: 5, Activation: 1, Fire: 0.25}
+		config := buggify.Config{Seed: 5, Activation: 1, Fire: 0.25}
 		registry, events := newBuggifyRegistry(t, config)
 		src := registrySource{registry: registry}
 
 		var fired int
 		for range 2000 {
-			if failpoint.Buggify(src, key1) {
+			if buggify.Fires(src, key1) {
 				fired++
 			}
 		}
 		require.InDelta(t, 500, fired, 75)
 		require.Len(t, events(), fired+1)
-		require.Equal(t, failpoint.Event{Kind: failpoint.BuggifyActivationEvent, Key: key1, Activated: true}, events()[0])
+		require.Equal(t, failpoint.Event{Kind: failpoint.FallbackActivationEvent, Key: key1, Activated: true}, events()[0])
 	})
 
-	t.Run("BuggifyWithProb overrides the fire probability", func(t *testing.T) {
+	t.Run("FiresWithProb overrides the fire probability", func(t *testing.T) {
 		t.Parallel()
-		registry, _ := newBuggifyRegistry(t, failpoint.BuggifyConfig{Seed: 5, Activation: 1, Fire: 0})
+		registry, _ := newBuggifyRegistry(t, buggify.Config{Seed: 5, Activation: 1, Fire: 0})
 		src := registrySource{registry: registry}
 
-		require.False(t, failpoint.Buggify(src, key1))
-		require.True(t, failpoint.BuggifyWithProb(src, key1, 1))
-		require.False(t, failpoint.BuggifyWithProb(src, key1, 0))
+		require.False(t, buggify.Fires(src, key1))
+		require.True(t, buggify.FiresWithProb(src, key1, 1))
+		require.False(t, buggify.FiresWithProb(src, key1, 0))
 	})
 
 	t.Run("never fires for a key that is not activated", func(t *testing.T) {
 		t.Parallel()
-		registry, events := newBuggifyRegistry(t, failpoint.BuggifyConfig{Seed: 5, Activation: 0, Fire: 1})
+		registry, events := newBuggifyRegistry(t, buggify.Config{Seed: 5, Activation: 0, Fire: 1})
 		src := registrySource{registry: registry}
 
-		require.False(t, failpoint.BuggifyWithProb(src, key1, 1))
-		require.False(t, failpoint.Buggify(src, key1))
-		require.Equal(t, []failpoint.Event{{Kind: failpoint.BuggifyActivationEvent, Key: key1, Activated: false}}, events())
+		require.False(t, buggify.FiresWithProb(src, key1, 1))
+		require.False(t, buggify.Fires(src, key1))
+		require.Equal(t, []failpoint.Event{{Kind: failpoint.FallbackActivationEvent, Key: key1, Activated: false}}, events())
 	})
 
 	t.Run("is off without a registry", func(t *testing.T) {
 		t.Parallel()
-		require.False(t, failpoint.Buggify(registrySource{}, key1))
-		require.NoError(t, failpoint.BuggifyError(registrySource{}, key1))
+		require.False(t, buggify.Fires(registrySource{}, key1))
+		require.NoError(t, failpoint.FallbackError(registrySource{}, key1))
 	})
 }
 
@@ -373,12 +257,12 @@ func TestBuggify_Suppress(t *testing.T) {
 	src := registrySource{registry: registry}
 	require.True(t, registry.Armed())
 
-	restore := registry.SuppressBuggify()
-	restoreNested := registry.SuppressBuggify()
+	restore := buggify.For(registry).Suppress()
+	restoreNested := buggify.For(registry).Suppress()
 	require.False(t, registry.Armed())
 	require.NoError(t, failpoint.Checkpoint(src, key1))
-	require.False(t, failpoint.Buggify(src, key1))
-	require.Equal(t, alwaysConfig(), registry.BuggifyConfig())
+	require.False(t, buggify.Fires(src, key1))
+	require.Equal(t, alwaysConfig(), buggify.For(registry).Config())
 
 	restoreNested()
 	restoreNested()
@@ -388,22 +272,22 @@ func TestBuggify_Suppress(t *testing.T) {
 	require.ErrorIs(t, failpoint.Checkpoint(src, key1), errBuggify)
 }
 
-func TestRegistry_SetBuggify(t *testing.T) {
+func TestBuggify_Set(t *testing.T) {
 	t.Parallel()
 
 	t.Run("arms the registry while enabled", func(t *testing.T) {
 		t.Parallel()
 		registry := failpoint.NewRegistry()
 		require.False(t, registry.Armed())
-		require.Equal(t, failpoint.BuggifyConfig{}, registry.BuggifyConfig())
+		require.Equal(t, buggify.Config{}, buggify.For(registry).Config())
 
-		require.NoError(t, registry.SetBuggify(alwaysConfig()))
+		require.NoError(t, buggify.For(registry).Set(alwaysConfig()))
 		require.True(t, registry.Armed())
 		require.Equal(t, 0, registry.Len())
-		require.Equal(t, alwaysConfig(), registry.BuggifyConfig())
+		require.Equal(t, alwaysConfig(), buggify.For(registry).Config())
 
 		registry.Set(key1, failpoint.NewFailpoint[error](key1))
-		require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{}))
+		require.NoError(t, buggify.For(registry).Set(buggify.Config{}))
 		require.True(t, registry.Armed())
 		registry.Delete(key1)
 		require.False(t, registry.Armed())
@@ -415,17 +299,17 @@ func TestRegistry_SetBuggify(t *testing.T) {
 		src := registrySource{registry: registry}
 		require.Error(t, failpoint.Checkpoint(src, key1))
 
-		require.NoError(t, registry.SetBuggify(alwaysConfig()))
+		require.NoError(t, buggify.For(registry).Set(alwaysConfig()))
 		require.Error(t, failpoint.Checkpoint(src, key1))
 		require.Equal(t, int64(2), events()[2].Execution)
 
 		changed := alwaysConfig()
 		changed.Seed = 2
-		require.NoError(t, registry.SetBuggify(changed))
+		require.NoError(t, buggify.For(registry).Set(changed))
 		require.Error(t, failpoint.Checkpoint(src, key1))
 		require.Equal(t, []failpoint.Event{
-			{Kind: failpoint.BuggifyActivationEvent, Key: key1, Activated: true},
-			{Kind: failpoint.BuggifyFireEvent, Key: key1, Action: failpoint.Return, Fired: true, Execution: 1},
+			{Kind: failpoint.FallbackActivationEvent, Key: key1, Activated: true},
+			{Kind: failpoint.FallbackFireEvent, Key: key1, Action: failpoint.Return, Fired: true, Execution: 1},
 		}, events()[3:])
 	})
 }
@@ -433,8 +317,8 @@ func TestRegistry_SetBuggify(t *testing.T) {
 func TestBuggify_OffPathDoesNotAllocate(t *testing.T) {
 	registerBuggifyError()
 	suppressed := failpoint.NewRegistry()
-	require.NoError(t, suppressed.SetBuggify(alwaysConfig()))
-	restore := suppressed.SuppressBuggify()
+	require.NoError(t, buggify.For(suppressed).Set(alwaysConfig()))
+	restore := buggify.For(suppressed).Suppress()
 	defer restore()
 
 	for name, registry := range map[string]failpoint.Registry{
@@ -445,50 +329,50 @@ func TestBuggify_OffPathDoesNotAllocate(t *testing.T) {
 		var src failpoint.Source = registrySource{registry: registry}
 		key := key1.ForScope("ns")
 		allocs := testing.AllocsPerRun(100, func() {
-			_ = failpoint.Buggify(src, key)
-			_ = failpoint.BuggifyWithProb(src, key, 1)
-			_ = failpoint.BuggifyError(src, key)
+			_ = buggify.Fires(src, key)
+			_ = buggify.FiresWithProb(src, key, 1)
+			_ = failpoint.FallbackError(src, key)
 			_ = failpoint.Checkpoint(src, key)
 		})
 		require.Zero(t, allocs, name)
 	}
 }
 
-func TestRegistry_SetBuggifyCopiesTheConfiguration(t *testing.T) {
+func TestBuggify_SetCopiesTheConfiguration(t *testing.T) {
 	t.Parallel()
-	config := failpoint.BuggifyConfig{
+	config := buggify.Config{
 		Seed: 1, Activation: 1, Fire: 1,
-		Prefixes: []failpoint.BuggifyPrefix{{Prefix: "a", Activation: 1, Fire: 1}},
+		Prefixes: []buggify.Prefix{{Prefix: "a", Activation: 1, Fire: 1}},
 		Include:  []string{"a*"},
 		Exclude:  []string{"ab"},
 	}
 	registry := failpoint.NewRegistry()
-	require.NoError(t, registry.SetBuggify(config))
+	require.NoError(t, buggify.For(registry).Set(config))
 
 	config.Prefixes[0].Activation = 0
 	config.Include[0] = "x"
-	got := registry.BuggifyConfig()
+	got := buggify.For(registry).Config()
 	got.Exclude[0] = "a*"
-	require.Equal(t, failpoint.BuggifyConfig{
+	require.Equal(t, buggify.Config{
 		Seed: 1, Activation: 1, Fire: 1,
-		Prefixes: []failpoint.BuggifyPrefix{{Prefix: "a", Activation: 1, Fire: 1}},
+		Prefixes: []buggify.Prefix{{Prefix: "a", Activation: 1, Fire: 1}},
 		Include:  []string{"a*"},
 		Exclude:  []string{"ab"},
-	}, registry.BuggifyConfig())
-	require.True(t, failpoint.Buggify(registrySource{registry: registry}, failpoint.KeyFromName("ac", "")))
+	}, buggify.For(registry).Config())
+	require.True(t, buggify.Fires(registrySource{registry: registry}, failpoint.KeyFromName("ac", "")))
 }
 
-func TestBuggifyError_Shadows(t *testing.T) {
+func TestFallbackError_Shadows(t *testing.T) {
 	t.Parallel()
 	registry, _ := newBuggifyRegistry(t, alwaysConfig())
 	src := registrySource{registry: registry}
 	key := key1.ForScope("ns")
-	require.ErrorIs(t, failpoint.BuggifyError(src, key, key2.ForScope("ns")), errBuggify)
+	require.ErrorIs(t, failpoint.FallbackError(src, key, key2.ForScope("ns")), errBuggify)
 
 	// A disabled failpoint of the unscoped shadow key is enough.
 	registry.Set(key2, failpoint.NewFailpoint[error](key2))
-	require.NoError(t, failpoint.BuggifyError(src, key, key2.ForScope("ns")))
-	require.ErrorIs(t, failpoint.BuggifyError(src, key, key3), errBuggify)
+	require.NoError(t, failpoint.FallbackError(src, key, key2.ForScope("ns")))
+	require.ErrorIs(t, failpoint.FallbackError(src, key, key3), errBuggify)
 }
 
 func TestBuggify_UnselectedNamesDoNotUseTheBudget(t *testing.T) {
@@ -499,7 +383,7 @@ func TestBuggify_UnselectedNamesDoNotUseTheBudget(t *testing.T) {
 	src := registrySource{registry: registry}
 
 	for i := range 20000 {
-		require.NoError(t, failpoint.BuggifyError(src, failpoint.KeyFromName(fmt.Sprintf("excluded.%d", i), "")))
+		require.NoError(t, failpoint.FallbackError(src, failpoint.KeyFromName(fmt.Sprintf("excluded.%d", i), "")))
 	}
 	require.ErrorIs(t, failpoint.Checkpoint(src, key1), errBuggify)
 }
@@ -522,10 +406,10 @@ func TestBuggify_ActivationPrecedesFires(t *testing.T) {
 	activated := map[string]bool{}
 	for _, e := range events() {
 		switch e.Kind {
-		case failpoint.BuggifyActivationEvent:
+		case failpoint.FallbackActivationEvent:
 			require.False(t, activated[e.Key.Name()], "activation reported twice for %s", e.Key)
 			activated[e.Key.Name()] = true
-		case failpoint.BuggifyFireEvent:
+		case failpoint.FallbackFireEvent:
 			require.True(t, activated[e.Key.Name()], "fire before activation for %s", e.Key)
 		default:
 		}
@@ -536,7 +420,7 @@ func TestBuggify_ActivationPrecedesFires(t *testing.T) {
 func TestBuggify_ScopesCountExecutionsSeparately(t *testing.T) {
 	t.Parallel()
 	registerBuggifyError()
-	config := failpoint.BuggifyConfig{Seed: 3, Activation: 1, Fire: 0.5, Error: buggifyErrName}
+	config := buggify.Config{Seed: 3, Activation: 1, Fire: 0.5, Error: buggifyErrName}
 	require.Equal(t, math.Float64bits(config.Draw("key", 4)), math.Float64bits(config.DrawScoped("key", "", 4)))
 	require.NotEqual(t, config.DrawScoped("key", "a", 4), config.DrawScoped("key", "b", 4))
 
@@ -561,12 +445,12 @@ func TestBuggify_ScopesCountExecutionsSeparately(t *testing.T) {
 	require.Equal(t, quiet, failures(true))
 }
 
-func TestRegistry_BuggifyStats(t *testing.T) {
+func TestBuggify_FallbackStats(t *testing.T) {
 	t.Parallel()
 	registerBuggifyError()
-	config := failpoint.BuggifyConfig{
+	config := buggify.Config{
 		Seed: 3, Activation: 1, Fire: 1, Error: buggifyErrName,
-		Prefixes: []failpoint.BuggifyPrefix{{Prefix: "2", Activation: 0}},
+		Prefixes: []buggify.Prefix{{Prefix: "2", Activation: 0}},
 		Exclude:  []string{"3"},
 	}
 	registry, _ := newBuggifyRegistry(t, config)
@@ -578,13 +462,13 @@ func TestRegistry_BuggifyStats(t *testing.T) {
 	registry.Set(key100, failpoint.NewFailpoint[error](key100))
 	_ = failpoint.Checkpoint(src, key100)
 
-	require.Equal(t, []failpoint.BuggifyKeyStats{
+	require.Equal(t, []failpoint.FallbackKeyStats{
 		{Name: "1", Activated: true, Hits: 3, Fires: 3},
 		{Name: "2", Activated: false, Hits: 2, Fires: 0},
-	}, registry.BuggifyStats())
+	}, buggify.For(registry).FallbackStats())
 
-	require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{}))
-	require.Empty(t, registry.BuggifyStats())
+	require.NoError(t, buggify.For(registry).Set(buggify.Config{}))
+	require.Empty(t, buggify.For(registry).FallbackStats())
 }
 
 func TestBuggify_ErrorMessageIsValidUTF8(t *testing.T) {
@@ -608,4 +492,116 @@ func TestBuggify_ExecuteCtxRespectsUnscopedRegistration(t *testing.T) {
 	err, set := failpoint.ExecuteCtx[error](ctx, key)
 	require.NoError(t, err)
 	require.False(t, set)
+}
+
+func TestFor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns the installed BUGGIFY, also inside Configure", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		b := buggify.For(registry)
+		require.Same(t, b, registry.Fallback())
+		require.False(t, registry.Armed())
+		registry.Configure(func() {
+			require.Same(t, b, buggify.For(registry))
+			require.NoError(t, buggify.For(registry).Set(alwaysConfig()))
+		})
+		require.True(t, registry.Armed())
+	})
+
+	t.Run("panics if the registry has another fallback", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		registry.SetFallback(otherFallback{})
+		require.Panics(t, func() { buggify.For(registry) })
+		require.Equal(t, otherFallback{}, registry.Fallback())
+	})
+}
+
+// otherFallback is a fallback that isn't BUGGIFY.
+type otherFallback struct{}
+
+func (otherFallback) Error(failpoint.Key) error { return errors.New("other") }
+
+func TestBuggify_StaleHandleDoesNotActivateReplacement(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	b := buggify.For(registry)
+	require.NoError(t, b.Set(alwaysConfig()))
+	restore := b.Suppress()
+
+	registry.SetFallback(otherFallback{})
+	restore()
+	require.ErrorIs(t, b.Set(alwaysConfig()), buggify.ErrNotInstalled)
+	require.False(t, registry.Armed())
+	require.NoError(t, failpoint.Checkpoint(registrySource{registry: registry}, key1))
+}
+
+func TestFires_FollowsTheActiveFallback(t *testing.T) {
+	t.Parallel()
+	registry, _ := newBuggifyRegistry(t, alwaysConfig())
+	src := registrySource{registry: registry}
+	b := buggify.For(registry)
+	require.True(t, buggify.Fires(src, key1))
+
+	// Turned off in the registry, while an unrelated failpoint keeps the registry armed.
+	require.True(t, registry.SetFallbackActive(b, false))
+	registry.Set(key2, failpoint.NewFailpoint[error](key2))
+	require.True(t, registry.Armed())
+	require.False(t, buggify.Fires(src, key1))
+	require.NoError(t, failpoint.Checkpoint(src, key1))
+}
+
+func TestBuggify_ListFailpointsReportsTheCounters(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	require.NoError(t, buggify.For(registry).Set(buggify.Config{
+		Seed:     1,
+		Prefixes: []buggify.Prefix{{Prefix: "z", Activation: 1}},
+	}))
+	src := registrySource{registry: registry}
+	// More key names than a ListFailpoints response reports.
+	padding := strings.Repeat("x", 200)
+	for i := range 12000 {
+		_ = buggify.Fires(src, failpoint.KeyFromName(fmt.Sprintf("a%s%d", padding, i), ""))
+	}
+	for i := range 3 {
+		require.False(t, buggify.Fires(src, failpoint.KeyFromName(fmt.Sprintf("z%d", i), "")))
+	}
+
+	resp, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	require.LessOrEqual(t, proto.Size(resp), 2<<20)
+	require.Positive(t, resp.FallbackKeysOmitted)
+	require.Equal(t, int64(12003), int64(len(resp.FallbackKeys))+resp.FallbackKeysOmitted)
+	for i, name := range []string{"z0", "z1", "z2"} {
+		require.True(t, proto.Equal(&failpointpb.FallbackKeyInfo{Key: name, Activated: true, Hits: 1}, resp.FallbackKeys[i]), resp.FallbackKeys[i])
+	}
+}
+
+// switchingSource returns first on the first call of Failpoints, and then other.
+type switchingSource struct {
+	first, other failpoint.Registry
+	calls        *int
+}
+
+func (s switchingSource) Failpoints() failpoint.Registry {
+	*s.calls++
+	if *s.calls == 1 {
+		return s.first
+	}
+	return s.other
+}
+
+func TestFires_ReadsTheRegistryOnce(t *testing.T) {
+	t.Parallel()
+	// The first registry forces the branch with a failpoint; the second has nothing.
+	first := failpoint.NewRegistry()
+	fp := failpoint.NewFailpoint[error](key1)
+	fp.On(failpoint.Always)
+	first.Set(key1, fp)
+	calls := 0
+	require.True(t, buggify.Fires(switchingSource{first: first, other: failpoint.NewRegistry(), calls: &calls}, key1))
+	require.Equal(t, 1, calls)
 }

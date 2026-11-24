@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/testx/failpoint"
+	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 )
 
 func TestChooseKnobs(t *testing.T) {
@@ -37,7 +37,7 @@ func TestChooseKnobs(t *testing.T) {
 
 	config.Exclude = []string{KnobPrefix + "*"}
 	require.Empty(t, ChooseKnobs(config, marked))
-	require.Empty(t, ChooseKnobs(failpoint.BuggifyConfig{}, marked))
+	require.Empty(t, ChooseKnobs(fpbuggify.Config{}, marked))
 }
 
 // staticClient returns the same slices on every call, like the file-based client.

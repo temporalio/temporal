@@ -35,7 +35,7 @@ func NewKey(name string) Key {
 // that failpoint did not fire with any action (see ExecuteWithFired). Their names cannot collide
 // with the keys of an operation, which contain a gRPC method or an HTTP request method and path.
 // Their prefixes differ from those of the operation keys, so a pattern for the keys of every
-// operation, such as "grpc:*" in a BuggifyConfig, doesn't match them.
+// operation, such as "grpc:*" in the configuration of a fallback, doesn't match them.
 var (
 	// AnyGRPCKey fires before the handler of every gRPC method runs.
 	AnyGRPCKey = Key{name: "grpc-any:request"}

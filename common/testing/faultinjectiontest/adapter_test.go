@@ -15,6 +15,7 @@ import (
 	_ "go.temporal.io/server/common/testing/failpointerrors"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/buggify"
 )
 
 const operation = "/test.Service/Method"
@@ -265,7 +266,7 @@ func TestAdapter_Buggify(t *testing.T) {
 	newRegistry := func(t *testing.T) failpoint.Registry {
 		registry := failpoint.NewRegistry()
 		// Every execution of the operation's key fires, with an error from the server's catalog.
-		require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{
+		require.NoError(t, buggify.For(registry).Set(buggify.Config{
 			Seed: 1, Activation: 1, Fire: 1, Error: "Unavailable",
 			Exclude: []string{"grpc-response:*"},
 		}))

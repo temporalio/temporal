@@ -4,6 +4,7 @@ package buggify
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
+	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 	"go.uber.org/fx"
 )
 
@@ -133,7 +135,10 @@ func newSourceFromParams(p params) *source {
 
 // source applies the value of Setting to a registry.
 type source struct {
-	registry   failpoint.Registry
+	registry failpoint.Registry
+	// buggify is the BUGGIFY of registry, installed when the source is created. If other code
+	// replaces it as the registry's fallback, the source leaves the replacement alone.
+	buggify    *fpbuggify.Buggify
 	collection *dynamicconfig.Collection
 	logger     log.Logger
 	// lookup reads the environment at start, unless startup has it, into env.
@@ -160,7 +165,15 @@ func newSource(
 	gomad io.Writer,
 	fatal func(error),
 ) *source {
-	return &source{registry: registry, collection: collection, logger: logger, lookup: lookup, gomad: gomad, fatal: fatal}
+	return &source{
+		registry:   registry,
+		buggify:    fpbuggify.For(registry),
+		collection: collection,
+		logger:     logger,
+		lookup:     lookup,
+		gomad:      gomad,
+		fatal:      fatal,
+	}
 }
 
 func (s *source) start(context.Context) error {
@@ -227,15 +240,19 @@ func (s *source) applyLocked(value settingValue) error {
 	return s.setLocked(config, seedSource)
 }
 
-func (s *source) setLocked(config failpoint.BuggifyConfig, seedSource string) error {
-	previous := s.registry.BuggifyConfig()
-	if err := s.registry.SetBuggify(config); err != nil {
+func (s *source) setLocked(config fpbuggify.Config, seedSource string) error {
+	previous := s.buggify.Config()
+	if err := s.buggify.Set(config); errors.Is(err, fpbuggify.ErrNotInstalled) {
+		s.logger.Warn("BUGGIFY is no longer the fallback of the failpoint registry; its configuration has no effect",
+			tag.NewUInt64("buggify-seed", config.Seed))
+		return nil
+	} else if err != nil {
 		return err
 	}
 	switch {
 	case config.Seed == previous.Seed:
 	case config.Enabled():
-		s.logger.Info(fmt.Sprintf("BUGGIFY enabled; reproduce with %s=%d", failpoint.BuggifySeedEnv, config.Seed),
+		s.logger.Info(fmt.Sprintf("BUGGIFY enabled; reproduce with %s=%d", fpbuggify.SeedEnv, config.Seed),
 			tag.NewUInt64("buggify-seed", config.Seed), tag.NewStringTag("buggify-seed-source", seedSource))
 	default:
 		s.logger.Info("BUGGIFY disabled")
@@ -245,7 +262,7 @@ func (s *source) setLocked(config failpoint.BuggifyConfig, seedSource string) er
 
 // report logs a BUGGIFY activation decision, and passes BUGGIFY events to gomad.
 func (s *source) report(e failpoint.Event) {
-	if e.Kind == failpoint.BuggifyActivationEvent {
+	if e.Kind == failpoint.FallbackActivationEvent {
 		if e.Activated {
 			s.logger.Info("BUGGIFY activated failpoint", tag.Key(e.Key.Name()))
 		} else {
@@ -278,7 +295,8 @@ func (s *source) stopLocked() {
 	if s.unsubscribe != nil {
 		s.unsubscribe()
 	}
-	_ = s.registry.SetBuggify(failpoint.BuggifyConfig{})
+	// Disabling a BUGGIFY that is no longer installed only returns ErrNotInstalled.
+	_ = s.buggify.Set(fpbuggify.Config{})
 }
 
 func invalidValueError(err error) error {

@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/testx/failpoint"
+	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 )
 
 // Release builds never randomize settings, even with a seed in the environment.
 func TestWrapDynamicConfigClient(t *testing.T) {
-	t.Setenv(failpoint.BuggifySeedEnv, "1")
+	t.Setenv(fpbuggify.SeedEnv, "1")
 	client := dynamicconfig.NewMemoryClient()
 	wrapped, startup, err := WrapDynamicConfigClient(client, log.NewNoopLogger())
 	require.NoError(t, err)

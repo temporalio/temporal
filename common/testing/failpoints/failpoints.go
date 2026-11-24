@@ -16,7 +16,7 @@ var (
 	// UpdateWithStartClosingWorkflowRetry fires before Update-with-Start retries after its update
 	// was aborted by a closing workflow. Tests use Call to start a new workflow before the retry.
 	UpdateWithStartClosingWorkflowRetry = failpoint.NewKey("history.updateWithStart.closingWorkflowRetry")
-	// MatchingSkipSyncMatch is a BUGGIFY site (see failpoint.Buggify): when it fires, matching
+	// MatchingSkipSyncMatch is a BUGGIFY site (see buggify.Fires in go.temporal.io/testx/failpoint/buggify): when it fires, matching
 	// doesn't offer a task that history added to a waiting poller and persists it to the backlog
 	// instead, as if no poller was waiting. Tests use On to force the backlog path.
 	MatchingSkipSyncMatch = failpoint.NewKey("matching.skipSyncMatch")

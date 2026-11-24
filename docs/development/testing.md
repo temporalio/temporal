@@ -467,9 +467,9 @@ When an activated key fires:
   receive, and outgoing HTTP requests. Requests from clients to the public frontend are not: an
   error there would test the client's retries, not the server (see
   `buggify.InjectsInboundGRPCErrors`). Registered failpoints still apply to the frontend.
-- Hand-placed keys (25% activated, 25% fire) take the branch of their `failpoint.Buggify` call
+- Hand-placed keys (25% activated, 25% fire) take the branch of their `buggify.Fires` call
   site, such as `failpoints.MatchingSkipSyncMatch`, which persists a task to the backlog instead
-  of offering it to a waiting poller. A `failpoint.Buggify` branch must only make legal but
+  of offering it to a waiting poller. A `buggify.Fires` branch must only make legal but
   unlikely states more likely, never produce one that cannot happen in production.
 - Dynamic config settings marked with `dynamicconfig.Buggifiable` (25% of them) get one of the
   alternative values that their owner listed, such as a batch size of 1, for the whole run.
@@ -485,7 +485,7 @@ HTTP requests, a failpoint registered for any method or request also does: for e
 Enable it on a server built with `-tags=test_dep` with one of:
 
 - `FAILPOINT_BUGGIFY_SEED=N` in the environment of the server process, read with
-  `failpoint.BuggifyConfigFromEnv`. `FAILPOINT_BUGGIFY_SEED=random` picks a seed, which the server
+  `buggify.ConfigFromEnv` (`go.temporal.io/testx/failpoint/buggify`). `FAILPOINT_BUGGIFY_SEED=random` picks a seed, which the server
   logs. Under gomad, `FAILPOINT_BUGGIFY_SEED=gomad` derives the seed from `GOMADSEED` (which
   alone doesn't enable BUGGIFY), and `FAILPOINT_GOMAD_EVENTS=1` prints a `GOMAD failpoint ...`
   line per activation decision and per execution that fired. `FAILPOINT_BUGGIFY_ACTIVATION` and
@@ -507,15 +507,16 @@ testing.buggify:
 The server logs the seed (`BUGGIFY enabled; reproduce with FAILPOINT_BUGGIFY_SEED=N`), every key it
 activates, and every randomized setting. `ListFailpoints` of the `FailpointService` reports, per
 registry, each key name that BUGGIFY saw with its activation, hits and fires, for example to check
-that a run reached the keys it meant to stress. Activated names come first; the list is limited to
-about 1 MiB and `buggify_keys_omitted` counts the names left out. An invalid setting or
+that a run reached the keys it meant to stress. Activated names come first; the list only takes the
+room that the failpoints leave in a 2 MiB response, and `fallback_keys_omitted` counts the names
+left out. An invalid setting or
 BUGGIFY environment variable stops the server. Settings are randomized once, when the server starts. To
 reproduce a run, start the server with the logged seed and the same `testing.buggify` overrides.
 
 A functional test of BUGGIFY itself sets `buggify.Setting` with `testcore.WithDynamicConfig`, which
 gives it a dedicated cluster, since BUGGIFY applies to the whole cluster (see `TestBuggify`).
 `testcore.FailpointRegistry(env)` lets it subscribe to the BUGGIFY events. Unit tests that run
-with BUGGIFY and need exact behavior call `registry.SuppressBuggify()`.
+with BUGGIFY and need exact behavior call `buggify.For(registry).Suppress()`.
 
 ### softassert package
 

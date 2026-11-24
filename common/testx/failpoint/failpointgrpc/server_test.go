@@ -734,35 +734,54 @@ func TestServer_LeavesRuleFailpoints(t *testing.T) {
 	})
 }
 
-func TestServer_ListFailpointsBuggifyKeys(t *testing.T) {
+// statsFallback is a fallback that injects nothing and reports fixed counters.
+type statsFallback struct {
+	stats []failpoint.FallbackKeyStats
+}
+
+func (*statsFallback) Error(failpoint.Key) error { return nil }
+
+func (f *statsFallback) FallbackStats() []failpoint.FallbackKeyStats { return f.stats }
+
+// errorOnlyFallback is a fallback that injects nothing and doesn't count.
+type errorOnlyFallback struct{}
+
+func (errorOnlyFallback) Error(failpoint.Key) error { return nil }
+
+func setFallbackStats(registry failpoint.Registry, stats ...failpoint.FallbackKeyStats) {
+	registry.SetFallback(&statsFallback{stats: stats})
+}
+
+func TestServer_ListFailpointsFallbackKeys(t *testing.T) {
 	t.Parallel()
 	registry := failpoint.NewRegistry()
-	require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{
-		Seed: 1, Activation: 1, Fire: 1,
-		Prefixes: []failpoint.BuggifyPrefix{{Prefix: "off", Activation: 0}},
-	}))
-	src := registrySource{registry: registry}
-	require.True(t, failpoint.Buggify(src, failpoint.KeyFromName("on", "a")))
-	require.True(t, failpoint.Buggify(src, failpoint.KeyFromName("on", "b")))
-	require.False(t, failpoint.Buggify(src, failpoint.KeyFromName("off", "")))
+	setFallbackStats(registry,
+		failpoint.FallbackKeyStats{Name: "off", Hits: 1},
+		failpoint.FallbackKeyStats{Name: "on", Activated: true, Hits: 2, Fires: 2},
+	)
 
 	resp, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
 	require.NoError(t, err)
 	require.Empty(t, resp.Failpoints)
-	require.Len(t, resp.BuggifyKeys, 2)
+	require.Len(t, resp.FallbackKeys, 2)
 	// Activated names come first.
-	require.True(t, proto.Equal(&failpointpb.BuggifyKeyInfo{Key: "on", Activated: true, Hits: 2, Fires: 2}, resp.BuggifyKeys[0]), resp.BuggifyKeys[0])
-	require.True(t, proto.Equal(&failpointpb.BuggifyKeyInfo{Key: "off", Activated: false, Hits: 1}, resp.BuggifyKeys[1]), resp.BuggifyKeys[1])
-	require.Zero(t, resp.BuggifyKeysOmitted)
+	require.True(t, proto.Equal(&failpointpb.FallbackKeyInfo{Key: "on", Activated: true, Hits: 2, Fires: 2}, resp.FallbackKeys[0]), resp.FallbackKeys[0])
+	require.True(t, proto.Equal(&failpointpb.FallbackKeyInfo{Key: "off", Activated: false, Hits: 1}, resp.FallbackKeys[1]), resp.FallbackKeys[1])
+	require.Zero(t, resp.FallbackKeysOmitted)
+
+	// A fallback that doesn't count reports nothing.
+	registry.SetFallback(errorOnlyFallback{})
+	resp, err = failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	require.Empty(t, resp.FallbackKeys)
 }
 
 func TestServer_ListFailpointsSanitizesNames(t *testing.T) {
 	t.Parallel()
 	registry := failpoint.NewRegistry()
-	require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{Seed: 1, Activation: 1}))
 	// An HTTP path such as /%FF unescapes to invalid UTF-8.
 	name := "http:GET /\xff"
-	_ = failpoint.Buggify(registrySource{registry: registry}, failpoint.KeyFromName(name, ""))
+	setFallbackStats(registry, failpoint.FallbackKeyStats{Name: name, Activated: true})
 	key := failpoint.KeyFromName(name, "scope\xfe")
 	registry.Set(key, failpoint.NewFailpoint[error](key))
 
@@ -770,41 +789,37 @@ func TestServer_ListFailpointsSanitizesNames(t *testing.T) {
 	require.NoError(t, err)
 	_, err = proto.Marshal(resp)
 	require.NoError(t, err)
-	require.Equal(t, "http:GET /�", resp.BuggifyKeys[0].Key)
+	require.Equal(t, "http:GET /�", resp.FallbackKeys[0].Key)
 	require.Equal(t, "http:GET /�", resp.Failpoints[0].Key)
 	require.Equal(t, "scope�", resp.Failpoints[0].Scope)
 }
 
-// manyBuggifyKeys makes BUGGIFY see more key names than a ListFailpoints response reports, and
-// activates those that start with "z".
-func manyBuggifyKeys(t *testing.T, registry failpoint.Registry) {
-	t.Helper()
-	require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{
-		Seed:     1,
-		Prefixes: []failpoint.BuggifyPrefix{{Prefix: "z", Activation: 1}},
-	}))
+// manyFallbackKeys makes the fallback report more key names than a ListFailpoints response
+// reports, and activates those that start with "z".
+func manyFallbackKeys(registry failpoint.Registry) {
 	padding := strings.Repeat("x", 200)
-	src := registrySource{registry: registry}
+	var stats []failpoint.FallbackKeyStats
 	for i := range 12000 {
-		_ = failpoint.Buggify(src, failpoint.KeyFromName(fmt.Sprintf("a%s%d", padding, i), ""))
+		stats = append(stats, failpoint.FallbackKeyStats{Name: fmt.Sprintf("a%s%d", padding, i), Hits: 1})
 	}
 	for i := range 3 {
-		_ = failpoint.Buggify(src, failpoint.KeyFromName(fmt.Sprintf("z%d", i), ""))
+		stats = append(stats, failpoint.FallbackKeyStats{Name: fmt.Sprintf("z%d", i), Activated: true, Hits: 1})
 	}
+	setFallbackStats(registry, stats...)
 }
 
-func TestServer_ListFailpointsBoundsBuggifyKeys(t *testing.T) {
+func TestServer_ListFailpointsBoundsFallbackKeys(t *testing.T) {
 	t.Parallel()
 	registry := failpoint.NewRegistry()
-	manyBuggifyKeys(t, registry)
+	manyFallbackKeys(registry)
 
 	resp, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
 	require.NoError(t, err)
 	require.Less(t, proto.Size(resp), 2<<20)
-	require.Positive(t, resp.BuggifyKeysOmitted)
-	require.Equal(t, int64(12003), int64(len(resp.BuggifyKeys))+resp.BuggifyKeysOmitted)
+	require.Positive(t, resp.FallbackKeysOmitted)
+	require.Equal(t, int64(12003), int64(len(resp.FallbackKeys))+resp.FallbackKeysOmitted)
 	for i, name := range []string{"z0", "z1", "z2"} {
-		require.Equal(t, name, resp.BuggifyKeys[i].Key)
+		require.Equal(t, name, resp.FallbackKeys[i].Key)
 	}
 }
 
@@ -818,18 +833,18 @@ func registerManyFailpoints(registry failpoint.Registry) {
 	}
 }
 
-func TestServer_ListFailpointsBudgetsBuggifyKeysAgainstTheResponse(t *testing.T) {
+func TestServer_ListFailpointsBudgetsFallbackKeysAgainstTheResponse(t *testing.T) {
 	t.Parallel()
 	registry := failpoint.NewRegistry()
 	registerManyFailpoints(registry)
 	withoutCounters, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
 	require.NoError(t, err)
-	manyBuggifyKeys(t, registry)
+	manyFallbackKeys(registry)
 
 	resp, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
 	require.NoError(t, err)
 	require.Len(t, resp.Failpoints, 9000)
 	require.LessOrEqual(t, proto.Size(resp), 2<<20)
 	require.Less(t, proto.Size(withoutCounters), proto.Size(resp))
-	require.Equal(t, int64(12003), int64(len(resp.BuggifyKeys))+resp.BuggifyKeysOmitted)
+	require.Equal(t, int64(12003), int64(len(resp.FallbackKeys))+resp.FallbackKeysOmitted)
 }

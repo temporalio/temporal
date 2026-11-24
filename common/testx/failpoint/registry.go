@@ -21,27 +21,32 @@ type Registry interface {
 	// cheaply while no failpoint is registered.
 	Len() int
 
-	// Armed reports whether any failpoint is registered or BUGGIFY is enabled and not suppressed.
-	// Like Len, it doesn't take the registry's lock, so call sites that do work before they execute
-	// a failpoint can skip it cheaply while it is false.
+	// Armed reports whether any failpoint is registered or an active fallback is installed (see
+	// Fallback). Like Len, it doesn't take the registry's lock, so call sites that do work before
+	// they execute a failpoint can skip it cheaply while it is false.
 	Armed() bool
 
-	// SetBuggify replaces the BUGGIFY configuration of the registry, see BuggifyConfig. A
-	// configuration with a zero seed disables BUGGIFY. It returns an error and changes nothing if
-	// the configuration is invalid. Setting a different configuration forgets the activation
-	// decisions and execution counts of the previous one.
-	SetBuggify(config BuggifyConfig) error
+	// SetFallback installs f as the fallback of the registry, replacing the previous one, or
+	// removes the fallback if f is nil. A fallback starts inactive, see SetFallbackActive.
+	SetFallback(f Fallback)
 
-	// BuggifyConfig returns the BUGGIFY configuration of the registry.
-	BuggifyConfig() BuggifyConfig
+	// InstallFallback installs f as the fallback of the registry if it has none, and returns the
+	// installed fallback, f or the one that was already installed. It doesn't take the lock of
+	// Configure, so it can be called inside Configure.
+	InstallFallback(f Fallback) Fallback
 
-	// BuggifyStats returns the counters of the key names that BUGGIFY saw since its configuration
-	// was last set, sorted by name. It is empty while BUGGIFY is disabled.
-	BuggifyStats() []BuggifyKeyStats
+	// Fallback returns the installed fallback, active or not, or nil.
+	Fallback() Fallback
 
-	// SuppressBuggify turns BUGGIFY off until restore is called, without changing its
-	// configuration, for tests that assert exact behavior. Calls nest.
-	SuppressBuggify() (restore func())
+	// ActiveFallback returns the installed fallback while it is active, else nil. Code that
+	// decides like the fallback, such as a branch at a call site, checks it, so it agrees with the
+	// executions that consult the fallback.
+	ActiveFallback() Fallback
+
+	// SetFallbackActive turns the fallback f on or off, and reports whether it did. It does
+	// nothing if f is not the installed fallback, so a stale handle can't turn on a fallback that
+	// replaced it. An inactive fallback is not consulted and doesn't arm the registry.
+	SetFallbackActive(f Fallback, active bool) bool
 
 	// Set stores a failpoint instance for the given key.
 	Set(key Key, fp any)
@@ -78,16 +83,13 @@ type Registry interface {
 	Keys() []Key
 
 	// Subscribe calls fn for every execution of an enabled failpoint in this registry, and for
-	// every BUGGIFY decision, until the returned function is called. fn must not call into the
+	// every event of its fallback, until the returned function is called. fn must not call into the
 	// failpoint that is executing, and must not execute failpoints while it handles a
-	// BuggifyActivationEvent.
+	// FallbackActivationEvent.
 	Subscribe(fn func(Event)) (unsubscribe func())
 
-	// emit reports an execution to the subscribers.
-	emit(Event)
-
-	// buggify returns the BUGGIFY state, or nil while BUGGIFY is disabled or suppressed.
-	buggify() *buggifyState
+	// Emit reports an event to the subscribers. Fallbacks use it to report their decisions.
+	Emit(Event)
 
 	// lookup returns the failpoint registered for key or, for a scoped key, for the unscoped key,
 	// from one snapshot of the registry.
@@ -174,15 +176,19 @@ type registryImpl struct {
 	nextSubID   int
 	subscribers map[int]func(Event)
 
-	// buggifyCfg is the BUGGIFY state of the configuration, nil while it is disabled, and
-	// suppressed counts the SuppressBuggify calls that are not restored. Both are guarded by mu.
-	buggifyCfg *buggifyState
-	suppressed int
-	// effective is buggifyCfg while it is not suppressed, else nil, so executions read the
-	// configuration and the suppression in one snapshot. armed caches Armed. Both are updated
-	// under mu.
-	effective atomic.Pointer[buggifyState]
+	// fallback is the installed fallback and fallbackActive whether it is on. Both are guarded by
+	// mu.
+	fallback       Fallback
+	fallbackActive bool
+	// effective holds fallback while it is active, else nil, so executions read the fallback and
+	// whether it is active in one snapshot. armed caches Armed. Both are updated under mu.
+	effective atomic.Pointer[installedFallback]
 	armed     atomic.Bool
+}
+
+// installedFallback boxes a Fallback for an atomic pointer.
+type installedFallback struct {
+	f Fallback
 }
 
 // NewRegistry creates a new failpoint registry for testing.
@@ -218,71 +224,58 @@ func (r *registryImpl) setCountLocked() {
 	r.updateArmedLocked()
 }
 
-// updateArmedLocked publishes effective and armed after a change of the failpoints or of BUGGIFY.
-// The caller must hold r.mu.
+// updateArmedLocked publishes effective and armed after a change of the failpoints or of the
+// fallback. The caller must hold r.mu.
 func (r *registryImpl) updateArmedLocked() {
-	var effective *buggifyState
-	if r.suppressed == 0 {
-		effective = r.buggifyCfg
+	var effective *installedFallback
+	if r.fallback != nil && r.fallbackActive {
+		effective = &installedFallback{f: r.fallback}
 	}
 	r.effective.Store(effective)
 	r.armed.Store(len(r.failpoints) > 0 || effective != nil)
 }
 
-func (r *registryImpl) SetBuggify(config BuggifyConfig) error {
-	// The registry keeps its own copy, so the caller can't change it.
-	config = config.clone()
-	if err := config.Validate(); err != nil {
-		return err
-	}
+func (r *registryImpl) SetFallback(f Fallback) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !config.Enabled() {
-		r.buggifyCfg = nil
-	} else if r.buggifyCfg == nil || !reflect.DeepEqual(r.buggifyCfg.config, config) {
-		r.buggifyCfg = &buggifyState{config: config}
-	}
+	r.fallback = f
+	r.fallbackActive = false
 	r.updateArmedLocked()
-	return nil
 }
 
-func (r *registryImpl) BuggifyConfig() BuggifyConfig {
+func (r *registryImpl) Fallback() Fallback {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if r.buggifyCfg != nil {
-		return r.buggifyCfg.config.clone()
-	}
-	return BuggifyConfig{}
+	return r.fallback
 }
 
-func (r *registryImpl) BuggifyStats() []BuggifyKeyStats {
-	r.mu.RLock()
-	b := r.buggifyCfg
-	r.mu.RUnlock()
-	if b == nil {
-		return nil
-	}
-	return b.stats()
-}
-
-func (r *registryImpl) SuppressBuggify() func() {
+func (r *registryImpl) InstallFallback(f Fallback) Fallback {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.suppressed++
-	r.updateArmedLocked()
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			r.mu.Lock()
-			defer r.mu.Unlock()
-			r.suppressed--
-			r.updateArmedLocked()
-		})
+	if r.fallback == nil {
+		r.fallback = f
+		r.fallbackActive = false
+		r.updateArmedLocked()
 	}
+	return r.fallback
 }
 
-func (r *registryImpl) buggify() *buggifyState {
-	return r.effective.Load()
+func (r *registryImpl) SetFallbackActive(f Fallback, active bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.fallback == nil || !sameEntry(r.fallback, f) {
+		return false
+	}
+	r.fallbackActive = active
+	r.updateArmedLocked()
+	return true
+}
+
+func (r *registryImpl) ActiveFallback() Fallback {
+	if effective := r.effective.Load(); effective != nil {
+		return effective.f
+	}
+	return nil
 }
 
 func (r *registryImpl) registeredAny(key Key, others []Key) bool {
@@ -463,7 +456,7 @@ func (r *registryImpl) Subscribe(fn func(Event)) func() {
 	}
 }
 
-func (r *registryImpl) emit(event Event) {
+func (r *registryImpl) Emit(event Event) {
 	r.mu.RLock()
 	subscribers := slices.Collect(maps.Values(r.subscribers))
 	r.mu.RUnlock()

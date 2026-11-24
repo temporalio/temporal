@@ -92,44 +92,19 @@ failpoint's state. It returns an error and changes nothing if a rule is invalid 
 a failpoint that other code registered. The set's failpoints report the set's source as their
 `Owner`, and the `failpointgrpc` service refuses to change them.
 
-## BUGGIFY
+## Fallback
 
-`registry.SetBuggify(cfg)` enables FoundationDB-style BUGGIFY: with `cfg.Seed`, each key name that
-has nothing registered is activated for the whole run with probability `Activation`, in every
-scope, and each execution of an activated key fires with probability `Fire`. Both are pure
-functions of the seed, the name and, for firing, the scope and the number of the execution in that
-scope, so a seed reproduces the activated keys without a shared random stream, and one scope's
-executions don't change which executions fire in another. `Prefixes` override the probabilities per name prefix (longest wins) and name a catalog
-error, which `Execute`/`Checkpoint` of an `error` return when the key fires. `Include`/`Exclude`
-select names with `*` patterns.
+A registry can have a `Fallback` that decides for executions of keys with nothing registered, for
+the key or its unscoped key: `registry.SetFallback(f)` (or `InstallFallback(f)`, which keeps an installed one) installs it,
+`registry.SetFallbackActive(f, true)` turns it on. `Execute`/`Checkpoint` of an `error` then return `f.Error(key)`. A registered
+failpoint always takes precedence, even while disabled; call sites that execute several keys for one
+operation use `ExecuteRegistered` for each key and `FallbackError(src, key, otherKeys...)` last. A
+fallback reports its decisions to subscribers with `registry.Emit` (`FallbackActivationEvent`,
+`FallbackFireEvent`), and its per-key counters through `FallbackStatsReporter`, which the
+`ListFailpoints` RPC returns. While nothing is registered and no fallback is active,
+`registry.Armed()` is false and executions cost one atomic load.
 
-BUGGIFY is meant for whole-system runs, such as a test cluster or a deterministic simulation,
-enabled by the consumer at process start, not for tests that assert exact behavior.
-`failpoint.BuggifyConfigFromEnv(os.LookupEnv)` reads `FAILPOINT_BUGGIFY_SEED` (a number, `random`,
-or `gomad` to derive it from `GOMADSEED`) and the optional `FAILPOINT_BUGGIFY_ACTIVATION` and
-`FAILPOINT_BUGGIFY_FIRE`; consumers apply their own prefixes and patterns on top and log the seed.
-
-```go
-registry.SetBuggify(failpoint.BuggifyConfig{
-	Seed: seed, Activation: 0.25, Fire: 0.25,
-	Prefixes: []failpoint.BuggifyPrefix{{Prefix: "rpc:", Activation: 0.1, Fire: 0.01, Error: "Unavailable"}},
-})
-
-if failpoint.Buggify(s.hooks, SmallBatch) { // or BuggifyWithProb(src, key, p)
-	batchSize = 1 // Legal but unlikely: exercise the multi-batch path.
-}
-```
-
-A registered failpoint always takes precedence over BUGGIFY for its key, even while disabled;
-`Buggify` then reports whether it fired with a value, as `Active` does. Call sites that execute
-several keys for one operation use `ExecuteRegistered` for each key and `BuggifyError` last.
-`registry.SuppressBuggify()` turns BUGGIFY off for tests that assert exact behavior. Subscribers see
-a `BuggifyActivationEvent` per name and a `BuggifyFireEvent` per execution that fired;
-`registry.BuggifyStats()` and the `ListFailpoints` RPC report each name's activation, hits and
-fires (activated names first, within a size limit), so a run can prove that it reached the keys it
-claims to stress. While
-nothing is registered and BUGGIFY is off, `registry.Armed()` is false and all of these cost one
-atomic load.
+[`buggify`](buggify) is a fallback that implements FoundationDB-style BUGGIFY.
 
 To configure failpoints in another process, serve the registry over gRPC with
 [`failpointgrpc`](failpointgrpc).

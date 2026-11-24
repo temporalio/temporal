@@ -33,18 +33,18 @@ type EventKind int32
 const (
 	// ExecutionEvent reports an execution of an enabled failpoint.
 	ExecutionEvent EventKind = iota
-	// BuggifyActivationEvent reports the BUGGIFY activation decision for a key name, on the first
-	// execution of the name. Key is unscoped, and Activated is the decision.
-	BuggifyActivationEvent
-	// BuggifyFireEvent reports an execution of a key that BUGGIFY fired. Action is Return if it
-	// injected an error and On if a Buggify call site takes its branch; Execution is the number of
-	// the execution of the key name in the key's scope.
-	BuggifyFireEvent
+	// FallbackActivationEvent reports that a fallback (see Fallback) decided whether it acts on a
+	// key name, on the first execution of the name. Key is unscoped, and Activated is the decision.
+	FallbackActivationEvent
+	// FallbackFireEvent reports an execution of a key that a fallback fired. Action is Return if
+	// it injected an error and On if a call site takes its branch; Execution is the number of the
+	// execution of the key name in the key's scope.
+	FallbackFireEvent
 )
 
-// Event describes one execution of an enabled failpoint, or a BUGGIFY decision.
+// Event describes one execution of an enabled failpoint, or a decision of a fallback.
 type Event struct {
-	// Kind is ExecutionEvent, the zero value, unless BUGGIFY reports the event.
+	// Kind is ExecutionEvent, the zero value, unless a fallback reports the event.
 	Kind   EventKind
 	Key    Key
 	Action Action
@@ -55,6 +55,6 @@ type Event struct {
 	// TypeMismatch reports that the failpoint fired with a return value that the call site
 	// could not accept, so the call site continued as if it had not fired.
 	TypeMismatch bool
-	// Activated is the decision of a BuggifyActivationEvent.
+	// Activated is the decision of a FallbackActivationEvent.
 	Activated bool
 }

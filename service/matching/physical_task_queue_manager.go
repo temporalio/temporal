@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
-	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/buggify"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -658,7 +658,7 @@ func buggifySkipSyncMatch(testHooks testhooks.TestHooks, nsID namespace.ID) bool
 	if registry := testHooks.Failpoints(); registry == nil || !registry.Armed() {
 		return false
 	}
-	return failpoint.Buggify(testHooks, failpoints.MatchingSkipSyncMatch.ForScope(nsID.String()))
+	return buggify.Fires(testHooks, failpoints.MatchingSkipSyncMatch.ForScope(nsID.String()))
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

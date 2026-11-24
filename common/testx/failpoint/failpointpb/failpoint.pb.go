@@ -778,14 +778,14 @@ type ListFailpointsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// failpoints is the list of failpoint information.
 	Failpoints []*FailpointInfo `protobuf:"bytes,1,rep,name=failpoints,proto3" json:"failpoints,omitempty"`
-	// buggify_keys are the counters of the key names that BUGGIFY saw since its configuration was
-	// last set, while it is enabled: activated names first, then by name, up to a size limit that
-	// keeps the response well below gRPC's message size limit.
-	BuggifyKeys []*BuggifyKeyInfo `protobuf:"bytes,2,rep,name=buggify_keys,json=buggifyKeys,proto3" json:"buggify_keys,omitempty"`
-	// buggify_keys_omitted is the number of key names left out of buggify_keys by the size limit.
-	BuggifyKeysOmitted int64 `protobuf:"varint,3,opt,name=buggify_keys_omitted,json=buggifyKeysOmitted,proto3" json:"buggify_keys_omitted,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// fallback_keys are the counters of the key names that the registry's fallback saw, if it
+	// counts them, such as seeded random fault activation: activated names first, then by name, up
+	// to a size limit that keeps the response well below gRPC's message size limit.
+	FallbackKeys []*FallbackKeyInfo `protobuf:"bytes,2,rep,name=fallback_keys,json=fallbackKeys,proto3" json:"fallback_keys,omitempty"`
+	// fallback_keys_omitted is the number of key names left out of fallback_keys by the size limit.
+	FallbackKeysOmitted int64 `protobuf:"varint,3,opt,name=fallback_keys_omitted,json=fallbackKeysOmitted,proto3" json:"fallback_keys_omitted,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ListFailpointsResponse) Reset() {
@@ -825,30 +825,31 @@ func (x *ListFailpointsResponse) GetFailpoints() []*FailpointInfo {
 	return nil
 }
 
-func (x *ListFailpointsResponse) GetBuggifyKeys() []*BuggifyKeyInfo {
+func (x *ListFailpointsResponse) GetFallbackKeys() []*FallbackKeyInfo {
 	if x != nil {
-		return x.BuggifyKeys
+		return x.FallbackKeys
 	}
 	return nil
 }
 
-func (x *ListFailpointsResponse) GetBuggifyKeysOmitted() int64 {
+func (x *ListFailpointsResponse) GetFallbackKeysOmitted() int64 {
 	if x != nil {
-		return x.BuggifyKeysOmitted
+		return x.FallbackKeysOmitted
 	}
 	return 0
 }
 
-// BuggifyKeyInfo counts the executions of a key name that BUGGIFY saw, in all scopes.
-type BuggifyKeyInfo struct {
+// FallbackKeyInfo counts the executions of a key name that a registry's fallback saw, in all
+// scopes.
+type FallbackKeyInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// key is the key name.
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// activated is the BUGGIFY activation decision for the key name.
+	// activated reports whether the fallback acts on the key name at all.
 	Activated bool `protobuf:"varint,2,opt,name=activated,proto3" json:"activated,omitempty"`
 	// hits is the number of executions of the key name, activated or not, with nothing registered.
 	Hits int64 `protobuf:"varint,3,opt,name=hits,proto3" json:"hits,omitempty"`
-	// fires is the number of those executions that BUGGIFY fired.
+	// fires is the number of those executions that the fallback fired.
 	Fires int64 `protobuf:"varint,4,opt,name=fires,proto3" json:"fires,omitempty"`
 	// hosts are the hosts that serve the registry, as in FailpointInfo.
 	Hosts         []string `protobuf:"bytes,5,rep,name=hosts,proto3" json:"hosts,omitempty"`
@@ -856,20 +857,20 @@ type BuggifyKeyInfo struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BuggifyKeyInfo) Reset() {
-	*x = BuggifyKeyInfo{}
+func (x *FallbackKeyInfo) Reset() {
+	*x = FallbackKeyInfo{}
 	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BuggifyKeyInfo) String() string {
+func (x *FallbackKeyInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BuggifyKeyInfo) ProtoMessage() {}
+func (*FallbackKeyInfo) ProtoMessage() {}
 
-func (x *BuggifyKeyInfo) ProtoReflect() protoreflect.Message {
+func (x *FallbackKeyInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -881,40 +882,40 @@ func (x *BuggifyKeyInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BuggifyKeyInfo.ProtoReflect.Descriptor instead.
-func (*BuggifyKeyInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use FallbackKeyInfo.ProtoReflect.Descriptor instead.
+func (*FallbackKeyInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *BuggifyKeyInfo) GetKey() string {
+func (x *FallbackKeyInfo) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
 	return ""
 }
 
-func (x *BuggifyKeyInfo) GetActivated() bool {
+func (x *FallbackKeyInfo) GetActivated() bool {
 	if x != nil {
 		return x.Activated
 	}
 	return false
 }
 
-func (x *BuggifyKeyInfo) GetHits() int64 {
+func (x *FallbackKeyInfo) GetHits() int64 {
 	if x != nil {
 		return x.Hits
 	}
 	return 0
 }
 
-func (x *BuggifyKeyInfo) GetFires() int64 {
+func (x *FallbackKeyInfo) GetFires() int64 {
 	if x != nil {
 		return x.Fires
 	}
 	return 0
 }
 
-func (x *BuggifyKeyInfo) GetHosts() []string {
+func (x *FallbackKeyInfo) GetHosts() []string {
 	if x != nil {
 		return x.Hosts
 	}
@@ -1138,14 +1139,14 @@ const file_temporal_testx_failpoint_v1_failpoint_proto_rawDesc = "" +
 	"\n" +
 	"error_name\x18\x05 \x01(\tR\terrorName\"\x16\n" +
 	"\x14InjectReturnResponse\"\x17\n" +
-	"\x15ListFailpointsRequest\"\xe6\x01\n" +
+	"\x15ListFailpointsRequest\"\xeb\x01\n" +
 	"\x16ListFailpointsResponse\x12J\n" +
 	"\n" +
 	"failpoints\x18\x01 \x03(\v2*.temporal.testx.failpoint.v1.FailpointInfoR\n" +
-	"failpoints\x12N\n" +
-	"\fbuggify_keys\x18\x02 \x03(\v2+.temporal.testx.failpoint.v1.BuggifyKeyInfoR\vbuggifyKeys\x120\n" +
-	"\x14buggify_keys_omitted\x18\x03 \x01(\x03R\x12buggifyKeysOmitted\"\x80\x01\n" +
-	"\x0eBuggifyKeyInfo\x12\x10\n" +
+	"failpoints\x12Q\n" +
+	"\rfallback_keys\x18\x02 \x03(\v2,.temporal.testx.failpoint.v1.FallbackKeyInfoR\ffallbackKeys\x122\n" +
+	"\x15fallback_keys_omitted\x18\x03 \x01(\x03R\x13fallbackKeysOmitted\"\x81\x01\n" +
+	"\x0fFallbackKeyInfo\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1c\n" +
 	"\tactivated\x18\x02 \x01(\bR\tactivated\x12\x12\n" +
 	"\x04hits\x18\x03 \x01(\x03R\x04hits\x12\x14\n" +
@@ -1220,7 +1221,7 @@ var file_temporal_testx_failpoint_v1_failpoint_proto_goTypes = []any{
 	(*InjectReturnResponse)(nil),         // 13: temporal.testx.failpoint.v1.InjectReturnResponse
 	(*ListFailpointsRequest)(nil),        // 14: temporal.testx.failpoint.v1.ListFailpointsRequest
 	(*ListFailpointsResponse)(nil),       // 15: temporal.testx.failpoint.v1.ListFailpointsResponse
-	(*BuggifyKeyInfo)(nil),               // 16: temporal.testx.failpoint.v1.BuggifyKeyInfo
+	(*FallbackKeyInfo)(nil),              // 16: temporal.testx.failpoint.v1.FallbackKeyInfo
 	(*FailpointInfo)(nil),                // 17: temporal.testx.failpoint.v1.FailpointInfo
 	(*DescribeRegistryRequest)(nil),      // 18: temporal.testx.failpoint.v1.DescribeRegistryRequest
 	(*DescribeRegistryResponse)(nil),     // 19: temporal.testx.failpoint.v1.DescribeRegistryResponse
@@ -1230,7 +1231,7 @@ var file_temporal_testx_failpoint_v1_failpoint_proto_depIdxs = []int32{
 	1,  // 1: temporal.testx.failpoint.v1.InjectBlockRequest.recurrence:type_name -> temporal.testx.failpoint.v1.Recurrence
 	1,  // 2: temporal.testx.failpoint.v1.InjectReturnRequest.recurrence:type_name -> temporal.testx.failpoint.v1.Recurrence
 	17, // 3: temporal.testx.failpoint.v1.ListFailpointsResponse.failpoints:type_name -> temporal.testx.failpoint.v1.FailpointInfo
-	16, // 4: temporal.testx.failpoint.v1.ListFailpointsResponse.buggify_keys:type_name -> temporal.testx.failpoint.v1.BuggifyKeyInfo
+	16, // 4: temporal.testx.failpoint.v1.ListFailpointsResponse.fallback_keys:type_name -> temporal.testx.failpoint.v1.FallbackKeyInfo
 	0,  // 5: temporal.testx.failpoint.v1.FailpointInfo.action:type_name -> temporal.testx.failpoint.v1.Action
 	1,  // 6: temporal.testx.failpoint.v1.FailpointInfo.recurrence:type_name -> temporal.testx.failpoint.v1.Recurrence
 	2,  // 7: temporal.testx.failpoint.v1.FailpointService.DisableFailpoint:input_type -> temporal.testx.failpoint.v1.DisableFailpointRequest

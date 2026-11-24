@@ -34,9 +34,9 @@ func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 	}
 
 	// Nothing is injected for the key, and nothing is registered for it or the unscoped key, so
-	// BUGGIFY may inject an error.
+	// the fallback may inject an error.
 	if state.registry != nil && state.registry.Armed() && !state.registry.registeredAny(key, nil) {
-		v, set, _ := executeBuggify[T](state.registry, key)
+		v, set, _ := executeFallback[T](state.registry, key)
 		return v, set
 	}
 	return zero, false
@@ -67,8 +67,8 @@ func ExecuteWith[T any](src Source, key Key, arg any) (T, bool) {
 // not a T. A failpoint that is disabled, suspended or skipped by its Trigger did not fire. Call
 // sites that fall back to another failpoint when the first did not fire use it.
 //
-// If no failpoint is registered for key or the unscoped key, and T is error, BUGGIFY may fire
-// with an error (see BuggifyError).
+// If no failpoint is registered for key or the unscoped key, and T is error, the fallback of the
+// registry may fire with an error (see FallbackError).
 func ExecuteWithFired[T any](src Source, key Key, arg any) (value T, set, fired bool) {
 	registry := src.Failpoints()
 	if registry == nil || !registry.Armed() {
@@ -77,13 +77,13 @@ func ExecuteWithFired[T any](src Source, key Key, arg any) (value T, set, fired 
 	if fpAny, ok := lookupRegistered(registry, key); ok {
 		return execute[T](registry, key, fpAny, arg)
 	}
-	return executeBuggify[T](registry, key)
+	return executeFallback[T](registry, key)
 }
 
-// ExecuteRegistered is ExecuteWithFired without BUGGIFY: it only executes a failpoint registered
-// for key or the unscoped key. Call sites that execute several keys for one operation use it, and
-// BuggifyError after all of them, so that a failpoint registered for any of the keys takes
-// precedence over BUGGIFY.
+// ExecuteRegistered is ExecuteWithFired without the fallback: it only executes a failpoint
+// registered for key or the unscoped key. Call sites that execute several keys for one operation
+// use it, and FallbackError after all of them, so that a failpoint registered for any of the keys
+// takes precedence over the fallback.
 func ExecuteRegistered[T any](src Source, key Key, arg any) (value T, set, fired bool) {
 	registry := src.Failpoints()
 	if registry == nil || !registry.Armed() {
@@ -95,13 +95,17 @@ func ExecuteRegistered[T any](src Source, key Key, arg any) (value T, set, fired
 	return value, false, false
 }
 
-// executeBuggify returns the error that BUGGIFY injects for key, which has no failpoint
-// registered, if T is error.
-func executeBuggify[T any](registry Registry, key Key) (value T, set, fired bool) {
+// executeFallback returns the error that the active fallback of registry injects for key, which
+// has no failpoint registered, if T is error.
+func executeFallback[T any](registry Registry, key Key) (value T, set, fired bool) {
 	if _, isError := any((*T)(nil)).(*error); !isError {
 		return value, false, false
 	}
-	err := buggifyError(registry, key)
+	fallback := registry.ActiveFallback()
+	if fallback == nil {
+		return value, false, false
+	}
+	err := fallback.Error(key)
 	if err == nil {
 		return value, false, false
 	}
@@ -144,7 +148,7 @@ func execute[T any](registry Registry, key Key, fpAny any, arg any) (value T, se
 	var zero T
 	var emit func(Event)
 	if registry != nil {
-		emit = registry.emit
+		emit = registry.Emit
 	}
 	if fp, ok := fpAny.(*Failpoint[T]); ok {
 		return fp.execute(emit, arg)

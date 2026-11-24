@@ -6,14 +6,14 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/testx/failpoint"
+	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 )
 
 // ChooseKnobs picks values for the dynamic config settings marked with dynamicconfig.Buggifiable,
 // given as their alternative values by key, like FoundationDB randomizes its knobs. A setting is
 // randomized if config activates the name KnobPrefix+key, and then gets one of its values. Both
 // choices are pure functions of the seed and the key.
-func ChooseKnobs(config failpoint.BuggifyConfig, marked map[dynamicconfig.Key][]any) map[dynamicconfig.Key]any {
+func ChooseKnobs(config fpbuggify.Config, marked map[dynamicconfig.Key][]any) map[dynamicconfig.Key]any {
 	chosen := make(map[dynamicconfig.Key]any)
 	for key, values := range marked {
 		name := KnobPrefix + key.String()
