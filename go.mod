@@ -74,7 +74,7 @@ require (
 	go.temporal.io/api v1.64.4-0.20261118022421-2ae2c7e65b2b
 	go.temporal.io/auto-scaled-workers v0.0.0-20261113173819-782664acf475
 	go.temporal.io/sdk v1.49.0
-	go.temporal.io/testx v0.0.0-20261124165124-77d6e4f490da
+	go.temporal.io/testx v0.0.0-20261124211146-42c15ace2189
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
