@@ -1,8 +1,20 @@
-// Package parallelsuitelint checks parallelsuite conventions and scope.
+// Package parallelsuitelint checks parallelsuite ownership, style and test entrypoints.
 //
 //	go run go.temporal.io/testx/parallelsuitelint/cmd/parallelsuitelint ./...
 //
 // The analyzer recognizes await wrappers that export T as an alias of
 // go.temporal.io/testx/await.T and provide functions matching the corresponding
 // testx await signatures.
+//
+// TestXxx functions must call parallelsuite.Run or parallelsuite.RunLegacySequential.
+// Project wrappers also count if they pass the same test handle and suite
+// straight through to one of those runners.
+//
+// To allow plain TestXxx functions and testify suites, pass a comma-separated
+// list of import paths to -allow-non-parallelsuite-tests. For example:
+//
+//	-allow-non-parallelsuite-tests=example.com/project/unit,example.com/project/legacy/...
+//
+// This allows them in unit, legacy, and legacy's subpackages. Use ... alone
+// to allow them everywhere. Checks on parallelsuite usage still apply.
 package parallelsuitelint
