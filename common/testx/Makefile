@@ -7,9 +7,7 @@ GOLANGCI_LINT_BASE_REV ?= main
 
 test:
 	go test -race -shuffle on -tags test_dep ./...
-ifneq ($(wildcard ./testhooks),)
 	go test -race -shuffle on ./testhooks
-endif
 
 lint:
 	$(GOLANGCI_LINT) run --timeout 10m --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=$(GOLANGCI_LINT_CONFIG) ./...
