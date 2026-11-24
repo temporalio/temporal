@@ -82,6 +82,9 @@ func genFileList(protoImports []string) {
 			importName := getImportName(goImport)
 			goImportsMap[goImport] = importName
 			protoToPackage[i] = importName
+		} else if i == "google/api/annotations.proto" || i == "google/api/http.proto" {
+			goImportsMap["google.golang.org/genproto/googleapis/api/annotations"] = "annotations"
+			protoToPackage[i] = "annotations"
 		} else if strings.HasPrefix(i, "google/") {
 			base := strings.TrimSuffix(filepath.Base(i), ".proto") + "pb"
 			base = strings.ReplaceAll(base, "field_mask", "fieldmask")
