@@ -2447,6 +2447,11 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 		64,
 		`MemoryTimerProcessorSchedulerWorkerCount is the number of workers in the task scheduler for in memory timer processor.`,
 	)
+	MemoryImmediateProcessorMaxConcurrentTasks = NewGlobalIntSetting(
+		"history.memoryImmediateProcessorMaxConcurrentTasks",
+		64,
+		`MemoryImmediateProcessorMaxConcurrentTasks limits concurrently running in-memory immediate tasks per History host. Tasks are dropped when the limit is reached.`,
+	)
 
 	TransferTaskBatchSize = NewGlobalIntSetting(
 		"history.transferTaskBatchSize",

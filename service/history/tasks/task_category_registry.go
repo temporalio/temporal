@@ -28,12 +28,13 @@ type (
 func NewDefaultTaskCategoryRegistry() *MutableTaskCategoryRegistry {
 	return &MutableTaskCategoryRegistry{
 		categories: map[int]Category{
-			CategoryTransfer.ID():    CategoryTransfer,
-			CategoryTimer.ID():       CategoryTimer,
-			CategoryVisibility.ID():  CategoryVisibility,
-			CategoryReplication.ID(): CategoryReplication,
-			CategoryMemoryTimer.ID(): CategoryMemoryTimer,
-			CategoryOutbound.ID():    CategoryOutbound,
+			CategoryTransfer.ID():        CategoryTransfer,
+			CategoryTimer.ID():           CategoryTimer,
+			CategoryVisibility.ID():      CategoryVisibility,
+			CategoryReplication.ID():     CategoryReplication,
+			CategoryMemoryTimer.ID():     CategoryMemoryTimer,
+			CategoryMemoryImmediate.ID(): CategoryMemoryImmediate,
+			CategoryOutbound.ID():        CategoryOutbound,
 		},
 	}
 }

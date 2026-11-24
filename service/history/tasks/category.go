@@ -18,13 +18,14 @@ type (
 // WARNING: These IDS are persisted in the database. Do not change them.
 
 const (
-	CategoryIDTransfer    = 1
-	CategoryIDTimer       = 2
-	CategoryIDReplication = 3
-	CategoryIDVisibility  = 4
-	CategoryIDArchival    = 5
-	CategoryIDMemoryTimer = 6
-	CategoryIDOutbound    = 7
+	CategoryIDTransfer        = 1
+	CategoryIDTimer           = 2
+	CategoryIDReplication     = 3
+	CategoryIDVisibility      = 4
+	CategoryIDArchival        = 5
+	CategoryIDMemoryTimer     = 6
+	CategoryIDOutbound        = 7
+	CategoryIDMemoryImmediate = 8
 )
 
 const (
@@ -34,13 +35,14 @@ const (
 )
 
 const (
-	categoryNameTransfer    = "transfer"
-	categoryNameTimer       = "timer"
-	categoryNameReplication = "replication"
-	categoryNameVisibility  = "visibility"
-	categoryNameArchival    = "archival"
-	categoryNameMemoryTimer = "memory-timer"
-	categoryNameOutbound    = "outbound"
+	categoryNameTransfer        = "transfer"
+	categoryNameTimer           = "timer"
+	categoryNameReplication     = "replication"
+	categoryNameVisibility      = "visibility"
+	categoryNameArchival        = "archival"
+	categoryNameMemoryTimer     = "memory-timer"
+	categoryNameOutbound        = "outbound"
+	categoryNameMemoryImmediate = "memory-immediate"
 )
 
 var (
@@ -84,6 +86,12 @@ var (
 		id:    CategoryIDOutbound,
 		cType: CategoryTypeImmediate,
 		name:  categoryNameOutbound,
+	}
+
+	CategoryMemoryImmediate = Category{
+		id:    CategoryIDMemoryImmediate,
+		cType: CategoryTypeImmediate,
+		name:  categoryNameMemoryImmediate,
 	}
 )
 

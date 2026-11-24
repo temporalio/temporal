@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -17,6 +18,37 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 )
+
+type memoryImmediateQueueFactory struct {
+	scheduler ctasks.RunnableScheduler
+}
+
+type memoryImmediateQueueLimiter struct {
+	maxConcurrency dynamicconfig.IntPropertyFn
+}
+
+func (l memoryImmediateQueueLimiter) Concurrency() int { return l.maxConcurrency() }
+func (l memoryImmediateQueueLimiter) BufferSize() int  { return 0 }
+
+// NewMemoryImmediateQueueFactory provides a separate host-wide pool for best-effort immediate tasks.
+// These tasks never wait behind speculative Workflow Task timers or their rescheduling delay.
+func NewMemoryImmediateQueueFactory(params memoryScheduledQueueFactoryParams) QueueFactory {
+	return &memoryImmediateQueueFactory{
+		scheduler: ctasks.NewDynamicWorkerPoolScheduler(
+			memoryImmediateQueueLimiter{maxConcurrency: params.Config.MemoryImmediateProcessorMaxConcurrentTasks},
+			params.MetricsHandler.WithTags(metrics.OperationTag("MemoryImmediateQueueProcessor")),
+		),
+	}
+}
+
+func (f *memoryImmediateQueueFactory) Start() {}
+func (f *memoryImmediateQueueFactory) Stop() {
+	f.scheduler.InitiateShutdown()
+	f.scheduler.WaitShutdown()
+}
+func (f *memoryImmediateQueueFactory) CreateQueue(historyi.ShardContext) queues.Queue {
+	return queues.NewMemoryImmediateQueue(f.scheduler)
+}
 
 type (
 	memoryScheduledQueueFactoryParams struct {
