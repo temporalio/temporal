@@ -26,20 +26,23 @@ if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${es_endpoint}/${ES_V
     exit 1
 fi
 
-echo "=== Step 1. Add TemporalTimeSkippingEnabled builtin search attributes ==="
+echo "=== Step 1. Add TemporalTimeSkippingEnabled and TemporalTimeSkippingAccumulatedDuration builtin search attributes ==="
 
 new_mapping='
 {
   "properties": {
     "TemporalTimeSkippingEnabled": {
       "type": "boolean"
+    },
+    "TemporalTimeSkippingAccumulatedDuration": {
+      "type": "long"
     }
   }
 }
 '
 
 if [ -z "${AUTO_CONFIRM}" ]; then
-    read -p "Add TemporalTimeSkippingEnabled builtin search attributes to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
+    read -p "Add TemporalTimeSkippingEnabled and TemporalTimeSkippingAccumulatedDuration builtin search attributes to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
     echo
 else
     REPLY="y"

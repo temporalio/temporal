@@ -126,6 +126,9 @@
       "TemporalTimeSkippingEnabled": {
         "type": "boolean"
       },
+      "TemporalTimeSkippingAccumulatedDuration": {
+        "type": "long"
+      },
       "TemporalBool01": {
         "type": "boolean"
       },

@@ -1,7 +1,7 @@
 {
   "CurrVersion": "1.16",
   "MinCompatibleVersion": "0.1",
-  "Description": "add TemporalTimeSkippingEnabled builtin search attributes",
+  "Description": "add TemporalTimeSkippingEnabled and TemporalTimeSkippingAccumulatedDuration builtin search attributes",
   "SchemaUpdateCqlFiles": [
     "add_time_skipping_search_attributes.sql"
   ]
