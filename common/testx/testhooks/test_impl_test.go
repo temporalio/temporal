@@ -34,6 +34,16 @@ func TestGet(t *testing.T) {
 		require.Equal(t, 42, v)
 	})
 
+	t.Run("returns a set nil interface value", func(t *testing.T) {
+		key := NewKey[error, namespaceScope]()
+		scope := namespaceScope("ns1")
+		t.Cleanup(Set(th, key, nil, scope))
+
+		value, ok := Get(th, key, scope)
+		require.True(t, ok)
+		require.NoError(t, value)
+	})
+
 	t.Run("cleanup removes value", func(t *testing.T) {
 		cleanup := Set(th, intKey, 42, namespaceScope("ns1"))
 		cleanup()
@@ -112,5 +122,21 @@ func TestSet(t *testing.T) {
 		require.False(t, ok)
 
 		cleanup1() // should not panic
+	})
+
+	t.Run("old cleanup leaves the replacement registered", func(t *testing.T) {
+		key := NewKey[struct{}, namespaceScope]()
+		scope := namespaceScope("ns1")
+		first := Set(th, key, struct{}{}, scope)
+		second := Set(th, key, struct{}{}, scope)
+		t.Cleanup(second)
+
+		first()
+		_, ok := Get(th, key, scope)
+		require.True(t, ok)
+
+		second()
+		_, ok = Get(th, key, scope)
+		require.False(t, ok)
 	})
 }

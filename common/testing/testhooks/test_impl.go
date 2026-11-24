@@ -20,9 +20,6 @@ func NewHook[T any, S any](key Key[T, S], value T) Hook {
 	return Hook{
 		scopeType: key.scopeType,
 		apply: func(th TestHooks, scope any) func() {
-			if _, ok := scope.(S); !ok {
-				panic("testhooks: scope type mismatch")
-			}
 			return Set(th, key, value, scope)
 		},
 	}

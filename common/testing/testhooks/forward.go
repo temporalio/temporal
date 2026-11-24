@@ -22,5 +22,9 @@ func Call[S any](th TestHooks, key Key[func(), S], scope S) {
 
 // Set sets a test hook to a value with the given scope and returns a cleanup function to unset it.
 func Set[T any, S any](th TestHooks, key Key[T, S], val T, scope any) func() {
-	return testxhooks.Set(th, key.key, val, scope)
+	typedScope, ok := scope.(S)
+	if !ok {
+		panic("testhooks: scope type mismatch")
+	}
+	return testxhooks.Set(th, key.key, val, typedScope)
 }

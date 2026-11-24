@@ -12,6 +12,11 @@ type hookKey struct {
 	scope any
 }
 
+type hookEntry[T any] struct {
+	value T
+	_     byte // Each registration has a distinct address even when T has zero size.
+}
+
 // TestHooks holds a registry of active test hooks. Create it with [NewTestHooks]
 // and use it with [Get] and [Set].
 //
@@ -37,7 +42,7 @@ func Get[T any, S any](th TestHooks, key Key[T, S], scope S) (T, bool) {
 		return zero, false
 	}
 	if val, ok := th.data.Load(hookKey{key.id, scope}); ok {
-		return val.(T), true //nolint:revive
+		return val.(*hookEntry[T]).value, true //nolint:revive
 	}
 	return zero, false
 }
@@ -53,10 +58,11 @@ func Call[S any](th TestHooks, key Key[func(), S], scope S) {
 
 // Set sets a test hook to a value with the given scope and returns a cleanup function to unset it.
 // The scope must be comparable.
-func Set[T any, S any](th TestHooks, key Key[T, S], val T, scope any) func() {
+func Set[T any, S any](th TestHooks, key Key[T, S], val T, scope S) func() {
 	mk := hookKey{key.id, scope}
-	th.data.Store(mk, val)
-	return func() { th.data.Delete(mk) }
+	entry := &hookEntry[T]{value: val}
+	th.data.Store(mk, entry)
+	return func() { th.data.CompareAndDelete(mk, entry) }
 }
 
 // keyCounter provides unique IDs for keys.

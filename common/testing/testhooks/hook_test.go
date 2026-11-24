@@ -27,3 +27,12 @@ func TestHookNamespaceScope(t *testing.T) {
 	_, ok = Get(hooks, MatchingLBForceReadPartition, scope)
 	require.False(t, ok)
 }
+
+func TestSetRejectsMismatchedScope(t *testing.T) {
+	t.Parallel()
+
+	hooks := NewTestHooks()
+	require.Panics(t, func() {
+		Set(hooks, MatchingLBForceReadPartition, 42, namespace.Name("ns"))
+	})
+}

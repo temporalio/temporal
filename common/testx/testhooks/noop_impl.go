@@ -30,7 +30,7 @@ func Get[T any, S any](_ TestHooks, _ Key[T, S], _ S) (T, bool) {
 func Call[S any](_ TestHooks, _ Key[func(), S], _ S) {}
 
 // Set is only to be used by test code together with the test_dep build tag.
-func Set[T any, S any](_ TestHooks, _ Key[T, S], _ T, _ any) func() {
+func Set[T any, S any](_ TestHooks, _ Key[T, S], _ T, _ S) func() {
 	//nolint:forbidigo // Setting a hook without test_dep is a test configuration error.
 	panic("testhooks.Set called but TestHooks are not enabled: use -tags=test_dep when running `go test`")
 }
