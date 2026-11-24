@@ -9,34 +9,13 @@
 package failpoint
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
-
-// Action is what a failpoint does when it executes. The values match the FailpointAction proto
-// enum.
-type Action int32
-
-const (
-	Unspecified Action = iota
-	Off
-	Return
-	Panic
-	Block
-	Pause
-	Call
-)
-
-var actionNames = [...]string{"Unspecified", "Off", "Return", "Panic", "Block", "Pause", "Call"}
-
-func (a Action) String() string {
-	if a >= 0 && int(a) < len(actionNames) {
-		return actionNames[a]
-	}
-	return fmt.Sprintf("Action(%d)", int32(a))
-}
 
 // Recurrence is how often a failpoint executes. The values match the FailpointRecurrence proto
 // enum.
@@ -97,6 +76,25 @@ type Failpoint[T any] struct {
 	// and Wait returns immediately without consulting arrivedCh at all.
 	currentlyBlocked bool
 	arrivedCh        chan struct{}
+
+	// trigger limits which executions fire; rng is set when trigger has a probability.
+	trigger Trigger
+	rng     *rand.Rand
+	// executions and fires count the executions of the enabled failpoint and how many fired.
+	executions int64
+	fires      int64
+}
+
+// Trigger limits when an enabled failpoint fires. The zero value fires on every execution.
+type Trigger struct {
+	// Probability is the chance, in (0, 1], that an execution fires. Zero means always.
+	Probability float64
+	// Seed seeds the random number generator for Probability. Zero means a time-based seed.
+	Seed int64
+	// After is the number of executions to skip before the failpoint can fire.
+	After int64
+	// Max is the maximum number of times the failpoint fires. Zero means unlimited.
+	Max int64
 }
 
 // NewFailpoint creates a Failpoint with the given key.
@@ -105,6 +103,42 @@ func NewFailpoint[T any](key Key) *Failpoint[T] {
 		key:    key,
 		action: Off,
 	}
+}
+
+// SetTrigger limits when the failpoint fires and resets its execution counts.
+func (f *Failpoint[T]) SetTrigger(trigger Trigger) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.trigger = trigger
+	f.executions, f.fires = 0, 0
+	f.rng = nil
+	if trigger.Probability > 0 {
+		f.rng = rand.New(rand.NewSource(cmp.Or(trigger.Seed, time.Now().UnixNano())))
+	}
+}
+
+// Stats returns how often the enabled failpoint executed and how often it fired since its
+// trigger was last set.
+func (f *Failpoint[T]) Stats() (executions, fires int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.executions, f.fires
+}
+
+// fireLocked counts an execution and reports whether it fires. The caller must hold f.mu.
+func (f *Failpoint[T]) fireLocked() bool {
+	f.executions++
+	if f.executions <= f.trigger.After {
+		return false
+	}
+	if f.trigger.Max > 0 && f.fires >= f.trigger.Max {
+		return false
+	}
+	if f.rng != nil && f.rng.Float64() >= f.trigger.Probability {
+		return false
+	}
+	f.fires++
+	return true
 }
 
 // Info returns the failpoint's current state.
@@ -228,6 +262,21 @@ func (f *Failpoint[T]) Do(op func() T) T {
 //
 // It will replace Do in its entirety
 func (f *Failpoint[T]) Execute() (t T, setReturnVal bool) {
+	return f.execute(nil)
+}
+
+// executeAny is Execute with the return value as any, for call sites of another type.
+func (f *Failpoint[T]) executeAny(emit func(Event)) (any, bool) {
+	t, ok := f.execute(emit)
+	if !ok {
+		return nil, false
+	}
+	return t, true
+}
+
+// execute is Execute that reports the execution to emit, if not nil. emit is called without
+// holding f.mu, before a Block failpoint waits.
+func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 	f.mu.Lock()
 
 	if f.action <= Off {
@@ -237,10 +286,25 @@ func (f *Failpoint[T]) Execute() (t T, setReturnVal bool) {
 
 	action := f.action
 	once := f.times == Once
+	fired := f.fireLocked()
+	event := Event{Key: f.key, Action: action, Fired: fired, Execution: f.executions}
+	report := func() {
+		if emit != nil {
+			emit(event)
+		}
+	}
+
+	if !fired {
+		f.mu.Unlock()
+		report()
+		return t, false
+	}
 
 	// Non-Block actions hold the lock for their full execution, so a deferred
 	// disableLocked is safe.
 	if action != Block {
+		// Deferred functions run in reverse order, so report runs after the unlock.
+		defer report()
 		defer f.mu.Unlock()
 		if once {
 			defer f.disableLocked()
@@ -281,6 +345,7 @@ func (f *Failpoint[T]) Execute() (t T, setReturnVal bool) {
 		f.action = Off
 	}
 	f.mu.Unlock()
+	report()
 
 	<-blockCh
 

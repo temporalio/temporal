@@ -22,3 +22,9 @@ func (r *registryNoop) Delete(key Key) {
 func (r *registryNoop) Keys() []Key {
 	return nil
 }
+
+func (r *registryNoop) Subscribe(func(Event)) func() {
+	return func() {}
+}
+
+func (r *registryNoop) emit(Event) {}

@@ -18,6 +18,13 @@ type Registry interface {
 
 	// Keys returns the keys of all registered failpoints.
 	Keys() []Key
+
+	// Subscribe calls fn for every execution of an enabled failpoint in this registry, until the
+	// returned function is called. fn must not call into the failpoint that is executing.
+	Subscribe(fn func(Event)) (unsubscribe func())
+
+	// emit reports an execution to the subscribers.
+	emit(Event)
 }
 
 // Source provides the registry that Execute uses. Servers use their testhooks.TestHooks, so each

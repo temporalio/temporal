@@ -113,11 +113,20 @@ func TestExecute(t *testing.T) {
 	}
 }
 
-func TestExecute_PanicsOnTypeMismatch(t *testing.T) {
+func TestExecute_AcceptsFailpointOfAnotherType(t *testing.T) {
 	t.Parallel()
 
 	registry := failpoint.NewRegistry()
 	registry.Set(key1, failpoint.NewFailpoint[int](key1))
+	_, fired := failpoint.Execute[error](registrySource{registry: registry}, key1)
+	require.False(t, fired)
+}
+
+func TestExecute_PanicsOnNonFailpoint(t *testing.T) {
+	t.Parallel()
+
+	registry := failpoint.NewRegistry()
+	registry.Set(key1, "not a failpoint")
 	require.Panics(t, func() { _, _ = failpoint.Execute[error](registrySource{registry: registry}, key1) })
 }
 

@@ -22,7 +22,7 @@ func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 	// Check registry first
 	if registry, ok := GetRegistry(ctx); ok {
 		if fpAny := registry.Get(key); fpAny != nil {
-			return execute[T](key, fpAny)
+			return execute[T](registry, key, fpAny)
 		}
 	}
 
@@ -31,7 +31,7 @@ func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 	if v == nil {
 		return zero, false
 	}
-	return execute[T](key, v)
+	return execute[T](nil, key, v)
 }
 
 // Execute executes the failpoint for key in the registry of src, if registered and enabled. For a
@@ -42,11 +42,11 @@ func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 func Execute[T any](src Source, key Key) (T, bool) {
 	registry := src.Failpoints()
 	if fpAny := registry.Get(key); fpAny != nil {
-		return execute[T](key, fpAny)
+		return execute[T](registry, key, fpAny)
 	}
 	if key.namespaceID != "" {
 		if fpAny := registry.Get(Key{name: key.name}); fpAny != nil {
-			return execute[T](key, fpAny)
+			return execute[T](registry, key, fpAny)
 		}
 	}
 	var zero T
@@ -61,11 +61,39 @@ func Checkpoint(src Source, key Key) error {
 	return err
 }
 
-func execute[T any](key Key, fpAny any) (T, bool) {
-	fp, ok := fpAny.(*Failpoint[T])
+// executor is implemented by Failpoint[T] for every T.
+type executor interface {
+	executeAny(emit func(Event)) (any, bool)
+}
+
+// execute executes fpAny for a call site that expects T and reports the execution to registry,
+// if not nil. A failpoint of another type still blocks, pauses, panics and calls back; a return
+// value that is not a T makes the call site continue as if the failpoint had not fired.
+func execute[T any](registry Registry, key Key, fpAny any) (T, bool) {
+	var zero T
+	var emit func(Event)
+	if registry != nil {
+		emit = registry.emit
+	}
+	if fp, ok := fpAny.(*Failpoint[T]); ok {
+		return fp.execute(emit)
+	}
+	ex, ok := fpAny.(executor)
 	if !ok {
-		var zero T
 		panic(fmt.Errorf("failpoint: invalid type for key %v: expected *Failpoint[%T], got %T", key, zero, fpAny))
 	}
-	return fp.Execute()
+	v, set := ex.executeAny(emit)
+	if !set {
+		return zero, false
+	}
+	if v == nil {
+		return zero, true
+	}
+	if t, ok := v.(T); ok {
+		return t, true
+	}
+	if emit != nil {
+		emit(Event{Key: key, Action: Return, Fired: true, TypeMismatch: true})
+	}
+	return zero, false
 }
