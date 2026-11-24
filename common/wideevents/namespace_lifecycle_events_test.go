@@ -276,3 +276,35 @@ func TestEmitNamespaceRenamed(t *testing.T) {
 	require.Equal(t, "ns-id", attrValue(lg.records[0], "namespace_id"))
 	require.Equal(t, "ns-deleted-abc", lagDetails(t, lg.records[0])["renamed_to"])
 }
+
+func TestEmitNamespaceEagerRefresh(t *testing.T) {
+	lg := &captureLogger{}
+
+	EmitNamespaceEagerRefresh(lg, NamespaceEagerRefreshInput{
+		Namespace:             "ns",
+		NamespaceID:           "ns-id",
+		SourceCluster:         "source",
+		CurrentCluster:        "current",
+		Operation:             "Create",
+		Outcome:               NamespaceEagerRefreshNotMember,
+		SourceFailoverVersion: 12,
+		SourceConfigVersion:   3,
+		Duration:              1500 * time.Millisecond,
+		Err:                   errors.New("not a member"),
+	})
+
+	require.Len(t, lg.records, 1)
+	require.Equal(t, PhaseNamespaceEagerRefresh, attrValue(lg.records[0], "phase"))
+	require.Equal(t, "ns", attrValue(lg.records[0], "namespace"))
+	require.Equal(t, "ns-id", attrValue(lg.records[0], "namespace_id"))
+	require.Equal(t, map[string]any{
+		"source_cluster":          "source",
+		"current_cluster":         "current",
+		"operation":               "Create",
+		"outcome":                 NamespaceEagerRefreshNotMember,
+		"source_failover_version": float64(12),
+		"source_config_version":   float64(3),
+		"duration_ms":             float64(1500),
+		"error":                   "not a member",
+	}, lagDetails(t, lg.records[0]))
+}

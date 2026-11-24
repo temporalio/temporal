@@ -380,6 +380,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		),
 		nil,
 		metrics.NoopMetricsHandler,
+		namespace.NewDefaultReplicationResolverFactory(),
 	)
 }
 

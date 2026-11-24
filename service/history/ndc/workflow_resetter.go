@@ -623,6 +623,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			true,
 			nil,
 			-1, // sentinel: synthetic event, no routing info
+			"",
 		)
 		if err != nil {
 			return err

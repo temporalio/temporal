@@ -320,9 +320,16 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 }
 
 func (d *RPCFactory) createLocalFrontendGRPCConnection() *grpc.ClientConn {
-	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
+	serviceName := primitives.FrontendService
+	if d.config != nil {
+		if _, ok := d.config.Services[string(primitives.InternalFrontendService)]; ok {
+			serviceName = primitives.InternalFrontendService
+		}
+	}
 
-	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
+	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[serviceName]...)
+
+	return d.dial(d.frontendURL, d.frontendTLSConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
 }
 
 // createInternodeGRPCConnection creates connection for gRPC calls
@@ -433,7 +440,7 @@ func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName
 		Timeout:             20 * time.Second,
 		PermitWithoutStream: false,
 	}
-	if d.EnableInternodeClientKeepalive {
+	if d.EnableInternodeClientKeepalive && d.config != nil {
 		serviceConfig := d.config.Services[string(serviceName)]
 		params = serviceConfig.RPC.ClientConnectionConfig.GetKeepAliveClientParameters()
 	}

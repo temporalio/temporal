@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporal"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -163,4 +164,50 @@ func TestMigrateScheduleToChasm_MigrationEnabledUnwired(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, client.createCalls, "unwired migrationEnabled currently fails open")
+}
+
+func TestMigrateScheduleToChasm_DeferredWhileBackfilling(t *testing.T) {
+	withBackfill := &schedulerpb.SchedulerMigrationState{
+		SchedulerState: &schedulerpb.SchedulerState{ScheduleId: "sched"},
+		Backfillers:    map[string]*schedulerpb.BackfillerState{"bf": {}},
+	}
+	noBackfill := &schedulerpb.SchedulerMigrationState{
+		SchedulerState: &schedulerpb.SchedulerState{ScheduleId: "sched"},
+	}
+	for _, tc := range []struct {
+		name     string
+		selected func(string) bool
+		state    *schedulerpb.SchedulerMigrationState
+		deferred bool
+	}{
+		{name: "auto-selected with backfill", selected: func(string) bool { return true }, state: withBackfill, deferred: true},
+		{name: "auto-selected without backfill", selected: func(string) bool { return true }, state: noBackfill},
+		{name: "not auto-selected with backfill", selected: func(string) bool { return false }, state: withBackfill},
+		{name: "nil selector with backfill", state: withBackfill},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &mockSchedulerClient{}
+			a := newTestActivities(client, testNamespaceID)
+			var gotID string
+			if tc.selected != nil {
+				a.autoMigrationSelected = func(id string) bool { gotID = id; return tc.selected(id) }
+			}
+
+			err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+				NamespaceId: testNamespaceID,
+				State:       tc.state,
+			})
+			if !tc.deferred {
+				require.NoError(t, err)
+				require.Equal(t, 1, client.createCalls)
+				return
+			}
+			var appErr *temporal.ApplicationError
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, errTypeMigrationDeferredBackfill, appErr.Type())
+			require.True(t, appErr.NonRetryable())
+			require.Equal(t, "sched", gotID)
+			require.Zero(t, client.createCalls, "must not create the V2 schedule while deferred")
+		})
+	}
 }
