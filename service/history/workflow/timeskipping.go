@@ -59,7 +59,6 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 		AccumulatedSkippedDuration: initialSkip,
 		InitialSkippedDuration:     initialSkip,
 		SessionSkipCount:           propagatedState.GetInitialSkipCount(),
-		OnceEnabled:                config.GetEnabled(),
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.applyFastForward(propagatedState.GetFastForwardTargetTime())
@@ -74,7 +73,6 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 		return
 	}
 	// we allow setting config to nil in updating tsc
-	tsi.OnceEnabled = tsi.GetOnceEnabled() || tsi.GetConfig().GetEnabled() || config.GetEnabled()
 	tsi.Config = config
 	tsi.SessionSkipCount = 0
 	ms.applyFastForward(nil)
@@ -672,7 +670,6 @@ func (ms *MutableStateImpl) executeTimeSkippingTransition(
 	disabledAfterFastForward bool,
 ) {
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
-	tsi.OnceEnabled = tsi.GetOnceEnabled() || tsi.GetConfig().GetEnabled()
 	if hasSkipTarget {
 		tsi.AccumulatedSkippedDuration = durationpb.New(
 			ms.accumulatedSkippedDuration() + skippedDuration)

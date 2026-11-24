@@ -2214,8 +2214,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 		elapsed, fastForward+settleWindow)
 }
 
-// TestTimeSkipping_SearchAttributes verifies both attributes are returned by visibility and
-// OnceEnabled remains true after disabling time skipping without skipping any time.
+// TestTimeSkipping_SearchAttributes verifies visibility tracks whether time skipping is enabled.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_SearchAttributes() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
@@ -2244,7 +2243,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SearchAttributes() {
 		return result
 	}
 
-	awaitVisible("TemporalTimeSkippingEnabled = false AND TemporalTimeSkippingOnceEnabled = false")
+	awaitVisible("TemporalTimeSkippingEnabled = false")
 	for _, enabled := range []bool{true, false, true, false} {
 		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 			Namespace: env.Namespace().String(), WorkflowExecution: execution,
@@ -2252,19 +2251,16 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SearchAttributes() {
 			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 		})
 		s.NoError(err)
-		visible := awaitVisible(fmt.Sprintf("TemporalTimeSkippingEnabled = %t AND TemporalTimeSkippingOnceEnabled = true", enabled))
+		visible := awaitVisible(fmt.Sprintf("TemporalTimeSkippingEnabled = %t", enabled))
 		fields := visible.GetSearchAttributes().GetIndexedFields()
 		actual, err := sadefs.DecodeValue(fields[sadefs.TemporalTimeSkippingEnabled], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
 		s.NoError(err)
 		s.Equal(enabled, actual)
-		onceEnabled, err := sadefs.DecodeValue(fields[sadefs.TemporalTimeSkippingOnceEnabled], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
-		s.NoError(err)
-		s.Equal(true, onceEnabled)
 	}
 
 	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "test cleanup",
 	})
 	s.NoError(err)
-	awaitVisible("ExecutionStatus = 'Terminated' AND TemporalTimeSkippingEnabled = false AND TemporalTimeSkippingOnceEnabled = true")
+	awaitVisible("ExecutionStatus = 'Terminated' AND TemporalTimeSkippingEnabled = false")
 }

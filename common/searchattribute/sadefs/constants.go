@@ -122,8 +122,6 @@ const (
 
 	// TemporalTimeSkippingEnabled indicates whether time skipping is currently enabled.
 	TemporalTimeSkippingEnabled = "TemporalTimeSkippingEnabled"
-	// TemporalTimeSkippingOnceEnabled indicates whether time skipping has ever been enabled for this run.
-	TemporalTimeSkippingOnceEnabled = "TemporalTimeSkippingOnceEnabled"
 )
 
 var (
@@ -193,7 +191,6 @@ var (
 		TemporalExternalPayloadCount:         enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalExternalPayloadSizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalTimeSkippingEnabled:          enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalTimeSkippingOnceEnabled:      enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

@@ -361,9 +361,6 @@ message TimeSkippingInfo {
   // Skipped duration inherited when this execution started. Unlike accumulated_skipped_duration,
   // this value remains fixed and can be used to calculate the execution's wall-clock start time.
   google.protobuf.Duration initial_skipped_duration = 8;
-
-  // Whether time skipping has ever been enabled for this run. Remains true after disabling it.
-  bool once_enabled = 9;
 }
 
 message FastForwardInfo {
