@@ -520,6 +520,15 @@ func (s *mutableStateSuite) TestIsWorkflowSkippableWithCHASM() {
 		1: chasm.NewComponentField(chasmCtx, chasmnexus.NewOperation(&nexusoperationpb.OperationState{})),
 	}
 	s.False(s.mutableState.isWorkflowSkippable(), "a pending CHASM Nexus operation blocks time skipping")
+
+	wf.Operations[1].Get(chasmCtx).Status = nexusoperationpb.OPERATION_STATUS_BACKING_OFF
+	s.True(s.mutableState.isWorkflowSkippable(), "a CHASM Nexus operation waiting to retry permits time skipping")
+
+	wf.Operations[1].Get(chasmCtx).Cancellation = chasm.NewComponentField(
+		chasmCtx,
+		&chasmnexus.Cancellation{CancellationState: &nexusoperationpb.CancellationState{}},
+	)
+	s.False(s.mutableState.isWorkflowSkippable(), "a requested cancellation blocks time skipping")
 }
 
 func (s *mutableStateSuite) TestIsWorkflowSkippableWithCHASMReadError() {

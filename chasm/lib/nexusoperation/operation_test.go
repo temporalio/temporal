@@ -28,6 +28,34 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestAllowsTimeSkipping(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		status           nexusoperationpb.OperationStatus
+		withCancellation bool
+		want             bool
+	}{
+		{name: "scheduled", status: nexusoperationpb.OPERATION_STATUS_SCHEDULED},
+		{name: "started", status: nexusoperationpb.OPERATION_STATUS_STARTED},
+		{name: "backing off", status: nexusoperationpb.OPERATION_STATUS_BACKING_OFF, want: true},
+		{name: "backing off with cancellation", status: nexusoperationpb.OPERATION_STATUS_BACKING_OFF, withCancellation: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			op := NewOperation(&nexusoperationpb.OperationState{Status: test.status})
+			if test.withCancellation {
+				op.Cancellation = chasm.NewComponentField[*Cancellation](nil, newCancellation(&nexusoperationpb.CancellationState{}))
+			}
+
+			require.Equal(t, test.want, op.AllowsTimeSkipping(&chasm.MockContext{}))
+		})
+	}
+}
+
 func TestRequestCancelDeduplicationAfterTerminalState(t *testing.T) {
 	const requestID = "cancel-request-id"
 

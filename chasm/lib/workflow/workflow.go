@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/common/callbacks"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -72,10 +73,20 @@ func (w *Workflow) LifecycleState(
 	return w.MSPointer.LifecycleState()
 }
 
-// IsExecutionSkippable reports whether CHASM-owned workflow work permits time skipping.
-// Mutable State checks the workflow's legacy state and in-flight work separately.
-func (w *Workflow) IsExecutionSkippable(_ chasm.Context) bool {
-	return w.pendingNexusOperationCount() == 0
+// IsExecutionSkippable reports whether every pending CHASM Nexus operation is waiting
+// for an invocation retry without a cancellation request.
+func (w *Workflow) IsExecutionSkippable(ctx chasm.Context) (skippable bool) {
+	// Field reads can panic on decode errors. A failed eligibility check must leave
+	// the workflow clock unchanged.
+	var readErr error
+	defer log.CapturePanic(ctx.Logger(), &readErr)
+
+	for _, operationField := range w.Operations {
+		if !operationField.Get(ctx).AllowsTimeSkipping(ctx) {
+			return false
+		}
+	}
+	return true
 }
 
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {

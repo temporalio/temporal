@@ -115,6 +115,16 @@ func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 	return &Operation{OperationState: state}
 }
 
+// AllowsTimeSkipping reports whether the operation has no in-flight work that must complete before
+// workflow time can advance.
+func (o *Operation) AllowsTimeSkipping(ctx chasm.Context) bool {
+	if o.GetStatus() != nexusoperationpb.OPERATION_STATUS_BACKING_OFF {
+		return false
+	}
+	_, cancellationRequested := o.Cancellation.TryGet(ctx)
+	return !cancellationRequested
+}
+
 func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,
