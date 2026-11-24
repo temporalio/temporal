@@ -249,8 +249,8 @@ func TestFanOut_SharedRegistry(t *testing.T) {
 		})
 	}
 	var injects atomic.Int32
-	local := failpointgrpc.Target{Host: "frontend", Service: countingService{failpointgrpc.NewServer(registry), &injects, hitBlock}}
-	peer := failpointgrpc.Target{Host: "history", Service: countingService{failpointgrpc.NewServer(registry), &injects, hitBlock}}
+	local := failpointgrpc.Target{Host: "entry", Service: countingService{failpointgrpc.NewServer(registry), &injects, hitBlock}}
+	peer := failpointgrpc.Target{Host: "peer", Service: countingService{failpointgrpc.NewServer(registry), &injects, hitBlock}}
 	fanOut := failpointgrpc.NewFanOut(local, staticPeers(peer))
 
 	_, err := fanOut.InjectBlock(callCtx(t), &failpointpb.InjectBlockRequest{Key: "1"})
@@ -420,9 +420,9 @@ func TestFanOut_WaitForBlock(t *testing.T) {
 	t.Run("a failed wait on another endpoint of the same registry does not hide the block", func(t *testing.T) {
 		t.Parallel()
 		registry := failpoint.NewRegistry()
-		local := failpointgrpc.Target{Host: "frontend", Service: failpointgrpc.NewServer(registry)}
+		local := failpointgrpc.Target{Host: "entry", Service: failpointgrpc.NewServer(registry)}
 		// The peer serves the same registry, but its wait fails.
-		peer := failpointgrpc.Target{Host: "history", Service: failingWait{failpointgrpc.NewServer(registry)}}
+		peer := failpointgrpc.Target{Host: "peer", Service: failingWait{failpointgrpc.NewServer(registry)}}
 		fanOut := failpointgrpc.NewFanOut(local, staticPeers(peer))
 		_, err := local.Service.InjectBlock(callCtx(t), &failpointpb.InjectBlockRequest{Key: "1"})
 		require.NoError(t, err)
@@ -482,8 +482,8 @@ func serveFailpoints(t *testing.T, service failpointpb.FailpointServiceServer, h
 	return failpointgrpc.NewRemote(conn)
 }
 
-// TestFanOut_PeerFanOuts covers fan-outs that are each other's peers, as the frontends of a
-// cluster are: a forwarded request must not be forwarded again, and carries the caller's
+// TestFanOut_PeerFanOuts covers fan-outs that are each other's peers, such as several entry points
+// of one system: a forwarded request must not be forwarded again, and carries the caller's
 // authorization header to peers that authorize it, but not to the other services.
 func TestFanOut_PeerFanOuts(t *testing.T) {
 	t.Parallel()

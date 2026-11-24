@@ -42,9 +42,9 @@ func TestRegistry_Delete(t *testing.T) {
 func TestRegistry_Keys(t *testing.T) {
 	registry := failpoint.NewRegistry()
 	registry.Set(key1, failpoint.NewFailpoint[error](key1))
-	registry.Set(key2.ForNamespace("ns"), failpoint.NewFailpoint[error](key2))
+	registry.Set(key2.ForScope("ns"), failpoint.NewFailpoint[error](key2))
 
-	require.ElementsMatch(t, []failpoint.Key{key1, key2.ForNamespace("ns")}, registry.Keys())
+	require.ElementsMatch(t, []failpoint.Key{key1, key2.ForScope("ns")}, registry.Keys())
 }
 
 func TestRegistry_ContextInjection(t *testing.T) {

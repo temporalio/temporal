@@ -567,29 +567,29 @@ func TestServer_DescribeRegistry(t *testing.T) {
 	require.NotEqual(t, resp1.RegistryId, resp3.RegistryId)
 }
 
-func TestServer_NamespaceScopedRequest(t *testing.T) {
+func TestServer_ScopedRequest(t *testing.T) {
 	registry := failpoint.NewRegistry()
 	server := failpointgrpc.NewServer(registry)
 	_, err := server.InjectReturn(t.Context(), &failpointpb.InjectReturnRequest{
 		Key:          "1",
-		NamespaceId:  "ns-1",
+		Scope:        "ns-1",
 		ErrorMessage: "scoped",
 		Recurrence:   failpointpb.Recurrence_RECURRENCE_ALWAYS,
 	})
 	require.NoError(t, err)
 
-	got, fired := failpoint.ExecuteCtx[error](failpoint.InjectRegistry(t.Context(), registry), key1.ForNamespace("ns-1"))
+	got, fired := failpoint.ExecuteCtx[error](failpoint.InjectRegistry(t.Context(), registry), key1.ForScope("ns-1"))
 	require.True(t, fired)
 	require.EqualError(t, got, "scoped")
 
-	_, fired = failpoint.ExecuteCtx[error](failpoint.InjectRegistry(t.Context(), registry), key1.ForNamespace("ns-2"))
+	_, fired = failpoint.ExecuteCtx[error](failpoint.InjectRegistry(t.Context(), registry), key1.ForScope("ns-2"))
 	require.False(t, fired)
 
 	resp, err := server.ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
 	require.NoError(t, err)
 	require.Len(t, resp.Failpoints, 1)
 	require.Equal(t, "1", resp.Failpoints[0].Key)
-	require.Equal(t, "ns-1", resp.Failpoints[0].NamespaceId)
+	require.Equal(t, "ns-1", resp.Failpoints[0].Scope)
 }
 
 func TestServer_InjectReturnErrorName(t *testing.T) {

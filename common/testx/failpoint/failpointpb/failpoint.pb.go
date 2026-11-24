@@ -148,8 +148,8 @@ type DisableFailpointRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// key is the name of the failpoint to disable.
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// namespace_id scopes the key to a namespace. Empty means all namespaces.
-	NamespaceId   string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// scope scopes the key, for example to a tenant. Empty means all scopes.
+	Scope         string `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -191,9 +191,9 @@ func (x *DisableFailpointRequest) GetKey() string {
 	return ""
 }
 
-func (x *DisableFailpointRequest) GetNamespaceId() string {
+func (x *DisableFailpointRequest) GetScope() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.Scope
 	}
 	return ""
 }
@@ -314,8 +314,8 @@ type InjectPanicRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// key is the name of the failpoint to configure.
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// namespace_id scopes the key to a namespace. Empty means all namespaces.
-	NamespaceId string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// scope scopes the key, for example to a tenant. Empty means all scopes.
+	Scope string `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	// panic_value is the string value passed to panic(errors.New(...)).
 	PanicValue string `protobuf:"bytes,3,opt,name=panic_value,json=panicValue,proto3" json:"panic_value,omitempty"`
 	// recurrence specifies whether this triggers once or always.
@@ -361,9 +361,9 @@ func (x *InjectPanicRequest) GetKey() string {
 	return ""
 }
 
-func (x *InjectPanicRequest) GetNamespaceId() string {
+func (x *InjectPanicRequest) GetScope() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.Scope
 	}
 	return ""
 }
@@ -424,8 +424,8 @@ type InjectBlockRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// key is the name of the failpoint to configure.
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// namespace_id scopes the key to a namespace. Empty means all namespaces.
-	NamespaceId string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// scope scopes the key, for example to a tenant. Empty means all scopes.
+	Scope string `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	// recurrence specifies whether this triggers once or always.
 	Recurrence    Recurrence `protobuf:"varint,3,opt,name=recurrence,proto3,enum=temporal.testx.failpoint.v1.Recurrence" json:"recurrence,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -469,9 +469,9 @@ func (x *InjectBlockRequest) GetKey() string {
 	return ""
 }
 
-func (x *InjectBlockRequest) GetNamespaceId() string {
+func (x *InjectBlockRequest) GetScope() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.Scope
 	}
 	return ""
 }
@@ -525,8 +525,8 @@ type WaitForBlockRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// key is the name of the failpoint to wait for.
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// namespace_id scopes the key to a namespace. Empty means all namespaces.
-	NamespaceId   string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// scope scopes the key, for example to a tenant. Empty means all scopes.
+	Scope         string `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -568,9 +568,9 @@ func (x *WaitForBlockRequest) GetKey() string {
 	return ""
 }
 
-func (x *WaitForBlockRequest) GetNamespaceId() string {
+func (x *WaitForBlockRequest) GetScope() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.Scope
 	}
 	return ""
 }
@@ -617,8 +617,8 @@ type InjectReturnRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// key is the name of the failpoint to configure.
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// namespace_id scopes the key to a namespace. Empty means all namespaces.
-	NamespaceId string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// scope scopes the key, for example to a tenant. Empty means all scopes.
+	Scope string `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	// error_message is the error message for the returned error.
 	ErrorMessage string `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	// recurrence specifies whether this triggers once or always.
@@ -667,9 +667,9 @@ func (x *InjectReturnRequest) GetKey() string {
 	return ""
 }
 
-func (x *InjectReturnRequest) GetNamespaceId() string {
+func (x *InjectReturnRequest) GetScope() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.Scope
 	}
 	return ""
 }
@@ -820,8 +820,8 @@ type FailpointInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// key is the failpoint name.
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// namespace_id is the namespace the failpoint is scoped to. Empty means all namespaces.
-	NamespaceId string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// scope is the scope the failpoint is scoped to. Empty means all scopes.
+	Scope string `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	// enabled indicates whether the failpoint is active.
 	Enabled bool `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	// action describes what the failpoint does.
@@ -872,9 +872,9 @@ func (x *FailpointInfo) GetKey() string {
 	return ""
 }
 
-func (x *FailpointInfo) GetNamespaceId() string {
+func (x *FailpointInfo) GetScope() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.Scope
 	}
 	return ""
 }
@@ -995,36 +995,36 @@ var File_temporal_testx_failpoint_v1_failpoint_proto protoreflect.FileDescriptor
 
 const file_temporal_testx_failpoint_v1_failpoint_proto_rawDesc = "" +
 	"\n" +
-	"+temporal/testx/failpoint/v1/failpoint.proto\x12\x1btemporal.testx.failpoint.v1\"N\n" +
+	"+temporal/testx/failpoint/v1/failpoint.proto\x12\x1btemporal.testx.failpoint.v1\"A\n" +
 	"\x17DisableFailpointRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\"\x1a\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\"\x1a\n" +
 	"\x18DisableFailpointResponse\"\x1d\n" +
 	"\x1bDisableAllFailpointsRequest\"\x1e\n" +
-	"\x1cDisableAllFailpointsResponse\"\xb3\x01\n" +
+	"\x1cDisableAllFailpointsResponse\"\xa6\x01\n" +
 	"\x12InjectPanicRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\x12\x1f\n" +
 	"\vpanic_value\x18\x03 \x01(\tR\n" +
 	"panicValue\x12G\n" +
 	"\n" +
 	"recurrence\x18\x04 \x01(\x0e2'.temporal.testx.failpoint.v1.RecurrenceR\n" +
 	"recurrence\"\x15\n" +
-	"\x13InjectPanicResponse\"\x92\x01\n" +
+	"\x13InjectPanicResponse\"\x85\x01\n" +
 	"\x12InjectBlockRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12G\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\x12G\n" +
 	"\n" +
 	"recurrence\x18\x03 \x01(\x0e2'.temporal.testx.failpoint.v1.RecurrenceR\n" +
 	"recurrence\"\x15\n" +
-	"\x13InjectBlockResponse\"J\n" +
+	"\x13InjectBlockResponse\"=\n" +
 	"\x13WaitForBlockRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\"\x16\n" +
-	"\x14WaitForBlockResponse\"\xd7\x01\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\"\x16\n" +
+	"\x14WaitForBlockResponse\"\xca\x01\n" +
 	"\x13InjectReturnRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12#\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\x12#\n" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12G\n" +
 	"\n" +
 	"recurrence\x18\x04 \x01(\x0e2'.temporal.testx.failpoint.v1.RecurrenceR\n" +
@@ -1036,10 +1036,10 @@ const file_temporal_testx_failpoint_v1_failpoint_proto_rawDesc = "" +
 	"\x16ListFailpointsResponse\x12J\n" +
 	"\n" +
 	"failpoints\x18\x01 \x03(\v2*.temporal.testx.failpoint.v1.FailpointInfoR\n" +
-	"failpoints\"\xfa\x01\n" +
+	"failpoints\"\xed\x01\n" +
 	"\rFailpointInfo\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x18\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\x12\x18\n" +
 	"\aenabled\x18\x03 \x01(\bR\aenabled\x12;\n" +
 	"\x06action\x18\x04 \x01(\x0e2#.temporal.testx.failpoint.v1.ActionR\x06action\x12G\n" +
 	"\n" +

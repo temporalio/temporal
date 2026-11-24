@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/failpointpb"
@@ -32,7 +33,7 @@ func TestFailpoint(t *testing.T) {
 	t.Run("persistence failpoint fails a store method", func(t *testing.T) {
 		t.Parallel()
 		env := testcore.NewEnv(t, testcore.WithDedicatedCluster())
-		fp := testcore.InjectGlobalFailpoint[error](env, failpoint.PersistenceKey(string(config.ExecutionStoreName), "CreateWorkflowExecution"))
+		fp := testcore.InjectGlobalFailpoint[error](env, failpoints.PersistenceKey(string(config.ExecutionStoreName), "CreateWorkflowExecution"))
 		fp.Return(errors.New("injected"), failpoint.Always)
 
 		_, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowRequest(env, env.Tv()))
@@ -72,7 +73,7 @@ func testFailpointService(t *testing.T, env *testcore.TestEnv, namespaceID strin
 
 	_, err := client.InjectReturn(testcore.NewContext(), &failpointpb.InjectReturnRequest{
 		Key:          key.Name(),
-		NamespaceId:  namespaceID,
+		Scope:        namespaceID,
 		ErrorName:    "InvalidArgument",
 		ErrorMessage: "injected",
 	})
@@ -82,7 +83,7 @@ func testFailpointService(t *testing.T, env *testcore.TestEnv, namespaceID strin
 	require.NoError(t, err)
 	var services []string
 	for _, info := range list.Failpoints {
-		if info.Key != key.Name() || info.NamespaceId != namespaceID {
+		if info.Key != key.Name() || info.Scope != namespaceID {
 			continue // A failpoint of another test on a shared cluster.
 		}
 		for _, host := range info.Hosts {
@@ -97,7 +98,7 @@ func testFailpointService(t *testing.T, env *testcore.TestEnv, namespaceID strin
 	require.ErrorAs(t, err, &invalidArgument)
 	require.ErrorContains(t, err, "injected")
 
-	_, err = client.DisableFailpoint(testcore.NewContext(), &failpointpb.DisableFailpointRequest{Key: key.Name(), NamespaceId: namespaceID})
+	_, err = client.DisableFailpoint(testcore.NewContext(), &failpointpb.DisableFailpointRequest{Key: key.Name(), Scope: namespaceID})
 	require.NoError(t, err)
 	mustStartWorkflow(env, env.Tv())
 }

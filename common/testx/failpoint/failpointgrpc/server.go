@@ -35,8 +35,8 @@ type disabler interface {
 
 // requestKey returns the key named by a request. Requests address failpoints by name, so the key
 // is not declared with NewKey.
-func requestKey(name, namespaceID string) failpoint.Key {
-	return failpoint.KeyFromName(name, namespaceID)
+func requestKey(name, scope string) failpoint.Key {
+	return failpoint.KeyFromName(name, scope)
 }
 
 // validateKey rejects an empty key name. Without this check, a request with no key set would
@@ -97,7 +97,7 @@ func (s *server) DisableFailpoint(ctx context.Context, req *failpointpb.DisableF
 	if s.registry == nil {
 		return nil, errNoRegistry
 	}
-	key := requestKey(req.Key, req.NamespaceId)
+	key := requestKey(req.Key, req.Scope)
 	// Disable is idempotent: a missing key means there's nothing to do, not an error.
 	// Tests that disable in cleanup hooks would otherwise see flaky NotFound errors.
 	if err := s.remove(key); err != nil {
@@ -128,7 +128,7 @@ func (s *server) InjectPanic(ctx context.Context, req *failpointpb.InjectPanicRe
 	if s.registry == nil {
 		return nil, errNoRegistry
 	}
-	key := requestKey(req.Key, req.NamespaceId)
+	key := requestKey(req.Key, req.Scope)
 	if err := validateKey(key); err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (s *server) InjectBlock(ctx context.Context, req *failpointpb.InjectBlockRe
 	if s.registry == nil {
 		return nil, errNoRegistry
 	}
-	key := requestKey(req.Key, req.NamespaceId)
+	key := requestKey(req.Key, req.Scope)
 	if err := validateKey(key); err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (s *server) InjectReturn(ctx context.Context, req *failpointpb.InjectReturn
 	if s.registry == nil {
 		return nil, errNoRegistry
 	}
-	key := requestKey(req.Key, req.NamespaceId)
+	key := requestKey(req.Key, req.Scope)
 	if err := validateKey(key); err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (s *server) WaitForBlock(ctx context.Context, req *failpointpb.WaitForBlock
 	if s.registry == nil {
 		return nil, errNoRegistry
 	}
-	key := requestKey(req.Key, req.NamespaceId)
+	key := requestKey(req.Key, req.Scope)
 	fp := s.registry.Get(key)
 	if fp == nil {
 		return nil, status.Errorf(codes.NotFound, "failpoint %s not found", key)
@@ -245,10 +245,10 @@ func infoProto(key failpoint.Key, fp any) *failpointpb.FailpointInfo {
 		info = ip.Info()
 	}
 	return &failpointpb.FailpointInfo{
-		Key:         info.Key.Name(),
-		NamespaceId: info.Key.NamespaceID(),
-		Enabled:     info.Enabled,
-		Action:      failpointpb.Action(info.Action),
-		Recurrence:  failpointpb.Recurrence(info.Recurrence),
+		Key:        info.Key.Name(),
+		Scope:      info.Key.Scope(),
+		Enabled:    info.Enabled,
+		Action:     failpointpb.Action(info.Action),
+		Recurrence: failpointpb.Recurrence(info.Recurrence),
 	}
 }

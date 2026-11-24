@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/persistencefaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
@@ -21,7 +22,7 @@ func TestWithFailpoints(t *testing.T) {
 	createTarget := config.FaultInjectionTarget{Store: config.ExecutionStoreName, Method: "CreateWorkflowExecution"}
 
 	testHooks := testhooks.NewTestHooks()
-	key := failpoint.PersistenceKey(string(config.ExecutionStoreName), "UpdateWorkflowExecution")
+	key := failpoints.PersistenceKey(string(config.ExecutionStoreName), "UpdateWorkflowExecution")
 	fp := failpoint.NewFailpoint[error](key)
 	fp.Return(injectedErr, failpoint.Always)
 	testHooks.Failpoints().Set(key, fp)

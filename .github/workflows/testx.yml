@@ -47,6 +47,20 @@ jobs:
             exit 1
           fi
 
+      - name: Check failpoint has no Temporal server concepts
+        run: |
+          # failpoint is a general-purpose library. Drop the module path and the proto package,
+          # which contain "temporal", then look for server concepts.
+          scan=$(grep -rnI . failpoint proto)
+          scan=$(printf '%s\n' "$scan" | sed -E 's#go\.temporal\.io/testx##g; s#temporal[._/]testx[._/]failpoint[._/]v1##g')
+          # grep exits with 1 when nothing matches; any other failure fails the step.
+          matches=$(printf '%s\n' "$scan" | grep -iE 'temporal|namespace|history|matching') || [ $? -eq 1 ]
+          if [ -n "$matches" ]; then
+            echo "::error::failpoint must not mention Temporal server concepts:"
+            echo "$matches"
+            exit 1
+          fi
+
       - name: Check testx go.mod is tidy
         run: go mod tidy -diff
 

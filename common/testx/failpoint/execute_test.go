@@ -17,12 +17,12 @@ func (s registrySource) Failpoints() failpoint.Registry { return s.registry }
 func TestKey(t *testing.T) {
 	t.Parallel()
 
-	scoped := key1.ForNamespace("ns-1")
+	scoped := key1.ForScope("ns-1")
 	require.Equal(t, "1", key1.Name())
-	require.Empty(t, key1.NamespaceID())
+	require.Empty(t, key1.Scope())
 	require.Equal(t, "1", key1.String())
 	require.Equal(t, "1", scoped.Name())
-	require.Equal(t, "ns-1", scoped.NamespaceID())
+	require.Equal(t, "ns-1", scoped.Scope())
 	require.Equal(t, "1@ns-1", scoped.String())
 	require.NotEqual(t, key1, scoped)
 }
@@ -32,7 +32,6 @@ func TestBoundaryKeys(t *testing.T) {
 
 	require.Equal(t, "grpc:/test.Service/Method", failpoint.GRPCKey("/test.Service/Method").Name())
 	require.Equal(t, "http:POST /callback", failpoint.HTTPKey("POST /callback").Name())
-	require.Equal(t, "persistence:ExecutionStore.UpdateWorkflowExecution", failpoint.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution").Name())
 }
 
 func TestNewKey_PanicsOnDuplicateName(t *testing.T) {
@@ -67,35 +66,35 @@ func TestExecute(t *testing.T) {
 		{name: "unscoped", registered: map[failpoint.Key]error{key1: fromUnscoped}, key: key1, want: fromUnscoped, wantFired: true},
 		{
 			name:       "scoped",
-			registered: map[failpoint.Key]error{key1.ForNamespace("ns-1"): fromScoped},
-			key:        key1.ForNamespace("ns-1"),
+			registered: map[failpoint.Key]error{key1.ForScope("ns-1"): fromScoped},
+			key:        key1.ForScope("ns-1"),
 			want:       fromScoped,
 			wantFired:  true,
 		},
 		{
 			name:       "scoped key falls back to unscoped",
 			registered: map[failpoint.Key]error{key1: fromUnscoped},
-			key:        key1.ForNamespace("ns-1"),
+			key:        key1.ForScope("ns-1"),
 			want:       fromUnscoped,
 			wantFired:  true,
 		},
 		{
 			name:       "scoped takes precedence over unscoped",
-			registered: map[failpoint.Key]error{key1: fromUnscoped, key1.ForNamespace("ns-1"): fromScoped},
-			key:        key1.ForNamespace("ns-1"),
+			registered: map[failpoint.Key]error{key1: fromUnscoped, key1.ForScope("ns-1"): fromScoped},
+			key:        key1.ForScope("ns-1"),
 			want:       fromScoped,
 			wantFired:  true,
 		},
 		{
-			name:       "other namespace does not fire",
-			registered: map[failpoint.Key]error{key1.ForNamespace("ns-1"): fromScoped},
-			key:        key1.ForNamespace("ns-2"),
+			name:       "other scope does not fire",
+			registered: map[failpoint.Key]error{key1.ForScope("ns-1"): fromScoped},
+			key:        key1.ForScope("ns-2"),
 			want:       nil,
 			wantFired:  false,
 		},
 		{
 			name:       "unscoped key does not see scoped failpoints",
-			registered: map[failpoint.Key]error{key1.ForNamespace("ns-1"): fromScoped},
+			registered: map[failpoint.Key]error{key1.ForScope("ns-1"): fromScoped},
 			key:        key1,
 			want:       nil,
 			wantFired:  false,

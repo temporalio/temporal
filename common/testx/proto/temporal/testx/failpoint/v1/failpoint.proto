@@ -5,7 +5,7 @@ package temporal.testx.failpoint.v1;
 option go_package = "go.temporal.io/testx/failpoint/failpointpb";
 
 // FailpointService configures the failpoints of a process from another process.
-// Processes only serve it in test builds.
+// Processes only serve it when they enable failpoints, for example only in test builds.
 service FailpointService {
   // DisableFailpoint disables a failpoint, allowing normal execution.
   rpc DisableFailpoint(DisableFailpointRequest) returns (DisableFailpointResponse);
@@ -68,8 +68,8 @@ enum Recurrence {
 message DisableFailpointRequest {
   // key is the name of the failpoint to disable.
   string key = 1;
-  // namespace_id scopes the key to a namespace. Empty means all namespaces.
-  string namespace_id = 2;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
 }
 
 // DisableFailpointResponse is returned after disabling a failpoint.
@@ -85,8 +85,8 @@ message DisableAllFailpointsResponse {}
 message InjectPanicRequest {
   // key is the name of the failpoint to configure.
   string key = 1;
-  // namespace_id scopes the key to a namespace. Empty means all namespaces.
-  string namespace_id = 2;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
   // panic_value is the string value passed to panic(errors.New(...)).
   string panic_value = 3;
   // recurrence specifies whether this triggers once or always.
@@ -100,8 +100,8 @@ message InjectPanicResponse {}
 message InjectBlockRequest {
   // key is the name of the failpoint to configure.
   string key = 1;
-  // namespace_id scopes the key to a namespace. Empty means all namespaces.
-  string namespace_id = 2;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
   // recurrence specifies whether this triggers once or always.
   Recurrence recurrence = 3;
 }
@@ -113,8 +113,8 @@ message InjectBlockResponse {}
 message WaitForBlockRequest {
   // key is the name of the failpoint to wait for.
   string key = 1;
-  // namespace_id scopes the key to a namespace. Empty means all namespaces.
-  string namespace_id = 2;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
 }
 
 // WaitForBlockResponse is returned when a block failpoint is triggered.
@@ -124,8 +124,8 @@ message WaitForBlockResponse {}
 message InjectReturnRequest {
   // key is the name of the failpoint to configure.
   string key = 1;
-  // namespace_id scopes the key to a namespace. Empty means all namespaces.
-  string namespace_id = 2;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
   // error_message is the error message for the returned error.
   string error_message = 3;
   // recurrence specifies whether this triggers once or always.
@@ -151,8 +151,8 @@ message ListFailpointsResponse {
 message FailpointInfo {
   // key is the failpoint name.
   string key = 1;
-  // namespace_id is the namespace the failpoint is scoped to. Empty means all namespaces.
-  string namespace_id = 2;
+  // scope is the scope the failpoint is scoped to. Empty means all scopes.
+  string scope = 2;
   // enabled indicates whether the failpoint is active.
   bool enabled = 3;
   // action describes what the failpoint does.

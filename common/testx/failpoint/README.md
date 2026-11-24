@@ -9,9 +9,8 @@ look the failpoint up in the registry of a `Source`; without a registry they are
 test injected directly into the context with `InjectReturn` and the other `Inject*` helpers; with
 neither, it is a no-op.
 
-The consumer decides when a registry exists. In the Temporal server, only a server built or tested
-with `-tags test_dep` has one: its test hooks provide the registry, and the test hooks of other
-builds have none.
+The consumer enables failpoints by providing a registry, for example only in test builds, and
+leaves it out everywhere else.
 
 ## Declare a key
 
@@ -19,7 +18,8 @@ builds have none.
 var ChargeCard = failpoint.NewKey("billing.chargeCard")
 ```
 
-Each name can be declared once; `NewKey` panics on a duplicate.
+Each name can be declared once; `NewKey` panics on a duplicate. `ChargeCard.ForScope("tenant-1")`
+scopes a key, for example to one tenant; `Execute` falls back to the unscoped key.
 
 ## Execute it
 

@@ -5,26 +5,13 @@ import (
 	"sync"
 )
 
-// Key identifies a failpoint by name. A key applies to all namespaces unless it is scoped to one
-// with ForNamespace.
+// Key identifies a failpoint by name. A key applies to all scopes unless it is scoped to one with
+// ForScope. A scope is a string that the code under test chooses, such as the ID of a tenant, so
+// that a failpoint only fires for the requests of that scope.
 type Key struct {
-	name        string
-	namespaceID string
+	name  string
+	scope string
 }
-
-// Failpoints in server code. Each key documents where it fires and what tests use it for.
-var (
-	// MatchingForwardTask fires before matching forwards a workflow, activity, query or Nexus task
-	// to the parent partition. Tests use Pause to make forwarding latency observable.
-	MatchingForwardTask = NewKey("matching.forwardTask")
-	// UpdateWithStartBetweenLockAndStart fires after Update-with-Start released the workflow lock
-	// and before it starts the workflow. Tests use Call to start a conflicting workflow in this
-	// window.
-	UpdateWithStartBetweenLockAndStart = NewKey("history.updateWithStart.betweenLockAndStart")
-	// UpdateWithStartClosingWorkflowRetry fires before Update-with-Start retries after its update
-	// was aborted by a closing workflow. Tests use Call to start a new workflow before the retry.
-	UpdateWithStartClosingWorkflowRetry = NewKey("history.updateWithStart.closingWorkflowRetry")
-)
 
 var (
 	keyNamesMu sync.Mutex
@@ -44,8 +31,7 @@ func NewKey(name string) Key {
 }
 
 // GRPCKey returns the key of the failpoint that fires before the handler of a gRPC method runs.
-// fullMethod is the full method name, for example
-// "/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution".
+// fullMethod is the full method name, for example "/pkg.Service/Method".
 func GRPCKey(fullMethod string) Key {
 	return Key{name: "grpc:" + fullMethod}
 }
@@ -56,32 +42,26 @@ func HTTPKey(operation string) Key {
 	return Key{name: "http:" + operation}
 }
 
-// PersistenceKey returns the key of the failpoint that fires before a persistence store method
-// runs, for example PersistenceKey("ExecutionStore", "UpdateWorkflowExecution").
-func PersistenceKey(store, method string) Key {
-	return Key{name: "persistence:" + store + "." + method}
-}
-
 // KeyFromName returns the key for a failpoint name received from outside the process, for example
 // in a remote request. Unlike NewKey, it does not declare the name.
-func KeyFromName(name string, namespaceID string) Key {
-	return Key{name: name, namespaceID: namespaceID}
+func KeyFromName(name string, scope string) Key {
+	return Key{name: name, scope: scope}
 }
 
 // Name returns the failpoint name.
 func (k Key) Name() string { return k.name }
 
-// NamespaceID returns the namespace the key is scoped to, or "" for all namespaces.
-func (k Key) NamespaceID() string { return k.namespaceID }
+// Scope returns the scope the key is scoped to, or "" for all scopes.
+func (k Key) Scope() string { return k.scope }
 
-// ForNamespace returns the key scoped to a namespace.
-func (k Key) ForNamespace(nsID string) Key {
-	return Key{name: k.name, namespaceID: nsID}
+// ForScope returns the key scoped to scope.
+func (k Key) ForScope(scope string) Key {
+	return Key{name: k.name, scope: scope}
 }
 
 func (k Key) String() string {
-	if k.namespaceID == "" {
+	if k.scope == "" {
 		return k.name
 	}
-	return fmt.Sprintf("%s@%s", k.name, k.namespaceID)
+	return fmt.Sprintf("%s@%s", k.name, k.scope)
 }

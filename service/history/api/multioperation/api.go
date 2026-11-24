@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -144,7 +145,7 @@ func Invoke(
 			return nil, err
 		}
 
-		if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartClosingWorkflowRetry.ForNamespace(uws.namespaceId.String())); err != nil {
+		if err := failpoint.Checkpoint(uws.testHooks, failpoints.UpdateWithStartClosingWorkflowRetry.ForScope(uws.namespaceId.String())); err != nil {
 			return nil, err
 		}
 
@@ -246,7 +247,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartBetweenLockAndStart.ForNamespace(uws.namespaceId.String())); err != nil {
+	if err := failpoint.Checkpoint(uws.testHooks, failpoints.UpdateWithStartBetweenLockAndStart.ForScope(uws.namespaceId.String())); err != nil {
 		return nil, err
 	}
 

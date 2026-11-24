@@ -116,7 +116,7 @@ func TestWrap_Failpoint(t *testing.T) {
 
 	testHooks := testhooks.NewTestHooks()
 	injectedErr := errors.New("injected")
-	key := failpoint.HTTPKey("POST /cb1").ForNamespace("namespace-id")
+	key := failpoint.HTTPKey("POST /cb1").ForScope("namespace-id")
 	fp := failpoint.NewFailpoint[error](key)
 	fp.Return(injectedErr, failpoint.Once)
 	testHooks.Failpoints().Set(key, fp)

@@ -60,7 +60,7 @@ func (a Adapter[Req, Resp]) GenerateRequest(
 	if a.failpointKey != nil {
 		key := a.failpointKey(operation)
 		if scope.NamespaceID != "" {
-			key = key.ForNamespace(scope.NamespaceID.String())
+			key = key.ForScope(scope.NamespaceID.String())
 		}
 		if err := failpoint.Checkpoint(a.testHooks, key); err != nil {
 			return &faultinjection.Outcome[Resp]{Error: err}

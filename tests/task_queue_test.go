@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -1028,7 +1029,7 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore
 		var forwardDelay time.Duration
 		if b.ForceTaskForward {
 			forwardDelay = 100 * time.Millisecond
-			testcore.InjectFailpoint[error](s, failpoint.MatchingForwardTask).Pause(forwardDelay, failpoint.Always)
+			testcore.InjectFailpoint[error](s, failpoints.MatchingForwardTask).Pause(forwardDelay, failpoint.Always)
 			forwardDelay *= 2 // two forward hops
 		}
 

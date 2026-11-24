@@ -142,8 +142,8 @@ func TestUnaryServerInterceptor_Failpoint(t *testing.T) {
 		namespaceID string
 		wantErr     error
 	}{
-		{name: "scoped to request namespace", key: failpoint.GRPCKey(fullMethod).ForNamespace("namespace-id"), namespaceID: "namespace-id", wantErr: injectedErr},
-		{name: "scoped to other namespace", key: failpoint.GRPCKey(fullMethod).ForNamespace("other"), namespaceID: "namespace-id", wantErr: nil},
+		{name: "scoped to request namespace", key: failpoint.GRPCKey(fullMethod).ForScope("namespace-id"), namespaceID: "namespace-id", wantErr: injectedErr},
+		{name: "scoped to other namespace", key: failpoint.GRPCKey(fullMethod).ForScope("other"), namespaceID: "namespace-id", wantErr: nil},
 		{name: "unscoped", key: failpoint.GRPCKey(fullMethod), namespaceID: "namespace-id", wantErr: injectedErr},
 		{name: "unscoped without request namespace", key: failpoint.GRPCKey(fullMethod), namespaceID: "", wantErr: injectedErr},
 		{name: "other method", key: failpoint.GRPCKey("/test.Service/Other"), namespaceID: "namespace-id", wantErr: nil},

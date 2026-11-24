@@ -26,7 +26,7 @@ func BenchmarkExecuteNilRegistry(b *testing.B) {
 
 func BenchmarkExecuteEmptyRegistry(b *testing.B) {
 	var src failpoint.Source = registrySource{registry: failpoint.NewRegistry()}
-	key := key1.ForNamespace("ns")
+	key := key1.ForScope("ns")
 	for b.Loop() {
 		_ = failpoint.Checkpoint(src, key)
 	}

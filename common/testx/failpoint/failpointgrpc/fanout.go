@@ -16,7 +16,7 @@ import (
 // forwardedHeader marks a request that a fan-out already forwarded. A fan-out that receives such a
 // request only applies it locally, so fan-outs that are each other's peers don't forward in a loop.
 // It is only a loop guard, not a credential.
-const forwardedHeader = "x-temporal-failpoint-forwarded"
+const forwardedHeader = "x-failpoint-forwarded"
 
 // Target is a FailpointService that a fan-out applies requests to.
 type Target struct {
@@ -265,8 +265,8 @@ func failures[T any](results []targetResult[T]) []failure {
 // joinErrors returns nil if no target failed, or one status error that names each failed target.
 // Its code is the code the failures share, or Unknown if they differ.
 //
-// Known limitation: the frontend's error interceptors can mask or truncate the message of the
-// aggregated error, so the names of the failed hosts may not reach the caller in full.
+// Known limitation: error interceptors of the serving process can mask or truncate the message of
+// the aggregated error, so the names of the failed hosts may not reach the caller in full.
 func joinErrors(fs []failure, total int) error {
 	if len(fs) == 0 {
 		return nil

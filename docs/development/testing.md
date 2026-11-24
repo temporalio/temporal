@@ -296,13 +296,6 @@ The test fails if no matching call reaches the gate.
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise
 difficult to test. This is a **last resort** - prefer mocking and dependency injection when possible.
 
-**Example:**
-
-The UpdateWithStart API has a race window between releasing a lock and starting a workflow where
-another request could create the same workflow first. The `UpdateWithStartInBetweenLockAndStart`
-hook lets tests inject a callback at this exact point, making it possible to reliably test
-conflict handling.
-
 _NOTE: Tests using testhooks must be run with `-tags=test_dep`._
 
 ### failpoint package
@@ -311,12 +304,12 @@ The `failpoint` package injects faults and timing control at named points in ser
 it over a new testhooks key when the test only needs to fail, delay, block, or run a callback at
 a point in the code.
 
-A failpoint is declared once as a `failpoint.Key` in `common/testx/failpoint/keys.go`, with a
+A failpoint is declared once as a `failpoint.Key` in `common/testing/failpoints`, with a
 comment that says where it fires and what tests use it for. Server code executes it through the
-server's test hooks, scoped to a namespace:
+server's test hooks, scoped to a namespace ID:
 
 ```go
-if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNamespace(nsID)); err != nil {
+if err := failpoint.Checkpoint(f.testHooks, failpoints.MatchingForwardTask.ForScope(nsID)); err != nil {
     return err
 }
 ```
@@ -328,12 +321,24 @@ no failpoint registry, so both do nothing.
 Tests configure the failpoint for the test's namespace. It is removed when the test ends:
 
 ```go
-fp := testcore.InjectFailpoint[error](env, failpoint.MatchingForwardTask)
+fp := testcore.InjectFailpoint[error](env, failpoints.MatchingForwardTask)
 fp.Pause(100*time.Millisecond, failpoint.Always)  // Delay every forward.
 fp.Return(serviceerror.NewUnavailable("injected"), failpoint.Once)  // Fail the next forward.
 fp.Block(failpoint.Once)                         // Hold the next forward ...
 require.NoError(t, fp.Wait(ctx))                 // ... until it arrives ...
 fp.Disable()                                     // ... then release it.
+```
+
+`Call` runs a callback at the failpoint. For example, Update-with-Start has a race window between
+releasing the workflow lock and starting the workflow, in which another request could start the
+same workflow first. `failpoints.UpdateWithStartBetweenLockAndStart` lets a test start a
+conflicting workflow at exactly this point:
+
+```go
+testcore.InjectFailpoint[error](env, failpoints.UpdateWithStartBetweenLockAndStart).Call(func() error {
+    // Start the conflicting workflow here.
+    return nil
+}, failpoint.Once)
 ```
 
 Failpoints also run at the gRPC, HTTP, and persistence fault injection points, without a declared
@@ -342,7 +347,7 @@ key:
 - `failpoint.GRPCKey(fullMethod)` fires before the handler of a unary gRPC method on frontend,
   history, and matching.
 - `failpoint.HTTPKey("POST /path")` fires before an outgoing callback or Nexus HTTP request.
-- `failpoint.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution")` fires before a
+- `failpoints.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution")` fires before a
   persistence store method.
 
 gRPC and HTTP failpoints are scoped to the namespace ID of the request when it has one. Persistence

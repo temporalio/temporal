@@ -53,8 +53,8 @@ type Registry interface {
 	emit(Event)
 }
 
-// Source provides the registry that Execute uses. Servers use their testhooks.TestHooks, so each
-// server, and each test cluster, has its own registry.
+// Source provides the registry that Execute uses. Each component that provides its own Source,
+// such as each process under test, can have its own registry.
 type Source interface {
 	Failpoints() Registry
 }

@@ -12,7 +12,7 @@ import (
 // namespace, and returns it for the test to configure. The failpoint is disabled and removed when
 // the test ends.
 func InjectFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Failpoint[T] {
-	return injectFailpoint[T](env, key.ForNamespace(env.nsID.String()))
+	return injectFailpoint[T](env, key.ForScope(env.nsID.String()))
 }
 
 // InjectGlobalFailpoint is InjectFailpoint for a failpoint that applies to all namespaces, such as

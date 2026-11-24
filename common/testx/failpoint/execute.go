@@ -34,12 +34,12 @@ func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 }
 
 // Execute executes the failpoint for key in the registry of src, if registered and enabled. For a
-// key scoped to a namespace, a failpoint registered for the unscoped key applies when none is
-// registered for the namespace.
+// key with a scope, a failpoint registered for the unscoped key applies when none is registered
+// for the scope.
 // Returns the failpoint's return value and a boolean indicating whether the failpoint
 // provided a return value.
 //
-// A Source without a registry, such as a zero-value test hooks struct in a unit test, has no
+// A Source without a registry, such as one in a build that disables failpoints, has no
 // failpoints.
 func Execute[T any](src Source, key Key) (T, bool) {
 	var zero T
@@ -50,7 +50,7 @@ func Execute[T any](src Source, key Key) (T, bool) {
 	if fpAny := registry.Get(key); fpAny != nil {
 		return execute[T](registry, key, fpAny)
 	}
-	if key.namespaceID != "" {
+	if key.scope != "" {
 		if fpAny := registry.Get(Key{name: key.name}); fpAny != nil {
 			return execute[T](registry, key, fpAny)
 		}
