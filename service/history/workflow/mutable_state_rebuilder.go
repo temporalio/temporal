@@ -259,6 +259,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
 			attributes := event.GetWorkflowTaskStartedEventAttributes()
+			// History events don't carry the started clock or worker control queue, so both stay empty here.
+			// After failover this workflow task is failed by startTransactionHandleWorkflowTaskFailover anyway,
+			// so WHN isn't needed for it.
+			// TODO(experimental@whn): a mutable state rebuild loses them for a live workflow task, so WHN can't
+			// be sent for it.
 			workflowTask, err := b.mutableState.ApplyWorkflowTaskStartedEvent(
 				nil,
 				event.GetVersion(),

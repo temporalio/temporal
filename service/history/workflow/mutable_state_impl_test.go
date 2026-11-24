@@ -354,6 +354,83 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 	s.Equal(int64(1), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
 }
 
+func (s *mutableStateSuite) TestWorkflowTaskStartedClockLifecycle() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.Nil(wft.StartedClock)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		worker_versioning.StampFromBuildId("b1"),
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+		"",
+	)
+	s.NoError(err)
+	s.NotNil(wft.StartedClock)
+	protorequire.ProtoEqual(s.T(), wft.StartedClock, s.mutableState.GetExecutionInfo().GetWorkflowTaskStartedClock())
+	protorequire.ProtoEqual(s.T(), wft.StartedClock, s.mutableState.GetStartedWorkflowTask().StartedClock)
+
+	_, err = s.mutableState.AddWorkflowTaskTimedOutEvent(wft)
+	s.NoError(err)
+	s.Nil(s.mutableState.GetExecutionInfo().GetWorkflowTaskStartedClock())
+}
+
+func (s *mutableStateSuite) TestSyncExecutionInfoReplicatesWorkflowTaskStartedClock() {
+	sourceClock := &clockspb.VectorClock{ClusterId: 2, ShardId: 1, Clock: 42}
+	incoming := common.CloneProto(s.mutableState.GetExecutionInfo())
+	incoming.WorkflowTaskScheduledEventId = 5
+	incoming.WorkflowTaskStartedEventId = 6
+	incoming.WorkflowTaskStartedTime = timestamppb.New(time.Unix(100, 0))
+	incoming.WorkflowTaskAttempt = 1
+	incoming.WorkflowTaskVersion = 7
+	incoming.WorkflowTaskStartedClock = sourceClock
+	incoming.WorkflowTaskLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 7,
+		TransitionCount:          10,
+	}
+	key := s.mutableState.GetWorkflowKey()
+
+	s.NoError(s.mutableState.syncExecutionInfo(s.mutableState.executionInfo, incoming, false))
+
+	sourceToken := RebuildCurrentWorkflowTaskToken(key, incoming)
+	s.NotNil(sourceToken)
+	protorequire.ProtoEqual(s.T(), sourceToken, RebuildCurrentWorkflowTaskToken(key, s.mutableState.GetExecutionInfo()))
+}
+
+func (s *mutableStateSuite) TestWorkflowTaskStartedClockLostOnEventReplication() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	wft, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
+		wft,
+		wft.Version,
+		wft.ScheduledEventID,
+		wft.ScheduledEventID+1,
+		"request-id",
+		time.Now(),
+		false,
+		0,
+		nil,
+		0,
+		nil,
+	)
+	s.NoError(err)
+	s.NotNil(s.mutableState.GetStartedWorkflowTask())
+	s.Nil(wft.StartedClock)
+	s.Nil(RebuildCurrentWorkflowTaskToken(s.mutableState.GetWorkflowKey(), s.mutableState.GetExecutionInfo()))
+}
+
 func (s *mutableStateSuite) TestWorkflowTaskWorkerControlQueueLifecycle() {
 	for _, tc := range []struct {
 		name  string

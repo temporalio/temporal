@@ -394,6 +394,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
+	s.NotNil(response.Clock)
+	expectedResponse.Clock = response.Clock
 	s.Equal(&expectedResponse, response)
 }
 
@@ -504,6 +506,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
+	s.NotNil(response.Clock)
+	expectedResponse.Clock = response.Clock
 	s.Equal(&expectedResponse, response)
 }
 

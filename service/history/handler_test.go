@@ -11,7 +11,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -28,6 +30,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -533,4 +536,62 @@ func TestStartNexusOperation_SystemNexusEndpointRejectsNonProtoResponse(t *testi
 	var failedPrecondition *serviceerror.FailedPrecondition
 	require.ErrorAs(t, err, &failedPrecondition)
 	require.ErrorContains(t, err, "system payload must be encoded as binary/protobuf but got json/plain")
+}
+
+func TestRecordWorkflowTaskStarted_Clock(t *testing.T) {
+	request := &historyservice.RecordWorkflowTaskStartedRequest{
+		NamespaceId:       tests.NamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		PollRequest:       &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "test-task-queue"}},
+	}
+	for _, tc := range []struct {
+		name        string
+		engineClock *clockspb.VectorClock
+	}{
+		{name: "engine clock is kept", engineClock: &clockspb.VectorClock{ShardId: 1, Clock: 42, ClusterId: 1}},
+		{name: "nil engine clock falls back to shard clock"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			controller := shard.NewMockController(ctrl)
+			shardContext := shard.NewTestContext(ctrl, &persistencespb.ShardInfo{ShardId: 1, RangeId: 1}, tests.NewDynamicConfig())
+			engine := historyi.NewMockEngine(ctrl)
+			shardContext.SetEngineForTesting(engine)
+			shardContext.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
+			controller.EXPECT().GetShardByNamespaceWorkflow(tests.NamespaceID, tests.WorkflowID).Return(shardContext, nil)
+			engine.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any()).Return(
+				&historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{Clock: tc.engineClock}, nil)
+			h := Handler{
+				metricsHandler: metrics.NoopMetricsHandler,
+				logger:         log.NewNoopLogger(),
+				controller:     controller,
+			}
+
+			resp, err := h.RecordWorkflowTaskStarted(context.Background(), request)
+			require.NoError(t, err)
+			if tc.engineClock != nil {
+				require.Same(t, tc.engineClock, resp.GetClock())
+				return
+			}
+			require.NotNil(t, resp.GetClock())
+			require.Equal(t, shardContext.GetShardID(), resp.GetClock().GetShardId())
+		})
+	}
+
+	t.Run("fallback clock error is returned", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		controller := shard.NewMockController(ctrl)
+		shardContext := historyi.NewMockShardContext(ctrl)
+		engine := historyi.NewMockEngine(ctrl)
+		clockErr := serviceerror.NewUnavailable("clock unavailable")
+		controller.EXPECT().GetShardByNamespaceWorkflow(tests.NamespaceID, tests.WorkflowID).Return(shardContext, nil)
+		shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil)
+		engine.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any()).
+			Return(&historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}, nil)
+		shardContext.EXPECT().NewVectorClock().Return(nil, clockErr)
+		h := Handler{metricsHandler: metrics.NoopMetricsHandler, logger: log.NewNoopLogger(), controller: controller}
+
+		_, err := h.RecordWorkflowTaskStarted(context.Background(), request)
+		require.ErrorIs(t, err, clockErr)
+	})
 }

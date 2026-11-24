@@ -1026,6 +1026,9 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 		response.GetStartedEventId(),
 		response.GetStartedTime(),
 		response.GetAttempt(),
+		// experimental@whn: inline new WFT tokens now carry a clock (they were nil before). When the worker
+		// returns such a token, WorkflowConsistencyChecker validates it against the shard clock, the same
+		// as a token from a Matching poll.
 		response.GetClock(),
 		response.GetVersion(),
 	)
