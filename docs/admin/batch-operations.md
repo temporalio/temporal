@@ -4,7 +4,7 @@ Admin batch workflows run in the `temporal-system` namespace and operate on exec
 
 ## Delegate termination or deletion
 
-Use `delegated-batch start` to terminate or delete matching workflows or activities. The supported `--batch-type` values are `terminate-workflows`, `delete-workflows`, `terminate-activities`, and `delete-activities`.
+Use `delegated-batch start` to terminate or delete matching workflows, activities, or Nexus operations. The supported `--batch-type` values are `terminate-workflows`, `delete-workflows`, `terminate-activities`, `delete-activities`, `terminate-nexus-operations`, and `delete-nexus-operations`.
 
 ```sh
 tdbg --namespace payments delegated-batch start \

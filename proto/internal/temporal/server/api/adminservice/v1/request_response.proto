@@ -744,7 +744,7 @@ message StartAdminBatchOperationRequest {
   // The admin batch operation to perform.
   oneof operation {
     BatchOperationRefreshTasks refresh_tasks_operation = 10;
-    // Supported types are workflow and activity termination and deletion.
+    // Supported types are workflow, activity, and Nexus operation termination and deletion.
     temporal.api.enums.v1.BatchOperationType delegation_operation = 11;
   }
 }

@@ -90,6 +90,14 @@ func (t *batchTestWorkflowClient) CountActivityExecutions(
 	return &workflowservice.CountActivityExecutionsResponse{Count: 5}, nil
 }
 
+func (t *batchTestWorkflowClient) CountNexusOperationExecutions(
+	context.Context,
+	*workflowservice.CountNexusOperationExecutionsRequest,
+	...grpc.CallOption,
+) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
+	return &workflowservice.CountNexusOperationExecutionsResponse{Count: 7}, nil
+}
+
 func (t *batchTestAdminClient) StartAdminBatchOperation(
 	_ context.Context,
 	request *adminservice.StartAdminBatchOperationRequest,
@@ -192,6 +200,21 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.Contains(s.output.String(), "Currently matching: 5 activities")
 	})
 
+	s.Run("Terminate Nexus operations delegates the Nexus operation batch type", func() {
+		s.NoError(s.run(
+			"--batch-type", batchTypeTerminateNexusOperations,
+			"--query", "A=B",
+			"--reason", "stuck Nexus operations",
+		))
+
+		request := s.client.admin.lastRequest
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION, request.GetDelegationOperation())
+		s.Equal("stuck Nexus operations", request.GetReason())
+		s.NotEmpty(request.GetIdentity())
+		s.Contains(s.output.String(), "Operation: terminate-nexus-operations")
+		s.Contains(s.output.String(), "Currently matching: 7 Nexus operations")
+	})
+
 	s.Run("Delete workflows delegates the workflow delete batch type", func() {
 		s.NoError(s.run(
 			"--batch-type", batchTypeDeleteWorkflows,
@@ -216,6 +239,19 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.Equal(enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, request.GetDelegationOperation())
 		s.Contains(s.output.String(), "Operation: delete-activities")
 		s.Contains(s.output.String(), "Currently matching: 5 activities")
+	})
+
+	s.Run("Delete Nexus operations delegates the Nexus operation delete batch type", func() {
+		s.NoError(s.run(
+			"--batch-type", batchTypeDeleteNexusOperations,
+			"--query", "Endpoint='expired-endpoint'",
+			"--reason", "retention cleanup",
+		))
+
+		request := s.client.admin.lastRequest
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION, request.GetDelegationOperation())
+		s.Contains(s.output.String(), "Operation: delete-nexus-operations")
+		s.Contains(s.output.String(), "Currently matching: 7 Nexus operations")
 	})
 
 	s.Run("Unknown batch type is rejected", func() {
@@ -253,8 +289,10 @@ func (s *batchCommandTestSuite) TestAdminBatchStartConfirmationWarnsOnlyForTermi
 	}{
 		{batchTypeTerminateWorkflows, true},
 		{batchTypeTerminateActivities, true},
+		{batchTypeTerminateNexusOperations, true},
 		{batchTypeDeleteWorkflows, false},
 		{batchTypeDeleteActivities, false},
+		{batchTypeDeleteNexusOperations, false},
 	} {
 		s.Run(tc.batchType, func() {
 			s.output.Reset()

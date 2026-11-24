@@ -2998,6 +2998,16 @@ func TestCreateDelegatedBatchRequest(t *testing.T) {
 			},
 		},
 		{
+			name:      "terminate Nexus operations",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminateNexusOperationsOperation.GetIdentity())
+				require.Equal(t, adminRequest.GetReason(), op.TerminateNexusOperationsOperation.GetReason())
+			},
+		},
+		{
 			name:      "delete workflows",
 			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
 			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
@@ -3011,6 +3021,14 @@ func TestCreateDelegatedBatchRequest(t *testing.T) {
 			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
 			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
 				_, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation)
+				require.True(t, ok)
+			},
+		},
+		{
+			name:      "delete Nexus operations",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				_, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation)
 				require.True(t, ok)
 			},
 		},
@@ -3070,6 +3088,11 @@ func TestCreateDelegatedBatchRequestConvertsExecutions(t *testing.T) {
 			name:          "activity operation",
 			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
 			executionType: enumspb.EXECUTION_TYPE_ACTIVITY,
+		},
+		{
+			name:          "Nexus operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+			executionType: enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
 		},
 	}
 
