@@ -42,7 +42,9 @@ jobs:
         run: go mod tidy -diff
 
       - name: Test testx
-        run: make test
+        run: |
+          make test
+          go test -tags test_dep ./testhooks
 
       - name: Lint testx
         env:
