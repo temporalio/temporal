@@ -3757,12 +3757,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	skipVersioningCheck bool,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	targetRevisionNumber int64,
+	workerControlQueue string,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber, workerControlQueue)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
@@ -9868,6 +9869,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			AttemptsSinceLastSuccess: incoming.WorkflowTaskAttemptsSinceLastSuccess,
 			Stamp:                    incoming.WorkflowTaskStamp,
 			StartedTime:              incoming.WorkflowTaskStartedTime.AsTime(),
+			WorkerControlQueue:       incoming.WorkflowTaskWorkerControlQueue,
 			ScheduledTime:            incoming.WorkflowTaskScheduledTime.AsTime(),
 
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
@@ -9906,6 +9908,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.WorkflowTaskTimeout,
 			&info.WorkflowTaskAttempt,
 			&info.WorkflowTaskStartedTime,
+			&info.WorkflowTaskWorkerControlQueue,
 			&info.WorkflowTaskScheduledTime,
 			&info.WorkflowTaskOriginalScheduledTime,
 			&info.WorkflowTaskType,

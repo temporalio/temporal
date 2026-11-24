@@ -35,11 +35,12 @@ var (
 		true,
 		`AdminEnableListHistoryTasks is the key for enabling listing history tasks`,
 	)
-	AdminEnableDescribeMutableStateRateLimit = NewGlobalBoolSetting(
-		"admin.enableDescribeMutableStateRateLimit",
-		false,
-		`AdminEnableDescribeMutableStateRateLimit gates whether AdminService.DescribeMutableState is subject to
-pod-level rate limiting. Read once at process startup: changing this value requires a restart to take effect.`,
+	AdminEnablePodLevelRateLimit = NewGlobalBoolSetting(
+		"admin.enablePodLevelRateLimit",
+		true,
+		`AdminEnablePodLevelRateLimit gates whether AdminService.DescribeMutableState, GetWorkflowExecutionRawHistory
+and GetWorkflowExecutionRawHistoryV2 are subject to pod-level rate limiting. Read once at process startup:
+changing this value requires a restart to take effect.`,
 	)
 	AdminMatchingNamespaceToPartitionDispatchRate = NewNamespaceFloatSetting(
 		"admin.matchingNamespaceToPartitionDispatchRate",
@@ -229,6 +230,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		"system.enableCancelActivityWorkerCommand",
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
+	)
+	WorkflowHeartbeatNotificationRolloutPercent = NewNamespaceIntSetting(
+		"history.workflowHeartbeatNotificationRolloutPercent",
+		0,
+		`WorkflowHeartbeatNotificationRolloutPercent selects a stable percentage of workflows per namespace for heartbeat notifications. Zero selects none; 100 selects all.`,
 	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
 		"system.workerCommandsDispatchTimeout",
@@ -1167,6 +1173,17 @@ task dispatch by endpoint URLs for forwarded Nexus requests. If set to true, for
 dispatch type (by endpoint or by namespace + task queue) as the original request. If false, dispatch by namespace + task
 queue will always be used for forwarded requests. Defaults to false because Nexus endpoints do not support replication,
 so forwarding by endpoint ID will not work out of the box.`,
+	)
+	FrontendNexusEnforceJWTAudience = NewGlobalBoolSetting(
+		"frontend.nexusEnforceJWTAudience",
+		false,
+		`Controls whether the frontend Nexus HTTP handlers verify the "aud" claim of an inbound JWT bearer token against
+the server's expected audience. When true, requests whose token audience does not match fail claim extraction and are
+rejected the same way as any other invalid token: Nexus operation requests fail as unauthenticated (HTTP 401), and Nexus
+completion requests currently fail with an internal error (HTTP 500). Has no effect unless a JWT audience is configured (authorization.audience or a custom JWTAudienceMapper) and the claim mapper
+honors AuthInfo.Audience, as the default JWT claim mapper does. Requests without an Authorization header are unaffected.
+When enabling, keep this setting consistent across connected clusters: forwarded Nexus requests carry the original caller's
+token and are checked again by the receiving cluster.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",

@@ -267,7 +267,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableStateRealignsMultipleNexusOperat
 		s.Equal(expectedScheduled, scheduled)
 	}
 	s.Await(func(s *AdminTestSuite) {
-		history := env.GetHistory(env.Namespace().String(), execution)
+		history := env.RequireHistory(s, execution)
 		var scheduled, started int
 		for _, event := range history {
 			switch event.GetEventType() {
@@ -412,12 +412,12 @@ func (s *AdminTestSuite) testAdminRebuildMutableStateRealignsNexusCancellation(c
 
 	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	if cancelInFlight {
-		history := env.GetHistory(env.Namespace().String(), execution)
+		history := env.RequireHistory(parallelsuite.WithContext(ctx, s), execution)
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
 		s.RequireNoHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
 	} else {
 		s.Await(func(s *AdminTestSuite) {
-			history := env.GetHistory(env.Namespace().String(), execution)
+			history := env.RequireHistory(s, execution)
 			s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
 			s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
 		}, 10*time.Second, 50*time.Millisecond)
@@ -429,7 +429,7 @@ func (s *AdminTestSuite) testAdminRebuildMutableStateRealignsNexusCancellation(c
 	if cancelInFlight {
 		close(releaseCancel)
 		s.Await(func(s *AdminTestSuite) {
-			history := env.GetHistory(env.Namespace().String(), execution)
+			history := env.RequireHistory(s, execution)
 			s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
 		}, 10*time.Second, 50*time.Millisecond)
 	} else {
@@ -447,7 +447,7 @@ func (s *AdminTestSuite) testAdminRebuildMutableStateRealignsNexusCancellation(c
 		Error: nexus.NewOperationCanceledErrorf("operation canceled"),
 	})
 	s.Await(func(s *AdminTestSuite) {
-		history := env.GetHistory(env.Namespace().String(), execution)
+		history := env.RequireHistory(s, execution)
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED)
 	}, 10*time.Second, 50*time.Millisecond)
 
@@ -516,7 +516,7 @@ func (s *AdminTestSuite) assertAdminRebuildNexusOperationTrees(
 	expectHSM bool,
 ) []string {
 	s.T().Helper()
-	history := env.GetHistory(env.Namespace().String(), execution)
+	history := env.RequireHistory(parallelsuite.WithContext(ctx, s), execution)
 	var opIDs []string
 	for _, event := range history {
 		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {

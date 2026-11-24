@@ -460,6 +460,27 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
+			name:           "redirect rejected by HTTP client",
+			requestTimeout: time.Hour,
+			httpCallerErr: &url.Error{
+				Op:  "Post",
+				URL: "http://169.254.169.254/latest/meta-data/",
+				Err: commonnexus.ErrRedirectNotAllowed,
+			},
+			expectedMetricOutcome: "unknown-error",
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.Len(t, events, 1)
+				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				require.Contains(t, failure.Message, commonnexus.ErrRedirectNotAllowed.Error())
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
+				require.Len(t, failedCount, 1)
+				require.Equal(t, "caller_error", failedCount[0].Tags["reason"])
+			},
+		},
+		{
 			name:                  "invocation timeout by request timeout",
 			requestTimeout:        2 * time.Millisecond,
 			schedToCloseTimeout:   time.Hour,

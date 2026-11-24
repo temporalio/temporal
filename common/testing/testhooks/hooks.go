@@ -12,6 +12,12 @@ import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
+	testxhooks "go.temporal.io/testx/testhooks"
+	"go.uber.org/fx"
+)
+
+var Module = fx.Options(
+	fx.Provide(NewTestHooks),
 )
 
 // HistoryPassiveReplicationTestHook defines the test-only seams used to replace an
@@ -27,57 +33,40 @@ type HistoryPassiveReplicationTestHook interface {
 // Test hook keys with their return type and scope.
 // Try to avoid global scope as it requires a dedicated test cluster.
 var (
-	MatchingDisableSyncMatch                    = newKey[bool, namespace.ID]()
-	MatchingLBForceReadPartition                = newKey[int, namespace.ID]()
-	MatchingLBForceWritePartition               = newKey[int, namespace.ID]()
-	UpdateWithStartInBetweenLockAndStart        = newKey[func(), namespace.ID]()
-	UpdateWithStartOnClosingWorkflowRetry       = newKey[func(), namespace.ID]()
-	TaskQueuesInDeploymentSyncBatchSize         = newKey[int, global]()
-	MatchingIgnoreRoutingConfigRevisionCheck    = newKey[bool, namespace.ID]()
-	MatchingDeploymentRegisterErrorBackoff      = newKey[time.Duration, namespace.ID]()
-	MatchingForwardTaskDelay                    = newKey[time.Duration, namespace.ID]()
-	HistoryReplicationTaskInterceptor           = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
-	HistoryReplicationTaskConversionInterceptor = newKey[func(historytasks.Task, func() (*replicationspb.ReplicationTask, error)) (*replicationspb.ReplicationTask, error), namespace.ID]()
-	HistoryReplicationDLQWriteInterceptor       = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
-	HistoryChasmRuntimeProvider                 = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
-	HistoryTransferTaskInterceptor              = newKey[func(historytasks.Task, func()), namespace.ID]()
-	NexusRetainTimedOutOperation                = newKey[bool, namespace.Name]()
+	MatchingDisableSyncMatch                    = testxhooks.NewKey[bool, namespace.ID]()
+	MatchingLBForceReadPartition                = testxhooks.NewKey[int, namespace.ID]()
+	MatchingLBForceWritePartition               = testxhooks.NewKey[int, namespace.ID]()
+	UpdateWithStartInBetweenLockAndStart        = testxhooks.NewKey[func(), namespace.ID]()
+	UpdateWithStartOnClosingWorkflowRetry       = testxhooks.NewKey[func(), namespace.ID]()
+	TaskQueuesInDeploymentSyncBatchSize         = testxhooks.NewGlobalKey[int]()
+	MatchingIgnoreRoutingConfigRevisionCheck    = testxhooks.NewKey[bool, namespace.ID]()
+	MatchingDeploymentRegisterErrorBackoff      = testxhooks.NewKey[time.Duration, namespace.ID]()
+	MatchingForwardTaskDelay                    = testxhooks.NewKey[time.Duration, namespace.ID]()
+	HistoryReplicationTaskInterceptor           = testxhooks.NewGlobalKey[func(*replicationspb.ReplicationTask, func() error) error]()
+	HistoryReplicationTaskConversionInterceptor = testxhooks.NewKey[func(historytasks.Task, func() (*replicationspb.ReplicationTask, error)) (*replicationspb.ReplicationTask, error), namespace.ID]()
+	HistoryReplicationDLQWriteInterceptor       = testxhooks.NewGlobalKey[func(*persistencespb.ReplicationTaskInfo, func() error) error]()
+	HistoryChasmRuntimeProvider                 = testxhooks.NewGlobalKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry)]()
+	HistoryTransferTaskInterceptor              = testxhooks.NewKey[func(historytasks.Task, func()), namespace.ID]()
+	NexusRetainTimedOutOperation                = testxhooks.NewKey[bool, namespace.Name]()
 	// HistoryPassiveReplicationTest enables the single-cluster passive replication
 	// test stack for one namespace. Production builds always report it as unset.
-	HistoryPassiveReplicationTest       = newKey[HistoryPassiveReplicationTestHook, namespace.ID]()
-	HistoryDLQTaskDeleteInterceptor     = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
-	NamespaceReplicationTaskInterceptor = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	HistoryPassiveReplicationTest       = testxhooks.NewKey[HistoryPassiveReplicationTestHook, namespace.ID]()
+	HistoryDLQTaskDeleteInterceptor     = testxhooks.NewGlobalKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error)]()
+	NamespaceReplicationTaskInterceptor = testxhooks.NewKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 	// NamespaceReplicationBeforeLocalCommit injects a test failure after the
 	// metadata write succeeds but before the CHASM component commit begins.
-	NamespaceReplicationBeforeLocalCommit     = newKey[func(context.Context) error, namespace.Name]()
-	GRPCRequestFaultGeneratorByNamespaceID    = newKey[grpcfaults.RequestCallback, namespace.ID]()
-	GRPCRequestFaultGeneratorByNamespaceName  = newKey[grpcfaults.RequestCallback, namespace.Name]()
-	GRPCResponseFaultGeneratorByNamespaceID   = newKey[grpcfaults.ResponseCallback, namespace.ID]()
-	GRPCResponseFaultGeneratorByNamespaceName = newKey[grpcfaults.ResponseCallback, namespace.Name]()
-	HTTPRequestFaultGeneratorByNamespaceID    = newKey[httpfaults.RequestCallback, namespace.ID]()
-	HTTPRequestFaultGeneratorByNamespaceName  = newKey[httpfaults.RequestCallback, namespace.Name]()
-	HTTPResponseFaultGeneratorByNamespaceID   = newKey[httpfaults.ResponseCallback, namespace.ID]()
-	HTTPResponseFaultGeneratorByNamespaceName = newKey[httpfaults.ResponseCallback, namespace.Name]()
+	NamespaceReplicationBeforeLocalCommit     = testxhooks.NewKey[func(context.Context) error, namespace.Name]()
+	GRPCRequestFaultGeneratorByNamespaceID    = testxhooks.NewKey[grpcfaults.RequestCallback, namespace.ID]()
+	GRPCRequestFaultGeneratorByNamespaceName  = testxhooks.NewKey[grpcfaults.RequestCallback, namespace.Name]()
+	GRPCResponseFaultGeneratorByNamespaceID   = testxhooks.NewKey[grpcfaults.ResponseCallback, namespace.ID]()
+	GRPCResponseFaultGeneratorByNamespaceName = testxhooks.NewKey[grpcfaults.ResponseCallback, namespace.Name]()
+	HTTPRequestFaultGeneratorByNamespaceID    = testxhooks.NewKey[httpfaults.RequestCallback, namespace.ID]()
+	HTTPRequestFaultGeneratorByNamespaceName  = testxhooks.NewKey[httpfaults.RequestCallback, namespace.Name]()
+	HTTPResponseFaultGeneratorByNamespaceID   = testxhooks.NewKey[httpfaults.ResponseCallback, namespace.ID]()
+	HTTPResponseFaultGeneratorByNamespaceName = testxhooks.NewKey[httpfaults.ResponseCallback, namespace.Name]()
 )
-
-// keyID is a unique identifier for a key, used as a map key.
-type keyID = int64
-
-// global is the scope type for global hooks.
-type global struct{}
-
-// GlobalScope is the singleton value for global hooks.
-var GlobalScope = global{}
-
-// ScopeType indicates the scope of a hook at runtime.
-type ScopeType int
 
 const (
-	ScopeNamespace ScopeType = iota
-	ScopeGlobal
+	ScopeNamespace = testxhooks.ScopeValue
+	ScopeGlobal    = testxhooks.ScopeGlobal
 )
-
-type Key[T any, S any] struct {
-	id        keyID
-	scopeType ScopeType
-}

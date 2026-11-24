@@ -209,7 +209,7 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 		WorkflowId: workflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// Verify if the state is intact even after a CAN
@@ -271,7 +271,7 @@ func (s *WorkerDeploymentSuite) TestForceCAN_WithOverrideState() {
 		WorkflowId: workflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// Verify that the override state is used after CAN
@@ -473,7 +473,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 	lastRelevantRunID := currentDeploymentRunID()
 	for runID := firstRelevantRunID; ; {
 		var nextRunID string
-		for _, event := range env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		for _, event := range env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: deploymentWorkflowID,
 			RunId:      runID,
 		}) {
@@ -3350,7 +3350,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		},
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// Stop the poller so it doesn't keep polling

@@ -217,7 +217,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_LinkResolvesRunID() {
 	s.RunSequential("empty run ID resolves to the reset run", func(s *QueryWorkflowSuite) {
 		var workflowTaskCompletedEventID int64
 		s.Await(func(s *QueryWorkflowSuite) {
-			hist := env.GetHistory(env.Namespace().String(), tv.WithRunID(secondRunID).WorkflowExecution())
+			hist := env.RequireHistory(s, tv.WithRunID(secondRunID).WorkflowExecution())
 			for _, event := range hist {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 					workflowTaskCompletedEventID = event.GetEventId()

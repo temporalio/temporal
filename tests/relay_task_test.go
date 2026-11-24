@@ -96,7 +96,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
 	workflowTaskTimeout := false
 	for range 3 {
-		events := env.GetHistory(env.Namespace().String(), workflowExecution)
+		events := env.RequireHistory(s, workflowExecution)
 		if len(events) >= 8 {
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted

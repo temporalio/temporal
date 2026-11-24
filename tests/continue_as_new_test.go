@@ -264,7 +264,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 
 	var historyEvents []*historypb.HistoryEvent
 	for range 20 {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		})
 		lastEvent := historyEvents[len(historyEvents)-1]
@@ -449,7 +449,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 	minTaskID := int64(0)
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events := env.GetHistory(env.Namespace().String(), executions[0])
+	events := env.RequireHistory(s, executions[0])
 	s.NotEmpty(events)
 	for _, event := range events {
 		s.Greater(event.GetTaskId(), minTaskID)
@@ -458,7 +458,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = env.GetHistory(env.Namespace().String(), executions[1])
+	events = env.RequireHistory(s, executions[1])
 	s.NotEmpty(events)
 	for _, event := range events {
 		s.Greater(event.GetTaskId(), minTaskID)
@@ -551,7 +551,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	s.False(workflowComplete)
 
 	// The original run's history must record the requested backoff on the continue-as-new event.
-	firstRunEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.RunId})
+	firstRunEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.RunId})
 	continuedAsNewEvent := firstRunEvents[len(firstRunEvents)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, continuedAsNewEvent.GetEventType())
 	canAttrs := continuedAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
@@ -571,7 +571,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	s.True(workflowComplete)
 
 	// The new run started with the requested first-workflow-task backoff and ran to completion.
-	finalEvents := env.GetHistory(env.Namespace().String(), newRunExecution)
+	finalEvents := env.RequireHistory(s, newRunExecution)
 	startedAttrs := finalEvents[0].GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(delayStart, startedAttrs.GetFirstWorkflowTaskBackoff().AsDuration())
 	s.Equal(we.RunId, startedAttrs.GetContinuedExecutionRunId())
@@ -682,7 +682,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewMinBackoffDoesNotAccumulate() 
 		})
 		s.NoError(err)
 
-		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      runIDs[len(runIDs)-1],
 		})
@@ -974,7 +974,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
- 14 WorkflowExecutionCompleted`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+ 14 WorkflowExecutionCompleted`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	}))
@@ -1109,14 +1109,14 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
- 10 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+ 10 WorkflowExecutionTerminated`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	}))
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+  2 WorkflowExecutionTerminated`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: childID,
 	}))
 }
@@ -1192,7 +1192,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// Verify workflow task failed
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -1362,7 +1362,7 @@ func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunFromDifferentChain_Firs
 	s.Equal(chain2RunID, desc.WorkflowExecutionInfo.GetFirstRunId())
 
 	// Locate the WorkflowTaskCompleted event in chain1's history to use as reset point.
-	chain1Events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: chain1RunID})
+	chain1Events := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: id, RunId: chain1RunID})
 	var wtCompletedEventID int64
 	for _, ev := range chain1Events {
 		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
@@ -1458,7 +1458,7 @@ func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunAfterContinueAsNew_Firs
 	s.NoError(err)
 
 	// Locate the WorkflowTaskCompleted event in the original (non-current) run to use as reset point.
-	originalEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: originalRunID})
+	originalEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: id, RunId: originalRunID})
 	var wtCompletedEventID int64
 	for _, ev := range originalEvents {
 		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {

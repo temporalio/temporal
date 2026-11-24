@@ -82,6 +82,7 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 
 	nsRegistry := namespace.NewMockRegistry(ctrl)
 	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-ns"), nil).AnyTimes()
+	nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
 	rateLimiter, err := queues.NewPrioritySchedulerRateLimiter(
 		func(string) float64 { return 100 },
