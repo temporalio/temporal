@@ -92,7 +92,7 @@ func timingOutAddresses(timingOut ...string) peerProbeFn {
 	}
 	return func(_ context.Context, _ primitives.ServiceName, address string) error {
 		if set[address] {
-			return status.Error(codes.DeadlineExceeded, "x")
+			return status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: i/o timeout"`)
 		}
 		return nil
 	}
@@ -110,41 +110,56 @@ func probeMetricCounts(capture *metricstest.Capture) map[string]int64 {
 func TestClassifyPeerProbeError(t *testing.T) {
 	doneCtx, cancel := context.WithCancel(context.Background())
 	cancel()
+	probeDeadlineCtx, probeDeadlineCancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer probeDeadlineCancel()
+	probeCanceledCtx, probeCanceledCancel := context.WithCancel(context.Background())
+	probeCanceledCancel()
 	for _, tc := range []struct {
 		name     string
 		roundCtx context.Context
+		probeCtx context.Context
 		err      error
 		want     peerProbeOutcome
 	}{
 		{name: "nil", err: nil, want: peerProbeResponse},
 		{name: "not found", err: status.Error(codes.NotFound, "x"), want: peerProbeResponse},
 		{name: "permission denied", err: status.Error(codes.PermissionDenied, "x"), want: peerProbeResponse},
-		{name: "connection refused", err: status.Error(codes.Unavailable, "dial tcp 10.0.0.1:7234: connect: connection refused"), want: peerProbeRefused},
-		{name: "i/o timeout", err: status.Error(codes.Unavailable, "dial tcp 10.0.0.1:7234: i/o timeout"), want: peerProbeTimeout},
-		{name: "dial context deadline exceeded", err: status.Error(codes.Unavailable, "dial: context deadline exceeded"), want: peerProbeTimeout},
-		{name: "no such host", err: status.Error(codes.Unavailable, "lookup history: no such host"), want: peerProbeUnresolved},
-		{name: "no route to host", err: status.Error(codes.Unavailable, "dial tcp 10.0.0.1:7234: no route to host"), want: peerProbeUnresolved},
-		{name: "network is unreachable", err: status.Error(codes.Unavailable, "dial tcp 10.0.0.1:7234: network is unreachable"), want: peerProbeUnresolved},
-		{name: "other unavailable", err: status.Error(codes.Unavailable, "connection reset by peer"), want: peerProbeUnknown},
+		{name: "connection refused transport", err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: connect: connection refused"`), want: peerProbeRefused},
+		{name: "i/o timeout transport", err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: i/o timeout"`), want: peerProbeTimeout},
+		{name: "dial context deadline exceeded transport", err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial: context deadline exceeded"`), want: peerProbeTimeout},
+		{name: "connect timed out transport", err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: connect: connection timed out"`), want: peerProbeTimeout},
+		{name: "operation timed out transport", err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: operation timed out"`), want: peerProbeTimeout},
+		{name: "no such host transport", err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: lookup history: no such host"`), want: peerProbeUnresolved},
+		{name: "no route to host transport", err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: no route to host"`), want: peerProbeUnresolved},
+		{name: "network is unreachable transport", err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: network is unreachable"`), want: peerProbeUnresolved},
+		{name: "closing transport is not an application response", err: status.Error(codes.Unavailable, "closing transport due to: EOF, received prior goaway: "), want: peerProbeUnknown},
+		{name: "unavailable with unknown origin", err: status.Error(codes.Unavailable, "connection reset by peer"), want: peerProbeUnknown},
+		{name: "unavailable with timeout wording but unknown origin", err: serviceerror.NewUnavailable("application i/o timeout"), want: peerProbeUnknown},
+		{name: "short TCP dial status", err: status.Error(codes.Unavailable, "dial tcp 10.0.0.1:7234: connect: connection timed out"), want: peerProbeTimeout},
+		{name: "short TCP dial service error", err: serviceerror.NewUnavailable("dial tcp 10.0.0.1:7234: connect: connection timed out"), want: peerProbeTimeout},
 		{name: "plain i/o timeout error", err: errors.New("dial tcp 10.0.0.1:7234: i/o timeout"), want: peerProbeTimeout},
 		{name: "plain unrecognized error", err: errors.New("boom"), want: peerProbeUnknown},
 		{name: "wrapped permission denied", err: fmt.Errorf("probe: %w", status.Error(codes.PermissionDenied, "x")), want: peerProbeResponse},
+		{name: "permission denied returned before probe deadline", probeCtx: probeDeadlineCtx, err: status.Error(codes.PermissionDenied, "x"), want: peerProbeResponse},
 		{name: "service error permission denied", err: serviceerror.NewPermissionDenied("x", ""), want: peerProbeResponse},
 		{name: "service error not found", err: serviceerror.NewNotFound("x"), want: peerProbeResponse},
 		{name: "service error connection refused", err: serviceerror.NewUnavailable(`connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: connect: connection refused"`), want: peerProbeRefused},
-		{name: "service error i/o timeout", err: serviceerror.NewUnavailable("dial tcp 10.0.0.1:7234: i/o timeout"), want: peerProbeTimeout},
-		{name: "service error deadline exceeded", err: serviceerror.NewDeadlineExceeded("context deadline exceeded"), want: peerProbeTimeout},
+		{name: "service error i/o timeout transport", err: serviceerror.NewUnavailable(`connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: i/o timeout"`), want: peerProbeTimeout},
+		{name: "service error connection timed out transport", err: serviceerror.NewUnavailable(`connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: connect: connection timed out"`), want: peerProbeTimeout},
+		{name: "service error operation timed out transport", err: serviceerror.NewUnavailable(`connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: operation timed out"`), want: peerProbeTimeout},
+		{name: "remote service error deadline exceeded", err: serviceerror.NewDeadlineExceeded("remote deadline"), want: peerProbeResponse},
 		{name: "service error deadline exceeded after round ended", roundCtx: doneCtx, err: serviceerror.NewDeadlineExceeded("context deadline exceeded"), want: peerProbeUnknown},
-		{name: "service error canceled", err: serviceerror.NewCanceled("x"), want: peerProbeUnknown},
+		{name: "converted closing client connection", err: serviceerror.FromStatus(status.Convert(status.Error(codes.Canceled, "grpc: the client connection is closing"))), want: peerProbeUnknown},
+		{name: "local probe canceled while returning transport error", probeCtx: probeCanceledCtx, err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp: i/o timeout"`), want: peerProbeUnknown},
 		{name: "wrapped service error permission denied", err: fmt.Errorf("wrap: %w", serviceerror.NewPermissionDenied("x", "")), want: peerProbeResponse},
-		{name: "deadline exceeded status", err: status.Error(codes.DeadlineExceeded, "x"), want: peerProbeTimeout},
-		{name: "raw deadline exceeded", err: context.DeadlineExceeded, want: peerProbeTimeout},
+		{name: "remote deadline exceeded status", err: status.Error(codes.DeadlineExceeded, "x"), want: peerProbeResponse},
+		{name: "local probe deadline", probeCtx: probeDeadlineCtx, err: context.DeadlineExceeded, want: peerProbeTimeout},
 		{name: "deadline exceeded after round ended", roundCtx: doneCtx, err: status.Error(codes.DeadlineExceeded, "x"), want: peerProbeUnknown},
 		{name: "raw deadline exceeded after round ended", roundCtx: doneCtx, err: context.DeadlineExceeded, want: peerProbeUnknown},
-		{name: "i/o timeout after round ended", roundCtx: doneCtx, err: status.Error(codes.Unavailable, "dial tcp 10.0.0.1:7234: i/o timeout"), want: peerProbeUnknown},
-		{name: "dial context deadline exceeded after round ended", roundCtx: doneCtx, err: status.Error(codes.Unavailable, "dial: context deadline exceeded"), want: peerProbeUnknown},
-		{name: "service error i/o timeout after round ended", roundCtx: doneCtx, err: serviceerror.NewUnavailable("dial tcp 10.0.0.1:7234: i/o timeout"), want: peerProbeUnknown},
-		{name: "canceled status", err: status.Error(codes.Canceled, "x"), want: peerProbeUnknown},
+		{name: "i/o timeout after round ended", roundCtx: doneCtx, err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: i/o timeout"`), want: peerProbeUnknown},
+		{name: "dial context deadline exceeded after round ended", roundCtx: doneCtx, err: status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial: context deadline exceeded"`), want: peerProbeUnknown},
+		{name: "service error i/o timeout after round ended", roundCtx: doneCtx, err: serviceerror.NewUnavailable(`connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: i/o timeout"`), want: peerProbeUnknown},
+		{name: "closing client connection", err: status.Error(codes.Canceled, "grpc: the client connection is closing"), want: peerProbeUnknown},
 		{name: "raw canceled", err: context.Canceled, want: peerProbeUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -152,7 +167,27 @@ func TestClassifyPeerProbeError(t *testing.T) {
 			if roundCtx == nil {
 				roundCtx = context.Background()
 			}
-			require.Equal(t, tc.want, classifyPeerProbeError(roundCtx, tc.err))
+			probeCtx := tc.probeCtx
+			if probeCtx == nil {
+				probeCtx = roundCtx
+			}
+			require.Equal(t, tc.want, classifyPeerProbeError(roundCtx, probeCtx, tc.err))
+		})
+	}
+}
+
+func TestSampleProbeTargetsUsesDefaultSamplingForSmallRoles(t *testing.T) {
+	for _, hostCount := range []int{3, 4} {
+		t.Run(fmt.Sprintf("%d hosts", hostCount), func(t *testing.T) {
+			monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
+				primitives.HistoryService:  testPeerHosts("history", hostCount),
+				primitives.MatchingService: nil,
+			})
+			cfg := peerHealthCheckConfig{Settings: dynamicconfig.GetTypedPropertyFn(dynamicconfig.DefaultPeerHealthCheckSettings)}
+			targets, planned := newPeerTestChecker(monitor, nil, cfg).sampleProbeTargets()
+
+			require.Len(t, targets, 2)
+			require.Equal(t, 2, planned[primitives.HistoryService])
 		})
 	}
 }
@@ -281,11 +316,11 @@ func TestRunRound_MinFailedHostsPreventsFailure(t *testing.T) {
 		primitives.HistoryService:  testPeerHosts("history", 3),
 		primitives.MatchingService: testPeerHosts("matching", 3),
 	})
-	// Two of three hosts are sampled and exactly one history probe times out: 50% reaches the threshold, but 1 < 2 min hosts.
+	// One of two probes times out, reaching the 50% threshold but falling short of the two-timeout minimum.
 	var historyCalls atomic.Int32
 	probe := func(_ context.Context, role primitives.ServiceName, _ string) error {
 		if role == primitives.HistoryService && historyCalls.Add(1) == 1 {
-			return status.Error(codes.DeadlineExceeded, "x")
+			return status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: i/o timeout"`)
 		}
 		return nil
 	}
@@ -320,13 +355,38 @@ func TestRunRound_ProbeDeadlineCountsAsTimeout(t *testing.T) {
 	require.Equal(t, int64(2), counts["history/response"])
 }
 
+func TestRemoteDeadlineExceededCountsAsResponse(t *testing.T) {
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	checker := newPeerHealthChecker(nil, func(context.Context, primitives.ServiceName, string) error {
+		return serviceerror.NewDeadlineExceeded("remote deadline")
+	}, func(healthpb.HealthCheckResponse_ServingStatus) {},
+		testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second), handler, log.NewNoopLogger())
+
+	result := checker.runProbe(context.Background(), peerProbeTarget{role: primitives.HistoryService, address: "history:7234"})
+	results := make(chan peerProbeResult, 1)
+	results <- result
+	counts, _ := checker.collectProbeResults(context.Background(), map[primitives.ServiceName]int{primitives.HistoryService: 1}, results)
+
+	require.Equal(t, 1, counts[primitives.HistoryService][peerProbeResponse])
+	require.Equal(t, map[string]int64{"history/response": 1}, probeMetricCounts(capture))
+}
+
+func TestProbeCutOffByEndedRoundIsUnknown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	checker := newPeerTestChecker(nil, func(context.Context, primitives.ServiceName, string) error { return nil }, testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second))
+	result := checker.runProbe(ctx, peerProbeTarget{role: primitives.HistoryService, address: "history:7234"})
+	require.Equal(t, peerProbeUnknown, result.outcome)
+}
+
 func TestRunRound_AllSampledTimeOutIsOutage(t *testing.T) {
 	monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
 		primitives.HistoryService:  testPeerHosts("history", 4),
 		primitives.MatchingService: testPeerHosts("matching", 4),
 	})
 	probe := func(context.Context, primitives.ServiceName, string) error {
-		return status.Error(codes.DeadlineExceeded, "x")
+		return status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: i/o timeout"`)
 	}
 	checker := newPeerTestChecker(monitor, probe, testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second))
 
@@ -398,8 +458,8 @@ func TestRunRound_DeadlineCountsUnfinishedAsUnknown(t *testing.T) {
 	checker := newPeerHealthChecker(monitor, probe, func(healthpb.HealthCheckResponse_ServingStatus) {},
 		testPeerHealthCheckConfig(1, 20, 0.5, time.Minute, 50*time.Millisecond), handler, log.NewNoopLogger())
 
-	// Responding probes may also miss the 50ms deadline on a busy machine, so only assert what holds either way.
-	require.Equal(t, peerRoundPass, checker.runRound(context.Background()))
+	// Responding probes may also miss the 50ms deadline on a busy machine, so assert only accounting and the blocked probe's unknown outcome.
+	_ = checker.runRound(context.Background())
 	counts := probeMetricCounts(capture)
 	var total int64
 	for _, n := range counts {
@@ -407,6 +467,34 @@ func TestRunRound_DeadlineCountsUnfinishedAsUnknown(t *testing.T) {
 	}
 	require.Equal(t, int64(4), total, "every planned probe is recorded once")
 	require.GreaterOrEqual(t, counts["history/unknown"], int64(1), "the blocked probe is unknown")
+}
+
+func TestEvaluateRound_UnknownOutcomesPreventDownstreamOutagePass(t *testing.T) {
+	checker := newPeerTestChecker(nil, nil, testPeerHealthCheckConfig(1, 20, 0.5, time.Second, time.Second))
+	planned := map[primitives.ServiceName]int{primitives.HistoryService: 2, primitives.MatchingService: 2}
+	counts := map[primitives.ServiceName]map[peerProbeOutcome]int{
+		primitives.HistoryService:  {peerProbeUnknown: 1, peerProbeTimeout: 1},
+		primitives.MatchingService: {peerProbeUnresolved: 2},
+	}
+
+	require.Equal(t, peerRoundUnknown, checker.evaluateRound(planned, counts, nil))
+	completedOutageCounts := map[primitives.ServiceName]map[peerProbeOutcome]int{
+		primitives.HistoryService:  {peerProbeTimeout: 2},
+		primitives.MatchingService: {peerProbeUnresolved: 2},
+	}
+	require.Equal(t, peerRoundPass, checker.evaluateRound(planned, completedOutageCounts, nil))
+}
+
+func TestEvaluateRoundUnknownProbesCanChangeVerdict(t *testing.T) {
+	checker := newPeerTestChecker(nil, nil, testPeerHealthCheckConfig(1, 20, 0.5, time.Second, time.Second))
+	planned := map[primitives.ServiceName]int{primitives.HistoryService: 4, primitives.MatchingService: 1}
+	counts := map[primitives.ServiceName]map[peerProbeOutcome]int{
+		primitives.HistoryService:  {peerProbeResponse: 1, peerProbeTimeout: 1, peerProbeUnknown: 2},
+		primitives.MatchingService: {peerProbeResponse: 1},
+	}
+	require.Equal(t, peerRoundUnknown, checker.evaluateRound(planned, counts, nil))
+	counts[primitives.HistoryService] = map[peerProbeOutcome]int{peerProbeResponse: 3, peerProbeUnknown: 1}
+	require.Equal(t, peerRoundPass, checker.evaluateRound(planned, counts, nil))
 }
 
 func TestCollectProbeResults_ExpiredRoundKeepsArrivedResults(t *testing.T) {
@@ -427,15 +515,28 @@ func TestCollectProbeResults_ExpiredRoundKeepsArrivedResults(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
 
-	counts := checker.collectProbeResults(ctx, planned, results)
+	counts, representativeErrors := checker.collectProbeResults(ctx, planned, results)
 
-	require.Equal(t, peerRoundFail, checker.evaluateRound(planned, counts))
+	require.Equal(t, peerRoundFail, checker.evaluateRound(planned, counts, representativeErrors))
 	require.Equal(t, map[string]int64{
 		"history/response":  2,
 		"history/timeout":   2,
 		"matching/response": 2,
 		"matching/unknown":  1,
 	}, probeMetricCounts(capture))
+}
+
+func TestCollectProbeResultsKeepsRepresentativeTimeoutError(t *testing.T) {
+	checker := newPeerTestChecker(nil, nil, testPeerHealthCheckConfig(1, 20, 0.5, time.Second, time.Second))
+	permissionErr := serviceerror.NewPermissionDenied("application response", "")
+	timeoutErr := errors.New("transport: Error while dialing: operation timed out")
+	results := make(chan peerProbeResult, 2)
+	results <- peerProbeResult{role: primitives.HistoryService, outcome: peerProbeResponse, err: permissionErr}
+	results <- peerProbeResult{role: primitives.HistoryService, outcome: peerProbeTimeout, err: timeoutErr}
+
+	_, representativeErrors := checker.collectProbeResults(context.Background(), map[primitives.ServiceName]int{primitives.HistoryService: 2}, results)
+
+	require.Same(t, timeoutErr, representativeErrors[primitives.HistoryService])
 }
 
 func TestRunRound_ConcurrencyCapped(t *testing.T) {
@@ -483,6 +584,53 @@ func TestRunRound_ConcurrencyCapped(t *testing.T) {
 	require.Equal(t, int32(peerHealthCheckMaxConcurrentProbes), maxInFlight.Load())
 }
 
+func TestRunRound_ConcurrencyCapIncludesProbesFromEarlierRound(t *testing.T) {
+	gate := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(gate) }) }
+	t.Cleanup(release)
+	entered := make(chan struct{}, 100)
+	var inFlight atomic.Int32
+	probe := func(context.Context, primitives.ServiceName, string) error {
+		inFlight.Add(1)
+		entered <- struct{}{}
+		<-gate
+		inFlight.Add(-1)
+		return nil
+	}
+	monitor := newPeerTestMonitor(t, map[primitives.ServiceName][]membership.HostInfo{
+		primitives.HistoryService:  testPeerHosts("history", 100),
+		primitives.MatchingService: testPeerHosts("matching", 100),
+	})
+	cfg := testPeerHealthCheckConfig(1, 100, 0.5, time.Minute, time.Second)
+	checker := newPeerTestChecker(monitor, probe, cfg)
+
+	firstRoundCtx, cancelFirstRound := context.WithCancel(context.Background())
+	firstRoundDone := make(chan string, 1)
+	go func() { firstRoundDone <- checker.runRound(firstRoundCtx) }()
+	startDeadline := time.NewTimer(5 * time.Second)
+	defer startDeadline.Stop()
+	for range peerHealthCheckMaxConcurrentProbes {
+		select {
+		case <-entered:
+		case <-startDeadline.C:
+			t.Fatal("timed out waiting for first round to fill the shared probe cap")
+		}
+	}
+	require.Equal(t, int32(peerHealthCheckMaxConcurrentProbes), inFlight.Load())
+	cancelFirstRound()
+	select {
+	case verdict := <-firstRoundDone:
+		require.Equal(t, peerRoundUnknown, verdict)
+	case <-time.After(5 * time.Second):
+		t.Fatal("first round did not exit after cancellation")
+	}
+	require.Equal(t, peerRoundUnknown, checker.runRound(context.Background()))
+	require.Empty(t, entered, "the second round must not start probes while earlier probes still hold all slots")
+
+	release()
+}
+
 // statusRecorder captures every setStatus call in order.
 type statusRecorder struct {
 	mu       sync.Mutex
@@ -527,7 +675,7 @@ func newPeerLoopChecker(
 	probe := func(_ context.Context, _ primitives.ServiceName, address string) error {
 		probeCalls.Add(1)
 		if !healthy.Load() && (address == "history-0:7234" || address == "history-1:7234") {
-			return status.Error(codes.DeadlineExceeded, "x")
+			return status.Error(codes.Unavailable, `connection error: desc = "transport: Error while dialing: dial tcp 10.0.0.1:7234: i/o timeout"`)
 		}
 		return nil
 	}
@@ -681,6 +829,13 @@ func TestStart_ZeroIntervalDoesNotPanic(t *testing.T) {
 		checker.Start()
 		checker.Stop()
 	})
+}
+
+func TestPeerHealthCheckIntervalZeroFallsBack(t *testing.T) {
+	cfg := withPeerSettings(testPeerHealthCheckConfig(1, 20, 0.5, time.Second, 5*time.Second), func(s *dynamicconfig.PeerHealthCheckSettings) {
+		s.Interval = 0
+	})
+	require.Equal(t, minPeerHealthCheckInterval, newPeerTestChecker(nil, nil, cfg).interval())
 }
 
 func TestStop_BeforeStartPreventsStart(t *testing.T) {

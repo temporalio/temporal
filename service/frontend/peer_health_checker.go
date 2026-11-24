@@ -51,6 +51,7 @@ var peerHealthCheckRoles = []primitives.ServiceName{primitives.HistoryService, p
 type (
 	// peerProbeFn probes one host of the given role. It returns nil for any answer from the host, NOT_SERVING included,
 	// and otherwise returns the raw RPC error, unwrapped or wrapped so errors.Is and status.Code still work, for the checker to classify.
+	// It must return promptly when its context ends to free a shared probe slot.
 	peerProbeFn func(ctx context.Context, role primitives.ServiceName, address string) error
 
 	peerHealthCheckConfig struct {
@@ -76,6 +77,7 @@ type (
 		status      int32
 		cancel      context.CancelFunc
 		wg          sync.WaitGroup
+		probeSlots  chan struct{}
 	}
 
 	peerProbeTarget struct {
@@ -86,6 +88,7 @@ type (
 	peerProbeResult struct {
 		role    primitives.ServiceName
 		outcome peerProbeOutcome
+		err     error
 	}
 )
 
@@ -104,6 +107,7 @@ func newPeerHealthChecker(
 		config:         config,
 		metricsHandler: metricsHandler,
 		logger:         logger,
+		probeSlots:     make(chan struct{}, peerHealthCheckMaxConcurrentProbes),
 	}
 }
 
@@ -125,7 +129,8 @@ func samplePeerHosts(hosts []membership.HostInfo, pct float64, maxHosts int) []m
 // Probes the round deadline cuts off, or that never start, count as unknown. A role without members or a resolver makes the verdict unknown, unless another role fails.
 // The verdict is unknown when no role could be probed.
 func (c *peerHealthChecker) runRound(ctx context.Context) string {
-	ctx, cancel := context.WithTimeout(ctx, c.roundTimeout())
+	parentCtx := ctx
+	ctx, cancel := context.WithTimeout(parentCtx, c.roundTimeout())
 	defer cancel()
 
 	targets, plannedPerRole := c.sampleProbeTargets()
@@ -135,8 +140,11 @@ func (c *peerHealthChecker) runRound(ctx context.Context) string {
 	// Buffered to the total probe count so probes that outlive the round never block.
 	results := make(chan peerProbeResult, len(targets))
 	c.launchProbes(ctx, targets, results)
-	counts := c.collectProbeResults(ctx, plannedPerRole, results)
-	return c.evaluateRound(plannedPerRole, counts)
+	counts, representativeErrors := c.collectProbeResults(ctx, plannedPerRole, results)
+	if parentCtx.Err() != nil {
+		return peerRoundUnknown
+	}
+	return c.evaluateRound(plannedPerRole, counts, representativeErrors)
 }
 
 // sampleProbeTargets samples hosts for every role. A role with a resolver error or no available hosts is logged and left out.
@@ -162,18 +170,20 @@ func (c *peerHealthChecker) sampleProbeTargets() ([]peerProbeTarget, map[primiti
 	return targets, plannedPerRole
 }
 
-// launchProbes starts one goroutine per target, with at most peerHealthCheckMaxConcurrentProbes running at once.
+// launchProbes starts one goroutine per target, with at most peerHealthCheckMaxConcurrentProbes running at once across rounds.
 // A goroutine that is still waiting for a slot when the round ends exits without sending a result.
 func (c *peerHealthChecker) launchProbes(ctx context.Context, targets []peerProbeTarget, results chan<- peerProbeResult) {
-	sem := make(chan struct{}, peerHealthCheckMaxConcurrentProbes)
 	for _, target := range targets {
 		go func() {
 			select {
-			case sem <- struct{}{}:
+			case c.probeSlots <- struct{}{}:
 			case <-ctx.Done():
 				return
 			}
-			defer func() { <-sem }()
+			defer func() { <-c.probeSlots }()
+			if ctx.Err() != nil {
+				return
+			}
 			results <- c.runProbe(ctx, target)
 		}()
 	}
@@ -183,45 +193,69 @@ func (c *peerHealthChecker) runProbe(ctx context.Context, target peerProbeTarget
 	probeCtx, cancel := context.WithTimeout(ctx, c.probeTimeout())
 	defer cancel()
 	err := c.probe(probeCtx, target.role, target.address)
-	outcome := classifyPeerProbeError(ctx, err)
+	outcome := classifyPeerProbeError(ctx, probeCtx, err)
 	if err != nil {
 		c.logger.Debug("peer health probe failed", tag.NewStringTag("target-service", string(target.role)), tag.NewStringTag("address", target.address), tag.NewStringTag("outcome", string(outcome)), tag.Error(err))
 	}
-	return peerProbeResult{role: target.role, outcome: outcome}
+	return peerProbeResult{role: target.role, outcome: outcome, err: err}
 }
 
-// classifyPeerProbeError maps a probe error to an outcome. roundCtx is the round context, not the probe context.
-func classifyPeerProbeError(roundCtx context.Context, err error) peerProbeOutcome {
+// classifyPeerProbeError maps a probe error to an outcome using both round and probe context state.
+func classifyPeerProbeError(roundCtx, probeCtx context.Context, err error) peerProbeOutcome {
+	if roundCtx.Err() != nil {
+		return peerProbeUnknown
+	}
 	if err == nil {
 		return peerProbeResponse
 	}
 	// Internode connections convert RPC errors to serviceerror types, which status.Code does not understand.
 	code := serviceerror.ToStatus(err).Code()
-	switch {
-	case code == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded):
-		// The round deadline cutting a probe short says nothing about the host.
-		if roundCtx.Err() != nil {
-			return peerProbeUnknown
-		}
-		return peerProbeTimeout
-	case code == codes.Canceled || errors.Is(err, context.Canceled):
-		return peerProbeUnknown
-	}
-	var svcErr serviceerror.ServiceError
-	if _, isGRPC := status.FromError(err); (isGRPC || errors.As(err, &svcErr)) && code != codes.Unavailable {
-		// The server answered, e.g. PermissionDenied or NotFound.
+	_, isGRPC := status.FromError(err)
+	_, isServiceError := errors.AsType[serviceerror.ServiceError](err)
+
+	if (isGRPC || isServiceError) && code != codes.Unavailable && code != codes.DeadlineExceeded && code != codes.Canceled {
+		// A non-transport application status confirms that the peer answered, even if the probe deadline expires just afterward.
 		return peerProbeResponse
 	}
-	// shortcut: matches grpc-go transport error text; switch to a custom dialer if the text proves unstable.
-	msg := err.Error()
+	if code == codes.Canceled || errors.Is(err, context.Canceled) {
+		// Closing the local gRPC connection can produce Canceled while the probe context is live.
+		return peerProbeUnknown
+	}
+	if probeCtx.Err() != nil {
+		if errors.Is(probeCtx.Err(), context.DeadlineExceeded) {
+			return peerProbeTimeout
+		}
+		return peerProbeUnknown
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return peerProbeTimeout
+	case code == codes.DeadlineExceeded:
+		// grpc-go can observe an elapsed deadline before the context timer signals cancellation.
+		if deadline, ok := roundCtx.Deadline(); ok && time.Until(deadline) <= 0 {
+			return peerProbeUnknown
+		}
+		if deadline, ok := probeCtx.Deadline(); ok && time.Until(deadline) <= 0 {
+			return peerProbeTimeout
+		}
+		return peerProbeResponse
+	}
+	return classifyPeerTransportError(err.Error(), code == codes.Unavailable && (isGRPC || isServiceError))
+}
+
+func classifyPeerTransportError(msg string, unavailableStatus bool) peerProbeOutcome {
+	if unavailableStatus {
+		hasTransportDetail := strings.Contains(msg, "transport: Error while dialing") || strings.Contains(msg, "connection error: desc") || strings.Contains(msg, "closing transport due to:") || strings.Contains(msg, "dial tcp ") || strings.Contains(msg, "dial: ") || strings.Contains(msg, "lookup ")
+		if !hasTransportDetail {
+			// The internode client also wraps peer application errors as Unavailable.
+			return peerProbeUnknown
+		}
+	}
+	// These strings come from grpc-go transport errors or direct dial failures.
 	switch {
 	case strings.Contains(msg, "connection refused"):
 		return peerProbeRefused
-	case strings.Contains(msg, "i/o timeout"), strings.Contains(msg, "context deadline exceeded"):
-		// Same rule as the DeadlineExceeded case above: a probe cut short by the round says nothing about the host.
-		if roundCtx.Err() != nil {
-			return peerProbeUnknown
-		}
+	case strings.Contains(msg, "i/o timeout"), strings.Contains(msg, "context deadline exceeded"), strings.Contains(msg, "connection timed out"), strings.Contains(msg, "operation timed out"):
 		return peerProbeTimeout
 	case strings.Contains(msg, "no such host"), strings.Contains(msg, "no route to host"), strings.Contains(msg, "network is unreachable"):
 		return peerProbeUnresolved
@@ -236,8 +270,15 @@ func (c *peerHealthChecker) collectProbeResults(
 	ctx context.Context,
 	plannedPerRole map[primitives.ServiceName]int,
 	results <-chan peerProbeResult,
-) map[primitives.ServiceName]map[peerProbeOutcome]int {
+) (map[primitives.ServiceName]map[peerProbeOutcome]int, map[primitives.ServiceName]error) {
 	counts := make(map[primitives.ServiceName]map[peerProbeOutcome]int, len(plannedPerRole))
+	representativeErrors := make(map[primitives.ServiceName]error, len(plannedPerRole))
+	record := func(r peerProbeResult) {
+		counts[r.role][r.outcome]++
+		if r.outcome == peerProbeTimeout && representativeErrors[r.role] == nil {
+			representativeErrors[r.role] = r.err
+		}
+	}
 	total := 0
 	for role, planned := range plannedPerRole {
 		counts[role] = make(map[peerProbeOutcome]int)
@@ -247,12 +288,11 @@ collect:
 	for range total {
 		select {
 		case r := <-results:
-			counts[r.role][r.outcome]++
+			record(r)
 		case <-ctx.Done():
 			// Results already in the channel are real answers, so count them before giving up on the rest.
 			for len(results) > 0 {
-				r := <-results
-				counts[r.role][r.outcome]++
+				record(<-results)
 			}
 			// Only a round deadline is worth a warning; a cancelled parent means shutdown.
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -263,7 +303,7 @@ collect:
 	}
 	// A round cut short by Stop is discarded by tick, so it records nothing.
 	if errors.Is(ctx.Err(), context.Canceled) {
-		return counts
+		return counts, representativeErrors
 	}
 	for role, planned := range plannedPerRole {
 		reported := 0
@@ -278,7 +318,7 @@ collect:
 			}
 		}
 	}
-	return counts
+	return counts, representativeErrors
 }
 
 // evaluateRound judges each role on its own, so roles are never combined.
@@ -287,6 +327,7 @@ collect:
 func (c *peerHealthChecker) evaluateRound(
 	plannedPerRole map[primitives.ServiceName]int,
 	counts map[primitives.ServiceName]map[peerProbeOutcome]int,
+	representativeErrors map[primitives.ServiceName]error,
 ) string {
 	threshold := c.failureThreshold()
 	minFailedHosts := c.minFailedHosts()
@@ -303,20 +344,40 @@ func (c *peerHealthChecker) evaluateRound(
 		roleCounts := counts[role]
 		timeouts := roleCounts[peerProbeTimeout]
 		logRole := func(msg string) {
-			c.logger.Warn(msg,
+			tags := []tag.Tag{
 				tag.NewStringTag("target-service", string(role)),
 				tag.NewInt("planned", planned),
 				tag.NewInt("timeout", timeouts),
 				tag.NewInt("refused", roleCounts[peerProbeRefused]),
-				tag.NewInt("unknown", roleCounts[peerProbeUnknown]))
+				tag.NewInt("unresolved", roleCounts[peerProbeUnresolved]),
+				tag.NewInt("unknown", roleCounts[peerProbeUnknown]),
+			}
+			if err := representativeErrors[role]; err != nil {
+				tags = append(tags, tag.Error(err))
+			}
+			c.logger.Warn(msg, tags...)
 		}
 		if roleCounts[peerProbeResponse]+roleCounts[peerProbeRefused] == 0 {
+			if roleCounts[peerProbeUnknown] > 0 {
+				// Uncertain probe evidence cannot support a downstream-outage pass.
+				logRole("peer health check has unknown probe outcomes and no reachable hosts")
+				if verdict == peerRoundPass {
+					verdict = peerRoundUnknown
+				}
+				continue
+			}
 			logRole("peer health check found no reachable hosts, treating as downstream outage")
 			continue
 		}
-		if float64(timeouts)/float64(planned) >= threshold && timeouts >= minFailedHosts {
+		meetsFailureThreshold := func(n int) bool {
+			return n >= minFailedHosts && float64(n)/float64(planned) >= threshold
+		}
+		if meetsFailureThreshold(timeouts) {
 			logRole("peer health check role failed")
 			verdict = peerRoundFail
+		} else if verdict == peerRoundPass && meetsFailureThreshold(timeouts+roleCounts[peerProbeUnknown]) {
+			// The unfinished or inconclusive probes could still change the verdict.
+			verdict = peerRoundUnknown
 		}
 	}
 	return verdict
