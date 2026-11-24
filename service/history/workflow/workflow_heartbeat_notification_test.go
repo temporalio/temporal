@@ -158,7 +158,7 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			shard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
 			logs := make(chan string, 1)
 			logger := log.NewMockLogger(ctrl)
-			logger.EXPECT().Warn(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { logs <- msg }).AnyTimes()
+			logger.EXPECT().Error(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { logs <- msg }).AnyTimes()
 			logger.EXPECT().Info(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...tag.Tag) { logs <- msg }).AnyTimes()
 			shard.EXPECT().GetLogger().Return(logger).AnyTimes()
 			delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)

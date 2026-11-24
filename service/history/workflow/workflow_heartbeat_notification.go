@@ -148,7 +148,7 @@ func (c *ContextImpl) handleWorkflowHeartbeatNotification(
 	if firstBufferedInput {
 		notification, err := NewWorkflowHeartbeatNotification(c.MutableState, filteredNewBufferedEventTypes[0])
 		if err != nil {
-			c.logger.Warn("WHN: Unable to prepare workflow heartbeat notification", tag.Error(err))
+			c.logger.Error("WHN: Unable to prepare workflow heartbeat notification", tag.Error(err))
 		} else {
 			SendWorkflowHeartbeatNotification(ctx, shardCtx, notification)
 		}
@@ -212,7 +212,7 @@ func SendWorkflowHeartbeatNotification(
 	go func() {
 		matchingClient, err := shardCtx.GetMatchingClient()
 		if err != nil {
-			shardCtx.GetLogger().Warn("WHN: Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
+			shardCtx.GetLogger().Error("WHN: Unable to get Matching client for workflow heartbeat notification", tag.Error(err))
 			return
 		}
 		command := &workerpb.WorkerCommand{Type: &workerpb.WorkerCommand_WorkflowHeartbeatNotification{
@@ -226,7 +226,7 @@ func SendWorkflowHeartbeatNotification(
 		}}
 		requestData, err := proto.Marshal(&workerservicepb.ExecuteCommandsRequest{Commands: []*workerpb.WorkerCommand{command}})
 		if err != nil {
-			shardCtx.GetLogger().Warn("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
+			shardCtx.GetLogger().Error("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
 			return
 		}
 		// TODO(experimental@whn): relax WorkflowHeartbeatNotificationDispatchTimeout once Matching keeps a shorter
@@ -255,47 +255,57 @@ func SendWorkflowHeartbeatNotification(
 				}},
 			},
 		})
-		handler := shardCtx.GetMetricsHandler().WithTags(
-			metrics.NamespaceTag(notification.namespaceName),
-			metrics.EventTypeTag(notification.inputEventTypeName),
-		)
-		metrics.WorkflowHeartbeatNotificationDeliveryLatency.With(handler).Record(time.Since(dispatchStart))
-		var result commonnexus.DispatchResult
-		if err == nil {
-			result = commonnexus.ClassifyStartOperationDispatch(resp)
-		}
-		resultTag := workflowHeartbeatNotificationResult(result, err)
-		var workerResult *workerpb.WorkflowHeartbeatNotificationResult
-		if result.Outcome == commonnexus.DispatchOutcomeSyncSuccess {
-			workerResult = decodeWorkflowHeartbeatNotificationResult(resp)
-			resultTag = "invalid_response"
-			if workerResult != nil {
-				resultTag = workerpb.WorkflowHeartbeatNotificationResult_Outcome_name[int32(workerResult.GetOutcome())]
-			}
-		}
-		metrics.WorkflowHeartbeatNotificationResults.With(handler).Record(1, metrics.StringTag("result", resultTag))
-		logger := log.With(shardCtx.GetLogger(),
-			tag.WorkflowNamespace(notification.namespaceName),
-			tag.WorkflowID(notification.workflowKey.WorkflowID),
-			tag.WorkflowRunID(notification.workflowKey.RunID),
-		)
-		switch {
-		case err != nil:
-			logger.Warn("WHN: Unable to dispatch workflow heartbeat notification", tag.Error(err))
-		case result.Outcome == commonnexus.DispatchOutcomeRequestTimeout:
-			// No worker took the notification in time, which is expected for best effort delivery.
-		case workerResult.GetOutcome() == workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH:
-			logger.Info("WHN: Workflow heartbeat notification task token mismatch",
-				tag.NewStringTag("event_type", notification.inputEventTypeName),
-				tag.NewStringTag("notification_task_token", base64.StdEncoding.EncodeToString(notification.taskToken)),
-				tag.NewStringTag("current_task_token", base64.StdEncoding.EncodeToString(workerResult.GetCurrentTaskToken())),
-			)
-		default:
-			if workerErr := commonnexus.DispatchResultToError(result); workerErr != nil {
-				logger.Warn("WHN: Worker failed workflow heartbeat notification", tag.Error(workerErr))
-			}
-		}
+		recordWorkflowHeartbeatNotificationResult(shardCtx, notification, resp, err, time.Since(dispatchStart))
 	}()
+}
+
+func recordWorkflowHeartbeatNotificationResult(
+	shardCtx historyi.ShardContext,
+	notification *WorkflowHeartbeatNotification,
+	resp *matchingservice.DispatchNexusTaskResponse,
+	err error,
+	latency time.Duration,
+) {
+	handler := shardCtx.GetMetricsHandler().WithTags(
+		metrics.NamespaceTag(notification.namespaceName),
+		metrics.EventTypeTag(notification.inputEventTypeName),
+	)
+	metrics.WorkflowHeartbeatNotificationDeliveryLatency.With(handler).Record(latency)
+	var result commonnexus.DispatchResult
+	if err == nil {
+		result = commonnexus.ClassifyStartOperationDispatch(resp)
+	}
+	resultTag := workflowHeartbeatNotificationResult(result, err)
+	var workerResult *workerpb.WorkflowHeartbeatNotificationResult
+	if result.Outcome == commonnexus.DispatchOutcomeSyncSuccess {
+		workerResult = decodeWorkflowHeartbeatNotificationResult(resp)
+		resultTag = "invalid_response"
+		if workerResult != nil {
+			resultTag = workerpb.WorkflowHeartbeatNotificationResult_Outcome_name[int32(workerResult.GetOutcome())]
+		}
+	}
+	metrics.WorkflowHeartbeatNotificationResults.With(handler).Record(1, metrics.StringTag("result", resultTag))
+	logger := log.With(shardCtx.GetLogger(),
+		tag.WorkflowNamespace(notification.namespaceName),
+		tag.WorkflowID(notification.workflowKey.WorkflowID),
+		tag.WorkflowRunID(notification.workflowKey.RunID),
+	)
+	switch {
+	case err != nil:
+		logger.Error("WHN: Unable to dispatch workflow heartbeat notification", tag.Error(err))
+	case result.Outcome == commonnexus.DispatchOutcomeRequestTimeout:
+		// No worker took the notification in time, which is expected for best effort delivery.
+	case workerResult.GetOutcome() == workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_TASK_TOKEN_MISMATCH:
+		logger.Info("WHN: Workflow heartbeat notification task token mismatch",
+			tag.NewStringTag("event_type", notification.inputEventTypeName),
+			tag.NewStringTag("notification_task_token", base64.StdEncoding.EncodeToString(notification.taskToken)),
+			tag.NewStringTag("current_task_token", base64.StdEncoding.EncodeToString(workerResult.GetCurrentTaskToken())),
+		)
+	default:
+		if workerErr := commonnexus.DispatchResultToError(result); workerErr != nil {
+			logger.Error("WHN: Worker failed workflow heartbeat notification", tag.Error(workerErr))
+		}
+	}
 }
 
 // workflowHeartbeatNotificationResult reuses the Nexus dispatch outcome tag values for the worker's answer.

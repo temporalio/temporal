@@ -148,7 +148,7 @@ func (u *Updater) ApplyRequest(
 	if u.firstBufferedForWorkflowHeartbeatNotification {
 		u.whnNotification, err = workflow.NewWorkflowHeartbeatNotification(ms, workflow.WorkflowHeartbeatNotificationUpdateAdmittedMetricTag)
 		if err != nil {
-			u.shardCtx.GetLogger().Warn("WHN: Unable to prepare workflow heartbeat notification", tag.Error(err))
+			u.shardCtx.GetLogger().Error("WHN: Unable to prepare workflow heartbeat notification", tag.Error(err))
 		}
 	}
 	u.nexusSerializationContext = common.CloneProto(u.upd.NexusSerializationContext())
