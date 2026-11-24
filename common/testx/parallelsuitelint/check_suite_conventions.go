@@ -2,7 +2,6 @@ package parallelsuitelint
 
 import (
 	"go/ast"
-	"go/types"
 
 	"golang.org/x/tools/go/analysis"
 )
@@ -58,7 +57,7 @@ func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr) {
 			break
 		}
 		switch fn.Name() {
-		case "Run", "RunSequential", "Await", "Awaitf":
+		case "Run", "RunSequential":
 			for _, arg := range call.Args {
 				if callback, ok := ast.Unparen(arg).(*ast.FuncLit); ok {
 					checkSuiteNames(pass, callback.Type.Params.List, "suite callback parameter must be named s")
@@ -69,7 +68,6 @@ func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr) {
 		default:
 		}
 	default:
-		checkSuiteAwaitCall(pass, call, fn)
 	}
 
 	if !isSelector || !suiteHandle(pass, sel.X) {
@@ -109,77 +107,6 @@ func suiteAccessor(pass *analysis.Pass, expr ast.Expr) *ast.SelectorExpr {
 		return nil
 	}
 	return sel
-}
-
-// checkSuiteAwaitCall flags standalone await calls that already use the suite's scope.
-func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, fn *types.Func) {
-	name := fn.Name()
-	var method string
-	handleIndex := 0
-	switch name {
-	case "Require":
-		method, handleIndex = "Await", 1
-	case "Requiref":
-		method, handleIndex = "Awaitf", 1
-	case "RequireTrue":
-		method = "AwaitTrue"
-	case "RequireTruef":
-		method = "AwaitTruef"
-	case "Rcv", "Snd":
-		method = name
-	default:
-		return
-	}
-	if len(call.Args) <= handleIndex || !isAwaitFunction(fn) {
-		return
-	}
-	handle := suiteAccessor(pass, call.Args[handleIndex])
-	if handle == nil || (handle.Sel.Name != "T" && handle.Sel.Name != "TB") {
-		return
-	}
-	if handleIndex == 1 {
-		ctx := suiteAccessor(pass, call.Args[0])
-		if ctx == nil || ctx.Sel.Name != "Context" || !sameSuiteReceiver(pass, ctx.X, handle.X) {
-			return
-		}
-	}
-	pass.Reportf(call.Pos(), "use suite %s instead of await.%s", method, name)
-}
-
-func isAwaitFunction(fn *types.Func) bool {
-	if fn.Signature().Recv() != nil {
-		return false
-	}
-
-	const awaitPath = "go.temporal.io/testx/await"
-	pkg := fn.Pkg()
-	if pkg.Path() == awaitPath {
-		return true
-	}
-
-	alias, ok := pkg.Scope().Lookup("T").(*types.TypeName)
-	if !ok || !alias.IsAlias() {
-		return false
-	}
-	awaitType, ok := types.Unalias(alias.Type()).(*types.Named)
-	if !ok {
-		return false
-	}
-	obj := awaitType.Obj()
-	if obj.Pkg() == nil || obj.Pkg().Path() != awaitPath || obj.Name() != "T" {
-		return false
-	}
-
-	if original, ok := obj.Pkg().Scope().Lookup(fn.Name()).(*types.Func); ok {
-		return types.Identical(fn.Signature(), original.Signature())
-	}
-	return matchesAwaitSignature(fn, awaitType)
-}
-
-func sameSuiteReceiver(pass *analysis.Pass, a, b ast.Expr) bool {
-	left, leftOK := ast.Unparen(a).(*ast.Ident)
-	right, rightOK := ast.Unparen(b).(*ast.Ident)
-	return leftOK && rightOK && pass.TypesInfo.ObjectOf(left) == pass.TypesInfo.ObjectOf(right)
 }
 
 func assertionAccessor(pass *analysis.Pass, expr ast.Expr) bool {
