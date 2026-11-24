@@ -25,12 +25,7 @@ func (p *PQDriver) CreateRefreshableConnection(buildDSN func() (string, error)) 
 		},
 		&pq.Driver{},
 	)
-	db := sqlx.NewDb(sql.OpenDB(c), pqDriverName)
-	if err := db.Ping(); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	return db, nil
+	return sqlx.NewDb(sql.OpenDB(c), pqDriverName), nil
 }
 
 func (p *PQDriver) IsDupEntryError(err error) bool {

@@ -43,12 +43,7 @@ func (p *PGXDriver) CreateRefreshableConnection(buildDSN func() (string, error))
 		},
 		stdlib.GetDefaultDriver(),
 	)
-	db := sqlx.NewDb(sql.OpenDB(c), pgxDriverName)
-	if err := db.Ping(); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	return db, nil
+	return sqlx.NewDb(sql.OpenDB(c), pgxDriverName), nil
 }
 
 // registerCustomTypes overrides pgx's default type mapping.
