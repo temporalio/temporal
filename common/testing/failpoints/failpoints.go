@@ -1,5 +1,6 @@
 // Package failpoints declares the failpoints of the Temporal server. Server code executes them
-// through its test hooks, scoped to a namespace ID; they only fire in builds with the test_dep tag.
+// through the server's failpoint Source, scoped to a namespace ID; they only fire if the startup switch
+// enabled failpoints (see Decide).
 package failpoints
 
 import "go.temporal.io/testx/failpoint"

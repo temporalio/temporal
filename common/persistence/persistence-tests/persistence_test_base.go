@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/temporal/environment"
 )
 
@@ -261,7 +260,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		metrics.NoopMetricsHandler,
 		s.TracerProvider,
 		serializer,
-		testhooks.TestHooks{},
+		nil,
 	)
 	factory := client.NewFactory(
 		dataStoreFactory,

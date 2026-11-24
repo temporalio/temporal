@@ -2,8 +2,6 @@
 
 package testhooks
 
-import "go.temporal.io/testx/failpoint"
-
 // TestHooks (in production mode) is an empty struct just so the build works.
 // See TestHooks in test_impl.go.
 //
@@ -20,11 +18,6 @@ func NewTestHooks() TestHooks {
 // Enabled returns false. Test hooks are only enabled with -tags=test_dep.
 func (TestHooks) Enabled() bool {
 	return false
-}
-
-// Failpoints returns nil. Failpoints never fire in production mode.
-func (TestHooks) Failpoints() failpoint.Registry {
-	return nil
 }
 
 // Get gets the value of a test hook. In production mode it always returns the zero value and

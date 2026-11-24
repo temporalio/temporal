@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package persistencefaultstest_test
 
 import (
@@ -10,7 +8,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/persistencefaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
 )
 
@@ -21,15 +18,15 @@ func TestWithFailpoints(t *testing.T) {
 	updateTarget := config.FaultInjectionTarget{Store: config.ExecutionStoreName, Method: "UpdateWorkflowExecution"}
 	createTarget := config.FaultInjectionTarget{Store: config.ExecutionStoreName, Method: "CreateWorkflowExecution"}
 
-	testHooks := testhooks.NewTestHooks()
+	source := failpoints.NewEnabledSource()
 	key := failpoints.PersistenceKey(string(config.ExecutionStoreName), "UpdateWorkflowExecution")
 	fp := failpoint.NewFailpoint[error](key)
 	fp.Return(injectedErr, failpoint.Always)
-	testHooks.Failpoints().Set(key, fp)
+	source.Failpoints().Set(key, fp)
 
 	t.Run("failpoint fails the method", func(t *testing.T) {
 		t.Parallel()
-		fiConfig := persistencefaultstest.WithFailpoints(nil, testHooks)
+		fiConfig := persistencefaultstest.WithFailpoints(nil, source)
 		require.ErrorIs(t, fiConfig.Injector(updateTarget), injectedErr)
 		require.NoError(t, fiConfig.Injector(createTarget))
 	})
@@ -43,7 +40,7 @@ func TestWithFailpoints(t *testing.T) {
 			}
 			return nil
 		}}
-		fiConfig := persistencefaultstest.WithFailpoints(original, testHooks)
+		fiConfig := persistencefaultstest.WithFailpoints(original, source)
 		require.ErrorIs(t, fiConfig.Injector(createTarget), previousErr)
 		require.ErrorIs(t, fiConfig.Injector(updateTarget), injectedErr)
 		require.NotSame(t, original, fiConfig)
@@ -52,11 +49,11 @@ func TestWithFailpoints(t *testing.T) {
 	t.Run("failpoint scoped to a namespace fails only its requests", func(t *testing.T) {
 		t.Parallel()
 		createKey := failpoints.PersistenceKey(string(config.ExecutionStoreName), "CreateWorkflowExecution")
-		scopedTestHooks := testhooks.NewTestHooks()
+		scopedSource := failpoints.NewEnabledSource()
 		scopedFP := failpoint.NewFailpoint[error](createKey.ForScope("ns"))
 		scopedFP.Return(injectedErr, failpoint.Always)
-		scopedTestHooks.Failpoints().Set(createKey.ForScope("ns"), scopedFP)
-		fiConfig := persistencefaultstest.WithFailpoints(nil, scopedTestHooks)
+		scopedSource.Failpoints().Set(createKey.ForScope("ns"), scopedFP)
+		fiConfig := persistencefaultstest.WithFailpoints(nil, scopedSource)
 
 		inNamespace := createTarget
 		inNamespace.NamespaceID = "ns"
@@ -67,10 +64,10 @@ func TestWithFailpoints(t *testing.T) {
 		require.NoError(t, fiConfig.Injector(createTarget))
 	})
 
-	t.Run("zero test hooks leave the config unchanged", func(t *testing.T) {
+	t.Run("disabled failpoints leave the config unchanged", func(t *testing.T) {
 		t.Parallel()
 		original := &config.FaultInjection{}
-		require.Same(t, original, persistencefaultstest.WithFailpoints(original, testhooks.TestHooks{}))
-		require.Nil(t, persistencefaultstest.WithFailpoints(nil, testhooks.TestHooks{}))
+		require.Same(t, original, persistencefaultstest.WithFailpoints(original, failpoints.NewSource(failpoints.Decision{})))
+		require.Nil(t, persistencefaultstest.WithFailpoints(nil, failpoints.NewSource(failpoints.Decision{})))
 	})
 }

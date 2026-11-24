@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/multierr"
 )
 
@@ -168,7 +167,7 @@ func initSystemNamespaces(
 		metricsHandler,
 		telemetry.NoopTracerProvider,
 		serializer,
-		testhooks.TestHooks{},
+		nil, // failpoints are not installed for the persistence of the cluster metadata setup
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,

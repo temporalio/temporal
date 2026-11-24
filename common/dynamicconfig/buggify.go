@@ -11,8 +11,8 @@ var (
 	buggifiable   = map[Key][]any{}
 )
 
-// Buggifiable marks setting as one that test builds may randomize when they run with BUGGIFY, and
-// returns it. The owner of the setting marks it, next to its declaration, and lists alternative
+// Buggifiable marks setting as one that servers with failpoints enabled may randomize when they
+// run with BUGGIFY, and returns it. The owner of the setting marks it, next to its declaration, and lists alternative
 // values that are legal in every deployment and likely to expose bugs, such as a batch size of 1.
 // A BUGGIFY run picks one of them for the whole run from its seed, unless dynamic config sets a
 // value without constraints for the setting. It has no effect on builds without BUGGIFY, and

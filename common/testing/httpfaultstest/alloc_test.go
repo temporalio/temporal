@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package httpfaultstest_test
 
 import (
@@ -8,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/httpfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint/buggify"
 )
 
@@ -23,18 +21,18 @@ func TestWrap_Allocations(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPost, "http://example.com/callback", nil)
 	require.NoError(t, err)
 
-	buggifyHooks := func(activation float64) testhooks.TestHooks {
-		testHooks := testhooks.NewTestHooks()
-		require.NoError(t, buggify.For(testHooks.Failpoints()).Set(buggify.Config{Seed: 1, Activation: activation, Fire: 0, Error: "Unavailable"}))
-		return testHooks
+	buggifyHooks := func(activation float64) *failpoints.Source {
+		source := failpoints.NewEnabledSource()
+		require.NoError(t, buggify.For(source.Failpoints()).Set(buggify.Config{Seed: 1, Activation: activation, Fire: 0, Error: "Unavailable"}))
+		return source
 	}
-	for name, testHooks := range map[string]testhooks.TestHooks{
-		"no failpoints":               testhooks.NewTestHooks(),
+	for name, source := range map[string]*failpoints.Source{
+		"no failpoints":               failpoints.NewEnabledSource(),
 		"BUGGIFY, not activated":      buggifyHooks(0),
 		"BUGGIFY, activated, no fire": buggifyHooks(1),
 	} {
 		wrapped := httpfaults.Wrap(
-			httpfaultstest.NewGenerator(testHooks),
+			httpfaultstest.NewGenerator(source),
 			httpfaults.Scope{NamespaceID: "namespace-id"},
 			func(*http.Request) (*http.Response, error) { return resp, nil },
 		)

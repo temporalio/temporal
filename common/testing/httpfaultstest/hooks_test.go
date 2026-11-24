@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package httpfaultstest_test
 
 import (
@@ -9,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/httpfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
 )
 
@@ -23,10 +21,10 @@ func newRequest(t *testing.T) *http.Request {
 	return req
 }
 
-func setFailpoint(testHooks testhooks.TestHooks, key failpoint.Key, configure func(*failpoint.Failpoint[error])) {
+func setFailpoint(source *failpoints.Source, key failpoint.Key, configure func(*failpoint.Failpoint[error])) {
 	fp := failpoint.NewFailpoint[error](key)
 	configure(fp)
-	testHooks.Failpoints().Set(key, fp)
+	source.Failpoints().Set(key, fp)
 }
 
 func TestWrap_NoFailpoints(t *testing.T) {
@@ -37,7 +35,7 @@ func TestWrap_NoFailpoints(t *testing.T) {
 		handlerCalled = true
 		return &http.Response{StatusCode: http.StatusOK}, nil
 	}
-	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testhooks.NewTestHooks()), scope, next)
+	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(failpoints.NewEnabledSource()), scope, next)
 
 	resp, err := wrapped(newRequest(t))
 	require.NoError(t, err)
@@ -65,8 +63,8 @@ func TestWrap_BeforeHandler(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			testHooks := testhooks.NewTestHooks()
-			setFailpoint(testHooks, tc.key, func(fp *failpoint.Failpoint[error]) {
+			source := failpoints.NewEnabledSource()
+			setFailpoint(source, tc.key, func(fp *failpoint.Failpoint[error]) {
 				fp.CallWith(func(arg any) error {
 					req := arg.(*httpfaults.Request)
 					require.Equal(t, "/cb1", req.Raw.URL.Path)
@@ -79,7 +77,7 @@ func TestWrap_BeforeHandler(t *testing.T) {
 				handlerCalls++
 				return &http.Response{StatusCode: http.StatusOK}, nil
 			}
-			wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), tc.scope, next)
+			wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(source), tc.scope, next)
 
 			resp, err := wrapped(newRequest(t))
 
@@ -99,12 +97,12 @@ func TestWrap_BeforeHandler(t *testing.T) {
 func TestWrap_ResponseOverrideBeforeHandler(t *testing.T) {
 	t.Parallel()
 
-	testHooks := testhooks.NewTestHooks()
+	source := failpoints.NewEnabledSource()
 	injected := httpfaults.NewResponse(http.StatusServiceUnavailable, "injected")
-	setFailpoint(testHooks, failpoint.HTTPKey("POST /cb1"), func(fp *failpoint.Failpoint[error]) {
+	setFailpoint(source, failpoint.HTTPKey("POST /cb1"), func(fp *failpoint.Failpoint[error]) {
 		fp.Return(httpfaults.ResponseOverride{Response: injected}, failpoint.Once)
 	})
-	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), scope, func(*http.Request) (*http.Response, error) {
+	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(source), scope, func(*http.Request) (*http.Response, error) {
 		require.FailNow(t, "HTTP call should not run")
 		return nil, nil
 	})
@@ -124,9 +122,9 @@ func TestWrap_AfterHandler(t *testing.T) {
 	} {
 		t.Run(key.Name(), func(t *testing.T) {
 			t.Parallel()
-			testHooks := testhooks.NewTestHooks()
+			source := failpoints.NewEnabledSource()
 			original := httpfaults.NewResponse(http.StatusOK, "original")
-			setFailpoint(testHooks, key, func(fp *failpoint.Failpoint[error]) {
+			setFailpoint(source, key, func(fp *failpoint.Failpoint[error]) {
 				fp.CallWith(func(arg any) error {
 					result := arg.(httpfaults.Result)
 					require.Equal(t, "POST /cb1", result.Operation)
@@ -136,7 +134,7 @@ func TestWrap_AfterHandler(t *testing.T) {
 					return httpfaults.ResponseOverride{Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected")}
 				}, failpoint.Always)
 			})
-			wrapper := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), scope, func(*http.Request) (*http.Response, error) {
+			wrapper := httpfaults.Wrap(httpfaultstest.NewGenerator(source), scope, func(*http.Request) (*http.Response, error) {
 				return original, nil
 			})
 

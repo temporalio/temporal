@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package failpointrules
 
 import (
@@ -13,7 +11,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/testx/failpoint"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -27,10 +25,10 @@ func newCollection(t *testing.T, client dynamicconfig.Client) *dynamicconfig.Col
 }
 
 // newApp returns an app with the modules around a server hook, as the server graph has them.
-func newApp(t *testing.T, testHooks testhooks.TestHooks, client dynamicconfig.Client, server fx.Hook) *fxtest.App {
+func newApp(t *testing.T, source *failpoints.Source, client dynamicconfig.Client, server fx.Hook) *fxtest.App {
 	return fxtest.New(t,
 		fx.Supply(
-			testHooks,
+			source,
 			newCollection(t, client),
 			fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger))),
 		),
@@ -50,15 +48,15 @@ func TestModule(t *testing.T) {
 		t.Parallel()
 		client := dynamicconfig.NewMemoryClient()
 		client.OverrideSetting(Setting, []any{onRule})
-		testHooks := testhooks.NewTestHooks()
+		source := failpoints.NewEnabledSource()
 		var activeAtStart, activeAtStop bool
-		app := newApp(t, testHooks, client, fx.Hook{
+		app := newApp(t, source, client, fx.Hook{
 			OnStart: func(context.Context) error {
-				activeAtStart = failpoint.Active(testHooks, onKey)
+				activeAtStart = failpoint.Active(source, onKey)
 				return nil
 			},
 			OnStop: func(context.Context) error {
-				activeAtStop = failpoint.Active(testHooks, onKey)
+				activeAtStop = failpoint.Active(source, onKey)
 				return nil
 			},
 		})
@@ -67,29 +65,29 @@ func TestModule(t *testing.T) {
 		app.RequireStop()
 		require.True(t, activeAtStart)
 		require.False(t, activeAtStop)
-		require.Empty(t, testHooks.Failpoints().Keys())
+		require.Empty(t, source.Failpoints().Keys())
 	})
 
 	t.Run("removes the rules when the server fails to start", func(t *testing.T) {
 		t.Parallel()
 		client := dynamicconfig.NewMemoryClient()
 		client.OverrideSetting(Setting, []any{onRule})
-		testHooks := testhooks.NewTestHooks()
-		app := newApp(t, testHooks, client, fx.Hook{
+		source := failpoints.NewEnabledSource()
+		app := newApp(t, source, client, fx.Hook{
 			OnStart: func(context.Context) error { return errors.New("server failed") },
 		})
 
 		require.ErrorContains(t, app.Start(t.Context()), "server failed")
-		require.Empty(t, testHooks.Failpoints().Keys())
+		require.Empty(t, source.Failpoints().Keys())
 	})
 
 	t.Run("fails to start with an invalid initial value", func(t *testing.T) {
 		t.Parallel()
 		client := dynamicconfig.NewMemoryClient()
 		client.OverrideSetting(Setting, []any{map[string]any{"key": "on", "action": "Of"}})
-		testHooks := testhooks.NewTestHooks()
+		source := failpoints.NewEnabledSource()
 		serverStarted := false
-		app := newApp(t, testHooks, client, fx.Hook{
+		app := newApp(t, source, client, fx.Hook{
 			OnStart: func(context.Context) error {
 				serverStarted = true
 				return nil
@@ -99,8 +97,33 @@ func TestModule(t *testing.T) {
 		err := app.Start(t.Context())
 		require.ErrorContains(t, err, `invalid dynamic config setting testing.failpointrules: rule 0: unknown action "Of"`)
 		require.False(t, serverStarted)
-		require.Empty(t, testHooks.Failpoints().Keys())
+		require.Empty(t, source.Failpoints().Keys())
 	})
+}
+
+func TestModule_Disabled(t *testing.T) {
+	t.Parallel()
+	for name, source := range map[string]*failpoints.Source{
+		"disabled": failpoints.NewSource(failpoints.Decision{}),
+		"nil":      nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			// Even an invalid value doesn't stop the server: the module doesn't read the setting.
+			client := dynamicconfig.NewMemoryClient()
+			client.OverrideSetting(Setting, []any{map[string]any{"key": "on", "action": "Of"}})
+			started := false
+			app := newApp(t, source, client, fx.Hook{OnStart: func(context.Context) error {
+				started = true
+				return nil
+			}})
+
+			app.RequireStart()
+			app.RequireStop()
+			require.True(t, started)
+			require.Nil(t, source.Failpoints())
+		})
+	}
 }
 
 func TestSource_Update(t *testing.T) {
@@ -267,4 +290,30 @@ testing.failpointRules:
 		file.set(nonStringRuleKey)
 		require.ErrorContains(t, client.Update(), "loading dynamic config failed")
 	})
+}
+
+// With failpoints not enabled, an invalid value in a dynamic config file has no effect: the file
+// loads without error and the module doesn't read it.
+func TestModule_DisabledIgnoresInvalidFile(t *testing.T) {
+	t.Parallel()
+	client, err := newFileClient(t, newFakeFile(`
+testing.failpointRules:
+  - value:
+      - key: on
+        action: On
+        trigger: {1: 2}
+`))
+	require.NoError(t, err)
+	collection := newCollection(t, client)
+	require.NotPanics(t, func() { _ = Setting.Get(collection)() })
+
+	source := failpoints.NewSource(failpoints.Decision{})
+	app := fxtest.New(t,
+		fx.Supply(source, collection, fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger)))),
+		Module,
+		ReleaseModule,
+	)
+	app.RequireStart()
+	app.RequireStop()
+	require.Nil(t, source.Failpoints())
 }

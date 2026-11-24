@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -108,6 +109,7 @@ type (
 	engineOptions struct {
 		workflowResendScheduler workflowresend.Scheduler
 		destinationThrottled    chasmnexus.DestinationThrottledFn
+		failpointSource         *failpoints.Source
 	}
 
 	// EngineOption adds optional history engine dependencies without adding required parameters.
@@ -163,6 +165,7 @@ type (
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		destinationThrottled       chasmnexus.DestinationThrottledFn
 		testHooks                  testhooks.TestHooks
+		failpointSource            *failpoints.Source
 	}
 )
 
@@ -177,6 +180,14 @@ func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOptio
 func WithDestinationThrottled(fn chasmnexus.DestinationThrottledFn) EngineOption {
 	return func(options *engineOptions) {
 		options.destinationThrottled = fn
+	}
+}
+
+// WithFailpointSource provides the failpoints that the engine's call sites execute. Without it, or
+// if failpoints are not enabled, they cost a nil check.
+func WithFailpointSource(source *failpoints.Source) EngineOption {
+	return func(options *engineOptions) {
+		options.failpointSource = source
 	}
 }
 
@@ -274,6 +285,7 @@ func NewEngineWithShardContext(
 		outboundQueueCBPool:        outboundQueueCBPool,
 		destinationThrottled:       engineOptions.destinationThrottled,
 		testHooks:                  testHooks,
+		failpointSource:            engineOptions.failpointSource,
 		chasmEngine:                chasmEngine,
 		versionCache:               versionCache,
 		workerDeploymentClient:     workerDeploymentClient,
@@ -487,7 +499,7 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.matchingClient,
 		e.versionCache,
 		e.workerDeploymentClient.SignalVersionReactivation,
-		e.testHooks,
+		e.failpointSource,
 	)
 }
 

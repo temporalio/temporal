@@ -1,7 +1,6 @@
-//go:build test_dep
-
-// Package failpointserver serves the FailpointService on a server's gRPC server in test builds, so
-// that tests and tools outside the process can configure its failpoints.
+// Package failpointserver serves the FailpointService on a server's gRPC server if the startup
+// switch enabled failpoints, so that tests and tools outside the process can configure its
+// failpoints.
 package failpointserver
 
 import (
@@ -19,6 +18,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint/failpointgrpc"
 	"go.temporal.io/testx/failpoint/failpointpb"
@@ -54,13 +54,14 @@ const (
 	defaultAuthExtraHeaderName = "authorization-extras"
 )
 
-// Register serves the FailpointService for the failpoints of testHooks on server. It serves
-// nothing if testHooks has no failpoint registry, such as zero-value test hooks.
-func Register(server *grpc.Server, testHooks testhooks.TestHooks, lc fx.Lifecycle) {
-	if testHooks.Failpoints() == nil {
+// Register serves the FailpointService for the failpoints of source on server. It serves nothing
+// if failpoints are not enabled, so source has no failpoint registry.
+func Register(server *grpc.Server, source *failpoints.Source, lc fx.Lifecycle) {
+	registry := source.Failpoints()
+	if registry == nil {
 		return
 	}
-	service := cancelWaitsOnStop(lc, failpointgrpc.NewServer(testHooks.Failpoints()))
+	service := cancelWaitsOnStop(lc, failpointgrpc.NewServer(registry))
 	failpointpb.RegisterFailpointServiceServer(server, service)
 }
 
@@ -69,6 +70,7 @@ type FanOutParams struct {
 	fx.In
 
 	Server            *grpc.Server
+	Failpoints        *failpoints.Source
 	TestHooks         testhooks.TestHooks
 	ServiceName       primitives.ServiceName
 	Config            *config.Config
@@ -96,19 +98,20 @@ type FanOutParams struct {
 // authorization headers to peer frontends, which authorize them too, but not to the other
 // services, which rely on internode mTLS. The internal frontend's claim mapper grants system admin
 // to every caller, so it admits failpoint requests from anyone that can reach it; that is the
-// trust model of all admin APIs on the internal frontend, and the service is only served in test
-// builds.
+// trust model of all admin APIs on the internal frontend, and the service is only served if the startup
+// switch enabled failpoints.
 //
 // Forwarding between frontends that use different TLS configs from the internode ones is not
 // covered by tests: test clusters run a single frontend.
 //
-// It serves nothing if the test hooks have no failpoint registry, such as zero-value test hooks.
+// It serves nothing if failpoints are not enabled, so there is no failpoint registry.
 //
 // Peers are looked up in the membership on every request, once the membership is initialized.
 // Frontends are dialed with the frontend client TLS config; all other services with the
 // internode client TLS config.
 func RegisterFanOut(params FanOutParams) {
-	if params.TestHooks.Failpoints() == nil {
+	registry := params.Failpoints.Failpoints()
+	if registry == nil {
 		return
 	}
 	self := params.HostInfoProvider.HostInfo().GetAddress()
@@ -125,7 +128,7 @@ func RegisterFanOut(params FanOutParams) {
 
 	local := failpointgrpc.Target{
 		Host:    hostName(params.ServiceName, self),
-		Service: failpointgrpc.NewServer(params.TestHooks.Failpoints()),
+		Service: failpointgrpc.NewServer(registry),
 	}
 	authConfig := params.Config.Global.Authorization
 	fanOut := failpointgrpc.NewFanOut(local, peers.targets, failpointgrpc.WithForwardedHeaders(

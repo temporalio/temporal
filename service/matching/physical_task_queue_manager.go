@@ -214,7 +214,7 @@ func newPhysicalTaskQueueManager(
 	var err error
 	if queue.Partition().IsChild() {
 		// Every DB Queue needs its own forwarder so that the throttles do not interfere
-		fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.testHooks)
+		fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.failpointSource)
 		if err != nil {
 			return nil, err
 		}
@@ -641,7 +641,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 			if disable {
 				return syncMatchNoPoller, nil
 			}
-		} else if buggifySkipSyncMatch(testHooks, c.partitionMgr.ns.ID()) {
+		} else if buggifySkipSyncMatch(c.partitionMgr.engine.failpointSource, c.partitionMgr.ns.ID()) {
 			// Legal: the task is persisted and dispatched from the backlog, exactly as if no
 			// poller had been waiting when it arrived.
 			return syncMatchNoPoller, nil
@@ -654,11 +654,11 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 // buggifySkipSyncMatch reports whether BUGGIFY, or a failpoint of a test, makes matching skip the
 // sync match of a task that history added. It checks for armed failpoints before it builds the
 // key, so it costs a nil check without a failpoint registry and an atomic load with an idle one.
-func buggifySkipSyncMatch(testHooks testhooks.TestHooks, nsID namespace.ID) bool {
-	if registry := testHooks.Failpoints(); registry == nil || !registry.Armed() {
+func buggifySkipSyncMatch(source *failpoints.Source, nsID namespace.ID) bool {
+	if registry := source.Failpoints(); registry == nil || !registry.Armed() {
 		return false
 	}
-	return buggify.Fires(testHooks, failpoints.MatchingSkipSyncMatch.ForScope(nsID.String()))
+	return buggify.Fires(source, failpoints.MatchingSkipSyncMatch.ForScope(nsID.String()))
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

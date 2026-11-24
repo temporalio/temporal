@@ -27,9 +27,9 @@ func InjectGlobalFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Fa
 }
 
 func injectFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Failpoint[T] {
-	registry := env.cluster.host.testHooks.Failpoints()
+	registry := FailpointRegistry(env)
 	if registry == nil {
-		env.t.Fatal("InjectFailpoint: failpoints require test hooks; use -tags test_dep")
+		env.t.Fatal("InjectFailpoint: the test cluster has no failpoint registry")
 	}
 	if owned, ok := registry.Get(key).(interface{ Owner() string }); ok && owned.Owner() != "" {
 		env.t.Fatalf("InjectFailpoint: failpoint %s is managed by %s", key, owned.Owner())
@@ -65,5 +65,5 @@ func FailpointClient(env *TestEnv) failpointpb.FailpointServiceClient {
 // FailpointRegistry returns the failpoint registry of the test cluster, for example to subscribe
 // to its events. On a shared cluster it also reports the events of other tests.
 func FailpointRegistry(env *TestEnv) failpoint.Registry {
-	return env.cluster.host.testHooks.Failpoints()
+	return env.cluster.host.failpointSource.Load().Failpoints()
 }

@@ -5,7 +5,7 @@ This document describes the project's testing setup, utilities and best practice
 ## Setup
 
 ### Build tags
-- `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled.
+- `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled. It does not control failpoints, which are compiled into every build; see [Enabling failpoints](#enabling-failpoints).
 - `TEMPORAL_DEBUG`: Extends functional test timeouts to allow sufficient time for debugging sessions.
 
 ### Environment variables
@@ -20,7 +20,8 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Each can be used by one test only at a time.
 - `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`.
 - `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
-- `FAILPOINT_BUGGIFY_SEED`, `FAILPOINT_BUGGIFY_ACTIVATION`, `FAILPOINT_BUGGIFY_FIRE`, `FAILPOINT_GOMAD_EVENTS`: Run servers with BUGGIFY (`test_dep` builds only). Meant for test clusters and gomad, not functional test runs. See [BUGGIFY](#buggify).
+- `TEMPORAL_FAILPOINTS`: Set to `1`, together with the `failpoints.enabled` server config setting, to enable failpoints in a server process. See [Enabling failpoints](#enabling-failpoints). Test clusters enable them themselves.
+- `FAILPOINT_BUGGIFY_SEED`, `FAILPOINT_BUGGIFY_ACTIVATION`, `FAILPOINT_BUGGIFY_FIRE`, `FAILPOINT_GOMAD_EVENTS`: Run servers with BUGGIFY (only with failpoints enabled). Meant for test clusters and gomad, not functional test runs. See [BUGGIFY](#buggify).
 
 ### Debugging via IDE
 
@@ -232,7 +233,7 @@ returns an error.
 
 `InjectHTTPRequestFault` and `InjectHTTPResponseFault` inject faults into HTTP clients that install
 the test fault generator. Callback delivery and Nexus operation clients support these faults. The
-faults are scoped to the test namespace and are unavailable in builds without `test_dep`. They are
+faults are scoped to the test namespace. They are
 callbacks of the `failpoint.AnyHTTPKey` and `failpoint.AnyHTTPResponseKey` failpoints.
 
 Return one of:
@@ -312,18 +313,42 @@ The `failpoint` package injects faults and timing control at named points in ser
 it over a new testhooks key when the test only needs to fail, delay, block, or run a callback at
 a point in the code.
 
+#### Enabling failpoints
+
+Failpoints are compiled into every build, including release binaries; there is no separate test
+image. A server process only installs them if both of these are set, each read once at startup:
+
+- `failpoints.enabled: true` in the server config (`config.Failpoints`), and
+- the `TEMPORAL_FAILPOINTS=1` environment variable.
+
+Neither is enough alone, and dynamic config cannot enable failpoints. With the switch off, nothing
+is installed: there is no failpoint registry, no gRPC fault interceptor, HTTP fault wrapper or
+persistence failpoint injector, the `FailpointService` is not registered, and the rules, BUGGIFY and
+knob randomization (`testing.failpointRules`, `testing.buggify`) do nothing. Call sites in server
+code cost a nil check. The `test_dep` tag is not involved.
+
+The `FailpointService` follows the cluster's authorizer like every admin API (system admins only).
+With the default allow-all authorizer and no internode or frontend TLS, anyone who can reach a
+server port can change failpoints, as with the other admin APIs, so enable failpoints only on test
+clusters with authorization or network isolation.
+
+When the switch is on, the server logs a warning that names the inputs of the decision, and
+the `failpoints_enabled` gauge is 1 (0 otherwise). Test clusters (`testcore`) run the normal server
+with the switch on: they set the config setting and supply the environment variable to each server
+through `temporal.WithEnvLookup`, so clusters in one process don't change the process environment.
+
 A failpoint is declared once as a `failpoint.Key` in `common/testing/failpoints`, with a
 comment that says where it fires and what tests use it for. Server code executes it through the
-server's test hooks, scoped to a namespace ID:
+server's `*failpoints.Source`, which fx provides to every service, scoped to a namespace ID:
 
 ```go
-if err := failpoint.Checkpoint(f.testHooks, failpoints.MatchingForwardTask.ForScope(nsID)); err != nil {
+if err := failpoint.Checkpoint(f.failpointSource, failpoints.MatchingForwardTask.ForScope(nsID)); err != nil {
     return err
 }
 ```
 
 `Checkpoint` returns an error only if the failpoint returns one. Use `failpoint.Execute[T]` when
-the failpoint must return a value of another type. Without `-tags=test_dep`, the test hooks have
+the failpoint must return a value of another type. Without failpoints enabled, the source has
 no failpoint registry, so both do nothing.
 
 Tests configure the failpoint for the test's namespace. It is removed when the test ends:
@@ -387,7 +412,7 @@ Inject failpoints for these methods with `testcore.InjectGlobalFailpoint`, which
 dedicated cluster. `common/persistence/faultinjection/namespace.go` maps each request type to its
 namespace.
 
-With `-tags=test_dep`, every server process also serves the `FailpointService` gRPC API
+With failpoints enabled, every server process also serves the `FailpointService` gRPC API
 (`common/testx/proto`) on its gRPC port, so tests and tools outside the process can configure
 failpoints by key name. Only system admins may call it on a frontend. History, matching, and
 worker serve their own failpoints. Frontends fan each request out: they apply it locally and
@@ -414,7 +439,7 @@ _, err := client.InjectReturn(ctx, &failpointpb.InjectReturnRequest{
 
 #### Failpoint rules in dynamic config
 
-With `-tags=test_dep`, a server process applies the failpoint rules of the `testing.failpointRules`
+With failpoints enabled, a server process applies the failpoint rules of the `testing.failpointRules`
 dynamic config setting to its failpoints. This configures failpoints without code, for example in a
 development server's dynamic config file:
 
@@ -450,7 +475,7 @@ cluster.
 
 BUGGIFY, after [FoundationDB](https://apple.github.io/foundationdb/testing.html), runs a server
 "mostly normal, with a few weird things". It is meant for test clusters (a development server or a
-test cell running a `test_dep` build) and gomad runs, not for the functional tests, which run
+test cell with failpoints enabled) and gomad runs, not for the functional tests, which run
 without it, except `TestBuggify`. With a seed, each failpoint key name that has
 nothing registered is activated for the whole run with some probability, and each execution of an
 activated key fires with another probability. Both decisions are pure functions of the seed, the key
@@ -482,7 +507,7 @@ is disabled, and so does an explicitly set dynamic config value over a randomize
 HTTP requests, a failpoint registered for any method or request also does: for example
 `InjectRequestFault` keeps BUGGIFY away from the gRPC requests of the test's namespace.
 
-Enable it on a server built with `-tags=test_dep` with one of:
+Enable it on a server with failpoints enabled with one of:
 
 - `FAILPOINT_BUGGIFY_SEED=N` in the environment of the server process, read with
   `buggify.ConfigFromEnv` (`go.temporal.io/testx/failpoint/buggify`). `FAILPOINT_BUGGIFY_SEED=random` picks a seed, which the server

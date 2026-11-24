@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
@@ -240,6 +241,28 @@ func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 func WithTestHooks(testHooks testhooks.TestHooks) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.testHooks = &testHooks
+	})
+}
+
+// WithEnvLookup sets how the server reads the environment variable that, together with the
+// failpoints.enabled config setting, enables failpoints (failpoints.EnvVar). It defaults to
+// os.LookupEnv. Servers that share a process, such as test clusters, use it to decide for
+// themselves instead of changing the environment of the process.
+// NOTE: this option is for tests only.
+func WithEnvLookup(lookup func(string) (string, bool)) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.lookupEnv = lookup
+	})
+}
+
+// WithFailpointSourceObserver passes the failpoint source that the server resolved at startup to
+// observe, so that tests can reach the registry of the server they run, if the startup switch
+// enabled failpoints. It is called once, while the server is constructed. Observers compose: all
+// of them are called, in the order of the options.
+// NOTE: this option is for tests only.
+func WithFailpointSourceObserver(observe func(*failpoints.Source)) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.failpointSourceObservers = append(s.failpointSourceObservers, observe)
 	})
 }
 

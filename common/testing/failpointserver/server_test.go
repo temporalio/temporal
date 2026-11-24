@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package failpointserver
 
 import (
@@ -17,6 +15,7 @@ import (
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint/failpointgrpc"
 	"go.uber.org/fx/fxtest"
@@ -112,20 +111,6 @@ func targetHosts(targets []failpointgrpc.Target) []string {
 func TestPeers_Targets(t *testing.T) {
 	t.Parallel()
 
-	t.Run("limits peers to the enabled services", func(t *testing.T) {
-		t.Parallel()
-		testHooks := testhooks.NewTestHooks()
-		testhooks.Set(testHooks, testhooks.FailpointFanOutServices,
-			[]primitives.ServiceName{primitives.FrontendService, primitives.HistoryService, primitives.MatchingService},
-			testhooks.GlobalScope)
-		p := newTestPeers(newTestMonitor(), testHooks, nil)
-		t.Cleanup(p.close)
-
-		targets, err := p.targets(t.Context())
-		require.NoError(t, err)
-		require.ElementsMatch(t, []string{"frontend/fe-2:7233", "history/history-1:7234", "matching/matching-1:7235"}, targetHosts(targets))
-	})
-
 	t.Run("forwards credentials only to frontends", func(t *testing.T) {
 		t.Parallel()
 		p := newTestPeers(newTestMonitor(), testhooks.NewTestHooks(), nil)
@@ -211,24 +196,25 @@ func TestRegister_WithoutRegistry(t *testing.T) {
 	t.Parallel()
 	const serviceName = "temporal.testx.failpoint.v1.FailpointService"
 	tests := []struct {
-		name      string
-		testHooks testhooks.TestHooks
-		want      bool
+		name   string
+		source *failpoints.Source
+		want   bool
 	}{
-		{name: "test hooks", testHooks: testhooks.NewTestHooks(), want: true},
-		{name: "zero-value test hooks", testHooks: testhooks.TestHooks{}, want: false},
+		{name: "enabled", source: failpoints.NewEnabledSource(), want: true},
+		{name: "disabled", source: failpoints.NewSource(failpoints.Decision{}), want: false},
+		{name: "nil", source: nil, want: false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			server := grpc.NewServer()
-			Register(server, tc.testHooks, fxtest.NewLifecycle(t))
+			Register(server, tc.source, fxtest.NewLifecycle(t))
 			require.Equal(t, tc.want, slices.Contains(slices.Collect(maps.Keys(server.GetServiceInfo())), serviceName))
 
 			fanOutServer := grpc.NewServer()
 			RegisterFanOut(FanOutParams{
 				Server:            fanOutServer,
-				TestHooks:         tc.testHooks,
+				Failpoints:        tc.source,
 				ServiceName:       primitives.FrontendService,
 				Config:            &config.Config{},
 				HostInfoProvider:  membership.NewHostInfoProvider(membership.NewHostInfoFromAddress("fe-1:7233")),

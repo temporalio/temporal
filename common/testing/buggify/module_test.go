@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package buggify
 
 import (
@@ -14,7 +12,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/testx/failpoint"
 	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 	"go.uber.org/fx"
@@ -62,35 +60,35 @@ func TestModule(t *testing.T) {
 		t.Parallel()
 		client := dynamicconfig.NewMemoryClient()
 		client.OverrideSetting(Setting, alwaysValue)
-		testHooks := testhooks.NewTestHooks()
+		source := failpoints.NewEnabledSource()
 		var errAtStart error
 		app := fxtest.New(t,
-			fx.Supply(testHooks, newCollection(t, client), fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger)))),
+			fx.Supply(source, newCollection(t, client), fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger)))),
 			Module,
 			fx.Invoke(func(lc fx.Lifecycle) {
-				lc.Append(fx.StartHook(func() { errAtStart = failpoint.Checkpoint(testHooks, alwaysKey) }))
+				lc.Append(fx.StartHook(func() { errAtStart = failpoint.Checkpoint(source, alwaysKey) }))
 			}),
 		)
 
 		app.RequireStart()
 		require.ErrorContains(t, errAtStart, "BUGGIFY: injected by failpoint always")
-		require.Equal(t, uint64(5), fpbuggify.For(testHooks.Failpoints()).Config().Seed)
+		require.Equal(t, uint64(5), fpbuggify.For(source.Failpoints()).Config().Seed)
 		app.RequireStop()
-		require.False(t, fpbuggify.For(testHooks.Failpoints()).Config().Enabled())
+		require.False(t, fpbuggify.For(source.Failpoints()).Config().Enabled())
 	})
 
 	t.Run("fails to start with an invalid initial value", func(t *testing.T) {
 		t.Parallel()
 		client := dynamicconfig.NewMemoryClient()
 		client.OverrideSetting(Setting, map[string]any{"sead": 5})
-		testHooks := testhooks.NewTestHooks()
+		source := failpoints.NewEnabledSource()
 		app := fxtest.New(t,
-			fx.Supply(testHooks, newCollection(t, client), fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger)))),
+			fx.Supply(source, newCollection(t, client), fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger)))),
 			Module,
 		)
 
 		require.ErrorContains(t, app.Start(t.Context()), "invalid dynamic config setting testing.buggify")
-		require.False(t, testHooks.Failpoints().Armed())
+		require.False(t, source.Failpoints().Armed())
 	})
 }
 
@@ -144,6 +142,39 @@ func TestSource(t *testing.T) {
 type testSource struct{ registry failpoint.Registry }
 
 func (s testSource) Failpoints() failpoint.Registry { return s.registry }
+
+// Without failpoints enabled, BUGGIFY never randomizes settings, even with a seed in the environment.
+func TestWrapDynamicConfigClient_Disabled(t *testing.T) {
+	t.Setenv(fpbuggify.SeedEnv, "1")
+	client := dynamicconfig.NewMemoryClient()
+	wrapped, startup, err := WrapDynamicConfigClient(client, log.NewNoopLogger(), false)
+	require.NoError(t, err)
+	require.Same(t, client, wrapped)
+	require.Equal(t, Startup{}, startup)
+}
+
+func TestModule_Disabled(t *testing.T) {
+	t.Parallel()
+	for name, source := range map[string]*failpoints.Source{
+		"disabled": failpoints.NewSource(failpoints.Decision{}),
+		"nil":      nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			// Even an invalid value doesn't stop the server: the module doesn't read the setting.
+			client := dynamicconfig.NewMemoryClient()
+			client.OverrideSetting(Setting, map[string]any{"sead": 5})
+			app := fxtest.New(t,
+				fx.Supply(source, newCollection(t, client), fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger)))),
+				Module,
+			)
+
+			app.RequireStart()
+			app.RequireStop()
+			require.Nil(t, source.Failpoints())
+		})
+	}
+}
 
 func TestWrapDynamicConfigClient(t *testing.T) {
 	t.Parallel()

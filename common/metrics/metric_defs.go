@@ -730,10 +730,14 @@ var (
 	OperationCounter                         = NewCounterDef("operation")
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
-	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
-	NamespaceRateLimitWaitLatency            = NewTimerDef("namespace_rate_limit_poll_wait_latency")
-	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
-	BlobSizeError                            = NewCounterDef(
+	FailpointsEnabled                        = NewGaugeDef(
+		"failpoints_enabled",
+		WithDescription("1 if failpoints are enabled for the process by the startup switch, else 0."),
+	)
+	ServiceAuthorizationLatency   = NewTimerDef("service_authorization_latency")
+	NamespaceRateLimitWaitLatency = NewTimerDef("namespace_rate_limit_poll_wait_latency")
+	EventBlobSize                 = NewBytesHistogramDef("event_blob_size")
+	BlobSizeError                 = NewCounterDef(
 		"blob_size_error",
 		WithDescription("The number of requests that failed due to blob size exceeding limits configured with BlobSizeLimitError and MemoSizeLimitError."),
 	)

@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/failpoints"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
@@ -44,7 +43,7 @@ type (
 		shardContext       historyi.ShardContext
 		namespaceId        namespace.ID
 		consistencyChecker api.WorkflowConsistencyChecker
-		testHooks          testhooks.TestHooks
+		failpointSource    *failpoints.Source
 
 		updateReq *historyservice.UpdateWorkflowExecutionRequest
 		startReq  *historyservice.StartWorkflowExecutionRequest
@@ -64,7 +63,7 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
-	testHooks testhooks.TestHooks,
+	failpointSource *failpoints.Source,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
 	if err != nil {
@@ -91,7 +90,7 @@ func Invoke(
 			shardContext:       shardContext,
 			namespaceId:        namespace.ID(req.NamespaceId),
 			consistencyChecker: workflowConsistencyChecker,
-			testHooks:          testHooks,
+			failpointSource:    failpointSource,
 			updateReq:          updateReq,
 			startReq:           startReq,
 		}
@@ -145,7 +144,7 @@ func Invoke(
 			return nil, err
 		}
 
-		if err := failpoint.Checkpoint(uws.testHooks, failpoints.UpdateWithStartClosingWorkflowRetry.ForScope(uws.namespaceId.String())); err != nil {
+		if err := uws.checkpoint(failpoints.UpdateWithStartClosingWorkflowRetry); err != nil {
 			return nil, err
 		}
 
@@ -169,6 +168,15 @@ func Invoke(
 	}
 
 	return res, nil
+}
+
+// checkpoint executes the failpoint key, scoped to the namespace. Without a failpoint registry it
+// costs a nil check.
+func (uws *updateWithStart) checkpoint(key failpoint.Key) error {
+	if !failpoint.Armed(uws.failpointSource) {
+		return nil
+	}
+	return failpoint.Checkpoint(uws.failpointSource, key.ForScope(uws.namespaceId.String()))
 }
 
 func (uws *updateWithStart) updateOnlyWasAbortedByClosingWorkflow(err error) bool {
@@ -247,7 +255,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	if err := failpoint.Checkpoint(uws.testHooks, failpoints.UpdateWithStartBetweenLockAndStart.ForScope(uws.namespaceId.String())); err != nil {
+	if err := uws.checkpoint(failpoints.UpdateWithStartBetweenLockAndStart); err != nil {
 		return nil, err
 	}
 

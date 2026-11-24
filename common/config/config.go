@@ -53,6 +53,18 @@ type (
 		ExporterConfig telemetry.ExportConfig `yaml:"otel"`
 		// Visibility related config
 		Visibility Visibility `yaml:"visibility"`
+		// Failpoints is the static switch for failpoints, see Failpoints
+		Failpoints Failpoints `yaml:"failpoints"`
+	}
+
+	// Failpoints is the static switch for failpoints: code that tests and tools can make fail,
+	// stall or return values from outside the process. Failpoints are compiled into every build.
+	// They are only installed if Enabled is set and the TEMPORAL_FAILPOINTS=1 environment
+	// variable is set too, both read once at startup. Dynamic config cannot enable them. Without
+	// both, nothing is installed and the failpoint call sites cost a nil check.
+	Failpoints struct {
+		// Enabled is the config half of the switch; it has no effect without TEMPORAL_FAILPOINTS=1.
+		Enabled bool `yaml:"enabled"`
 	}
 
 	// Service contains the service specific config items

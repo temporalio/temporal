@@ -9,8 +9,8 @@ look the failpoint up in the registry of a `Source`; without a registry they are
 test injected directly into the context with `InjectReturn` and the other `Inject*` helpers; with
 neither, it is a no-op.
 
-The consumer enables failpoints by providing a registry, for example only in test builds, and
-leaves it out everywhere else.
+The consumer enables failpoints by providing a registry, for example only when a startup setting
+turns them on, and leaves it out everywhere else.
 
 ## Declare a key
 

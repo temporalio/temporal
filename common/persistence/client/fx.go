@@ -20,8 +20,8 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	otel "go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/persistencefaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
 
@@ -194,7 +194,7 @@ func DataStoreFactoryProvider(
 	metricsHandler metrics.Handler,
 	tracerProvider trace.TracerProvider,
 	serializer serialization.Serializer,
-	testHooks testhooks.TestHooks,
+	failpointSource *failpoints.Source,
 ) persistence.DataStoreFactory {
 	var dataStoreFactory persistence.DataStoreFactory
 	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
@@ -209,7 +209,7 @@ func DataStoreFactoryProvider(
 		logger.Fatal("invalid config: one of cassandra, sql, or custom datastore params must be specified")
 	}
 
-	if fiConfig := persistencefaultstest.WithFailpoints(defaultStoreCfg.FaultInjection, testHooks); fiConfig != nil {
+	if fiConfig := persistencefaultstest.WithFailpoints(defaultStoreCfg.FaultInjection, failpointSource); fiConfig != nil {
 		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(fiConfig, dataStoreFactory)
 	}
 

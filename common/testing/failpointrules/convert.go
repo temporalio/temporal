@@ -1,5 +1,5 @@
-// Package failpointrules configures the failpoints of a server in test builds from the
-// testing.failpointRules dynamic config setting.
+// Package failpointrules configures the failpoints of a server, if the startup switch enabled
+// failpoints, from the testing.failpointRules dynamic config setting.
 package failpointrules
 
 import (

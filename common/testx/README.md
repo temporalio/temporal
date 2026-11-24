@@ -9,4 +9,4 @@ Collection of general-purpose Go test helpers.
 - `parallelsuite`: isolated parallel test suites with fail-fast assertions.
 - `softassert`: log failed invariants without stopping execution.
 - `testcontext`: shared test contexts with deadlines and decorators.
-- `testhooks`: typed, scoped hooks and a failpoint registry, enabled with `-tags test_dep`.
+- `testhooks`: typed, scoped hooks, enabled with `-tags test_dep`.

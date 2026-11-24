@@ -1,5 +1,5 @@
 // Package buggify configures BUGGIFY, seeded random failpoint activation (see
-// fpbuggify.Config), for the server in test builds: the server's defaults per key prefix,
+// fpbuggify.Config), for the server if the startup switch enabled failpoints: the server's defaults per key prefix,
 // the testing.buggify dynamic config setting, the seed environment variables, and the
 // randomization of dynamic config settings marked with dynamicconfig.Buggifiable.
 package buggify
@@ -30,7 +30,7 @@ const (
 // seed even if the setting changes meanwhile.
 type Startup struct {
 	// Resolved is false if the server didn't resolve a configuration, such as in a build
-	// without test hooks.
+	// with failpoints not enabled.
 	Resolved bool
 	// Value and Env are the value of the setting and the environment that Config was resolved
 	// from.

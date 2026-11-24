@@ -72,9 +72,9 @@ func (f *faultTracker) attach(unregister func()) func() {
 // checked and the error to inject, or nil. Several faults on the same key all run, in the order
 // they were injected, until one returns an error. The test fails if the fault never fires.
 func (e *TestEnv) injectFault(key failpoint.Key, fault func(arg any) (req any, err error)) func() {
-	registry := e.cluster.host.testHooks.Failpoints()
+	registry := FailpointRegistry(e)
 	if registry == nil {
-		e.t.Fatal("fault injection requires test hooks; use -tags test_dep")
+		e.t.Fatal("fault injection requires a failpoint registry, but the test cluster has none")
 	}
 	tracker := newFaultTracker(e.t)
 	remove, err := faultinjectiontest.AddCallback(registry, key.ForScope(e.nsID.String()), func(arg any) error {

@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package grpcfaultstest_test
 
 import (
@@ -10,16 +8,16 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint/buggify"
 	"google.golang.org/grpc"
 )
 
-// BenchmarkUnaryServerInterceptor_NoFailpoints measures the cost of the fault interceptor in a
-// test_dep build while no failpoint is registered.
+// BenchmarkUnaryServerInterceptor_NoFailpoints measures the cost of the fault interceptor with
+// failpoints enabled while no failpoint is registered.
 func BenchmarkUnaryServerInterceptor_NoFailpoints(b *testing.B) {
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testhooks.NewTestHooks(), nil, primitives.HistoryService))
+	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(failpoints.NewEnabledSource(), nil, primitives.HistoryService))
 	info := &grpc.UnaryServerInfo{FullMethod: matchingservice.MatchingService_AddWorkflowTask_FullMethodName}
 	handler := func(context.Context, any) (any, error) { return nil, nil }
 	ctx := context.Background()
@@ -55,11 +53,11 @@ func BenchmarkUnaryServerInterceptor_Buggify(b *testing.B) {
 		{name: "activated", activation: 1},
 	} {
 		b.Run(bc.name, func(b *testing.B) {
-			testHooks := testhooks.NewTestHooks()
-			if err := buggify.For(testHooks.Failpoints()).Set(buggify.Config{Seed: 1, Activation: bc.activation, Fire: 0, Error: "Unavailable"}); err != nil {
+			source := failpoints.NewEnabledSource()
+			if err := buggify.For(source.Failpoints()).Set(buggify.Config{Seed: 1, Activation: bc.activation, Fire: 0, Error: "Unavailable"}); err != nil {
 				b.Fatal(err)
 			}
-			interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks, nil, primitives.HistoryService))
+			interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(source, nil, primitives.HistoryService))
 			b.ReportAllocs()
 			for b.Loop() {
 				_, _ = interceptor(ctx, req, info, handler)

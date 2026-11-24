@@ -65,7 +65,7 @@ const (
 	// Technically not a gRPC service, but still using this format for metadata.
 	NexusServicePrefix = "/temporal.api.nexusservice.v1.NexusService/"
 	// FailpointServicePrefix is the test-only service that configures failpoints. Servers only
-	// serve it in test builds.
+	// serve it if the startup switch enabled failpoints.
 	FailpointServicePrefix = "/temporal.testx.failpoint.v1.FailpointService/"
 )
 
@@ -222,7 +222,7 @@ var (
 )
 
 // GetMethodMetadata gets metadata for a given API method in one of the services exported by
-// frontend (WorkflowService, OperatorService, AdminService, and FailpointService in test builds).
+// frontend (WorkflowService, OperatorService, AdminService, and FailpointService with failpoints enabled).
 func GetMethodMetadata(fullApiName string) MethodMetadata {
 	switch {
 	case strings.HasPrefix(fullApiName, WorkflowServicePrefix):

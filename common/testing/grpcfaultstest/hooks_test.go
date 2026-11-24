@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package grpcfaultstest_test
 
 import (
@@ -13,8 +11,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/buggify"
 	"go.temporal.io/testx/failpoint/failpointpb"
@@ -23,9 +21,9 @@ import (
 
 const fullMethod = "/test.Service/Method"
 
-func newInterceptor(t *testing.T, testHooks testhooks.TestHooks) grpc.UnaryServerInterceptor {
+func newInterceptor(t *testing.T, source *failpoints.Source) grpc.UnaryServerInterceptor {
 	t.Helper()
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks, func(name namespace.Name) namespace.ID {
+	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(source, func(name namespace.Name) namespace.ID {
 		if name == "namespace-name" {
 			return "namespace-id"
 		}
@@ -46,16 +44,16 @@ func TestNewGenerator_BuggifyByService(t *testing.T) {
 		primitives.MatchingService:         true,
 		primitives.WorkerService:           true,
 	} {
-		testHooks := testhooks.NewTestHooks()
-		require.NoError(t, buggify.For(testHooks.Failpoints()).Set(buggify.Config{
+		source := failpoints.NewEnabledSource()
+		require.NoError(t, buggify.For(source.Failpoints()).Set(buggify.Config{
 			Seed: 1, Activation: 1, Fire: 1, Error: "Unavailable",
 		}))
-		interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks, nil, service))
+		interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(source, nil, service))
 		_, err := interceptor(context.Background(), "request", info, handler)
 		require.Equal(t, wantBuggify, err != nil, service)
 
 		// Registered failpoints apply to every service.
-		setFailpoint(testHooks, failpoint.GRPCKey(fullMethod), func(fp *failpoint.Failpoint[error]) {
+		setFailpoint(source, failpoint.GRPCKey(fullMethod), func(fp *failpoint.Failpoint[error]) {
 			fp.Return(errors.New("registered"), failpoint.Always)
 		})
 		_, err = interceptor(context.Background(), "request", info, handler)
@@ -63,16 +61,16 @@ func TestNewGenerator_BuggifyByService(t *testing.T) {
 	}
 }
 
-func setFailpoint(testHooks testhooks.TestHooks, key failpoint.Key, configure func(*failpoint.Failpoint[error])) {
+func setFailpoint(source *failpoints.Source, key failpoint.Key, configure func(*failpoint.Failpoint[error])) {
 	fp := failpoint.NewFailpoint[error](key)
 	configure(fp)
-	testHooks.Failpoints().Set(key, fp)
+	source.Failpoints().Set(key, fp)
 }
 
 func TestUnaryServerInterceptor_NoFailpoints(t *testing.T) {
 	t.Parallel()
 
-	interceptor := newInterceptor(t, testhooks.NewTestHooks())
+	interceptor := newInterceptor(t, failpoints.NewEnabledSource())
 	response, err := interceptor(
 		context.Background(),
 		"request",
@@ -113,8 +111,8 @@ func TestUnaryServerInterceptor_BeforeHandler(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			testHooks := testhooks.NewTestHooks()
-			setFailpoint(testHooks, tc.key, func(fp *failpoint.Failpoint[error]) {
+			source := failpoints.NewEnabledSource()
+			setFailpoint(source, tc.key, func(fp *failpoint.Failpoint[error]) {
 				fp.CallWith(func(arg any) error {
 					require.Equal(t, tc.request, arg)
 					return injectedErr
@@ -122,7 +120,7 @@ func TestUnaryServerInterceptor_BeforeHandler(t *testing.T) {
 			})
 			handlerCalled := false
 
-			response, err := newInterceptor(t, testHooks)(
+			response, err := newInterceptor(t, source)(
 				context.Background(),
 				tc.request,
 				&grpc.UnaryServerInfo{FullMethod: fullMethod},
@@ -156,9 +154,9 @@ func TestUnaryServerInterceptor_AfterHandler(t *testing.T) {
 	} {
 		t.Run(key.Name(), func(t *testing.T) {
 			t.Parallel()
-			testHooks := testhooks.NewTestHooks()
+			source := failpoints.NewEnabledSource()
 			var results []grpcfaults.Result
-			setFailpoint(testHooks, key, func(fp *failpoint.Failpoint[error]) {
+			setFailpoint(source, key, func(fp *failpoint.Failpoint[error]) {
 				fp.CallWith(func(arg any) error {
 					result := arg.(grpcfaults.Result)
 					results = append(results, result)
@@ -168,7 +166,7 @@ func TestUnaryServerInterceptor_AfterHandler(t *testing.T) {
 					return nil
 				}, failpoint.Always)
 			})
-			interceptor := newInterceptor(t, testHooks)
+			interceptor := newInterceptor(t, source)
 			info := &grpc.UnaryServerInfo{FullMethod: fullMethod}
 
 			// A nil error keeps the result of the handler.
@@ -200,7 +198,7 @@ func TestUnaryServerInterceptor_AfterHandler(t *testing.T) {
 func TestUnaryServerInterceptor_FailpointServiceExempt(t *testing.T) {
 	t.Parallel()
 
-	testHooks := testhooks.NewTestHooks()
+	source := failpoints.NewEnabledSource()
 	injectedErr := errors.New("injected")
 	method := failpointpb.FailpointService_DisableAllFailpoints_FullMethodName
 	for _, key := range []failpoint.Key{
@@ -209,9 +207,9 @@ func TestUnaryServerInterceptor_FailpointServiceExempt(t *testing.T) {
 		failpoint.GRPCKey(method),
 		failpoint.GRPCResponseKey(method),
 	} {
-		setFailpoint(testHooks, key, func(fp *failpoint.Failpoint[error]) { fp.Return(injectedErr, failpoint.Always) })
+		setFailpoint(source, key, func(fp *failpoint.Failpoint[error]) { fp.Return(injectedErr, failpoint.Always) })
 	}
-	interceptor := newInterceptor(t, testHooks)
+	interceptor := newInterceptor(t, source)
 	handler := func(context.Context, any) (any, error) { return "response", nil }
 
 	response, err := interceptor(context.Background(), &failpointpb.DisableAllFailpointsRequest{}, &grpc.UnaryServerInfo{FullMethod: method}, handler)

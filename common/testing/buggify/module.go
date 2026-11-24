@@ -1,5 +1,3 @@
-//go:build test_dep
-
 package buggify
 
 import (
@@ -17,28 +15,36 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/testx/failpoint"
 	fpbuggify "go.temporal.io/testx/failpoint/buggify"
 	"go.uber.org/fx"
 )
 
-// settingValue is the value of Setting. Its conversion never fails, so an invalid value reaches
-// the subscriber in err, instead of dynamic config replacing it with the default.
+// settingValue is the value of Setting. Dynamic config converts the setting on every load, also
+// while failpoints are not enabled, so the conversion only keeps the raw value and never fails.
+// The module, which only runs with failpoints enabled, validates it with parsed, so an invalid
+// value reaches the subscriber in err, instead of dynamic config replacing it with the default.
 type settingValue struct {
+	raw   any
 	value Value
 	err   error
+}
+
+// parsed returns v with the value and the error of its raw value.
+func (v settingValue) parsed() settingValue {
+	v.value, v.err = ConvertValue(v.raw)
+	return v
 }
 
 // Setting configures BUGGIFY for the server, see Value. An invalid value stops the server.
 var Setting = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	SettingKey,
 	func(value any) (settingValue, error) {
-		v, err := ConvertValue(value)
-		return settingValue{value: v, err: err}, nil
+		return settingValue{raw: value}, nil
 	},
 	settingValue{},
-	`testing.buggify configures BUGGIFY, seeded random failpoint activation, in test builds: a map
+	`testing.buggify configures BUGGIFY, seeded random failpoint activation, if failpoints are enabled: a map
 with seed (0: FAILPOINT_BUGGIFY_SEED), disabled, activation, fire, error,
 prefixes (prefix, activation, fire, error), include and exclude, which override the server's
 defaults. Settings marked as buggifiable are randomized from the seed at startup. An invalid
@@ -46,7 +52,7 @@ value stops the server.`,
 )
 
 // Module applies Setting, and the seed environment variables, to the failpoint registry of the
-// test hooks, and logs the seed and the BUGGIFY activation decisions. It belongs in the graph of
+// process, and logs the seed and the BUGGIFY activation decisions. It belongs in the graph of
 // the server process, before the server's lifecycle hook, so BUGGIFY is configured before the
 // services start.
 var Module = fx.Options(
@@ -59,12 +65,16 @@ var Module = fx.Options(
 )
 
 // WrapDynamicConfigClient resolves the BUGGIFY configuration of the server once, from Setting, as
-// client returns it, and the environment. If it enables BUGGIFY, it returns client with the
+// client returns it, and the environment. If failpoints are not enabled, it returns client as it
+// is, and BUGGIFY is never configured. If it enables BUGGIFY, it returns client with the
 // settings marked with dynamicconfig.Buggifiable randomized: the values are chosen from the seed
 // and logged. Values that client sets without constraints take precedence. It also returns the
 // configuration, which Module applies at startup. It returns an error if Setting or the
 // environment is invalid.
-func WrapDynamicConfigClient(client dynamicconfig.Client, logger log.Logger) (dynamicconfig.Client, Startup, error) {
+func WrapDynamicConfigClient(client dynamicconfig.Client, logger log.Logger, failpointsEnabled bool) (dynamicconfig.Client, Startup, error) {
+	if !failpointsEnabled {
+		return client, Startup{}, nil
+	}
 	return wrapDynamicConfigClient(client, logger, os.LookupEnv)
 }
 
@@ -109,7 +119,7 @@ func globalValue(cvs []dynamicconfig.ConstrainedValue) any {
 
 type params struct {
 	fx.In
-	TestHooks  testhooks.TestHooks
+	Failpoints *failpoints.Source
 	Collection *dynamicconfig.Collection
 	Logger     log.Logger
 	// Startup is set by servers that resolved BUGGIFY with WrapDynamicConfigClient.
@@ -118,7 +128,7 @@ type params struct {
 
 // newSourceFromParams returns nil without a failpoint registry.
 func newSourceFromParams(p params) *source {
-	registry := p.TestHooks.Failpoints()
+	registry := p.Failpoints.Failpoints()
 	if registry == nil {
 		return nil
 	}
@@ -182,6 +192,7 @@ func (s *source) start(context.Context) error {
 	s.unsubscribe = s.registry.Subscribe(s.report)
 	value, cancel := Setting.Subscribe(s.collection)(s.update)
 	s.cancel = cancel
+	value = value.parsed()
 	var err error
 	if s.startup.Resolved {
 		s.env = s.startup.Env
@@ -215,6 +226,7 @@ func (s *source) update(delivered settingValue) {
 	if s.stopped {
 		return
 	}
+	delivered = delivered.parsed()
 	if delivered.err != nil {
 		s.fatal(invalidValueError(delivered.err))
 		return
@@ -224,7 +236,7 @@ func (s *source) update(delivered settingValue) {
 		s.fatal(err)
 		return
 	}
-	if err := s.applyLocked(Setting.Get(s.collection)()); err != nil {
+	if err := s.applyLocked(Setting.Get(s.collection)().parsed()); err != nil {
 		s.fatal(err)
 	}
 }
