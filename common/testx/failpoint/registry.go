@@ -33,6 +33,11 @@ type Registry interface {
 	// DeleteAll removes all failpoints at once and returns them.
 	DeleteAll() []any
 
+	// DeleteFunc removes the failpoints for which keep returns false at once and returns them. It
+	// calls keep without holding the registry's lock, so keep can call the registry. An entry that
+	// changed after keep saw it is kept.
+	DeleteFunc(keep func(key Key, fp any) bool) []any
+
 	// Configure runs fn while no other Configure call of the registry runs. Code that configures
 	// or removes failpoints with several calls, such as a lookup followed by a change, runs them
 	// in Configure, so they are atomic with respect to each other. It does not block executions.
@@ -51,6 +56,10 @@ type Registry interface {
 
 	// emit reports an execution to the subscribers.
 	emit(Event)
+
+	// update runs fn with the failpoints of the registry, while no other change to the registry
+	// runs, so fn can check and change several entries atomically. fn must not call the registry.
+	update(fn func(failpoints map[Key]any))
 }
 
 // Source provides the registry that Execute uses. Each component that provides its own Source,
@@ -193,6 +202,58 @@ func (r *registryImpl) DeleteAll() []any {
 	clear(r.failpoints)
 	r.count.Store(0)
 	return removed
+}
+
+func (r *registryImpl) update(fn func(failpoints map[Key]any)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	fn(r.failpoints)
+	r.count.Store(int64(len(r.failpoints)))
+}
+
+func (r *registryImpl) DeleteFunc(keep func(key Key, fp any) bool) []any {
+	r.mu.RLock()
+	snapshot := maps.Clone(r.failpoints)
+	r.mu.RUnlock()
+
+	candidates := make(map[Key]any)
+	for key, fp := range snapshot {
+		if !keep(key, fp) {
+			candidates[key] = fp
+		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var removed []any
+	for key, fp := range candidates {
+		if current, ok := r.failpoints[key]; ok && identical(current, fp) {
+			removed = append(removed, current)
+			delete(r.failpoints, key)
+		}
+	}
+	r.count.Store(int64(len(r.failpoints)))
+	return removed
+}
+
+// identical reports whether a and b are the same entry. Unlike sameEntry, it compares slices and
+// maps by identity, so DeleteFunc can remove them.
+func identical(a, b any) bool {
+	if sameEntry(a, b) {
+		return true
+	}
+	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
+	if !va.IsValid() || !vb.IsValid() || va.Type() != vb.Type() {
+		return false
+	}
+	switch va.Kind() {
+	case reflect.Slice:
+		return va.Pointer() == vb.Pointer() && va.Len() == vb.Len()
+	case reflect.Map:
+		return va.Pointer() == vb.Pointer()
+	default:
+		return false
+	}
 }
 
 func (r *registryImpl) Configure(fn func()) {

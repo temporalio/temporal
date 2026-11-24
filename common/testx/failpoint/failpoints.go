@@ -59,6 +59,12 @@ type Failpoint[T any] struct {
 	pauseDur   time.Duration
 	blockCh    chan struct{}
 	times      Recurrence
+	// owner describes the code that manages the failpoint, such as a RuleSet. It is set before the
+	// failpoint is registered and never changes.
+	owner string
+	// suspended is set by SetEnabled(false). A suspended failpoint keeps its configuration,
+	// trigger and counts, but doesn't execute.
+	suspended bool
 
 	// Block synchronization: blockCh, arrivedCh, and blocked work together.
 	//
@@ -115,10 +121,52 @@ func NewFailpoint[T any](key Key) *Failpoint[T] {
 	}
 }
 
+// Owner describes the code that manages the failpoint, such as a RuleSet. It is empty for a
+// failpoint created with NewFailpoint. Other code should leave a failpoint with an owner alone.
+func (f *Failpoint[T]) Owner() string {
+	return f.owner
+}
+
+// settings is a complete configuration of a failpoint.
+type settings[T any] struct {
+	action     Action
+	value      T
+	panicValue any
+	callback   func() T
+	pauseDur   time.Duration
+	times      Recurrence
+	trigger    Trigger
+	enabled    bool
+}
+
+// install replaces the configuration of the failpoint with s, so no execution sees a part of
+// it, such as the new action with the old trigger.
+func (f *Failpoint[T]) install(s settings[T]) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.disableLocked()
+	f.action = s.action
+	f.t = s.value
+	f.panicValue = s.panicValue
+	f.callback = s.callback
+	f.pauseDur = s.pauseDur
+	f.times = s.times
+	f.setTriggerLocked(s.trigger)
+	f.suspended = !s.enabled
+	if f.action == Block && !f.suspended {
+		f.armBlockLocked()
+	}
+}
+
 // SetTrigger limits when the failpoint fires and resets its execution counts.
 func (f *Failpoint[T]) SetTrigger(trigger Trigger) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.setTriggerLocked(trigger)
+}
+
+func (f *Failpoint[T]) setTriggerLocked(trigger Trigger) {
 	f.trigger = trigger
 	f.executions, f.fires = 0, 0
 	f.rng = nil
@@ -157,7 +205,7 @@ func (f *Failpoint[T]) Info() Info {
 	defer f.mu.Unlock()
 	return Info{
 		Key:        f.key,
-		Enabled:    f.action > Off,
+		Enabled:    f.action > Off && !f.suspended,
 		Action:     f.action,
 		Recurrence: f.times,
 	}
@@ -165,6 +213,12 @@ func (f *Failpoint[T]) Info() Info {
 
 func (f *Failpoint[T]) disableLocked() {
 	f.action = Off
+	f.releaseLocked()
+}
+
+// releaseLocked releases the executions blocked at the failpoint and wakes the callers waiting
+// for an arrival. The caller must hold f.mu.
+func (f *Failpoint[T]) releaseLocked() {
 	if f.blockCh != nil {
 		close(f.blockCh)
 		f.blockCh = nil
@@ -232,11 +286,47 @@ func (f *Failpoint[T]) Block(times Recurrence) {
 	f.disableLocked()
 	f.action = Block
 	f.times = times
+	f.armBlockLocked()
+}
+
+// armBlockLocked creates the channels of a block configuration. The caller must hold f.mu.
+func (f *Failpoint[T]) armBlockLocked() {
 	// Store up to _one_ unlock. Be careful with this
 	f.blockCh = make(chan struct{}, 1)
 	f.arrivedCh = make(chan struct{})
 	f.arrived = new(bool)
 	f.blocked = new(int)
+}
+
+// On configures the failpoint to fire without a value. Execute reports that it fired and returns
+// the zero value of T.
+func (f *Failpoint[T]) On(times Recurrence) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.disableLocked()
+	var zero T
+	f.action = On
+	f.t = zero
+	f.times = times
+}
+
+// SetEnabled suspends or resumes the failpoint. A suspended failpoint doesn't execute, but keeps
+// its configuration, its trigger and its counts, so resuming it continues where it stopped.
+// Suspending releases the executions blocked at the failpoint, as Disable does. Configuring an
+// action doesn't change whether the failpoint is suspended.
+func (f *Failpoint[T]) SetEnabled(enabled bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.suspended = !enabled
+	if f.suspended {
+		f.releaseLocked()
+		return
+	}
+	if f.action == Block && f.blockCh == nil {
+		f.armBlockLocked()
+	}
 }
 
 // UnblockOne unblocks one goroutine waiting on the failpoint.
@@ -304,7 +394,7 @@ func (f *Failpoint[T]) executeAny(emit func(Event)) (any, bool) {
 func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 	f.mu.Lock()
 
-	if f.action <= Off {
+	if f.action <= Off || f.suspended {
 		f.mu.Unlock()
 		return t, false
 	}
@@ -337,7 +427,7 @@ func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 		defer report()
 
 		switch action {
-		case Return:
+		case Return, On:
 			return value, true
 		case Panic:
 			panic(panicValue)
@@ -406,7 +496,7 @@ func (f *Failpoint[T]) WaitCh() chan struct{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if f.action != Block || f.currentlyBlocked() {
+	if f.action != Block || f.suspended || f.currentlyBlocked() {
 		return closedCh
 	}
 	return f.arrivedCh
@@ -418,7 +508,7 @@ func (f *Failpoint[T]) WaitCh() chan struct{} {
 // immediately (mirroring WaitCh's tolerant semantics).
 func (f *Failpoint[T]) Wait(ctx context.Context) error {
 	f.mu.Lock()
-	if f.action != Block || f.currentlyBlocked() {
+	if f.action != Block || f.suspended || f.currentlyBlocked() {
 		f.mu.Unlock()
 		return nil
 	}
@@ -462,7 +552,7 @@ func (f *Failpoint[T]) beginAwaitBlock() (*blockWaiter, error) {
 	if f.currentlyBlocked() {
 		return nil, nil
 	}
-	if f.action != Block {
+	if f.action != Block || f.suspended {
 		return nil, ErrNotBlocking
 	}
 	return &blockWaiter{ch: f.arrivedCh, arrived: f.arrived}, nil

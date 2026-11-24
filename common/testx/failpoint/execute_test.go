@@ -3,6 +3,7 @@ package failpoint_test
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/testx/failpoint"
@@ -180,5 +181,44 @@ func TestExecute_OtherTypes(t *testing.T) {
 		require.NoError(t, fp.Wait(t.Context()))
 		fp.Disable()
 		require.False(t, <-done)
+	})
+}
+
+func TestActive(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		configure  func(*failpoint.Failpoint[int])
+		wantActive bool
+	}{
+		{name: "on", configure: func(fp *failpoint.Failpoint[int]) { fp.On(failpoint.Always) }, wantActive: true},
+		{name: "return", configure: func(fp *failpoint.Failpoint[int]) { fp.Return(7, failpoint.Always) }, wantActive: true},
+		{name: "pause", configure: func(fp *failpoint.Failpoint[int]) { fp.Pause(time.Nanosecond, failpoint.Always) }, wantActive: false},
+		{name: "off", configure: func(fp *failpoint.Failpoint[int]) {}, wantActive: false},
+		{name: "suspended", configure: func(fp *failpoint.Failpoint[int]) {
+			fp.On(failpoint.Always)
+			fp.SetEnabled(false)
+		}, wantActive: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fp := failpoint.NewFailpoint[int](key1)
+			tc.configure(fp)
+
+			registry := failpoint.NewRegistry()
+			registry.Set(key1, fp)
+			require.Equal(t, tc.wantActive, failpoint.Active(registrySource{registry: registry}, key1))
+
+			ctx := failpoint.InjectRegistry(t.Context(), registry)
+			require.Equal(t, tc.wantActive, failpoint.ActiveCtx(ctx, key1))
+		})
+	}
+
+	t.Run("not registered", func(t *testing.T) {
+		t.Parallel()
+		require.False(t, failpoint.Active(registrySource{registry: failpoint.NewRegistry()}, key1))
+		require.False(t, failpoint.ActiveCtx(t.Context(), key1))
 	})
 }

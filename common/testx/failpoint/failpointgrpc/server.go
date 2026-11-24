@@ -33,6 +33,20 @@ type disabler interface {
 	Disable()
 }
 
+// owned is implemented by Failpoint[T] for every T.
+type owned interface {
+	Owner() string
+}
+
+// checkNotOwned rejects a change to a failpoint that other code manages, such as a rule set, so
+// the two don't undo each other's changes.
+func checkNotOwned(key failpoint.Key, fp any) error {
+	if o, ok := fp.(owned); ok && o.Owner() != "" {
+		return status.Errorf(codes.FailedPrecondition, "failpoint %s is managed by %s", key, o.Owner())
+	}
+	return nil
+}
+
 // requestKey returns the key named by a request. Requests address failpoints by name, so the key
 // is not declared with NewKey.
 func requestKey(name, scope string) failpoint.Key {
@@ -63,6 +77,9 @@ func (s *server) configure(key failpoint.Key, configure func(*failpoint.Failpoin
 	// so a failpoint is never configured after a concurrent disable removed it.
 	s.registry.Configure(func() {
 		fp := s.registry.GetOrSet(key, failpoint.NewFailpoint[error](key))
+		if err = checkNotOwned(key, fp); err != nil {
+			return
+		}
 		f, ok := fp.(*failpoint.Failpoint[error])
 		if !ok {
 			err = status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
@@ -80,6 +97,9 @@ func (s *server) remove(key failpoint.Key) error {
 	s.registry.Configure(func() {
 		fp := s.registry.Get(key)
 		if fp == nil {
+			return
+		}
+		if err = checkNotOwned(key, fp); err != nil {
 			return
 		}
 		f, ok := fp.(disabler)
@@ -111,9 +131,12 @@ func (s *server) DisableAllFailpoints(ctx context.Context, req *failpointpb.Disa
 		return nil, errNoRegistry
 	}
 	// Detach all entries at once, so an injection either happened before and is disabled, or
-	// happens after and is kept.
+	// happens after and is kept. Failpoints that other code manages, such as a rule set, are kept.
 	s.registry.Configure(func() {
-		for _, fp := range s.registry.DeleteAll() {
+		removed := s.registry.DeleteFunc(func(key failpoint.Key, fp any) bool {
+			return checkNotOwned(key, fp) != nil
+		})
+		for _, fp := range removed {
 			if f, ok := fp.(disabler); ok {
 				f.Disable()
 			}

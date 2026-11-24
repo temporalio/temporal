@@ -66,6 +66,20 @@ func Checkpoint(src Source, key Key) error {
 	return err
 }
 
+// Active executes the failpoint for key in the registry of src, as Execute does, and reports
+// whether it fired with a value. Switch-style call sites use it with failpoints configured with
+// On; a failpoint that pauses, or blocks and is released, is not active.
+func Active(src Source, key Key) bool {
+	_, ok := Execute[any](src, key)
+	return ok
+}
+
+// ActiveCtx is Active for a failpoint looked up as ExecuteCtx does.
+func ActiveCtx(ctx context.Context, key Key) bool {
+	_, ok := ExecuteCtx[any](ctx, key)
+	return ok
+}
+
 // executor is implemented by Failpoint[T] for every T.
 type executor interface {
 	executeAny(emit func(Event)) (any, bool)

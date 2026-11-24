@@ -680,3 +680,54 @@ func TestServer_DisableEntryTypes(t *testing.T) {
 		require.Empty(t, registry.Keys())
 	})
 }
+
+func TestServer_LeavesRuleFailpoints(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	server := failpointgrpc.NewServer(registry)
+	set := failpoint.NewRuleSet(registry, "test rules")
+	t.Cleanup(set.Close)
+	require.NoError(t, set.Apply([]failpoint.Rule{{Key: "rule", Action: failpoint.On}}))
+	ruleKey := failpoint.KeyFromName("rule", "")
+	ruleFP := registry.Get(ruleKey)
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{name: "InjectReturn", call: func() error {
+			_, err := server.InjectReturn(t.Context(), &failpointpb.InjectReturnRequest{Key: "rule", ErrorMessage: "injected"})
+			return err
+		}},
+		{name: "InjectPanic", call: func() error {
+			_, err := server.InjectPanic(t.Context(), &failpointpb.InjectPanicRequest{Key: "rule", PanicValue: "injected"})
+			return err
+		}},
+		{name: "InjectBlock", call: func() error {
+			_, err := server.InjectBlock(t.Context(), &failpointpb.InjectBlockRequest{Key: "rule"})
+			return err
+		}},
+		{name: "DisableFailpoint", call: func() error {
+			_, err := server.DisableFailpoint(t.Context(), &failpointpb.DisableFailpointRequest{Key: "rule"})
+			return err
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call()
+			require.Equal(t, codes.FailedPrecondition, status.Code(err))
+			require.ErrorContains(t, err, "managed by test rules")
+			require.Same(t, ruleFP, registry.Get(ruleKey))
+			require.True(t, failpoint.Active(registrySource{registry}, ruleKey))
+		})
+	}
+
+	t.Run("DisableAllFailpoints", func(t *testing.T) {
+		_, err := server.InjectBlock(t.Context(), &failpointpb.InjectBlockRequest{Key: "rpc"})
+		require.NoError(t, err)
+		_, err = server.DisableAllFailpoints(t.Context(), &failpointpb.DisableAllFailpointsRequest{})
+		require.NoError(t, err)
+		require.Equal(t, []failpoint.Key{ruleKey}, registry.Keys())
+		require.True(t, failpoint.Active(registrySource{registry}, ruleKey))
+	})
+}

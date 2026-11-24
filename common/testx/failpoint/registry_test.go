@@ -194,6 +194,42 @@ func TestRegistry_DeleteAll(t *testing.T) {
 	require.Same(t, fp1, registry.Get(key1))
 }
 
+func TestRegistry_DeleteFunc(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp2 := failpoint.NewFailpoint[int](key2)
+	registry.Set(key1, fp1)
+	registry.Set(key2, fp2)
+	registry.Set(key3, []string{"not comparable"})
+
+	removed := registry.DeleteFunc(func(key failpoint.Key, _ any) bool { return key == key1 })
+	require.ElementsMatch(t, []any{fp2, []string{"not comparable"}}, removed)
+	require.Equal(t, []failpoint.Key{key1}, registry.Keys())
+	require.Same(t, fp1, registry.Get(key1))
+}
+
+func TestRegistry_DeleteFunc_PredicateCallsRegistry(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp2 := failpoint.NewFailpoint[error](key2)
+	replacement := failpoint.NewFailpoint[error](key2)
+	registry.Set(key1, fp1)
+	registry.Set(key2, fp2)
+
+	removed := registry.DeleteFunc(func(key failpoint.Key, _ any) bool {
+		require.Len(t, registry.Keys(), 2)
+		if key == key2 {
+			// The entry changes after the predicate saw it, so it is kept.
+			registry.Set(key2, replacement)
+		}
+		return false
+	})
+	require.Equal(t, []any{fp1}, removed)
+	require.Equal(t, []failpoint.Key{key2}, registry.Keys())
+	require.Same(t, replacement, registry.Get(key2))
+}
+
 func TestRegistry_ID(t *testing.T) {
 	registry := failpoint.NewRegistry()
 	id := registry.ID()

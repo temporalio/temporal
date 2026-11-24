@@ -731,3 +731,85 @@ func TestTrigger_SkippedExecutionDoesNotConsumeOnce(t *testing.T) {
 	require.Equal(t, int64(2), executions)
 	require.Equal(t, int64(1), fired)
 }
+
+func TestFailpointOn(t *testing.T) {
+	t.Parallel()
+
+	fp := failpoint.NewFailpoint[int](key1)
+	fp.Return(42, failpoint.Always)
+	fp.On(failpoint.Once)
+	require.Equal(t, failpoint.Info{Key: key1, Enabled: true, Action: failpoint.On, Recurrence: failpoint.Once}, fp.Info())
+
+	got, fired := fp.Execute()
+	require.True(t, fired)
+	require.Zero(t, got, "On doesn't return the value of an earlier Return")
+	_, fired = fp.Execute()
+	require.False(t, fired)
+}
+
+func TestSetEnabled_KeepsConfigurationAndCounts(t *testing.T) {
+	t.Parallel()
+
+	fp := failpoint.NewFailpoint[error](key1)
+	fp.Return(errors.New("injected"), failpoint.Always)
+	fp.SetTrigger(failpoint.Trigger{Max: 2})
+	require.Equal(t, []bool{true}, fires(fp, 1))
+
+	fp.SetEnabled(false)
+	require.Equal(t, failpoint.Info{Key: key1, Enabled: false, Action: failpoint.Return, Recurrence: failpoint.Always}, fp.Info())
+	require.Equal(t, []bool{false, false}, fires(fp, 2))
+	executions, fired := fp.Stats()
+	require.Equal(t, [2]int64{1, 1}, [2]int64{executions, fired}, "a suspended failpoint doesn't count executions")
+
+	// Configuring an action keeps the failpoint suspended.
+	fp.Return(errors.New("reconfigured"), failpoint.Always)
+	require.Equal(t, []bool{false}, fires(fp, 1))
+
+	fp.SetEnabled(true)
+	require.Equal(t, []bool{true, false}, fires(fp, 2), "the trigger continues from its counts")
+}
+
+func TestSetEnabled_ReleasesBlock(t *testing.T) {
+	t.Parallel()
+
+	fp := failpoint.NewFailpoint[error](key1)
+	fp.Block(failpoint.Always)
+	t.Cleanup(fp.Disable)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	t.Cleanup(cancel)
+	released := make(chan struct{}, 2)
+	execute := func() {
+		_, _ = fp.Execute()
+		released <- struct{}{}
+	}
+	go execute()
+	require.NoError(t, fp.AwaitBlock(ctx))
+
+	fp.SetEnabled(false)
+	await.Rcv(t, released)
+	require.ErrorIs(t, fp.AwaitBlock(ctx), failpoint.ErrNotBlocking)
+	require.NoError(t, fp.Wait(ctx))
+	_, fired := fp.Execute()
+	require.False(t, fired)
+
+	fp.SetEnabled(true)
+	go execute()
+	require.NoError(t, fp.AwaitBlock(ctx))
+	fp.Disable()
+	await.Rcv(t, released)
+}
+
+func TestSetEnabled_EndsAwaitBlock(t *testing.T) {
+	t.Parallel()
+
+	fp := failpoint.NewFailpoint[error](key1)
+	fp.Block(failpoint.Always)
+	t.Cleanup(fp.Disable)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	w, err := fp.BeginAwaitBlock()
+	require.NoError(t, err)
+	fp.SetEnabled(false)
+	require.ErrorIs(t, fp.FinishAwaitBlock(ctx, w), failpoint.ErrNotBlocking)
+}

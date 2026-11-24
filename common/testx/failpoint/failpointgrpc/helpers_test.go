@@ -10,3 +10,9 @@ var (
 	key3   = failpoint.NewKey("3")
 	key100 = failpoint.NewKey("100")
 )
+
+type registrySource struct {
+	registry failpoint.Registry
+}
+
+func (s registrySource) Failpoints() failpoint.Registry { return s.registry }

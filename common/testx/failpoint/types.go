@@ -14,9 +14,11 @@ const (
 	Block
 	Pause
 	Call
+	// On fires without a value. Switch-style call sites check it with Active.
+	On
 )
 
-var actionNames = [...]string{"Unspecified", "Off", "Return", "Panic", "Block", "Pause", "Call"}
+var actionNames = [...]string{"Unspecified", "Off", "Return", "Panic", "Block", "Pause", "Call", "On"}
 
 func (a Action) String() string {
 	if a >= 0 && int(a) < len(actionNames) {

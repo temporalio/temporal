@@ -56,5 +56,39 @@ ctx, _ := failpoint.InjectReturn(ctx, ChargeCard, errors.New("card declined"), f
 err, _ := failpoint.ExecuteCtx[error](ctx, ChargeCard) // card declined
 ```
 
+## Switch-style failpoints
+
+A call site that only needs to know whether to take a fault path checks `Active`:
+
+```go
+if failpoint.Active(s.hooks, SkipCache) {
+	return s.loadUncached(ctx)
+}
+```
+
+`fp.On(failpoint.Always)` makes the failpoint active. `fp.SetEnabled(false)` suspends any failpoint
+without losing its configuration, trigger or counts; it releases held blocks.
+
+## Declarative rules
+
+A `RuleSet` keeps the failpoints of a registry in line with a list of `Rule`s, for example ones
+loaded from a configuration file:
+
+```go
+set := failpoint.NewRuleSet(registry, "billing rules")
+defer set.Close()
+err := set.Apply([]failpoint.Rule{
+	{Key: "billing.chargeCard", Scope: "tenant-1", Action: failpoint.Return, Error: "Unavailable"},
+	{Key: "billing.refund", Action: failpoint.Call, Behavior: "slowRefund"},
+	{Key: "billing.skipCache", Action: failpoint.On, Trigger: failpoint.Trigger{Probability: 0.1}},
+})
+```
+
+Rules name errors and behaviors registered with `RegisterError` and `RegisterBehavior`. `Apply`
+creates, reconfigures and removes the failpoints that the set created; an unchanged rule keeps its
+failpoint's state. It returns an error and changes nothing if a rule is invalid or names the key of
+a failpoint that other code registered. The set's failpoints report the set's source as their
+`Owner`, and the `failpointgrpc` service refuses to change them.
+
 To configure failpoints in another process, serve the registry over gRPC with
 [`failpointgrpc`](failpointgrpc).

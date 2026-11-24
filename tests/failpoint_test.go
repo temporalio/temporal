@@ -4,11 +4,14 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/testx/failpoint"
@@ -41,6 +44,31 @@ func TestFailpoint(t *testing.T) {
 
 		fp.Disable()
 		mustStartWorkflow(env, env.Tv())
+	})
+
+	t.Run("dynamic config rule fails a history call until it is removed", func(t *testing.T) {
+		t.Parallel()
+		env := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		cleanup := env.OverrideDynamicConfig(failpointrules.Setting, []any{map[string]any{
+			"key":     failpoint.GRPCKey(historyservice.HistoryService_StartWorkflowExecution_FullMethodName).Name(),
+			"scope":   env.NamespaceID().String(),
+			"action":  "Return",
+			"error":   "InvalidArgument",
+			"message": "injected by rule",
+		}})
+
+		await.Require(t.Context(), t, func(t *await.T) {
+			_, err := env.FrontendClient().StartWorkflowExecution(t.Context(), startWorkflowRequest(env, env.Tv()))
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, "injected by rule")
+		}, 10*time.Second, 100*time.Millisecond)
+
+		cleanup()
+		await.Require(t.Context(), t, func(t *await.T) {
+			_, err := env.FrontendClient().StartWorkflowExecution(t.Context(), startWorkflowRequest(env, env.Tv()))
+			require.NoError(t, err)
+		}, 10*time.Second, 100*time.Millisecond)
 	})
 
 	// The services of the test cluster share one failpoint registry, so the frontend applies each

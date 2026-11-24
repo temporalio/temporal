@@ -52,6 +52,8 @@ enum Action {
   ACTION_PAUSE = 5;
   // ACTION_CALL causes the failpoint to call a specified function.
   ACTION_CALL = 6;
+  // ACTION_ON causes the failpoint to fire without a value.
+  ACTION_ON = 7;
 }
 
 // Recurrence specifies how many times a failpoint should trigger.

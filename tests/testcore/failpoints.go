@@ -31,6 +31,9 @@ func injectFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Failpoin
 	if registry == nil {
 		env.t.Fatal("InjectFailpoint: failpoints require test hooks; use -tags test_dep")
 	}
+	if owned, ok := registry.Get(key).(interface{ Owner() string }); ok && owned.Owner() != "" {
+		env.t.Fatalf("InjectFailpoint: failpoint %s is managed by %s", key, owned.Owner())
+	}
 	fp := failpoint.NewFailpoint[T](key)
 	registry.Set(key, fp)
 	env.t.Cleanup(func() {

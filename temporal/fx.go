@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/frontend"
@@ -150,7 +151,11 @@ var (
 		chasm.Module,
 		serialization.Module,
 		FxLogAdapter,
+		// Before ServerLifetimeHooks, so the failpoint rules apply before the services start.
+		failpointrules.Module,
 		fx.Invoke(ServerLifetimeHooks),
+		// After ServerLifetimeHooks, so the failpoint rules are removed before the services stop.
+		failpointrules.ReleaseModule,
 	)
 )
 

@@ -39,6 +39,8 @@ const (
 	Action_ACTION_PAUSE Action = 5
 	// ACTION_CALL causes the failpoint to call a specified function.
 	Action_ACTION_CALL Action = 6
+	// ACTION_ON causes the failpoint to fire without a value.
+	Action_ACTION_ON Action = 7
 )
 
 // Enum value maps for Action.
@@ -51,6 +53,7 @@ var (
 		4: "ACTION_BLOCK",
 		5: "ACTION_PAUSE",
 		6: "ACTION_CALL",
+		7: "ACTION_ON",
 	}
 	Action_value = map[string]int32{
 		"ACTION_UNSPECIFIED": 0,
@@ -60,6 +63,7 @@ var (
 		"ACTION_BLOCK":       4,
 		"ACTION_PAUSE":       5,
 		"ACTION_CALL":        6,
+		"ACTION_ON":          7,
 	}
 )
 
@@ -1049,7 +1053,7 @@ const file_temporal_testx_failpoint_v1_failpoint_proto_rawDesc = "" +
 	"\x17DescribeRegistryRequest\";\n" +
 	"\x18DescribeRegistryResponse\x12\x1f\n" +
 	"\vregistry_id\x18\x01 \x01(\tR\n" +
-	"registryId*\x8a\x01\n" +
+	"registryId*\x99\x01\n" +
 	"\x06Action\x12\x16\n" +
 	"\x12ACTION_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -1058,7 +1062,8 @@ const file_temporal_testx_failpoint_v1_failpoint_proto_rawDesc = "" +
 	"\fACTION_PANIC\x10\x03\x12\x10\n" +
 	"\fACTION_BLOCK\x10\x04\x12\x10\n" +
 	"\fACTION_PAUSE\x10\x05\x12\x0f\n" +
-	"\vACTION_CALL\x10\x06*T\n" +
+	"\vACTION_CALL\x10\x06\x12\r\n" +
+	"\tACTION_ON\x10\a*T\n" +
 	"\n" +
 	"Recurrence\x12\x1a\n" +
 	"\x16RECURRENCE_UNSPECIFIED\x10\x00\x12\x13\n" +

@@ -379,6 +379,40 @@ _, err := client.InjectReturn(ctx, &failpointpb.InjectReturnRequest{
 })
 ```
 
+#### Failpoint rules in dynamic config
+
+With `-tags=test_dep`, a server process applies the failpoint rules of the `testing.failpointRules`
+dynamic config setting to its failpoints. This configures failpoints without code, for example in a
+development server's dynamic config file:
+
+```yaml
+testing.failpointRules:
+  - value:
+      - key: "grpc:/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution"
+        scope: "<namespace ID>"   # Optional.
+        action: Return            # Return, Panic, Block, Pause, Call or On.
+        error: InvalidArgument    # A name from the failpoint error catalog, for Return and Panic.
+        message: "injected"
+        recurrence: Always        # Once or Always (default).
+        trigger: {probability: 0.5, after: 1, max: 10}
+      - key: "grpc:/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask"
+        action: Pause
+        delay: 2s
+        enabled: false            # Keeps the rule configured but suspended.
+```
+
+`Call` names a behavior registered with `failpoint.RegisterBehavior` in `behavior`. `On` makes the
+failpoint fire without a value, for call sites that check `failpoint.Active`. Changing the setting
+creates, reconfigures and removes the failpoints of the rules; a rule that didn't change keeps its
+failpoint's state. Rules and other injections stay separate: if a rule names the key of a failpoint
+that a test or the `FailpointService` registered, the server logs an error and keeps the previous
+rules, and the `FailpointService` and `testcore.InjectFailpoint` refuse to change a failpoint of a
+rule. An invalid `testing.failpointRules` value stops the server: it fails to start, or exits when
+the value changes. A dynamic config file with a non-string map key in a rule is rejected as a
+whole by the file loader, which keeps the previous dynamic config and logs an error. Functional
+tests set the setting with `env.OverrideDynamicConfig(failpointrules.Setting, ...)` on a dedicated
+cluster.
+
 ### softassert package
 
 `softassert.That` is a "soft" assertion that logs an error if the given condition is false.
