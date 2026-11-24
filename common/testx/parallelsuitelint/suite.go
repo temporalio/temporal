@@ -41,6 +41,23 @@ func embeddedSuite(t types.Type, seen map[types.Type]bool) *types.Named {
 	return nil
 }
 
+func suiteMethod(selection *types.Selection) bool {
+	suite := embeddedSuite(selection.Recv(), make(map[types.Type]bool))
+	if suite == nil {
+		return false
+	}
+	method, ok := selection.Obj().(*types.Func)
+	if !ok || !method.Exported() {
+		return false
+	}
+	methods := types.NewMethodSet(types.NewPointer(suite))
+	member := methods.Lookup(method.Pkg(), method.Name())
+	if member == nil {
+		return false
+	}
+	return member.Obj().(*types.Func).Origin() == method.Origin()
+}
+
 func suiteExpression(pass *analysis.Pass, expr ast.Expr) bool {
 	return embedsSuite(pass.TypesInfo.TypeOf(expr), make(map[types.Type]bool))
 }
