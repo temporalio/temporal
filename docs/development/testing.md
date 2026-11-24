@@ -350,9 +350,25 @@ key:
 - `failpoints.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution")` fires before a
   persistence store method.
 
-gRPC and HTTP failpoints are scoped to the namespace ID of the request when it has one. Persistence
-requests carry no namespace, so persistence failpoints apply to all namespaces; inject them with
-`testcore.InjectGlobalFailpoint`, which requires a dedicated cluster.
+gRPC, HTTP, and persistence failpoints are scoped to the namespace ID of the request when it has
+one, so `testcore.InjectFailpoint` works for them on a shared cluster. A failpoint without a scope
+applies to all namespaces, but only to requests whose namespace has no failpoint registered for the
+same key. A failpoint registered for the namespace takes precedence, even when it is disabled.
+
+Only store methods that take a request after the context have a persistence failpoint. Of these,
+the requests of the following methods have no namespace, so only failpoints without a scope fire for
+them:
+
+- `ShardStore`, `ClusterMetadataStore`, `Queue`, `QueueV2`, and `NexusEndpointStore`: all methods.
+- `ExecutionStore`: history branch methods (`AppendHistoryNodes`, `ReadHistoryBranch`, ...), history
+  task methods (`GetHistoryTasks`, `CompleteHistoryTask`, `RangeCompleteHistoryTasks`),
+  `ListConcreteExecutions`, and the replication DLQ methods except `PutReplicationTaskToDLQ`.
+- `MetadataStore`: `ListNamespaces`, `DeleteNamespaceByName`, and `GetNamespace` by name.
+- `TaskStore`: `ListTaskQueue`.
+
+Inject failpoints for these methods with `testcore.InjectGlobalFailpoint`, which requires a
+dedicated cluster. `common/persistence/faultinjection/namespace.go` maps each request type to its
+namespace.
 
 With `-tags=test_dep`, every server process also serves the `FailpointService` gRPC API
 (`common/testx/proto`) on its gRPC port, so tests and tools outside the process can configure

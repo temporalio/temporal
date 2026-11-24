@@ -16,8 +16,8 @@ func InjectFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Failpoin
 }
 
 // InjectGlobalFailpoint is InjectFailpoint for a failpoint that applies to all namespaces, such as
-// a persistence failpoint whose requests carry no namespace. Like global test hooks, it requires a
-// dedicated cluster.
+// a persistence failpoint of a store method whose requests carry no namespace. Like global test
+// hooks, it requires a dedicated cluster.
 func InjectGlobalFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Failpoint[T] {
 	if env.isShared && !testClusterRouter.hasSuiteScoped(env.t) {
 		env.t.Fatal("InjectGlobalFailpoint: global failpoints require a dedicated cluster; use testcore.WithDedicatedCluster()")

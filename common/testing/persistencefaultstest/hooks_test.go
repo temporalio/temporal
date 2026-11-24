@@ -49,6 +49,24 @@ func TestWithFailpoints(t *testing.T) {
 		require.NotSame(t, original, fiConfig)
 	})
 
+	t.Run("failpoint scoped to a namespace fails only its requests", func(t *testing.T) {
+		t.Parallel()
+		createKey := failpoints.PersistenceKey(string(config.ExecutionStoreName), "CreateWorkflowExecution")
+		scopedTestHooks := testhooks.NewTestHooks()
+		scopedFP := failpoint.NewFailpoint[error](createKey.ForScope("ns"))
+		scopedFP.Return(injectedErr, failpoint.Always)
+		scopedTestHooks.Failpoints().Set(createKey.ForScope("ns"), scopedFP)
+		fiConfig := persistencefaultstest.WithFailpoints(nil, scopedTestHooks)
+
+		inNamespace := createTarget
+		inNamespace.NamespaceID = "ns"
+		inOtherNamespace := createTarget
+		inOtherNamespace.NamespaceID = "other"
+		require.ErrorIs(t, fiConfig.Injector(inNamespace), injectedErr)
+		require.NoError(t, fiConfig.Injector(inOtherNamespace))
+		require.NoError(t, fiConfig.Injector(createTarget))
+	})
+
 	t.Run("zero test hooks leave the config unchanged", func(t *testing.T) {
 		t.Parallel()
 		original := &config.FaultInjection{}

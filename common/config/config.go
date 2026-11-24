@@ -313,6 +313,8 @@ type (
 		Method string
 		// Request is optionally populated by fault injection wrappers for request-aware faults.
 		Request any
+		// NamespaceID is the ID of the namespace that Request operates on, or empty if it has none.
+		NamespaceID string
 	}
 
 	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.

@@ -2,7 +2,6 @@ package persistencefaultstest
 
 import (
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/testing/failpoints"
 	commontesthooks "go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
@@ -30,8 +29,8 @@ func WithFailpoints(fiConfig *config.FaultInjection, testHooks commontesthooks.T
 			}
 		}
 		key := failpoints.PersistenceKey(string(target.Store), target.Method)
-		if nsID := faultinjection.ScopeFromRequest(target.Request).NamespaceID; nsID != "" {
-			key = key.ForScope(nsID.String())
+		if target.NamespaceID != "" {
+			key = key.ForScope(target.NamespaceID)
 		}
 		return failpoint.Checkpoint(testHooks, key)
 	}
