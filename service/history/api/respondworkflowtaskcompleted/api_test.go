@@ -36,6 +36,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
@@ -890,6 +892,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		false,
 		nil,
 		0,
+		"",
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -970,6 +973,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		false,
 		nil,
 		0,
+		"",
 	)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: tv.Any().String(),
@@ -988,6 +992,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		false,
 		nil,
 		0,
+		"",
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -1507,6 +1512,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 		false,
 		nil,
 		0,
+		"",
 	)
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1540,4 +1546,82 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 	s.NoError(err)
 
 	return wfContext, serializedTaskToken
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) expectNewWorkflowTaskResponse(tv *testvars.TestVars) {
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tv.NamespaceID()).Return(tv.NamespaceName(), nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{}, nil).AnyTimes()
+	visibilityMgr := manager.NewMockVisibilityManager(s.controller)
+	visibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
+	s.workflowTaskCompletedHandler.persistenceVisibilityMgr = visibilityMgr
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
+		Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestInlineWorkflowTaskKeepsWorkerControlQueue() {
+	for _, workerControlQueue := range []string{"worker-control", ""} {
+		s.Run("normal workflow task/"+workerControlQueue, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.expectNewWorkflowTaskResponse(tv)
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+			wfContext := s.createStartedWorkflow(tv)
+			updRequestMsg, _, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+			wfContext.(*workflow.ContextImpl).MutableState.GetExecutionInfo().WorkflowTaskWorkerControlQueue = workerControlQueue
+
+			resp, err := s.workflowTaskCompletedHandler.Invoke(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:                  serializedTaskToken,
+					Commands:                   s.UpdateAcceptCompleteCommands(tv),
+					Messages:                   s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+					Identity:                   tv.Any().String(),
+					ReturnNewWorkflowTask:      true,
+					ForceCreateNewWorkflowTask: true,
+				},
+			})
+			s.NoError(err)
+			s.NotNil(resp.GetNewWorkflowTask())
+
+			newWorkflowTask := wfContext.(*workflow.ContextImpl).MutableState.GetStartedWorkflowTask()
+			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, newWorkflowTask.Type)
+			s.Equal(workerControlQueue, newWorkflowTask.WorkerControlQueue)
+		})
+
+		s.Run("speculative workflow task/"+workerControlQueue, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.expectNewWorkflowTaskResponse(tv)
+			wfContext := s.createStartedWorkflow(tv)
+			updRequestMsg, _, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+			ms := wfContext.(*workflow.ContextImpl).MutableState
+			ms.GetExecutionInfo().WorkflowTaskWorkerControlQueue = workerControlQueue
+
+			// An update admitted while the workflow task is running makes the completion start a speculative task.
+			ctx := metrics.AddMetricsContext(context.Background())
+			nextUpd, _, err := wfContext.UpdateRegistry(ctx).FindOrCreate(ctx, "next-"+tv.UpdateID())
+			s.NoError(err)
+			s.NoError(nextUpd.Admit(
+				&updatepb.Request{Meta: &updatepb.Meta{UpdateId: "next-" + tv.UpdateID()}, Input: &updatepb.Input{Name: tv.HandlerName()}},
+				workflow.WithEffects(effect.Immediate(ctx), ms),
+			))
+
+			resp, err := s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:             serializedTaskToken,
+					Messages:              s.UpdateRejectMessages(tv, updRequestMsg),
+					Identity:              tv.Any().String(),
+					ReturnNewWorkflowTask: true,
+				},
+			})
+			s.NoError(err)
+			s.NotNil(resp.GetNewWorkflowTask())
+
+			newWorkflowTask := wfContext.(*workflow.ContextImpl).MutableState.GetStartedWorkflowTask()
+			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE, newWorkflowTask.Type)
+			s.Equal(workerControlQueue, newWorkflowTask.WorkerControlQueue)
+		})
+	}
 }

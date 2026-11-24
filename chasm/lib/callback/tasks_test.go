@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -219,6 +220,18 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "handler-error:BAD_REQUEST",
+			expectedEvent:         "nonretryable-error",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+		{
+			name: "redirect-rejected",
+			caller: func(r *http.Request) (*http.Response, error) {
+				return nil, &url.Error{Op: "Post", URL: r.URL.String(), Err: commonnexus.ErrRedirectNotAllowed}
+			},
+			expectedMetricOutcome: "unknown-error",
 			expectedEvent:         "nonretryable-error",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
