@@ -9899,6 +9899,18 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 			wantVisibilityUpdate: true,
 		},
 		{
+			name:          "no configuration remains unset",
+			updatedFlag:   true,
+			wantInfoIsNil: true,
+		},
+		{
+			name:        "disabled configuration unchanged",
+			existing:    &commonpb.TimeSkippingConfig{Enabled: false},
+			eventConfig: &commonpb.TimeSkippingConfig{Enabled: false},
+			wantConfig:  &commonpb.TimeSkippingConfig{Enabled: false},
+			updatedFlag: true,
+		},
+		{
 			name:              "overwrites existing",
 			existing:          initialConfig,
 			eventConfig:       updatedConfig,

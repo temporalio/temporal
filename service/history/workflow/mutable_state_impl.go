@@ -6189,12 +6189,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		} else {
 			ms.updateTimeSkippingInfo(tsc)
 		}
-		if ms.IsWorkflow() && tsi == nil && ms.GetExecutionInfo().GetTimeSkippingInfo() != nil {
-			ms.visibilityUpdated = true
-			if err := ms.taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
-				return err
-			}
-		} else if err := ms.upsertVisibilityOnTimeSkippingEnabledChange(previouslyEnabled); err != nil {
+		if err := ms.upsertVisibilityOnTimeSkippingChange(tsi != nil, previouslyEnabled); err != nil {
 			return err
 		}
 	}
