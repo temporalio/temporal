@@ -262,12 +262,14 @@ var (
 	// It's a placeholder for now but will contain APIs once their proven out using dynamic config
 	PodOnlyAPIToPriority = map[string]int{}
 
-	// DescribeMutableStateAPIToPriority holds AdminService.DescribeMutableState's pod-only rate-limit
-	// priority while it's still gated by AdminEnableDescribeMutableStateRateLimit. RateLimitInterceptorProvider
-	// Once the rollout is complete and the flag is retired, move this entry into PodOnlyAPIToPriority
+	// AdminAPIToPriority holds the AdminService APIs' pod-only rate-limit priorities while they're
+	// still gated by AdminEnablePodLevelRateLimit. RateLimitInterceptorProvider
+	// Once the rollout is complete and the flag is retired, move these entries into PodOnlyAPIToPriority
 	// above and delete this map.
-	DescribeMutableStateAPIToPriority = map[string]int{
-		adminservice.AdminService_DescribeMutableState_FullMethodName: 5,
+	AdminAPIToPriority = map[string]int{
+		adminservice.AdminService_DescribeMutableState_FullMethodName:             5,
+		adminservice.AdminService_GetWorkflowExecutionRawHistory_FullMethodName:   5,
+		adminservice.AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName: 5,
 	}
 
 	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
@@ -303,7 +305,7 @@ func NewExecutionPriorityRateLimiter(
 			if priority, ok := PodOnlyAPIToPriority[req.API]; ok {
 				return priority
 			}
-			if priority, ok := DescribeMutableStateAPIToPriority[req.API]; ok {
+			if priority, ok := AdminAPIToPriority[req.API]; ok {
 				return priority
 			}
 			return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
