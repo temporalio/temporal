@@ -30,24 +30,24 @@ type config struct {
 // Option configures shard selection.
 type Option func(*config)
 
-// WithTotalShardsEnv sets the variable used for the shard count; the default is TEST_TOTAL_SHARDS.
+// WithTotalShardsEnv sets the variable used for the shard count; the default is TESTSHARD_COUNT.
 func WithTotalShardsEnv(name string) Option {
 	return func(cfg *config) { cfg.totalShardsEnv = name }
 }
 
-// WithShardIndexEnv sets the variable used for the zero-based index; the default is TEST_SHARD_INDEX.
+// WithShardIndexEnv sets the variable used for the zero-based index; the default is TESTSHARD_INDEX.
 func WithShardIndexEnv(name string) Option {
 	return func(cfg *config) { cfg.shardIndexEnv = name }
 }
 
-// FromEnv reads TEST_TOTAL_SHARDS and the zero-based TEST_SHARD_INDEX by default.
+// FromEnv reads TESTSHARD_COUNT and the zero-based TESTSHARD_INDEX by default.
 // Sharding is disabled when either configured variable is empty.
 // A non-empty salt is required when sharding is enabled.
 // The salt is appended to the full test name before hashing with FarmHash Fingerprint32.
 func FromEnv(salt string, options ...Option) (Shard, error) {
 	cfg := config{
-		totalShardsEnv: "TEST_TOTAL_SHARDS",
-		shardIndexEnv:  "TEST_SHARD_INDEX",
+		totalShardsEnv: "TESTSHARD_COUNT",
+		shardIndexEnv:  "TESTSHARD_INDEX",
 	}
 	for _, option := range options {
 		option(&cfg)

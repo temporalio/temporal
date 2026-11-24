@@ -26,7 +26,7 @@ This document describes the project's testing setup, utilities and best practice
 The functional test package uses the checked-in salt to select suite methods before setup. Pass the shard count and index on the test command to run a single shard.
 
 ```bash
-TEST_TOTAL_SHARDS=5 TEST_SHARD_INDEX=0 \
+TESTSHARD_COUNT=5 TESTSHARD_INDEX=0 \
   go test -tags test_dep ./tests
 ```
 

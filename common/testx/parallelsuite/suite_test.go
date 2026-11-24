@@ -280,7 +280,7 @@ func TestRunSharding(t *testing.T) {
 			require.NoError(t, err)
 			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestRunShardingProcess$", "-testify.m="+tc.filter)
 			cmd.Env = append(os.Environ(),
-				"TESTX_SHARD_PROCESS=1", "TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index,
+				"TESTX_SHARD_PROCESS=1", "TESTSHARD_COUNT="+tc.total, "TESTSHARD_INDEX="+tc.index,
 				"TESTX_SHARD_WANT="+tc.want, "TESTX_SHARD_LEGACY="+strconv.FormatBool(tc.legacy),
 				"TESTX_SHARD_PLAIN_RUN="+strconv.FormatBool(tc.plainRun))
 			output, err := cmd.CombinedOutput()

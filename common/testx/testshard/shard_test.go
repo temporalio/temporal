@@ -24,16 +24,16 @@ func TestFromEnv(t *testing.T) {
 		{name: "first shard", total: "4", index: "0", salt: "my-suite", want: Shard{total: 4, salt: "my-suite"}},
 		{name: "last shard", total: "4", index: "3", salt: "my-suite", want: Shard{index: 3, total: 4, salt: "my-suite"}},
 		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required"},
-		{name: "malformed total", total: "four", index: "0", wantErr: `parsing TEST_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
-		{name: "zero total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
-		{name: "negative total", total: "-1", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: -1"},
-		{name: "malformed index", total: "4", index: "first", wantErr: `parsing TEST_SHARD_INDEX: strconv.Atoi: parsing "first": invalid syntax`},
-		{name: "negative index", total: "4", index: "-1", wantErr: "TEST_SHARD_INDEX out of bounds: -1 must be in [0, 4)"},
-		{name: "index equal to total", total: "4", index: "4", wantErr: "TEST_SHARD_INDEX out of bounds: 4 must be in [0, 4)"},
+		{name: "malformed total", total: "four", index: "0", wantErr: `parsing TESTSHARD_COUNT: strconv.Atoi: parsing "four": invalid syntax`},
+		{name: "zero total", total: "0", index: "0", wantErr: "TESTSHARD_COUNT must be positive: 0"},
+		{name: "negative total", total: "-1", index: "0", wantErr: "TESTSHARD_COUNT must be positive: -1"},
+		{name: "malformed index", total: "4", index: "first", wantErr: `parsing TESTSHARD_INDEX: strconv.Atoi: parsing "first": invalid syntax`},
+		{name: "negative index", total: "4", index: "-1", wantErr: "TESTSHARD_INDEX out of bounds: -1 must be in [0, 4)"},
+		{name: "index equal to total", total: "4", index: "4", wantErr: "TESTSHARD_INDEX out of bounds: 4 must be in [0, 4)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("TEST_TOTAL_SHARDS", tc.total)
-			t.Setenv("TEST_SHARD_INDEX", tc.index)
+			t.Setenv("TESTSHARD_COUNT", tc.total)
+			t.Setenv("TESTSHARD_INDEX", tc.index)
 			shard, err := FromEnv(tc.salt)
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
@@ -56,9 +56,9 @@ func TestShouldRunTestCompatibility(t *testing.T) {
 		{name: "TestSuite/TestMethod", salt: "-test-salt", owner: "1"},
 	} {
 		t.Run(tc.name+tc.salt, func(t *testing.T) {
-			t.Setenv("TEST_TOTAL_SHARDS", "4")
+			t.Setenv("TESTSHARD_COUNT", "4")
 			for _, index := range []string{"0", "1", "2", "3"} {
-				t.Setenv("TEST_SHARD_INDEX", index)
+				t.Setenv("TESTSHARD_INDEX", index)
 				shard, err := FromEnv(tc.salt)
 				require.NoError(t, err)
 				require.Equal(t, index == tc.owner, shard.ShouldRunTest(tc.name))
@@ -84,8 +84,8 @@ func TestSkipUnlessInShardInheritsSelection(t *testing.T) {
 }
 
 func TestFromEnvCustomVariables(t *testing.T) {
-	t.Setenv("TEST_TOTAL_SHARDS", "invalid")
-	t.Setenv("TEST_SHARD_INDEX", "invalid")
+	t.Setenv("TESTSHARD_COUNT", "invalid")
+	t.Setenv("TESTSHARD_INDEX", "invalid")
 	for _, tc := range []struct {
 		name    string
 		total   string
@@ -144,7 +144,7 @@ func TestSkipUnlessInShard(t *testing.T) {
 		{name: "other shard", total: "4", index: "1", salt: "my-suite"},
 		{name: "other salt", total: "4", index: "2", salt: "other", wantRun: true},
 		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required"},
-		{name: "misconfigured", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
+		{name: "misconfigured", total: "0", index: "0", wantErr: "TESTSHARD_COUNT must be positive: 0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -152,7 +152,7 @@ func TestSkipUnlessInShard(t *testing.T) {
 			require.NoError(t, err)
 			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestSkipUnlessInShardProcess$", "-test.v")
 			cmd.Env = append(os.Environ(), "TESTX_SKIP_PROCESS=1", "TESTX_SKIP_SALT="+tc.salt,
-				"TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index)
+				"TESTSHARD_COUNT="+tc.total, "TESTSHARD_INDEX="+tc.index)
 			output, err := cmd.CombinedOutput()
 			if tc.wantErr != "" {
 				require.Error(t, err, "%s", output)

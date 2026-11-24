@@ -11,7 +11,7 @@ Run each shard in a separate job, using the same salt and total and a different
 index:
 
 ```sh
-TEST_TOTAL_SHARDS=4 TEST_SHARD_INDEX=0 go test ./...
+TESTSHARD_COUNT=4 TESTSHARD_INDEX=0 go test ./...
 ```
 
 Run indices `0` through `3` for this example. If either variable is empty, all
