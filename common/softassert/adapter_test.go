@@ -4,10 +4,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/internal/softassert"
 	"go.temporal.io/server/common/log/tag"
 	server "go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/testx/softassert"
 )
 
 func TestAdapterPreservesSharedMarker(t *testing.T) {
