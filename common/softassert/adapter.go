@@ -1,14 +1,5 @@
-// softassert provides utilities for performing assertions.
-//
-// Unlike traditional assertions that may terminate the program or panic, soft assertions log an
-// error message when a condition is not met but allow the program to continue running. The runner
-// of the program, such as a Go test, is expected to flag failed assertions.
-//
-// Best practices:
-// - Use it to check for programming errors and invariants.
-// - Use it to communicate assumptions about the code.
-// - Use it to abort or recover from an unexpected state.
-// - Never use it as a substitute for regular error handling, validation, or control flow.
+// Package softassert adapts [go.temporal.io/testx/softassert] to Temporal's logger
+// and attaches [tag.FailedAssertion] to each failed assertion.
 package softassert
 
 import (
@@ -17,30 +8,15 @@ import (
 	"go.temporal.io/testx/softassert"
 )
 
-// That performs a soft assertion by logging an error if the given condition is false.
-// It is meant to indicate a condition is always expected to be true.
-// Returns true if the condition is met, otherwise false.
-//
-// `staticMessage` is expected to be a static string to help with grouping and searching logs.
-// Dynamic information should be passed via `tags`.
-//
-// Example:
-// softassert.That(logger, object.state == "ready", "object is not ready")
+// That returns condition and calls [Fail] when it is false.
 func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
 	if !condition {
-		// By using the same prefix for all assertions, they can be reliably found in logs.
-		softassert.Fail(logger, staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
+		Fail(logger, staticMessage, tags...)
 	}
 	return condition
 }
 
-// Fail logs an error using `staticMessage` to indicate a failed assertion.
-//
-// `staticMessage` is expected to be a static string to help with grouping and searching logs.
-// Dynamic information should be passed via `tags`.
-//
-// Example:
-// softassert.Fail(logger, "unreachable code reached", tag.String("state", object.state))
+// Fail logs a failed assertion with [tag.FailedAssertion]. Pass dynamic details as tags.
 func Fail(logger log.Logger, staticMessage string, tags ...tag.Tag) {
 	softassert.Fail(logger, staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
 }

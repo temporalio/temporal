@@ -27,8 +27,7 @@ type Logger[F any] interface {
 // softassert.That(logger, object.state == "ready", "object is not ready")
 func That[F any](logger Logger[F], condition bool, staticMessage string, tags ...F) bool {
 	if !condition {
-		// By using the same prefix for all assertions, they can be reliably found in logs.
-		logger.Error("failed assertion: "+staticMessage, tags...)
+		Fail(logger, staticMessage, tags...)
 	}
 	return condition
 }
@@ -41,5 +40,6 @@ func That[F any](logger Logger[F], condition bool, staticMessage string, tags ..
 // Example:
 // softassert.Fail(logger, "unreachable code reached", tag.String("state", object.state))
 func Fail[F any](logger Logger[F], staticMessage string, tags ...F) {
+	// By using the same prefix for all assertions, they can be reliably found in logs.
 	logger.Error("failed assertion: "+staticMessage, tags...)
 }
