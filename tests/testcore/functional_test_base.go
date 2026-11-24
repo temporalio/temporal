@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/testx/testshard"
 )
 
 type (
@@ -382,7 +384,7 @@ func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persist
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
 func (s *functionalTestBase) SetupTest() {
-	s.checkTestShard()
+	testshard.SkipUnlessInShard(s.T(), testshard.WithSalt(strings.TrimSpace(shardSalt)))
 	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 	s.setupSdk()
@@ -406,11 +408,6 @@ func (s *functionalTestBase) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.UpdateUtils = updateutils.New(s.T())
-}
-
-// checkTestShard supports test sharding based on environment variables.
-func (s *functionalTestBase) checkTestShard() {
-	checkTestShard(s.T())
 }
 
 func ApplyTestClusterOptions(options []TestClusterOption) testClusterParams {
