@@ -22,12 +22,18 @@ import (
 type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
+		// HandleTransmissionTask publishes a namespace replication task.
+		// replicationClusters are the clusters that hold a replica, as the
+		// replication resolver reports them, and replicationClusterListUpdated
+		// reports whether that list changed. They decide whether the task is
+		// published; the task carries replicationConfig as given.
 		HandleTransmissionTask(
 			ctx context.Context,
 			namespaceOperation enumsspb.NamespaceOperation,
 			info *persistencespb.NamespaceInfo,
 			config *persistencespb.NamespaceConfig,
 			replicationConfig *persistencespb.NamespaceReplicationConfig,
+			replicationClusters []string,
 			replicationClusterListUpdated bool,
 			configVersion int64,
 			failoverVersion int64,
@@ -70,6 +76,7 @@ func (r *replicator) HandleTransmissionTask(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
+	replicationClusters []string,
 	replicationClusterListUpdated bool,
 	configVersion int64,
 	failoverVersion int64,
@@ -81,7 +88,7 @@ func (r *replicator) HandleTransmissionTask(
 	if !ShouldReplicateNamespace(
 		forceReplicate,
 		isGlobalNamespace,
-		replicationConfig.Clusters,
+		replicationClusters,
 		replicationClusterListUpdated,
 		info.State,
 	) {
