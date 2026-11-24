@@ -1,5 +1,11 @@
 package softassert
 
+// Field supplies a key and value for structured logging.
+type Field interface {
+	Key() string
+	Value() any
+}
+
 type failedAssertionTag struct{}
 
 func (failedAssertionTag) Key() string {

@@ -1,5 +1,4 @@
-// Package softassert adapts [go.temporal.io/testx/softassert] to Temporal's logger
-// and attaches the shared failure marker to each failed assertion.
+// TODO: Remove this forwarding file once all callers use go.temporal.io/testx/softassert.
 package softassert
 
 import (
@@ -8,15 +7,12 @@ import (
 	"go.temporal.io/testx/softassert"
 )
 
-// That returns condition and calls [Fail] when it is false.
+// That returns condition and logs an error when it is false.
 func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
-	if !condition {
-		Fail(logger, staticMessage, tags...)
-	}
-	return condition
+	return softassert.That(logger, condition, staticMessage, tags...)
 }
 
 // Fail logs a failed assertion with the shared failure marker. Pass dynamic details as tags.
 func Fail(logger log.Logger, staticMessage string, tags ...tag.Tag) {
-	softassert.Fail(logger, staticMessage, append([]tag.Tag{softassert.FailedAssertion}, tags...)...)
+	softassert.Fail(logger, staticMessage, tags...)
 }

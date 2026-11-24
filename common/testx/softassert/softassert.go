@@ -12,8 +12,8 @@
 package softassert
 
 // Logger is the error-logging method needed by soft assertions.
-type Logger[F any] interface {
-	Error(string, ...F)
+type Logger interface {
+	Error(string, ...Field)
 }
 
 // That performs a soft assertion by logging an error if the given condition is false.
@@ -25,21 +25,21 @@ type Logger[F any] interface {
 //
 // Example:
 // softassert.That(logger, object.state == "ready", "object is not ready")
-func That[F any](logger Logger[F], condition bool, staticMessage string, tags ...F) bool {
+func That(logger Logger, condition bool, staticMessage string, tags ...Field) bool {
 	if !condition {
 		Fail(logger, staticMessage, tags...)
 	}
 	return condition
 }
 
-// Fail logs an error using `staticMessage` to indicate a failed assertion.
+// Fail logs an error using `staticMessage` and prepends [FailedAssertion] to the tags.
 //
 // `staticMessage` is expected to be a static string to help with grouping and searching logs.
 // Dynamic information should be passed via `tags`.
 //
 // Example:
 // softassert.Fail(logger, "unreachable code reached", tag.String("state", object.state))
-func Fail[F any](logger Logger[F], staticMessage string, tags ...F) {
+func Fail(logger Logger, staticMessage string, tags ...Field) {
 	// By using the same prefix for all assertions, they can be reliably found in logs.
-	logger.Error("failed assertion: "+staticMessage, tags...)
+	logger.Error("failed assertion: "+staticMessage, append([]Field{FailedAssertion}, tags...)...)
 }

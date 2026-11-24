@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestAdapterPreservesSharedMarker(t *testing.T) {
+func TestForwarderPreservesSharedMarker(t *testing.T) {
 	t.Parallel()
 
 	core, observed := observer.New(zap.ErrorLevel)
