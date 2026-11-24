@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"slices"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -66,6 +68,22 @@ func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool 
 	}
 }
 
+// HasBufferedWorkflowHeartbeatNotificationInput checks at most 5 buffered events, excluding newBufferedEvents.
+// Of the 31 implemented bufferable event types, 25 are WHN-eligible. Assuming independent, uniformly
+// distributed prior event types, five checks find an eligible type with probability 1-(6/31)^5 = 99.97%,
+// exceeding the 99.9% target. This is an estimate, not a guarantee for actual event ordering or excluded new events.
+// If no eligible input is found within the limit, another best-effort notification is allowed.
+func HasBufferedWorkflowHeartbeatNotificationInput(ms historyi.MutableState, newBufferedEvents []*historypb.HistoryEvent) bool {
+	checked := 0
+	found := false
+	ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
+		checked++
+		found = IsWorkflowHeartbeatNotificationInputType(event.GetEventType()) && !slices.Contains(newBufferedEvents, event)
+		return found || checked == 5
+	})
+	return found
+}
+
 // handleWorkflowHeartbeatNotification handles buffered events waiting for the next Workflow Task to reach the worker.
 // Admitted Updates can also trigger WHN while waiting for that task, through the Update path.
 func (c *ContextImpl) handleWorkflowHeartbeatNotification(
@@ -86,9 +104,7 @@ func (c *ContextImpl) handleWorkflowHeartbeatNotification(
 		return
 	}
 
-	// TODO(whn): Distinguish prior WHN-eligible events from other buffered events. Counting all buffered
-	// events avoids a scan but can miss the first-input metric and suppress WHN for a later eligible event.
-	hadBufferedInput := c.MutableState.NumBufferedEvents() > len(newBufferedEvents)
+	hadBufferedInput := HasBufferedWorkflowHeartbeatNotificationInput(c.MutableState, newBufferedEvents)
 	firstBufferedInput := !hadBufferedInput && !c.hasPendingUpdateForWorkflowHeartbeatNotification()
 	namespaceEntry := c.MutableState.GetNamespaceEntry()
 	if namespaceEntry == nil {

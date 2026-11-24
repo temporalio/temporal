@@ -194,7 +194,7 @@ func TestApplyRequest_RejectsUpdateOnPausedWorkflow(t *testing.T) {
 }
 
 func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
-	newMutableState := func(t *testing.T, numBufferedEvents int) *historyi.MockMutableState {
+	newMutableState := func(t *testing.T, bufferedEvents ...enumspb.EventType) *historyi.MockMutableState {
 		ms := historyi.NewMockMutableState(gomock.NewController(t))
 		ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
 		ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -203,7 +203,14 @@ func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
 		ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
 		ms.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 		ms.EXPECT().HasPendingWorkflowTask().Return(true).AnyTimes()
-		ms.EXPECT().NumBufferedEvents().Return(numBufferedEvents).AnyTimes()
+		ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).DoAndReturn(func(filter func(*historypb.HistoryEvent) bool) bool {
+			for _, eventType := range bufferedEvents {
+				if filter(&historypb.HistoryEvent{EventType: eventType}) {
+					return true
+				}
+			}
+			return false
+		}).AnyTimes()
 		ms.EXPECT().GetCurrentVersion().Return(int64(1))
 		ms.EXPECT().VisitUpdates(gomock.Any())
 		ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
@@ -221,16 +228,23 @@ func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
 	}
 
 	t.Run("earlier unsent Update", func(t *testing.T) {
-		ms := newMutableState(t, 0)
+		ms := newMutableState(t)
 		registry := update.NewRegistry(ms)
 		require.True(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
 		require.False(t, applyUpdate(t, registry, ms, "second").firstBufferedForWorkflowHeartbeatNotification)
 	})
 
 	t.Run("buffered events", func(t *testing.T) {
-		ms := newMutableState(t, 1)
+		ms := newMutableState(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 		registry := update.NewRegistry(ms)
 		require.False(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+	})
+
+	t.Run("non-input buffered event allows first Update", func(t *testing.T) {
+		ms := newMutableState(t, enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED)
+		registry := update.NewRegistry(ms)
+		require.True(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+		require.False(t, applyUpdate(t, registry, ms, "second").firstBufferedForWorkflowHeartbeatNotification)
 	})
 }
 
