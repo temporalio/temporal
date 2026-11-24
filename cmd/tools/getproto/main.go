@@ -155,6 +155,12 @@ func initSeeds() {
 
 func checkImports(files map[string]protoreflect.FileDescriptor) {
 	missing := make(map[string]struct{})
+	for _, path := range findProtoImports() {
+		if _, ok := files[path]; !ok {
+			missing[path] = struct{}{}
+		}
+	}
+
 	for _, fd := range files {
 		imports := fd.Imports()
 		num := imports.Len()
