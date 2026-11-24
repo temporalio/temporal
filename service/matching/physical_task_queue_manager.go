@@ -29,10 +29,12 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/taskqueue"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -634,12 +636,29 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		// request sent by history service
 		c.liveness.markAlive()
 		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
-		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
+		testHooks := c.partitionMgr.engine.testHooks
+		if disable, ok := testhooks.Get(testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); ok {
+			if disable {
+				return syncMatchNoPoller, nil
+			}
+		} else if buggifySkipSyncMatch(testHooks, c.partitionMgr.ns.ID()) {
+			// Legal: the task is persisted and dispatched from the backlog, exactly as if no
+			// poller had been waiting when it arrived.
 			return syncMatchNoPoller, nil
 		}
 	}
 
 	return c.matcher.Offer(ctx, task)
+}
+
+// buggifySkipSyncMatch reports whether BUGGIFY, or a failpoint of a test, makes matching skip the
+// sync match of a task that history added. It checks for armed failpoints before it builds the
+// key, so it costs a nil check without a failpoint registry and an atomic load with an idle one.
+func buggifySkipSyncMatch(testHooks testhooks.TestHooks, nsID namespace.ID) bool {
+	if registry := testHooks.Failpoints(); registry == nil || !registry.Armed() {
+		return false
+	}
+	return failpoint.Buggify(testHooks, failpoints.MatchingSkipSyncMatch.ForScope(nsID.String()))
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

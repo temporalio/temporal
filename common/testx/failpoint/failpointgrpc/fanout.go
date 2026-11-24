@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // forwardedHeader marks a request that a fan-out already forwarded. A fan-out that receives such a
@@ -76,8 +77,8 @@ func WithDescribeTimeout(timeout time.Duration) FanOutOption {
 //   - Inject*, DisableFailpoint and DisableAllFailpoints succeed only if every target succeeds.
 //     Otherwise the error names each failed target, and the targets that succeeded keep the
 //     change: a failed mutation can be partially applied.
-//   - ListFailpoints returns the failpoints of all registries, with hosts set to the targets that
-//     serve the registry.
+//   - ListFailpoints returns the failpoints and BUGGIFY counters of all registries, with hosts set
+//     to the targets that serve the registry.
 //   - WaitForBlock succeeds as soon as any registry reports that an execution reached the block.
 //     It fails only if every target fails, such as with NotFound or FailedPrecondition from the
 //     targets where the failpoint is not registered or not configured to block. It waits on
@@ -358,7 +359,10 @@ func (f *fanOut) ListFailpoints(ctx context.Context, req *failpointpb.ListFailpo
 		return nil, err
 	}
 	var failpoints []*failpointpb.FailpointInfo
+	var buggifyKeys []*failpointpb.BuggifyKeyInfo
+	var omitted int64
 	for i, r := range results {
+		omitted += r.resp.GetBuggifyKeysOmitted()
 		for _, info := range r.resp.GetFailpoints() {
 			// A forwarded request leaves hosts empty, so they are set where they are known.
 			if len(info.Hosts) == 0 {
@@ -366,8 +370,22 @@ func (f *fanOut) ListFailpoints(ctx context.Context, req *failpointpb.ListFailpo
 			}
 			failpoints = append(failpoints, info)
 		}
+		// Each registry counts its own executions, so its BUGGIFY counters are reported per
+		// registry, like its failpoints.
+		for _, info := range r.resp.GetBuggifyKeys() {
+			if len(info.Hosts) == 0 {
+				info.Hosts = p.groups[i].hosts
+			}
+			buggifyKeys = append(buggifyKeys, info)
+		}
 	}
-	return &failpointpb.ListFailpointsResponse{Failpoints: failpoints}, nil
+	// The counters of all registries together take the room that their failpoints leave, as
+	// those of one registry do.
+	resp := &failpointpb.ListFailpointsResponse{Failpoints: failpoints}
+	var limited int64
+	resp.BuggifyKeys, limited = limitBuggifyKeys(buggifyKeys, maxListFailpointsSize-proto.Size(resp)-11)
+	resp.BuggifyKeysOmitted = omitted + limited
+	return resp, nil
 }
 
 func (f *fanOut) WaitForBlock(ctx context.Context, req *failpointpb.WaitForBlockRequest) (*failpointpb.WaitForBlockResponse, error) {

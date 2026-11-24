@@ -28,7 +28,7 @@ func TestBoundaryKeys(t *testing.T) {
 	require.Equal(t, "grpc-response:/test.Service/Method", failpoint.GRPCResponseKey("/test.Service/Method").Name())
 	require.Equal(t, "http-response:POST /callback", failpoint.HTTPResponseKey("POST /callback").Name())
 	require.Equal(t,
-		[]string{"grpc:*", "grpc-response:*", "http:*", "http-response:*"},
+		[]string{"grpc-any:request", "grpc-any:response", "http-any:request", "http-any:response"},
 		[]string{failpoint.AnyGRPCKey.Name(), failpoint.AnyGRPCResponseKey.Name(), failpoint.AnyHTTPKey.Name(), failpoint.AnyHTTPResponseKey.Name()},
 	)
 }

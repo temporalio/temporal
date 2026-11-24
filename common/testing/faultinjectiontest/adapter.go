@@ -46,6 +46,9 @@ type Keys struct {
 	// Exempt reports whether no failpoint fires for an operation, such as one that configures
 	// failpoints. It can be nil.
 	Exempt func(operation string) bool
+	// NoBuggify keeps BUGGIFY from injecting errors at this boundary, for example into the
+	// requests that a server receives from clients. Registered failpoints still fire.
+	NoBuggify bool
 }
 
 type operationKeys struct {
@@ -63,6 +66,10 @@ type operationKeys struct {
 // nil (see failpoint.ExecuteWithFired). An error fails the call. After the handler, it does the
 // same with a faultinjection.Result as the argument. An error replaces the result of the handler;
 // nil keeps it. Exempt operations run no failpoints.
+//
+// BUGGIFY (see failpoint.BuggifyConfig) can inject an error for the key of the operation at either
+// stage, but only if no failpoint is registered for the operation or for any operation, enabled or
+// not, so registered failpoints always take precedence.
 type Adapter[Req, Resp any] struct {
 	source     failpoint.Source
 	keys       Keys
@@ -109,10 +116,11 @@ func (a *Adapter[Req, Resp]) GenerateResponse(_ context.Context, operation strin
 	return a.execute(keys.response, a.keys.AnyResponse, req, result)
 }
 
-// armed reports whether any failpoint is registered, so calls skip the lookups while none is.
+// armed reports whether any failpoint is registered or BUGGIFY is enabled, so calls skip the
+// lookups while neither is.
 func (a *Adapter[Req, Resp]) armed() bool {
 	registry := a.source.Failpoints()
-	return registry != nil && registry.Len() > 0
+	return registry != nil && registry.Armed()
 }
 
 func (a *Adapter[Req, Resp]) execute(operationKey, anyKey failpoint.Key, req Req, arg any) error {
@@ -120,11 +128,16 @@ func (a *Adapter[Req, Resp]) execute(operationKey, anyKey failpoint.Key, req Req
 		operationKey = operationKey.ForScope(scope)
 		anyKey = anyKey.ForScope(scope)
 	}
-	if err, _, fired := failpoint.ExecuteWithFired[error](a.source, operationKey, arg); fired {
+	if err, _, fired := failpoint.ExecuteRegistered[error](a.source, operationKey, arg); fired {
 		return err
 	}
-	err, _ := failpoint.ExecuteWith[error](a.source, anyKey, arg)
-	return err
+	if err, _, fired := failpoint.ExecuteRegistered[error](a.source, anyKey, arg); fired {
+		return err
+	}
+	if a.keys.NoBuggify {
+		return nil
+	}
+	return failpoint.BuggifyError(a.source, operationKey, anyKey)
 }
 
 // namespaceID returns the namespace ID of req, or "" if it has none.

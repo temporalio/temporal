@@ -5,11 +5,14 @@ package failpointgrpc
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 
 	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/failpointpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // server synchronizes through the registry, not a lock of its own: several servers can serve the
@@ -252,9 +255,55 @@ func (s *server) ListFailpoints(ctx context.Context, req *failpointpb.ListFailpo
 		failpoints = append(failpoints, infoProto(key, fp))
 	}
 
-	return &failpointpb.ListFailpointsResponse{
-		Failpoints: failpoints,
-	}, nil
+	stats := s.registry.BuggifyStats()
+	buggifyKeys := make([]*failpointpb.BuggifyKeyInfo, 0, len(stats))
+	for _, st := range stats {
+		buggifyKeys = append(buggifyKeys, &failpointpb.BuggifyKeyInfo{
+			Key:       protoString(st.Name),
+			Activated: st.Activated,
+			Hits:      st.Hits,
+			Fires:     st.Fires,
+		})
+	}
+	resp := &failpointpb.ListFailpointsResponse{Failpoints: failpoints}
+	resp.BuggifyKeys, resp.BuggifyKeysOmitted = limitBuggifyKeys(buggifyKeys, maxListFailpointsSize-proto.Size(resp)-11)
+	return resp, nil
+}
+
+// maxListFailpointsSize bounds the encoded size of a ListFailpoints response with BUGGIFY counters,
+// well below gRPC's default limit of 4 MiB, since key names, such as those of HTTP operations,
+// contain text chosen by callers. The counters only take the room that the registered failpoints
+// leave, so they can't make a response too large that would fit without them.
+const maxListFailpointsSize = 2 << 20
+
+// limitBuggifyKeys sorts keys, activated ones first and then by name, and keeps those that fit in
+// budget bytes. It returns them and the number it left out.
+func limitBuggifyKeys(keys []*failpointpb.BuggifyKeyInfo, budget int) ([]*failpointpb.BuggifyKeyInfo, int64) {
+	slices.SortStableFunc(keys, func(a, b *failpointpb.BuggifyKeyInfo) int {
+		if a.Activated != b.Activated {
+			if a.Activated {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.Key, b.Key)
+	})
+	size := 0
+	for i, key := range keys {
+		// Each entry of a repeated field also takes a tag and a length of up to protowire.SizeVarint
+		// bytes; 1 + 10 is an upper bound.
+		size += proto.Size(key) + 11
+		if size > budget {
+			return keys[:i], int64(len(keys) - i)
+		}
+	}
+	return keys, 0
+}
+
+// protoString returns s with invalid UTF-8 replaced, since proto strings must be valid UTF-8 and
+// key names can contain bytes chosen by callers, such as an escaped HTTP path.
+func protoString(s string) string {
+	return strings.ToValidUTF8(s, "\uFFFD")
 }
 
 // infoProvider is implemented by Failpoint[T].
@@ -268,8 +317,8 @@ func infoProto(key failpoint.Key, fp any) *failpointpb.FailpointInfo {
 		info = ip.Info()
 	}
 	return &failpointpb.FailpointInfo{
-		Key:        info.Key.Name(),
-		Scope:      info.Key.Scope(),
+		Key:        protoString(info.Key.Name()),
+		Scope:      protoString(info.Key.Scope()),
 		Enabled:    info.Enabled,
 		Action:     failpointpb.Action(info.Action),
 		Recurrence: failpointpb.Recurrence(info.Recurrence),

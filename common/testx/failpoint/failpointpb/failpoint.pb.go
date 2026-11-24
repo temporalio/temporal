@@ -777,9 +777,15 @@ func (*ListFailpointsRequest) Descriptor() ([]byte, []int) {
 type ListFailpointsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// failpoints is the list of failpoint information.
-	Failpoints    []*FailpointInfo `protobuf:"bytes,1,rep,name=failpoints,proto3" json:"failpoints,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Failpoints []*FailpointInfo `protobuf:"bytes,1,rep,name=failpoints,proto3" json:"failpoints,omitempty"`
+	// buggify_keys are the counters of the key names that BUGGIFY saw since its configuration was
+	// last set, while it is enabled: activated names first, then by name, up to a size limit that
+	// keeps the response well below gRPC's message size limit.
+	BuggifyKeys []*BuggifyKeyInfo `protobuf:"bytes,2,rep,name=buggify_keys,json=buggifyKeys,proto3" json:"buggify_keys,omitempty"`
+	// buggify_keys_omitted is the number of key names left out of buggify_keys by the size limit.
+	BuggifyKeysOmitted int64 `protobuf:"varint,3,opt,name=buggify_keys_omitted,json=buggifyKeysOmitted,proto3" json:"buggify_keys_omitted,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListFailpointsResponse) Reset() {
@@ -819,6 +825,102 @@ func (x *ListFailpointsResponse) GetFailpoints() []*FailpointInfo {
 	return nil
 }
 
+func (x *ListFailpointsResponse) GetBuggifyKeys() []*BuggifyKeyInfo {
+	if x != nil {
+		return x.BuggifyKeys
+	}
+	return nil
+}
+
+func (x *ListFailpointsResponse) GetBuggifyKeysOmitted() int64 {
+	if x != nil {
+		return x.BuggifyKeysOmitted
+	}
+	return 0
+}
+
+// BuggifyKeyInfo counts the executions of a key name that BUGGIFY saw, in all scopes.
+type BuggifyKeyInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// key is the key name.
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// activated is the BUGGIFY activation decision for the key name.
+	Activated bool `protobuf:"varint,2,opt,name=activated,proto3" json:"activated,omitempty"`
+	// hits is the number of executions of the key name, activated or not, with nothing registered.
+	Hits int64 `protobuf:"varint,3,opt,name=hits,proto3" json:"hits,omitempty"`
+	// fires is the number of those executions that BUGGIFY fired.
+	Fires int64 `protobuf:"varint,4,opt,name=fires,proto3" json:"fires,omitempty"`
+	// hosts are the hosts that serve the registry, as in FailpointInfo.
+	Hosts         []string `protobuf:"bytes,5,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuggifyKeyInfo) Reset() {
+	*x = BuggifyKeyInfo{}
+	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuggifyKeyInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuggifyKeyInfo) ProtoMessage() {}
+
+func (x *BuggifyKeyInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuggifyKeyInfo.ProtoReflect.Descriptor instead.
+func (*BuggifyKeyInfo) Descriptor() ([]byte, []int) {
+	return file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *BuggifyKeyInfo) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *BuggifyKeyInfo) GetActivated() bool {
+	if x != nil {
+		return x.Activated
+	}
+	return false
+}
+
+func (x *BuggifyKeyInfo) GetHits() int64 {
+	if x != nil {
+		return x.Hits
+	}
+	return 0
+}
+
+func (x *BuggifyKeyInfo) GetFires() int64 {
+	if x != nil {
+		return x.Fires
+	}
+	return 0
+}
+
+func (x *BuggifyKeyInfo) GetHosts() []string {
+	if x != nil {
+		return x.Hosts
+	}
+	return nil
+}
+
 // FailpointInfo describes the state of a failpoint.
 type FailpointInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -841,7 +943,7 @@ type FailpointInfo struct {
 
 func (x *FailpointInfo) Reset() {
 	*x = FailpointInfo{}
-	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[14]
+	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -853,7 +955,7 @@ func (x *FailpointInfo) String() string {
 func (*FailpointInfo) ProtoMessage() {}
 
 func (x *FailpointInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[14]
+	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -866,7 +968,7 @@ func (x *FailpointInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailpointInfo.ProtoReflect.Descriptor instead.
 func (*FailpointInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP(), []int{14}
+	return file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *FailpointInfo) GetKey() string {
@@ -920,7 +1022,7 @@ type DescribeRegistryRequest struct {
 
 func (x *DescribeRegistryRequest) Reset() {
 	*x = DescribeRegistryRequest{}
-	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[15]
+	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -932,7 +1034,7 @@ func (x *DescribeRegistryRequest) String() string {
 func (*DescribeRegistryRequest) ProtoMessage() {}
 
 func (x *DescribeRegistryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[15]
+	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -945,7 +1047,7 @@ func (x *DescribeRegistryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeRegistryRequest.ProtoReflect.Descriptor instead.
 func (*DescribeRegistryRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP(), []int{15}
+	return file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP(), []int{16}
 }
 
 // DescribeRegistryResponse identifies a failpoint registry.
@@ -960,7 +1062,7 @@ type DescribeRegistryResponse struct {
 
 func (x *DescribeRegistryResponse) Reset() {
 	*x = DescribeRegistryResponse{}
-	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[16]
+	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -972,7 +1074,7 @@ func (x *DescribeRegistryResponse) String() string {
 func (*DescribeRegistryResponse) ProtoMessage() {}
 
 func (x *DescribeRegistryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[16]
+	mi := &file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -985,7 +1087,7 @@ func (x *DescribeRegistryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeRegistryResponse.ProtoReflect.Descriptor instead.
 func (*DescribeRegistryResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP(), []int{16}
+	return file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DescribeRegistryResponse) GetRegistryId() string {
@@ -1036,11 +1138,19 @@ const file_temporal_testx_failpoint_v1_failpoint_proto_rawDesc = "" +
 	"\n" +
 	"error_name\x18\x05 \x01(\tR\terrorName\"\x16\n" +
 	"\x14InjectReturnResponse\"\x17\n" +
-	"\x15ListFailpointsRequest\"d\n" +
+	"\x15ListFailpointsRequest\"\xe6\x01\n" +
 	"\x16ListFailpointsResponse\x12J\n" +
 	"\n" +
 	"failpoints\x18\x01 \x03(\v2*.temporal.testx.failpoint.v1.FailpointInfoR\n" +
-	"failpoints\"\xed\x01\n" +
+	"failpoints\x12N\n" +
+	"\fbuggify_keys\x18\x02 \x03(\v2+.temporal.testx.failpoint.v1.BuggifyKeyInfoR\vbuggifyKeys\x120\n" +
+	"\x14buggify_keys_omitted\x18\x03 \x01(\x03R\x12buggifyKeysOmitted\"\x80\x01\n" +
+	"\x0eBuggifyKeyInfo\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1c\n" +
+	"\tactivated\x18\x02 \x01(\bR\tactivated\x12\x12\n" +
+	"\x04hits\x18\x03 \x01(\x03R\x04hits\x12\x14\n" +
+	"\x05fires\x18\x04 \x01(\x03R\x05fires\x12\x14\n" +
+	"\x05hosts\x18\x05 \x03(\tR\x05hosts\"\xed\x01\n" +
 	"\rFailpointInfo\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05scope\x18\x02 \x01(\tR\x05scope\x12\x18\n" +
@@ -1092,7 +1202,7 @@ func file_temporal_testx_failpoint_v1_failpoint_proto_rawDescGZIP() []byte {
 }
 
 var file_temporal_testx_failpoint_v1_failpoint_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_temporal_testx_failpoint_v1_failpoint_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_temporal_testx_failpoint_v1_failpoint_proto_goTypes = []any{
 	(Action)(0),                          // 0: temporal.testx.failpoint.v1.Action
 	(Recurrence)(0),                      // 1: temporal.testx.failpoint.v1.Recurrence
@@ -1110,38 +1220,40 @@ var file_temporal_testx_failpoint_v1_failpoint_proto_goTypes = []any{
 	(*InjectReturnResponse)(nil),         // 13: temporal.testx.failpoint.v1.InjectReturnResponse
 	(*ListFailpointsRequest)(nil),        // 14: temporal.testx.failpoint.v1.ListFailpointsRequest
 	(*ListFailpointsResponse)(nil),       // 15: temporal.testx.failpoint.v1.ListFailpointsResponse
-	(*FailpointInfo)(nil),                // 16: temporal.testx.failpoint.v1.FailpointInfo
-	(*DescribeRegistryRequest)(nil),      // 17: temporal.testx.failpoint.v1.DescribeRegistryRequest
-	(*DescribeRegistryResponse)(nil),     // 18: temporal.testx.failpoint.v1.DescribeRegistryResponse
+	(*BuggifyKeyInfo)(nil),               // 16: temporal.testx.failpoint.v1.BuggifyKeyInfo
+	(*FailpointInfo)(nil),                // 17: temporal.testx.failpoint.v1.FailpointInfo
+	(*DescribeRegistryRequest)(nil),      // 18: temporal.testx.failpoint.v1.DescribeRegistryRequest
+	(*DescribeRegistryResponse)(nil),     // 19: temporal.testx.failpoint.v1.DescribeRegistryResponse
 }
 var file_temporal_testx_failpoint_v1_failpoint_proto_depIdxs = []int32{
 	1,  // 0: temporal.testx.failpoint.v1.InjectPanicRequest.recurrence:type_name -> temporal.testx.failpoint.v1.Recurrence
 	1,  // 1: temporal.testx.failpoint.v1.InjectBlockRequest.recurrence:type_name -> temporal.testx.failpoint.v1.Recurrence
 	1,  // 2: temporal.testx.failpoint.v1.InjectReturnRequest.recurrence:type_name -> temporal.testx.failpoint.v1.Recurrence
-	16, // 3: temporal.testx.failpoint.v1.ListFailpointsResponse.failpoints:type_name -> temporal.testx.failpoint.v1.FailpointInfo
-	0,  // 4: temporal.testx.failpoint.v1.FailpointInfo.action:type_name -> temporal.testx.failpoint.v1.Action
-	1,  // 5: temporal.testx.failpoint.v1.FailpointInfo.recurrence:type_name -> temporal.testx.failpoint.v1.Recurrence
-	2,  // 6: temporal.testx.failpoint.v1.FailpointService.DisableFailpoint:input_type -> temporal.testx.failpoint.v1.DisableFailpointRequest
-	4,  // 7: temporal.testx.failpoint.v1.FailpointService.DisableAllFailpoints:input_type -> temporal.testx.failpoint.v1.DisableAllFailpointsRequest
-	6,  // 8: temporal.testx.failpoint.v1.FailpointService.InjectPanic:input_type -> temporal.testx.failpoint.v1.InjectPanicRequest
-	8,  // 9: temporal.testx.failpoint.v1.FailpointService.InjectBlock:input_type -> temporal.testx.failpoint.v1.InjectBlockRequest
-	12, // 10: temporal.testx.failpoint.v1.FailpointService.InjectReturn:input_type -> temporal.testx.failpoint.v1.InjectReturnRequest
-	10, // 11: temporal.testx.failpoint.v1.FailpointService.WaitForBlock:input_type -> temporal.testx.failpoint.v1.WaitForBlockRequest
-	14, // 12: temporal.testx.failpoint.v1.FailpointService.ListFailpoints:input_type -> temporal.testx.failpoint.v1.ListFailpointsRequest
-	17, // 13: temporal.testx.failpoint.v1.FailpointService.DescribeRegistry:input_type -> temporal.testx.failpoint.v1.DescribeRegistryRequest
-	3,  // 14: temporal.testx.failpoint.v1.FailpointService.DisableFailpoint:output_type -> temporal.testx.failpoint.v1.DisableFailpointResponse
-	5,  // 15: temporal.testx.failpoint.v1.FailpointService.DisableAllFailpoints:output_type -> temporal.testx.failpoint.v1.DisableAllFailpointsResponse
-	7,  // 16: temporal.testx.failpoint.v1.FailpointService.InjectPanic:output_type -> temporal.testx.failpoint.v1.InjectPanicResponse
-	9,  // 17: temporal.testx.failpoint.v1.FailpointService.InjectBlock:output_type -> temporal.testx.failpoint.v1.InjectBlockResponse
-	13, // 18: temporal.testx.failpoint.v1.FailpointService.InjectReturn:output_type -> temporal.testx.failpoint.v1.InjectReturnResponse
-	11, // 19: temporal.testx.failpoint.v1.FailpointService.WaitForBlock:output_type -> temporal.testx.failpoint.v1.WaitForBlockResponse
-	15, // 20: temporal.testx.failpoint.v1.FailpointService.ListFailpoints:output_type -> temporal.testx.failpoint.v1.ListFailpointsResponse
-	18, // 21: temporal.testx.failpoint.v1.FailpointService.DescribeRegistry:output_type -> temporal.testx.failpoint.v1.DescribeRegistryResponse
-	14, // [14:22] is the sub-list for method output_type
-	6,  // [6:14] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	17, // 3: temporal.testx.failpoint.v1.ListFailpointsResponse.failpoints:type_name -> temporal.testx.failpoint.v1.FailpointInfo
+	16, // 4: temporal.testx.failpoint.v1.ListFailpointsResponse.buggify_keys:type_name -> temporal.testx.failpoint.v1.BuggifyKeyInfo
+	0,  // 5: temporal.testx.failpoint.v1.FailpointInfo.action:type_name -> temporal.testx.failpoint.v1.Action
+	1,  // 6: temporal.testx.failpoint.v1.FailpointInfo.recurrence:type_name -> temporal.testx.failpoint.v1.Recurrence
+	2,  // 7: temporal.testx.failpoint.v1.FailpointService.DisableFailpoint:input_type -> temporal.testx.failpoint.v1.DisableFailpointRequest
+	4,  // 8: temporal.testx.failpoint.v1.FailpointService.DisableAllFailpoints:input_type -> temporal.testx.failpoint.v1.DisableAllFailpointsRequest
+	6,  // 9: temporal.testx.failpoint.v1.FailpointService.InjectPanic:input_type -> temporal.testx.failpoint.v1.InjectPanicRequest
+	8,  // 10: temporal.testx.failpoint.v1.FailpointService.InjectBlock:input_type -> temporal.testx.failpoint.v1.InjectBlockRequest
+	12, // 11: temporal.testx.failpoint.v1.FailpointService.InjectReturn:input_type -> temporal.testx.failpoint.v1.InjectReturnRequest
+	10, // 12: temporal.testx.failpoint.v1.FailpointService.WaitForBlock:input_type -> temporal.testx.failpoint.v1.WaitForBlockRequest
+	14, // 13: temporal.testx.failpoint.v1.FailpointService.ListFailpoints:input_type -> temporal.testx.failpoint.v1.ListFailpointsRequest
+	18, // 14: temporal.testx.failpoint.v1.FailpointService.DescribeRegistry:input_type -> temporal.testx.failpoint.v1.DescribeRegistryRequest
+	3,  // 15: temporal.testx.failpoint.v1.FailpointService.DisableFailpoint:output_type -> temporal.testx.failpoint.v1.DisableFailpointResponse
+	5,  // 16: temporal.testx.failpoint.v1.FailpointService.DisableAllFailpoints:output_type -> temporal.testx.failpoint.v1.DisableAllFailpointsResponse
+	7,  // 17: temporal.testx.failpoint.v1.FailpointService.InjectPanic:output_type -> temporal.testx.failpoint.v1.InjectPanicResponse
+	9,  // 18: temporal.testx.failpoint.v1.FailpointService.InjectBlock:output_type -> temporal.testx.failpoint.v1.InjectBlockResponse
+	13, // 19: temporal.testx.failpoint.v1.FailpointService.InjectReturn:output_type -> temporal.testx.failpoint.v1.InjectReturnResponse
+	11, // 20: temporal.testx.failpoint.v1.FailpointService.WaitForBlock:output_type -> temporal.testx.failpoint.v1.WaitForBlockResponse
+	15, // 21: temporal.testx.failpoint.v1.FailpointService.ListFailpoints:output_type -> temporal.testx.failpoint.v1.ListFailpointsResponse
+	19, // 22: temporal.testx.failpoint.v1.FailpointService.DescribeRegistry:output_type -> temporal.testx.failpoint.v1.DescribeRegistryResponse
+	15, // [15:23] is the sub-list for method output_type
+	7,  // [7:15] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_temporal_testx_failpoint_v1_failpoint_proto_init() }
@@ -1155,7 +1267,7 @@ func file_temporal_testx_failpoint_v1_failpoint_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_testx_failpoint_v1_failpoint_proto_rawDesc), len(file_temporal_testx_failpoint_v1_failpoint_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   17,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

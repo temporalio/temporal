@@ -21,6 +21,28 @@ type Registry interface {
 	// cheaply while no failpoint is registered.
 	Len() int
 
+	// Armed reports whether any failpoint is registered or BUGGIFY is enabled and not suppressed.
+	// Like Len, it doesn't take the registry's lock, so call sites that do work before they execute
+	// a failpoint can skip it cheaply while it is false.
+	Armed() bool
+
+	// SetBuggify replaces the BUGGIFY configuration of the registry, see BuggifyConfig. A
+	// configuration with a zero seed disables BUGGIFY. It returns an error and changes nothing if
+	// the configuration is invalid. Setting a different configuration forgets the activation
+	// decisions and execution counts of the previous one.
+	SetBuggify(config BuggifyConfig) error
+
+	// BuggifyConfig returns the BUGGIFY configuration of the registry.
+	BuggifyConfig() BuggifyConfig
+
+	// BuggifyStats returns the counters of the key names that BUGGIFY saw since its configuration
+	// was last set, sorted by name. It is empty while BUGGIFY is disabled.
+	BuggifyStats() []BuggifyKeyStats
+
+	// SuppressBuggify turns BUGGIFY off until restore is called, without changing its
+	// configuration, for tests that assert exact behavior. Calls nest.
+	SuppressBuggify() (restore func())
+
 	// Set stores a failpoint instance for the given key.
 	Set(key Key, fp any)
 
@@ -55,12 +77,25 @@ type Registry interface {
 	// Keys returns the keys of all registered failpoints.
 	Keys() []Key
 
-	// Subscribe calls fn for every execution of an enabled failpoint in this registry, until the
-	// returned function is called. fn must not call into the failpoint that is executing.
+	// Subscribe calls fn for every execution of an enabled failpoint in this registry, and for
+	// every BUGGIFY decision, until the returned function is called. fn must not call into the
+	// failpoint that is executing, and must not execute failpoints while it handles a
+	// BuggifyActivationEvent.
 	Subscribe(fn func(Event)) (unsubscribe func())
 
 	// emit reports an execution to the subscribers.
 	emit(Event)
+
+	// buggify returns the BUGGIFY state, or nil while BUGGIFY is disabled or suppressed.
+	buggify() *buggifyState
+
+	// lookup returns the failpoint registered for key or, for a scoped key, for the unscoped key,
+	// from one snapshot of the registry.
+	lookup(key Key) (any, bool)
+
+	// registeredAny reports whether a failpoint is registered for key or any of others, or for
+	// their unscoped keys, from one snapshot of the registry.
+	registeredAny(key Key, others []Key) bool
 
 	// update runs fn with the failpoints of the registry, while no other change to the registry
 	// runs, so fn can check and change several entries atomically. fn must not call the registry.
@@ -138,6 +173,16 @@ type registryImpl struct {
 	count       atomic.Int64
 	nextSubID   int
 	subscribers map[int]func(Event)
+
+	// buggifyCfg is the BUGGIFY state of the configuration, nil while it is disabled, and
+	// suppressed counts the SuppressBuggify calls that are not restored. Both are guarded by mu.
+	buggifyCfg *buggifyState
+	suppressed int
+	// effective is buggifyCfg while it is not suppressed, else nil, so executions read the
+	// configuration and the suppression in one snapshot. armed caches Armed. Both are updated
+	// under mu.
+	effective atomic.Pointer[buggifyState]
+	armed     atomic.Bool
 }
 
 // NewRegistry creates a new failpoint registry for testing.
@@ -162,11 +207,128 @@ func (r *registryImpl) Len() int {
 	return int(r.count.Load())
 }
 
+func (r *registryImpl) Armed() bool {
+	return r.armed.Load()
+}
+
+// setCountLocked updates count and armed after a change of the failpoints. The caller must hold
+// r.mu.
+func (r *registryImpl) setCountLocked() {
+	r.count.Store(int64(len(r.failpoints)))
+	r.updateArmedLocked()
+}
+
+// updateArmedLocked publishes effective and armed after a change of the failpoints or of BUGGIFY.
+// The caller must hold r.mu.
+func (r *registryImpl) updateArmedLocked() {
+	var effective *buggifyState
+	if r.suppressed == 0 {
+		effective = r.buggifyCfg
+	}
+	r.effective.Store(effective)
+	r.armed.Store(len(r.failpoints) > 0 || effective != nil)
+}
+
+func (r *registryImpl) SetBuggify(config BuggifyConfig) error {
+	// The registry keeps its own copy, so the caller can't change it.
+	config = config.clone()
+	if err := config.Validate(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !config.Enabled() {
+		r.buggifyCfg = nil
+	} else if r.buggifyCfg == nil || !reflect.DeepEqual(r.buggifyCfg.config, config) {
+		r.buggifyCfg = &buggifyState{config: config}
+	}
+	r.updateArmedLocked()
+	return nil
+}
+
+func (r *registryImpl) BuggifyConfig() BuggifyConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.buggifyCfg != nil {
+		return r.buggifyCfg.config.clone()
+	}
+	return BuggifyConfig{}
+}
+
+func (r *registryImpl) BuggifyStats() []BuggifyKeyStats {
+	r.mu.RLock()
+	b := r.buggifyCfg
+	r.mu.RUnlock()
+	if b == nil {
+		return nil
+	}
+	return b.stats()
+}
+
+func (r *registryImpl) SuppressBuggify() func() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.suppressed++
+	r.updateArmedLocked()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			r.suppressed--
+			r.updateArmedLocked()
+		})
+	}
+}
+
+func (r *registryImpl) buggify() *buggifyState {
+	return r.effective.Load()
+}
+
+func (r *registryImpl) registeredAny(key Key, others []Key) bool {
+	if r.count.Load() == 0 {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if _, ok := r.lookupLocked(key); ok {
+		return true
+	}
+	for _, other := range others {
+		if _, ok := r.lookupLocked(other); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *registryImpl) lookup(key Key) (any, bool) {
+	if r.count.Load() == 0 {
+		return nil, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.lookupLocked(key)
+}
+
+// lookupLocked is lookup for a caller that holds r.mu.
+func (r *registryImpl) lookupLocked(key Key) (any, bool) {
+	if fp := r.failpoints[key]; fp != nil {
+		return fp, true
+	}
+	if key.scope != "" {
+		if fp := r.failpoints[Key{name: key.name}]; fp != nil {
+			return fp, true
+		}
+	}
+	return nil, false
+}
+
 func (r *registryImpl) Set(key Key, fp any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.failpoints[key] = fp
-	r.count.Store(int64(len(r.failpoints)))
+	r.setCountLocked()
 }
 
 func (r *registryImpl) GetOrSet(key Key, fp any) any {
@@ -176,7 +338,7 @@ func (r *registryImpl) GetOrSet(key Key, fp any) any {
 		return existing
 	}
 	r.failpoints[key] = fp
-	r.count.Store(int64(len(r.failpoints)))
+	r.setCountLocked()
 	return fp
 }
 
@@ -187,7 +349,7 @@ func (r *registryImpl) CompareAndDelete(key Key, fp any) bool {
 		return false
 	}
 	delete(r.failpoints, key)
-	r.count.Store(int64(len(r.failpoints)))
+	r.setCountLocked()
 	return true
 }
 
@@ -209,7 +371,7 @@ func (r *registryImpl) DeleteAll() []any {
 	defer r.mu.Unlock()
 	removed := slices.Collect(maps.Values(r.failpoints))
 	clear(r.failpoints)
-	r.count.Store(0)
+	r.setCountLocked()
 	return removed
 }
 
@@ -217,7 +379,7 @@ func (r *registryImpl) update(fn func(failpoints map[Key]any)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	fn(r.failpoints)
-	r.count.Store(int64(len(r.failpoints)))
+	r.setCountLocked()
 }
 
 func (r *registryImpl) DeleteFunc(keep func(key Key, fp any) bool) []any {
@@ -241,7 +403,7 @@ func (r *registryImpl) DeleteFunc(keep func(key Key, fp any) bool) []any {
 			delete(r.failpoints, key)
 		}
 	}
-	r.count.Store(int64(len(r.failpoints)))
+	r.setCountLocked()
 	return removed
 }
 
@@ -279,7 +441,7 @@ func (r *registryImpl) Delete(key Key) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.failpoints, key)
-	r.count.Store(int64(len(r.failpoints)))
+	r.setCountLocked()
 }
 
 func (r *registryImpl) Keys() []Key {

@@ -34,15 +34,17 @@ func NewKey(name string) Key {
 // one after the key of the operation, such as GRPCKey for the request of a gRPC method, and only if
 // that failpoint did not fire with any action (see ExecuteWithFired). Their names cannot collide
 // with the keys of an operation, which contain a gRPC method or an HTTP request method and path.
+// Their prefixes differ from those of the operation keys, so a pattern for the keys of every
+// operation, such as "grpc:*" in a BuggifyConfig, doesn't match them.
 var (
 	// AnyGRPCKey fires before the handler of every gRPC method runs.
-	AnyGRPCKey = Key{name: "grpc:*"}
+	AnyGRPCKey = Key{name: "grpc-any:request"}
 	// AnyGRPCResponseKey fires after the handler of every gRPC method returns.
-	AnyGRPCResponseKey = Key{name: "grpc-response:*"}
+	AnyGRPCResponseKey = Key{name: "grpc-any:response"}
 	// AnyHTTPKey fires before every outgoing HTTP request is sent.
-	AnyHTTPKey = Key{name: "http:*"}
+	AnyHTTPKey = Key{name: "http-any:request"}
 	// AnyHTTPResponseKey fires after every outgoing HTTP request returns.
-	AnyHTTPResponseKey = Key{name: "http-response:*"}
+	AnyHTTPResponseKey = Key{name: "http-any:response"}
 )
 
 // GRPCKey returns the key of the failpoint that fires before the handler of a gRPC method runs.

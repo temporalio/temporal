@@ -55,21 +55,8 @@ func ConvertRules(value any) ([]failpoint.Rule, error) {
 	if rules, ok := value.([]failpoint.Rule); ok {
 		return rules, failpoint.ValidateRules(rules)
 	}
-	// mapstructure assumes that the keys of maps decoded into structs are strings.
-	value, err := stringKeys(value)
-	if err != nil {
-		return nil, err
-	}
 	var configs []ruleConfig
-	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result:      &configs,
-		ErrorUnused: true,
-		DecodeHook:  mapstructure.ComposeDecodeHookFunc(decodeDuration, decodeInteger),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := dec.Decode(value); err != nil {
+	if err := DecodeStrict(value, &configs); err != nil {
 		return nil, err
 	}
 	rules := make([]failpoint.Rule, 0, len(configs))
@@ -84,6 +71,27 @@ func ConvertRules(value any) ([]failpoint.Rule, error) {
 		return nil, err
 	}
 	return rules, nil
+}
+
+// DecodeStrict decodes a dynamic config value into result, which points to a struct, a slice of
+// structs or a map. Unlike dynamicconfig.ConvertStructure, it returns an error for unknown fields,
+// for a fractional number in an integer field and for a non-string map key, and it parses
+// durations written as strings, such as "1.5s".
+func DecodeStrict(value any, result any) error {
+	// mapstructure assumes that the keys of maps decoded into structs are strings.
+	value, err := stringKeys(value)
+	if err != nil {
+		return err
+	}
+	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:      result,
+		ErrorUnused: true,
+		DecodeHook:  mapstructure.ComposeDecodeHookFunc(decodeDuration, decodeInteger),
+	})
+	if err != nil {
+		return err
+	}
+	return dec.Decode(value)
 }
 
 func (c ruleConfig) rule() (failpoint.Rule, error) {
@@ -157,11 +165,17 @@ func stringKeys(value any) (any, error) {
 	return value, nil
 }
 
-var int64Type = reflect.TypeFor[int64]()
+var (
+	int64Type  = reflect.TypeFor[int64]()
+	uint64Type = reflect.TypeFor[uint64]()
+)
 
 // decodeInteger rejects a fractional number for an integer field, which mapstructure would
 // truncate.
 func decodeInteger(_, t reflect.Type, data any) (any, error) {
+	if t == uint64Type {
+		return decodeUnsigned(data)
+	}
 	if t != int64Type {
 		return data, nil
 	}
@@ -192,4 +206,28 @@ func decodeDuration(_, t reflect.Type, data any) (any, error) {
 		return timestamp.ParseDurationDefaultSeconds(v)
 	}
 	return nil, errors.New("delay must be a duration string")
+}
+
+// decodeUnsigned rejects a negative or fractional number for an unsigned field, which mapstructure
+// would wrap or truncate. A float64 cannot represent every uint64, so large values must be
+// integers.
+func decodeUnsigned(data any) (any, error) {
+	switch v := data.(type) {
+	case float32, float64:
+		f := reflect.ValueOf(v).Float()
+		if f != math.Trunc(f) || f < 0 || f >= math.MaxUint64 {
+			return nil, fmt.Errorf("%v is not an unsigned integer", data)
+		}
+		return uint64(f), nil
+	case int:
+		if v < 0 {
+			return nil, fmt.Errorf("%v is not an unsigned integer", data)
+		}
+	case int64:
+		if v < 0 {
+			return nil, fmt.Errorf("%v is not an unsigned integer", data)
+		}
+	default:
+	}
+	return data, nil
 }

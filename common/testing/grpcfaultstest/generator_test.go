@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint/failpointpb"
@@ -14,9 +15,9 @@ import (
 func TestNewGenerator_WithoutTestHooks(t *testing.T) {
 	t.Parallel()
 
-	require.Nil(t, grpcfaultstest.NewGenerator(testhooks.TestHooks{}, nil))
+	require.Nil(t, grpcfaultstest.NewGenerator(testhooks.TestHooks{}, nil, primitives.HistoryService))
 	testHooks := testhooks.NewTestHooks()
-	require.Equal(t, testHooks.Enabled(), grpcfaultstest.NewGenerator(testHooks, nil) != nil)
+	require.Equal(t, testHooks.Enabled(), grpcfaultstest.NewGenerator(testHooks, nil, primitives.HistoryService) != nil)
 }
 
 func TestFailpointServicePrefix(t *testing.T) {

@@ -3,7 +3,9 @@ package failpointgrpc_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // callCtx returns a context for one fan-out call, so a regression fails instead of hanging.
@@ -540,4 +543,62 @@ func TestFanOut_PeerFanOuts(t *testing.T) {
 
 func staticPeersFunc(peers func() []failpointgrpc.Target) func(context.Context) ([]failpointgrpc.Target, error) {
 	return func(context.Context) ([]failpointgrpc.Target, error) { return peers(), nil }
+}
+
+func TestFanOut_ListFailpointsReturnsBuggifyKeys(t *testing.T) {
+	t.Parallel()
+	local, peers, registries := fanOutTargets()
+	peers = append(peers, failpointgrpc.Target{Host: "peer-c", Service: failpointgrpc.NewServer(registries[1])})
+	fanOut := failpointgrpc.NewFanOut(local, staticPeers(peers...))
+	// Only the registries of local and peer-a run with BUGGIFY, and only peer-a's key was hit.
+	for i, hits := range []int{0, 2} {
+		require.NoError(t, registries[i].SetBuggify(failpoint.BuggifyConfig{Seed: 1, Activation: 1}))
+		for range hits {
+			_ = failpoint.Buggify(registrySource{registry: registries[i]}, failpoint.KeyFromName("on", ""))
+		}
+	}
+
+	resp, err := fanOut.ListFailpoints(callCtx(t), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	require.Len(t, resp.BuggifyKeys, 1)
+	require.True(t, proto.Equal(&failpointpb.BuggifyKeyInfo{
+		Key: "on", Activated: true, Hits: 2, Hosts: []string{"peer-a", "peer-c"},
+	}, resp.BuggifyKeys[0]), resp.BuggifyKeys[0])
+}
+
+func TestFanOut_ListFailpointsBoundsBuggifyKeys(t *testing.T) {
+	t.Parallel()
+	local, peers, registries := fanOutTargets()
+	for _, registry := range registries {
+		manyBuggifyKeys(t, registry)
+	}
+	fanOut := failpointgrpc.NewFanOut(local, staticPeers(peers...))
+
+	resp, err := fanOut.ListFailpoints(callCtx(t), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	require.Less(t, proto.Size(resp), 2<<20)
+	require.Equal(t, int64(3*12003), int64(len(resp.BuggifyKeys))+resp.BuggifyKeysOmitted)
+	for _, info := range resp.BuggifyKeys[:9] {
+		require.True(t, info.Activated)
+	}
+}
+
+func TestFanOut_ListFailpointsBudgetsBuggifyKeysAgainstTheResponse(t *testing.T) {
+	t.Parallel()
+	local, peers, registries := fanOutTargets()
+	// Each registry's response fits, but the failpoints of all of them take most of the room.
+	for _, registry := range registries {
+		for i := range 3000 {
+			key := failpoint.KeyFromName(fmt.Sprintf("b%s%d", strings.Repeat("y", 200), i), "")
+			registry.Set(key, failpoint.NewFailpoint[error](key))
+		}
+		manyBuggifyKeys(t, registry)
+	}
+	fanOut := failpointgrpc.NewFanOut(local, staticPeers(peers...))
+
+	resp, err := fanOut.ListFailpoints(callCtx(t), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	require.Len(t, resp.Failpoints, 9000)
+	require.LessOrEqual(t, proto.Size(resp), 2<<20)
+	require.Equal(t, int64(3*12003), int64(len(resp.BuggifyKeys))+resp.BuggifyKeysOmitted)
 }

@@ -31,11 +31,13 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1317,5 +1319,35 @@ func userDataWithDeploymentVersion(deploymentName, buildID string) *persistences
 				},
 			},
 		},
+	}
+}
+
+// TestBuggifySkipSyncMatch is not parallel, since AllocsPerRun doesn't allow it.
+func TestBuggifySkipSyncMatch(t *testing.T) {
+	idle := testhooks.NewTestHooks()
+	for name, hooks := range map[string]testhooks.TestHooks{"zero test hooks": {}, "idle test hooks": idle} {
+		require.False(t, buggifySkipSyncMatch(hooks, "ns-id"), name)
+		allocs := testing.AllocsPerRun(100, func() { _ = buggifySkipSyncMatch(hooks, "ns-id") })
+		require.Zero(t, allocs, name)
+	}
+
+	registry := idle.Failpoints()
+	if registry == nil {
+		return // Failpoints need -tags test_dep.
+	}
+	forced := testhooks.NewTestHooks()
+	key := failpoints.MatchingSkipSyncMatch.ForScope("ns-id")
+	fp := failpoint.NewFailpoint[error](key)
+	fp.On(failpoint.Always)
+	forced.Failpoints().Set(key, fp)
+	require.True(t, buggifySkipSyncMatch(forced, "ns-id"))
+	require.False(t, buggifySkipSyncMatch(forced, "other-ns-id"))
+}
+
+func BenchmarkBuggifySkipSyncMatch_Idle(b *testing.B) {
+	hooks := testhooks.NewTestHooks()
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = buggifySkipSyncMatch(hooks, "ns-id")
 	}
 }

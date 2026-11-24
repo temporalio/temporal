@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/faultinjection"
+	_ "go.temporal.io/server/common/testing/failpointerrors"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/testx/failpoint"
 )
@@ -254,4 +256,76 @@ func TestAdapter_Exempt(t *testing.T) {
 	require.NoError(t, adapter.GenerateRequest(context.Background(), operation, "request"))
 	require.NoError(t, adapter.GenerateResponse(context.Background(), operation, "request", "response", nil))
 	require.Equal(t, injected, adapter.GenerateRequest(context.Background(), "/test.Service/Other", "request"))
+}
+
+func TestAdapter_Buggify(t *testing.T) {
+	t.Parallel()
+
+	fromAny := errors.New("any")
+	newRegistry := func(t *testing.T) failpoint.Registry {
+		registry := failpoint.NewRegistry()
+		// Every execution of the operation's key fires, with an error from the server's catalog.
+		require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{
+			Seed: 1, Activation: 1, Fire: 1, Error: "Unavailable",
+			Exclude: []string{"grpc-response:*"},
+		}))
+		return registry
+	}
+
+	t.Run("injects an error for an operation with nothing registered", func(t *testing.T) {
+		t.Parallel()
+		adapter := newAdapter(newRegistry(t), nil)
+		err := adapter.GenerateRequest(context.Background(), operation, "request")
+		var unavailable *serviceerror.Unavailable
+		require.ErrorAs(t, err, &unavailable)
+		require.NoError(t, adapter.GenerateResponse(context.Background(), operation, "request", "response", nil))
+	})
+
+	t.Run("a failpoint of any operation takes precedence", func(t *testing.T) {
+		t.Parallel()
+		registry := newRegistry(t)
+		setReturn(registry, failpoint.AnyGRPCKey, fromAny)
+		require.Equal(t, fromAny, newAdapter(registry, nil).GenerateRequest(context.Background(), operation, "request"))
+	})
+
+	t.Run("a failpoint of any operation takes precedence even if it does not fire", func(t *testing.T) {
+		t.Parallel()
+		for name, configure := range map[string]func(*failpoint.Failpoint[error]){
+			"disabled": func(*failpoint.Failpoint[error]) {},
+			"suspended": func(fp *failpoint.Failpoint[error]) {
+				fp.Return(fromAny, failpoint.Always)
+				fp.SetEnabled(false)
+			},
+			"skipped by trigger": func(fp *failpoint.Failpoint[error]) {
+				fp.Return(fromAny, failpoint.Always)
+				fp.SetTrigger(failpoint.Trigger{After: 100})
+			},
+		} {
+			registry := newRegistry(t)
+			fp := failpoint.NewFailpoint[error](failpoint.AnyGRPCKey)
+			configure(fp)
+			registry.Set(failpoint.AnyGRPCKey.ForScope("namespace-id"), fp)
+			request := &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"}
+			require.NoError(t, newAdapter(registry, nil).GenerateRequest(context.Background(), operation, request), name)
+		}
+	})
+
+	t.Run("a failpoint of the operation takes precedence even if it does not fire", func(t *testing.T) {
+		t.Parallel()
+		registry := newRegistry(t)
+		registry.Set(failpoint.GRPCKey(operation), failpoint.NewFailpoint[error](failpoint.GRPCKey(operation)))
+		require.NoError(t, newAdapter(registry, nil).GenerateRequest(context.Background(), operation, "request"))
+	})
+
+	t.Run("exempt operations are never buggified", func(t *testing.T) {
+		t.Parallel()
+		adapter := faultinjectiontest.NewAdapter[any, any](registrySource{registry: newRegistry(t)}, faultinjectiontest.Keys{
+			Request:     failpoint.GRPCKey,
+			Response:    failpoint.GRPCResponseKey,
+			AnyRequest:  failpoint.AnyGRPCKey,
+			AnyResponse: failpoint.AnyGRPCResponseKey,
+			Exempt:      func(op string) bool { return op == operation },
+		}, nil)
+		require.NoError(t, adapter.GenerateRequest(context.Background(), operation, "request"))
+	})
 }

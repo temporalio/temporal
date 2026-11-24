@@ -61,3 +61,9 @@ func FailpointClient(env *TestEnv) failpointpb.FailpointServiceClient {
 	env.t.Cleanup(func() { _ = conn.Close() })
 	return failpointpb.NewFailpointServiceClient(conn)
 }
+
+// FailpointRegistry returns the failpoint registry of the test cluster, for example to subscribe
+// to its events. On a shared cluster it also reports the events of other tests.
+func FailpointRegistry(env *TestEnv) failpoint.Registry {
+	return env.cluster.host.testHooks.Failpoints()
+}

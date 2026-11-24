@@ -109,3 +109,37 @@ func TestConvertRules(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeStrict(t *testing.T) {
+	t.Parallel()
+	type value struct {
+		Count uint64
+		Delay time.Duration
+	}
+
+	tests := []struct {
+		name    string
+		value   any
+		want    value
+		wantErr string
+	}{
+		{name: "integers", value: map[string]any{"count": 3, "delay": "2s"}, want: value{Count: 3, Delay: 2 * time.Second}},
+		{name: "integral float", value: map[any]any{"count": 3.0}, want: value{Count: 3}},
+		{name: "negative", value: map[string]any{"count": -1}, wantErr: "-1 is not an unsigned integer"},
+		{name: "fractional", value: map[string]any{"count": 0.5}, wantErr: "0.5 is not an unsigned integer"},
+		{name: "unknown field", value: map[string]any{"cuont": 1}, wantErr: "invalid keys: cuont"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var got value
+			err := DecodeStrict(tc.value, &got)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

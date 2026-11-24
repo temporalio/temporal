@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/buggify"
 	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
@@ -128,6 +129,9 @@ type (
 		MetricsHandler             metrics.Handler
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
+		// BuggifyStartup is the BUGGIFY configuration that the dynamic config client was set up
+		// with, so the failpoint registry starts with the same seed.
+		BuggifyStartup buggify.Startup
 	}
 )
 
@@ -153,6 +157,8 @@ var (
 		FxLogAdapter,
 		// Before ServerLifetimeHooks, so the failpoint rules apply before the services start.
 		failpointrules.Module,
+		// Before ServerLifetimeHooks, so BUGGIFY is configured before the services start.
+		buggify.Module,
 		fx.Invoke(ServerLifetimeHooks),
 		// After ServerLifetimeHooks, so the failpoint rules are removed before the services stop.
 		failpointrules.ReleaseModule,
@@ -238,6 +244,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			dcClient = dynamicconfig.NewNoopClient()
 		}
 	}
+	// In test builds with BUGGIFY, randomizes the settings marked as buggifiable.
+	dcClient, buggifyStartup, err := buggify.WrapDynamicConfigClient(dcClient, logger)
+	if err != nil {
+		return serverOptionsProvider{}, err
+	}
 
 	testHooks := testhooks.NewTestHooks()
 	if so.testHooks != nil {
@@ -316,6 +327,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		MetricsHandler:             metricHandler,
 		TestHooks:                  testHooks,
 		EventLoggerProvider:        eventLoggerProvider,
+		BuggifyStartup:             buggifyStartup,
 	}, nil
 }
 

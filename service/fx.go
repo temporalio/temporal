@@ -54,6 +54,7 @@ type (
 		AdditionalInterceptors        []grpc.UnaryServerInterceptor           `optional:"true"`
 		AdditionalStreamInterceptors  []grpc.StreamServerInterceptor          `optional:"true"`
 		TestHooks                     testhooks.TestHooks
+		ServiceName                   primitives.ServiceName
 	}
 )
 
@@ -180,7 +181,7 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 		interceptors = append(interceptors, params.ContextMetadataInterceptor.Intercept)
 	}
 
-	faultGenerator := grpcfaultstest.NewGenerator(params.TestHooks, nil)
+	faultGenerator := grpcfaultstest.NewGenerator(params.TestHooks, nil, params.ServiceName)
 	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
 		interceptors = append(interceptors, faultInterceptor)
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/testx/failpoint/failpointpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // Low-level registry operations
@@ -730,4 +732,104 @@ func TestServer_LeavesRuleFailpoints(t *testing.T) {
 		require.Equal(t, []failpoint.Key{ruleKey}, registry.Keys())
 		require.True(t, failpoint.Active(registrySource{registry}, ruleKey))
 	})
+}
+
+func TestServer_ListFailpointsBuggifyKeys(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{
+		Seed: 1, Activation: 1, Fire: 1,
+		Prefixes: []failpoint.BuggifyPrefix{{Prefix: "off", Activation: 0}},
+	}))
+	src := registrySource{registry: registry}
+	require.True(t, failpoint.Buggify(src, failpoint.KeyFromName("on", "a")))
+	require.True(t, failpoint.Buggify(src, failpoint.KeyFromName("on", "b")))
+	require.False(t, failpoint.Buggify(src, failpoint.KeyFromName("off", "")))
+
+	resp, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	require.Empty(t, resp.Failpoints)
+	require.Len(t, resp.BuggifyKeys, 2)
+	// Activated names come first.
+	require.True(t, proto.Equal(&failpointpb.BuggifyKeyInfo{Key: "on", Activated: true, Hits: 2, Fires: 2}, resp.BuggifyKeys[0]), resp.BuggifyKeys[0])
+	require.True(t, proto.Equal(&failpointpb.BuggifyKeyInfo{Key: "off", Activated: false, Hits: 1}, resp.BuggifyKeys[1]), resp.BuggifyKeys[1])
+	require.Zero(t, resp.BuggifyKeysOmitted)
+}
+
+func TestServer_ListFailpointsSanitizesNames(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{Seed: 1, Activation: 1}))
+	// An HTTP path such as /%FF unescapes to invalid UTF-8.
+	name := "http:GET /\xff"
+	_ = failpoint.Buggify(registrySource{registry: registry}, failpoint.KeyFromName(name, ""))
+	key := failpoint.KeyFromName(name, "scope\xfe")
+	registry.Set(key, failpoint.NewFailpoint[error](key))
+
+	resp, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	_, err = proto.Marshal(resp)
+	require.NoError(t, err)
+	require.Equal(t, "http:GET /�", resp.BuggifyKeys[0].Key)
+	require.Equal(t, "http:GET /�", resp.Failpoints[0].Key)
+	require.Equal(t, "scope�", resp.Failpoints[0].Scope)
+}
+
+// manyBuggifyKeys makes BUGGIFY see more key names than a ListFailpoints response reports, and
+// activates those that start with "z".
+func manyBuggifyKeys(t *testing.T, registry failpoint.Registry) {
+	t.Helper()
+	require.NoError(t, registry.SetBuggify(failpoint.BuggifyConfig{
+		Seed:     1,
+		Prefixes: []failpoint.BuggifyPrefix{{Prefix: "z", Activation: 1}},
+	}))
+	padding := strings.Repeat("x", 200)
+	src := registrySource{registry: registry}
+	for i := range 12000 {
+		_ = failpoint.Buggify(src, failpoint.KeyFromName(fmt.Sprintf("a%s%d", padding, i), ""))
+	}
+	for i := range 3 {
+		_ = failpoint.Buggify(src, failpoint.KeyFromName(fmt.Sprintf("z%d", i), ""))
+	}
+}
+
+func TestServer_ListFailpointsBoundsBuggifyKeys(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	manyBuggifyKeys(t, registry)
+
+	resp, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	require.Less(t, proto.Size(resp), 2<<20)
+	require.Positive(t, resp.BuggifyKeysOmitted)
+	require.Equal(t, int64(12003), int64(len(resp.BuggifyKeys))+resp.BuggifyKeysOmitted)
+	for i, name := range []string{"z0", "z1", "z2"} {
+		require.Equal(t, name, resp.BuggifyKeys[i].Key)
+	}
+}
+
+// registerManyFailpoints registers failpoints whose ListFailpoints entries take most of the room
+// of a response.
+func registerManyFailpoints(registry failpoint.Registry) {
+	padding := strings.Repeat("y", 200)
+	for i := range 9000 {
+		key := failpoint.KeyFromName(fmt.Sprintf("b%s%d", padding, i), "")
+		registry.Set(key, failpoint.NewFailpoint[error](key))
+	}
+}
+
+func TestServer_ListFailpointsBudgetsBuggifyKeysAgainstTheResponse(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	registerManyFailpoints(registry)
+	withoutCounters, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	manyBuggifyKeys(t, registry)
+
+	resp, err := failpointgrpc.NewServer(registry).ListFailpoints(t.Context(), &failpointpb.ListFailpointsRequest{})
+	require.NoError(t, err)
+	require.Len(t, resp.Failpoints, 9000)
+	require.LessOrEqual(t, proto.Size(resp), 2<<20)
+	require.Less(t, proto.Size(withoutCounters), proto.Size(resp))
+	require.Equal(t, int64(12003), int64(len(resp.BuggifyKeys))+resp.BuggifyKeysOmitted)
 }

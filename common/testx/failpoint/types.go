@@ -27,8 +27,25 @@ func (a Action) String() string {
 	return fmt.Sprintf("Action(%d)", int32(a))
 }
 
-// Event describes one execution of an enabled failpoint.
+// EventKind is what an Event reports.
+type EventKind int32
+
+const (
+	// ExecutionEvent reports an execution of an enabled failpoint.
+	ExecutionEvent EventKind = iota
+	// BuggifyActivationEvent reports the BUGGIFY activation decision for a key name, on the first
+	// execution of the name. Key is unscoped, and Activated is the decision.
+	BuggifyActivationEvent
+	// BuggifyFireEvent reports an execution of a key that BUGGIFY fired. Action is Return if it
+	// injected an error and On if a Buggify call site takes its branch; Execution is the number of
+	// the execution of the key name in the key's scope.
+	BuggifyFireEvent
+)
+
+// Event describes one execution of an enabled failpoint, or a BUGGIFY decision.
 type Event struct {
+	// Kind is ExecutionEvent, the zero value, unless BUGGIFY reports the event.
+	Kind   EventKind
 	Key    Key
 	Action Action
 	// Fired reports whether the failpoint fired, as opposed to being skipped by its Trigger.
@@ -38,4 +55,6 @@ type Event struct {
 	// TypeMismatch reports that the failpoint fired with a return value that the call site
 	// could not accept, so the call site continued as if it had not fired.
 	TypeMismatch bool
+	// Activated is the decision of a BuggifyActivationEvent.
+	Activated bool
 }

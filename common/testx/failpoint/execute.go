@@ -32,6 +32,13 @@ func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 			return v, set
 		}
 	}
+
+	// Nothing is injected for the key, and nothing is registered for it or the unscoped key, so
+	// BUGGIFY may inject an error.
+	if state.registry != nil && state.registry.Armed() && !state.registry.registeredAny(key, nil) {
+		v, set, _ := executeBuggify[T](state.registry, key)
+		return v, set
+	}
 	return zero, false
 }
 
@@ -59,20 +66,47 @@ func ExecuteWith[T any](src Source, key Key, arg any) (T, bool) {
 // including one that paused, blocked and was released, called back or returned a value that is
 // not a T. A failpoint that is disabled, suspended or skipped by its Trigger did not fire. Call
 // sites that fall back to another failpoint when the first did not fire use it.
+//
+// If no failpoint is registered for key or the unscoped key, and T is error, BUGGIFY may fire
+// with an error (see BuggifyError).
 func ExecuteWithFired[T any](src Source, key Key, arg any) (value T, set, fired bool) {
 	registry := src.Failpoints()
-	if registry == nil {
+	if registry == nil || !registry.Armed() {
 		return value, false, false
 	}
-	if fpAny := registry.Get(key); fpAny != nil {
+	if fpAny, ok := lookupRegistered(registry, key); ok {
 		return execute[T](registry, key, fpAny, arg)
 	}
-	if key.scope != "" {
-		if fpAny := registry.Get(Key{name: key.name}); fpAny != nil {
-			return execute[T](registry, key, fpAny, arg)
-		}
+	return executeBuggify[T](registry, key)
+}
+
+// ExecuteRegistered is ExecuteWithFired without BUGGIFY: it only executes a failpoint registered
+// for key or the unscoped key. Call sites that execute several keys for one operation use it, and
+// BuggifyError after all of them, so that a failpoint registered for any of the keys takes
+// precedence over BUGGIFY.
+func ExecuteRegistered[T any](src Source, key Key, arg any) (value T, set, fired bool) {
+	registry := src.Failpoints()
+	if registry == nil || !registry.Armed() {
+		return value, false, false
+	}
+	if fpAny, ok := lookupRegistered(registry, key); ok {
+		return execute[T](registry, key, fpAny, arg)
 	}
 	return value, false, false
+}
+
+// executeBuggify returns the error that BUGGIFY injects for key, which has no failpoint
+// registered, if T is error.
+func executeBuggify[T any](registry Registry, key Key) (value T, set, fired bool) {
+	if _, isError := any((*T)(nil)).(*error); !isError {
+		return value, false, false
+	}
+	err := buggifyError(registry, key)
+	if err == nil {
+		return value, false, false
+	}
+	value, _ = any(err).(T)
+	return value, true, true
 }
 
 // Checkpoint executes an error failpoint for key in the registry of src and returns its error.

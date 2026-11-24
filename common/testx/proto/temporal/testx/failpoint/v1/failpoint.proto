@@ -147,6 +147,26 @@ message ListFailpointsRequest {}
 message ListFailpointsResponse {
   // failpoints is the list of failpoint information.
   repeated FailpointInfo failpoints = 1;
+  // buggify_keys are the counters of the key names that BUGGIFY saw since its configuration was
+  // last set, while it is enabled: activated names first, then by name, up to a size limit that
+  // keeps the response well below gRPC's message size limit.
+  repeated BuggifyKeyInfo buggify_keys = 2;
+  // buggify_keys_omitted is the number of key names left out of buggify_keys by the size limit.
+  int64 buggify_keys_omitted = 3;
+}
+
+// BuggifyKeyInfo counts the executions of a key name that BUGGIFY saw, in all scopes.
+message BuggifyKeyInfo {
+  // key is the key name.
+  string key = 1;
+  // activated is the BUGGIFY activation decision for the key name.
+  bool activated = 2;
+  // hits is the number of executions of the key name, activated or not, with nothing registered.
+  int64 hits = 3;
+  // fires is the number of those executions that BUGGIFY fired.
+  int64 fires = 4;
+  // hosts are the hosts that serve the registry, as in FailpointInfo.
+  repeated string hosts = 5;
 }
 
 // FailpointInfo describes the state of a failpoint.

@@ -349,7 +349,7 @@ func GrpcServerOptionsProvider(
 	}
 	// Frontend requests mostly carry a namespace name; the registry resolves it to the namespace ID
 	// that failpoints are scoped to.
-	faultGenerator := grpcfaultstest.NewGenerator(testHooks, faultinjectiontest.RegistryNamespaceIDs(namespaceRegistry))
+	faultGenerator := grpcfaultstest.NewGenerator(testHooks, faultinjectiontest.RegistryNamespaceIDs(namespaceRegistry), serviceName)
 	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
 		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
 	}
