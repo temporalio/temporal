@@ -354,6 +354,97 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 	s.Equal(int64(1), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
 }
 
+func (s *mutableStateSuite) TestActivityLimiterReleasedOnCompletion() {
+	tq, completedEvent := s.scheduleCompletedWFTForBatchIDTest()
+	s.mutableState.PopTasks()
+
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		completedEvent.GetEventId(),
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "activity-id",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    tq,
+		},
+		true,
+	)
+	s.Require().NoError(err)
+	limiters := []*taskqueuespb.LimiterRef{{
+		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+		Key:         "limiter-1",
+		SlotId:      uuid.NewString(),
+	}}
+	activityInfo.Limiters = limiters
+
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		activityInfo,
+		activityInfo.ScheduledEventId,
+		uuid.NewString(),
+		"worker-identity",
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+	)
+	s.Require().NoError(err)
+	_, err = s.mutableState.AddActivityTaskCompletedEvent(
+		activityInfo.ScheduledEventId,
+		activityInfo.StartedEventId,
+		&workflowservice.RespondActivityTaskCompletedRequest{},
+	)
+	s.Require().NoError(err)
+
+	s.requireReleaseLimiterTask(limiters)
+}
+
+func (s *mutableStateSuite) TestWorkflowCloseReleasesPendingTaskLimiters() {
+	s.mutableState.PopTasks()
+	activityLimiter := &taskqueuespb.LimiterRef{
+		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+		Key:         "activity-limiter",
+		SlotId:      uuid.NewString(),
+	}
+	s.mutableState.pendingActivityInfoIDs[123] = &persistencespb.ActivityInfo{
+		Limiters: []*taskqueuespb.LimiterRef{activityLimiter},
+	}
+	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	s.mutableState.stateInDB = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+
+	s.mutableState.closeTransactionGenerateReleaseLimiterTask(historyi.TransactionPolicyActive)
+
+	transferTasks := s.mutableState.PopTasks()[tasks.CategoryTransfer]
+	s.Require().Len(transferTasks, 1)
+	releaseTask, ok := transferTasks[0].(*tasks.ReleaseLimiterTask)
+	s.Require().True(ok)
+	protorequire.ProtoElementsMatch(
+		s.T(),
+		[]*taskqueuespb.LimiterRef{activityLimiter},
+		releaseTask.Limiters,
+	)
+}
+
+func (s *mutableStateSuite) TestPassiveTransactionDoesNotReleaseLimiters() {
+	s.mutableState.PopTasks()
+	s.mutableState.releaseLimiterRefs = []*taskqueuespb.LimiterRef{{
+		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+		Key:         "limiter",
+		SlotId:      uuid.NewString(),
+	}}
+
+	s.mutableState.closeTransactionGenerateReleaseLimiterTask(historyi.TransactionPolicyPassive)
+
+	s.Empty(s.mutableState.PopTasks()[tasks.CategoryTransfer])
+}
+
+func (s *mutableStateSuite) requireReleaseLimiterTask(limiters []*taskqueuespb.LimiterRef) {
+	s.mutableState.closeTransactionGenerateReleaseLimiterTask(historyi.TransactionPolicyActive)
+	transferTasks := s.mutableState.PopTasks()[tasks.CategoryTransfer]
+	s.Require().Len(transferTasks, 1)
+	releaseTask, ok := transferTasks[0].(*tasks.ReleaseLimiterTask)
+	s.Require().True(ok)
+	protorequire.ProtoElementsMatch(s.T(), limiters, releaseTask.Limiters)
+}
+
 func (s *mutableStateSuite) TestWorkflowTaskWorkerControlQueueLifecycle() {
 	for _, tc := range []struct {
 		name  string
