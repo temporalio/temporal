@@ -193,13 +193,18 @@ func (h *Handler) applyBatch(
 		reserveTimeout: h.reserveTimeout(),
 	}
 
+	// TODO(fc): instead of depending on some arbitrary context, we should take the longest
+	// deadline among the input calls, create a detached context from that, add that deadline,
+	// and run the batch with that one.
+	batchCtx := items[0].ctx
+
 	if needStart {
 		opts = append(opts, chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyAllowDuplicate,
 			chasm.BusinessIDConflictPolicyUseExisting,
 		))
 		updateRes, err := chasm.UpdateWithStartExecution(
-			items[0].ctx,
+			batchCtx,
 			chasm.ExecutionKey{
 				NamespaceID: key.namespaceID,
 				BusinessID:  key.key,
@@ -213,7 +218,7 @@ func (h *Handler) applyBatch(
 	}
 
 	ress, _, err := chasm.UpdateComponent(
-		items[0].ctx,
+		batchCtx,
 		chasm.NewComponentRef[*Component](chasm.ExecutionKey{
 			NamespaceID: key.namespaceID,
 			BusinessID:  key.key,
