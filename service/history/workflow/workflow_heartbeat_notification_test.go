@@ -133,11 +133,9 @@ func TestHasBufferedWorkflowHeartbeatNotificationInput(t *testing.T) {
 		{name: "prior and new inputs of the same type", buffered: []*historypb.HistoryEvent{newInput, input}, newEvents: []*historypb.HistoryEvent{newInput}, found: true, checked: 2},
 		{name: "only new events", buffered: newEvents, newEvents: newEvents, checked: 5},
 		{name: "new events before prior input", buffered: append(slices.Clone(newEvents), input), newEvents: newEvents, found: true, checked: 6},
-		{name: "new events before input at prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5)...), input), newEvents: newEvents, found: true, checked: 11},
-		{name: "new events before input beyond prior scan limit", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6)...), input), newEvents: newEvents, checked: 11},
-		{name: "input at scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 5), input), found: true, checked: 6},
-		{name: "input beyond scan limit", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6), input), checked: 6},
-		{name: "non-input events beyond scan limit", buffered: slices.Repeat([]*historypb.HistoryEvent{nonInput}, 7), checked: 6},
+		{name: "new events before a long non-input prefix", buffered: append(append(slices.Clone(newEvents), slices.Repeat([]*historypb.HistoryEvent{nonInput}, 100)...), input), newEvents: newEvents, found: true, checked: 106},
+		{name: "input after a non-input prefix stops the scan", buffered: append(slices.Repeat([]*historypb.HistoryEvent{nonInput}, 6), input, nonInput), found: true, checked: 7},
+		{name: "only a long non-input prefix", buffered: slices.Repeat([]*historypb.HistoryEvent{nonInput}, 100), checked: 100},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -152,6 +150,27 @@ func TestHasBufferedWorkflowHeartbeatNotificationInput(t *testing.T) {
 			require.Equal(t, tc.found, HasBufferedWorkflowHeartbeatNotificationInput(ms, tc.newEvents))
 			require.Equal(t, tc.checked, checked)
 		})
+	}
+}
+
+func TestHasBufferedWorkflowHeartbeatNotificationInputSequentialInputs(t *testing.T) {
+	t.Parallel()
+	var buffered []*historypb.HistoryEvent
+	for range 6 {
+		buffered = append(buffered, &historypb.HistoryEvent{EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED})
+	}
+	ms := historyi.NewMockMutableState(gomock.NewController(t))
+	ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).DoAndReturn(func(filter func(*historypb.HistoryEvent) bool) bool {
+		return slices.ContainsFunc(buffered, filter)
+	}).AnyTimes()
+	for i, eventType := range []enumspb.EventType{
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+	} {
+		event := &historypb.HistoryEvent{EventType: eventType}
+		buffered = append(buffered, event)
+		require.Equal(t, i > 0, HasBufferedWorkflowHeartbeatNotificationInput(ms, []*historypb.HistoryEvent{event}), "input %d", i)
 	}
 }
 

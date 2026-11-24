@@ -1,8 +1,6 @@
 package workflow
 
 import (
-	"slices"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -68,28 +66,19 @@ func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool 
 	}
 }
 
-// HasBufferedWorkflowHeartbeatNotificationInput checks at most 6 prior buffered events.
-// Events in newBufferedEvents are skipped without consuming the limit.
-// Of the 31 implemented bufferable event types, 25 are WHN-eligible. Assuming independent, uniformly
-// distributed prior event types, six checks find an eligible type with probability 1-(6/31)^6 ≈ 99.995%,
-// exceeding the 99.9% target. This is an estimate, not a guarantee for actual event ordering.
-// If no eligible input is found within the limit, another best-effort notification is allowed.
+// HasBufferedWorkflowHeartbeatNotificationInput reports whether a prior WHN-eligible event is buffered.
+// Events in newBufferedEvents are excluded by pointer identity.
 func HasBufferedWorkflowHeartbeatNotificationInput(ms historyi.MutableState, newBufferedEvents []*historypb.HistoryEvent) bool {
 	newEventSet := make(map[*historypb.HistoryEvent]struct{}, len(newBufferedEvents))
-	for event := range slices.Values(newBufferedEvents) {
+	for _, event := range newBufferedEvents {
 		newEventSet[event] = struct{}{}
 	}
-	checked := 0
-	found := false
-	ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
+	return ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
 		if _, ok := newEventSet[event]; ok {
 			return false
 		}
-		checked++
-		found = IsWorkflowHeartbeatNotificationInputType(event.GetEventType())
-		return found || checked == 6
+		return IsWorkflowHeartbeatNotificationInputType(event.GetEventType())
 	})
-	return found
 }
 
 // handleWorkflowHeartbeatNotification handles buffered events waiting for the next Workflow Task to reach the worker.
