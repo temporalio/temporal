@@ -3,22 +3,28 @@ package testlogger_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/testx/parallelsuite"
 )
 
-func TestWithLoggerPreservesServerInterface(t *testing.T) {
-	t.Parallel()
+type compatibilitySuite struct {
+	parallelsuite.Suite[*compatibilitySuite]
+}
 
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+func TestCompatibilitySuite(t *testing.T) {
+	parallelsuite.Run(t, &compatibilitySuite{})
+}
+
+func (s *compatibilitySuite) TestWithLoggerPreservesServerInterface() {
+	testLogger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 	capture := testLogger.StartCapture()
 
 	log.With(testLogger, tag.String("inherited", "value")).Info("with")
 	testLogger.WithTags(tag.String("direct", "value")).Info("with-tags")
 
-	require.Equal(t, []testlogger.CapturedLog{
+	s.Equal([]testlogger.CapturedLog{
 		{Level: testlogger.Info, Message: "with", Tags: []tag.Tag{tag.String("inherited", "value")}},
 		{Level: testlogger.Info, Message: "with-tags", Tags: []tag.Tag{tag.String("direct", "value")}},
 	}, capture.Snapshot())
