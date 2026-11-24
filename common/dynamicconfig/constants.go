@@ -2268,8 +2268,7 @@ cleanup doesn't finish within history.queueRangeCompleteTimeout. A value <= 0 de
 		"history.queueRangeCompleteTimeout",
 		5*time.Second,
 		`Timeout for one cleanup of a history queue's completed task range, covering all of its delete batches.
-Cleanup runs on the queue's processing loop, so a longer timeout can delay task processing and shard unload on that
-shard while a large range is cleaned up.`,
+A longer timeout can delay new task pickup and shard unload while a large range is cleaned up.`,
 	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",

@@ -182,15 +182,14 @@ func (m *sqlExecutionStore) rangeCompleteHistoryImmediateTasks(
 		return m.rangeCompleteReplicationTasks(ctx, request)
 	}
 
-	filter := sqlplugin.HistoryImmediateTasksRangeFilter{
-		ShardID:            request.ShardID,
-		CategoryID:         int32(categoryID),
-		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
-		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-		PageSize:           request.BatchSize,
-	}
-	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
-		return m.DB.RangeDeleteFromHistoryImmediateTasks(ctx, filter)
+	err := rangeDeleteInBatches(request.BatchSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
+			ShardID:            request.ShardID,
+			CategoryID:         int32(categoryID),
+			InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+			ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
+			PageSize:           request.BatchSize,
+		})
 	})
 	if err != nil {
 		return serviceerror.NewUnavailablef(
@@ -294,15 +293,14 @@ func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 		return m.rangeCompleteTimerTasks(ctx, request)
 	}
 
-	filter := sqlplugin.HistoryScheduledTasksRangeFilter{
-		ShardID:                         request.ShardID,
-		CategoryID:                      int32(categoryID),
-		InclusiveMinVisibilityTimestamp: request.InclusiveMinTaskKey.FireTime,
-		ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
-		PageSize:                        request.BatchSize,
-	}
-	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
-		return m.DB.RangeDeleteFromHistoryScheduledTasks(ctx, filter)
+	err := rangeDeleteInBatches(request.BatchSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
+			ShardID:                         request.ShardID,
+			CategoryID:                      int32(categoryID),
+			InclusiveMinVisibilityTimestamp: request.InclusiveMinTaskKey.FireTime,
+			ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
+			PageSize:                        request.BatchSize,
+		})
 	})
 	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteHistoryTask operation failed. CategoryID: %v. Error: %v", categoryID, err)
@@ -370,14 +368,13 @@ func (m *sqlExecutionStore) rangeCompleteTransferTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	filter := sqlplugin.TransferTasksRangeFilter{
-		ShardID:            request.ShardID,
-		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
-		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-		PageSize:           request.BatchSize,
-	}
-	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
-		return m.DB.RangeDeleteFromTransferTasks(ctx, filter)
+	err := rangeDeleteInBatches(request.BatchSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
+			ShardID:            request.ShardID,
+			InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+			ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
+			PageSize:           request.BatchSize,
+		})
 	})
 	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteTransferTask operation failed. Error: %v", err)
@@ -449,14 +446,13 @@ func (m *sqlExecutionStore) rangeCompleteTimerTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	filter := sqlplugin.TimerTasksRangeFilter{
-		ShardID:                         request.ShardID,
-		InclusiveMinVisibilityTimestamp: request.InclusiveMinTaskKey.FireTime,
-		ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
-		PageSize:                        request.BatchSize,
-	}
-	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
-		return m.DB.RangeDeleteFromTimerTasks(ctx, filter)
+	err := rangeDeleteInBatches(request.BatchSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
+			ShardID:                         request.ShardID,
+			InclusiveMinVisibilityTimestamp: request.InclusiveMinTaskKey.FireTime,
+			ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
+			PageSize:                        request.BatchSize,
+		})
 	})
 	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteTimerTask operation failed. Error: %v", err)
@@ -590,14 +586,13 @@ func (m *sqlExecutionStore) rangeCompleteReplicationTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	filter := sqlplugin.ReplicationTasksRangeFilter{
-		ShardID:            request.ShardID,
-		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
-		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-		PageSize:           request.BatchSize,
-	}
-	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
-		return m.DB.RangeDeleteFromReplicationTasks(ctx, filter)
+	err := rangeDeleteInBatches(request.BatchSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
+			ShardID:            request.ShardID,
+			InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+			ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
+			PageSize:           request.BatchSize,
+		})
 	})
 	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteReplicationTask operation failed. Error: %v", err)
@@ -770,14 +765,13 @@ func (m *sqlExecutionStore) rangeCompleteVisibilityTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	filter := sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:            request.ShardID,
-		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
-		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-		PageSize:           request.BatchSize,
-	}
-	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
-		return m.DB.RangeDeleteFromVisibilityTasks(ctx, filter)
+	err := rangeDeleteInBatches(request.BatchSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
+			ShardID:            request.ShardID,
+			InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+			ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
+			PageSize:           request.BatchSize,
+		})
 	})
 	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteVisibilityTask operation failed. Error: %v", err)
