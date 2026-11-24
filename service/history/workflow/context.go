@@ -18,6 +18,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/limiter"
@@ -152,7 +153,12 @@ func NewContext(
 		testHooks:         testHooks,
 	}
 	if config.WorkflowPersistencePipeline {
-		contextImpl.pipeline = &persistencePipeline{changed: make(chan struct{}), coalescing: config.WorkflowPersistenceCoalescing}
+		contextImpl.pipeline = &persistencePipeline{
+			admission:  locks.NewPrioritySemaphore(1),
+			changed:    make(chan struct{}),
+			coalescing: config.WorkflowPersistenceCoalescing,
+			timeSource: clock.NewRealTimeSource(),
+		}
 		contextImpl.pipeline.cacheSize.Store(1)
 	}
 	softassert.That(
@@ -184,6 +190,7 @@ func (c *ContextImpl) Unlock() error {
 	if op == nil {
 		return nil
 	}
+	c.pipeline.admission.Release(1)
 	return c.completeOperation(op)
 }
 

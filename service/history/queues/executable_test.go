@@ -115,6 +115,28 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 	s.NoError(executable.Execute())
 }
 
+func (s *executableSuite) TestExecutePipelineWaitLatency() {
+	executable := s.newTestExecutable()
+	now := s.timeSource.Now()
+	executable.SetScheduledTime(now)
+	s.timeSource.Advance(100 * time.Millisecond)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(func(ctx context.Context, _ queues.Executable) queues.ExecuteResponse {
+		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(), int64(200*time.Millisecond))
+		metrics.ContextCounterAdd(ctx, metrics.WorkflowPersistencePipelineWaitLatency.Name(), int64(300*time.Millisecond))
+		s.timeSource.Advance(time.Second)
+		return queues.ExecuteResponse{ExecutedAsActive: true}
+	})
+	capture := s.metricsHandler.StartCapture()
+	defer s.metricsHandler.StopCapture(capture)
+	s.NoError(executable.Execute())
+	executable.Ack()
+	snapshot := capture.Snapshot()
+	s.Len(snapshot[metrics.TaskProcessingLatency.Name()], 1)
+	s.Equal(time.Second, snapshot[metrics.TaskProcessingLatency.Name()][0].Value)
+	s.Len(snapshot[metrics.TaskLatency.Name()], 1)
+	s.Equal(600*time.Millisecond, snapshot[metrics.TaskLatency.Name()][0].Value)
+}
+
 func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 	scheduleLatency := 100 * time.Millisecond
 	userLatency := 500 * time.Millisecond

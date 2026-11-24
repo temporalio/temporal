@@ -359,6 +359,9 @@ func (e *executableImpl) Execute() (retErr error) {
 		if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name()); ok {
 			attemptUserLatency = time.Duration(duration)
 		}
+		if duration, ok := metrics.ContextCounterGet(ctx, metrics.WorkflowPersistencePipelineWaitLatency.Name()); ok {
+			attemptUserLatency += time.Duration(duration)
+		}
 
 		attemptLatency := e.timeSource.Now().Sub(startTime)
 		e.attemptNoUserLatency = attemptLatency - attemptUserLatency

@@ -38,6 +38,9 @@ func TestWorkflowPersistencePipeline(t *testing.T) {
 	case "highest":
 		workloads = []workload{{5000, 512}}
 		repeats = 1
+	case "admission":
+		workloads = []workload{{1000, 32}, {2000, 128}, {2000, 256}, {2000, 512}}
+		repeats = 1
 	default:
 		workloads = []workload{{100, 32}}
 		repeats = 1
@@ -152,7 +155,7 @@ func TestWorkflowPersistencePipeline(t *testing.T) {
 					}
 					require.Equal(t, want, result)
 					iterator := env.SdkClient().GetWorkflowHistory(ctx, id, run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-					signals := 0
+					signals, workflowTaskCompletions := 0, 0
 					for eventID := int64(1); iterator.HasNext(); eventID++ {
 						event, err := iterator.Next()
 						require.NoError(t, err)
@@ -160,8 +163,14 @@ func TestWorkflowPersistencePipeline(t *testing.T) {
 						if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 							signals++
 						}
+						if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+							workflowTaskCompletions++
+						}
 					}
 					require.Equal(t, work.signals, signals)
+					if os.Getenv("TEMPORAL_PIPELINE_PERF") == "admission" && mode.pipeline {
+						require.Greater(t, workflowTaskCompletions, 1)
+					}
 					state, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 						Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: run.GetRunID()}, Archetype: chasm.WorkflowArchetype,
 					})

@@ -3,8 +3,10 @@ package interceptor
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
@@ -30,6 +33,53 @@ const (
 	startWorkflow   = "StartWorkflowExecution"
 	executeMultiOps = "ExecuteMultiOperation"
 )
+
+func TestRecordLatencyMetricsWorkflowContention(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		cacheWait     time.Duration
+		pipelineWait  time.Duration
+		clampAdjusted bool
+	}{
+		{name: "no contention"},
+		{name: "cache acquisition", cacheWait: 100 * time.Millisecond},
+		{name: "pipeline wait", pipelineWait: 200 * time.Millisecond},
+		{name: "both", cacheWait: 100 * time.Millisecond, pipelineWait: 200 * time.Millisecond},
+		{name: "clamp", pipelineWait: time.Hour, clampAdjusted: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := metrics.AddMetricsContext(t.Context())
+			if tc.cacheWait != 0 {
+				metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(), int64(tc.cacheWait))
+			}
+			if tc.pipelineWait != 0 {
+				metrics.ContextCounterAdd(ctx, metrics.WorkflowPersistencePipelineWaitLatency.Name(), int64(tc.pipelineWait))
+			}
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			(&TelemetryInterceptor{}).RecordLatencyMetrics(ctx, time.Now().Add(-time.Second), handler)
+			snapshot := capture.Snapshot()
+			require.Len(t, snapshot[metrics.ServiceLatency.Name()], 1)
+			require.Len(t, snapshot[metrics.ServiceLatencyNoUserLatency.Name()], 1)
+			total := snapshot[metrics.ServiceLatency.Name()][0].Value.(time.Duration)
+			adjusted := snapshot[metrics.ServiceLatencyNoUserLatency.Name()][0].Value.(time.Duration)
+			if tc.clampAdjusted {
+				require.Zero(t, adjusted)
+			} else {
+				require.Equal(t, total-tc.cacheWait-tc.pipelineWait, adjusted)
+			}
+			if tc.cacheWait+tc.pipelineWait == 0 {
+				require.Empty(t, snapshot[metrics.ServiceLatencyUserLatency.Name()])
+			} else {
+				require.Len(t, snapshot[metrics.ServiceLatencyUserLatency.Name()], 1)
+				require.Equal(t, tc.cacheWait+tc.pipelineWait, snapshot[metrics.ServiceLatencyUserLatency.Name()][0].Value)
+			}
+		})
+	}
+}
 
 func TestEmitActionMetric(t *testing.T) {
 	controller := gomock.NewController(t)

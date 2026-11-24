@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -260,7 +261,9 @@ func TestPersistencePipelineFallbackDrainsRetainedPrefix(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.LockSpeculative(t.Context(), locks.PriorityHigh))
 	fallback := make(chan error, 1)
+	fallbackStarted := make(chan struct{})
 	go func() {
+		close(fallbackStarted)
 		err := c.makeOperationCommitted(t.Context(), true)
 		unlockErr := c.Unlock()
 		if err == nil {
@@ -268,7 +271,7 @@ func TestPersistencePipelineFallbackDrainsRetainedPrefix(t *testing.T) {
 		}
 		fallback <- err
 	}()
-	waitPipeline(t, c.pipeline, func() bool { return len(c.pipeline.waiters) == 1 })
+	await.Rcv(t, fallbackStarted)
 	cancel()
 	require.ErrorIs(t, c.completeSubmission(d), context.Canceled)
 	select {
@@ -386,7 +389,9 @@ func TestPersistencePipelineFallbackKeepsCurrentAdmission(t *testing.T) {
 	require.NoError(t, c.LockSpeculative(t.Context(), locks.PriorityHigh))
 	committed, committedDone := make(chan error, 1), make(chan error, 1)
 	releaseCommitted := make(chan struct{})
+	committedStarted := make(chan struct{})
 	go func() {
+		close(committedStarted)
 		err := c.Lock(t.Context(), locks.PriorityHigh)
 		committed <- err
 		if err == nil {
@@ -394,7 +399,7 @@ func TestPersistencePipelineFallbackKeepsCurrentAdmission(t *testing.T) {
 			committedDone <- c.Unlock()
 		}
 	}()
-	waitPipeline(t, c.pipeline, func() bool { return len(c.pipeline.waiters) == 1 })
+	await.Rcv(t, committedStarted)
 	fallback, fallbackDone := make(chan error, 1), make(chan error, 1)
 	releaseFallback := make(chan struct{})
 	go func() {
@@ -471,10 +476,17 @@ func TestPersistencePipelineOversizedWriteStaysSynchronous(t *testing.T) {
 
 func TestPersistencePipelineCommittedFairness(t *testing.T) {
 	t.Parallel()
-	c := pipelineTestContext(t, false, func(_ context.Context, _ *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	started, finish := make(chan struct{}, 1), make(chan struct{})
+	c := pipelineTestContext(t, false, func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		started <- struct{}{}
+		<-finish
 		return pipelineTestResponse(0), nil
 	})
-	require.NoError(t, c.LockSpeculative(t.Context(), locks.PriorityHigh))
+	a, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	require.NoError(t, err)
+	aDone := make(chan error, 1)
+	go func() { aDone <- c.completeSubmission(a) }()
+	await.Rcv(t, started)
 	committed := make(chan error, 1)
 	releaseCommitted := make(chan struct{})
 	done := make(chan error, 1)
@@ -486,14 +498,12 @@ func TestPersistencePipelineCommittedFairness(t *testing.T) {
 			done <- c.Unlock()
 		}
 	}()
-	waitPipeline(t, c.pipeline, func() bool { return len(c.pipeline.waiters) == 1 })
+	waitPipelineAdmissionHeld(t, c)
 	cancelCtx, cancel := context.WithCancel(t.Context())
 	canceled := make(chan error, 1)
 	go func() { canceled <- c.Lock(cancelCtx, locks.PriorityHigh) }()
-	waitPipeline(t, c.pipeline, func() bool { return len(c.pipeline.waiters) == 2 })
 	cancel()
 	require.ErrorIs(t, await.Rcv(t, canceled), context.Canceled)
-	waitPipeline(t, c.pipeline, func() bool { return len(c.pipeline.waiters) == 1 })
 	speculative := make(chan error, 1)
 	go func() {
 		err := c.LockSpeculative(t.Context(), locks.PriorityHigh)
@@ -502,7 +512,8 @@ func TestPersistencePipelineCommittedFairness(t *testing.T) {
 		}
 		speculative <- err
 	}()
-	require.NoError(t, c.Unlock())
+	close(finish)
+	require.NoError(t, await.Rcv(t, aDone))
 	require.NoError(t, await.Rcv(t, committed))
 	select {
 	case <-speculative:
@@ -514,21 +525,178 @@ func TestPersistencePipelineCommittedFairness(t *testing.T) {
 	require.NoError(t, await.Rcv(t, speculative))
 }
 
-func waitPipeline(t *testing.T, p *persistencePipeline, predicate func() bool) {
+func waitPipelineAdmissionHeld(t *testing.T, c *ContextImpl) {
 	t.Helper()
-	for {
-		p.mu.Lock()
-		ok := predicate()
-		changed := p.changed
-		p.mu.Unlock()
-		if ok {
-			return
+	await.RequireTrue(t, func() bool {
+		if c.pipeline.admission.TryAcquire(locks.PriorityLow, 1) {
+			c.pipeline.admission.Release(1)
+			return false
 		}
+		return true
+	}, 5*time.Second, time.Millisecond)
+}
+
+func TestPersistencePipelineAdmissionRetainsPositionAtCapacity(t *testing.T) {
+	t.Parallel()
+	for _, committed := range []bool{false, true} {
+		name := "newer pipelined request"
+		if committed {
+			name = "newer committed request"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := pipelineTestContext(t, false, func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+				return pipelineTestResponse(0), nil
+			})
+			queued := make([]*submission, maxPipelineSubmissions)
+			for i := range queued {
+				var err error
+				queued[i], err = c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+i)))
+				require.NoError(t, err)
+			}
+			older, olderDone := make(chan error, 1), make(chan error, 1)
+			releaseOlder := make(chan struct{})
+			go func() {
+				err := c.LockSpeculative(t.Context(), locks.PriorityHigh)
+				older <- err
+				if err == nil {
+					<-releaseOlder
+					err = c.Unlock()
+				}
+				olderDone <- err
+			}()
+			waitPipelineAdmissionHeld(t, c)
+			newer := make(chan error, 1)
+			go func() {
+				lock := c.LockSpeculative
+				if committed {
+					lock = c.Lock
+				}
+				err := lock(t.Context(), locks.PriorityHigh)
+				if err == nil {
+					err = c.Unlock()
+				}
+				newer <- err
+			}()
+			drained := make(chan error, 1)
+			go func() {
+				var result error
+				for _, s := range queued {
+					if err := c.completeSubmission(s); result == nil && err != nil {
+						result = err
+					}
+				}
+				drained <- result
+			}()
+			require.NoError(t, await.Rcv(t, older))
+			select {
+			case <-newer:
+				t.Fatal("newer request overtook the capacity waiter")
+			default:
+			}
+			close(releaseOlder)
+			require.NoError(t, await.Rcv(t, olderDone))
+			require.NoError(t, await.Rcv(t, newer))
+			require.NoError(t, await.Rcv(t, drained))
+		})
+	}
+}
+
+func TestPersistencePipelineCanceledAdmissionReleasesPosition(t *testing.T) {
+	t.Parallel()
+	c := pipelineTestContext(t, false, func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		return pipelineTestResponse(0), nil
+	})
+	queued := make([]*submission, maxPipelineSubmissions)
+	for i := range queued {
+		var err error
+		queued[i], err = c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+i)))
+		require.NoError(t, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- c.LockSpeculative(ctx, locks.PriorityHigh) }()
+	waitPipelineAdmissionHeld(t, c)
+	cancel()
+	require.ErrorIs(t, await.Rcv(t, done), context.Canceled)
+	require.True(t, c.pipeline.admission.TryAcquire(locks.PriorityHigh, 1))
+	c.pipeline.admission.Release(1)
+	for _, s := range queued {
+		require.NoError(t, c.completeSubmission(s))
+	}
+	require.NoError(t, c.pipeline.err)
+}
+
+type pipelineAdmissionKey struct{}
+
+type pausedPipelineAdmission struct {
+	locks.PrioritySemaphore
+	granted chan struct{}
+	resume  chan struct{}
+}
+
+func (p *pausedPipelineAdmission) Acquire(ctx context.Context, priority locks.Priority, n int) error {
+	if err := p.PrioritySemaphore.Acquire(ctx, priority, n); err != nil {
+		return err
+	}
+	if ctx.Value(pipelineAdmissionKey{}) != nil {
+		close(p.granted)
 		select {
-		case <-changed:
-		case <-t.Context().Done():
-			t.Fatal(t.Context().Err())
+		case <-p.resume:
+		case <-ctx.Done():
+			p.Release(n)
+			return ctx.Err()
 		}
+	}
+	return nil
+}
+
+func TestPersistencePipelineAdmissionPreventsBargingAfterCommittedAccess(t *testing.T) {
+	t.Parallel()
+	c := pipelineTestContext(t, false, nil)
+	admission := &pausedPipelineAdmission{
+		PrioritySemaphore: c.pipeline.admission,
+		granted:           make(chan struct{}),
+		resume:            make(chan struct{}),
+	}
+	c.pipeline.admission = admission
+	require.NoError(t, c.Lock(t.Context(), locks.PriorityHigh))
+	older, olderDone := make(chan error, 1), make(chan error, 1)
+	releaseOlder := make(chan struct{})
+	go func() {
+		err := c.LockSpeculative(context.WithValue(t.Context(), pipelineAdmissionKey{}, true), locks.PriorityHigh)
+		older <- err
+		if err == nil {
+			<-releaseOlder
+			err = c.Unlock()
+		}
+		olderDone <- err
+	}()
+	require.NoError(t, c.Unlock())
+	await.Rcv(t, admission.granted)
+	newer := make(chan error, 20)
+	for range cap(newer) {
+		go func() {
+			err := c.LockSpeculative(t.Context(), locks.PriorityHigh)
+			if err == nil {
+				err = c.Unlock()
+			}
+			newer <- err
+		}()
+	}
+	require.False(t, admission.TryAcquire(locks.PriorityHigh, 1))
+	close(admission.resume)
+	require.NoError(t, await.Rcv(t, older))
+	select {
+	case <-newer:
+		t.Fatal("newer request overtook an admission granted before mutex acquisition")
+	default:
+	}
+	close(releaseOlder)
+	require.NoError(t, await.Rcv(t, olderDone))
+	for range cap(newer) {
+		require.NoError(t, await.Rcv(t, newer))
 	}
 }
 

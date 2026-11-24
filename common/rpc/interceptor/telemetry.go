@@ -206,8 +206,10 @@ func AddTelemetryContext(ctx context.Context, metricsHandler metrics.Handler) co
 
 func (ti *TelemetryInterceptor) RecordLatencyMetrics(ctx context.Context, startTime time.Time, metricsHandler metrics.Handler) {
 	userLatencyDuration := time.Duration(0)
-	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name()); ok {
-		userLatencyDuration = time.Duration(val)
+	cacheLatency, hasCacheLatency := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name())
+	pipelineLatency, hasPipelineLatency := metrics.ContextCounterGet(ctx, metrics.WorkflowPersistencePipelineWaitLatency.Name())
+	if hasCacheLatency || hasPipelineLatency {
+		userLatencyDuration = time.Duration(cacheLatency) + time.Duration(pipelineLatency)
 		metrics.ServiceLatencyUserLatency.With(metricsHandler).Record(userLatencyDuration)
 	}
 

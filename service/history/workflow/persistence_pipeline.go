@@ -6,11 +6,13 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
@@ -33,6 +35,7 @@ type submission struct {
 	failoverVersion int64
 	request         *persistence.UpdateWorkflowExecutionRequest
 	completion      *future.FutureImpl[struct{}]
+	queueEndTime    time.Time
 	historySize     int64
 	bytes           int
 	taskTargets     map[tasks.Category][]tasks.Task
@@ -47,6 +50,7 @@ type operation struct {
 
 type persistencePipeline struct {
 	mu                       sync.Mutex
+	timeSource               clock.TimeSource
 	err                      error
 	inFlight                 []*submission
 	pending                  []*submission
@@ -54,7 +58,7 @@ type persistencePipeline struct {
 	committedHistorySize     int64
 	outstandingHistorySize   int64
 	coalescing               bool
-	waiters                  []chan struct{}
+	admission                locks.PrioritySemaphore
 	changed                  chan struct{}
 	acquirePin               func()
 	releasePin               func()
@@ -136,106 +140,91 @@ func (p *persistencePipeline) releaseIdlePin() func() {
 }
 
 func (c *ContextImpl) lockCommitted(ctx context.Context, priority locks.Priority) error {
-	p := c.pipeline
-	waiter := make(chan struct{})
-	p.mu.Lock()
-	p.waiters = append(p.waiters, waiter)
-	p.notify()
-	p.mu.Unlock()
-	defer func() {
-		p.mu.Lock()
-		p.waiters = slices.DeleteFunc(p.waiters, func(w chan struct{}) bool { return w == waiter })
-		p.notify()
-		p.mu.Unlock()
-	}()
-	for {
-		p.mu.Lock()
-		first := p.waiters[0] == waiter
-		changed := p.changed
-		p.mu.Unlock()
-		if !first {
-			select {
-			case <-changed:
-				continue
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-		if err := c.lock.Acquire(ctx, priority, 1); err != nil {
-			return err
-		}
-		p.mu.Lock()
-		if p.waiters[0] != waiter {
-			p.mu.Unlock()
-			c.lock.Release(1)
-			continue
-		}
-		tail := p.tail()
-		invalid := p.err != nil
-		p.mu.Unlock()
-		if tail != nil {
-			c.lock.Release(1)
-			if _, err := tail.completion.Get(ctx); err != nil && ctx.Err() != nil {
-				return ctx.Err()
-			}
-			continue
-		}
-		if invalid {
-			c.clearMutableState()
-		}
-		c.operation = &operation{ctx: ctx, dependency: readyPersistenceFuture(nil)}
-		return nil
-	}
+	return c.lockPipeline(ctx, priority, false)
 }
 
 func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priority) error {
 	if c.pipeline == nil {
 		return c.Lock(ctx, priority)
 	}
+	return c.lockPipeline(ctx, priority, true)
+}
+
+func (c *ContextImpl) lockPipeline(ctx context.Context, priority locks.Priority, pipelined bool) error {
+	p := c.pipeline
+	if err := p.admission.Acquire(ctx, priority, 1); err != nil {
+		return err
+	}
+	pipelined, err := c.acquirePipelineLock(ctx, priority, pipelined)
+	if err != nil {
+		p.admission.Release(1)
+		return err
+	}
+	operationCtx := ctx
+	var dependency future.Future[struct{}] = readyPersistenceFuture(nil)
+	if pipelined {
+		if original, ok := ctx.Value(pipelineContextKey{}).(context.Context); ok {
+			operationCtx = original
+		}
+		dependency = c.PersistenceFuture()
+	}
+	c.operation = &operation{ctx: operationCtx, pipelined: pipelined, dependency: dependency}
+	return nil
+}
+
+func (c *ContextImpl) acquirePipelineLock(ctx context.Context, priority locks.Priority, pipelined bool) (bool, error) {
 	p := c.pipeline
 	for {
 		p.mu.Lock()
-		blocked := len(p.waiters) != 0 || len(p.pending)+len(p.inFlight) >= maxPipelineSubmissions
-		invalid := p.err != nil
+		if p.err != nil {
+			pipelined = false
+		}
+		blocked := pipelined && len(p.pending)+len(p.inFlight) >= maxPipelineSubmissions
 		changed := p.changed
 		p.mu.Unlock()
-		if invalid {
-			return c.lockCommitted(ctx, priority)
-		}
 		if blocked {
 			select {
 			case <-changed:
 				continue
 			case <-ctx.Done():
-				return ctx.Err()
+				return false, ctx.Err()
 			}
 		}
 		if err := c.lock.Acquire(ctx, priority, 1); err != nil {
-			return err
+			return false, err
 		}
 		p.mu.Lock()
-		blocked = len(p.waiters) != 0 || p.err != nil || len(p.pending)+len(p.inFlight) >= maxPipelineSubmissions
+		tail := p.tail()
+		invalid := p.err != nil
+		full := len(p.pending)+len(p.inFlight) >= maxPipelineSubmissions
 		p.mu.Unlock()
-		if blocked {
+		if pipelined && (invalid || full) {
 			c.lock.Release(1)
 			continue
 		}
-		operationCtx := ctx
-		if original, ok := ctx.Value(pipelineContextKey{}).(context.Context); ok {
-			operationCtx = original
+		if !pipelined && tail != nil {
+			c.lock.Release(1)
+			if _, err := tail.completion.Get(ctx); err != nil && ctx.Err() != nil {
+				return false, ctx.Err()
+			}
+			continue
 		}
-		c.operation = &operation{ctx: operationCtx, pipelined: true, dependency: c.PersistenceFuture()}
-		return nil
+		if invalid {
+			c.clearMutableState()
+		}
+		return pipelined, nil
 	}
 }
 
 func (p *persistencePipeline) invalidate(start int, err error) {
 	p.err = pipelineDependencyError()
+	now := p.timeSource.Now()
 	for _, s := range p.pending[start:] {
 		result := err
 		if canceled := s.ctx.Err(); canceled != nil {
 			result = canceled
 		}
+		s.queueEndTime = now
 		s.completion.Set(struct{}{}, result)
 		p.outstandingHistorySize -= s.historySize
 	}
@@ -282,13 +271,39 @@ func (c *ContextImpl) completeOperation(op *operation) error {
 		}
 	}
 	if len(op.submissions) == 0 {
+		if op.dependency.Ready() {
+			_, result = op.dependency.Get(op.ctx)
+			return result
+		}
+		start := c.pipeline.timeSource.Now()
 		_, result = op.dependency.Get(op.ctx)
+		c.recordPipelineWait(op.ctx, start, c.pipeline.timeSource.Now())
 	}
 	return result
 }
 
+func (c *ContextImpl) recordPipelineWait(ctx context.Context, start, end time.Time) {
+	if duration := end.Sub(start); duration > 0 {
+		metrics.ContextCounterAdd(ctx, metrics.WorkflowPersistencePipelineWaitLatency.Name(), duration.Nanoseconds())
+		metrics.WorkflowPersistencePipelineWaitLatency.With(c.metricsHandler).Record(duration)
+	}
+}
+
 func (c *ContextImpl) completeSubmission(s *submission) error {
 	p := c.pipeline
+	var start time.Time
+	defer func() {
+		if start.IsZero() {
+			return
+		}
+		p.mu.Lock()
+		end := s.queueEndTime
+		p.mu.Unlock()
+		if end.IsZero() {
+			end = p.timeSource.Now()
+		}
+		c.recordPipelineWait(s.ctx, start, end)
+	}()
 	for {
 		p.mu.Lock()
 		if s.completion.Ready() {
@@ -324,6 +339,9 @@ func (c *ContextImpl) completeSubmission(s *submission) error {
 			continue
 		}
 		predecessor := p.predecessor(index)
+		if index >= 0 && start.IsZero() {
+			start = p.timeSource.Now()
+		}
 		p.mu.Unlock()
 		select {
 		case <-s.completion.Done():
@@ -344,6 +362,7 @@ func (p *persistencePipeline) predecessor(index int) <-chan struct{} {
 }
 
 func (p *persistencePipeline) claimHead(s *submission) (*persistence.UpdateWorkflowExecutionRequest, error) {
+	now := p.timeSource.Now()
 	request, _, _, err := clonePipelineRequest(s.request)
 	if err != nil {
 		return nil, err
@@ -369,6 +388,9 @@ func (p *persistencePipeline) claimHead(s *submission) (*persistence.UpdateWorkf
 	request.UpdateWorkflowMutation.DBRecordVersion = p.committedDBRecordVersion + 1
 	request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize = p.committedHistorySize
 	p.inFlight = slices.Clone(p.pending[:count])
+	for _, member := range p.inFlight {
+		member.queueEndTime = now
+	}
 	p.pending = p.pending[count:]
 	p.notify()
 	return request, nil
@@ -623,26 +645,14 @@ func (c *ContextImpl) makeOperationCommitted(ctx context.Context, discard bool) 
 	p := c.pipeline
 	op := c.operation
 	c.operation = nil
-	waiter := make(chan struct{})
 	p.mu.Lock()
-	// The current holder was admitted before waiters registered during its preparation.
-	p.waiters = append([]chan struct{}{waiter}, p.waiters...)
 	tail := p.tail()
-	p.notify()
 	p.mu.Unlock()
+	start := p.timeSource.Now()
 	c.lock.Release(1)
 	var err error
 	if tail != nil {
 		_, err = tail.completion.Get(context.WithoutCancel(ctx))
-	}
-	for {
-		p.mu.Lock()
-		first, changed := p.waiters[0] == waiter, p.changed
-		p.mu.Unlock()
-		if first {
-			break
-		}
-		<-changed
 	}
 	for {
 		_ = c.lock.Acquire(context.Background(), locks.PriorityHigh, 1)
@@ -658,14 +668,20 @@ func (c *ContextImpl) makeOperationCommitted(ctx context.Context, discard bool) 
 			err = dependencyErr
 		}
 	}
+	end := p.timeSource.Now()
 	p.mu.Lock()
-	p.waiters = slices.DeleteFunc(p.waiters, func(w chan struct{}) bool { return w == waiter })
+	for _, s := range op.submissions {
+		if !s.queueEndTime.IsZero() && s.queueEndTime.Before(end) {
+			end = s.queueEndTime
+		}
+	}
 	invalid := p.err != nil
 	if discard || ctx.Err() != nil {
 		p.err = pipelineDependencyError()
 	}
 	p.notify()
 	p.mu.Unlock()
+	c.recordPipelineWait(op.ctx, start, end)
 	c.operation = op
 	op.pipelined = false
 	op.dependency = readyPersistenceFuture(err)
