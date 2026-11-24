@@ -119,15 +119,10 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 MAIN_BRANCH    := main
 
 # If you update these dirs, please also update in CategoryDirs find_altered_tests.go
-# Testx and mixed-brain tests run separately from the main package list.
-TEST_DIRS                     := \
-	$(filter-out \
-		./common/testx/% \
-		./tests/mixedbrain/%, \
-		$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
-# Skip testdata fixtures, which are loaded by their test harnesses.
-TEST_DIRS                     := \
-	$(foreach dir,$(TEST_DIRS),$(if $(findstring /testdata/,$(dir)),,$(dir)))
+TEST_DIRS                     := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
+TEST_DIRS                     := $(filter-out ./common/testx/%,$(TEST_DIRS))# Testx runs in its own Go module.
+TEST_DIRS                     := $(filter-out ./tests/mixedbrain/%,$(TEST_DIRS))# Mixed-brain tests run separately.
+TEST_DIRS                     := $(foreach dir,$(TEST_DIRS),$(if $(findstring /testdata/,$(dir)),,$(dir)))# Test harnesses load these fixtures.
 
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
