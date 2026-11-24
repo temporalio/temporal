@@ -453,7 +453,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		}
 	}
 
-	combinedMemo := make(map[string]*commonpb.Payload, 1)
+	combinedMemo := make(map[string]*commonpb.Payload, 2)
 	userMemoMap := visComponent.CustomMemo(visTaskContext)
 	if len(userMemoMap) > 0 {
 		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
@@ -759,6 +759,9 @@ func withTimeSkippingSearchAttributes(
 	}
 	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingEnabled] = sadefs.MustEncodeValue(
 		tsi.GetConfig().GetEnabled(), enumspb.INDEXED_VALUE_TYPE_BOOL)
+	// Individual skips do not trigger visibility writes; the duration is refreshed on start,
+	// enabled-state changes, close, and other visibility writes.
+	// TODO: Revisit whether running workflows need more frequent duration updates.
 	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingAccumulatedDuration] = sadefs.MustEncodeValue(
 		tsi.GetAccumulatedSkippedDuration().AsDuration().Nanoseconds(), enumspb.INDEXED_VALUE_TYPE_INT)
 	return searchAttributes
