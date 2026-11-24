@@ -9,7 +9,9 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-type plugin struct{}
+type plugin struct {
+	AwaitPackages []string `json:"await-packages"`
+}
 
 func init() {
 	register.Plugin("parallelsuitelint", newPlugin)
@@ -23,8 +25,8 @@ func newPlugin(raw any) (register.LinterPlugin, error) {
 	return &settings, nil
 }
 
-func (*plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
-	return []*analysis.Analyzer{parallelsuitelint.New()}, nil
+func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
+	return []*analysis.Analyzer{parallelsuitelint.NewWithAwaitPackages(p.AwaitPackages...)}, nil
 }
 
 func (*plugin) GetLoadMode() string {

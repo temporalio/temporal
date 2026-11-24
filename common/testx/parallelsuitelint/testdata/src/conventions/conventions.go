@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	forwardawait "example.com/await"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	serverawait "go.temporal.io/server/common/testing/await"
 	"go.temporal.io/testx/await"
 	ps "go.temporal.io/testx/parallelsuite"
 )
@@ -40,13 +40,14 @@ func awaiting(s, other *testSuite, t *testing.T, ctx context.Context, ch chan in
 	attempt := func(*await.T) {}
 	ready := func() bool { return true }
 
-	await.Require(s.Context(), s.T(), attempt, time.Second, time.Millisecond)                      // want "use suite Await instead of await.Require"
-	serverawait.Requiref((s).Context(), s.TB(), attempt, time.Second, time.Millisecond, "waiting") // want "use suite Awaitf instead of await.Requiref"
-	await.RequireTrue(s.TB(), ready, time.Second, time.Millisecond)                                // want "use suite AwaitTrue instead of await.RequireTrue"
-	await.RequireTruef(s.T(), ready, time.Second, time.Millisecond, "waiting")                     // want "use suite AwaitTruef instead of await.RequireTruef"
-	await.Rcv[int](s.T(), ch)                                                                      // want "use suite Rcv instead of await.Rcv"
-	await.Snd(s.TB(), ch, 1)                                                                       // want "use suite Snd instead of await.Snd"
+	await.Require(s.Context(), s.T(), attempt, time.Second, time.Millisecond)                // want "use suite Await instead of await.Require"
+	await.Requiref((s).Context(), s.TB(), attempt, time.Second, time.Millisecond, "waiting") // want "use suite Awaitf instead of await.Requiref"
+	await.RequireTrue(s.TB(), ready, time.Second, time.Millisecond)                          // want "use suite AwaitTrue instead of await.RequireTrue"
+	await.RequireTruef(s.T(), ready, time.Second, time.Millisecond, "waiting")               // want "use suite AwaitTruef instead of await.RequireTruef"
+	await.Rcv[int](s.T(), ch)                                                                // want "use suite Rcv instead of await.Rcv"
+	await.Snd(s.TB(), ch, 1)                                                                 // want "use suite Snd instead of await.Snd"
 
+	forwardawait.Requiref(s.Context(), s.TB(), attempt, time.Second, time.Millisecond, "waiting")
 	await.Require(ctx, s.T(), attempt, time.Second, time.Millisecond)
 	await.Require(other.Context(), s.T(), attempt, time.Second, time.Millisecond)
 	await.Require(s.Context(), t, attempt, time.Second, time.Millisecond)

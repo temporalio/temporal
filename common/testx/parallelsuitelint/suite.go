@@ -41,44 +41,6 @@ func embeddedSuite(t types.Type, seen map[types.Type]bool) *types.Named {
 	return nil
 }
 
-func selectedFunction(pass *analysis.Pass, call *ast.CallExpr) (*ast.SelectorExpr, *types.Func) {
-	sel, ok := callTarget(call.Fun).(*ast.SelectorExpr)
-	if !ok {
-		return nil, nil
-	}
-	return sel, calledFunction(pass, sel)
-}
-
 func suiteExpression(pass *analysis.Pass, expr ast.Expr) bool {
 	return embedsSuite(pass.TypesInfo.TypeOf(expr), make(map[types.Type]bool))
-}
-
-func calledFunction(pass *analysis.Pass, expr ast.Expr) *types.Func {
-	switch expr := callTarget(expr).(type) {
-	case *ast.SelectorExpr:
-		fn, ok := pass.TypesInfo.ObjectOf(expr.Sel).(*types.Func)
-		if !ok {
-			return nil
-		}
-		return fn
-	case *ast.Ident:
-		fn, ok := pass.TypesInfo.ObjectOf(expr).(*types.Func)
-		if !ok {
-			return nil
-		}
-		return fn
-	default:
-		return nil
-	}
-}
-
-func callTarget(expr ast.Expr) ast.Expr {
-	switch expr := ast.Unparen(expr).(type) {
-	case *ast.IndexExpr:
-		return callTarget(expr.X)
-	case *ast.IndexListExpr:
-		return callTarget(expr.X)
-	default:
-		return expr
-	}
 }

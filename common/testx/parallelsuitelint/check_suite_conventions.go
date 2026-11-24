@@ -2,12 +2,13 @@ package parallelsuitelint
 
 import (
 	"go/ast"
+	"slices"
 
 	"golang.org/x/tools/go/analysis"
 )
 
 // checkSuiteConventions enforces suite names and direct use of suite methods while preserving Scope helper APIs.
-func checkSuiteConventions(pass *analysis.Pass) {
+func checkSuiteConventions(pass *analysis.Pass, awaitPackages []string) {
 	for _, file := range pass.Files {
 		for node := range ast.Preorder(file) {
 			switch node := node.(type) {
@@ -16,7 +17,7 @@ func checkSuiteConventions(pass *analysis.Pass) {
 					checkSuiteNames(pass, node.Recv.List, "suite receiver must be named s")
 				}
 			case *ast.CallExpr:
-				checkSuiteCall(pass, node)
+				checkSuiteCall(pass, node, awaitPackages)
 			default:
 			}
 		}
@@ -39,21 +40,20 @@ func checkSuiteNames(pass *analysis.Pass, fields []*ast.Field, message string) {
 	}
 }
 
-func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr) {
+func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr, awaitPackages []string) {
 	fn := calledFunction(pass, call.Fun)
 	if fn == nil || fn.Pkg() == nil {
 		return
 	}
 	sel, isSelector := callTarget(call.Fun).(*ast.SelectorExpr)
-	switch fn.Pkg().Path() {
+	path := fn.Pkg().Path()
+	switch path {
 	case "github.com/stretchr/testify/require", "github.com/stretchr/testify/assert":
 		passesSuiteHandle := fn.Signature().Recv() == nil && len(call.Args) > 0 && suiteHandle(pass, call.Args[0])
 		usesAssertionAccessor := isSelector && assertionAccessor(pass, sel.X)
 		if passesSuiteHandle || usesAssertionAccessor {
 			pass.Reportf(call.Pos(), "use suite assertion methods directly")
 		}
-	case "go.temporal.io/testx/await", "go.temporal.io/server/common/testing/await":
-		checkSuiteAwaitCall(pass, call, fn.Name())
 	case suitePath:
 		if !isSelector || !suiteExpression(pass, sel.X) {
 			break
@@ -70,6 +70,9 @@ func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr) {
 		default:
 		}
 	default:
+		if slices.Contains(awaitPackages, path) {
+			checkSuiteAwaitCall(pass, call, fn.Name())
+		}
 	}
 
 	if !isSelector || !suiteHandle(pass, sel.X) {
