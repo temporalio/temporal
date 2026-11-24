@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -928,6 +929,187 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
 	release1(nil)
+}
+
+// newSizeBasedCache returns a test shard and a host-level cache whose size-based limit is 1000 bytes.
+func (s *workflowCacheSuite) newSizeBasedCache(ctrl *gomock.Controller) (*shard.ContextTest, *cacheImpl) {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	config.HistoryHostLevelCacheMaxSizeBytes = dynamicconfig.GetIntPropertyFn(1000)
+	mockShard := shard.NewTestContext(
+		ctrl,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
+		config,
+	)
+	c := NewHostLevelCache(config, mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
+	return mockShard, c.(*cacheImpl)
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedReleaseMeasuresContextUnderLock() {
+	mockShard, c := s.newSizeBasedCache(s.controller)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	ctx, release, err := c.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+
+	mockMS := historyi.NewMockMutableState(s.controller)
+	mockMS.EXPECT().IsDirty().Return(false).AnyTimes()
+	// Another request may change the mutable state as soon as the workflow lock is released,
+	// so the size must be measured while the lock is still held.
+	mockMS.EXPECT().GetApproximatePersistedSize().DoAndReturn(func() int {
+		if ctx.TryLock(locks.PriorityLow) {
+			ctx.Unlock()
+			s.Fail("workflow context was measured without its lock")
+		}
+		return 400
+	}).Times(1)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS
+	release(nil)
+
+	keySize := len(namespaceID) + len(execution.GetWorkflowId()) + len(execution.GetRunId())
+	s.Equal(keySize+400, c.Size())
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedReleaseAfterClearUpdatesSize() {
+	testCases := []struct {
+		name    string
+		release func(historyi.ReleaseWorkflowContextFunc)
+	}{
+		{
+			name: "release with error",
+			release: func(release historyi.ReleaseWorkflowContextFunc) {
+				release(errors.New("test error"))
+			},
+		},
+		{
+			name: "release while panicking",
+			release: func(release historyi.ReleaseWorkflowContextFunc) {
+				defer func() { _ = recover() }()
+				defer release(nil)
+				panic("test panic")
+			},
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctrl := gomock.NewController(t)
+			mockShard, c := s.newSizeBasedCache(ctrl)
+
+			namespaceID := namespace.ID("test_namespace_id")
+			execution := commonpb.WorkflowExecution{
+				WorkflowId: "some random workflow ID",
+				RunId:      uuid.NewString(),
+			}
+			ctx, release, err := c.GetOrCreateWorkflowExecution(
+				context.Background(),
+				mockShard,
+				namespaceID,
+				&execution,
+				locks.PriorityHigh,
+			)
+			require.NoError(t, err)
+			mockMS := historyi.NewMockMutableState(ctrl)
+			mockMS.EXPECT().IsDirty().Return(false).AnyTimes()
+			mockMS.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+			mockMS.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).Times(1)
+			mockMS.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().Times(1)
+			ctx.(*workflow.ContextImpl).MutableState = mockMS
+			release(nil)
+			keySize := len(namespaceID) + len(execution.GetWorkflowId()) + len(execution.GetRunId())
+			require.Equal(t, keySize+400, c.Size())
+
+			// The release clears the context, which drops its mutable state, so it must record the smaller size.
+			_, release, err = c.GetOrCreateWorkflowExecution(
+				context.Background(),
+				mockShard,
+				namespaceID,
+				&execution,
+				locks.PriorityHigh,
+			)
+			require.NoError(t, err)
+			tc.release(release)
+			require.Equal(t, keySize, c.Size())
+		})
+	}
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedReleaseUnlocksWhenMeasurementPanics() {
+	mockShard, c := s.newSizeBasedCache(s.controller)
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	ctx, release, err := c.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespace.ID("test_namespace_id"),
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	mockMS := historyi.NewMockMutableState(s.controller)
+	mockMS.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockMS.EXPECT().GetApproximatePersistedSize().DoAndReturn(func() int {
+		panic("test panic")
+	}).Times(1)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS
+
+	s.Panics(func() { release(nil) })
+	s.True(ctx.TryLock(locks.PriorityHigh), "workflow lock is still held after release")
+	ctx.Unlock()
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedLockFailureDoesNotMeasureContext() {
+	mockShard, c := s.newSizeBasedCache(s.controller)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	ctx, release, err := c.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	mockMS := historyi.NewMockMutableState(s.controller)
+	mockMS.EXPECT().IsDirty().Return(false).AnyTimes()
+	ctx.(*workflow.ContextImpl).MutableState = mockMS
+
+	// The first request still holds the workflow lock, so this request fails to acquire it and releases
+	// the cache entry. That release must not measure the context, because this request never held its lock.
+	// The mock has no expectation for GetApproximatePersistedSize yet, so a call to it fails the test.
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err = c.GetOrCreateWorkflowExecution(
+		canceledCtx,
+		mockShard,
+		namespaceID,
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.ErrorIs(err, consts.ErrResourceExhaustedBusyWorkflow)
+
+	mockMS.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+	release(nil)
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {

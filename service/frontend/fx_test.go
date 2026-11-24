@@ -256,7 +256,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				OperatorRPSRatio: func() float64 {
 					return tc.operatorRPSRatio
 				},
-				EnableDescribeMutableStateRateLimit: func() bool {
+				EnableAdminPodLevelRateLimit: func() bool {
 					return false
 				},
 			}
@@ -343,11 +343,17 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 	}
 }
 
-// TestRateLimitInterceptorProviderPodOnlyAPIs verifies that PodOnlyAPIToPriority entries (e.g.
+// TestRateLimitInterceptorProviderPodOnlyAPIs verifies that AdminAPIToPriority entries (e.g.
 // DescribeMutableState) are routed to the pod-level Execution rate limiter, the same way
-// APIToPriority entries are, but only while EnableDescribeMutableStateRateLimit is enabled.
+// APIToPriority entries are, but only while EnableAdminPodLevelRateLimit is enabled.
 func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
 	t.Parallel()
+
+	adminAPIs := []string{
+		adminservice.AdminService_DescribeMutableState_FullMethodName,
+		adminservice.AdminService_GetWorkflowExecutionRawHistory_FullMethodName,
+		adminservice.AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName,
+	}
 
 	testCases := []struct {
 		name              string
@@ -361,42 +367,44 @@ func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctrl := gomock.NewController(t)
-			serviceResolver := membership.NewMockServiceResolver(ctrl)
-			serviceResolver.EXPECT().AvailableMemberCount().Return(1).AnyTimes()
+		for _, api := range adminAPIs {
+			t.Run(tc.name+"/"+api, func(t *testing.T) {
+				t.Parallel()
+				ctrl := gomock.NewController(t)
+				serviceResolver := membership.NewMockServiceResolver(ctrl)
+				serviceResolver.EXPECT().AvailableMemberCount().Return(1).AnyTimes()
 
-			config := &Config{
-				RPS: func() int {
-					return tc.executionRPSLimit
-				},
-				GlobalRPS: func() int {
-					return tc.executionRPSLimit
-				},
-				NamespaceReplicationInducingAPIsRPS: func() int {
-					return 100
-				},
-				OperatorRPSRatio: func() float64 {
-					return 0.2
-				},
-				EnableDescribeMutableStateRateLimit: func() bool {
-					return tc.rateLimitEnabled
-				},
-			}
-			rateLimiters := RateLimitersProvider(config, serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
-			rateLimitInterceptor := RateLimitInterceptorProvider(config, rateLimiters)
+				config := &Config{
+					RPS: func() int {
+						return tc.executionRPSLimit
+					},
+					GlobalRPS: func() int {
+						return tc.executionRPSLimit
+					},
+					NamespaceReplicationInducingAPIsRPS: func() int {
+						return 100
+					},
+					OperatorRPSRatio: func() float64 {
+						return 0.2
+					},
+					EnableAdminPodLevelRateLimit: func() bool {
+						return tc.rateLimitEnabled
+					},
+				}
+				rateLimiters := RateLimitersProvider(config, serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
+				rateLimitInterceptor := RateLimitInterceptorProvider(config, rateLimiters)
 
-			err := rateLimitInterceptor.Allow(
-				adminservice.AdminService_DescribeMutableState_FullMethodName,
-				headers.NewGRPCHeaderGetter(context.Background()),
-			)
-			if tc.expectRateLimit {
-				require.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
+				err := rateLimitInterceptor.Allow(
+					api,
+					headers.NewGRPCHeaderGetter(context.Background()),
+				)
+				if tc.expectRateLimit {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
 	}
 }
 
@@ -885,7 +893,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				NamespaceReplicationInducingAPIsRPS: func() int {
 					return 1
 				},
-				EnableDescribeMutableStateRateLimit: func() bool {
+				EnableAdminPodLevelRateLimit: func() bool {
 					return false
 				},
 			}
