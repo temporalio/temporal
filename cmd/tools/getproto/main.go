@@ -184,20 +184,15 @@ func main() {
 
 	checkImports(importMap) // doesn't return if any errors
 
-	set := descriptorSet(importMap)
-
-	b, err := proto.Marshal(set)
-	fatalIfErr(err)
-	fatalIfErr(os.WriteFile(*out, b, 0644))
-}
-
-func descriptorSet(files map[string]protoreflect.FileDescriptor) *descriptorpb.FileDescriptorSet {
-	paths := expmaps.Keys(files)
+	paths := expmaps.Keys(importMap)
 	sort.Strings(paths)
 
 	set := &descriptorpb.FileDescriptorSet{}
 	for _, path := range paths {
-		set.File = append(set.File, protodesc.ToFileDescriptorProto(files[path]))
+		set.File = append(set.File, protodesc.ToFileDescriptorProto(importMap[path]))
 	}
-	return set
+
+	b, err := proto.Marshal(set)
+	fatalIfErr(err)
+	fatalIfErr(os.WriteFile(*out, b, 0644))
 }
