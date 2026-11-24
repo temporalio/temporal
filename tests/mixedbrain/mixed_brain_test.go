@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -129,11 +130,19 @@ func TestMixedBrain(t *testing.T) {
 	var proxy *frontendProxy
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
 
+	pollShutdownConfig := map[string]any{
+		// TODO: remove this override once Mixed Brain uses v1.33 as its release server. This is the current main default
+		"frontend.enableCancelWorkerPollsOnShutdown": true,
+		// TODO: remove this override once Mixed Brain uses v1.33 as its release server. This is the current main default
+		"frontend.enableMatchingFanOutForPollCancellation": false,
+	}
+
 	t.Run("start current server", func(st *testing.T) {
 		// Server processes use the parent t so their context survives this sub-test.
 		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
-			SourceDir:   sourceRoot(),
-			Persistence: persistence,
+			SourceDir:           sourceRoot(),
+			Persistence:         persistence,
+			DynamicConfigValues: pollShutdownConfig,
 		})
 
 		var err error
@@ -153,18 +162,20 @@ func TestMixedBrain(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 
 	t.Run("start release server", func(_ *testing.T) {
+		releaseDynamicConfig := map[string]any{
+			// TODO: remove this override once the release server defaults to standalone activities on. Currently the downgrade version of 1.31 has SAA defaulted to off.
+			"activity.enableStandalone": true,
+			// TODO: remove this override once the release server defaults to standalone nexus operations on. Currently the downgrade version of 1.32 has SANO defaulted to off.
+			"nexusoperation.enableStandalone": true,
+		}
+		maps.Copy(releaseDynamicConfig, pollShutdownConfig)
 		releaseSrv, releaseLogFile = startDevServer(t, "release", releaseLog, devserver.Options{
 			Ref:         releaseTag,
 			Persistence: persistence,
 			ClusterEndpoint: devserver.ClusterEndpoint{
 				RPCAddress: currentSrv.FrontendHostPort(),
 			},
-			DynamicConfigValues: map[string]any{
-				// TODO: remove this override once the release server defaults to standalone activities on. Currently the downgrade version of 1.31 has SAA defaulted to off.
-				"activity.enableStandalone": true,
-				// TODO: remove this override once the release server defaults to standalone nexus operations on. Currently the downgrade version of 1.32 has SANO defaulted to off.
-				"nexusoperation.enableStandalone": true,
-			},
+			DynamicConfigValues: releaseDynamicConfig,
 		})
 	})
 	if t.Failed() {
