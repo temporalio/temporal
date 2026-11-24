@@ -18,6 +18,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -2099,6 +2100,119 @@ func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
 
 	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
 	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
+}
+
+func (s *activitiesSuite) TestFetchPage_ListErrors() {
+	invalidArgument := serviceerror.NewInvalidArgument("bad query")
+	unavailable := serviceerror.NewUnavailable("try again")
+	for _, tc := range []struct {
+		name              string
+		batchType         enumspb.BatchOperationType
+		listErr           error
+		expectNonRetrying bool
+	}{
+		{"workflow invalid argument is non-retryable", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, invalidArgument, true},
+		{"activity invalid argument is non-retryable", enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, invalidArgument, true},
+		{"nexus invalid argument is non-retryable", enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION, invalidArgument, true},
+		{"workflow other error passes through", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, unavailable, false},
+		{"activity other error passes through", enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, unavailable, false},
+		{"nexus other error passes through", enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION, unavailable, false},
+	} {
+		s.Run(tc.name, func() {
+			mockSdk := &mocks.Client{}
+			switch targetExecutionType(tc.batchType) {
+			case enumspb.EXECUTION_TYPE_ACTIVITY:
+				mockSdk.On("WorkflowService").Return(s.mockFrontendClient)
+				s.mockFrontendClient.EXPECT().ListActivityExecutions(gomock.Any(), gomock.Any()).Return(nil, tc.listErr)
+			case enumspb.EXECUTION_TYPE_NEXUS_OPERATION:
+				mockSdk.On("WorkflowService").Return(s.mockFrontendClient)
+				s.mockFrontendClient.EXPECT().ListNexusOperationExecutions(gomock.Any(), gomock.Any()).Return(nil, tc.listErr)
+			default:
+				mockSdk.On("ListWorkflow", mock.Anything, mock.Anything).Return(nil, tc.listErr).Once()
+			}
+			defer mockSdk.AssertExpectations(s.T())
+			config := batchProcessorConfig{
+				targetNamespace: "test-namespace",
+				adjustedQuery:   "A=B",
+				batchType:       tc.batchType,
+			}
+
+			_, err := fetchPage(context.Background(), mockSdk, config, nil, 0)
+
+			if !tc.expectNonRetrying {
+				s.Require().ErrorIs(err, tc.listErr)
+				_, isAppErr := errors.AsType[*temporal.ApplicationError](err)
+				s.False(isAppErr)
+				return
+			}
+			appErr, ok := errors.AsType[*temporal.ApplicationError](err)
+			s.Require().True(ok)
+			s.True(appErr.NonRetryable())
+			s.Equal("InvalidArgument", appErr.Type())
+		})
+	}
+}
+
+func (s *activitiesSuite) TestFetchPage_TargetExecutions() {
+	for _, tc := range []struct {
+		name       string
+		batchType  enumspb.BatchOperationType
+		expectList func()
+		expected   []*commonpb.Execution
+	}{
+		{
+			name:      "activity",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			expectList: func() {
+				s.mockFrontendClient.EXPECT().ListActivityExecutions(gomock.Any(), protomock.Eq(&workflowservice.ListActivityExecutionsRequest{
+					Namespace:     "test-namespace",
+					PageSize:      int32(pageSize),
+					NextPageToken: []byte("token"),
+					Query:         "A=B",
+				})).Return(&workflowservice.ListActivityExecutionsResponse{
+					Executions:    []*activitypb.ActivityExecutionListInfo{{ActivityId: "activity-id", RunId: "run-id"}},
+					NextPageToken: []byte("next-token"),
+				}, nil)
+			},
+			expected: []*commonpb.Execution{{Type: enumspb.EXECUTION_TYPE_ACTIVITY, BusinessId: "activity-id", RunId: "run-id"}},
+		},
+		{
+			name:      "nexus operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+			expectList: func() {
+				s.mockFrontendClient.EXPECT().ListNexusOperationExecutions(gomock.Any(), protomock.Eq(&workflowservice.ListNexusOperationExecutionsRequest{
+					Namespace:     "test-namespace",
+					PageSize:      int32(pageSize),
+					NextPageToken: []byte("token"),
+					Query:         "A=B",
+				})).Return(&workflowservice.ListNexusOperationExecutionsResponse{
+					Operations:    []*nexuspb.NexusOperationExecutionListInfo{{OperationId: "operation-id", RunId: "run-id"}},
+					NextPageToken: []byte("next-token"),
+				}, nil)
+			},
+			expected: []*commonpb.Execution{{Type: enumspb.EXECUTION_TYPE_NEXUS_OPERATION, BusinessId: "operation-id", RunId: "run-id"}},
+		},
+	} {
+		s.Run(tc.name, func() {
+			mockSdk := &mocks.Client{}
+			mockSdk.On("WorkflowService").Return(s.mockFrontendClient)
+			defer mockSdk.AssertExpectations(s.T())
+			tc.expectList()
+			config := batchProcessorConfig{
+				targetNamespace: "test-namespace",
+				adjustedQuery:   "A=B",
+				batchType:       tc.batchType,
+			}
+
+			p, err := fetchPage(context.Background(), mockSdk, config, []byte("token"), 3)
+
+			s.Require().NoError(err)
+			protorequire.ProtoSliceEqual(s.T(), tc.expected, p.targetExecutionInfo)
+			s.Equal([]byte("next-token"), p.nextPageToken)
+			s.Equal(3, p.pageNumber)
+			s.Empty(p.executionInfos)
+		})
+	}
 }
 
 func (s *activitiesSuite) TestGetOperationRPS() {
