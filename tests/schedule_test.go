@@ -3518,7 +3518,7 @@ func testScheduledWorkflowDoubleReset(s *ScheduleCHASMSuite, enableCHASMCallback
 		RunId:      a1.StartWorkflowResult.RunId,
 	}
 
-	env.WaitForHistoryEvents(`
+	s.WaitForHistoryEvents(`
 		1 WorkflowExecutionStarted
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
@@ -3643,8 +3643,8 @@ func (s *ScheduleCHASMSuite) TestDoubleReset_ResetRequestIDDeduplicationDisabled
 
 // testScheduledWorkflowResetAndContinueAsNew validates that the scheduler observes the completion of a
 // scheduled workflow whose chain contains both a reset and a continue-as-new, in either order.
-func testScheduledWorkflowResetAndContinueAsNew(suite *ScheduleCHASMSuite, resetFirst bool) {
-	t := suite.T()
+func testScheduledWorkflowResetAndContinueAsNew(s *ScheduleCHASMSuite, resetFirst bool) {
+	t := s.T()
 	newContext := chasmContextFactory
 	env := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
@@ -3698,12 +3698,12 @@ func testScheduledWorkflowResetAndContinueAsNew(suite *ScheduleCHASMSuite, reset
 	scheduledRunID := startResult.RunId
 
 	waitForFirstWorkflowTask := func(runID string) {
-		env.WaitForHistoryEvents(`
+		s.WaitForHistoryEvents(`
 			1 WorkflowExecutionStarted
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-			env.RequireHistoryFunc(parallelsuite.WithContext(ctx, suite), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID}),
+			env.RequireHistoryFunc(parallelsuite.WithContext(ctx, s), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID}),
 			5*time.Second,
 			10*time.Millisecond,
 		)
@@ -3731,7 +3731,7 @@ func testScheduledWorkflowResetAndContinueAsNew(suite *ScheduleCHASMSuite, reset
 	continueAsNew := func(runID string) string {
 		signal("continue")
 		var newRunID string
-		suite.Await(func(s *ScheduleCHASMSuite) {
+		s.Await(func(s *ScheduleCHASMSuite) {
 			desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: env.Namespace().String(),
 				Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
@@ -3829,7 +3829,7 @@ func testResetWithAdditionalCallback(s *ScheduleCHASMSuite, enableCHASMCallbacks
 		RunId:      a1.StartWorkflowResult.RunId,
 	}
 
-	env.WaitForHistoryEvents(`
+	s.WaitForHistoryEvents(`
 		1 WorkflowExecutionStarted
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
@@ -3864,7 +3864,7 @@ func testResetWithAdditionalCallback(s *ScheduleCHASMSuite, enableCHASMCallbacks
 	require.NoError(t, err)
 	s.False(attachResp.Started, "expected to attach to existing run, not start a new one")
 
-	env.WaitForHistoryEvents(`
+	s.WaitForHistoryEvents(`
 		1 WorkflowExecutionStarted
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
