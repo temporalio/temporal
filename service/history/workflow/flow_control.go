@@ -39,6 +39,7 @@ func (ms *MutableStateImpl) closeTransactionGenerateReleaseLimiterTask(
 	transactionPolicy historyi.TransactionPolicy,
 ) {
 	if transactionPolicy != historyi.TransactionPolicyActive {
+		// TODO(fc): add passive side task to verify limiter release
 		return
 	}
 
