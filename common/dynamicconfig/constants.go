@@ -234,12 +234,14 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 	WorkflowHeartbeatNotificationRolloutPercent = NewNamespaceIntSetting(
 		"history.workflowHeartbeatNotificationRolloutPercent",
 		0,
-		`WorkflowHeartbeatNotificationRolloutPercent selects a stable percentage of workflows per namespace for heartbeat notifications. Zero selects none; 100 selects all.`,
+		`WorkflowHeartbeatNotificationRolloutPercent selects a stable percentage of workflows per namespace for heartbeat notifications. Zero selects none; 100 selects all.
+Keep at zero until all Matching hosts support matching.highPerfMinDispatchTimeout. Disable before rolling Matching back to a version without that support.`,
 	)
 	WorkflowHeartbeatNotificationDispatchTimeout = NewNamespaceDurationSetting(
 		"history.workflowHeartbeatNotificationDispatchTimeout",
 		600*time.Millisecond,
-		`WorkflowHeartbeatNotificationDispatchTimeout limits how long History waits for Matching to dispatch a Workflow Task heartbeat notification and receive a worker response.`,
+		`WorkflowHeartbeatNotificationDispatchTimeout limits how long History waits for Matching to dispatch a Workflow Task heartbeat notification and receive a worker response.
+While any Matching host uses the legacy 1s dispatch buffer, keep this timeout above 1s with enough additional time for dispatch and response delivery.`,
 	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
 		"system.workerCommandsDispatchTimeout",
