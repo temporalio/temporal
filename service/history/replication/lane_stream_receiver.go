@@ -320,27 +320,10 @@ func (r *laneStreamReceiver) ackMessage(
 	}
 
 	var throttleHighNamespaceIDs []string
-	var laneFeedback *anypb.Any
-	var maxLanes int32
-	laneProtocolVersion := r.laneProtocolVersion(receiverMode)
 	if receiverMode == ReceiverModeTieredStack {
 		throttleHighNamespaceIDs = r.laneFeedback.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
 	}
-	if laneProtocolVersion > 0 {
-		maxLanes = int32(r.maxLanes)
-		if maxBytes := r.Config.ReplicationStreamReceiverLaneFeedbackMaxBytes(); maxBytes > 0 {
-			laneFeedback = r.laneFeedback.Feedback(r.clientShardKey.ShardID, maxBytes)
-			if size := proto.Size(laneFeedback); size > maxBytes {
-				metrics.ReplicationLaneFeedbackDropped.With(r.MetricsHandler).Record(
-					1,
-					metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
-					metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
-				)
-				r.logger.Warn("Dropping replication lane feedback larger than the configured limit.", tag.NewInt("size", size), tag.NewInt("limit", maxBytes))
-				laneFeedback = nil
-			}
-		}
-	}
+	laneProtocolVersion, maxLanes, laneFeedback := r.laneAckFields(receiverMode)
 	err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &replicationspb.SyncReplicationState{
@@ -747,6 +730,33 @@ func (r *laneStreamReceiver) setReceiverMode(priority enumsspb.TaskPriority) {
 		atomic.StoreInt32((*int32)(&r.receiverMode), int32(ReceiverModeTieredStack))
 	default:
 	}
+}
+
+// laneAckFields returns the lane fields of an ack: the lane protocol version this receiver
+// advertises, the most lanes it accepts, and its lane feedback. They are all zero when it
+// accepts no lanes. Feedback larger than ReplicationStreamReceiverLaneFeedbackMaxBytes is
+// dropped and counted.
+func (r *laneStreamReceiver) laneAckFields(receiverMode ReceiverMode) (version int32, maxLanes int32, feedback *anypb.Any) {
+	version = r.laneProtocolVersion(receiverMode)
+	if version == 0 {
+		return 0, 0, nil
+	}
+	maxLanes = int32(r.maxLanes)
+	maxBytes := r.Config.ReplicationStreamReceiverLaneFeedbackMaxBytes()
+	if maxBytes <= 0 {
+		return version, maxLanes, nil
+	}
+	feedback = r.laneFeedback.Feedback(r.clientShardKey.ShardID, maxBytes)
+	if size := proto.Size(feedback); size > maxBytes {
+		metrics.ReplicationLaneFeedbackDropped.With(r.MetricsHandler).Record(
+			1,
+			metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
+		)
+		r.logger.Warn("Dropping replication lane feedback larger than the configured limit.", tag.NewInt("size", size), tag.NewInt("limit", maxBytes))
+		return version, maxLanes, nil
+	}
+	return version, maxLanes, feedback
 }
 
 // laneProtocolVersion is the replication lane protocol version this receiver advertises.
