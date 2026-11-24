@@ -44,9 +44,7 @@ func findProtoImports() []string {
 			for line := range strings.SplitSeq(string(protoFile), "\n") {
 				if match := matchImport.FindStringSubmatch(line); len(match) > 0 {
 					i := match[1]
-					if strings.HasPrefix(i, "temporal/api/") ||
-						strings.HasPrefix(i, "google/") ||
-						strings.HasPrefix(i, "nexus/") {
+					if supportedImport(i) {
 						importMap[i] = struct{}{}
 					}
 				}
@@ -55,6 +53,12 @@ func findProtoImports() []string {
 		return nil
 	}))
 	return expmaps.Keys(importMap)
+}
+
+func supportedImport(path string) bool {
+	return strings.HasPrefix(path, "temporal/api/") ||
+		strings.HasPrefix(path, "google/") ||
+		strings.HasPrefix(path, "nexusannotations/")
 }
 
 func getImportName(i string) string {
@@ -157,7 +161,7 @@ func checkImports(files map[string]protoreflect.FileDescriptor) {
 		num := imports.Len()
 		for i := range num {
 			imp := imports.Get(i).Path()
-			if strings.HasPrefix(imp, "temporal/api/") || strings.HasPrefix(imp, "google/") || strings.HasPrefix(imp, "nexus/") {
+			if supportedImport(imp) {
 				if _, ok := files[imp]; !ok {
 					missing[imp] = struct{}{}
 				}
