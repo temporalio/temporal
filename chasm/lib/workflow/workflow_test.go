@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -106,4 +109,72 @@ func TestLifecycleState(t *testing.T) {
 	wf := &Workflow{MSPointer: chasm.NewMSPointer(nodeBackend)}
 
 	require.Equal(t, chasm.LifecycleStateRunning, wf.LifecycleState(nil))
+}
+
+func TestIsExecutionSkippableWithPersistedNexusOperations(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name          string
+		secondStatus  nexusoperationpb.OperationStatus
+		corruptPath   []string
+		cancellation  bool
+		wantSkippable bool
+	}{
+		{name: "both backing off", secondStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF, wantSkippable: true},
+		{name: "one scheduled", secondStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED},
+		{name: "unreadable operation", secondStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF, corruptPath: []string{"Operations", "2"}},
+		{name: "unreadable cancellation", secondStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF, cancellation: true, corruptPath: []string{"Operations", "2", "Cancellation"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			logger := log.NewNoopLogger()
+			registry := chasm.NewRegistry(logger)
+			require.NoError(t, registry.Register(NewLibrary(NewRegistry())))
+			require.NoError(t, registry.Register(nexusoperation.NewNilLibrary()))
+			backend := &chasm.MockNodeBackend{
+				HandleGetCurrentVersion:   func() int64 { return 1 },
+				HandleNextTransitionCount: func() int64 { return 1 },
+			}
+			tree := chasm.NewEmptyTree(registry, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+			ctx := chasm.NewMutableContext(t.Context(), tree)
+			wf := NewWorkflow(ctx, chasm.NewMSPointer(backend))
+			wf.addNexusOperation(ctx, 1, nexusoperation.NewOperation(&nexusoperationpb.OperationState{
+				Status: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			}))
+			second := nexusoperation.NewOperation(&nexusoperationpb.OperationState{Status: test.secondStatus})
+			if test.cancellation {
+				second.Cancellation = chasm.NewComponentField(ctx, &nexusoperation.Cancellation{
+					CancellationState: &nexusoperationpb.CancellationState{RequestId: "cancel-request"},
+				})
+			}
+			wf.addNexusOperation(ctx, 2, second)
+			require.NoError(t, tree.SetRootComponent(wf))
+			mutation, err := tree.CloseTransaction(t.Context(), true)
+			require.NoError(t, err)
+			if test.corruptPath != nil {
+				var target *persistencespb.ChasmNode
+				for encodedPath, node := range mutation.UpdatedNodes {
+					path, err := chasm.DefaultPathEncoder.Decode(encodedPath)
+					require.NoError(t, err)
+					if slices.Equal(path, test.corruptPath) {
+						target = node
+						break
+					}
+				}
+				require.NotNil(t, target, "missing CHASM node at %v", test.corruptPath)
+				target.Data.Data = []byte{0xff}
+			}
+
+			reloaded, err := chasm.NewTreeFromDB(
+				mutation.UpdatedNodes, registry, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler,
+			)
+			require.NoError(t, err)
+			readCtx := chasm.NewContext(t.Context(), reloaded)
+			component, err := reloaded.ComponentByPath(readCtx, nil)
+			require.NoError(t, err)
+			require.Equal(t, test.wantSkippable, component.(*Workflow).IsExecutionSkippable(readCtx))
+		})
+	}
 }
