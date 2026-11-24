@@ -1,3 +1,4 @@
+// TODO: Remove this forwarding file once all callers use go.temporal.io/testx/testhooks.
 package testhooks
 
 import testxhooks "go.temporal.io/testx/testhooks"
