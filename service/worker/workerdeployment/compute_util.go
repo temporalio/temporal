@@ -116,7 +116,7 @@ func scalingGroupsToUpsertUpdates(scalingGroups map[string]*computepb.ComputeCon
 }
 
 // wciValidationStatusToComputeStatus converts a WCI ValidationStatus to the public ComputeStatus proto.
-// A successful validation results in an empty error_message; a failed validation sets the error_message.
+// A failed validation sets error_message and carries no warnings.
 func wciValidationStatusToComputeStatus(vs *wciiface.ValidationStatus) *deploymentpb.ComputeStatus {
 	if vs == nil {
 		return nil
@@ -127,7 +127,7 @@ func wciValidationStatusToComputeStatus(vs *wciiface.ValidationStatus) *deployme
 	if vs.Status == wciiface.ValidationResultFailed {
 		pv.ErrorMessage = vs.ErrMessage
 	}
-	return &deploymentpb.ComputeStatus{ProviderValidation: pv}
+	return &deploymentpb.ComputeStatus{ProviderValidation: pv, ConfigWarnings: vs.Warnings}
 }
 
 func wciClientErrorToActivityError(err error) error {

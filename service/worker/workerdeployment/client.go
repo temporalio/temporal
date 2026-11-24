@@ -478,6 +478,7 @@ func (d *ClientImpl) DescribeVersion(
 		}
 	} else {
 		versionInfo.ComputeConfig = wciSpecToComputeConfig(wciDesc.Spec)
+		versionInfo.ComputeStatus = wciValidationStatusToComputeStatus(wciDesc.ValidationStatus)
 	}
 
 	return versionInfo, tqInfos, nil
