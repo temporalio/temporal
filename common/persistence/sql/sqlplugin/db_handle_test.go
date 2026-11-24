@@ -26,18 +26,18 @@ type (
 	noopRows   struct{}
 )
 
-func (noopDriver) Open(_ string) (driver.Conn, error)        { return noopConn{}, nil }
-func (noopConn) Prepare(_ string) (driver.Stmt, error)       { return noopStmt{}, nil }
-func (noopConn) Close() error                                { return nil }
-func (noopConn) Begin() (driver.Tx, error)                   { return nil, driver.ErrBadConn }
+func (noopDriver) Open(_ string) (driver.Conn, error)  { return noopConn{}, nil }
+func (noopConn) Prepare(_ string) (driver.Stmt, error) { return noopStmt{}, nil }
+func (noopConn) Close() error                          { return nil }
+func (noopConn) Begin() (driver.Tx, error)             { return nil, driver.ErrBadConn }
 
-func (noopStmt) Close() error                                    { return nil }
-func (noopStmt) NumInput() int                                   { return 0 }
-func (noopStmt) Exec(_ []driver.Value) (driver.Result, error)    { return nil, nil }
-func (noopStmt) Query(_ []driver.Value) (driver.Rows, error)     { return noopRows{}, nil }
-func (noopRows) Columns() []string                               { return nil }
-func (noopRows) Close() error                                    { return nil }
-func (noopRows) Next(_ []driver.Value) error                     { return io.EOF }
+func (noopStmt) Close() error                                 { return nil }
+func (noopStmt) NumInput() int                                { return 0 }
+func (noopStmt) Exec(_ []driver.Value) (driver.Result, error) { return nil, nil }
+func (noopStmt) Query(_ []driver.Value) (driver.Rows, error)  { return noopRows{}, nil }
+func (noopRows) Columns() []string                            { return nil }
+func (noopRows) Close() error                                 { return nil }
+func (noopRows) Next(_ []driver.Value) error                  { return io.EOF }
 
 var registerNoopDriverOnce sync.Once
 
@@ -125,14 +125,14 @@ func TestReconnectPoolAccumulationDuringOutage(t *testing.T) {
 
 	// no time has passed, so the throttle should have blocked all 5 reconnect
 	// attempts and returned the existing pool — connect() must not be called again
-	assert.Equal(t, 1, connectCount,
+	require.Equal(t, 1, connectCount,
 		"connect() must not be called again during a throttle window — "+
 			"each extra call creates a new pool that multiplies connections at recovery")
 
 	// the pool must still be alive; callers should not get DatabaseUnavailableError
 	db, err := dbHandle.DB()
-	assert.NoError(t, err, "pool should survive a rapid burst of reconnect(true) calls")
-	assert.NotNil(t, db, "pool should not be nil after rapid burst")
+	require.NoError(t, err, "pool should survive a rapid burst of reconnect(true) calls")
+	require.NotNil(t, db, "pool should not be nil after rapid burst")
 }
 
 // TestReconnectNilPoolOnThrottle ensures DB() still returns the existing healthy pool when a reconnect is throttled.
@@ -167,10 +167,8 @@ func TestReconnectNilPoolOnThrottle(t *testing.T) {
 	// BUG: under current code the second reconnect(true) nils out the pool
 	// BEFORE reaching the throttle check, so DB() now returns nil+error.
 	db, err = dbHandle.DB()
-	assert.NoError(t, err,
+	require.NoError(t, err,
 		"DB() should return the existing healthy pool during the throttle window, not DatabaseUnavailableError")
-	assert.NotNil(t, db,
+	require.NotNil(t, db,
 		"DB() should not return nil when a healthy pool was just established")
 }
-
-

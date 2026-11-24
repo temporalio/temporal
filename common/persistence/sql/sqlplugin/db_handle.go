@@ -101,6 +101,14 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 	}
 
 	h.lastRefresh = now
+	h.db.Store(nil)
+	if prevConn != nil {
+		go func() {
+			if err := prevConn.Close(); err != nil {
+				h.logger.Warn("sql handle: unable to close database connection pool", tag.Error(err))
+			}
+		}()
+	}
 	newConn, err := h.connect()
 	if err != nil {
 		h.logger.Error("sql handle: unable to refresh database connection pool", tag.Error(err))
@@ -109,12 +117,7 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 		return nil
 	}
 
-	// only retire the old pool once we have a healthy replacement, so we never
-	// leave h.db nil between destroying an old pool and establishing a new one
 	h.db.Store(newConn)
-	if prevConn != nil {
-		go prevConn.Close()
-	}
 	return newConn
 }
 
