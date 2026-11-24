@@ -3001,7 +3001,7 @@ func (s *VersionWorkflowSuite) Test_SyncValidationStatus_SuccessValidation() {
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(worker_versioning.SignalSyncValidationStatus, wciiface.NewValidationStatusSuccess(validationTime))
+		s.env.SignalWorkflow(worker_versioning.SignalSyncValidationStatus, wciiface.NewValidationStatusSuccess(validationTime, nil))
 
 		s.env.RegisterDelayedCallback(func() {
 			queryResp := &deploymentspb.QueryDescribeVersionResponse{}

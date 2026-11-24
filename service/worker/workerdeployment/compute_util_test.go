@@ -84,7 +84,7 @@ func TestWciValidationStatusToComputeStatus_Nil(t *testing.T) {
 func TestWciValidationStatusToComputeStatus_Success(t *testing.T) {
 	t.Parallel()
 	ts := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
-	result := wciValidationStatusToComputeStatus(wciiface.NewValidationStatusSuccess(ts))
+	result := wciValidationStatusToComputeStatus(wciiface.NewValidationStatusSuccess(ts, nil))
 	require.NotNil(t, result)
 	require.NotNil(t, result.ProviderValidation)
 	require.Empty(t, result.ProviderValidation.ErrorMessage)
