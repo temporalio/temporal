@@ -15,7 +15,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/testx/softassert"
 )
 
 type (
@@ -307,7 +307,7 @@ func (s *functionalTestBase) setupCluster(options ...TestClusterOption) {
 		}
 		tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 		// Fail tests when a soft assertion fires (see `softassert` package).
-		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+		tl.Expect(testlogger.Error, ".*", softassert.FailedAssertion)
 		s.Logger = tl
 	}
 
@@ -642,34 +642,6 @@ func (s *functionalTestBase) MarkNamespaceAsDeleted(
 	return err
 }
 
-func (s *functionalTestBase) GetHistoryFunc(nsName string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
-	return func() []*historypb.HistoryEvent {
-		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:       nsName,
-			Execution:       execution,
-			MaximumPageSize: 5, // Use small page size to force pagination code path
-		})
-		s.Require().NoError(err)
-
-		events := historyResponse.History.Events
-		for historyResponse.NextPageToken != nil {
-			historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace:     nsName,
-				Execution:     execution,
-				NextPageToken: historyResponse.NextPageToken,
-			})
-			s.Require().NoError(err)
-			events = append(events, historyResponse.History.Events...)
-		}
-
-		return events
-	}
-}
-
-func (s *functionalTestBase) GetHistory(nsName string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	return s.GetHistoryFunc(nsName, execution)()
-}
-
 func (s *functionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 	s.T().Helper()
 	var r int
@@ -733,11 +705,10 @@ func (s *functionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	}
 }
 
-// TODO (alex): change to nsName namespace.Name
-func (s *functionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
+func (s *functionalTestBase) SendSignal(nsName namespace.Name, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         nsName,
+		Namespace:         nsName.String(),
 		WorkflowExecution: execution,
 		SignalName:        signalName,
 		Input:             input,

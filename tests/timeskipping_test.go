@@ -144,7 +144,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
 	s.True(tsi.GetConfig().GetEnabled())
 	s.Zero(tsi.GetSessionSkipCount())
 	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration())
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.False(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
 	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
 
@@ -172,7 +172,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
 	tsi = s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
 	s.Positive(tsi.GetSessionSkipCount())
 	s.Positive(tsi.GetAccumulatedSkippedDuration().AsDuration())
-	history = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history = env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
@@ -233,7 +233,7 @@ func (s *TimeSkippingTestSuite) TestReuseWorkflowIDAfterTimeSkipping() {
 	s.NoError(err)
 	s.NotEqual(first.GetRunId(), skippedRunID)
 	s.True(hasEventType(
-		env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: first.GetRunId()}),
+		env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: first.GetRunId()}),
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
 	))
 	s.True(s.getMutableState(env, tv.WorkflowID(), skippedRunID).State.ExecutionState.GetStartTime().AsTime().After(time.Now()))
@@ -339,7 +339,7 @@ func (s *TimeSkippingTestSuite) TestTerminateExistingWorkflowAfterTimeSkipping()
 	s.NoError(err)
 	s.NotEqual(virtualRunID, realRun.GetRunId())
 	s.True(hasEventType(
-		env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: virtualRunID}),
+		env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: virtualRunID}),
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 	))
 
@@ -871,7 +871,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 	s.NoError(err)
 
 	// Verify history.
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED), "timer must have fired via time-skipping")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
 		"time-skipping transitioned event expected")
@@ -949,7 +949,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityRetryBackoff() {
 	s.NoError(err)
 	wallElapsed := time.Since(wallStart)
 
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED),
 		"activity must complete on its retry attempt")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
@@ -1027,7 +1027,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 	s.NoError(err)
 	wallElapsed := time.Since(wallStart)
 
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tvA.WorkflowID(),
 		RunId:      aResp.RunId,
 	})
@@ -1137,7 +1137,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingNexusOperationBlocksSkip
 	s.NoError(err)
 	wallElapsed := time.Since(wallStart)
 
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      runID,
 	})
@@ -1329,7 +1329,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingCHASMNexusOperationBlock
 	}
 
 	ms := s.getMutableState(env.TestEnv, tv.WorkflowID(), runID)
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	scheduledEvent := s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
 	_, inCHASM := ms.State.ChasmNodes["Operations#"+strconv.FormatInt(scheduledEvent.EventId, 10)]
 	s.True(inCHASM, "pending Nexus operation must be stored in the CHASM tree")
@@ -1345,7 +1345,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingCHASMNexusOperationBlock
 	})
 	s.NoError(err)
 
-	history = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history = env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED))
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
 	s.Less(indexOfEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED),
@@ -1512,7 +1512,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarge
 	})
 	s.NoError(err)
 
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(), RunId: runID,
 	})
 	timerExpiry := make(map[string]time.Time)
@@ -1681,7 +1681,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	wallAfterClose := time.Now()
 
 	// ── Assertion 1/2/3: the three history events are present. ────────────────
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED), "activity must have completed")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED), "skip transition must have happened")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must have completed")
@@ -1937,7 +1937,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestTimeSkipping_ExecutionTimeo
 	s.Less(time.Since(startWall), executionTimeout,
 		"time skipping must reach the execution timeout in far less than the 5 min real timeout")
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 1, "exactly one transition: skip to the execution timeout")
 	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
@@ -1985,7 +1985,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkippingTransitionEventOrdersAfterOption
 	})
 	s.NoError(err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 
 	// The transition and the OPTIONS_UPDATED that triggered it must both be present, and the
 	// OPTIONS_UPDATED must come first (the transition is the last event of the transaction).
@@ -2122,7 +2122,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 	tsi := timeSkippingInfo()
 	s.True(tsi.GetConfig().GetEnabled())
 	s.False(tsi.GetFastForwardInfo().GetHasReached(), "the fast-forward starts out pending")
-	s.False(hasEventType(env.GetHistory(env.Namespace().String(), execution), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
+	s.False(hasEventType(env.RequireHistory(s, execution), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
 		"enabling time skipping on a paused workflow must not skip")
 
 	// (4) Pause does not hold off the fast-forward. Its timer task is wall-clock-anchored, and
@@ -2138,7 +2138,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration(),
 		"the fast-forward disable must not advance the clock of a paused workflow")
 
-	histPaused := env.GetHistory(env.Namespace().String(), execution)
+	histPaused := env.RequireHistory(s, execution)
 	s.False(hasEventType(histPaused, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must not fire while paused")
 	transitions := timeSkippingTransitions(histPaused)
 	s.Len(transitions, 1, "the only transition so far is the fast-forward disable")
@@ -2158,7 +2158,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 	tsi = timeSkippingInfo()
 	s.True(tsi.GetConfig().GetEnabled(), "time skipping must stay enabled — nothing disabled it")
 	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration(), "a paused workflow must not skip time")
-	histStillPaused := env.GetHistory(env.Namespace().String(), execution)
+	histStillPaused := env.RequireHistory(s, execution)
 	s.False(hasEventType(histStillPaused, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must not fire while paused")
 	s.Len(timeSkippingTransitions(histStillPaused), 1, "no new transition while paused")
 
@@ -2195,7 +2195,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 		"the post-unpause skip covers what was left of the 5min timer")
 	s.True(tsi.GetConfig().GetEnabled(), "one skip with no fast-forward and a fresh session count leaves skipping enabled")
 
-	histFinal := env.GetHistory(env.Namespace().String(), execution)
+	histFinal := env.RequireHistory(s, execution)
 	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must fire once the workflow is unpaused")
 	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED))
 	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED))

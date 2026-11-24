@@ -113,10 +113,8 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	nsName := ns.Name().String()
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		key := fmt.Appendf(nil, "%s\x00%s", nsName, args.State.ScheduleId)
 		enableMigration := func() bool {
-			return s.enableCHASMMigration(nsName) &&
-				dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
+			return s.autoMigrationSelected(nsName, args.State.ScheduleId)
 		}
 		migrateWithRunningWorkflows := func() bool {
 			return s.migrateWithRunningWorkflows(nsName)
@@ -161,5 +159,16 @@ func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID, de
 		maxBlobSize:              func() int { return s.maxBlobSize(name.String()) },
 		localActivitySleepLimit:  func() time.Duration { return s.localActivitySleepLimit(name.String()) },
 		migrationEnabled:         func() bool { return s.enableCHASMMigration(name.String()) },
+		autoMigrationSelected: func(scheduleID string) bool {
+			return s.autoMigrationSelected(name.String(), scheduleID)
+		},
 	}, cancel
+}
+
+// autoMigrationSelected is the single source of truth for whether the CHASM auto-migration
+// rollout selects a schedule; the workflow and the migration activity must agree on it.
+func (s *workerComponent) autoMigrationSelected(nsName, scheduleID string) bool {
+	key := fmt.Appendf(nil, "%s\x00%s", nsName, scheduleID)
+	return s.enableCHASMMigration(nsName) &&
+		dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
 }

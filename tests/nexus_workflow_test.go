@@ -282,7 +282,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 	err = env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	})
@@ -381,7 +381,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancellationCrossTree(chasmEn
 			env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, !tc.enableChasmAtSchedule)
 			s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "cancel", nil))
 			s.NoError(run.Get(ctx, nil))
-			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+			hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 			s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
 			s.RequireNoHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
 		})
@@ -482,7 +482,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancellationBufferedCrossTree
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "cancel", nil))
 
 	s.NoError(run.Get(ctx, nil))
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	// The no-op cross-tree cancellation did not fail the workflow task.
@@ -493,7 +493,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancellationBufferedCrossTree
 // the operation's scheduled event ID. Leave the execution's RunId empty to target the current run.
 func (s *NexusWorkflowTestSuite) assertNexusOperationTree(ctx context.Context, env *NexusTestEnv, execution *commonpb.WorkflowExecution, expectHSM bool) {
 	s.T().Helper()
-	hist := env.GetHistory(env.Namespace().String(), execution)
+	hist := env.RequireHistory(parallelsuite.WithContext(ctx, s), execution)
 	scheduledEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
 	opID := strconv.FormatInt(scheduledEvent.EventId, 10)
 
@@ -564,7 +564,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 	s.Equal("result", result)
 
 	// Verify the completed event has the expected link.
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	completedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	s.Len(completedEvent.GetLinks(), 1)
 	protorequire.ProtoEqual(s.T(), handlerLink, completedEvent.GetLinks()[0].GetWorkflowEvent())
@@ -633,7 +633,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletionAfterWorkflowTe
 	var terminatedErr *temporal.TerminatedError
 	s.ErrorAs(run.Get(ctx, nil), &terminatedErr)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	})
@@ -691,7 +691,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationTasksInvalidatedOnContinueAsN
 	firstRunID := run.GetRunID()
 	s.NoError(run.Get(ctx, nil))
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
 		RunId:      firstRunID,
 	})
@@ -706,7 +706,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationTasksInvalidatedOnContinueAsN
 	// Continue-as-new starts a new run, and Nexus operations are not carried over to it.
 	newRunID := run.GetRunID()
 	s.NotEqual(firstRunID, newRunID)
-	newRunHist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	newRunHist := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
 		RunId:      newRunID,
 	})
@@ -949,7 +949,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartsStandaloneActivityBidir
 	s.Equal("ok", result)
 
 	// (1) The Nexus operation completed event carries the SAA's Activity link.
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	completedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	s.Len(completedEvent.GetLinks(), 1)
 	activityLink := completedEvent.GetLinks()[0].GetActivity()
@@ -1125,7 +1125,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncStandaloneActivityComple
 	// history must fabricate a NEXUS_OPERATION_STARTED event carrying the synthesized link.
 	var startedEvent *historypb.HistoryEvent
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		hist := env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: callerRun.GetID(),
 			RunId:      callerRun.GetRunID(),
 		})
@@ -1184,7 +1184,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload(c
 	s.Error(err)
 
 	// Verify the failure details by scanning history.
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	failedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED)
 	s.Equal("http: response body too large", failedEvent.GetNexusOperationFailedEventAttributes().GetFailure().GetCause().GetMessage())
 }
@@ -1279,7 +1279,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 
 	// Wait for the handler to be called by checking for the NexusOperationStarted event.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+		hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 		historyrequire.New(t).RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 	}, time.Second*10, time.Millisecond*200)
 
@@ -1450,7 +1450,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	}
 
 	// Verify the started event has the expected link and find the wftCompletedEventID for reset tests.
-	hist := env.GetHistory(env.Namespace().String(), wfExec)
+	hist := env.RequireHistory(s, wfExec)
 	opStartedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 	s.Len(opStartedEvent.Links, 1)
 	protorequire.ProtoEqual(s.T(), handlerLink, opStartedEvent.Links[0].GetWorkflowEvent())
@@ -1473,7 +1473,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	})
 	s.NoError(err)
 
-	resetHist1 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
+	resetHist1 := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
 	s.RequireHistoryEvent(resetHist1, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 
 	// Reset the workflow again to the same point with enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS option
@@ -1488,7 +1488,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	})
 	s.NoError(err)
 
-	resetHist2 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
+	resetHist2 := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
 	s.RequireNoHistoryEvent(resetHist2, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 
 	// Reset once more, this time to an event before the operation was scheduled. NexusOperationScheduled is a command
@@ -1525,7 +1525,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	s.NoError(err,
 		"resetting to before the operation was scheduled must skip the orphaned Nexus events, not fail on them")
 
-	resetHist3 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
+	resetHist3 := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
 	s.RequireNoHistoryEvent(resetHist3, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	s.RequireNoHistoryEvent(resetHist3, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 }
@@ -1666,7 +1666,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(ch
 		Identity: "test",
 	})
 	s.NoError(err)
-	completionWorkflowHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	completionWorkflowHistory := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: completionWFID,
 		RunId:      completionWfRunIDs[0],
 	})
@@ -1873,7 +1873,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 
 			// Wait for the handler to be called by checking for the NexusOperationStarted event.
 			s.EventuallyWithT(func(t *assert.CollectT) {
-				hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+				hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 				historyrequire.New(t).RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 			}, time.Second*10, time.Millisecond*200)
 
@@ -1890,7 +1890,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 
 			s.NoError(run.Get(ctx, nil))
 
-			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+			hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 			s.RequireHistoryEvent(hist, tc.expectedEvent)
 		})
 	}
@@ -2251,7 +2251,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth(c
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 }
@@ -2319,7 +2319,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
 
 	// Assert that cancel was requested before the operation started.
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	})
@@ -2372,7 +2372,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 	var wftCompletedEventID int64
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		hr := historyrequire.New(t)
-		hist := env.GetHistory(env.Namespace().String(), wfExec)
+		hist := env.RequireHistory(s, wfExec)
 		opStartedEvent := hr.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 		if opStartedEvent == nil {
 			return
@@ -2394,7 +2394,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 	})
 	s.NoError(err)
 
-	resetHist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.RunId})
+	resetHist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.RunId})
 	s.RequireHistoryEvent(resetHist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 	completion := nexusrpc.CompleteOperationOptions{
@@ -2410,7 +2410,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 	s.NoError(resetRun.Get(ctx, &result))
 	s.Equal("result", result)
 
-	resetHist = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.RunId})
+	resetHist = env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.RunId})
 	s.RequireHistoryEvent(resetHist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 }
 
@@ -2468,7 +2468,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFramework
 			var wftCompletedEventID int64
 			s.EventuallyWithT(func(t *assert.CollectT) {
 				hr := historyrequire.New(t)
-				hist := env.GetHistory(env.Namespace().String(), wfExec)
+				hist := env.RequireHistory(s, wfExec)
 				opStartedEvent := hr.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 				if opStartedEvent == nil {
 					return
@@ -2493,7 +2493,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFramework
 			s.NoError(err)
 
 			resetExec := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.RunId}
-			s.RequireHistoryEvent(env.GetHistory(env.Namespace().String(), resetExec), enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+			s.RequireHistoryEvent(env.RequireHistory(s, resetExec), enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 			// Deliver the stale completion and expect the dispatcher to convert it.
 			completion := nexusrpc.CompleteOperationOptions{
@@ -2506,7 +2506,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFramework
 			resetRun := env.SdkClient().GetWorkflow(ctx, run.GetID(), resetResp.RunId)
 			s.NoError(resetRun.Get(ctx, &result))
 			s.Equal("result", result)
-			s.RequireHistoryEvent(env.GetHistory(env.Namespace().String(), resetExec), enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+			s.RequireHistoryEvent(env.RequireHistory(s, resetExec), enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 		})
 	}
 }
@@ -2577,7 +2577,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO(chasmEnabled b
 	s.NoError(err)
 
 	s.NoError(run.Get(ctx, nil))
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	hist := env.RequireHistory(parallelsuite.WithContext(ctx, s), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	completedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	protorequire.ProtoEqual(s.T(), testcore.MustToPayload(s.T(), nil), completedEvent.GetNexusOperationCompletedEventAttributes().GetResult())
 
@@ -3361,7 +3361,7 @@ func (s *NexusWorkflowTestSuite) TestTimeoutCleanupWithBufferedCancellation(chas
 	cancel := &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION, Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{ScheduledEventId: id}}}
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: held.TaskToken, Identity: "test", Commands: []*commandpb.Command{schedule(time.Minute), cancel}})
 	s.NoError(err)
-	events := env.GetHistory(env.Namespace().String(), exec)
+	events := env.RequireHistory(s, exec)
 	s.ContainsHistoryEvents(`
 NexusOperationScheduled
 NexusOperationCancelRequested
@@ -3455,7 +3455,7 @@ func (s *NexusWorkflowTestSuite) TestTimeoutCleanupWithLateCallbackAndCancellati
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-	events := env.GetHistory(env.Namespace().String(), exec)
+	events := env.RequireHistory(s, exec)
 	s.RequireHistoryEvent(events, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
 	s.RequireHistoryEvent(events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
 	s.RequireNoHistoryEvent(events, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
@@ -3492,7 +3492,7 @@ func (s *NexusWorkflowTestSuite) TestTimeoutCleanupResetReappliesTimeout(chasmEn
 	resetTask := poll()
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: resetTask.TaskToken})
 	s.NoError(err)
-	history := env.GetHistory(env.Namespace().String(), execution)
+	history := env.RequireHistory(s, execution)
 	var resetID int64
 	for _, event := range history {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
@@ -3512,7 +3512,7 @@ func (s *NexusWorkflowTestSuite) TestTimeoutCleanupResetReappliesTimeout(chasmEn
 	reset, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "timeout cleanup reset regression", RequestId: uuid.NewString(), WorkflowTaskFinishEventId: resetID})
 	s.NoError(err)
 	resetExecution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: reset.GetRunId()}
-	resetHistory := env.GetHistory(env.Namespace().String(), resetExecution)
+	resetHistory := env.RequireHistory(s, resetExecution)
 	reapplied := s.RequireHistoryEvent(resetHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
 	s.Equal(oldID, reapplied.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId())
 	desc, err = env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: env.Namespace().String(), Execution: resetExecution, Archetype: chasm.WorkflowArchetype})
@@ -3561,7 +3561,7 @@ func (s *NexusWorkflowTestSuite) TestTimeoutRemovesOperationBeforeNextSchedule(c
 	}
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{schedule()}})
 	s.NoError(err)
-	history := env.GetHistory(env.Namespace().String(), execution)
+	history := env.RequireHistory(s, execution)
 	count := 0
 	for _, event := range history {
 		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
@@ -3615,7 +3615,7 @@ func (s *NexusWorkflowTestSuite) TestResetRemovesRetainedTimedOutOperations(chas
 	})
 	s.NoError(err)
 	s.Await(func(s *NexusWorkflowTestSuite) {
-		events := env.GetHistory(env.Namespace().String(), execution)
+		events := env.RequireHistory(s, execution)
 		count := 0
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT {
@@ -3637,7 +3637,7 @@ func (s *NexusWorkflowTestSuite) TestResetRemovesRetainedTimedOutOperations(chas
 		TaskToken: timeoutTask.TaskToken, Identity: "test",
 	})
 	s.NoError(err)
-	events := env.GetHistory(env.Namespace().String(), execution)
+	events := env.RequireHistory(s, execution)
 	var resetID int64
 	for _, event := range events {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
@@ -3658,7 +3658,7 @@ func (s *NexusWorkflowTestSuite) TestResetRemovesRetainedTimedOutOperations(chas
 	})
 	s.NoError(err)
 	resetExecution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: reset.GetRunId()}
-	resetHistory := env.GetHistory(env.Namespace().String(), resetExecution)
+	resetHistory := env.RequireHistory(s, resetExecution)
 	timeoutCount := 0
 	for _, event := range resetHistory {
 		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT {
@@ -3751,7 +3751,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToCloseTimeout(chasmE
 	s.Error(err)
 
 	// Verify the timeout event in history.
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	timedOutEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
@@ -4271,7 +4271,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmE
 			}
 
 			// Reset to the last completed workflow task; this rebuilds mutable state (including the Nexus op).
-			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
+			hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 			var lastWFT *historypb.HistoryEvent
 			for _, e := range hist {
 				if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
@@ -4298,7 +4298,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmE
 			s.WaitForHistoryEventsSuffix(`
   WorkflowTaskCompleted
   WorkflowExecutionUpdateCompleted`,
-				env.GetHistoryFunc(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}),
+				env.RequireHistoryFunc(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}),
 				10*time.Second,
 				10*time.Millisecond)
 
@@ -4310,7 +4310,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmE
 			// operation is reapplied (events 6-7, NexusOperationScheduled/Started) onto the rebuilt tree, the
 			// reset boundary is the synthetic WorkflowTaskFailed (event 10, Cause 20 = RESET_WORKFLOW), and the
 			// run then replays and completes cleanly.
-			newHist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID})
+			newHist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID})
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

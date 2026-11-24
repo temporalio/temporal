@@ -2339,7 +2339,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates(standalone boo
 	s.NoError(err)
 
 	// Verify history has the OptionsUpdated event with the second requestID attached.
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	updatedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
 	updateOptions := updatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetWorkflowUpdateOptions()
 	s.Len(updateOptions, 1)
@@ -2433,7 +2433,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfAdmitt
 
 	// The first request's callbacks are in the UpdateAccepted event; the second request's are in an
 	// OptionsUpdated event.
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	acceptedRequest := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED).
 		GetWorkflowExecutionUpdateAcceptedEventAttributes().GetAcceptedRequest()
 	s.Equal(firstRequestID, acceptedRequest.GetRequestId())
@@ -2513,7 +2513,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfReappl
 
 	// The new run attaches only the second request's callbacks, in a single OptionsUpdated event.
 	// The first request's callbacks were attached by the reapplied UpdateAdmitted event.
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID})
 	var updateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate
 	for _, event := range hist {
 		updateOptions = append(updateOptions, event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetWorkflowUpdateOptions()...)

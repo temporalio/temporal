@@ -591,6 +591,9 @@ func (e taskExecutor) handleStartOperationError(
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response's operation token is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
+	case errors.Is(callErr, commonnexus.ErrRedirectNotAllowed):
+		// Redirects are never followed, and the destination will keep redirecting, so do not retry.
+		return handleNonRetryableStartOperationError(node, operation, callErr)
 	case errors.As(callErr, &opTimeoutBelowMinErr):
 		// Not enough time to execute another request, resolve the operation with a timeout.
 		return "", e.recordOperationTimeout(node, opTimeoutBelowMinErr.timeoutType)
@@ -933,7 +936,9 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			if callErr != nil {
 				var handlerErr *nexus.HandlerError
 				var opTimeoutBelowMinErr *operationTimeoutBelowMinError
-				isRetryable := !errors.As(callErr, &opTimeoutBelowMinErr) && (!errors.As(callErr, &handlerErr) || handlerErr.Retryable())
+				isRetryable := !errors.As(callErr, &opTimeoutBelowMinErr) &&
+					!errors.Is(callErr, commonnexus.ErrRedirectNotAllowed) &&
+					(!errors.As(callErr, &handlerErr) || handlerErr.Retryable())
 				failure, err := callErrToFailure(callErr, isRetryable)
 				if err != nil {
 					return hsm.TransitionOutput{}, err
@@ -1147,6 +1152,9 @@ func isDestinationDown(err error) bool {
 		return false
 	}
 	if errors.Is(err, ErrInvalidOperationToken) {
+		return false
+	}
+	if errors.Is(err, commonnexus.ErrRedirectNotAllowed) {
 		return false
 	}
 	var opTimeoutBelowMinErr *operationTimeoutBelowMinError

@@ -531,7 +531,7 @@ func (s *RawHistorySuite) TestGetHistoryReverse() {
 	wfeResponse, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
 
-	eventDefaultOrder := env.GetHistory(env.Namespace().String(), wfeResponse.WorkflowExecutionInfo.Execution)
+	eventDefaultOrder := env.RequireHistory(s, wfeResponse.WorkflowExecutionInfo.Execution)
 	slices.Reverse(eventDefaultOrder)
 
 	events := s.getHistoryReverse(env, wfeResponse.WorkflowExecutionInfo.Execution, 100)
@@ -620,7 +620,7 @@ func (s *RawHistorySuite) TestGetHistoryReverse_MultipleBranches() {
 	resetWfeResponse, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), resetWorkflowRun.GetID(), resetWorkflowRun.GetRunID())
 	s.NoError(err)
 
-	eventsDefaultOrder := env.GetHistory(env.Namespace().String(), resetWfeResponse.WorkflowExecutionInfo.Execution)
+	eventsDefaultOrder := env.RequireHistory(s, resetWfeResponse.WorkflowExecutionInfo.Execution)
 	slices.Reverse(eventsDefaultOrder)
 
 	events := s.getHistoryReverse(env, resetWfeResponse.WorkflowExecutionInfo.Execution, 100)

@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/testlogger"
+	softasserttestx "go.temporal.io/testx/softassert"
 )
 
 // mockSubtestT stands in for an in-flight subtest passed to RegisterTest.
@@ -139,7 +139,7 @@ func TestSharedClusterPoison(t *testing.T) {
 			s := &functionalTestBase{}
 			s.t = &sharedClusterT{name: t.Name()}
 			tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
-			tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+			tl.Expect(testlogger.Error, ".*", softasserttestx.FailedAssertion)
 			s.Logger = tl
 
 			for i, p := range tc.phases {
