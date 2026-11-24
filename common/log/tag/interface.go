@@ -1,7 +1,9 @@
 package tag
 
-// Tag is implemented by custom fields supplied to a logger.
-type Tag = interface {
-	Key() string
-	Value() any
-}
+type (
+	// Tag is implemented by custom fields supplied to a logger.
+	Tag = interface {
+		Key() string
+		Value() any
+	}
+)
