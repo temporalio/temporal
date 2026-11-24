@@ -79,6 +79,124 @@ func TestExecute(t *testing.T) {
 	}
 }
 
+func TestExecuteWith(t *testing.T) {
+	t.Parallel()
+
+	injected := errors.New("injected")
+	registry := failpoint.NewRegistry()
+	src := registrySource{registry: registry}
+	fp := failpoint.NewFailpoint[error](key1)
+	fp.CallWith(func(arg any) error {
+		if arg == "fail" {
+			return injected
+		}
+		return nil
+	}, failpoint.Always)
+	registry.Set(key1, fp)
+
+	got, fired := failpoint.ExecuteWith[error](src, key1.ForScope("ns-1"), "fail")
+	require.True(t, fired)
+	require.Equal(t, injected, got)
+
+	got, fired = failpoint.ExecuteWith[error](src, key1, "pass")
+	require.True(t, fired)
+	require.NoError(t, got)
+
+	// Execute passes no argument.
+	require.NoError(t, failpoint.Checkpoint(src, key1))
+
+	t.Run("failpoint of another type", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint[int](key1)
+		fp.CallWith(func(arg any) int { return arg.(int) * 2 }, failpoint.Always)
+		registry.Set(key1, fp)
+
+		got, fired := failpoint.ExecuteWith[any](registrySource{registry: registry}, key1, 21)
+		require.True(t, fired)
+		require.Equal(t, 42, got)
+	})
+}
+
+func TestExecuteWithFired(t *testing.T) {
+	t.Parallel()
+
+	injected := errors.New("injected")
+	tests := []struct {
+		name      string
+		configure func(*failpoint.Failpoint[error])
+		want      error
+		wantSet   bool
+		wantFired bool
+	}{
+		{name: "off", configure: func(*failpoint.Failpoint[error]) {}},
+		{name: "return", configure: func(fp *failpoint.Failpoint[error]) { fp.Return(injected, failpoint.Always) }, want: injected, wantSet: true, wantFired: true},
+		{name: "call returning nil", configure: func(fp *failpoint.Failpoint[error]) {
+			fp.CallWith(func(any) error { return nil }, failpoint.Always)
+		}, wantSet: true, wantFired: true},
+		{name: "on", configure: func(fp *failpoint.Failpoint[error]) { fp.On(failpoint.Always) }, wantSet: true, wantFired: true},
+		{name: "pause", configure: func(fp *failpoint.Failpoint[error]) { fp.Pause(time.Nanosecond, failpoint.Always) }, wantFired: true},
+		{name: "skipped by trigger", configure: func(fp *failpoint.Failpoint[error]) {
+			fp.Return(injected, failpoint.Always)
+			fp.SetTrigger(failpoint.Trigger{After: 1})
+		}},
+		{name: "suspended", configure: func(fp *failpoint.Failpoint[error]) {
+			fp.Return(injected, failpoint.Always)
+			fp.SetEnabled(false)
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			registry := failpoint.NewRegistry()
+			fp := failpoint.NewFailpoint[error](key1)
+			tc.configure(fp)
+			registry.Set(key1, fp)
+
+			got, set, fired := failpoint.ExecuteWithFired[error](registrySource{registry: registry}, key1.ForScope("ns-1"), nil)
+			require.Equal(t, tc.want, got)
+			require.Equal(t, tc.wantSet, set)
+			require.Equal(t, tc.wantFired, fired)
+		})
+	}
+
+	t.Run("block released", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Block(failpoint.Always)
+		registry.Set(key1, fp)
+
+		fired := make(chan bool, 1)
+		go func() {
+			_, _, f := failpoint.ExecuteWithFired[error](registrySource{registry: registry}, key1, nil)
+			fired <- f
+		}()
+		require.NoError(t, fp.AwaitBlock(t.Context()))
+		fp.Disable()
+		require.True(t, <-fired)
+	})
+
+	t.Run("return value of another type", func(t *testing.T) {
+		t.Parallel()
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint[int](key1)
+		fp.Return(1, failpoint.Always)
+		registry.Set(key1, fp)
+
+		_, set, fired := failpoint.ExecuteWithFired[error](registrySource{registry: registry}, key1, nil)
+		require.False(t, set)
+		require.True(t, fired)
+	})
+
+	t.Run("not registered", func(t *testing.T) {
+		t.Parallel()
+		_, set, fired := failpoint.ExecuteWithFired[error](registrySource{registry: failpoint.NewRegistry()}, key1, nil)
+		require.False(t, set)
+		require.False(t, fired)
+	})
+}
+
 func TestExecute_AcceptsFailpointOfAnotherType(t *testing.T) {
 	t.Parallel()
 

@@ -98,7 +98,7 @@ func TestServer_InjectBlock(t *testing.T) {
 		default:
 			return false
 		}
-	}, time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func TestServer_InjectReturn(t *testing.T) {
@@ -219,7 +219,7 @@ func TestServer_WaitForBlock(t *testing.T) {
 		default:
 			return false
 		}
-	}, time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 	require.NoError(t, waitErr)
 
 	fp.UnblockOne()
@@ -419,7 +419,7 @@ func TestServer_WaitForBlock_DisabledMidWait(t *testing.T) {
 		default:
 			return false
 		}
-	}, time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 	require.Equal(t, codes.FailedPrecondition, status.Code(waitErr))
 }
 

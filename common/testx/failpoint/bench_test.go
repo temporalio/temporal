@@ -45,3 +45,12 @@ func BenchmarkExecuteCtxEmptyRegistry(b *testing.B) {
 		_, _ = failpoint.ExecuteCtx[error](ctx, key1)
 	}
 }
+
+func BenchmarkExecuteWithEmptyRegistry(b *testing.B) {
+	var src failpoint.Source = registrySource{registry: failpoint.NewRegistry()}
+	key := key1.ForScope("ns")
+	arg := any(&struct{}{})
+	for b.Loop() {
+		_, _ = failpoint.ExecuteWith[error](src, key, arg)
+	}
+}

@@ -3,18 +3,18 @@
 package httpfaultstest_test
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
 )
+
+var scope = httpfaults.Scope{NamespaceID: "namespace-id"}
 
 func newRequest(t *testing.T) *http.Request {
 	t.Helper()
@@ -23,7 +23,13 @@ func newRequest(t *testing.T) *http.Request {
 	return req
 }
 
-func TestWrap_NoGenerator(t *testing.T) {
+func setFailpoint(testHooks testhooks.TestHooks, key failpoint.Key, configure func(*failpoint.Failpoint[error])) {
+	fp := failpoint.NewFailpoint[error](key)
+	configure(fp)
+	testHooks.Failpoints().Set(key, fp)
+}
+
+func TestWrap_NoFailpoints(t *testing.T) {
 	t.Parallel()
 
 	handlerCalled := false
@@ -31,7 +37,7 @@ func TestWrap_NoGenerator(t *testing.T) {
 		handlerCalled = true
 		return &http.Response{StatusCode: http.StatusOK}, nil
 	}
-	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testhooks.NewTestHooks()), httpfaults.Scope{NamespaceID: "namespace-id"}, next)
+	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testhooks.NewTestHooks()), scope, next)
 
 	resp, err := wrapped(newRequest(t))
 	require.NoError(t, err)
@@ -42,97 +48,103 @@ func TestWrap_NoGenerator(t *testing.T) {
 func TestWrap_BeforeHandler(t *testing.T) {
 	t.Parallel()
 
-	testHooks := testhooks.NewTestHooks()
 	injectedErr := errors.New("injected")
-	generator := httpfaultstest.NewCallbackGenerator(testHooks)
-	generator.RegisterRequestCallback(httpfaults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, *httpfaults.Request) *httpfaults.Outcome {
-		return &httpfaults.Outcome{Error: injectedErr}
-	})
-	handlerCalled := false
-	next := func(*http.Request) (*http.Response, error) {
-		handlerCalled = true
-		return &http.Response{StatusCode: http.StatusOK}, nil
+	tests := []struct {
+		name    string
+		key     failpoint.Key
+		scope   httpfaults.Scope
+		wantErr error
+	}{
+		{name: "scoped to namespace", key: failpoint.HTTPKey("POST /cb1").ForScope("namespace-id"), scope: scope, wantErr: injectedErr},
+		{name: "scoped to other namespace", key: failpoint.HTTPKey("POST /cb1").ForScope("other"), scope: scope, wantErr: nil},
+		{name: "unscoped", key: failpoint.HTTPKey("POST /cb1"), scope: scope, wantErr: injectedErr},
+		{name: "other operation", key: failpoint.HTTPKey("GET /cb1"), scope: scope, wantErr: nil},
+		{name: "any operation", key: failpoint.AnyHTTPKey.ForScope("namespace-id"), scope: scope, wantErr: injectedErr},
+		{name: "namespace name only", key: failpoint.AnyHTTPKey.ForScope("namespace-id"), scope: httpfaults.Scope{NamespaceName: "namespace-name"}, wantErr: nil},
 	}
-	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), httpfaults.Scope{NamespaceID: "namespace-id"}, next)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			testHooks := testhooks.NewTestHooks()
+			setFailpoint(testHooks, tc.key, func(fp *failpoint.Failpoint[error]) {
+				fp.CallWith(func(arg any) error {
+					req := arg.(*httpfaults.Request)
+					require.Equal(t, "/cb1", req.Raw.URL.Path)
+					require.Equal(t, tc.scope, req.Scope)
+					return injectedErr
+				}, failpoint.Always)
+			})
+			handlerCalls := 0
+			next := func(*http.Request) (*http.Response, error) {
+				handlerCalls++
+				return &http.Response{StatusCode: http.StatusOK}, nil
+			}
+			wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), tc.scope, next)
 
-	_, err := wrapped(newRequest(t))
+			resp, err := wrapped(newRequest(t))
 
-	require.ErrorIs(t, err, injectedErr)
-	require.False(t, handlerCalled)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				require.Nil(t, resp)
+				require.Equal(t, 0, handlerCalls)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Equal(t, 1, handlerCalls)
+		})
+	}
+}
+
+func TestWrap_ResponseOverrideBeforeHandler(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	injected := httpfaults.NewResponse(http.StatusServiceUnavailable, "injected")
+	setFailpoint(testHooks, failpoint.HTTPKey("POST /cb1"), func(fp *failpoint.Failpoint[error]) {
+		fp.Return(httpfaults.ResponseOverride{Response: injected}, failpoint.Once)
+	})
+	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), scope, func(*http.Request) (*http.Response, error) {
+		require.FailNow(t, "HTTP call should not run")
+		return nil, nil
+	})
+
+	resp, err := wrapped(newRequest(t))
+
+	require.NoError(t, err)
+	require.Same(t, injected, resp)
 }
 
 func TestWrap_AfterHandler(t *testing.T) {
 	t.Parallel()
 
-	testHooks := testhooks.NewTestHooks()
-	generator := httpfaultstest.NewCallbackGenerator(testHooks)
-	generator.RegisterResponseCallback(httpfaults.Scope{NamespaceName: "namespace-name"}, func(context.Context, string, *httpfaults.Request, *http.Response, error) *httpfaults.Outcome {
-		return &httpfaults.Outcome{Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected")}
-	})
-	wrapper := httpfaults.Wrap(
-		httpfaultstest.NewGenerator(testHooks),
-		httpfaults.Scope{NamespaceName: "namespace-name"},
-		func(*http.Request) (*http.Response, error) {
-			return httpfaults.NewResponse(http.StatusOK, "original"), nil
-		},
-	)
+	for _, key := range []failpoint.Key{
+		failpoint.HTTPResponseKey("POST /cb1").ForScope("namespace-id"),
+		failpoint.AnyHTTPResponseKey.ForScope("namespace-id"),
+	} {
+		t.Run(key.Name(), func(t *testing.T) {
+			t.Parallel()
+			testHooks := testhooks.NewTestHooks()
+			original := httpfaults.NewResponse(http.StatusOK, "original")
+			setFailpoint(testHooks, key, func(fp *failpoint.Failpoint[error]) {
+				fp.CallWith(func(arg any) error {
+					result := arg.(httpfaults.Result)
+					require.Equal(t, "POST /cb1", result.Operation)
+					require.Equal(t, scope, result.Request.Scope)
+					require.Same(t, original, result.Response)
+					require.NoError(t, result.Error)
+					return httpfaults.ResponseOverride{Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected")}
+				}, failpoint.Always)
+			})
+			wrapper := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), scope, func(*http.Request) (*http.Response, error) {
+				return original, nil
+			})
 
-	resp, err := wrapper(newRequest(t))
+			resp, err := wrapper(newRequest(t))
 
-	require.NoError(t, err)
-	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
-	require.NoError(t, resp.Body.Close())
-}
-
-func TestNewCallbackGenerator_UnregisterRemovesHook(t *testing.T) {
-	t.Parallel()
-
-	testHooks := testhooks.NewTestHooks()
-	generator := httpfaultstest.NewCallbackGenerator(testHooks)
-	unregister := generator.RegisterRequestCallback(httpfaults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, *httpfaults.Request) *httpfaults.Outcome {
-		return nil
-	})
-	_, ok := testhooks.Get(testHooks, testhooks.HTTPRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
-	require.True(t, ok)
-
-	unregister()
-	_, ok = testhooks.Get(testHooks, testhooks.HTTPRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
-	require.False(t, ok)
-}
-
-func TestNewCallbackGenerator_RequiresNamespaceScope(t *testing.T) {
-	t.Parallel()
-
-	generator := httpfaultstest.NewCallbackGenerator(testhooks.NewTestHooks())
-	require.PanicsWithValue(t, "fault injection test hooks require a namespace scope", func() {
-		generator.RegisterRequestCallback(httpfaults.Scope{}, func(context.Context, string, *httpfaults.Request) *httpfaults.Outcome {
-			return nil
+			require.NoError(t, err)
+			require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+			require.NoError(t, resp.Body.Close())
 		})
-	})
-}
-
-func TestWrap_Failpoint(t *testing.T) {
-	t.Parallel()
-
-	testHooks := testhooks.NewTestHooks()
-	injectedErr := errors.New("injected")
-	key := failpoint.HTTPKey("POST /cb1").ForScope("namespace-id")
-	fp := failpoint.NewFailpoint[error](key)
-	fp.Return(injectedErr, failpoint.Once)
-	testHooks.Failpoints().Set(key, fp)
-	handlerCalls := 0
-	next := func(*http.Request) (*http.Response, error) {
-		handlerCalls++
-		return &http.Response{StatusCode: http.StatusOK}, nil
 	}
-	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), httpfaults.Scope{NamespaceID: "namespace-id"}, next)
-
-	_, err := wrapped(newRequest(t))
-	require.ErrorIs(t, err, injectedErr)
-	require.Equal(t, 0, handlerCalls)
-
-	resp, err := wrapped(newRequest(t))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, 1, handlerCalls)
 }

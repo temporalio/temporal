@@ -10,8 +10,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/rpc/grpcfaults"
-	"go.temporal.io/server/common/rpc/httpfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	testxhooks "go.temporal.io/testx/testhooks"
 	"go.uber.org/fx"
@@ -53,15 +51,7 @@ var (
 	NamespaceReplicationTaskInterceptor = testxhooks.NewKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 	// NamespaceReplicationBeforeLocalCommit injects a test failure after the
 	// metadata write succeeds but before the CHASM component commit begins.
-	NamespaceReplicationBeforeLocalCommit     = testxhooks.NewKey[func(context.Context) error, namespace.Name]()
-	GRPCRequestFaultGeneratorByNamespaceID    = testxhooks.NewKey[grpcfaults.RequestCallback, namespace.ID]()
-	GRPCRequestFaultGeneratorByNamespaceName  = testxhooks.NewKey[grpcfaults.RequestCallback, namespace.Name]()
-	GRPCResponseFaultGeneratorByNamespaceID   = testxhooks.NewKey[grpcfaults.ResponseCallback, namespace.ID]()
-	GRPCResponseFaultGeneratorByNamespaceName = testxhooks.NewKey[grpcfaults.ResponseCallback, namespace.Name]()
-	HTTPRequestFaultGeneratorByNamespaceID    = testxhooks.NewKey[httpfaults.RequestCallback, namespace.ID]()
-	HTTPRequestFaultGeneratorByNamespaceName  = testxhooks.NewKey[httpfaults.RequestCallback, namespace.Name]()
-	HTTPResponseFaultGeneratorByNamespaceID   = testxhooks.NewKey[httpfaults.ResponseCallback, namespace.ID]()
-	HTTPResponseFaultGeneratorByNamespaceName = testxhooks.NewKey[httpfaults.ResponseCallback, namespace.Name]()
+	NamespaceReplicationBeforeLocalCommit = testxhooks.NewKey[func(context.Context) error, namespace.Name]()
 	// FailpointFanOutServices limits the services that a frontend forwards failpoint requests to.
 	// Test clusters whose static membership lists services that they don't start set it to the
 	// services they start.

@@ -24,6 +24,18 @@ func TestRegistry_SetAndGet(t *testing.T) {
 	require.Equal(t, fp, retrieved)
 }
 
+func TestRegistry_Len(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	require.Zero(t, registry.Len())
+
+	registry.Set(key1, failpoint.NewFailpoint[error](key1))
+	registry.Set(key1.ForScope("ns"), failpoint.NewFailpoint[error](key1))
+	require.Equal(t, 2, registry.Len())
+
+	registry.Delete(key1)
+	require.Equal(t, 1, registry.Len())
+}
+
 func TestRegistry_Delete(t *testing.T) {
 	registry := failpoint.NewRegistry()
 

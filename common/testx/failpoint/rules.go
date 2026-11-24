@@ -138,7 +138,8 @@ func (r Rule) settings() settings[error] {
 	case Pause:
 		c.pauseDur = r.Delay
 	case Call:
-		c.callback, _ = LookupBehavior(r.Behavior)
+		behavior, _ := LookupBehavior(r.Behavior)
+		c.callback = func(any) error { return behavior() }
 	case Block, On:
 	default:
 		panic(fmt.Sprintf("unsupported failpoint rule action: %s", r.Action))
@@ -276,8 +277,7 @@ func (s *RuleSet) applyLocked(failpoints map[Key]any, r Rule, c settings[error])
 		s.owned[key] = ownedFailpoint{rule: r, fp: owned.fp}
 		return
 	}
-	fp := NewFailpoint[error](key)
-	fp.owner = s.source
+	fp := NewOwnedFailpoint[error](key, s.source)
 	fp.install(c)
 	failpoints[key] = fp
 	s.owned[key] = ownedFailpoint{rule: r, fp: fp}

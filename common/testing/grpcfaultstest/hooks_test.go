@@ -15,17 +15,38 @@ import (
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/failpointpb"
 	"google.golang.org/grpc"
 )
 
-func TestUnaryServerInterceptor_NoGenerator(t *testing.T) {
+const fullMethod = "/test.Service/Method"
+
+func newInterceptor(t *testing.T, testHooks testhooks.TestHooks) grpc.UnaryServerInterceptor {
+	t.Helper()
+	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks, func(name namespace.Name) namespace.ID {
+		if name == "namespace-name" {
+			return "namespace-id"
+		}
+		return ""
+	}))
+	require.NotNil(t, interceptor)
+	return interceptor
+}
+
+func setFailpoint(testHooks testhooks.TestHooks, key failpoint.Key, configure func(*failpoint.Failpoint[error])) {
+	fp := failpoint.NewFailpoint[error](key)
+	configure(fp)
+	testHooks.Failpoints().Set(key, fp)
+}
+
+func TestUnaryServerInterceptor_NoFailpoints(t *testing.T) {
 	t.Parallel()
 
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testhooks.NewTestHooks()))
+	interceptor := newInterceptor(t, testhooks.NewTestHooks())
 	response, err := interceptor(
 		context.Background(),
 		"request",
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		&grpc.UnaryServerInfo{FullMethod: fullMethod},
 		func(context.Context, any) (any, error) {
 			return "response", nil
 		},
@@ -38,130 +59,45 @@ func TestUnaryServerInterceptor_NoGenerator(t *testing.T) {
 func TestUnaryServerInterceptor_BeforeHandler(t *testing.T) {
 	t.Parallel()
 
-	testHooks := testhooks.NewTestHooks()
 	injectedErr := errors.New("injected")
-	generator := grpcfaultstest.NewCallbackGenerator(testHooks)
-	generator.RegisterRequestCallback(grpcfaults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *grpcfaults.Outcome {
-		return &grpcfaults.Outcome{Error: injectedErr}
-	})
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks))
-	handlerCalled := false
-
-	response, err := interceptor(
-		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
-		func(context.Context, any) (any, error) {
-			handlerCalled = true
-			return "response", nil
-		},
-	)
-
-	require.ErrorIs(t, err, injectedErr)
-	require.Nil(t, response)
-	require.False(t, handlerCalled)
-}
-
-func TestUnaryServerInterceptor_AfterHandler(t *testing.T) {
-	t.Parallel()
-
-	testHooks := testhooks.NewTestHooks()
-	generator := grpcfaultstest.NewCallbackGenerator(testHooks)
-	generator.RegisterResponseCallback(grpcfaults.Scope{NamespaceName: "namespace-name"}, func(context.Context, string, any, any, error) *grpcfaults.Outcome {
-		return &grpcfaults.Outcome{Response: "replacement"}
-	})
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks))
-
-	response, err := interceptor(
-		context.Background(),
-		&workflowservice.UpdateNamespaceRequest{Namespace: "namespace-name"},
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
-		func(context.Context, any) (any, error) {
-			return "response", nil
-		},
-	)
-
-	require.NoError(t, err)
-	require.Equal(t, "replacement", response)
-}
-
-func TestUnaryServerInterceptor_HandlerError(t *testing.T) {
-	t.Parallel()
-
-	testHooks := testhooks.NewTestHooks()
-	handlerErr := errors.New("handler")
-	injectedErr := errors.New("injected")
-	generator := grpcfaultstest.NewCallbackGenerator(testHooks)
-	generator.RegisterResponseCallback(grpcfaults.Scope{NamespaceID: "namespace-id"}, func(_ context.Context, _ string, _, response any, err error) *grpcfaults.Outcome {
-		require.Nil(t, response)
-		require.ErrorIs(t, err, handlerErr)
-		return &grpcfaults.Outcome{Error: injectedErr}
-	})
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks))
-	handlerCalled := false
-
-	response, err := interceptor(
-		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
-		func(context.Context, any) (any, error) {
-			handlerCalled = true
-			return nil, handlerErr
-		},
-	)
-
-	require.ErrorIs(t, err, injectedErr)
-	require.Nil(t, response)
-	require.True(t, handlerCalled)
-}
-
-func TestNewCallbackGenerator_UnregisterRemovesHook(t *testing.T) {
-	t.Parallel()
-
-	testHooks := testhooks.NewTestHooks()
-	generator := grpcfaultstest.NewCallbackGenerator(testHooks)
-	unregister := generator.RegisterRequestCallback(grpcfaults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *grpcfaults.Outcome {
-		return nil
-	})
-	_, ok := testhooks.Get(testHooks, testhooks.GRPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
-	require.True(t, ok)
-
-	unregister()
-	_, ok = testhooks.Get(testHooks, testhooks.GRPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
-	require.False(t, ok)
-}
-
-func TestUnaryServerInterceptor_Failpoint(t *testing.T) {
-	t.Parallel()
-
-	const fullMethod = "/test.Service/Method"
-	injectedErr := errors.New("injected")
+	request := &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"}
 	tests := []struct {
-		name        string
-		key         failpoint.Key
-		namespaceID string
-		wantErr     error
+		name    string
+		key     failpoint.Key
+		request any
+		wantErr error
 	}{
-		{name: "scoped to request namespace", key: failpoint.GRPCKey(fullMethod).ForScope("namespace-id"), namespaceID: "namespace-id", wantErr: injectedErr},
-		{name: "scoped to other namespace", key: failpoint.GRPCKey(fullMethod).ForScope("other"), namespaceID: "namespace-id", wantErr: nil},
-		{name: "unscoped", key: failpoint.GRPCKey(fullMethod), namespaceID: "namespace-id", wantErr: injectedErr},
-		{name: "unscoped without request namespace", key: failpoint.GRPCKey(fullMethod), namespaceID: "", wantErr: injectedErr},
-		{name: "other method", key: failpoint.GRPCKey("/test.Service/Other"), namespaceID: "namespace-id", wantErr: nil},
+		{name: "scoped to request namespace", key: failpoint.GRPCKey(fullMethod).ForScope("namespace-id"), request: request, wantErr: injectedErr},
+		{name: "scoped to other namespace", key: failpoint.GRPCKey(fullMethod).ForScope("other"), request: request, wantErr: nil},
+		{name: "unscoped", key: failpoint.GRPCKey(fullMethod), request: request, wantErr: injectedErr},
+		{name: "unscoped without request namespace", key: failpoint.GRPCKey(fullMethod), request: &matchingservice.AddWorkflowTaskRequest{}, wantErr: injectedErr},
+		{name: "other method", key: failpoint.GRPCKey("/test.Service/Other"), request: request, wantErr: nil},
+		{name: "any method", key: failpoint.AnyGRPCKey.ForScope("namespace-id"), request: request, wantErr: injectedErr},
+		{
+			name:    "namespace name resolved to ID",
+			key:     failpoint.AnyGRPCKey.ForScope("namespace-id"),
+			request: &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespace-name"},
+			wantErr: injectedErr,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			testHooks := testhooks.NewTestHooks()
-			fp := failpoint.NewFailpoint[error](tc.key)
-			fp.Return(injectedErr, failpoint.Always)
-			testHooks.Failpoints().Set(tc.key, fp)
-			interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks))
+			setFailpoint(testHooks, tc.key, func(fp *failpoint.Failpoint[error]) {
+				fp.CallWith(func(arg any) error {
+					require.Equal(t, tc.request, arg)
+					return injectedErr
+				}, failpoint.Always)
+			})
+			handlerCalled := false
 
-			response, err := interceptor(
+			response, err := newInterceptor(t, testHooks)(
 				context.Background(),
-				&matchingservice.AddWorkflowTaskRequest{NamespaceId: tc.namespaceID},
+				tc.request,
 				&grpc.UnaryServerInfo{FullMethod: fullMethod},
 				func(context.Context, any) (any, error) {
+					handlerCalled = true
 					return "response", nil
 				},
 			)
@@ -169,10 +105,90 @@ func TestUnaryServerInterceptor_Failpoint(t *testing.T) {
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
 				require.Nil(t, response)
+				require.False(t, handlerCalled)
 				return
 			}
 			require.NoError(t, err)
 			require.Equal(t, "response", response)
 		})
 	}
+}
+
+func TestUnaryServerInterceptor_AfterHandler(t *testing.T) {
+	t.Parallel()
+
+	request := &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"}
+	handlerErr := errors.New("handler")
+	injectedErr := errors.New("injected")
+	for _, key := range []failpoint.Key{
+		failpoint.GRPCResponseKey(fullMethod).ForScope("namespace-id"),
+		failpoint.AnyGRPCResponseKey.ForScope("namespace-id"),
+	} {
+		t.Run(key.Name(), func(t *testing.T) {
+			t.Parallel()
+			testHooks := testhooks.NewTestHooks()
+			var results []grpcfaults.Result
+			setFailpoint(testHooks, key, func(fp *failpoint.Failpoint[error]) {
+				fp.CallWith(func(arg any) error {
+					result := arg.(grpcfaults.Result)
+					results = append(results, result)
+					if result.Error != nil {
+						return injectedErr
+					}
+					return nil
+				}, failpoint.Always)
+			})
+			interceptor := newInterceptor(t, testHooks)
+			info := &grpc.UnaryServerInfo{FullMethod: fullMethod}
+
+			// A nil error keeps the result of the handler.
+			response, err := interceptor(context.Background(), request, info, func(context.Context, any) (any, error) {
+				return "response", nil
+			})
+			require.NoError(t, err)
+			require.Equal(t, "response", response)
+
+			// An error replaces it.
+			handlerCalled := false
+			response, err = interceptor(context.Background(), request, info, func(context.Context, any) (any, error) {
+				handlerCalled = true
+				return nil, handlerErr
+			})
+			require.ErrorIs(t, err, injectedErr)
+			require.NotErrorIs(t, err, handlerErr)
+			require.Nil(t, response)
+			require.True(t, handlerCalled)
+
+			require.Equal(t, []grpcfaults.Result{
+				{Operation: fullMethod, Request: request, Response: "response"},
+				{Operation: fullMethod, Request: request, Error: handlerErr},
+			}, results)
+		})
+	}
+}
+
+func TestUnaryServerInterceptor_FailpointServiceExempt(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	injectedErr := errors.New("injected")
+	method := failpointpb.FailpointService_DisableAllFailpoints_FullMethodName
+	for _, key := range []failpoint.Key{
+		failpoint.AnyGRPCKey,
+		failpoint.AnyGRPCResponseKey,
+		failpoint.GRPCKey(method),
+		failpoint.GRPCResponseKey(method),
+	} {
+		setFailpoint(testHooks, key, func(fp *failpoint.Failpoint[error]) { fp.Return(injectedErr, failpoint.Always) })
+	}
+	interceptor := newInterceptor(t, testHooks)
+	handler := func(context.Context, any) (any, error) { return "response", nil }
+
+	response, err := interceptor(context.Background(), &failpointpb.DisableAllFailpointsRequest{}, &grpc.UnaryServerInfo{FullMethod: method}, handler)
+	require.NoError(t, err)
+	require.Equal(t, "response", response)
+
+	// Other methods still fail.
+	_, err = interceptor(context.Background(), "request", &grpc.UnaryServerInfo{FullMethod: fullMethod}, handler)
+	require.ErrorIs(t, err, injectedErr)
 }

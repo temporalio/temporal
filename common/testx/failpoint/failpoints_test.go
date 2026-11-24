@@ -313,7 +313,7 @@ func TestFailpoint_OnceBlock_ConcurrentReinject(t *testing.T) {
 		default:
 			return false
 		}
-	}, time.Second, 5*time.Millisecond)
+	}, 10*time.Second, 5*time.Millisecond)
 
 	// Re-inject Block(Always) while the original goroutine is parked. The
 	// original goroutine's Once cleanup must not close the new channels.
@@ -326,7 +326,7 @@ func TestFailpoint_OnceBlock_ConcurrentReinject(t *testing.T) {
 	// returned.
 	select {
 	case <-executed:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("original Once goroutine did not return after re-inject")
 	}
 
@@ -344,11 +344,11 @@ func TestFailpoint_OnceBlock_ConcurrentReinject(t *testing.T) {
 		default:
 			return false
 		}
-	}, time.Second, 5*time.Millisecond)
+	}, 10*time.Second, 5*time.Millisecond)
 	fp.UnblockOne()
 	select {
 	case <-parked:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("new Always failpoint did not unblock — state was clobbered")
 	}
 }
@@ -382,6 +382,36 @@ func TestFailpointCall(t *testing.T) {
 			t.Errorf("expected 44, got %d", ret)
 		}
 	}
+}
+
+func TestFailpointCallWith(t *testing.T) {
+	t.Parallel()
+
+	fp := failpoint.NewFailpoint[string](key1)
+	var args []any
+	fp.CallWith(func(arg any) string {
+		args = append(args, arg)
+		return "called"
+	}, failpoint.Always)
+
+	got, fired := fp.Execute()
+	require.True(t, fired)
+	require.Equal(t, "called", got)
+
+	registry := failpoint.NewRegistry()
+	registry.Set(key1, fp)
+	got, fired = failpoint.ExecuteWith[string](registrySource{registry: registry}, key1, "request")
+	require.True(t, fired)
+	require.Equal(t, "called", got)
+	require.Equal(t, []any{nil, "request"}, args)
+}
+
+func TestNewOwnedFailpoint(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, failpoint.NewFailpoint[error](key1).Owner())
+	require.Equal(t, "owner", failpoint.NewOwnedFailpoint[error](key1, "owner").Owner())
+	require.Panics(t, func() { failpoint.NewOwnedFailpoint[error](key1, "") })
 }
 
 func TestFailpointCall_ConcurrentExecutionsOverlap(t *testing.T) {

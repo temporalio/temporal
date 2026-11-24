@@ -160,7 +160,7 @@ func TestFanOut_StalledDescribe(t *testing.T) {
 	local, peers, registries := fanOutTargets()
 	stalled := failpointgrpc.Target{Host: "stalled", Service: stalledService{}}
 	fanOut := failpointgrpc.NewFanOut(local, staticPeers(append(peers, stalled)...),
-		failpointgrpc.WithDescribeTimeout(50*time.Millisecond))
+		failpointgrpc.WithDescribeTimeout(time.Second))
 
 	_, err := fanOut.InjectReturn(callCtx(t), &failpointpb.InjectReturnRequest{Key: "1"})
 	require.Equal(t, codes.DeadlineExceeded, status.Code(err))

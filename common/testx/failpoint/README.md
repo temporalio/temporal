@@ -34,7 +34,9 @@ func (s *Service) Charge(ctx context.Context) error {
 ```
 
 `Checkpoint` returns the error of an error failpoint. Use `Execute[T]` for other return types, and
-`ExecuteCtx[T]` to look the failpoint up in a context (see `InjectRegistry`).
+`ExecuteCtx[T]` to look the failpoint up in a context (see `InjectRegistry`). `ExecuteWith[T]` passes
+an argument, such as the request, to a callback configured with `fp.CallWith(func(arg any) T, ...)`.
+`ExecuteWithFired[T]` also reports whether the failpoint fired with any action, such as a pause.
 
 ## Inject it in a test
 

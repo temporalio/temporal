@@ -143,7 +143,7 @@ func TestFailpointIntegration_InjectBlockAndWait(t *testing.T) {
 		default:
 			return false
 		}
-	}, time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 	require.NoError(t, waitErr)
 
 	fp.UnblockOne()

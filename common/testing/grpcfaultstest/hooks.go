@@ -1,40 +1,38 @@
 package grpcfaultstest
 
 import (
+	"strings"
+
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	commontesthooks "go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/testx/failpoint"
 )
 
-// NewCallbackGenerator creates a CallbackGenerator connected to namespace-scoped test hooks.
-// Without test hooks, it creates a CallbackGenerator without them.
-func NewCallbackGenerator(testHooks commontesthooks.TestHooks) *grpcfaults.CallbackGenerator {
-	if !testHooks.Enabled() {
-		return grpcfaults.NewCallbackGenerator()
-	}
-	return grpcfaults.NewCallbackGeneratorWithHooks(newAdapter(testHooks))
-}
-
-// NewGenerator creates a Generator backed by namespace-scoped test hooks. It returns nil without
-// test hooks, so no fault interceptor is installed.
-func NewGenerator(testHooks commontesthooks.TestHooks) grpcfaults.Generator {
+// NewGenerator creates a Generator that executes the gRPC failpoints of test hooks, scoped to the
+// namespace ID of the request. namespaces resolves the ID of a request that only carries a
+// namespace name, such as most frontend requests; it can be nil. It returns nil without test
+// hooks, so no fault interceptor is installed.
+func NewGenerator(testHooks commontesthooks.TestHooks, namespaces faultinjectiontest.NamespaceIDs) grpcfaults.Generator {
 	if !testHooks.Enabled() {
 		return nil
 	}
-	return newAdapter(testHooks)
+	return faultinjectiontest.NewAdapter[any, any](testHooks, faultinjectiontest.Keys{
+		Request:     failpoint.GRPCKey,
+		Response:    failpoint.GRPCResponseKey,
+		AnyRequest:  failpoint.AnyGRPCKey,
+		AnyResponse: failpoint.AnyGRPCResponseKey,
+		Exempt:      isFailpointService,
+	}, namespaces)
 }
 
-func newAdapter(testHooks commontesthooks.TestHooks) faultinjectiontest.Adapter[any, any] {
-	return faultinjectiontest.NewAdapter(testHooks, faultinjectiontest.HookKeys[any, any]{
-		Request: faultinjectiontest.Keys[grpcfaults.RequestCallback]{
-			ByNamespaceID:   commontesthooks.GRPCRequestFaultGeneratorByNamespaceID,
-			ByNamespaceName: commontesthooks.GRPCRequestFaultGeneratorByNamespaceName,
-		},
-		Response: faultinjectiontest.Keys[grpcfaults.ResponseCallback]{
-			ByNamespaceID:   commontesthooks.GRPCResponseFaultGeneratorByNamespaceID,
-			ByNamespaceName: commontesthooks.GRPCResponseFaultGeneratorByNamespaceName,
-		},
-		Failpoint: failpoint.GRPCKey,
-	})
+// FailpointServicePrefix is the prefix of the full method names of the FailpointService. It is a
+// constant rather than derived from failpointpb, so that builds without test hooks don't link the
+// service.
+const FailpointServicePrefix = "/temporal.testx.failpoint.v1.FailpointService/"
+
+// isFailpointService reports whether fullMethod belongs to the FailpointService. Its methods run no
+// failpoints, so a failpoint for every method doesn't block the requests that remove it.
+func isFailpointService(fullMethod string) bool {
+	return strings.HasPrefix(fullMethod, FailpointServicePrefix)
 }

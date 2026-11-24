@@ -30,16 +30,43 @@ func NewKey(name string) Key {
 	return Key{name: name}
 }
 
+// Keys of the failpoints at a transport boundary that fire for every operation. A call site executes
+// one after the key of the operation, such as GRPCKey for the request of a gRPC method, and only if
+// that failpoint did not fire with any action (see ExecuteWithFired). Their names cannot collide
+// with the keys of an operation, which contain a gRPC method or an HTTP request method and path.
+var (
+	// AnyGRPCKey fires before the handler of every gRPC method runs.
+	AnyGRPCKey = Key{name: "grpc:*"}
+	// AnyGRPCResponseKey fires after the handler of every gRPC method returns.
+	AnyGRPCResponseKey = Key{name: "grpc-response:*"}
+	// AnyHTTPKey fires before every outgoing HTTP request is sent.
+	AnyHTTPKey = Key{name: "http:*"}
+	// AnyHTTPResponseKey fires after every outgoing HTTP request returns.
+	AnyHTTPResponseKey = Key{name: "http-response:*"}
+)
+
 // GRPCKey returns the key of the failpoint that fires before the handler of a gRPC method runs.
 // fullMethod is the full method name, for example "/pkg.Service/Method".
 func GRPCKey(fullMethod string) Key {
 	return Key{name: "grpc:" + fullMethod}
 }
 
+// GRPCResponseKey returns the key of the failpoint that fires after the handler of a gRPC method
+// returns.
+func GRPCResponseKey(fullMethod string) Key {
+	return Key{name: "grpc-response:" + fullMethod}
+}
+
 // HTTPKey returns the key of the failpoint that fires before an outgoing HTTP request is sent.
 // operation is the request method and path, for example "POST /callback".
 func HTTPKey(operation string) Key {
 	return Key{name: "http:" + operation}
+}
+
+// HTTPResponseKey returns the key of the failpoint that fires after an outgoing HTTP request
+// returns.
+func HTTPResponseKey(operation string) Key {
+	return Key{name: "http-response:" + operation}
 }
 
 // KeyFromName returns the key for a failpoint name received from outside the process, for example

@@ -55,7 +55,7 @@ type Failpoint[T any] struct {
 	action     Action
 	t          T
 	panicValue any
-	callback   func() T
+	callback   func(arg any) T
 	pauseDur   time.Duration
 	blockCh    chan struct{}
 	times      Recurrence
@@ -121,6 +121,18 @@ func NewFailpoint[T any](key Key) *Failpoint[T] {
 	}
 }
 
+// NewOwnedFailpoint creates a Failpoint with the given key that reports owner as its Owner, for
+// code that manages the failpoint and doesn't want other code, such as the failpointgrpc service,
+// to change or remove it. owner must not be empty.
+func NewOwnedFailpoint[T any](key Key, owner string) *Failpoint[T] {
+	if owner == "" {
+		panic("failpoint: empty owner")
+	}
+	f := NewFailpoint[T](key)
+	f.owner = owner
+	return f
+}
+
 // Owner describes the code that manages the failpoint, such as a RuleSet. It is empty for a
 // failpoint created with NewFailpoint. Other code should leave a failpoint with an owner alone.
 func (f *Failpoint[T]) Owner() string {
@@ -132,7 +144,7 @@ type settings[T any] struct {
 	action     Action
 	value      T
 	panicValue any
-	callback   func() T
+	callback   func(arg any) T
 	pauseDur   time.Duration
 	times      Recurrence
 	trigger    Trigger
@@ -270,6 +282,13 @@ func (f *Failpoint[T]) Panic(value any, times Recurrence) {
 // synchronize their own state, and fn can call into the failpoint. Disable and reconfiguration
 // don't wait for callbacks that already started.
 func (f *Failpoint[T]) Call(fn func() T, times Recurrence) {
+	f.CallWith(func(any) T { return fn() }, times)
+}
+
+// CallWith is Call with a callback that receives the argument of the execution, which the call
+// site passes to ExecuteWith, for example the request it is about to handle. Executions without an
+// argument pass nil.
+func (f *Failpoint[T]) CallWith(fn func(arg any) T, times Recurrence) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -377,31 +396,33 @@ func (f *Failpoint[T]) Do(op func() T) T {
 //
 // It will replace Do in its entirety
 func (f *Failpoint[T]) Execute() (t T, setReturnVal bool) {
-	return f.execute(nil)
+	t, setReturnVal, _ = f.execute(nil, nil)
+	return t, setReturnVal
 }
 
-// executeAny is Execute with the return value as any, for call sites of another type.
-func (f *Failpoint[T]) executeAny(emit func(Event)) (any, bool) {
-	t, ok := f.execute(emit)
-	if !ok {
-		return nil, false
+// executeAny is execute with the return value as any, for call sites of another type.
+func (f *Failpoint[T]) executeAny(emit func(Event), arg any) (value any, set, fired bool) {
+	t, set, fired := f.execute(emit, arg)
+	if !set {
+		return nil, false, fired
 	}
-	return t, true
+	return t, true, fired
 }
 
-// execute is Execute that reports the execution to emit, if not nil. emit is called without
-// holding f.mu, before a Block failpoint waits.
-func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
+// execute is Execute that reports the execution to emit, if not nil, and passes arg to a callback.
+// It also reports whether the failpoint fired, with any action. emit is called without holding
+// f.mu, before a Block failpoint waits.
+func (f *Failpoint[T]) execute(emit func(Event), arg any) (t T, setReturnVal, fired bool) {
 	f.mu.Lock()
 
 	if f.action <= Off || f.suspended {
 		f.mu.Unlock()
-		return t, false
+		return t, false, false
 	}
 
 	action := f.action
 	once := f.times == Once
-	fired := f.fireLocked()
+	fired = f.fireLocked()
 	event := Event{Key: f.key, Action: action, Fired: fired, Execution: f.executions}
 	report := func() {
 		if emit != nil {
@@ -412,7 +433,7 @@ func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 	if !fired {
 		f.mu.Unlock()
 		report()
-		return t, false
+		return t, false, false
 	}
 
 	// Non-Block actions capture their arguments and consume a Once under the lock, and run without
@@ -428,17 +449,17 @@ func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 
 		switch action {
 		case Return, On:
-			return value, true
+			return value, true, true
 		case Panic:
 			panic(panicValue)
 		case Call:
-			return callback(), true
+			return callback(arg), true, true
 		case Pause:
 			time.Sleep(pauseDur)
 		default:
 			panic(fmt.Sprintf("unknown failpoint action: %s", action))
 		}
-		return t, false
+		return t, false, true
 	}
 
 	// Block: we have to release the lock during the wait, so a deferred
@@ -478,7 +499,7 @@ func (f *Failpoint[T]) execute(emit func(Event)) (t T, setReturnVal bool) {
 		f.disableLocked()
 	}
 	f.mu.Unlock()
-	return t, false
+	return t, false, true
 }
 
 // WaitCh returns a channel that will be closed when the goroutine reaches the Block failpoint. It

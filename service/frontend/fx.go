@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/failpointserver"
+	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
@@ -284,6 +285,7 @@ func GrpcServerOptionsProvider(
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
 	testHooks testhooks.TestHooks,
+	namespaceRegistry namespace.Registry,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -345,7 +347,9 @@ func GrpcServerOptionsProvider(
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
-	faultGenerator := grpcfaultstest.NewGenerator(testHooks)
+	// Frontend requests mostly carry a namespace name; the registry resolves it to the namespace ID
+	// that failpoints are scoped to.
+	faultGenerator := grpcfaultstest.NewGenerator(testHooks, faultinjectiontest.RegistryNamespaceIDs(namespaceRegistry))
 	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
 		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
 	}

@@ -16,6 +16,11 @@ type Registry interface {
 	// Get retrieves a failpoint by key. Returns nil if not found.
 	Get(key Key) any
 
+	// Len returns the number of registered failpoints. It doesn't take the registry's lock, so call
+	// sites that do work before they execute a failpoint, such as building its key, can skip it
+	// cheaply while no failpoint is registered.
+	Len() int
+
 	// Set stores a failpoint instance for the given key.
 	Set(key Key, fp any)
 
@@ -151,6 +156,10 @@ func (r *registryImpl) Get(key Key) any {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.failpoints[key]
+}
+
+func (r *registryImpl) Len() int {
+	return int(r.count.Load())
 }
 
 func (r *registryImpl) Set(key Key, fp any) {
