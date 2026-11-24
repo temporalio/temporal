@@ -72,6 +72,8 @@ var testQueueOptions = Options{
 	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0),
 	MoveGroupTaskCountMultiplier:        dynamicconfig.GetFloatPropertyFn(3.0),
 	ShrinkPredicateMaxPendingKeys:       dynamicconfig.GetIntPropertyFn(10),
+	RangeCompleteBatchSize:              dynamicconfig.GetIntPropertyFn(0),
+	RangeCompleteTimeout:                dynamicconfig.GetDurationPropertyFn(5 * time.Second),
 }
 
 func TestQueueBaseSuite(t *testing.T) {

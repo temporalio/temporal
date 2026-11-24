@@ -180,13 +180,14 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_M
 		TaskCategory:        fakeImmediateTaskCategory,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(0),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(math.MaxInt64),
+		BatchSize:           3,
 	})
 	s.NoError(err)
 
 	loadedTasks = s.PaginateTasks(
 		fakeImmediateTaskCategory,
-		inclusiveMinTaskKey,
-		exclusiveMaxTaskKey,
+		tasks.NewImmediateKey(0),
+		tasks.NewImmediateKey(math.MaxInt64),
 		1,
 	)
 	s.Empty(loadedTasks)
@@ -239,16 +240,45 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_M
 		TaskCategory:        fakeScheduledTaskCategory,
 		InclusiveMinTaskKey: tasks.NewKey(time.Unix(0, 0), 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
+		BatchSize:           3,
 	})
 	s.NoError(err)
 
 	loadedTasks = s.PaginateTasks(
 		fakeScheduledTaskCategory,
-		inclusiveMinTaskKey,
-		exclusiveMaxTaskKey,
+		tasks.NewKey(time.Unix(0, 0), 0),
+		tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
 		1,
 	)
 	s.Empty(loadedTasks)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestRangeCompleteImmediateTasks_Batched() {
+	newTaskFns := map[tasks.Category]func(definition.WorkflowKey, int64, time.Time) tasks.Task{
+		tasks.CategoryTransfer: func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.ActivityTask{WorkflowKey: workflowKey, TaskID: taskID, VisibilityTimestamp: visibilityTimestamp}
+		},
+		tasks.CategoryVisibility: func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.StartExecutionVisibilityTask{WorkflowKey: workflowKey, TaskID: taskID, VisibilityTimestamp: visibilityTimestamp}
+		},
+		tasks.CategoryReplication: func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.HistoryReplicationTask{WorkflowKey: workflowKey, TaskID: taskID, VisibilityTimestamp: visibilityTimestamp}
+		},
+	}
+	inclusiveMinTaskKey := tasks.NewImmediateKey(0)
+	exclusiveMaxTaskKey := tasks.NewImmediateKey(math.MaxInt64)
+	for category, newTaskFn := range newTaskFns {
+		s.AddRandomTasks(category, 10, newTaskFn)
+		err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
+			ShardID:             s.ShardID,
+			TaskCategory:        category,
+			InclusiveMinTaskKey: inclusiveMinTaskKey,
+			ExclusiveMaxTaskKey: exclusiveMaxTaskKey,
+			BatchSize:           3,
+		})
+		s.NoError(err, category.Name())
+		s.Empty(s.PaginateTasks(category, inclusiveMinTaskKey, exclusiveMaxTaskKey, 1), category.Name())
+	}
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteTransferTask_Single() {

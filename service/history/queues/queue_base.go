@@ -99,6 +99,8 @@ type (
 		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountMultiplier        dynamicconfig.FloatPropertyFn
 		ShrinkPredicateMaxPendingKeys       dynamicconfig.IntPropertyFn
+		RangeCompleteBatchSize              dynamicconfig.IntPropertyFn
+		RangeCompleteTimeout                dynamicconfig.DurationPropertyFn
 	}
 )
 
@@ -379,7 +381,7 @@ func (p *queueBase) rangeCompleteTasks(
 		newExclusiveDeletionHighWatermark.TaskID = 0
 	}
 
-	ctx, cancel := newQueueIOContext()
+	ctx, cancel := newQueueIOContextWithTimeout(p.options.RangeCompleteTimeout() * debug.TimeoutMultiplier)
 	defer cancel()
 
 	if err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
@@ -387,6 +389,7 @@ func (p *queueBase) rangeCompleteTasks(
 		TaskCategory:        p.category,
 		InclusiveMinTaskKey: oldExclusiveDeletionHighWatermark,
 		ExclusiveMaxTaskKey: newExclusiveDeletionHighWatermark,
+		BatchSize:           p.options.RangeCompleteBatchSize(),
 	}); err != nil {
 		p.logger.Error("Error range completing queue task", tag.Error(err))
 		return err
@@ -459,7 +462,11 @@ func createCheckpointRetryPolicy() backoff.RetryPolicy {
 }
 
 func newQueueIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), queueIOTimeout)
+	return newQueueIOContextWithTimeout(queueIOTimeout)
+}
+
+func newQueueIOContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 	return ctx, cancel
 }

@@ -39,7 +39,7 @@ type (
 		// DeleteFromTransferTasks deletes one rows from transfer_tasks table.
 		DeleteFromTransferTasks(ctx context.Context, filter TransferTasksFilter) (sql.Result, error)
 		// RangeDeleteFromTransferTasks deletes one or more rows from transfer_tasks table.
-		//  TransferTasksRangeFilter - {PageSize} will be ignored
+		//  TransferTasksRangeFilter - PageSize > 0 caps the number of rows deleted
 		RangeDeleteFromTransferTasks(ctx context.Context, filter TransferTasksRangeFilter) (sql.Result, error)
 	}
 )

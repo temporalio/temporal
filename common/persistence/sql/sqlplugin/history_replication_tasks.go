@@ -39,7 +39,7 @@ type (
 		// DeleteFromReplicationTasks deletes a row from replication_tasks table
 		DeleteFromReplicationTasks(ctx context.Context, filter ReplicationTasksFilter) (sql.Result, error)
 		// DeleteFromReplicationTasks deletes multi rows from replication_tasks table
-		//  ReplicationTasksRangeFilter - {PageSize} will be ignored
+		//  ReplicationTasksRangeFilter - PageSize > 0 caps the number of rows deleted
 		RangeDeleteFromReplicationTasks(ctx context.Context, filter ReplicationTasksRangeFilter) (sql.Result, error)
 	}
 )

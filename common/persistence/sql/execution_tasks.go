@@ -182,12 +182,17 @@ func (m *sqlExecutionStore) rangeCompleteHistoryImmediateTasks(
 		return m.rangeCompleteReplicationTasks(ctx, request)
 	}
 
-	if _, err := m.DB.RangeDeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
+	filter := sqlplugin.HistoryImmediateTasksRangeFilter{
 		ShardID:            request.ShardID,
 		CategoryID:         int32(categoryID),
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-	}); err != nil {
+		PageSize:           request.BatchSize,
+	}
+	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromHistoryImmediateTasks(ctx, filter)
+	})
+	if err != nil {
 		return serviceerror.NewUnavailablef(
 			"RangeCompleteTransferTask operation failed. CategoryID: %v. Error: %v", categoryID, err,
 		)
@@ -289,14 +294,17 @@ func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 		return m.rangeCompleteTimerTasks(ctx, request)
 	}
 
-	start := request.InclusiveMinTaskKey.FireTime
-	end := request.ExclusiveMaxTaskKey.FireTime
-	if _, err := m.DB.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
+	filter := sqlplugin.HistoryScheduledTasksRangeFilter{
 		ShardID:                         request.ShardID,
 		CategoryID:                      int32(categoryID),
-		InclusiveMinVisibilityTimestamp: start,
-		ExclusiveMaxVisibilityTimestamp: end,
-	}); err != nil {
+		InclusiveMinVisibilityTimestamp: request.InclusiveMinTaskKey.FireTime,
+		ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
+		PageSize:                        request.BatchSize,
+	}
+	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromHistoryScheduledTasks(ctx, filter)
+	})
+	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteHistoryTask operation failed. CategoryID: %v. Error: %v", categoryID, err)
 	}
 	return nil
@@ -362,11 +370,16 @@ func (m *sqlExecutionStore) rangeCompleteTransferTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := m.DB.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
+	filter := sqlplugin.TransferTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-	}); err != nil {
+		PageSize:           request.BatchSize,
+	}
+	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromTransferTasks(ctx, filter)
+	})
+	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteTransferTask operation failed. Error: %v", err)
 	}
 	return nil
@@ -436,13 +449,16 @@ func (m *sqlExecutionStore) rangeCompleteTimerTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	start := request.InclusiveMinTaskKey.FireTime
-	end := request.ExclusiveMaxTaskKey.FireTime
-	if _, err := m.DB.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
+	filter := sqlplugin.TimerTasksRangeFilter{
 		ShardID:                         request.ShardID,
-		InclusiveMinVisibilityTimestamp: start,
-		ExclusiveMaxVisibilityTimestamp: end,
-	}); err != nil {
+		InclusiveMinVisibilityTimestamp: request.InclusiveMinTaskKey.FireTime,
+		ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
+		PageSize:                        request.BatchSize,
+	}
+	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromTimerTasks(ctx, filter)
+	})
+	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteTimerTask operation failed. Error: %v", err)
 	}
 	return nil
@@ -574,11 +590,16 @@ func (m *sqlExecutionStore) rangeCompleteReplicationTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := m.DB.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
+	filter := sqlplugin.ReplicationTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-	}); err != nil {
+		PageSize:           request.BatchSize,
+	}
+	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromReplicationTasks(ctx, filter)
+	})
+	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteReplicationTask operation failed. Error: %v", err)
 	}
 	return nil
@@ -749,11 +770,16 @@ func (m *sqlExecutionStore) rangeCompleteVisibilityTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := m.DB.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
+	filter := sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
-	}); err != nil {
+		PageSize:           request.BatchSize,
+	}
+	err := rangeDeleteInBatches(filter.PageSize, func() (sql.Result, error) {
+		return m.DB.RangeDeleteFromVisibilityTasks(ctx, filter)
+	})
+	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteVisibilityTask operation failed. Error: %v", err)
 	}
 	return nil
@@ -770,4 +796,22 @@ func (t *scheduledTaskPageToken) serialize() ([]byte, error) {
 
 func (t *scheduledTaskPageToken) deserialize(payload []byte) error {
 	return json.Unmarshal(payload, t)
+}
+
+// rangeDeleteInBatches calls deleteBatch once when batchSize <= 0, otherwise until a batch deletes fewer than
+// batchSize rows. Each batch commits on its own, so rows deleted before a timeout stay deleted.
+func rangeDeleteInBatches(batchSize int, deleteBatch func() (sql.Result, error)) error {
+	for {
+		result, err := deleteBatch()
+		if err != nil || batchSize <= 0 {
+			return err
+		}
+		deleted, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if deleted < int64(batchSize) {
+			return nil
+		}
+	}
 }

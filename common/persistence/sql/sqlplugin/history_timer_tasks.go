@@ -43,7 +43,7 @@ type (
 		// DeleteFromTimerTasks deletes one or more rows from timer_tasks table
 		DeleteFromTimerTasks(ctx context.Context, filter TimerTasksFilter) (sql.Result, error)
 		// RangeDeleteFromTimerTasks deletes one or more rows from timer_tasks table
-		//  TimerTasksRangeFilter - {TaskID, PageSize} will be ignored
+		//  TimerTasksRangeFilter - {TaskID} will be ignored, PageSize > 0 caps the number of rows deleted
 		RangeDeleteFromTimerTasks(ctx context.Context, filter TimerTasksRangeFilter) (sql.Result, error)
 	}
 )

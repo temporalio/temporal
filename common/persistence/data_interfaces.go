@@ -470,6 +470,9 @@ type (
 		TaskCategory        tasks.Category
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
+		// BatchSize caps the rows one delete statement removes. Only SQL stores honor it, and
+		// RangeDeleteReplicationTaskFromDLQ ignores it. <= 0 deletes the whole range in one statement.
+		BatchSize int
 	}
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
