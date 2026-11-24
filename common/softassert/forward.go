@@ -7,7 +7,7 @@ import (
 	"go.temporal.io/testx/softassert"
 )
 
-// That returns condition and logs an error when it is false.
+// That returns condition and logs an error when it is false. Pass dynamic details as tags.
 func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
 	return softassert.That(logger, condition, staticMessage, tags...)
 }
