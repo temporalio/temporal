@@ -72,16 +72,16 @@ func TestPersistencePipelinePhysicalVersions(t *testing.T) {
 		writes <- written{m.DBRecordVersion, m.Condition, m.NextEventID, m.ExecutionInfo.ExecutionStats.HistorySize}
 		return pipelineTestResponse(10), nil
 	})
-	b, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	b, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
-	d, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 11))
+	d, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 11))
 	require.NoError(t, err)
 	bFuture, dFuture := b.completion, d.completion
 	require.NoError(t, c.completeOperation(&operation{ctx: t.Context(), submissions: []*submission{b, d}}))
 	require.Equal(t, written{42, 10, 12, 100}, await.Rcv(t, writes))
 	require.Same(t, bFuture, b.completion)
 	require.Same(t, dFuture, d.completion)
-	e, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 12))
+	e, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 12))
 	require.NoError(t, err)
 	require.NoError(t, c.completeSubmission(e))
 	require.Equal(t, written{43, 12, 13, 110}, await.Rcv(t, writes))
@@ -107,7 +107,7 @@ func TestPersistencePipelineCanceledSuffix(t *testing.T) {
 			})
 			var pins atomic.Int64
 			c.SetPersistencePin(func() { pins.Add(1) }, func() { pins.Add(-1) })
-			a, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+			a, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
 			require.NoError(t, err)
 			aDone := make(chan error, 1)
 			go func() { aDone <- c.completeSubmission(a) }()
@@ -119,7 +119,7 @@ func TestPersistencePipelineCanceledSuffix(t *testing.T) {
 				if i == cancelIndex {
 					ctx, cancel = context.WithCancel(ctx)
 				}
-				queued[i], err = c.pipeline.submit(ctx, 1, pipelineTestRequest(t, int64(11+i)))
+				queued[i], err = c.pipeline.submit(ctx, 1, submitterSpeculative, pipelineTestRequest(t, int64(11+i)))
 				require.NoError(t, err)
 			}
 			old := queued[cancelIndex].completion
@@ -133,7 +133,7 @@ func TestPersistencePipelineCanceledSuffix(t *testing.T) {
 			require.Equal(t, int64(1), pins.Load())
 			_, err = c.PersistenceFuture().Get(t.Context())
 			require.Error(t, err)
-			_, err = c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 15))
+			_, err = c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 15))
 			require.Error(t, err)
 			close(finish)
 			require.NoError(t, await.Rcv(t, aDone))
@@ -161,9 +161,9 @@ func TestPersistencePipelineClaimSurvivesCancellation(t *testing.T) {
 		return pipelineTestResponse(0), ctx.Err()
 	})
 	ctx, cancel := context.WithCancel(t.Context())
-	b, err := c.pipeline.submit(ctx, 1, pipelineTestRequest(t, 10))
+	b, err := c.pipeline.submit(ctx, 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
-	d, err := c.pipeline.submit(ctx, 1, pipelineTestRequest(t, 11))
+	d, err := c.pipeline.submit(ctx, 1, submitterSpeculative, pipelineTestRequest(t, 11))
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	go func() { done <- c.completeSubmission(b) }()
@@ -185,9 +185,9 @@ func TestPersistencePipelineFailureWakesDependent(t *testing.T) {
 	c := pipelineTestContext(t, true, func(_ context.Context, _ *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 		return nil, writeErr
 	})
-	a, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	a, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
-	b, err := c.pipeline.submit(t.Context(), 2, pipelineTestRequest(t, 11))
+	b, err := c.pipeline.submit(t.Context(), 2, submitterSpeculative, pipelineTestRequest(t, 11))
 	require.NoError(t, err)
 	require.ErrorIs(t, c.completeSubmission(a), writeErr)
 	require.Error(t, c.completeSubmission(b))
@@ -205,7 +205,7 @@ func TestPersistencePipelineAllOwnedSubmissions(t *testing.T) {
 	})
 	var submissions []*submission
 	for i := range 3 {
-		s, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+i)))
+		s, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, int64(10+i)))
 		require.NoError(t, err)
 		submissions = append(submissions, s)
 	}
@@ -223,9 +223,9 @@ func TestPersistencePipelinePanicSettlesClaim(t *testing.T) {
 	c := pipelineTestContext(t, false, func(_ context.Context, _ *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 		panic("writer panic")
 	})
-	a, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	a, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
-	b, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 11))
+	b, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 11))
 	require.NoError(t, err)
 	require.PanicsWithValue(t, "writer panic", func() { _ = c.completeSubmission(a) })
 	require.True(t, a.completion.Ready())
@@ -246,17 +246,17 @@ func TestPersistencePipelineFallbackDrainsRetainedPrefix(t *testing.T) {
 		}
 		return pipelineTestResponse(0), nil
 	})
-	a, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	a, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
 	aDone := make(chan error, 1)
 	go func() { aDone <- c.completeSubmission(a) }()
 	await.Rcv(t, started)
-	b, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 11))
+	b, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 11))
 	require.NoError(t, err)
 	bDone := make(chan error, 1)
 	go func() { bDone <- c.completeSubmission(b) }()
 	ctx, cancel := context.WithCancel(t.Context())
-	d, err := c.pipeline.submit(ctx, 1, pipelineTestRequest(t, 12))
+	d, err := c.pipeline.submit(ctx, 1, submitterSpeculative, pipelineTestRequest(t, 12))
 	require.NoError(t, err)
 	require.NoError(t, c.LockSpeculative(t.Context(), locks.PriorityHigh))
 	fallback := make(chan error, 1)
@@ -296,7 +296,7 @@ func TestPersistencePipelineCancelReleasesIdlePin(t *testing.T) {
 	var pins atomic.Int64
 	c.SetPersistencePin(func() { pins.Add(1) }, func() { pins.Add(-1) })
 	ctx, cancel := context.WithCancel(t.Context())
-	s, err := c.pipeline.submit(ctx, 1, pipelineTestRequest(t, 10))
+	s, err := c.pipeline.submit(ctx, 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), pins.Load())
 	cancel()
@@ -313,7 +313,7 @@ func TestPersistencePipelineReadUsesRequestContext(t *testing.T) {
 		<-finish
 		return pipelineTestResponse(0), nil
 	})
-	a, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	a, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
 	aDone := make(chan error, 1)
 	go func() { aDone <- c.completeSubmission(a) }()
@@ -438,9 +438,9 @@ func TestPersistencePipelinePreparedFallbackVersion(t *testing.T) {
 	state.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{ExecutionStats: &persistencespb.ExecutionStats{HistorySize: 100}}).AnyTimes()
 	c.MutableState = state
 	require.NoError(t, c.LockSpeculative(t.Context(), locks.PriorityHigh))
-	a, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	a, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
-	b, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 11))
+	b, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 11))
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	go func() { done <- c.completeOperation(&operation{ctx: t.Context(), submissions: []*submission{a, b}}) }()
@@ -463,7 +463,7 @@ func TestPersistencePipelineOversizedWriteStaysSynchronous(t *testing.T) {
 	})
 	request := pipelineTestRequest(t, 10)
 	request.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = strings.Repeat("x", maxPipelineBatchBytes)
-	_, err := c.pipeline.submit(t.Context(), 1, request)
+	_, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, request)
 	require.ErrorIs(t, err, persistence.ErrIncompatibleWorkflowMutations)
 	require.Empty(t, c.pipeline.pending)
 	require.Empty(t, c.pipeline.inFlight)

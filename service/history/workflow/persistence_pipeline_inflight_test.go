@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -112,7 +114,7 @@ func newAsyncPipelineFixture(t *testing.T, maxInFlight int, coalescing bool) *as
 // submit queues a request and drives it from its own goroutine, as a signal handler does after Unlock.
 func (f *asyncPipelineFixture) submit(ctx context.Context, t *testing.T, condition int64) (*submission, chan error) {
 	t.Helper()
-	s, err := f.c.pipeline.submit(ctx, 1, pipelineTestRequest(t, condition))
+	s, err := f.c.pipeline.submit(ctx, 1, submitterSpeculative, pipelineTestRequest(t, condition))
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	go func() { done <- f.c.completeSubmission(s) }()
@@ -172,9 +174,9 @@ func TestPersistencePipelineCoalescesBehindInFlightGroups(t *testing.T) {
 	_, bDone := f.submit(t.Context(), t, 11)
 	wb := await.Rcv(t, f.submits)
 	// Both slots are taken, so c and d queue and are claimed together.
-	c, err := f.c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 12))
+	c, err := f.c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 12))
 	require.NoError(t, err)
-	d, err := f.c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 13))
+	d, err := f.c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 13))
 	require.NoError(t, err)
 	cdDone := make(chan error, 1)
 	go func() {
@@ -245,7 +247,7 @@ func TestPersistencePipelineFailureFailsLaterInFlightGroups(t *testing.T) {
 	require.Equal(t, int64(41), f.c.pipeline.committedDBRecordVersion)
 	require.Error(t, f.c.pipeline.err)
 	require.Empty(t, f.c.pipeline.inFlight)
-	_, err := f.c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 13))
+	_, err := f.c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 13))
 	require.Error(t, err)
 }
 
@@ -277,7 +279,7 @@ func TestPersistencePipelineSubmitFailureKeepsEarlierGroup(t *testing.T) {
 	wa := await.Rcv(t, f.submits)
 	_, bDone := f.submit(t.Context(), t, 11)
 	waitPipeline(t, f.c.pipeline, func() bool { return f.c.pipeline.err != nil })
-	_, err := f.c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 12))
+	_, err := f.c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 12))
 	require.Error(t, err)
 
 	wa.receipt.complete(nil)
@@ -315,9 +317,9 @@ func TestPersistencePipelineCancelAfterClaimStillPublishes(t *testing.T) {
 	t.Parallel()
 	f := newAsyncPipelineFixture(t, 2, true)
 	ctx, cancel := context.WithCancel(t.Context())
-	a, err := f.c.pipeline.submit(ctx, 1, pipelineTestRequest(t, 10))
+	a, err := f.c.pipeline.submit(ctx, 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
-	b, err := f.c.pipeline.submit(ctx, 1, pipelineTestRequest(t, 11))
+	b, err := f.c.pipeline.submit(ctx, 1, submitterSpeculative, pipelineTestRequest(t, 11))
 	require.NoError(t, err)
 	aDone := make(chan error, 1)
 	go func() { aDone <- f.c.completeSubmission(a) }()
@@ -424,7 +426,7 @@ func TestPersistencePipelineRecordsSubmissionLimitWait(t *testing.T) {
 	})
 	capture, blocked := captureWaits(c)
 	for i := range maxPipelineSubmissions {
-		_, err := c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+i)))
+		_, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, int64(10+i)))
 		require.NoError(t, err)
 	}
 	locked := make(chan error, 1)
@@ -497,6 +499,173 @@ func TestContextRecordsLockHoldWithoutPipeline(t *testing.T) {
 	require.Equal(t, []string{lockAcquirerOperation}, recordedTags(capture, metrics.WorkflowContextLockAcquireWait.Name(), "acquirer"))
 }
 
+var phaseTimers = []string{
+	metrics.WorkflowPersistencePipelineQueueWait.Name(),
+	metrics.WorkflowPersistencePipelineGroupWrite.Name(),
+	metrics.WorkflowPersistencePipelinePublishWait.Name(),
+	metrics.WorkflowPersistencePipelineSubmissionLatency.Name(),
+}
+
+// phaseDurations returns metric's recorded durations, and requires every recording to be tagged with submitter.
+func phaseDurations(t *testing.T, capture *metricstest.Capture, metric, submitter string) []time.Duration {
+	t.Helper()
+	var durations []time.Duration
+	for _, r := range capture.SnapshotMetric(metric) {
+		require.Equal(t, submitter, r.Tags["submitter"], metric)
+		durations = append(durations, r.Value.(time.Duration))
+	}
+	return durations
+}
+
+func sumDurations(durations []time.Duration) time.Duration {
+	var sum time.Duration
+	for _, d := range durations {
+		sum += d
+	}
+	return sum
+}
+
+// requirePhasesAddUp requires count recordings of each phase timer, and that the queue waits, group writes, and
+// publish waits add up to the totals.
+func requirePhasesAddUp(t *testing.T, capture *metricstest.Capture, submitter string, count int) (queue, write, publish []time.Duration) {
+	t.Helper()
+	recorded := make([][]time.Duration, len(phaseTimers))
+	for i, metric := range phaseTimers {
+		recorded[i] = phaseDurations(t, capture, metric, submitter)
+		require.Len(t, recorded[i], count, metric)
+	}
+	queue, write, publish = recorded[0], recorded[1], recorded[2]
+	require.Equal(t, sumDurations(recorded[3]), sumDurations(queue)+sumDurations(write)+sumDurations(publish))
+	return queue, write, publish
+}
+
+func TestPersistencePipelineRecordsPhaseTimers(t *testing.T) {
+	t.Parallel()
+	const hold = 20 * time.Millisecond
+	f := newAsyncPipelineFixture(t, 2, false)
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	f.c.metricsHandler = handler
+
+	// a and b are in flight, so c waits in pending until a publishes.
+	_, aDone := f.submit(t.Context(), t, 10)
+	wa := await.Rcv(t, f.submits)
+	_, bDone := f.submit(t.Context(), t, 11)
+	wb := await.Rcv(t, f.submits)
+	_, cDone := f.submit(t.Context(), t, 12)
+	f.waitSettled(t, 2, 1)
+	time.Sleep(hold) //nolint:forbidigo // elapsed time bounds the recorded phases from below
+	// b is durable first, and waits for a before it publishes.
+	wb.receipt.complete(nil)
+	time.Sleep(hold) //nolint:forbidigo // elapsed time bounds the recorded phases from below
+	wa.receipt.complete(nil)
+	require.NoError(t, await.Rcv(t, aDone))
+	require.NoError(t, await.Rcv(t, bDone))
+	wc := await.Rcv(t, f.submits)
+	wc.receipt.complete(nil)
+	require.NoError(t, await.Rcv(t, cDone))
+
+	queue, write, publish := requirePhasesAddUp(t, capture, submitterSpeculative, 3)
+	require.GreaterOrEqual(t, slices.Max(queue), 2*hold, "c's queue wait doesn't include the wait for a claim slot")
+	require.GreaterOrEqual(t, slices.Max(write), 2*hold, "a's group write doesn't last until its receipt completes")
+	require.GreaterOrEqual(t, slices.Max(publish), hold, "b's publish wait doesn't include waiting for a")
+}
+
+func TestPersistencePipelineRecordsPhaseTimersForSynchronousWrites(t *testing.T) {
+	t.Parallel()
+	const hold = 20 * time.Millisecond
+	release := make(chan struct{})
+	var writes atomic.Int32
+	c := pipelineTestContext(t, true, func(ctx context.Context, _ *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		if writes.Add(1) == 1 {
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return pipelineTestResponse(0), nil
+	})
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	c.metricsHandler = handler
+
+	a, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
+	require.NoError(t, err)
+	aDone := make(chan error, 1)
+	go func() { aDone <- c.completeSubmission(a) }()
+	waitPipeline(t, c.pipeline, func() bool { return len(c.pipeline.inFlight) == 1 })
+	// b and d queue behind the synchronous write and are coalesced into one group.
+	b, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 11))
+	require.NoError(t, err)
+	d, err := c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 12))
+	require.NoError(t, err)
+	bdDone := make(chan error, 1)
+	go func() { bdDone <- c.completeOperation(&operation{ctx: t.Context(), submissions: []*submission{b, d}}) }()
+	time.Sleep(hold) //nolint:forbidigo // elapsed time bounds the recorded phases from below
+	close(release)
+	require.NoError(t, await.Rcv(t, aDone))
+	require.NoError(t, await.Rcv(t, bdDone))
+	require.Equal(t, int32(2), writes.Load())
+
+	queue, write, publish := requirePhasesAddUp(t, capture, submitterSpeculative, 3)
+	require.GreaterOrEqual(t, slices.Max(queue), hold, "b and d's queue waits don't include the write in flight")
+	require.GreaterOrEqual(t, slices.Max(write), hold, "a's group write doesn't last until the write returns")
+	// Members of one group share its group write and publish wait.
+	slices.Sort(write)
+	slices.Sort(publish)
+	require.True(t, write[0] == write[1] || write[1] == write[2], "coalesced members have different group writes: %v", write)
+	require.True(t, publish[0] == publish[1] || publish[1] == publish[2], "coalesced members have different publish waits: %v", publish)
+}
+
+func TestPersistencePipelineTagsPhaseTimersBySubmitter(t *testing.T) {
+	t.Parallel()
+	f := newAsyncPipelineFixture(t, 2, false)
+	f.c.pipeline.taskCompletions = true
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	f.c.metricsHandler = handler
+	// write queues the operation's write as executeWorkflowTransaction does for a pipelined operation.
+	write := func(condition int64) {
+		s, err := f.c.pipeline.submit(t.Context(), 1, f.c.operation.submitter, pipelineTestRequest(t, condition))
+		require.NoError(t, err)
+		f.c.operation.submissions = append(f.c.operation.submissions, s)
+		unlocked := make(chan error, 1)
+		go func() { unlocked <- f.c.Unlock() }()
+		await.Rcv(t, f.submits).receipt.complete(nil)
+		require.NoError(t, await.Rcv(t, unlocked))
+	}
+
+	require.NoError(t, f.c.LockSpeculative(t.Context(), locks.PriorityHigh))
+	write(10)
+	require.NoError(t, f.c.Lock(t.Context(), locks.PriorityHigh))
+	require.True(t, f.c.PipelineCommittedWrite())
+	write(11)
+
+	for _, metric := range phaseTimers {
+		require.Equal(t, []string{submitterSpeculative, submitterCommitted}, recordedTags(capture, metric, "submitter"), metric)
+	}
+}
+
+func TestPersistencePipelineFailedGroupsRecordNoPhaseTimers(t *testing.T) {
+	t.Parallel()
+	f := newAsyncPipelineFixture(t, 2, false)
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	f.c.metricsHandler = handler
+	_, aDone := f.submit(t.Context(), t, 10)
+	wa := await.Rcv(t, f.submits)
+	_, bDone := f.submit(t.Context(), t, 11)
+	wb := await.Rcv(t, f.submits)
+	wb.receipt.complete(nil)
+	wa.receipt.complete(serviceerror.NewUnavailable("write failed"))
+	require.Error(t, await.Rcv(t, aDone))
+	require.Error(t, await.Rcv(t, bDone))
+	for _, metric := range phaseTimers {
+		require.Empty(t, capture.SnapshotMetric(metric), metric)
+	}
+}
+
 func TestPersistencePipelineAdmissionWakesOnlyOnAdmissionChange(t *testing.T) {
 	t.Parallel()
 	c := pipelineTestContext(t, false, func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
@@ -538,11 +707,11 @@ func TestPersistencePipelineAdmissionWakesOnlyOnAdmissionChange(t *testing.T) {
 
 	before = admission()
 	for i := range maxPipelineSubmissions - 1 {
-		_, err := p.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+i)))
+		_, err := p.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, int64(10+i)))
 		require.NoError(t, err)
 	}
 	require.False(t, closed(before), "submissions under the limit woke blocked admissions")
-	_, err := p.submit(t.Context(), 1, pipelineTestRequest(t, int64(10+maxPipelineSubmissions)))
+	_, err := p.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, int64(10+maxPipelineSubmissions)))
 	require.NoError(t, err)
 	require.True(t, closed(before), "reaching the submission limit didn't wake blocked admissions")
 
@@ -558,7 +727,7 @@ func TestPersistencePipelineCommittedWriteReleasesLockBeforeDurable(t *testing.T
 	require.NoError(t, f.c.Lock(t.Context(), locks.PriorityHigh))
 	require.True(t, f.c.PipelineCommittedWrite())
 	// Queue the operation's write as executeWorkflowTransaction does for a pipelined operation.
-	s, err := f.c.pipeline.submit(t.Context(), 1, pipelineTestRequest(t, 10))
+	s, err := f.c.pipeline.submit(t.Context(), 1, submitterSpeculative, pipelineTestRequest(t, 10))
 	require.NoError(t, err)
 	f.c.operation.submissions = append(f.c.operation.submissions, s)
 

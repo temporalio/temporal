@@ -1210,7 +1210,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 			NewWorkflowSnapshot: payload.NewExecutionSnapshot, NewWorkflowEvents: payload.NewExecutionEvents,
 			CheckRunAlreadyExists: payload.NewExecutionCheckRunAlreadyExists,
 		}
-		s, err := c.pipeline.submit(ctx, c.MutableState.GetCurrentVersion(), request)
+		s, err := c.pipeline.submit(ctx, c.MutableState.GetCurrentVersion(), c.operation.submitter, request)
 		if errors.Is(err, persistence.ErrIncompatibleWorkflowMutations) {
 			if err := c.commitPreparedMutation(ctx, payload.ExecutionMutation); err != nil {
 				return err

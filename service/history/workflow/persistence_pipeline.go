@@ -41,6 +41,10 @@ type submission struct {
 	historySize int64
 	bytes       int
 	taskTargets map[tasks.Category][]tasks.Task
+	// submitter and enqueuedAt are for the phase timers: the kind of operation that queued the
+	// submission, and when it entered pending.
+	submitter  string
+	enqueuedAt time.Time
 }
 
 // commitGroup is one claimed write. Groups publish in claim order.
@@ -53,15 +57,23 @@ type commitGroup struct {
 	// publish as failed even if its own write succeeds.
 	dependencyFailed bool
 	inFlightAtClaim  int
-	// claimedAt is when the claim began, for the dispatch latency timer.
+	// claimedAt is when the claim began, for the dispatch latency timer. It ends each member's queue
+	// wait and starts the group write.
 	claimedAt time.Time
+	// writtenAt is when the write became durable, and publishedAt when the members completed, for the
+	// phase timers.
+	writtenAt   time.Time
+	publishedAt time.Time
 	// published is closed when the group leaves inFlight, so the next group can wait for its turn
 	// without waking on every pipeline change.
 	published chan struct{}
 }
 
 type operation struct {
-	pipelined   bool
+	pipelined bool
+	// submitter tags the operation's submissions: submitterSpeculative, or submitterCommitted for a
+	// write sent through the pipeline by PipelineCommittedWrite.
+	submitter   string
 	submissions []*submission
 	dependency  future.Future[struct{}]
 	ctx         context.Context
@@ -105,6 +117,8 @@ const (
 	drainSiteMakeCommitted         = "make_committed"
 	admissionReasonCommittedWaiter = "committed_waiter"
 	admissionReasonSubmissionLimit = "submission_limit"
+	submitterSpeculative           = "speculative"
+	submitterCommitted             = "committed"
 )
 
 // admissionState is what LockSpeculative's admission check reads.
@@ -241,6 +255,7 @@ func (c *ContextImpl) PipelineCommittedWrite() bool {
 		return false
 	}
 	c.operation.pipelined = true
+	c.operation.submitter = submitterCommitted
 	return true
 }
 
@@ -375,7 +390,7 @@ func (c *ContextImpl) LockSpeculative(ctx context.Context, priority locks.Priori
 		dependency := p.futureLocked()
 		p.mu.Unlock()
 		p.recordMutexWait(mutexSiteAdmit, wait)
-		c.operation = &operation{ctx: operationCtx, pipelined: true, dependency: dependency}
+		c.operation = &operation{ctx: operationCtx, pipelined: true, submitter: submitterSpeculative, dependency: dependency}
 		recordBlocked()
 		return nil
 	}
@@ -396,7 +411,7 @@ func (p *persistencePipeline) invalidate(start int, err error) {
 	p.notify()
 }
 
-func (p *persistencePipeline) submit(ctx context.Context, failoverVersion int64, request *persistence.UpdateWorkflowExecutionRequest) (*submission, error) {
+func (p *persistencePipeline) submit(ctx context.Context, failoverVersion int64, submitter string, request *persistence.UpdateWorkflowExecutionRequest) (*submission, error) {
 	owned, size, historySize, err := clonePipelineRequest(request)
 	if err != nil {
 		return nil, err
@@ -419,7 +434,8 @@ func (p *persistencePipeline) submit(ctx context.Context, failoverVersion int64,
 	if queuedBytes > maxPipelineBytes {
 		return nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "workflow persistence pipeline is full")
 	}
-	s := &submission{ctx: ctx, failoverVersion: failoverVersion, request: owned, completion: future.NewFuture[struct{}](), dequeued: make(chan struct{}), historySize: historySize, bytes: size, taskTargets: request.UpdateWorkflowMutation.Tasks}
+	s := &submission{ctx: ctx, failoverVersion: failoverVersion, request: owned, completion: future.NewFuture[struct{}](), dequeued: make(chan struct{}), historySize: historySize, bytes: size, taskTargets: request.UpdateWorkflowMutation.Tasks,
+		submitter: submitter, enqueuedAt: time.Now()}
 	if !p.pinned && p.acquirePin != nil {
 		p.acquirePin()
 		p.pinned = true
@@ -577,6 +593,7 @@ func (c *ContextImpl) executePersistenceGroup(group *commitGroup) {
 			first.failoverVersion, &request.UpdateWorkflowMutation, request.UpdateWorkflowEvents, nil, nil, nil, false,
 			request.ArchetypeID == chasm.WorkflowArchetypeID)
 	}()
+	group.writtenAt = time.Now()
 	if recovered != nil {
 		err = serviceerror.NewInternal("workflow persistence panicked")
 	}
@@ -584,6 +601,9 @@ func (c *ContextImpl) executePersistenceGroup(group *commitGroup) {
 	_ = c.acquireLock(context.Background(), locks.PriorityHigh, lockAcquirerPublish, lockHolderPublish)
 	c.publishPersistenceGroup(group, delta, err)
 	c.releaseLock()
+	if err == nil {
+		c.recordPersistencePhases(group)
+	}
 	if recovered != nil {
 		panic(recovered) //nolint:forbidigo // Preserve the original panic after settling accepted writes.
 	}
@@ -632,6 +652,7 @@ func (c *ContextImpl) submitPersistenceGroup(group *commitGroup) {
 			}()
 			err = wait(ctx)
 		}()
+		group.writtenAt = time.Now()
 		if err != nil {
 			p.mu.Lock()
 			p.failInFlightSuffix(group)
@@ -655,8 +676,27 @@ func (c *ContextImpl) submitPersistenceGroup(group *commitGroup) {
 	_ = c.acquireLock(context.Background(), locks.PriorityHigh, lockAcquirerPublish, lockHolderPublish)
 	c.publishPersistenceGroup(group, delta, err)
 	c.releaseLock()
+	if err == nil {
+		c.recordPersistencePhases(group)
+	}
 	if recovered != nil {
 		panic(recovered) //nolint:forbidigo // Preserve the original panic after settling accepted writes.
+	}
+}
+
+// recordPersistencePhases records the phase timers for each member of a group that published
+// successfully. Each member's queue wait, group write, and publish wait add up to its total.
+func (c *ContextImpl) recordPersistencePhases(group *commitGroup) {
+	queueWait := metrics.WorkflowPersistencePipelineQueueWait.With(c.metricsHandler)
+	groupWrite := metrics.WorkflowPersistencePipelineGroupWrite.With(c.metricsHandler)
+	publishWait := metrics.WorkflowPersistencePipelinePublishWait.With(c.metricsHandler)
+	total := metrics.WorkflowPersistencePipelineSubmissionLatency.With(c.metricsHandler)
+	for _, s := range group.members {
+		tag := metrics.StringTag("submitter", s.submitter)
+		queueWait.Record(group.claimedAt.Sub(s.enqueuedAt), tag)
+		groupWrite.Record(group.writtenAt.Sub(group.claimedAt), tag)
+		publishWait.Record(group.publishedAt.Sub(group.writtenAt), tag)
+		total.Record(group.publishedAt.Sub(s.enqueuedAt), tag)
 	}
 }
 
@@ -712,6 +752,7 @@ func (c *ContextImpl) publishPersistenceGroup(group *commitGroup, delta int64, e
 	}
 	close(p.inFlight[0].published)
 	p.inFlight = p.inFlight[1:]
+	group.publishedAt = time.Now()
 	for _, s := range members {
 		s.completion.Set(struct{}{}, err)
 	}

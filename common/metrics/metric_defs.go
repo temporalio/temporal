@@ -1580,6 +1580,10 @@ var (
 	WorkflowPersistencePipelineMutexWait          = NewTimerDef("workflow_persistence_pipeline_mutex_wait")
 	WorkflowPersistencePipelineDrainWait          = NewTimerDef("workflow_persistence_pipeline_drain_wait")
 	WorkflowPersistencePipelineAdmissionWait      = NewTimerDef("workflow_persistence_pipeline_admission_wait")
+	WorkflowPersistencePipelineQueueWait          = NewTimerDef("workflow_persistence_pipeline_queue_wait")
+	WorkflowPersistencePipelineGroupWrite         = NewTimerDef("workflow_persistence_pipeline_group_write_latency")
+	WorkflowPersistencePipelinePublishWait        = NewTimerDef("workflow_persistence_pipeline_publish_wait")
+	WorkflowPersistencePipelineSubmissionLatency  = NewTimerDef("workflow_persistence_pipeline_submission_latency")
 
 	VisibilityArchiverArchiveNonRetryableErrorCount                   = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount                      = NewCounterDef("visibility_archiver_archive_transient_error")
