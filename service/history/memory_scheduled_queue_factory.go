@@ -41,7 +41,11 @@ func NewMemoryImmediateQueueFactory(params memoryScheduledQueueFactoryParams) Qu
 				maxConcurrency: params.Config.MemoryImmediateProcessorMaxConcurrentTasks,
 				maxPending:     params.Config.MemoryImmediateProcessorMaxPendingTasks,
 			},
-			params.MetricsHandler.WithTags(metrics.OperationTag("MemoryImmediateQueueProcessor")),
+			params.MetricsHandler.WithTags(
+				metrics.OperationTag("MemoryImmediateQueueProcessor"),
+				metrics.NamespaceTag(""),
+				metrics.DestinationTag(""),
+			),
 		),
 		timeSource: params.TimeSource,
 	}
