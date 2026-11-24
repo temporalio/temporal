@@ -6,7 +6,6 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/namespace"
 )
 
 // NamespaceReplicationAdmitter decides whether to process a namespace
@@ -44,16 +43,6 @@ type DeliveryPolicy func(ctx context.Context, task *replicationspb.NamespaceTask
 // NewDefaultDeliveryPolicy creates the default DeliveryPolicy.
 func NewDefaultDeliveryPolicy() DeliveryPolicy {
 	return func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) { return false, nil }
-}
-
-// MutationDataValidator checks the final data of an authoritative namespace
-// replication snapshot. A returned error rejects the mutation before it starts.
-// Shadow mutations skip validation. Implementations treat the data map as read-only.
-type MutationDataValidator func(ctx context.Context, namespaceID namespace.ID, namespaceName namespace.Name, data map[string]string) error
-
-// NewDefaultMutationDataValidator creates a validator that accepts all data.
-func NewDefaultMutationDataValidator() MutationDataValidator {
-	return func(context.Context, namespace.ID, namespace.Name, map[string]string) error { return nil }
 }
 
 // DefaultAdmitter accepts member snapshots and explicit removal deliveries.

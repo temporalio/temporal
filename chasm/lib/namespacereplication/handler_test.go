@@ -16,11 +16,7 @@ import (
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/testing/testlogger"
-	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -227,69 +223,9 @@ func TestTriggerNamespaceMutationRejectsInvalidReplicateOnlyModes(t *testing.T) 
 			req.Mutation.Shadow = testCase.shadow
 			req.Mutation.ReplicateOnly = true
 
-			_, err := newServiceHandler(log.NewNoopLogger(), nsreplication.NewDefaultMutationDataValidator()).
-				TriggerNamespaceMutation(context.Background(), req)
+			_, err := newServiceHandler(log.NewNoopLogger()).TriggerNamespaceMutation(context.Background(), req)
 			var invalidArgument *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgument)
-		})
-	}
-}
-
-func TestTriggerNamespaceMutationValidatesAuthoritativeData(t *testing.T) {
-	t.Parallel()
-	invalidData := serviceerror.NewInvalidArgument("invalid namespace data")
-	for _, tc := range []struct {
-		name          string
-		shadow        bool
-		replicateOnly bool
-		wantErr       error
-	}{
-		{name: "authoritative update", wantErr: invalidData},
-		{name: "replicate only", replicateOnly: true, wantErr: invalidData},
-		{name: "shadow skips validation", shadow: true, wantErr: context.Canceled},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			req := validTriggerNamespaceMutationRequest(t)
-			req.Mutation.Shadow = tc.shadow
-			req.Mutation.ReplicateOnly = tc.replicateOnly
-			data := map[string]string{"custom-config": "invalid"}
-			req.Mutation.NamespaceDetail.Info.Data = data
-			req.Mutation.NamespaceDetail.Info.Name = "my-namespace"
-			engine := chasm.NewMockEngine(gomock.NewController(t))
-			if tc.shadow {
-				engine.EXPECT().StartExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-					Return(chasm.StartExecutionResult{}, context.Canceled)
-			}
-			ctx := chasm.NewEngineContext(t.Context(), engine)
-			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-			capture := logger.StartCapture()
-			handler := newServiceHandler(logger,
-				func(validationCtx context.Context, namespaceID namespace.ID, namespaceName namespace.Name, snapshotData map[string]string) error {
-					require.Equal(t, ctx, validationCtx)
-					require.Equal(t, namespace.ID(req.GetNamespaceId()), namespaceID)
-					require.Equal(t, namespace.Name("my-namespace"), namespaceName)
-					require.Equal(t, data, snapshotData)
-					return invalidData
-				},
-			)
-
-			_, err := handler.TriggerNamespaceMutation(ctx, req)
-			require.ErrorIs(t, err, tc.wantErr)
-			if tc.shadow {
-				require.Empty(t, capture.Snapshot())
-				return
-			}
-			capture.RequireContains(t, testlogger.CapturedLogPattern{
-				Level:   testlogger.Warn,
-				Message: "namespace replication authoritative snapshot rejected before start",
-				Tags: map[string]any{
-					"wf-namespace-id": req.GetNamespaceId(),
-					"wf-namespace":    "my-namespace",
-					"business_id":     req.GetBusinessId(),
-					"operation":       enumsspb.NAMESPACE_OPERATION_UPDATE.String(),
-				},
-			})
 		})
 	}
 }
@@ -320,7 +256,7 @@ func TestTriggerNamespaceMutationRetryUsesExistingExecution(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			response, err := newServiceHandler(logger, nsreplication.NewDefaultMutationDataValidator()).TriggerNamespaceMutation(ctx, req)
+			response, err := newServiceHandler(logger).TriggerNamespaceMutation(ctx, req)
 			require.NoError(t, err)
 			require.NotNil(t, response)
 		})
@@ -355,7 +291,7 @@ func TestTriggerNamespaceMutationIndeterminateReturnsUnavailable(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	response, err := newServiceHandler(logger, nsreplication.NewDefaultMutationDataValidator()).TriggerNamespaceMutation(ctx, req)
+	response, err := newServiceHandler(logger).TriggerNamespaceMutation(ctx, req)
 	require.Nil(t, response)
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)

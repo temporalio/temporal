@@ -1658,8 +1658,7 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 	})
 	if err != nil && !mutation.GetShadow() {
 		// A timeout or Unavailable can leave the local commit outcome unknown.
-		// Snapshot validation rejects before the execution starts. The business
-		// ID links this error to the source validation log or execution.
+		// The business ID links the error to the execution if one started.
 		d.logger.Warn(
 			"namespace replication authoritative trigger returned an error",
 			tag.WorkflowNamespaceID(info.GetId()),

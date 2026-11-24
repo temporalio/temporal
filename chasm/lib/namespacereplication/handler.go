@@ -9,9 +9,6 @@ import (
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/primitives"
 	"google.golang.org/protobuf/proto"
 )
@@ -19,12 +16,11 @@ import (
 type serviceHandler struct {
 	namespacereplicationpb.UnimplementedNamespaceReplicationServiceServer
 
-	logger               log.Logger
-	validateMutationData nsreplication.MutationDataValidator
+	logger log.Logger
 }
 
-func newServiceHandler(logger log.Logger, validateMutationData nsreplication.MutationDataValidator) *serviceHandler {
-	return &serviceHandler{logger: logger, validateMutationData: validateMutationData}
+func newServiceHandler(logger log.Logger) *serviceHandler {
+	return &serviceHandler{logger: logger}
 }
 
 func (h *serviceHandler) TriggerNamespaceMutation(
@@ -35,20 +31,6 @@ func (h *serviceHandler) TriggerNamespaceMutation(
 
 	if err := validateTriggerNamespaceMutationRequest(req); err != nil {
 		return nil, err
-	}
-	mutation := req.GetMutation()
-	if !mutation.GetShadow() {
-		info := mutation.GetNamespaceDetail().GetInfo()
-		if err := h.validateMutationData(ctx, namespace.ID(info.GetId()), namespace.Name(info.GetName()), info.GetData()); err != nil {
-			h.logger.Warn("namespace replication authoritative snapshot rejected before start",
-				tag.WorkflowNamespaceID(info.GetId()),
-				tag.WorkflowNamespace(info.GetName()),
-				tag.NewStringTag("business_id", req.GetBusinessId()),
-				tag.Operation(mutation.GetOperation().String()),
-				tag.Error(err),
-			)
-			return nil, err
-		}
 	}
 
 	key := executionKey(req)
@@ -63,7 +45,7 @@ func (h *serviceHandler) TriggerNamespaceMutation(
 			}
 			return component, nil
 		},
-		mutation,
+		req.GetMutation(),
 		chasm.WithRequestID(req.GetBusinessId()),
 	)
 	if err != nil {
