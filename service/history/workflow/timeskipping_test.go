@@ -2614,4 +2614,13 @@ func (s *mutableStateSuite) TestUpsertVisibilityOnTimeSkippingEnabledChange() {
 		s.True(s.mutableState.visibilityUpdated)
 	})
 
+	s.Run("SessionSkipLimitReached_Upserts", func() {
+		setup()
+		s.mutableState.executionInfo.TimeSkippingInfo.Config.MaxSessionSkipCount = 1
+		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(), transitionEvent(timestamppb.New(eventTime.Add(30*time.Minute)), false)))
+		s.Len(visibilityTasks(), 1)
+		s.False(s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+	})
+
 }

@@ -2264,3 +2264,61 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SearchAttributes() {
 	s.NoError(err)
 	awaitVisible("ExecutionStatus = 'Terminated' AND TemporalTimeSkippingEnabled = false")
 }
+
+// TestTimeSkipping_AccumulatedDurationSearchAttribute verifies duration is published when skipping
+// disables itself and refreshed at completion after a subsequent session skips more time.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_AccumulatedDurationSearchAttribute() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+	runID := s.startWorkflowWithTimeSkipping(env, tv, 24*time.Hour)
+	execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID}
+
+	setSkipLimit := func(limit int32) {
+		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			Namespace: env.Namespace().String(), WorkflowExecution: execution,
+			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+				Enabled: true, MaxSessionSkipCount: limit,
+			}},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+		})
+		s.NoError(err)
+	}
+	awaitVisible := func(condition string) {
+		query := fmt.Sprintf("WorkflowId = '%s' AND %s", tv.WorkflowID(), condition)
+		s.Await(func(s *TimeSkippingTestSuite) {
+			resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(), Query: query,
+			})
+			s.NoError(err)
+			s.Len(resp.GetExecutions(), 1, query)
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+
+	setSkipLimit(1)
+	_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("first", time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+	awaitVisible("TemporalTimeSkippingEnabled = false AND TemporalTimeSkippingAccumulatedDuration > 0")
+	firstSkip := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	awaitVisible(fmt.Sprintf("TemporalTimeSkippingAccumulatedDuration = %d", firstSkip.Nanoseconds()))
+
+	setSkipLimit(defaultMaxSkipPerSession)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("second", 2*time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{completeWorkflowCmd()}}, nil
+	})
+	s.NoError(err)
+	totalSkip := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	s.Greater(totalSkip, firstSkip)
+	awaitVisible(fmt.Sprintf("ExecutionStatus = 'Completed' AND TemporalTimeSkippingAccumulatedDuration = %d", totalSkip.Nanoseconds()))
+}

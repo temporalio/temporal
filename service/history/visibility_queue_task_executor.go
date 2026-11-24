@@ -755,10 +755,12 @@ func withTimeSkippingSearchAttributes(
 		searchAttributes = &commonpb.SearchAttributes{}
 	}
 	if searchAttributes.IndexedFields == nil {
-		searchAttributes.IndexedFields = make(map[string]*commonpb.Payload, 1)
+		searchAttributes.IndexedFields = make(map[string]*commonpb.Payload, 2)
 	}
 	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingEnabled] = sadefs.MustEncodeValue(
 		tsi.GetConfig().GetEnabled(), enumspb.INDEXED_VALUE_TYPE_BOOL)
+	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingAccumulatedDuration] = sadefs.MustEncodeValue(
+		tsi.GetAccumulatedSkippedDuration().AsDuration().Nanoseconds(), enumspb.INDEXED_VALUE_TYPE_INT)
 	return searchAttributes
 }
 
