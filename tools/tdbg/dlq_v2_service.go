@@ -357,9 +357,9 @@ func (ac *DLQV2Service) findLastMessageIDFromListQueues(c *cli.Context) (int64, 
 }
 
 func getSupportedDLQTaskCategories(taskCategoryRegistry tasks.TaskCategoryRegistry) []tasks.Category {
-	categories := make([]tasks.Category, 0, len(taskCategoryRegistry.GetCategories())-1)
+	var categories []tasks.Category
 	for _, c := range taskCategoryRegistry.GetCategories() {
-		if c != tasks.CategoryMemoryTimer {
+		if c != tasks.CategoryMemoryTimer && c != tasks.CategoryMemoryImmediate {
 			categories = append(categories, c)
 		}
 	}

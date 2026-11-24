@@ -864,6 +864,9 @@ func (s *WorkflowHeartbeatNotificationSuite) TestImmediateQueueSaturation() {
 		rejected := capture.Metric(metrics.DynamicWorkerPoolSchedulerRejectedTasks.Name())
 		s.Len(rejected, 1)
 		s.Equal("MemoryImmediateQueueProcessor", rejected[0].Tags["operation"])
+		results := capture.Metric(metrics.WorkflowHeartbeatNotificationResults.Name())
+		s.Len(results, 1)
+		s.Equal("dropped", results[0].Tags["result"])
 	}, 5*time.Second, 10*time.Millisecond)
 	s.respondNotification(env, first, notification.GetTaskToken(), &workerpb.WorkflowHeartbeatNotificationResult{
 		Outcome: workerpb.WorkflowHeartbeatNotificationResult_OUTCOME_ACCEPTED,

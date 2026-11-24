@@ -240,7 +240,8 @@ Keep at zero until all Matching hosts support matching.highPerfMinDispatchTimeou
 	WorkflowHeartbeatNotificationDispatchTimeout = NewNamespaceDurationSetting(
 		"history.workflowHeartbeatNotificationDispatchTimeout",
 		600*time.Millisecond,
-		`WorkflowHeartbeatNotificationDispatchTimeout limits how long History waits for Matching to dispatch a Workflow Task heartbeat notification and receive a worker response.
+		`WorkflowHeartbeatNotificationDispatchTimeout limits how long History waits, from submitting a Workflow Task heartbeat notification to the in-memory immediate queue, for Matching to dispatch it and receive a worker response.
+Notifications still queued when it elapses are dropped.
 While any Matching host uses the legacy 1s dispatch buffer, keep this timeout above 1s with enough additional time for dispatch and response delivery.`,
 	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(

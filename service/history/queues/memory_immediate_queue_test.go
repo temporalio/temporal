@@ -61,9 +61,11 @@ func TestMemoryImmediateQueueExpiration(t *testing.T) {
 			}}})
 			await.Rcv(t, started)
 			ran := make(chan struct{}, 1)
+			aborted := make(chan struct{}, 1)
 			q.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{
-				QueueTimeout: tc.timeout,
-				Callback:     func(context.Context) { ran <- struct{}{} },
+				QueueTimeout:  tc.timeout,
+				Callback:      func(context.Context) { ran <- struct{}{} },
+				AbortCallback: func() { aborted <- struct{}{} },
 			}})
 			drained := make(chan struct{}, 1)
 			q.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{Callback: func(context.Context) { drained <- struct{}{} }}})
@@ -71,6 +73,7 @@ func TestMemoryImmediateQueueExpiration(t *testing.T) {
 			close(release)
 			await.Rcv(t, drained)
 			require.Equal(t, tc.wantRun, len(ran) == 1)
+			require.Equal(t, !tc.wantRun, len(aborted) == 1)
 		})
 	}
 }
@@ -85,6 +88,7 @@ func TestMemoryImmediateQueueAdmissionAndShutdown(t *testing.T) {
 	defer second.Stop()
 	first.Start()
 	unexpected := make(chan struct{}, 2)
+	aborted := make(chan struct{}, 2)
 	started := make(chan struct{}, 1)
 	finished := make(chan error, 1)
 	first.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{Callback: func(ctx context.Context) {
@@ -94,14 +98,21 @@ func TestMemoryImmediateQueueAdmissionAndShutdown(t *testing.T) {
 	}}})
 	await.Rcv(t, started)
 	// The pool is shared across shards. Admission returns immediately and drops the second task.
-	second.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{Callback: func(context.Context) { unexpected <- struct{}{} }}})
+	second.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{
+		Callback:      func(context.Context) { unexpected <- struct{}{} },
+		AbortCallback: func() { aborted <- struct{}{} },
+	}})
 	first.Stop()
 	require.ErrorIs(t, await.Rcv(t, finished), context.Canceled)
 	// Stopping a shard prevents later execution even after host capacity becomes available.
-	first.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{Callback: func(context.Context) { unexpected <- struct{}{} }}})
+	first.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{
+		Callback:      func(context.Context) { unexpected <- struct{}{} },
+		AbortCallback: func() { aborted <- struct{}{} },
+	}})
 	pool.InitiateShutdown()
 	pool.WaitShutdown()
 	require.Empty(t, unexpected)
+	require.Len(t, aborted, 2)
 	require.Equal(t, tasks.CategoryMemoryImmediate, first.Category())
 }
 
@@ -124,8 +135,13 @@ func TestMemoryImmediateQueueHostShutdown(t *testing.T) {
 	pool.InitiateShutdown()
 	require.ErrorIs(t, await.Rcv(t, finished), context.Canceled)
 	pool.WaitShutdown()
-	q.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{Callback: func(context.Context) { unexpected <- struct{}{} }}})
+	aborted := make(chan struct{}, 1)
+	q.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{
+		Callback:      func(context.Context) { unexpected <- struct{}{} },
+		AbortCallback: func() { aborted <- struct{}{} },
+	}})
 	require.Empty(t, unexpected)
+	require.Len(t, aborted, 1)
 }
 
 func TestMemoryImmediateQueueZeroCapacity(t *testing.T) {
@@ -136,8 +152,13 @@ func TestMemoryImmediateQueueZeroCapacity(t *testing.T) {
 	q := NewMemoryImmediateQueue(pool, clock.NewRealTimeSource())
 	defer q.Stop()
 	unexpected := make(chan struct{}, 1)
-	q.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{Callback: func(context.Context) { unexpected <- struct{}{} }}})
+	aborted := make(chan struct{}, 1)
+	q.NotifyNewTasks([]tasks.Task{&tasks.MemoryImmediateTask{
+		Callback:      func(context.Context) { unexpected <- struct{}{} },
+		AbortCallback: func() { aborted <- struct{}{} },
+	}})
 	pool.InitiateShutdown()
 	pool.WaitShutdown()
 	require.Empty(t, unexpected)
+	require.Len(t, aborted, 1)
 }

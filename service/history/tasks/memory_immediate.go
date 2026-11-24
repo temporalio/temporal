@@ -14,8 +14,9 @@ type MemoryImmediateTask struct {
 	TaskID              int64
 	VisibilityTimestamp time.Time
 	// QueueTimeout limits time spent waiting for a worker. Nonpositive values disable queue expiration.
-	QueueTimeout time.Duration
-	Callback     func(context.Context)
+	QueueTimeout  time.Duration
+	Callback      func(context.Context)
+	AbortCallback func()
 }
 
 var _ Task = (*MemoryImmediateTask)(nil)
@@ -31,4 +32,8 @@ func (t *MemoryImmediateTask) GetCategory() Category      { return CategoryMemor
 func (t *MemoryImmediateTask) GetType() enumsspb.TaskType { return enumsspb.TASK_TYPE_UNSPECIFIED }
 
 func (t *MemoryImmediateTask) Run(ctx context.Context) { t.Callback(ctx) }
-func (t *MemoryImmediateTask) Abort()                  {}
+func (t *MemoryImmediateTask) Abort() {
+	if t.AbortCallback != nil {
+		t.AbortCallback()
+	}
+}

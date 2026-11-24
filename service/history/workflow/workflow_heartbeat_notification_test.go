@@ -84,6 +84,7 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 		name           string
 		resp           *matchingservice.DispatchNexusTaskResponse
 		err            error
+		dropped        bool
 		expectedResult string
 		expectedLog    string
 	}{
@@ -145,6 +146,11 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			expectedResult: "dispatch_error",
 			expectedLog:    "WHN: Unable to dispatch workflow heartbeat notification",
 		},
+		{
+			name:           "dropped",
+			dropped:        true,
+			expectedResult: "dropped",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
@@ -166,12 +172,20 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			shard.EXPECT().GetEngine(gomock.Any()).Return(engine, nil)
 			engine.EXPECT().NotifyNewTasks(gomock.Any()).Do(func(batch map[tasks.Category][]tasks.Task) {
 				for _, task := range batch[tasks.CategoryMemoryImmediate] {
-					require.Equal(t, 500*time.Millisecond, task.(*tasks.MemoryImmediateTask).QueueTimeout)
-					task.(*tasks.MemoryImmediateTask).Run(context.Background())
+					immediate, ok := task.(*tasks.MemoryImmediateTask)
+					require.True(t, ok)
+					require.Equal(t, 500*time.Millisecond, immediate.QueueTimeout)
+					if tc.dropped {
+						immediate.Abort()
+					} else {
+						immediate.Run(context.Background())
+					}
 				}
 			})
 			delivered := make(chan *matchingservice.DispatchNexusTaskRequest, 1)
-			shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered, resp: tc.resp, err: tc.err}, nil)
+			if !tc.dropped {
+				shard.EXPECT().GetMatchingClient().Return(&whnMatchingClient{delivered: delivered, resp: tc.resp, err: tc.err}, nil)
+			}
 			signaled := enumspb.EventType_name[int32(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)]
 
 			SendWorkflowHeartbeatNotification(context.Background(), shard, &WorkflowHeartbeatNotification{
@@ -182,6 +196,17 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 				inputEventTypeName: signaled,
 			})
 
+			if tc.dropped {
+				results := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationResults.Name())
+				require.Len(t, results, 1)
+				require.Equal(t, map[string]string{
+					"namespace":  "namespace-name",
+					"event_type": signaled,
+					"result":     "dropped",
+				}, results[0].Tags)
+				require.Empty(t, capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationDeliveryLatency.Name()))
+				return
+			}
 			select {
 			case request := <-delivered:
 				require.Equal(t, "namespace-id", request.GetNamespaceId())
@@ -634,6 +659,9 @@ func TestWorkflowHeartbeatNotificationQueueContext(t *testing.T) {
 	go func() { task.Run(queueCtx); finished <- struct{}{} }()
 	dispatchCtx := await.Rcv(t, started)
 	require.NoError(t, dispatchCtx.Err())
+	deadline, ok := dispatchCtx.Deadline()
+	require.True(t, ok)
+	require.WithinDuration(t, time.Now().Add(time.Minute), deadline, 10*time.Second)
 	require.Equal(t, "request metadata", dispatchCtx.Value(key))
 	queueCancel()
 	await.Rcv(t, finished)

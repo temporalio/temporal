@@ -1402,7 +1402,7 @@ var (
 	)
 	WorkflowHeartbeatNotificationResults = NewCounterDef(
 		"workflow_task_heartbeat_notification_results",
-		WithDescription("Results of workflow-heartbeat notification dispatches: the worker's answer, or the dispatch failure or timeout."),
+		WithDescription("Results of workflow-heartbeat notifications: the worker's answer, the dispatch failure or timeout, or dropped before dispatch."),
 	)
 	WorkflowHeartbeatNotificationDeliveryLatency = NewTimerDef(
 		"workflow_task_heartbeat_notification_delivery_latency",

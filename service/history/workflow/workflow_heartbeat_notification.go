@@ -193,6 +193,7 @@ func NewWorkflowHeartbeatNotification(ms historyi.MutableState, inputEventTypeNa
 
 // SendWorkflowHeartbeatNotification submits a best-effort in-memory task after the input transaction succeeds.
 // Admission never waits for a worker. Notifications are dropped when the buffer is full or their queue timeout expires.
+// WorkflowHeartbeatNotificationDispatchTimeout bounds queue wait and dispatch together.
 func SendWorkflowHeartbeatNotification(
 	ctx context.Context,
 	shardCtx historyi.ShardContext,
@@ -206,23 +207,26 @@ func SendWorkflowHeartbeatNotification(
 	cancel()
 	engine, err := shardCtx.GetEngine(lookupCtx)
 	if err != nil {
-		shardCtx.GetLogger().Error("WHN: Unable to get History engine for workflow heartbeat notification", tag.Error(err))
+		shardCtx.GetLogger().Warn("WHN: Unable to get History engine for workflow heartbeat notification", tag.Error(err))
 		return
 	}
 	// Preserve request metadata without retaining its cancellation or deadline after the RPC returns.
 	requestCtx := context.WithoutCancel(ctx)
+	timeout := shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName)
+	deadline := time.Now().Add(timeout)
 	task := &tasks.MemoryImmediateTask{
 		WorkflowKey:  notification.workflowKey,
-		QueueTimeout: shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
+		QueueTimeout: timeout,
 		Callback: func(queueCtx context.Context) {
-			dispatchCtx, cancel := context.WithCancel(requestCtx)
+			dispatchCtx, cancel := context.WithDeadline(requestCtx, deadline)
 			stop := context.AfterFunc(queueCtx, cancel)
 			defer stop()
 			defer cancel()
-			if queueCtx.Err() != nil {
-				return
-			}
 			dispatchWorkflowHeartbeatNotification(dispatchCtx, shardCtx, notification)
+		},
+		AbortCallback: func() {
+			metrics.WorkflowHeartbeatNotificationResults.With(workflowHeartbeatNotificationMetricsHandler(shardCtx, notification)).
+				Record(1, metrics.StringTag("result", "dropped"))
 		},
 	}
 	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{tasks.CategoryMemoryImmediate: {task}})
@@ -252,13 +256,8 @@ func dispatchWorkflowHeartbeatNotification(
 		shardCtx.GetLogger().Error("WHN: Unable to encode workflow heartbeat notification", tag.Error(err))
 		return
 	}
-	matchCtx, matchCancel := context.WithTimeout(
-		ctx,
-		shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
-	)
-	defer matchCancel()
 	dispatchStart := time.Now()
-	resp, err := matchingClient.DispatchNexusTask(matchCtx, &matchingservice.DispatchNexusTaskRequest{
+	resp, err := matchingClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: notification.workflowKey.NamespaceID,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: notification.controlQueue,
@@ -286,10 +285,7 @@ func recordWorkflowHeartbeatNotificationResult(
 	err error,
 	latency time.Duration,
 ) {
-	handler := shardCtx.GetMetricsHandler().WithTags(
-		metrics.NamespaceTag(notification.namespaceName),
-		metrics.EventTypeTag(notification.inputEventTypeName),
-	)
+	handler := workflowHeartbeatNotificationMetricsHandler(shardCtx, notification)
 	metrics.WorkflowHeartbeatNotificationDeliveryLatency.With(handler).Record(latency)
 	var result commonnexus.DispatchResult
 	if err == nil {
@@ -326,6 +322,13 @@ func recordWorkflowHeartbeatNotificationResult(
 			logger.Error("WHN: Worker failed workflow heartbeat notification", tag.Error(workerErr))
 		}
 	}
+}
+
+func workflowHeartbeatNotificationMetricsHandler(shardCtx historyi.ShardContext, notification *WorkflowHeartbeatNotification) metrics.Handler {
+	return shardCtx.GetMetricsHandler().WithTags(
+		metrics.NamespaceTag(notification.namespaceName),
+		metrics.EventTypeTag(notification.inputEventTypeName),
+	)
 }
 
 // workflowHeartbeatNotificationResult reuses the Nexus dispatch outcome tag values for the worker's answer.
