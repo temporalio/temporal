@@ -166,6 +166,7 @@ func TestSendWorkflowHeartbeatNotification(t *testing.T) {
 			shard.EXPECT().GetEngine(gomock.Any()).Return(engine, nil)
 			engine.EXPECT().NotifyNewTasks(gomock.Any()).Do(func(batch map[tasks.Category][]tasks.Task) {
 				for _, task := range batch[tasks.CategoryMemoryImmediate] {
+					require.Equal(t, 500*time.Millisecond, task.(*tasks.MemoryImmediateTask).QueueTimeout)
 					task.(*tasks.MemoryImmediateTask).Run(context.Background())
 				}
 			})

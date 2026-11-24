@@ -173,6 +173,7 @@ type Config struct {
 
 	MemoryTimerProcessorSchedulerWorkerCount   dynamicconfig.TypedSubscribable[int]
 	MemoryImmediateProcessorMaxConcurrentTasks dynamicconfig.IntPropertyFn
+	MemoryImmediateProcessorMaxPendingTasks    dynamicconfig.IntPropertyFn
 
 	// TransferQueueProcessor settings
 	TransferTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -651,6 +652,7 @@ func NewConfig(
 
 		MemoryTimerProcessorSchedulerWorkerCount:   dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
 		MemoryImmediateProcessorMaxConcurrentTasks: dynamicconfig.MemoryImmediateProcessorMaxConcurrentTasks.Get(dc),
+		MemoryImmediateProcessorMaxPendingTasks:    dynamicconfig.MemoryImmediateProcessorMaxPendingTasks.Get(dc),
 
 		TransferTaskBatchSize:                               dynamicconfig.TransferTaskBatchSize.Get(dc),
 		TransferProcessorSchedulerWorkerCount:               dynamicconfig.TransferProcessorSchedulerWorkerCount.Subscribe(dc),

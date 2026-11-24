@@ -1,11 +1,20 @@
 # In-memory immediate history tasks
 
 WHN dispatch uses a host-wide, on-demand goroutine pool, separate from speculative
-Workflow Task timers. Submission does not wait for capacity. Tasks that exceed
-`history.memoryImmediateProcessorMaxConcurrentTasks` are dropped without persistence,
-retry, or rescheduling. The default limit is 512 concurrent tasks. No notifications
-wait in a backlog. Shard shutdown cancels its active tasks; host shutdown cancels
+Workflow Task timers. Submission does not wait for capacity. The default limits are 512 concurrent tasks
+(`history.memoryImmediateProcessorMaxConcurrentTasks`) and 1,024 pending tasks
+(`history.memoryImmediateProcessorMaxPendingTasks`) per host. A full buffer rejects
+new tasks without persistence, retry, or rescheduling. Set the pending limit to zero
+to disable buffering. Shard shutdown cancels its active tasks; host shutdown cancels
 and waits for the pool. Completing the originating RPC does not cancel dispatch.
+
+Each task sets its own `QueueTimeout`. A task that has waited at least that long is
+discarded when dequeued, before its callback runs. Nonpositive values disable queue
+expiration. Expired tasks remain in the bounded buffer until dequeued. WHN takes its
+queue timeout from the namespace
+`history.workflowHeartbeatNotificationDispatchTimeout` setting (600 ms by default).
+Once dispatch begins, the existing dispatch timeout applies separately; queue
+expiration does not cancel an already running task.
 
 The existing `dynamic_worker_pool_scheduler_rejected_tasks` metric, tagged with
 operation `MemoryImmediateQueueProcessor`, counts rejected submissions. Existing WHN
@@ -42,7 +51,7 @@ go test -tags test_dep ./service/history/queues -run '^$' \
 ```
 
 This benchmark exercises the same zero-buffer worker pool with a fixed 300 ms wait
-per accepted task. It offers 1,000 submissions/s for 3,000 submissions. It simulates
+per accepted task. It offers 1,000 submissions/s for 3,000 submissions. Buffering is disabled in this benchmark to isolate concurrency capacity. It simulates
 blocking latency; it does not measure RPC, serialization, persistence, or worker
 execution costs. There is no speculative-task persistence fallback.
 

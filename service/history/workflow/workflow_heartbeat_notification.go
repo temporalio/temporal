@@ -192,7 +192,7 @@ func NewWorkflowHeartbeatNotification(ms historyi.MutableState, inputEventTypeNa
 }
 
 // SendWorkflowHeartbeatNotification submits a best-effort in-memory task after the input transaction succeeds.
-// Admission never waits for a worker. Notifications are dropped when the host's immediate task pool is full.
+// Admission never waits for a worker. Notifications are dropped when the buffer is full or their queue timeout expires.
 func SendWorkflowHeartbeatNotification(
 	ctx context.Context,
 	shardCtx historyi.ShardContext,
@@ -212,7 +212,8 @@ func SendWorkflowHeartbeatNotification(
 	// Preserve request metadata without retaining its cancellation or deadline after the RPC returns.
 	requestCtx := context.WithoutCancel(ctx)
 	task := &tasks.MemoryImmediateTask{
-		WorkflowKey: notification.workflowKey,
+		WorkflowKey:  notification.workflowKey,
+		QueueTimeout: shardCtx.GetConfig().WorkflowHeartbeatNotificationDispatchTimeout(notification.namespaceName),
 		Callback: func(queueCtx context.Context) {
 			dispatchCtx, cancel := context.WithCancel(requestCtx)
 			stop := context.AfterFunc(queueCtx, cancel)

@@ -13,7 +13,9 @@ type MemoryImmediateTask struct {
 	definition.WorkflowKey
 	TaskID              int64
 	VisibilityTimestamp time.Time
-	Callback            func(context.Context)
+	// QueueTimeout limits time spent waiting for a worker. Nonpositive values disable queue expiration.
+	QueueTimeout time.Duration
+	Callback     func(context.Context)
 }
 
 var _ Task = (*MemoryImmediateTask)(nil)

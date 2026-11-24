@@ -849,6 +849,7 @@ func (s *WorkflowHeartbeatNotificationSuite) TestImmediateQueueSaturation() {
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowHeartbeatNotificationRolloutPercent, 100),
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowHeartbeatNotificationDispatchTimeout, 10*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.MemoryImmediateProcessorMaxConcurrentTasks, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MemoryImmediateProcessorMaxPendingTasks, 0),
 	)
 	first := env.Tv()
 	second := first.WithWorkflowIDNumber(2)
