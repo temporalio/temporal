@@ -60,9 +60,6 @@ var (
 	HTTPResponseFaultGeneratorByNamespaceName = newKey[httpfaults.ResponseCallback, namespace.Name]()
 )
 
-// keyID is a unique identifier for a key, used as a map key.
-type keyID = int64
-
 // global is the scope type for global hooks.
 type global struct{}
 
@@ -76,8 +73,3 @@ const (
 	ScopeNamespace ScopeType = iota
 	ScopeGlobal
 )
-
-type Key[T any, S any] struct {
-	id        keyID
-	scopeType ScopeType
-}
