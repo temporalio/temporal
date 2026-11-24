@@ -154,7 +154,7 @@ func (s *MatchingSuite) TestUpdate() {
 	type testcase struct {
 		name      string
 		request   *matchingservice.UpdateNexusEndpointRequest
-		assertion func(*matchingservice.UpdateNexusEndpointResponse, error)
+		assertion func(*MatchingSuite, *matchingservice.UpdateNexusEndpointResponse, error)
 	}
 	testCases := []testcase{
 		{
@@ -174,7 +174,7 @@ func (s *MatchingSuite) TestUpdate() {
 					},
 				},
 			},
-			assertion: func(resp *matchingservice.UpdateNexusEndpointResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.UpdateNexusEndpointResponse, err error) {
 				s.NoError(err)
 				s.NotNil(resp.Entry)
 				s.Equal(int64(2), resp.Entry.Version)
@@ -199,7 +199,7 @@ func (s *MatchingSuite) TestUpdate() {
 					},
 				},
 			},
-			assertion: func(resp *matchingservice.UpdateNexusEndpointResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.UpdateNexusEndpointResponse, err error) {
 				var notFoundErr *serviceerror.NotFound
 				s.ErrorAs(err, &notFoundErr)
 			},
@@ -221,7 +221,7 @@ func (s *MatchingSuite) TestUpdate() {
 					},
 				},
 			},
-			assertion: func(resp *matchingservice.UpdateNexusEndpointResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.UpdateNexusEndpointResponse, err error) {
 				var fpErr *serviceerror.FailedPrecondition
 				s.ErrorAs(err, &fpErr)
 			},
@@ -230,9 +230,9 @@ func (s *MatchingSuite) TestUpdate() {
 
 	matchingClient := env.GetTestCluster().MatchingClient()
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.RunSequential(tc.name, func(s *MatchingSuite) {
 			resp, err := matchingClient.UpdateNexusEndpoint(s.Context(), tc.request)
-			tc.assertion(resp, err)
+			tc.assertion(s, resp, err)
 		})
 	}
 }
@@ -243,13 +243,13 @@ func (s *MatchingSuite) TestDelete() {
 	type testcase struct {
 		name       string
 		endpointID string
-		assertion  func(*matchingservice.DeleteNexusEndpointResponse, error)
+		assertion  func(*MatchingSuite, *matchingservice.DeleteNexusEndpointResponse, error)
 	}
 	testCases := []testcase{
 		{
 			name:       "invalid delete: not found",
 			endpointID: "missing-endpoint",
-			assertion: func(resp *matchingservice.DeleteNexusEndpointResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.DeleteNexusEndpointResponse, err error) {
 				var notFoundErr *serviceerror.NotFound
 				s.ErrorAs(err, &notFoundErr)
 			},
@@ -257,7 +257,7 @@ func (s *MatchingSuite) TestDelete() {
 		{
 			name:       "valid delete",
 			endpointID: endpoint.Id,
-			assertion: func(resp *matchingservice.DeleteNexusEndpointResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.DeleteNexusEndpointResponse, err error) {
 				s.NoError(err)
 			},
 		},
@@ -265,13 +265,13 @@ func (s *MatchingSuite) TestDelete() {
 
 	matchingClient := env.GetTestCluster().MatchingClient()
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.RunSequential(tc.name, func(s *MatchingSuite) {
 			resp, err := matchingClient.DeleteNexusEndpoint(
 				s.Context(),
 				&matchingservice.DeleteNexusEndpointRequest{
 					Id: tc.endpointID,
 				})
-			tc.assertion(resp, err)
+			tc.assertion(s, resp, err)
 		})
 	}
 }
@@ -307,7 +307,7 @@ func (s *MatchingSuite) TestList() {
 	type testcase struct {
 		name      string
 		request   *matchingservice.ListNexusEndpointsRequest
-		assertion func(*matchingservice.ListNexusEndpointsResponse, error)
+		assertion func(*MatchingSuite, *matchingservice.ListNexusEndpointsResponse, error)
 	}
 	testCases := []testcase{
 		{
@@ -318,7 +318,7 @@ func (s *MatchingSuite) TestList() {
 				Wait:                  false,
 				PageSize:              2,
 			},
-			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
 				s.Equal([]byte(endpointsOrdered[2].Id), resp.NextPageToken)
@@ -333,7 +333,7 @@ func (s *MatchingSuite) TestList() {
 				Wait:                  true,
 				PageSize:              3,
 			},
-			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
 				s.ProtoElementsMatch(resp.Entries, endpointsOrdered[0:3])
@@ -347,7 +347,7 @@ func (s *MatchingSuite) TestList() {
 				Wait:                  false,
 				PageSize:              2,
 			},
-			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				var failedPreErr *serviceerror.FailedPrecondition
 				s.ErrorAs(err, &failedPreErr)
 			},
@@ -360,7 +360,7 @@ func (s *MatchingSuite) TestList() {
 				Wait:                  false,
 				PageSize:              2,
 			},
-			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				var failedPreErr *serviceerror.FailedPrecondition
 				s.ErrorAs(err, &failedPreErr)
 			},
@@ -373,7 +373,7 @@ func (s *MatchingSuite) TestList() {
 				Wait:                  false,
 				PageSize:              2,
 			},
-			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
 				s.ProtoEqual(resp.Entries[0], endpointsOrdered[2])
@@ -387,7 +387,7 @@ func (s *MatchingSuite) TestList() {
 				Wait:                  true,
 				PageSize:              2,
 			},
-			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				var invalidErr *serviceerror.InvalidArgument
 				s.ErrorAs(err, &invalidErr)
 			},
@@ -400,7 +400,7 @@ func (s *MatchingSuite) TestList() {
 				Wait:                  true,
 				PageSize:              3,
 			},
-			assertion: func(resp *matchingservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *MatchingSuite, resp *matchingservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion+1, resp.TableVersion)
 				s.NotNil(resp.NextPageToken)
@@ -410,19 +410,23 @@ func (s *MatchingSuite) TestList() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.RunSequential(tc.name, func(s *MatchingSuite) {
 			ctx := s.Context()
-			listReqDone := make(chan struct{})
+			type listResult struct {
+				response *matchingservice.ListNexusEndpointsResponse
+				err      error
+			}
+			results := make(chan listResult, 1)
 			go func() {
-				defer close(listReqDone)
 				resp, err := matchingClient.ListNexusEndpoints(ctx, tc.request) //nolint:revive
-				tc.assertion(resp, err)
+				results <- listResult{response: resp, err: err}
 			}()
 			if tc.request.Wait && tc.request.NextPageToken == nil && tc.request.LastKnownTableVersion != 0 {
-				env.createRandomNexusEndpoint(s.Context(), s.T())
+				env.createNexusEndpoint(ctx, s.T(), env.Tv().NexusEndpointName(), "unused")
 			}
 			select {
-			case <-listReqDone:
+			case result := <-results:
+				tc.assertion(s, result.response, result.err)
 			case <-ctx.Done():
 				s.Fail("timed out waiting for list nexus endpoints request to complete")
 			}
@@ -440,7 +444,7 @@ func (s *OperatorSuite) TestCreate() {
 	type testcase struct {
 		name      string
 		request   *operatorservice.CreateNexusEndpointRequest
-		assertion func(*operatorservice.CreateNexusEndpointResponse, error)
+		assertion func(*OperatorSuite, *operatorservice.CreateNexusEndpointResponse, error)
 	}
 	testCases := []testcase{
 		{
@@ -458,7 +462,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.NoError(err)
 				s.NotNil(resp.Endpoint)
 				s.Equal(int64(1), resp.Endpoint.Version)
@@ -485,7 +489,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				var existsErr *serviceerror.AlreadyExists
 				s.ErrorAs(err, &existsErr)
 			},
@@ -504,7 +508,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "endpoint name not set")
 			},
@@ -524,7 +528,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "endpoint name exceeds length limit")
 			},
@@ -544,7 +548,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "endpoint name must match the regex")
 			},
@@ -563,7 +567,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "target namespace not set")
 			},
@@ -583,7 +587,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				var preCondErr *serviceerror.FailedPrecondition
 				s.ErrorAs(err, &preCondErr)
 			},
@@ -602,7 +606,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "taskQueue is not set")
 			},
@@ -622,7 +626,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "taskQueue length exceeds limit")
 			},
@@ -639,7 +643,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "empty target URL")
 			},
@@ -658,7 +662,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "URL length exceeds limit")
 			},
@@ -677,7 +681,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "invalid target URL: parse")
 			},
@@ -696,7 +700,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "invalid target URL scheme:")
 			},
@@ -719,7 +723,7 @@ func (s *OperatorSuite) TestCreate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.CreateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.CreateNexusEndpointResponse, err error) {
 				s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 				s.ErrorContains(err, "description size exceeds limit of 20000")
 			},
@@ -727,9 +731,9 @@ func (s *OperatorSuite) TestCreate() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.RunSequential(tc.name, func(s *OperatorSuite) {
 			resp, err := env.OperatorClient().CreateNexusEndpoint(s.Context(), tc.request)
-			tc.assertion(resp, err)
+			tc.assertion(s, resp, err)
 		})
 	}
 }
@@ -741,7 +745,7 @@ func (s *OperatorSuite) TestUpdate() {
 	type testcase struct {
 		name      string
 		request   *operatorservice.UpdateNexusEndpointRequest
-		assertion func(*operatorservice.UpdateNexusEndpointResponse, error)
+		assertion func(*OperatorSuite, *operatorservice.UpdateNexusEndpointResponse, error)
 	}
 	testCases := []testcase{
 		{
@@ -761,7 +765,7 @@ func (s *OperatorSuite) TestUpdate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.UpdateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.UpdateNexusEndpointResponse, err error) {
 				s.NoError(err)
 				s.NotNil(resp.Endpoint)
 				s.Equal(int64(2), resp.Endpoint.Version)
@@ -786,7 +790,7 @@ func (s *OperatorSuite) TestUpdate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.UpdateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.UpdateNexusEndpointResponse, err error) {
 				var notFoundErr *serviceerror.NotFound
 				s.ErrorAs(err, &notFoundErr)
 			},
@@ -808,7 +812,7 @@ func (s *OperatorSuite) TestUpdate() {
 					},
 				},
 			},
-			assertion: func(resp *operatorservice.UpdateNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.UpdateNexusEndpointResponse, err error) {
 				var fpErr *serviceerror.FailedPrecondition
 				s.ErrorAs(err, &fpErr)
 			},
@@ -816,9 +820,9 @@ func (s *OperatorSuite) TestUpdate() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.RunSequential(tc.name, func(s *OperatorSuite) {
 			resp, err := env.OperatorClient().UpdateNexusEndpoint(s.Context(), tc.request)
-			tc.assertion(resp, err)
+			tc.assertion(s, resp, err)
 		})
 	}
 }
@@ -829,13 +833,13 @@ func (s *OperatorSuite) TestDelete() {
 	type testcase struct {
 		name      string
 		serviceId string
-		assertion func(*operatorservice.DeleteNexusEndpointResponse, error)
+		assertion func(*OperatorSuite, *operatorservice.DeleteNexusEndpointResponse, error)
 	}
 	testCases := []testcase{
 		{
 			name:      "invalid delete: not found",
 			serviceId: uuid.NewString(),
-			assertion: func(resp *operatorservice.DeleteNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.DeleteNexusEndpointResponse, err error) {
 				var notFoundErr *serviceerror.NotFound
 				s.ErrorAs(err, &notFoundErr)
 			},
@@ -843,21 +847,21 @@ func (s *OperatorSuite) TestDelete() {
 		{
 			name:      "valid delete",
 			serviceId: endpoint.Id,
-			assertion: func(resp *operatorservice.DeleteNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.DeleteNexusEndpointResponse, err error) {
 				s.NoError(err)
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.RunSequential(tc.name, func(s *OperatorSuite) {
 			resp, err := env.OperatorClient().DeleteNexusEndpoint(
 				s.Context(),
 				&operatorservice.DeleteNexusEndpointRequest{
 					Id:      tc.serviceId,
 					Version: 1,
 				})
-			tc.assertion(resp, err)
+			tc.assertion(s, resp, err)
 		})
 	}
 }
@@ -889,7 +893,7 @@ func (s *OperatorSuite) TestList() {
 	type testcase struct {
 		name      string
 		request   *operatorservice.ListNexusEndpointsRequest
-		assertion func(*operatorservice.ListNexusEndpointsResponse, error)
+		assertion func(*OperatorSuite, *operatorservice.ListNexusEndpointsResponse, error)
 	}
 	testCases := []testcase{
 		{
@@ -898,7 +902,7 @@ func (s *OperatorSuite) TestList() {
 				NextPageToken: nil,
 				PageSize:      2,
 			},
-			assertion: func(resp *operatorservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Equal(nextPageToken, resp.NextPageToken)
 				s.ProtoElementsMatch(resp.Endpoints, endpointsOrdered[0:2])
@@ -910,7 +914,7 @@ func (s *OperatorSuite) TestList() {
 				NextPageToken: nextPageToken,
 				PageSize:      2,
 			},
-			assertion: func(resp *operatorservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.ProtoEqual(resp.Endpoints[0], endpointsOrdered[2])
 			},
@@ -918,7 +922,7 @@ func (s *OperatorSuite) TestList() {
 		{
 			name:    "list with no page size",
 			request: &operatorservice.ListNexusEndpointsRequest{},
-			assertion: func(resp *operatorservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.NotEmpty(resp.Endpoints)
 			},
@@ -930,7 +934,7 @@ func (s *OperatorSuite) TestList() {
 				PageSize:      2,
 				Name:          entryToFilter.Spec.Name,
 			},
-			assertion: func(resp *operatorservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Nil(resp.NextPageToken)
 				s.Len(resp.Endpoints, 1)
@@ -944,7 +948,7 @@ func (s *OperatorSuite) TestList() {
 				PageSize:      2,
 				Name:          "missing-endpoint",
 			},
-			assertion: func(resp *operatorservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
 				s.Nil(resp.NextPageToken)
 				s.Empty(resp.Endpoints)
@@ -956,7 +960,7 @@ func (s *OperatorSuite) TestList() {
 				NextPageToken: nil,
 				PageSize:      1005,
 			},
-			assertion: func(resp *operatorservice.ListNexusEndpointsResponse, err error) {
+			assertion: func(s *OperatorSuite, resp *operatorservice.ListNexusEndpointsResponse, err error) {
 				var invalidErr *serviceerror.InvalidArgument
 				s.ErrorAs(err, &invalidErr)
 			},
@@ -964,9 +968,9 @@ func (s *OperatorSuite) TestList() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.RunSequential(tc.name, func(s *OperatorSuite) {
 			resp, err := env.OperatorClient().ListNexusEndpoints(s.Context(), tc.request)
-			tc.assertion(resp, err)
+			tc.assertion(s, resp, err)
 		})
 	}
 }
@@ -978,7 +982,7 @@ func (s *OperatorSuite) TestGet() {
 	type testcase struct {
 		name      string
 		request   *operatorservice.GetNexusEndpointRequest
-		assertion func(*operatorservice.GetNexusEndpointResponse, error)
+		assertion func(*OperatorSuite, *operatorservice.GetNexusEndpointResponse, error)
 	}
 	testCases := []testcase{
 		{
@@ -986,7 +990,7 @@ func (s *OperatorSuite) TestGet() {
 			request: &operatorservice.GetNexusEndpointRequest{
 				Id: endpoint.Id,
 			},
-			assertion: func(response *operatorservice.GetNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, response *operatorservice.GetNexusEndpointResponse, err error) {
 				s.NoError(err)
 				s.Equal(endpoint.Id, response.Endpoint.Id)
 				s.Equal(endpoint.Version, response.Endpoint.Version)
@@ -1001,7 +1005,7 @@ func (s *OperatorSuite) TestGet() {
 			request: &operatorservice.GetNexusEndpointRequest{
 				Id: uuid.NewString(),
 			},
-			assertion: func(response *operatorservice.GetNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, response *operatorservice.GetNexusEndpointResponse, err error) {
 				var notFoundErr *serviceerror.NotFound
 				s.ErrorAs(err, &notFoundErr)
 			},
@@ -1009,16 +1013,16 @@ func (s *OperatorSuite) TestGet() {
 		{
 			name:    "invalid: endpoint ID not set",
 			request: &operatorservice.GetNexusEndpointRequest{},
-			assertion: func(response *operatorservice.GetNexusEndpointResponse, err error) {
+			assertion: func(s *OperatorSuite, response *operatorservice.GetNexusEndpointResponse, err error) {
 				s.ErrorContains(err, "endpoint ID not set")
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.RunSequential(tc.name, func(s *OperatorSuite) {
 			resp, err := env.OperatorClient().GetNexusEndpoint(s.Context(), tc.request)
-			tc.assertion(resp, err)
+			tc.assertion(s, resp, err)
 		})
 	}
 }

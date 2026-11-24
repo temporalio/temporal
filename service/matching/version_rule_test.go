@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
-	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -43,11 +43,11 @@ func mkNewDeleteAssignmentReq(ruleIdx int32, force bool) *workflowservice.Update
 	}
 }
 
-func mkAssignmentRulePersistence(rule *taskqueuepb.BuildIdAssignmentRule, createTs, deleteTs *hlc.Clock) *persistencespb.AssignmentRule {
+func mkAssignmentRulePersistence(rule *taskqueuepb.BuildIdAssignmentRule, createTS, deleteTS *hlc.Clock) *persistencespb.AssignmentRule {
 	return &persistencespb.AssignmentRule{
 		Rule:            rule,
-		CreateTimestamp: createTs,
-		DeleteTimestamp: deleteTs,
+		CreateTimestamp: createTS,
+		DeleteTimestamp: deleteTS,
 	}
 }
 
@@ -84,18 +84,18 @@ func mkNewDeleteRedirectReq(source string) *workflowservice.UpdateWorkerVersioni
 	}
 }
 
-func mkNewCommitBuildIdReq(target string, force bool) *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId {
+func mkNewCommitBuildIDReq(target string, force bool) *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId {
 	return &workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId{
 		TargetBuildId: target,
 		Force:         force,
 	}
 }
 
-func mkRedirectRulePersistence(rule *taskqueuepb.CompatibleBuildIdRedirectRule, createTs, deleteTs *hlc.Clock) *persistencespb.RedirectRule {
+func mkRedirectRulePersistence(rule *taskqueuepb.CompatibleBuildIdRedirectRule, createTS, deleteTS *hlc.Clock) *persistencespb.RedirectRule {
 	return &persistencespb.RedirectRule{
 		Rule:            rule,
-		CreateTimestamp: createTs,
-		DeleteTimestamp: deleteTs,
+		CreateTimestamp: createTS,
+		DeleteTimestamp: deleteTS,
 	}
 }
 
@@ -189,44 +189,44 @@ func TestInsertAssignmentRuleBasic(t *testing.T) {
 	maxRules := 10
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
-	assert.False(t, containsFullyRamped(initialData.GetAssignmentRules()))
+	require.False(t, containsFullyRamped(initialData.GetAssignmentRules()))
 	expected := &persistencespb.VersioningData{AssignmentRules: []*persistencespb.AssignmentRule{}}
 
 	// insert at index 0
 	rule1 := mkAssignmentRuleWithoutRamp("1")
 	data, err := insertAssignmentRule(rule1, initialData, clock, 0, maxRules)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 100), clock, nil))
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	rule2 := mkAssignmentRuleWithoutRamp("2")
 	data, err = insertAssignmentRule(rule2, data, clock, 0, maxRules)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("2", 100), clock, nil))
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	rule3 := mkAssignmentRuleWithoutRamp("3")
 	data, err = insertAssignmentRule(rule3, data, clock, 0, maxRules)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("3", 100), clock, nil))
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	// insert into the middle
 	rule4 := mkAssignmentRuleWithoutRamp("4")
 	data, err = insertAssignmentRule(rule4, data, clock, 2, maxRules)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("4", 100), clock, nil))
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	// insert with a too-big index, it should be at the back
 	rule5 := mkAssignmentRuleWithoutRamp("5")
 	data, err = insertAssignmentRule(rule5, data, clock, 100, maxRules)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules = append(expected.AssignmentRules, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("5", 100), clock, nil))
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	// initial data should be unmodified
-	protoassert.ProtoEqual(t, mkInitialData(0, clock), initialData)
+	protorequire.ProtoEqual(t, mkInitialData(0, clock), initialData)
 }
 
 func TestInsertAssignmentRuleMaxRules(t *testing.T) {
@@ -239,13 +239,12 @@ func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 	// insert 3x --> success
 	for range 3 {
 		data, err = insertAssignmentRule(mkAssignmentRuleWithoutRamp("1"), data, clock, 0, maxRules)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	// insert fourth --> error
 	_, err = insertAssignmentRule(mkAssignmentRuleWithoutRamp("1"), data, clock, 0, maxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
+	require.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
 }
 
 // Test requirement that target id isn't in a version set
@@ -256,20 +255,18 @@ func TestInsertAssignmentRuleInVersionSet(t *testing.T) {
 
 	// target 0 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
 func TestInsertAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data, err := insertRedirectRule(mkRedirectRule("0", "1"), mkInitialData(0, clock), clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// insert 1 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRuleWithRamp("0", 10), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
+	require.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
 func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
@@ -279,8 +276,7 @@ func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
 
 	// insert @ -1 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, -1, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidNegativeIndex, err)
+	require.Equal(t, errInvalidNegativeIndex, err)
 }
 
 func TestInsertAssignmentRuleInvalidRampPercentage(t *testing.T) {
@@ -290,13 +286,11 @@ func TestInsertAssignmentRuleInvalidRampPercentage(t *testing.T) {
 
 	// insert with ramp percent < 0 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRuleWithRamp("0", -1), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	require.Equal(t, errInvalidRampPercentage, err)
 
 	// insert with ramp percent > 100 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRuleWithRamp("0", 101), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	require.Equal(t, errInvalidRampPercentage, err)
 }
 
 func TestReplaceAssignmentRuleBasic(t *testing.T) {
@@ -325,37 +319,37 @@ func TestReplaceAssignmentRuleBasic(t *testing.T) {
 	rule2 := mkAssignmentRuleWithoutRamp("2")
 	clock = hlc.Next(clock, timesource)
 	data, err = replaceAssignmentRule(rule2, data, clock, 2, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules[2].DeleteTimestamp = clock
 	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("2", 100), clock, nil))
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	// [1, 1, 2] --> [0, 1, 2]
 	// [1A, 1A, 2A, 1D] --> [0A, 1D, 1A, 2A, 1D]
 	rule0 := mkAssignmentRuleWithoutRamp("0")
 	clock = hlc.Next(clock, timesource)
 	data, err = replaceAssignmentRule(rule0, data, clock, 0, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules[0].DeleteTimestamp = clock
 	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("0", 100), clock, nil))
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	// [0, 1, 2] --> [0, 11, 2]
 	// [0A, 1D, 1A, 2A, 1D] --> [0A, 1D, 11A, 1D, 2A, 1D]
 	rule11 := mkAssignmentRuleWithoutRamp("11")
 	clock = hlc.Next(clock, timesource)
 	data, err = replaceAssignmentRule(rule11, data, clock, 1, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules[2].DeleteTimestamp = clock
 	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("11", 100), clock, nil))
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	// out-of-bounds indices --> failure
 	_, err = replaceAssignmentRule(rule11, data, clock, 99, false)
-	assert.Error(t, err)
+	require.Error(t, err)
 
-	_, err = replaceAssignmentRule(rule11, data, clock, 99, false)
-	assert.Error(t, err)
+	_, err = replaceAssignmentRule(rule11, data, clock, -1, false)
+	require.Error(t, err)
 }
 
 func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
@@ -369,8 +363,7 @@ func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
 
 	// replace 0 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
 func TestReplaceAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) {
@@ -387,8 +380,7 @@ func TestReplaceAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) 
 
 	// replace with target isSource and ramp < 100 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRuleWithRamp("0", 10), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
+	require.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
 func TestReplaceAssignmentRuleTestRequireFullyRamped(t *testing.T) {
@@ -396,21 +388,17 @@ func TestReplaceAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	var err error
-	data.AssignmentRules = []*persistencespb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 10), clock, nil),
-	}
 
 	// replace fully-ramped rule with partially-ramped rule --> failure
 	data.AssignmentRules = []*persistencespb.AssignmentRule{
 		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithRamp("2", 20), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errRequireFullyRampedAssignmentRule, err)
+	require.Equal(t, errRequireFullyRampedAssignmentRule, err)
 
 	// same as above but with force --> success
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithRamp("4", 20), data, clock, 0, true)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestReplaceAssignmentRuleIndexOutOfBounds(t *testing.T) {
@@ -423,13 +411,11 @@ func TestReplaceAssignmentRuleIndexOutOfBounds(t *testing.T) {
 
 	// replace @ -1 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, -1, false)
-	assert.Error(t, err)
-	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
+	require.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
 
 	// replace @ 1 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 1, false)
-	assert.Error(t, err)
-	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
+	require.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
 }
 
 func TestReplaceAssignmentRuleInvalidRampPercentage(t *testing.T) {
@@ -442,13 +428,11 @@ func TestReplaceAssignmentRuleInvalidRampPercentage(t *testing.T) {
 
 	// replace with ramp percent < 0 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRuleWithRamp("0", -1), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	require.Equal(t, errInvalidRampPercentage, err)
 
 	// replace with ramp percent > 100 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithRamp("0", 101), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	require.Equal(t, errInvalidRampPercentage, err)
 }
 
 func TestDeleteAssignmentRuleBasic(t *testing.T) {
@@ -477,21 +461,21 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 
 	// in-bounds index --> success
 	data, err = deleteAssignmentRule(data, nextClock(), 2, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules[2].DeleteTimestamp = clock
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	data, err = deleteAssignmentRule(data, nextClock(), 0, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expected.AssignmentRules[0].DeleteTimestamp = clock
-	protoassert.ProtoEqual(t, expected, data)
+	protorequire.ProtoEqual(t, expected, data)
 
 	// out-of-bounds index --> failure
 	_, err = deleteAssignmentRule(data, nextClock(), 99, false)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	_, err = deleteAssignmentRule(data, nextClock(), -1, false)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestDeleteAssignmentRuleTestRequireFullyRamped(t *testing.T) {
@@ -499,21 +483,17 @@ func TestDeleteAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	var err error
-	data.AssignmentRules = []*persistencespb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 10), clock, nil),
-	}
 
 	// delete only fully-ramped rule --> failure
 	data.AssignmentRules = []*persistencespb.AssignmentRule{
 		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errRequireFullyRampedAssignmentRule, err)
+	require.Equal(t, errRequireFullyRampedAssignmentRule, err)
 
 	// same as above but with force --> success
 	_, err = deleteAssignmentRule(data, clock, 0, true)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// delete one of two fully-ramped rules --> success
 	data.AssignmentRules = []*persistencespb.AssignmentRule{
@@ -521,7 +501,7 @@ func TestDeleteAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestDeleteAssignmentRuleIndexOutOfBounds(t *testing.T) {
@@ -534,13 +514,11 @@ func TestDeleteAssignmentRuleIndexOutOfBounds(t *testing.T) {
 
 	// delete @ -1 --> failure
 	_, err := deleteAssignmentRule(data, clock, -1, false)
-	assert.Error(t, err)
-	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
+	require.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
 
 	// delete @ 1 --> failure
 	_, err = deleteAssignmentRule(data, clock, 1, false)
-	assert.Error(t, err)
-	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
+	require.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
 }
 
 func TestAddRedirectRuleBasic(t *testing.T) {
@@ -551,29 +529,23 @@ func TestAddRedirectRuleBasic(t *testing.T) {
 
 	rule1 := mkRedirectRule("1", "0")
 	data, err := insertRedirectRule(rule1, initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule1, clock, nil))
-	for _, r := range data.RedirectRules {
-		assert.Contains(t, expectedSet, r)
-	}
+	protorequire.ProtoElementsMatch(t, expectedSet, data.RedirectRules)
 
 	rule2 := mkRedirectRule("2", "0")
 	data, err = insertRedirectRule(rule2, data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule2, clock, nil))
-	for _, r := range data.RedirectRules {
-		assert.Contains(t, expectedSet, r)
-	}
+	protorequire.ProtoElementsMatch(t, expectedSet, data.RedirectRules)
 
 	rule3 := mkRedirectRule("3", "0")
 	data, err = insertRedirectRule(rule3, data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule3, clock, nil))
-	for _, r := range data.RedirectRules {
-		assert.Contains(t, expectedSet, r)
-	}
+	protorequire.ProtoElementsMatch(t, expectedSet, data.RedirectRules)
 
-	protoassert.ProtoEqual(t, mkInitialData(0, clock), initialData)
+	protorequire.ProtoEqual(t, mkInitialData(0, clock), initialData)
 }
 
 func TestAddRedirectRuleMaxRules(t *testing.T) {
@@ -588,13 +560,12 @@ func TestAddRedirectRuleMaxRules(t *testing.T) {
 		src := fmt.Sprintf("%d", i)
 		dst := fmt.Sprintf("%d", i+1)
 		data, err = insertRedirectRule(mkRedirectRule(src, dst), data, clock, maxRules, ignoreMaxUpstreamBuildIDs)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	// insert fourth --> error
 	_, err = insertRedirectRule(mkRedirectRule("10", "20"), data, clock, maxRules, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxRedirectRules(4, maxRules), err)
+	require.Equal(t, errExceedsMaxRedirectRules(4, maxRules), err)
 }
 
 func TestAddRedirectRuleInVersionSet(t *testing.T) {
@@ -605,13 +576,11 @@ func TestAddRedirectRuleInVersionSet(t *testing.T) {
 
 	// insert with source build id "0" --> failure
 	_, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceIsVersionSetMember, err)
+	require.Equal(t, errSourceIsVersionSetMember, err)
 
 	// insert with target build id "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
 func TestAddRedirectRuleSourceIsPartiallyRampedAssignmentRuleTarget(t *testing.T) {
@@ -625,8 +594,7 @@ func TestAddRedirectRuleSourceIsPartiallyRampedAssignmentRuleTarget(t *testing.T
 
 	// insert redirect rule with target 1 --> failure
 	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceIsPartiallyRampedAssignmentRuleTarget, err)
+	require.Equal(t, errSourceIsPartiallyRampedAssignmentRuleTarget, err)
 }
 
 func TestAddRedirectRuleAlreadyExists(t *testing.T) {
@@ -636,12 +604,11 @@ func TestAddRedirectRuleAlreadyExists(t *testing.T) {
 
 	// insert with source build id "0"
 	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// insert with source build id "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("0", "6"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceAlreadyExists("0", "1"), err)
+	require.Equal(t, errSourceAlreadyExists("0", "1"), err)
 }
 
 func TestAddRedirectRuleCreateCycle(t *testing.T) {
@@ -651,17 +618,15 @@ func TestAddRedirectRuleCreateCycle(t *testing.T) {
 
 	// insert with source -> target == "0" -> "0" --> failure
 	_, err := insertRedirectRule(mkRedirectRule("0", "0"), initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	require.Equal(t, errIsCyclic, err)
 
 	// insert with source -> target == "0" -> "1" --> success
 	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// insert with source build id "1" -> "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	require.Equal(t, errIsCyclic, err)
 }
 
 func TestAddRedirectRuleMaxUpstreamBuildIDs(t *testing.T) {
@@ -673,18 +638,17 @@ func TestAddRedirectRuleMaxUpstreamBuildIDs(t *testing.T) {
 	// insert (4->5)
 	// 4 ---> 5
 	data, err := insertRedirectRule(mkRedirectRule("4", "5"), data, clock, ignoreMaxRules, maxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// insert (5->6)
 	// 4 ---> 5 ---> 6
 	data, err = insertRedirectRule(mkRedirectRule("5", "6"), data, clock, ignoreMaxRules, maxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// insert (6->7)
 	// 4 ---> 5 ---> 6 ---> 7
 	_, err = insertRedirectRule(mkRedirectRule("6", "7"), data, clock, ignoreMaxRules, maxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxUpstreamBuildIDs(3, maxUpstreamBuildIDs), err)
+	require.Equal(t, errExceedsMaxUpstreamBuildIDs(3, maxUpstreamBuildIDs), err)
 }
 
 func TestAddRedirectRuleUnversionedTarget(t *testing.T) {
@@ -694,7 +658,7 @@ func TestAddRedirectRuleUnversionedTarget(t *testing.T) {
 
 	// insert (1->"") errors
 	_, err := insertRedirectRule(mkRedirectRule("1", ""), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.ErrorIs(t, err, errUnversionedRedirectRuleTarget)
+	require.ErrorIs(t, err, errUnversionedRedirectRuleTarget)
 }
 
 func TestReplaceRedirectRuleBasic(t *testing.T) {
@@ -713,14 +677,15 @@ func TestReplaceRedirectRuleBasic(t *testing.T) {
 		prevRule := getActiveRedirectRuleBySrc(source, data)
 		rule := mkRedirectRule(source, target)
 		data, err = replaceRedirectRule(rule, data, clock, ignoreMaxUpstreamBuildIDs)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		newActive := getActiveRedirectRuleBySrc(source, data)
-		protoassert.ProtoEqual(t, newActive.GetRule(), rule)
+		protorequire.ProtoEqual(t, rule, newActive.GetRule())
 		deleted := getDeletedRedirectRuleBySrc(source, data)
-		assert.Equal(t, deleted[0].GetRule().GetSourceBuildId(), prevRule.GetRule().GetSourceBuildId())
-		assert.Equal(t, deleted[0].GetRule().GetTargetBuildId(), prevRule.GetRule().GetTargetBuildId())
+		require.Len(t, deleted, 1)
+		require.Equal(t, prevRule.GetRule().GetSourceBuildId(), deleted[0].GetRule().GetSourceBuildId())
+		require.Equal(t, prevRule.GetRule().GetTargetBuildId(), deleted[0].GetRule().GetTargetBuildId())
 		for _, dr := range deleted {
-			assert.GreaterOrEqual(t, newActive.GetCreateTimestamp().GetWallClock(), dr.GetDeleteTimestamp().GetWallClock())
+			require.GreaterOrEqual(t, newActive.GetCreateTimestamp().GetWallClock(), dr.GetDeleteTimestamp().GetWallClock())
 		}
 	}
 
@@ -743,8 +708,7 @@ func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 
 	// replace with target 0 --> failure
 	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
 func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
@@ -759,20 +723,16 @@ func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
 	var err error
 
 	_, err = replaceRedirectRule(mkRedirectRule("0", "0"), data, clock, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	require.Equal(t, errIsCyclic, err)
 
 	_, err = replaceRedirectRule(mkRedirectRule("2", "0"), data, clock, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	require.Equal(t, errIsCyclic, err)
 
 	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	require.Equal(t, errIsCyclic, err)
 
 	_, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	require.Equal(t, errIsCyclic, err)
 }
 
 func TestReplaceRedirectRuleMaxUpstreamBuildIDs(t *testing.T) {
@@ -791,13 +751,12 @@ func TestReplaceRedirectRuleMaxUpstreamBuildIDs(t *testing.T) {
 	// replace(2, new_target=1)
 	// 2 ---> 1, 4 ---> 5 ---> 6
 	data, err := replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, maxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// replace(2, new_target=4)
 	// 2 ---> 4 ---> 5 ---> 6
 	_, err = replaceRedirectRule(mkRedirectRule("2", "4"), data, clock, maxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxUpstreamBuildIDs(3, maxUpstreamBuildIDs), err)
+	require.Equal(t, errExceedsMaxUpstreamBuildIDs(3, maxUpstreamBuildIDs), err)
 }
 
 func TestReplaceRedirectRuleUnversionedTarget(t *testing.T) {
@@ -807,11 +766,11 @@ func TestReplaceRedirectRuleUnversionedTarget(t *testing.T) {
 
 	// insert (1->2) so that we can replace
 	data, err := insertRedirectRule(mkRedirectRule("1", "2"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// replace (1->"") errors
 	_, err = replaceRedirectRule(mkRedirectRule("1", ""), data, clock, ignoreMaxUpstreamBuildIDs)
-	assert.ErrorIs(t, err, errUnversionedRedirectRuleTarget)
+	require.ErrorIs(t, err, errUnversionedRedirectRuleTarget)
 }
 
 func TestReplaceRedirectRuleNotFound(t *testing.T) {
@@ -822,8 +781,7 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rules to replace
 	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceNotFound("1"), err)
+	require.Equal(t, errSourceNotFound("1"), err)
 
 	data.RedirectRules = []*persistencespb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("0", "1"), clock, nil),
@@ -831,8 +789,7 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 
 	// fails because source doesnt exist
 	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, ignoreMaxUpstreamBuildIDs)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceNotFound("1"), err)
+	require.Equal(t, errSourceNotFound("1"), err)
 }
 
 func TestDeleteRedirectRuleBasic(t *testing.T) {
@@ -849,21 +806,21 @@ func TestDeleteRedirectRuleBasic(t *testing.T) {
 
 	clock1 := hlc.Next(clock, timesource)
 	data, err = deleteRedirectRule("1", data, clock1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	deleted := getDeletedRedirectRuleBySrc("1", data)
-	assert.Equal(t, 1, len(deleted))
-	assert.Equal(t, clock1.GetWallClock(), deleted[0].GetDeleteTimestamp().GetWallClock())
-	assert.Equal(t, "1", deleted[0].GetRule().GetSourceBuildId())
-	assert.Equal(t, "2", deleted[0].GetRule().GetTargetBuildId())
+	require.Len(t, deleted, 1)
+	require.Equal(t, clock1.GetWallClock(), deleted[0].GetDeleteTimestamp().GetWallClock())
+	require.Equal(t, "1", deleted[0].GetRule().GetSourceBuildId())
+	require.Equal(t, "2", deleted[0].GetRule().GetTargetBuildId())
 
 	clock2 := hlc.Next(clock1, timesource)
 	data, err = deleteRedirectRule("2", data, clock2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	deleted = getDeletedRedirectRuleBySrc("2", data)
-	assert.Equal(t, 1, len(deleted))
-	assert.Equal(t, clock2.GetWallClock(), deleted[0].GetDeleteTimestamp().GetWallClock())
-	assert.Equal(t, "2", deleted[0].GetRule().GetSourceBuildId())
-	assert.Equal(t, "3", deleted[0].GetRule().GetTargetBuildId())
+	require.Len(t, deleted, 1)
+	require.Equal(t, clock2.GetWallClock(), deleted[0].GetDeleteTimestamp().GetWallClock())
+	require.Equal(t, "2", deleted[0].GetRule().GetSourceBuildId())
+	require.Equal(t, "3", deleted[0].GetRule().GetTargetBuildId())
 }
 
 func TestDeleteRedirectRuleNotFound(t *testing.T) {
@@ -873,8 +830,7 @@ func TestDeleteRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rules to delete
 	_, err := deleteRedirectRule("1", data, clock)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceNotFound("1"), err)
+	require.Equal(t, errSourceNotFound("1"), err)
 
 	// insert a rule to replace
 	data.RedirectRules = []*persistencespb.RedirectRule{
@@ -883,8 +839,7 @@ func TestDeleteRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rule with that source
 	_, err = deleteRedirectRule("1", data, clock)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceNotFound("1"), err)
+	require.Equal(t, errSourceNotFound("1"), err)
 }
 
 func TestGetWorkerVersioningRules(t *testing.T) {
@@ -909,27 +864,27 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 	// Call list successfully
 	dummyClock := hlc.Zero(99) // used to generate conflict token, but not in this test
 	resp, err := GetTimestampedWorkerVersioningRules(data, dummyClock)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// check assignment rules
 	assignmentRules := resp.GetResponse().GetAssignmentRules()
-	assert.Equal(t, 3, len(assignmentRules))
-	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+	require.Len(t, assignmentRules, 3)
+	protorequire.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
 		Rule:       mkAssignmentRuleWithoutRamp("1"),
 		CreateTime: hlc.ProtoTimestamp(clock1),
 	}, assignmentRules[0])
-	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+	protorequire.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
 		Rule:       mkAssignmentRuleWithoutRamp("10"),
 		CreateTime: hlc.ProtoTimestamp(clock2),
 	}, assignmentRules[1])
-	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+	protorequire.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
 		Rule:       mkAssignmentRuleWithoutRamp("100"),
 		CreateTime: hlc.ProtoTimestamp(clock2),
 	}, assignmentRules[2])
 
 	// check redirect rules, no ordering guarantee
 	redirectRules := resp.GetResponse().GetCompatibleRedirectRules()
-	assert.Equal(t, 3, len(redirectRules))
+	require.Len(t, redirectRules, 3)
 	contains := func(expected *taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) bool {
 		for _, r := range redirectRules {
 			if proto.Equal(expected, r) {
@@ -938,19 +893,19 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 		}
 		return false
 	}
-	assert.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+	require.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
 		Rule:       mkRedirectRule("1", "2"),
 		CreateTime: hlc.ProtoTimestamp(clock1),
 	}))
-	assert.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+	require.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
 		Rule:       mkRedirectRule("3", "4"),
 		CreateTime: hlc.ProtoTimestamp(clock2),
 	}))
-	assert.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+	require.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
 		Rule:       mkRedirectRule("4", "5"),
 		CreateTime: hlc.ProtoTimestamp(clock2),
 	}))
-	assert.False(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+	require.False(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
 		Rule:       mkRedirectRule("4", "6"),
 		CreateTime: hlc.ProtoTimestamp(clock1),
 	}))
@@ -968,28 +923,28 @@ func TestCleanupRedirectRuleTombstones(t *testing.T) {
 	rule1 := mkRedirectRule("1", "10")
 	clock1 := hlc.Next(clock, timesource)
 	data, err := insertRedirectRule(rule1, initialData, clock1, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	rule2 := mkRedirectRule("2", "10")
 	data, err = insertRedirectRule(rule2, data, clock1, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	rule3 := mkRedirectRule("3", "10")
 	data, err = insertRedirectRule(rule3, data, clock1, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// delete "now," ~1 hour ago
 	clock4 := hlc.Next(clock, timesource)
 	data, err = deleteRedirectRule("1", data, clock4)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// delete 35 min later, ~25 min ago
 	timesource.Advance(35 * time.Minute)
 	clock5 := hlc.Next(clock, timesource)
 	data, err = deleteRedirectRule("2", data, clock5)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// delete 25 min later, ~now (real time.Now())
 	timesource.Advance(25 * time.Minute)
 	clock6 := hlc.Next(clock, timesource)
 	data, err = deleteRedirectRule("3", data, clock6)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Remove data that was deleted > 30 min ago --> remove first rule
 	data = CleanupRuleTombstones(data, 30*time.Minute)
@@ -997,9 +952,9 @@ func TestCleanupRedirectRuleTombstones(t *testing.T) {
 	for _, r := range data.GetRedirectRules() {
 		sources = append(sources, r.GetRule().GetSourceBuildId())
 	}
-	assert.NotContains(t, sources, "1")
-	assert.Contains(t, sources, "2")
-	assert.Contains(t, sources, "3")
+	require.NotContains(t, sources, "1")
+	require.Contains(t, sources, "2")
+	require.Contains(t, sources, "3")
 
 	// Remove data that was deleted > 5 min ago --> remove second rule
 	data = CleanupRuleTombstones(data, 5*time.Minute)
@@ -1007,9 +962,9 @@ func TestCleanupRedirectRuleTombstones(t *testing.T) {
 	for _, r := range data.GetRedirectRules() {
 		sources = append(sources, r.GetRule().GetSourceBuildId())
 	}
-	assert.NotContains(t, sources, "1")
-	assert.NotContains(t, sources, "2")
-	assert.Contains(t, sources, "3")
+	require.NotContains(t, sources, "1")
+	require.NotContains(t, sources, "2")
+	require.Contains(t, sources, "3")
 }
 
 func TestCommitBuildIDBasic(t *testing.T) {
@@ -1034,9 +989,9 @@ func TestCommitBuildIDBasic(t *testing.T) {
 	}
 	var err error
 
-	data, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), true, ignoreMaxRules)
-	assert.NoError(t, err)
-	protoassert.ProtoEqual(t, expected, data)
+	data, err = CommitBuildID(clock2, data, mkNewCommitBuildIDReq("10", false), true, ignoreMaxRules)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, expected, data)
 
 	// make sure multiple commits are idempotent except for timestamps
 	clock3 := hlc.Next(clock2, timesource)
@@ -1049,9 +1004,9 @@ func TestCommitBuildIDBasic(t *testing.T) {
 			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("10", 100), clock3, nil),
 		},
 	}
-	data, err = CommitBuildID(clock3, data, mkNewCommitBuildIdReq("10", false), true, ignoreMaxRules)
-	assert.NoError(t, err)
-	protoassert.ProtoEqual(t, expected, data)
+	data, err = CommitBuildID(clock3, data, mkNewCommitBuildIDReq("10", false), true, ignoreMaxRules)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, expected, data)
 }
 
 func TestCommitBuildIDNoRecentPoller(t *testing.T) {
@@ -1070,13 +1025,12 @@ func TestCommitBuildIDNoRecentPoller(t *testing.T) {
 	var err error
 
 	// without force --> fail
-	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), false, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errNoRecentPollerOnCommitVersion("10"), err)
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIDReq("10", false), false, ignoreMaxRules)
+	require.Equal(t, errNoRecentPollerOnCommitVersion("10"), err)
 
 	// with force --> success
-	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", true), false, ignoreMaxRules)
-	assert.NoError(t, err)
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIDReq("10", true), false, ignoreMaxRules)
+	require.NoError(t, err)
 }
 
 func TestCommitBuildIDInVersionSet(t *testing.T) {
@@ -1093,9 +1047,8 @@ func TestCommitBuildIDInVersionSet(t *testing.T) {
 	var err error
 
 	// with target 0 --> fail
-	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("0", false), true, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIDReq("0", false), true, ignoreMaxRules)
+	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
 func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
@@ -1114,9 +1067,8 @@ func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
 	var err error
 
 	// commit a new target, no rules to be deleted --> fail
-	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("1000", false), true, maxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIDReq("1000", false), true, maxRules)
+	require.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
 }
 
 /*
@@ -1165,40 +1117,40 @@ func TestFindTerminalBuildId(t *testing.T) {
 		|
 		5 <------ 3 <------ 4
 	*/
-	createTs := hlc.Zero(1)
+	createTS := hlc.Zero(1)
 
 	redirectRules := []*persistencespb.RedirectRule{
-		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTS, nil),
 	}
 
-	assert.Equal(t, "10", findTerminalBuildId("1", redirectRules))
-	assert.Equal(t, "10", findTerminalBuildId("2", redirectRules))
-	assert.Equal(t, "10", findTerminalBuildId("3", redirectRules))
-	assert.Equal(t, "10", findTerminalBuildId("4", redirectRules))
-	assert.Equal(t, "10", findTerminalBuildId("5", redirectRules))
-	assert.Equal(t, "10", findTerminalBuildId("10", redirectRules))
+	require.Equal(t, "10", findTerminalBuildId("1", redirectRules))
+	require.Equal(t, "10", findTerminalBuildId("2", redirectRules))
+	require.Equal(t, "10", findTerminalBuildId("3", redirectRules))
+	require.Equal(t, "10", findTerminalBuildId("4", redirectRules))
+	require.Equal(t, "10", findTerminalBuildId("5", redirectRules))
+	require.Equal(t, "10", findTerminalBuildId("10", redirectRules))
 
 	// empty rule set
-	assert.Equal(t, "11", findTerminalBuildId("11", []*persistencespb.RedirectRule{}))
+	require.Equal(t, "11", findTerminalBuildId("11", []*persistencespb.RedirectRule{}))
 
 	// single rule
 	redirectRules = []*persistencespb.RedirectRule{
-		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTS, nil),
 	}
-	assert.Equal(t, "2", findTerminalBuildId("1", redirectRules))
-	assert.Equal(t, "2", findTerminalBuildId("2", redirectRules))
+	require.Equal(t, "2", findTerminalBuildId("1", redirectRules))
+	require.Equal(t, "2", findTerminalBuildId("2", redirectRules))
 
 	// cyclic rule set
 	redirectRules = []*persistencespb.RedirectRule{
-		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTS, nil),
 	}
-	assert.Equal(t, "", findTerminalBuildId("1", redirectRules))
-	assert.Equal(t, "", findTerminalBuildId("2", redirectRules))
+	require.Empty(t, findTerminalBuildId("1", redirectRules))
+	require.Empty(t, findTerminalBuildId("2", redirectRules))
 }
 
 func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
@@ -1214,21 +1166,21 @@ func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
 		|
 		5 <------ 3 <------ 4
 	*/
-	createTs := hlc.Zero(1)
+	createTS := hlc.Zero(1)
 
 	redirectRules := []*persistencespb.RedirectRule{
-		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTS, nil),
 	}
 
 	expectedUpstreamBuildIds := []string{"2", "5", "3", "4"}
 	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules)
 	slices.Sort(expectedUpstreamBuildIds)
 	slices.Sort(upstreamBuildIds)
-	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
+	require.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
 }
 
 func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
@@ -1241,19 +1193,19 @@ func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
 		|         v
 		5 <------ 3 ------> 4
 	*/
-	createTs := hlc.Zero(1)
+	createTS := hlc.Zero(1)
 	redirectRules := []*persistencespb.RedirectRule{
-		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTS, nil),
 	}
 	expectedUpstreamBuildIds := []string{"5", "3", "2"}
 	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules)
 	slices.Sort(expectedUpstreamBuildIds)
 	slices.Sort(upstreamBuildIds)
-	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
+	require.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
 
 	/*
 		e.g.
@@ -1264,15 +1216,15 @@ func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
 		5 <------ 3 ------> 4
 	*/
 	redirectRules = []*persistencespb.RedirectRule{
-		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("4", "2"), createTs, nil),
-		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "2"), createTS, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTS, nil),
 	}
 	expectedUpstreamBuildIds = []string{"5", "3", "2", "4"}
 	upstreamBuildIds = getUpstreamBuildIds("1", redirectRules)
 	slices.Sort(expectedUpstreamBuildIds)
 	slices.Sort(upstreamBuildIds)
-	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
+	require.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
 }

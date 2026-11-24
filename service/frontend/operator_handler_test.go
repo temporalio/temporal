@@ -24,7 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
@@ -34,6 +34,7 @@ import (
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.uber.org/mock/gomock"
 	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 )
 
@@ -77,6 +78,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 	args := NewOperatorHandlerImplArgs{
 		&Config{NumHistoryShards: 4},
 		s.mockResource.Logger,
+		nil,
 		s.mockResource.GetSDKClientFactory(),
 		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetVisibilityManager(),
@@ -163,7 +165,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeNames:                []string{elasticsearch.PersistenceName},
+			storeNames:                []string{esconfig.PersistenceName},
 			getSearchAttributesCalled: true,
 			getSearchAttributesErr:    errors.New("mock error get search attributes"),
 			expectedErrMsg:            "mock error get search attributes",
@@ -175,7 +177,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeNames:                []string{elasticsearch.PersistenceName},
+			storeNames:                []string{esconfig.PersistenceName},
 			indexName:                 testIndexName,
 			getSearchAttributesCalled: true,
 			addInternalSuccess:        true,
@@ -189,7 +191,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(tc.indexName).AnyTimes()
 
 			saTypeMap := searchattribute.TestNameTypeMap()
-			if len(tc.storeNames) > 0 && tc.storeNames[0] == elasticsearch.PersistenceName {
+			if len(tc.storeNames) > 0 && tc.storeNames[0] == esconfig.PersistenceName {
 				saTypeMap = searchattribute.TestEsNameTypeMap()
 			}
 
@@ -289,7 +291,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 
 			testIndexName1 := testIndexName + "-1"
 			testIndexName2 := testIndexName + "-2"
-			mockVisManager1.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+			mockVisManager1.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName}).AnyTimes()
 			mockVisManager1.EXPECT().GetIndexName().Return(testIndexName1).AnyTimes()
 			mockVisManager2.EXPECT().GetStoreNames().Return([]string{mysql.PluginName}).AnyTimes()
 			mockVisManager2.EXPECT().GetIndexName().Return(testIndexName2).AnyTimes()
@@ -357,8 +359,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 		addEsCalled            bool
 		addEsSchemaErr         error
 		addEsMetadataErr       error
-		addSqlCalled           bool
-		addSqlErr              error
+		addSQLCalled           bool
+		addSQLErr              error
 		expectedErrMsg         string
 	}{
 		{
@@ -368,7 +370,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:              elasticsearch.PersistenceName,
+			storeName:              esconfig.PersistenceName,
 			indexName:              testIndexName,
 			getSearchAttributesErr: errors.New("mock error get search attributes"),
 			expectedErrMsg:         "Unable to get search attributes: mock error get search attributes",
@@ -380,7 +382,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:      elasticsearch.PersistenceName,
+			storeName:      esconfig.PersistenceName,
 			indexName:      testIndexName,
 			addEsCalled:    true,
 			addEsSchemaErr: errors.New("mock error add es schema"),
@@ -393,7 +395,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:        elasticsearch.PersistenceName,
+			storeName:        esconfig.PersistenceName,
 			indexName:        testIndexName,
 			addEsCalled:      true,
 			addEsMetadataErr: errors.New("mock error add es metadata"),
@@ -406,7 +408,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:      elasticsearch.PersistenceName,
+			storeName:      esconfig.PersistenceName,
 			indexName:      testIndexName,
 			addEsCalled:    true,
 			expectedErrMsg: "",
@@ -421,8 +423,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 			},
 			storeName:      mysql.PluginName,
 			indexName:      testIndexName,
-			addSqlCalled:   true,
-			addSqlErr:      errors.New("mock error add sql mapping"),
+			addSQLCalled:   true,
+			addSQLErr:      errors.New("mock error add sql mapping"),
 			expectedErrMsg: "mock error add sql mapping",
 		},
 		{
@@ -435,7 +437,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 			},
 			storeName:      mysql.PluginName,
 			indexName:      testIndexName,
-			addSqlCalled:   true,
+			addSQLCalled:   true,
 			expectedErrMsg: "",
 		},
 	}
@@ -443,7 +445,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			saTypeMap := searchattribute.TestNameTypeMap()
-			if tc.storeName == elasticsearch.PersistenceName {
+			if tc.storeName == esconfig.PersistenceName {
 				saTypeMap = searchattribute.TestEsNameTypeMap()
 			}
 
@@ -468,7 +470,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 				}
 			}
 
-			if tc.addSqlCalled {
+			if tc.addSQLCalled {
 				s.mockResource.ClientFactory.EXPECT().
 					NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
 					Return(nil, s.mockResource.GetFrontendClient(), nil)
@@ -489,7 +491,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 
 				s.mockResource.FrontendClient.EXPECT().
 					UpdateNamespace(gomock.Any(), gomock.Any()).
-					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addSqlErr)
+					Return(&workflowservice.UpdateNamespaceResponse{}, tc.addSQLErr)
 			}
 
 			err := s.handler.addSearchAttributesInternal(ctx, tc.request, s.mockResource.VisibilityManager)
@@ -821,16 +823,16 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_Elasticsearch() {
 	ctx := context.Background()
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(esconfig.PersistenceName).Return(true)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestEsNameTypeMap(), nil)
 	resp, err := handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.NotNil(resp)
 
 	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.NameTypeMap{}, errors.New("random error"))
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
-	s.Error(err)
+	s.Require().Error(err)
 	s.Nil(resp)
 }
 
@@ -838,7 +840,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 	handler := s.handler
 	ctx := context.Background()
 
-	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(false)
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(esconfig.PersistenceName).Return(false)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.ClientFactory.EXPECT().
 		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
@@ -913,7 +915,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_Elasticsearch() {
 	for _, testCase := range testCases {
 		s.Run(testCase.Name, func() {
 			saTypeMap := searchattribute.TestEsNameTypeMap()
-			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName, true).
@@ -1144,7 +1146,12 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
-	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {ClusterID: "cluster-id", Enabled: true, ReplicationEnabled: true},
+	})
 	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
@@ -1153,10 +1160,17 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationRemoved, details["mutation"])
+	s.Equal("cluster-id", details["remote_cluster_id"])
 }
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(false)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
 	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
@@ -1166,10 +1180,49 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.Error(err)
+	s.Empty(eventLogger.records)
+}
+
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_PanicEmitsFailure() {
+	clusterName := "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("test panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
+}
+
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_EventEmissionPanicCaptured() {
+	clusterName := "cluster"
+	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("handler panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "event logger panic")
 }
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	// The namespace lists both the current cluster and the cluster being
 	// removed, so removing clusterName would sever a link the current cluster
 	// relies on -> blocked.
@@ -1189,6 +1242,10 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace
 	var failedPrecondition *serviceerror.FailedPrecondition
 	s.Require().ErrorAs(err, &failedPrecondition)
 	s.Contains(err.Error(), "global-ns")
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.NotNil(details["cached_before"])
+	s.NotContains(details, "persistence_request")
 }
 
 // Test_RemoveRemoteCluster_OrphanedNamespaceDoesNotBlock covers the case that
@@ -1340,6 +1397,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -1377,6 +1437,13 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationCreated, details["mutation"])
+	s.Equal(remoteClusterTransitionInitializedDisabled, details["requested_connection_transition"])
+	s.Equal(remoteClusterTransitionInitializedDisabled, details["requested_replication_transition"])
+	s.Nil(details["persisted_before"])
+	s.NotNil(details["persistence_request"])
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ClusterNameConflict() {
@@ -1595,6 +1662,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Emp
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error() {
 	var rpcAddress = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockResource.RemoteAdminClient,
@@ -1605,12 +1675,67 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Err
 	)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Unavailable", details["error_code"])
+	s.NotContains(details, "persisted_before")
+	s.NotContains(details, "persistence_request")
+}
+
+func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_PanicEmitsFailure() {
+	rpcAddress := uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockResource.RemoteAdminClient,
+	)
+	s.mockResource.RemoteAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("test panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
+}
+
+func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_EventEmissionPanicCaptured() {
+	rpcAddress := uuid.NewString()
+	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockResource.RemoteAdminClient,
+	)
+	s.mockResource.RemoteAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("handler panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "event logger panic")
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Error() {
 	var rpcAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -1632,6 +1757,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_
 	)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.NotContains(details, "persisted_before")
+	s.NotContains(details, "persistence_request")
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Error() {
@@ -1683,6 +1811,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -1721,4 +1852,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterMutationCreated, details["mutation"])
+	s.NotNil(details["persistence_request"])
 }

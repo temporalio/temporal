@@ -14,8 +14,8 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/nexusworkflowref"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -68,6 +68,8 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 
 	notFound := serviceerror.NewNotFound("operation not found")
 	internalErr := serviceerror.NewInternal("boom")
+	primaryNotFound := serviceerror.NewNotFound("primary framework: operation not found")
+	fallbackNotFound := serviceerror.NewNotFound("fallback framework: operation not found")
 
 	testCases := []struct {
 		name string
@@ -75,7 +77,8 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 		chasmDisabled bool
 		token         func(t *testing.T) *tokenspb.NexusOperationCompletion
 		setupClient   func(t *testing.T, client *historyservicemock.MockHistoryServiceClient)
-		wantErr       bool
+		// wantErr is the exact error completeOperation must return; nil expects success.
+		wantErr error
 	}{
 		{
 			name:  "HSM primary succeeds, no fallback",
@@ -123,7 +126,7 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 			setupClient: func(t *testing.T, client *historyservicemock.MockHistoryServiceClient) {
 				client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).Return(nil, notFound)
 			},
-			wantErr: true,
+			wantErr: notFound,
 		},
 		{
 			name: "no fallback when token has no request ID",
@@ -135,7 +138,7 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 			setupClient: func(t *testing.T, client *historyservicemock.MockHistoryServiceClient) {
 				client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).Return(nil, notFound)
 			},
-			wantErr: true,
+			wantErr: notFound,
 		},
 		{
 			name:  "no fallback on non-NotFound error",
@@ -143,18 +146,40 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 			setupClient: func(t *testing.T, client *historyservicemock.MockHistoryServiceClient) {
 				client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).Return(nil, internalErr)
 			},
-			wantErr: true,
+			wantErr: internalErr,
 		},
 		{
-			name:  "both frameworks NotFound returns NotFound",
+			name:  "both frameworks NotFound returns the error from initial lookup (HSM Completion Token)",
 			token: func(*testing.T) *tokenspb.NexusOperationCompletion { return hsmCompletionToken() },
 			setupClient: func(t *testing.T, client *historyservicemock.MockHistoryServiceClient) {
 				gomock.InOrder(
-					client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).Return(nil, notFound),
-					client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).Return(nil, notFound),
+					client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).Return(nil, primaryNotFound),
+					client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).Return(nil, fallbackNotFound),
 				)
 			},
-			wantErr: true,
+			wantErr: primaryNotFound,
+		},
+		{
+			name:  "both frameworks NotFound returns the error from initial lookup (CHASM Completion Token)",
+			token: chasmCompletionToken,
+			setupClient: func(t *testing.T, client *historyservicemock.MockHistoryServiceClient) {
+				gomock.InOrder(
+					client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).Return(nil, primaryNotFound),
+					client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).Return(nil, fallbackNotFound),
+				)
+			},
+			wantErr: primaryNotFound,
+		},
+		{
+			name:  "initial lookup NotFound with fallback non-NotFound returns error from fallback",
+			token: func(*testing.T) *tokenspb.NexusOperationCompletion { return hsmCompletionToken() },
+			setupClient: func(t *testing.T, client *historyservicemock.MockHistoryServiceClient) {
+				gomock.InOrder(
+					client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).Return(nil, primaryNotFound),
+					client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).Return(nil, internalErr),
+				)
+			},
+			wantErr: internalErr,
 		},
 	}
 
@@ -168,11 +193,38 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 			req := &nexusrpc.CompletionRequest{State: nexus.OperationStateSucceeded, OperationToken: "operation-token"}
 
 			err := h.completeOperation(context.Background(), log.NewNoopLogger(), tc.token(t), &commonpb.Payload{}, req, nil, !tc.chasmDisabled)
-			if tc.wantErr {
-				require.Error(t, err)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
 			} else {
 				require.NoError(t, err)
 			}
 		})
 	}
+}
+
+// TestCompleteChasmOperation_CanceledBareFailure guards bare canceled failures
+// on the CHASM async completion path.
+func TestCompleteChasmOperation_CanceledBareFailure(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+	var captured *historyservice.CompleteNexusOperationChasmRequest
+	client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *historyservice.CompleteNexusOperationChasmRequest, _ ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+			captured = req
+			return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+		})
+
+	h := &nexusCompletionHandler{HistoryClient: client}
+	req := &nexusrpc.CompletionRequest{
+		State: nexus.OperationStateCanceled,
+		Error: &nexus.OperationError{
+			State:           nexus.OperationStateCanceled,
+			OriginalFailure: &nexus.Failure{Message: "operation canceled"},
+		},
+	}
+	require.NoError(t, h.completeChasmOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, req, nil))
+	require.NotNil(t, captured.GetFailure().GetCanceledFailureInfo(),
+		"bare canceled failures must carry CanceledFailureInfo")
 }

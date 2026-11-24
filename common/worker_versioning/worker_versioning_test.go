@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1143,6 +1144,94 @@ func TestValidateVersioningOverrideStructure(t *testing.T) {
 				require.ErrorContains(t, err, tt.errorContains)
 			} else {
 				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateVersioningOverride(t *testing.T) {
+	const maxIDLengthLimit = 1000
+	validVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-id",
+	}
+
+	tests := []struct {
+		name          string
+		override      *workflowpb.VersioningOverride
+		errorContains string
+	}{
+		{
+			name: "pinned",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  validVersion,
+					},
+				},
+			},
+		},
+		{
+			name: "pinned empty deployment",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  &deploymentpb.WorkerDeploymentVersion{BuildId: "test-build-id"},
+					},
+				},
+			},
+			errorContains: "WorkerDeploymentName cannot be empty",
+		},
+		{
+			name: "pinned invalid deployment",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version: &deploymentpb.WorkerDeploymentVersion{
+							DeploymentName: "invalid:deployment",
+							BuildId:        "test-build-id",
+						},
+					},
+				},
+			},
+			errorContains: "worker deployment name cannot contain ':'",
+		},
+		{
+			name: "one-time",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: validVersion,
+					},
+				},
+			},
+		},
+		{
+			name: "one-time oversized build ID",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+							DeploymentName: "test-deployment",
+							BuildId:        strings.Repeat("a", maxIDLengthLimit),
+						},
+					},
+				},
+			},
+			errorContains: "size of BuildID larger than the maximum allowed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateVersioningOverride(tt.override, maxIDLengthLimit)
+			if tt.errorContains == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tt.errorContains)
 			}
 		})
 	}

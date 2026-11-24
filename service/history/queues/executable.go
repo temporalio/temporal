@@ -50,6 +50,10 @@ type (
 		GetPriority() ctasks.Priority
 		GetScheduledTime() time.Time
 		SetScheduledTime(time.Time)
+
+		// SetThrottleAdmitted records that the gate issued this dispatch. It is set before the
+		// scheduler handoff, which is what carries it to the worker that reads it.
+		SetThrottleAdmitted(admitted bool)
 	}
 
 	Executor interface {
@@ -73,7 +77,15 @@ type (
 	// MaybeTerminalTaskError are errors which (if IsTerminalTaskError returns true) cannot be retried and should
 	// not be rescheduled. Tasks should be enqueued to the DLQ immediately if an error is marked as terminal.
 	MaybeTerminalTaskError interface {
+		error
 		IsTerminalTaskError() bool
+	}
+
+	// TaskErrorLogTags are optional tags provided by task processing errors.
+	// They are emitted on logs only and must not be converted into metric tags.
+	TaskErrorLogTags interface {
+		error
+		LogTags() []tag.Tag
 	}
 )
 
@@ -89,6 +101,13 @@ var (
 
 	_ MaybeTerminalTaskError = terminalTaskError{}
 )
+
+func taskErrorLogTags(err error) []tag.Tag {
+	if tagged, ok := errors.AsType[TaskErrorLogTags](err); ok {
+		return tagged.LogTags()
+	}
+	return nil
+}
 
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
@@ -137,14 +156,20 @@ type (
 		lastActiveness             bool
 		invalidTask                bool
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		throttleState              *ThrottleState
+		throttleKey                ThrottleKey
+		throttleAdmitted           bool
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
+		alertableAttempts          int
+		alertableErrorCauseTag     metrics.Tag
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableParams struct {
+		ThrottleState              *ThrottleState
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -234,11 +259,13 @@ func NewExecutable(
 		),
 		baseMetricsHandler:         metricsHandler,
 		tracer:                     tracer,
+		throttleState:              params.ThrottleState,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 		dlqInternalErrors:          params.DLQInternalErrors,
 		dlqErrorPattern:            params.DLQErrorPattern,
+		alertableErrorCauseTag:     metrics.LastAttemptCauseTag("none"),
 	}
 	e.refreshMetricsHandlers(nil)
 	e.attempt.Store(1)
@@ -466,6 +493,28 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 	return false
 }
 
+// classifyAlertableError answers both whether err should count toward alertableAttempts and,
+// if so, what cause tag it should carry.
+func classifyAlertableError(err error) (alertable bool, causeTag metrics.Tag) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		alertable = resourceExhaustedErr.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE ||
+			resourceExhaustedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW
+		if alertable {
+			causeTag = metrics.LastAttemptCauseTag(resourceExhaustedErr.Cause.String())
+		}
+		return alertable, causeTag
+	}
+	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
+		return false, causeTag
+	}
+	if err == consts.ErrDependencyTaskNotCompleted ||
+		err == consts.ErrTaskRetry ||
+		err.Error() == consts.ErrNamespaceHandover.Error() {
+		return false, causeTag
+	}
+	return true, metrics.LastAttemptCauseTag(metrics.ServiceErrorTypeTag(err).Value)
+}
+
 // Returns true when the error is expected and should be retried. You're expected to return
 // an error in this case, as that possible-rewritten-error is what we'll return
 func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, retErr error) {
@@ -476,8 +525,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 		}
 	}()
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
 			err = consts.ErrResourceExhaustedBusyWorkflow
@@ -490,9 +538,11 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 		metrics.TaskThrottledCounter.With(e.chasmMetricsHandler).Record(
 			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
+		e.reportThrottle(resourceExhaustedErr.Cause, resourceExhaustedErr.Scope)
 		return true, err
 	}
 	e.resourceExhaustedCount = 0
+	e.clearThrottle()
 
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// error is expected when there's namespace failover,
@@ -520,8 +570,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 }
 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
-	var terr MaybeTerminalTaskError
-	if errors.As(err, &terr) {
+	if terr, ok := errors.AsType[MaybeTerminalTaskError](err); ok {
 		return terr.IsTerminalTaskError()
 	}
 
@@ -556,6 +605,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}()
 
 	if matchedErr := e.matchDLQErrorPattern(err); matchedErr != nil {
+		e.clearThrottle()
 		e.incAttempt()
 		return matchedErr
 	}
@@ -571,7 +621,19 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
+	// The attempt that just failed. incAttempt moves the counter on to the next attempt, so it can no longer
+	// answer "which attempt failed" for the logging below.
+	failedAttempt := e.attempt.Load()
 	e.incAttempt()
+
+	if alertable, causeTag := classifyAlertableError(err); alertable {
+		e.alertableAttempts++
+		e.alertableErrorCauseTag = causeTag
+		if e.attempt.Load() > taskCriticalLogMetricAttempts {
+			metrics.TaskAlertableAttempt.With(e.chasmMetricsHandler).Record(
+				int64(e.alertableAttempts), causeTag, metrics.AttemptStageInFlightTag)
+		}
+	}
 
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
 		return rewrittenErr
@@ -580,14 +642,16 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	// Unexpected errors handled below
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.chasmMetricsHandler).Record(1)
-	logger := log.With(e.logger,
+	logTags := []tag.Tag{
 		tag.Error(err),
 		tag.ErrorType(err),
-		tag.Attempt(int32(e.attempt.Load())),
+		tag.Attempt(int32(failedAttempt)),
 		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
 		tag.LifeCycleProcessingFailed,
 		tag.String("task-category", e.GetCategory().Name()),
-	)
+	}
+	logTags = append(logTags, taskErrorLogTags(err)...)
+	logger := log.With(e.logger, logTags...)
 	if e.attempt.Load() > taskCriticalLogMetricAttempts {
 		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
 	} else {
@@ -601,12 +665,18 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		metrics.TaskCorruptionCounter.With(e.chasmMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
-			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
+			e.logger.Error("Marking task as terminally failed, will send to DLQ", append([]tag.Tag{
+				tag.Error(err),
+				tag.ErrorType(err),
+			}, taskErrorLogTags(err)...)...)
 			e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
 			metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
-		e.logger.Error("Dropping task due to terminal error", tag.Error(err), tag.ErrorType(err))
+		e.logger.Error("Dropping task due to terminal error", append([]tag.Tag{
+			tag.Error(err),
+			tag.ErrorType(err),
+		}, taskErrorLogTags(err)...)...)
 		return nil
 	}
 
@@ -614,7 +684,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
-			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.Error(err))
+			append([]tag.Tag{
+				tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
+				tag.Error(err),
+			}, taskErrorLogTags(err)...)...)
 		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
 		metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
@@ -639,8 +712,10 @@ func (e *executableImpl) matchDLQErrorPattern(err error) error {
 	e.logger.Error(
 		fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
 			dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
-		tag.Error(err),
-		tag.ErrorType(err))
+		append([]tag.Tag{
+			tag.Error(err),
+			tag.ErrorType(err),
+		}, taskErrorLogTags(err)...)...)
 	e.terminalFailureCause = err
 	metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 	return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
@@ -696,6 +771,8 @@ func (e *executableImpl) Ack() {
 	}
 
 	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(e.attempt.Load())
+	metrics.TaskAlertableAttempt.With(e.chasmMetricsHandler).Record(
+		int64(e.alertableAttempts), e.alertableErrorCauseTag, metrics.AttemptStageTerminalTag)
 
 	priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
@@ -736,7 +813,7 @@ func (e *executableImpl) Nack(err error) {
 			e.inMemoryNoUserLatency += backoffDuration
 		}
 
-		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration))
+		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration), e.throttleKey)
 	}
 }
 
@@ -746,7 +823,7 @@ func (e *executableImpl) Reschedule() {
 		return
 	}
 
-	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil)))
+	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil)), e.throttleKey)
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -800,10 +877,15 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 		return false
 	}
 
-	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
-		common.IsResourceExhausted(err) &&
-		e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
-		return false
+	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
+		// Resubmitting synchronously bypasses the rescheduler, and with it the gate, so every
+		// parked task would keep rediscovering the same constraint at full dispatch cost.
+		if e.throttleState.Enabled() && e.throttleKey != (ThrottleKey{}) {
+			return false
+		}
+		if e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
+			return false
+		}
 	}
 
 	if shard.IsShardOwnershipLostError(err) {
@@ -817,6 +899,53 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 	return err != consts.ErrTaskRetry &&
 		err != consts.ErrDependencyTaskNotCompleted &&
 		err != consts.ErrNamespaceHandover
+}
+
+// Classifies the failure, and reports it when the gate issued the dispatch.
+//
+// Classification only runs while the controller is on, so with it off a throttled task is
+// parked under its plain task channel and never touches the controller.
+func (e *executableImpl) reportThrottle(
+	cause enumspb.ResourceExhaustedCause,
+	scope enumspb.ResourceExhaustedScope,
+) {
+	// The issuing class is the one the task was parked under, until reclassified below.
+	issuer, metered := e.throttleKey, e.throttleAdmitted
+	e.throttleAdmitted = false
+	e.throttleKey = ThrottleKey{}
+
+	if !e.throttleState.Enabled() {
+		return
+	}
+	if !IsControllerInput(cause, scope) {
+		// Not a budget this controller paces, so the release stays counted as clean.
+		return
+	}
+	nsName, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	if err != nil {
+		return
+	}
+	key := NewThrottleKey(cause, nsName)
+	if cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT {
+		key.Destination = e.GetDestination()
+	}
+	e.throttleKey = key
+
+	// A metered rejection belongs to the class that issued the release, whichever budget
+	// refused it; an unmetered one is recorded against the new class but must not move it.
+	if metered {
+		key = issuer
+	}
+	e.throttleState.ReportThrottled(key, metered)
+}
+
+func (e *executableImpl) clearThrottle() {
+	e.throttleKey = ThrottleKey{}
+	e.throttleAdmitted = false
+}
+
+func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
+	e.throttleAdmitted = admitted
 }
 
 func (e *executableImpl) backoffDuration(
@@ -955,10 +1084,11 @@ func (e *CircuitBreakerExecutable) Execute() error {
 		// and does not go to the DLQ.
 		return fmt.Errorf(
 			"%w: %w",
-			serviceerror.NewResourceExhausted(
-				enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
-				"circuit breaker rejection",
-			),
+			&serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+				Message: "circuit breaker rejection",
+			},
 			err,
 		)
 	}

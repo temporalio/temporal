@@ -8,11 +8,15 @@ package health
 // can be added without proto changes, and the message field can describe exactly
 // what went wrong with actual values (e.g. "RPC latency 850.00ms exceeded 500.00ms threshold").
 const (
-	CheckTypeGRPCHealth          = "grpc_health"
-	CheckTypeRPCLatency          = "rpc_latency"
-	CheckTypeRPCErrorRatio       = "rpc_error_ratio"
-	CheckTypePersistenceLatency  = "persistence_latency"
-	CheckTypePersistenceErrRatio = "persistence_error_ratio"
-	CheckTypeHostAvailability    = "host_availability"
-	CheckTypeTaskQueueBacklog    = "task_queue_backlog"
+	CheckTypeGRPCHealth           = "grpc_health"
+	CheckTypeRPCLatency           = "rpc_latency"
+	CheckTypeRPCErrorRatio        = "rpc_error_ratio"
+	CheckTypeRPCLatencyOverall    = "rpc_latency_overall"
+	CheckTypeRPCErrorRatioOverall = "rpc_error_ratio_overall"
+	CheckTypeRPCLatencyGroup      = "rpc_latency_group"
+	CheckTypeRPCErrorRatioGroup   = "rpc_error_ratio_group"
+	CheckTypePersistenceLatency   = "persistence_latency"
+	CheckTypePersistenceErrRatio  = "persistence_error_ratio"
+	CheckTypeHostAvailability     = "host_availability"
+	CheckTypeTaskQueueBacklog     = "task_queue_backlog"
 )

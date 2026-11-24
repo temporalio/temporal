@@ -1,6 +1,7 @@
 package history
 
 import (
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -10,7 +11,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -28,13 +28,13 @@ type (
 
 		QueueFactoryBaseParams
 
-		ClientBean             client.Bean
-		SdkClientFactory       sdk.ClientFactory
-		HistoryRawClient       resource.HistoryRawClient
-		MatchingRawClient      resource.MatchingRawClient
-		VisibilityManager      manager.VisibilityManager
-		VersionMembershipCache worker_versioning.VersionMembershipAndReactivationStatusCache
-		TestHooks              testhooks.TestHooks
+		ClientBean               client.Bean
+		SdkClientFactory         sdk.ClientFactory
+		HistoryRawClient         resource.HistoryRawClient
+		MatchingRawClient        resource.MatchingRawClient
+		ConcurrencyServiceClient fcpb.ConcurrencyServiceClient
+		VisibilityManager        manager.VisibilityManager
+		VersionMembershipCache   worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	transferQueueFactory struct {
@@ -109,11 +109,19 @@ func (f *transferQueueFactory) CreateQueue(
 		metricsHandler,
 	)
 
+	shardScheduler = queues.NewNamespaceStateGateScheduler(
+		shardScheduler,
+		f.NamespaceRegistry,
+		queues.IsExemptFromNamespaceStateGate,
+		metricsHandler,
+	)
+
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.ThrottleState,
 	)
 
 	activeExecutor := newTransferQueueActiveTaskExecutor(
@@ -125,6 +133,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config,
 		f.HistoryRawClient,
 		f.MatchingRawClient,
+		f.ConcurrencyServiceClient,
 		f.VisibilityManager,
 		f.ChasmEngine,
 		f.VersionMembershipCache,
@@ -150,6 +159,8 @@ func (f *transferQueueFactory) CreateQueue(
 		activeExecutor,
 		standbyExecutor,
 		logger,
+		metricsHandler,
+		f.TestHooks,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
@@ -173,6 +184,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.ThrottleState,
 	)
 	return queues.NewImmediateQueue(
 		shardContext,
@@ -189,6 +201,7 @@ func (f *transferQueueFactory) CreateQueue(
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+				ReaderStuckShadowMode:       f.Config.QueueReaderStuckShadowMode,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
 			MaxPollRPS:                          f.Config.TransferProcessorMaxPollRPS,

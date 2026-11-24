@@ -42,7 +42,7 @@ const (
 
 type (
 	PerNamespaceWorkerManager struct {
-		status int32
+		status atomic.Int32
 
 		// from init params or Start
 		logger            log.Logger
@@ -129,18 +129,14 @@ func NewPerNamespaceWorkerManager(
 }
 
 func (wm *PerNamespaceWorkerManager) Running() bool {
-	return atomic.LoadInt32(&wm.status) == common.DaemonStatusStarted
+	return wm.status.Load() == common.DaemonStatusStarted
 }
 
 func (wm *PerNamespaceWorkerManager) Start(
 	self membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 ) {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -163,11 +159,7 @@ func (wm *PerNamespaceWorkerManager) Start(
 }
 
 func (wm *PerNamespaceWorkerManager) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 
@@ -244,11 +236,15 @@ func (wm *PerNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 		logger:  log.With(wm.logger, tag.WorkflowNamespace(ns.Name().String())),
 		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), clock.NewRealTimeSource()),
 	}
+	// Hold lock before registering dynamic config subscriptions: their callbacks can fire
+	// concurrently and must not observe uninitialized fields.
+	worker.lock.Lock()
 	count, c1 := wm.config.PerNamespaceWorkerCount(ns.Name().String(), worker.setWorkerCount)
 	opts, c2 := wm.config.PerNamespaceWorkerOptions(ns.Name().String(), worker.setWorkerOptions)
 	worker.ns = ns
 	worker.count = count
 	worker.opts = opts
+	worker.lock.Unlock()
 	worker.cancel = func() { c1(); c2() }
 
 	wm.workers[ns.ID()] = worker
@@ -305,7 +301,8 @@ func (w *perNamespaceWorker) setWorkerOptions(opts sdkworker.Options) {
 func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, newCount *int, newOpts *sdkworker.Options) {
 	w.lock.Lock()
 
-	if ns != nil {
+	// Callbacks run concurrently and can arrive out of order; keep the newest namespace.
+	if ns != nil && ns.NotificationVersion() >= w.ns.NotificationVersion() {
 		w.ns = ns
 		// The name inside of *ns, which was used to initialize the logger, can change, but
 		// don't update w.logger here, otherwise we'd have to hold w.lock just to log.
@@ -337,10 +334,6 @@ func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, new
 // refresh the worker again at a later time.
 func (w *perNamespaceWorker) handleError(err error) {
 	if err == nil {
-		return
-	}
-	if errors.Is(err, errNoWorkerNeeded) {
-		w.stopWorkerAndResetTimer()
 		return
 	}
 
@@ -380,6 +373,10 @@ func (w *perNamespaceWorker) handleError(err error) {
 // Returning noWorkerNeeded means any existing worker should be stopped.
 func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	defer func() {
+		if errors.Is(retErr, errNoWorkerNeeded) {
+			w.stopWorkerIfCurrent(args.ns)
+			return
+		}
 		w.handleError(retErr)
 	}()
 
@@ -387,6 +384,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 
 	if !w.wm.Running() ||
 		args.ns.State() == enumspb.NAMESPACE_STATE_DELETED ||
+		args.ns.State() == enumspb.NAMESPACE_STATE_SOFT_DELETED ||
 		//nolint:forbidigo // per-namespace worker lifecycle, no workflow context
 		!args.ns.ActiveInCluster(w.wm.thisClusterName) {
 
@@ -423,17 +421,18 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	// ensure this changes if multiplicity changes
 	fmt.Fprintf(&componentSet, "%d,", workerAllocation.local)
 
-	// get sdk worker options
-	fmt.Fprintf(&componentSet, "%+v,", w.opts)
-
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	if args.ns != w.ns {
-		// stale refresh goroutine, do nothing
+		// Namespace changed since we snapshotted — another goroutine will handle the new one.
 		return nil
 	}
+
+	// Format opts under the lock so the cache key describes the worker actually being started
+	// (startWorker reads w.opts, not the snapshot).
+	fmt.Fprintf(&componentSet, "%+v,", w.opts)
 
 	if componentSet.String() == w.componentSet {
 		// no change in set of components enabled, leave existing running
@@ -547,10 +546,25 @@ func (w *perNamespaceWorker) stopWorker() {
 	w.stopWorkerLocked()
 }
 
+// stopWorkerIfCurrent does nothing if the namespace changed after ns was read; the newer refresh decides.
+func (w *perNamespaceWorker) stopWorkerIfCurrent(ns *namespace.Namespace) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	if ns != w.ns {
+		return
+	}
+	w.stopWorkerAndResetTimerLocked()
+}
+
 func (w *perNamespaceWorker) stopWorkerAndResetTimer() {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	w.stopWorkerAndResetTimerLocked()
+}
+
+func (w *perNamespaceWorker) stopWorkerAndResetTimerLocked() {
 	w.stopWorkerLocked()
 	w.retrier.Reset()
 	// Note that we only reset reserved here, not in stopWorkerLocked: if we did it there, we

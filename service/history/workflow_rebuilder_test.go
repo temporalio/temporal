@@ -2,13 +2,20 @@ package history
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestWorkflowRebuilderImpl_RebuildableCheck(t *testing.T) {
@@ -212,6 +219,68 @@ func TestWorkflowRebuilderImpl_RebuildableCheck(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestWorkflowRebuilderImpl_RebuildStartTime(t *testing.T) {
+	recordedStartTime := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)
+	rebuildTime := time.Date(2026, 8, 19, 10, 0, 0, 0, time.UTC)
+
+	testCases := []struct {
+		name         string
+		mutableState *persistencespb.WorkflowMutableState
+		expected     time.Time
+	}{
+		{
+			name: "start time on execution state",
+			mutableState: &persistencespb.WorkflowMutableState{
+				ExecutionState: &persistencespb.WorkflowExecutionState{
+					StartTime: timestamppb.New(recordedStartTime),
+				},
+				ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+			},
+			expected: recordedStartTime,
+		},
+		{
+			name: "fallback to start time on execution info",
+			mutableState: &persistencespb.WorkflowMutableState{
+				ExecutionState: &persistencespb.WorkflowExecutionState{},
+				ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+					StartTime: timestamppb.New(recordedStartTime),
+				},
+			},
+			expected: recordedStartTime,
+		},
+		{
+			name: "no start time recorded anywhere",
+			mutableState: &persistencespb.WorkflowMutableState{
+				ExecutionState: &persistencespb.WorkflowExecutionState{},
+				ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{},
+			},
+			expected: rebuildTime,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockShard := shard.NewTestContextWithTimeSource(
+				ctrl,
+				&persistencespb.ShardInfo{ShardId: 0, RangeId: 1},
+				tests.NewDynamicConfig(),
+				clock.NewEventTimeSource().Update(rebuildTime),
+			)
+			rebuilder := &workflowRebuilderImpl{
+				shard:  mockShard,
+				logger: log.NewTestLogger(),
+			}
+
+			startTime := rebuilder.rebuildStartTime(
+				definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
+				tc.mutableState,
+			)
+			require.Equal(t, tc.expected, startTime.UTC())
 		})
 	}
 }

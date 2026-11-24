@@ -1425,8 +1425,7 @@ func (p *metricEmitter) recordRequestMetrics(operation string, caller string, la
 
 func (p *metricEmitter) recordDataLossMetrics(operation string, caller string, err error, workflowID, runID string) {
 	// Emit data loss metrics if enabled and error is DataLoss
-	var dataLoss *serviceerror.DataLoss
-	if errors.As(err, &dataLoss) {
+	if _, ok := errors.AsType[*serviceerror.DataLoss](err); ok {
 		if p.enableDataLossMetrics() {
 			EmitDataLossMetric(p.metricsHandler, caller, workflowID, runID, operation, err)
 		}
@@ -1446,6 +1445,7 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 			*AppendHistoryTimeoutError,
 			*CurrentWorkflowConditionFailedError,
 			*WorkflowConditionFailedError,
+			*WorkflowRunAlreadyExistsError,
 			*ConditionFailedError,
 			*TimeoutError,
 			*serviceerror.InvalidArgument,

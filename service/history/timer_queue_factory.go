@@ -109,11 +109,19 @@ func (f *timerQueueFactory) CreateQueue(
 		metricsHandler,
 	)
 
+	shardScheduler = queues.NewNamespaceStateGateScheduler(
+		shardScheduler,
+		f.NamespaceRegistry,
+		queues.IsExemptFromNamespaceStateGate,
+		metricsHandler,
+	)
+
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.ThrottleState,
 	)
 
 	activeExecutor := newTimerQueueActiveTaskExecutor(
@@ -150,6 +158,8 @@ func (f *timerQueueFactory) CreateQueue(
 		activeExecutor,
 		standbyExecutor,
 		logger,
+		metricsHandler,
+		f.TestHooks,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
@@ -173,6 +183,7 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.ThrottleState,
 	)
 	return queues.NewScheduledQueue(
 		shardContext,
@@ -190,6 +201,7 @@ func (f *timerQueueFactory) CreateQueue(
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+				ReaderStuckShadowMode:       f.Config.QueueReaderStuckShadowMode,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
 			MaxPollRPS:                          f.Config.TimerProcessorMaxPollRPS,

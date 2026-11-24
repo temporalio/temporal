@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -41,15 +39,6 @@ func (s *CallbacksMigrationSuite) newTestEnv() *testcore.TestEnv {
 	)
 }
 
-func (s *CallbacksMigrationSuite) runNexusCompletionHTTPServer(h *completionHandler) string {
-	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
-	srv := httptest.NewServer(hh)
-	s.T().Cleanup(func() {
-		srv.Close()
-	})
-	return srv.URL
-}
-
 // TODO (seankane): This test can be removed once CHASM callbacks are the default
 func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	// This test verifies that when CHASM is enabled mid-workflow, callbacks still work correctly.
@@ -67,15 +56,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	workflowType := "blockingWorkflow"
 	workflowID := env.Tv().WorkflowID()
 
-	ch := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	defer func() {
-		close(ch.requestCh)
-		close(ch.requestCompleteCh)
-	}()
-	callbackAddress := s.runNexusCompletionHTTPServer(ch)
+	ch, callbackAddress := newNexusCompletionHandler(s.T())
 
 	// Register workflow that blocks until it receives a signal
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
@@ -119,7 +100,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -180,15 +161,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	workflowType := "blockingWorkflow"
 	workflowID := env.Tv().WorkflowID()
 
-	ch := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	defer func() {
-		close(ch.requestCh)
-		close(ch.requestCompleteCh)
-	}()
-	callbackAddress := s.runNexusCompletionHTTPServer(ch)
+	ch, callbackAddress := newNexusCompletionHandler(s.T())
 
 	// Register workflow that blocks until it receives a signal
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
@@ -232,7 +205,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -286,23 +259,8 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	workflowType := "blockingWorkflow"
 	workflowID := env.Tv().WorkflowID()
 
-	ch1 := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	ch2 := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	defer func() {
-		close(ch1.requestCh)
-		close(ch1.requestCompleteCh)
-		close(ch2.requestCh)
-		close(ch2.requestCompleteCh)
-	}()
-
-	callbackAddress1 := s.runNexusCompletionHTTPServer(ch1)
-	callbackAddress2 := s.runNexusCompletionHTTPServer(ch2)
+	ch1, callbackAddress1 := newNexusCompletionHandler(s.T())
+	ch2, callbackAddress2 := newNexusCompletionHandler(s.T())
 
 	// Register workflow that blocks until it receives a signal
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
@@ -346,7 +304,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -442,17 +400,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	s.Equal(2, callbacksReceived)
 
 	// Verify DescribeWorkflow shows both callbacks in SUCCEEDED state after completion
-	s.Await(func(suite *CallbacksMigrationSuite) {
+	s.Await(func(s *CallbacksMigrationSuite) {
 		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
-		suite.NoError(err)
-		suite.Len(description.Callbacks, 2, "should still have 2 callbacks")
+		s.NoError(err)
+		s.Len(description.Callbacks, 2, "should still have 2 callbacks")
 
 		// Both callbacks should now be in SUCCEEDED state
 		for _, callbackInfo := range description.Callbacks {
-			suite.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-			suite.Equal(int32(1), callbackInfo.Attempt)
-			suite.Nil(callbackInfo.LastAttemptFailure)
-			suite.NotNil(callbackInfo.LastAttemptCompleteTime)
+			s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+			s.Equal(int32(1), callbackInfo.Attempt)
+			s.Nil(callbackInfo.LastAttemptFailure)
+			s.NotNil(callbackInfo.LastAttemptCompleteTime)
 		}
 	}, 2*time.Second, 100*time.Millisecond)
 }

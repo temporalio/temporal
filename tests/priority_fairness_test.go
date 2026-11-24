@@ -156,93 +156,6 @@ func (s *PrioritySuite) TestActivity_Basic() {
 	s.Less(w, 0.1)
 }
 
-func (s *PrioritySuite) TestSubqueue_Migration() {
-	env := s.newTestEnv()
-
-	// start with old matcher
-	env.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
-
-	// start 100 workflows
-	for range 100 {
-		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:    env.Namespace().String(),
-			WorkflowId:   uuid.NewString(),
-			WorkflowType: env.Tv().WorkflowType(),
-			TaskQueue:    env.Tv().TaskQueue(),
-		})
-		s.NoError(err)
-	}
-
-	// process workflow tasks and create 300 activities
-	for range 100 {
-		_, err := env.TaskPoller().PollAndHandleWorkflowTask(
-			env.Tv(),
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Len(task.History.Events, 3)
-
-				var commands []*commandpb.Command
-
-				for i := range 3 {
-					input, err := payloads.Encode(i)
-					s.NoError(err)
-					commands = append(commands, &commandpb.Command{
-						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             fmt.Sprintf("act%d", i),
-								ActivityType:           env.Tv().ActivityType(),
-								TaskQueue:              env.Tv().TaskQueue(),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								Input:                  input,
-							},
-						},
-					})
-				}
-
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
-			},
-			taskpoller.WithContext(s.Context()),
-		)
-		s.NoError(err)
-	}
-
-	processActivity := func() {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			_, err := env.TaskPoller().PollAndHandleActivityTask(
-				env.Tv(),
-				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-					nothing, err := payloads.Encode()
-					s.NoError(err)
-					return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
-				},
-				taskpoller.WithContext(s.Context()),
-			)
-			assert.NoError(c, err)
-		}, 5*time.Second, time.Millisecond)
-	}
-
-	s.T().Log("process first 100 activities")
-	for range 100 {
-		processActivity()
-	}
-
-	s.T().Log("switching to new matcher")
-	env.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
-
-	s.T().Log("processing next 100 activities")
-	for range 100 {
-		processActivity()
-	}
-
-	s.T().Log("switching back to old matcher")
-	env.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
-
-	s.T().Log("processing last 100 activities")
-	for range 100 {
-		processActivity()
-	}
-}
-
 func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	const N = 10
 
@@ -417,11 +330,7 @@ type FairnessSuite struct {
 }
 
 func TestFairnessSuite(t *testing.T) {
-	parallelsuite.Run(t, &FairnessSuite{}, false)
-}
-
-func TestFairnessAutoEnableSuite(t *testing.T) {
-	parallelsuite.Run(t, &FairnessSuite{}, true)
+	parallelsuite.Run(t, &FairnessSuite{})
 }
 
 // fairnessPartitions is the number of read/write partitions used by FairnessSuite.
@@ -429,7 +338,7 @@ func (s *FairnessSuite) fairnessPartitions() int {
 	return 1
 }
 
-func (s *FairnessSuite) newTestEnv(doAutoEnable bool, opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *FairnessSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetTasksBatchSize, 20),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetTasksReloadAt, 5),
@@ -437,94 +346,17 @@ func (s *FairnessSuite) newTestEnv(doAutoEnable bool, opts ...testcore.TestOptio
 		// TODO: disable this and use default later?
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.fairnessPartitions()),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.fairnessPartitions()),
-	}
-	if doAutoEnable {
-		baseOpts = append(baseOpts,
-			testcore.WithDynamicConfig(dynamicconfig.MatchingAutoEnableV2, true),
-			testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false),
-			testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, false),
-		)
-	} else {
-		baseOpts = append(baseOpts,
-			testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true),
-			testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, true),
-		)
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, true),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
 
-func (s *FairnessSuite) triggerAutoEnable(env *testcore.TestEnv) {
-	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    env.Namespace().String(),
-		WorkflowId:   "trigger",
-		WorkflowType: env.Tv().WorkflowType(),
-		TaskQueue:    env.Tv().TaskQueue(),
-		Priority: &commonpb.Priority{
-			PriorityKey: 3,
-		},
-	})
-	s.NoError(err)
-
-	s.Eventually(func() bool {
-		resp, err := env.AdminClient().GetTaskQueueTasks(s.Context(), &adminservice.GetTaskQueueTasksRequest{
-			Namespace:     env.Namespace().String(),
-			TaskQueue:     env.Tv().TaskQueue().Name,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			BatchSize:     10,
-			MinPass:       1,
-		})
-		return err == nil && len(resp.GetTasks()) == 1
-	}, 10*time.Second, 100*time.Millisecond)
-
-	_, err = env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			var commands []*commandpb.Command
-			commands = append(commands,
-				&commandpb.Command{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-							ActivityId:             "trigger",
-							ActivityType:           env.Tv().ActivityType(),
-							TaskQueue:              env.Tv().TaskQueue(),
-							ScheduleToCloseTimeout: durationpb.New(time.Minute),
-						},
-					},
-				},
-			)
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
-		},
-		taskpoller.WithContext(s.Context()),
-	)
-	s.NoError(err)
-
-	_, err = env.TaskPoller().PollAndHandleActivityTask(
-		env.Tv(),
-		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
-		},
-		taskpoller.WithContext(s.Context()),
-	)
-	s.NoError(err)
-
-	_, err = env.FrontendClient().DeleteWorkflowExecution(s.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: "trigger",
-		},
-	})
-	s.NoError(err)
-}
-
-func (s *FairnessSuite) Test_Activity_Basic(doAutoEnable bool) {
+func (s *FairnessSuite) Test_Activity_Basic() {
 	const Workflows = 15
 	const Tasks = 15
 	const Keys = 10
 
-	env := s.newTestEnv(doAutoEnable)
-	if doAutoEnable {
-		s.triggerAutoEnable(env)
-	}
+	env := s.newTestEnv()
 
 	zipf := rand.NewZipf(rand.New(rand.NewSource(12345)), 2, 2, Keys-1)
 
@@ -617,7 +449,7 @@ func unfairness(vs []int) float64 {
 	return float64(totalDelay) / float64(len(firsts)*len(firsts))
 }
 
-func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairness bool) {
+func (s *FairnessSuite) testMigration(env *testcore.TestEnv, fairness bool) {
 
 	// Speed up periodic sync so drain completion is detected faster
 	env.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 100*time.Millisecond)
@@ -636,10 +468,9 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 			dynamicconfig.ConstrainedValue{Value: true},
 		}
 	}
-	setConfig := func(stage string, newNewMatcher, newFairness bool) {
-		newMatcher, fairness = newNewMatcher, newFairness
-		s.T().Log("setting config: "+stage, "newMatcher", newMatcher, "fairness", fairness)
-		env.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, forTest(newMatcher))
+	setConfig := func(stage string, newFairness bool) {
+		fairness = newFairness
+		s.T().Log("setting config: "+stage, "fairness", fairness)
 		env.OverrideDynamicConfig(dynamicconfig.MatchingEnableFairness, forTest(fairness))
 	}
 	waitForTasks := func(tp enumspb.TaskQueueType, onDraining, onActive int64) {
@@ -668,7 +499,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 		}, 15*time.Second, 250*time.Millisecond)
 	}
 
-	setConfig("initial", newMatcher, fairness)
+	setConfig("initial", fairness)
 
 	// start 20 workflows. 20 tasks will be queued on wft queue.
 	s.T().Log("starting workflows")
@@ -727,7 +558,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0, 20)
 
 	// switch fairness. queues will be reloaded. wft queue should drain old queue.
-	setConfig("switching fairness", true, !fairness)
+	setConfig("switching fairness", !fairness)
 
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 10, 0)
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 0)
@@ -771,7 +602,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 	}
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 7, 20)
 
-	setConfig("switching fairness again", true, !fairness)
+	setConfig("switching fairness again", !fairness)
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 7)
 
 	s.T().Log("processing next 1/3 activities")
@@ -780,7 +611,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 	}
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 6, 7)
 
-	setConfig("switching fairness last time", true, !fairness)
+	setConfig("switching fairness last time", !fairness)
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 7, 6)
 
 	s.T().Log("processing last 1/3 activities")
@@ -824,29 +655,20 @@ func (s *FairnessSuite) countTasksByDrainingActive(env *testcore.TestEnv, tp enu
 	return
 }
 
-func (s *FairnessSuite) TestMigration_FromClassic(doAutoEnable bool) {
-	// classic->fair, fair->pri. fair metadata will be created on transition.
-	env := s.newTestEnv(doAutoEnable)
-	s.testMigration(env, false, false)
-}
-
-func (s *FairnessSuite) TestMigration_FromPri(doAutoEnable bool) {
+func (s *FairnessSuite) TestMigration_FromPri() {
 	// pri->fair, fair->pri. fair metadata will be created before transition.
-	env := s.newTestEnv(doAutoEnable)
-	s.testMigration(env, true, false)
+	env := s.newTestEnv()
+	s.testMigration(env, false)
 }
 
-func (s *FairnessSuite) TestMigration_FromFair(doAutoEnable bool) {
+func (s *FairnessSuite) TestMigration_FromFair() {
 	// fair->pri, pri->fair. fair metadata will be created first.
-	env := s.newTestEnv(doAutoEnable)
-	s.testMigration(env, true, true)
+	env := s.newTestEnv()
+	s.testMigration(env, true)
 }
 
-func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTask(doAutoEnable bool) {
-	if doAutoEnable {
-		s.T().Skip("flaky with autoenable")
-	}
-	env := s.newTestEnv(doAutoEnable)
+func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTask() {
+	env := s.newTestEnv()
 	capture := env.StartNamespaceMetricCapture()
 
 	originalPriority := &commonpb.Priority{FairnessKey: "KEY"}

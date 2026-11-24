@@ -4,21 +4,25 @@ package protomock
 import (
 	"fmt"
 
-	"go.temporal.io/api/temporalproto"
+	"github.com/google/go-cmp/cmp"
+	"go.temporal.io/server/common/testing/protodiff"
 	"go.uber.org/mock/gomock"
 )
 
 type protoEq struct {
 	want any
+	opts []cmp.Option
 }
 
 type protoSliceEq struct {
 	want []any
+	opts []cmp.Option
 }
 
-// Eq returns a gomock.Matcher that uses proto.Equal to check equality
-func Eq(want any) gomock.Matcher {
-	return protoEq{want}
+// Eq returns a gomock.Matcher that checks equality with proto semantics for any proto messages inside the value.
+// Pass cmp options, e.g. cmp.AllowUnexported, for types with unexported fields.
+func Eq(want any, opts ...cmp.Option) gomock.Matcher {
+	return protoEq{want, opts}
 }
 
 // Matches returns true when the provided value equals the expectation
@@ -27,15 +31,20 @@ func (m protoEq) Matches(x any) bool {
 		return true
 	}
 
-	return temporalproto.DeepEqual(m.want, x)
+	return protodiff.Equal(m.want, x, m.opts...)
 }
 
 func (m protoEq) String() string {
 	return fmt.Sprintf("is equal to %v (%T)", m.want, m.want)
 }
 
-func SliceEq(want []any) gomock.Matcher {
-	return protoSliceEq{want}
+// Got is used by gomock to print the received value in a failure message.
+func (m protoEq) Got(got any) string {
+	return fmt.Sprintf("%v (%T)\nDiff (-want +got):\n%v", got, got, protodiff.Diff(m.want, got, m.opts...))
+}
+
+func SliceEq(want []any, opts ...cmp.Option) gomock.Matcher {
+	return protoSliceEq{want, opts}
 }
 
 func (m protoSliceEq) Matches(x any) bool {
@@ -45,7 +54,7 @@ func (m protoSliceEq) Matches(x any) bool {
 	}
 
 	for i := range m.want {
-		if !temporalproto.DeepEqual(m.want[i], xs[i]) {
+		if !protodiff.Equal(m.want[i], xs[i], m.opts...) {
 			return false
 		}
 	}

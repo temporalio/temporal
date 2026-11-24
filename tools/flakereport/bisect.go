@@ -60,61 +60,115 @@ func logSumExpNormalize(logWeights []float64) []float64 {
 	return probs
 }
 
-// buildObservations groups TestRun records for a single (normalized) test name by commit SHA
-// and returns them sorted chronologically using the commit order slice.
-// runToSHA maps workflow RunID → commit SHA.
-// commitOrder lists SHAs from oldest to newest.
-// Runs whose SHA is not in commitOrder are skipped (e.g. from force-pushes or unrelated branches).
-func buildObservations(testName string, runs []TestRun, commitOrderSlice []string, runToSHA map[int64]string) []CommitObservation {
-	// Build commit index map: SHA → index
-	commitIdx := make(map[string]int, len(commitOrderSlice))
-	for i, sha := range commitOrderSlice {
-		commitIdx[sha] = i
+type testRunIndex struct {
+	tests map[string]*indexedTestRuns
+}
+
+type indexedTestRuns struct {
+	totalRuns int
+	failures  int
+}
+
+type commitRunCounts struct {
+	passes int
+	fails  int
+}
+
+// buildTestRunIndex aggregates non-skipped runs by normalized test name.
+// totalRuns and failures count every run, including ones outside the commit range.
+func buildTestRunIndex(allRuns []TestRun) *testRunIndex {
+	index := &testRunIndex{
+		tests: make(map[string]*indexedTestRuns),
 	}
-
-	// Aggregate pass/fail counts per commit SHA for this test
-	type counts struct{ passes, fails int }
-	bySHA := make(map[string]*counts)
-
-	for _, run := range runs {
+	for _, run := range allRuns {
 		if run.Skipped {
 			continue
 		}
-		if normalizeTestName(run.Name) != testName {
-			continue
+		testName := normalizeTestName(run.Name)
+		testRuns := index.tests[testName]
+		if testRuns == nil {
+			testRuns = &indexedTestRuns{}
+			index.tests[testName] = testRuns
 		}
-		sha, ok := runToSHA[run.RunID]
-		if !ok || sha == "" {
-			continue
-		}
-		if _, inOrder := commitIdx[sha]; !inOrder {
-			continue
-		}
-		if bySHA[sha] == nil {
-			bySHA[sha] = &counts{}
-		}
+		testRuns.totalRuns++
 		if run.Failed {
-			bySHA[sha].fails++
-		} else {
-			bySHA[sha].passes++
+			testRuns.failures++
 		}
+	}
+	return index
+}
+
+// buildObservationsByTest aggregates selected tests by commit. commitOrder lists
+// SHAs oldest to newest; runs with commits outside that range are excluded.
+func buildObservationsByTest(
+	allRuns []TestRun,
+	testNames []string,
+	commitOrder []string,
+	runToSHA map[int64]string,
+) map[string][]CommitObservation {
+	selectedTests := make(map[string]struct{}, len(testNames))
+	for _, testName := range testNames {
+		selectedTests[testName] = struct{}{}
 	}
 
-	// Convert to slice and sort by commit index
-	obs := make([]CommitObservation, 0, len(bySHA))
-	for sha, c := range bySHA {
-		obs = append(obs, CommitObservation{
-			CommitSHA: sha,
-			CommitIdx: commitIdx[sha],
-			Prior:     1.0, // uniform prior; adjusted by heuristics if enabled
-			Passes:    c.passes,
-			Fails:     c.fails,
-		})
+	commitIndexes := make(map[string]int, len(commitOrder))
+	for i, sha := range commitOrder {
+		commitIndexes[sha] = i
 	}
-	sort.Slice(obs, func(i, j int) bool {
-		return obs[i].CommitIdx < obs[j].CommitIdx
-	})
-	return obs
+
+	countsByTest := make(map[string]map[int]commitRunCounts, len(testNames))
+	for _, run := range allRuns {
+		if run.Skipped {
+			continue
+		}
+		testName := normalizeTestName(run.Name)
+		if _, ok := selectedTests[testName]; !ok {
+			continue
+		}
+		commitSHA, ok := runToSHA[run.RunID]
+		if !ok || commitSHA == "" {
+			continue
+		}
+		commitIndex, ok := commitIndexes[commitSHA]
+		if !ok {
+			continue
+		}
+		countsByCommit := countsByTest[testName]
+		if countsByCommit == nil {
+			countsByCommit = make(map[int]commitRunCounts)
+			countsByTest[testName] = countsByCommit
+		}
+		counts := countsByCommit[commitIndex]
+		if run.Failed {
+			counts.fails++
+		} else {
+			counts.passes++
+		}
+		countsByCommit[commitIndex] = counts
+	}
+
+	observationsByTest := make(map[string][]CommitObservation, len(countsByTest))
+	for testName, countsByCommit := range countsByTest {
+		commitIndexes := make([]int, 0, len(countsByCommit))
+		for commitIndex := range countsByCommit {
+			commitIndexes = append(commitIndexes, commitIndex)
+		}
+		sort.Ints(commitIndexes)
+
+		observations := make([]CommitObservation, 0, len(commitIndexes))
+		for _, commitIndex := range commitIndexes {
+			counts := countsByCommit[commitIndex]
+			observations = append(observations, CommitObservation{
+				CommitSHA: commitOrder[commitIndex],
+				CommitIdx: commitIndex,
+				Prior:     1.0,
+				Passes:    counts.passes,
+				Fails:     counts.fails,
+			})
+		}
+		observationsByTest[testName] = observations
+	}
+	return observationsByTest
 }
 
 // runBisect computes posterior probability for each candidate culprit commit.
@@ -243,8 +297,7 @@ func allFilesMatchSuffixes(files, suffixes []string) bool {
 // commitMetas is a pre-populated, read-only cache of commit metadata (SHA → github.Commit).
 //
 //nolint:revive // Keep the bisect pipeline linear so the filtering steps remain reviewable.
-func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, commitOrderSlice []string, runToSHA map[int64]string, commitMetas map[string]github.Commit) TestBisectReport {
-	obs := buildObservations(testName, allRuns, commitOrderSlice, runToSHA)
+func runBisectForTest(cfg BisectConfig, testName string, obs []CommitObservation, commitMetas map[string]github.Commit) TestBisectReport {
 
 	totalPasses, totalFails := 0, 0
 	for _, o := range obs {
@@ -349,42 +402,22 @@ func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, comm
 	}
 }
 
-// selectTopFlakyTests selects the top-N flakiest tests that meet minimum signal thresholds.
-// allRuns is the full set of test runs. Returns normalized test names sorted by failure rate desc.
-func selectTopFlakyTests(allRuns []TestRun, cfg BisectConfig) []string {
-	type testStats struct {
-		fails int
-		total int
-	}
-	stats := make(map[string]*testStats)
-	for _, run := range allRuns {
-		if run.Skipped {
-			continue
-		}
-		name := normalizeTestName(run.Name)
-		if stats[name] == nil {
-			stats[name] = &testStats{}
-		}
-		stats[name].total++
-		if run.Failed {
-			stats[name].fails++
-		}
-	}
-
+// selectTopFlakyTests selects the top-N flakiest indexed tests that meet minimum signal thresholds.
+func selectTopFlakyTests(index *testRunIndex, cfg BisectConfig) []string {
 	type ranked struct {
 		name  string
 		rate  float64
 		fails int
 	}
 	var candidates []ranked
-	for name, s := range stats {
-		if s.fails < cfg.MinFailures || s.total < cfg.MinRuns {
+	for name, testRuns := range index.tests {
+		if testRuns.failures < cfg.MinFailures || testRuns.totalRuns < cfg.MinRuns {
 			continue
 		}
 		candidates = append(candidates, ranked{
 			name:  name,
-			rate:  float64(s.fails) / float64(s.total),
-			fails: s.fails,
+			rate:  float64(testRuns.failures) / float64(testRuns.totalRuns),
+			fails: testRuns.failures,
 		})
 	}
 
@@ -409,24 +442,23 @@ func selectTopFlakyTests(allRuns []TestRun, cfg BisectConfig) []string {
 
 // runBisectAnalysis is the top-level bisect orchestrator called from the generate command.
 // It runs bisect for the top-N flakiest tests and returns their reports.
-func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun, workflowRuns []github.Run) ([]TestBisectReport, error) {
-	// Build runID → SHA map from workflow runs
-	runToSHA := make(map[int64]string, len(workflowRuns))
+func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun, githubActionsRuns []github.Run) ([]TestBisectReport, error) {
+	runToSHA := make(map[int64]string, len(githubActionsRuns))
 	var oldestSHA string
 	var oldestTime time.Time
-	for _, wr := range workflowRuns {
-		if wr.HeadSHA == "" {
+	for _, githubActionsRun := range githubActionsRuns {
+		if githubActionsRun.HeadSHA == "" {
 			continue
 		}
-		runToSHA[wr.DatabaseID] = wr.HeadSHA
-		if oldestTime.IsZero() || wr.CreatedAt.Before(oldestTime) {
-			oldestTime = wr.CreatedAt
-			oldestSHA = wr.HeadSHA
+		runToSHA[githubActionsRun.DatabaseID] = githubActionsRun.HeadSHA
+		if oldestTime.IsZero() || githubActionsRun.CreatedAt.Before(oldestTime) {
+			oldestTime = githubActionsRun.CreatedAt
+			oldestSHA = githubActionsRun.HeadSHA
 		}
 	}
 
 	if oldestSHA == "" {
-		return nil, errors.New("no workflow runs with commit SHAs found")
+		return nil, errors.New("no GitHub Actions runs with commit SHAs found")
 	}
 
 	// Get commit ordering from git log
@@ -439,9 +471,10 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 		return nil, fmt.Errorf("commit order is empty for anchor %s: SHA may not be an ancestor of HEAD (force-push or unrelated branch?)", oldestSHA[:7])
 	}
 	fmt.Printf("Commit range: %d commits\n", len(commitOrderSlice))
+	testRuns := buildTestRunIndex(allRuns)
 
 	// Select qualifying flaky tests
-	targetTests := selectTopFlakyTests(allRuns, cfg)
+	targetTests := selectTopFlakyTests(testRuns, cfg)
 	if cfg.TopN > 0 {
 		fmt.Printf("Selected %d tests for bisect analysis (top %d, min %d failures, min %d runs)\n",
 			len(targetTests), cfg.TopN, cfg.MinFailures, cfg.MinRuns)
@@ -450,9 +483,10 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 			len(targetTests), cfg.MinFailures, cfg.MinRuns)
 	}
 
-	// Pre-fetch commit metadata for all unique SHAs that appear in the run set.
-	// Fetching once here (deduplicated, in parallel) avoids O(tests × commits) serial
-	// subprocess calls — the dominant cost of the bisect pipeline.
+	observationsByTest := buildObservationsByTest(allRuns, targetTests, commitOrderSlice, runToSHA)
+
+	// Fetching once here, deduplicated and in parallel, avoids O(tests × commits)
+	// serial subprocess calls.
 	uniqueSHAs := make([]string, 0, len(runToSHA))
 	seenSHA := make(map[string]struct{}, len(runToSHA))
 	for _, sha := range runToSHA {
@@ -461,14 +495,17 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 			uniqueSHAs = append(uniqueSHAs, sha)
 		}
 	}
-	commitMetas := fetchCommitMetasParallel(ctx, cfg.Repo, uniqueSHAs, defaultConcurrency)
+	commitMetas, err := fetchCommitMetasParallel(ctx, cfg.Repo, uniqueSHAs, defaultConcurrency)
+	if err != nil {
+		return nil, err
+	}
 	fmt.Printf("Fetched metadata for %d/%d unique commits\n", len(commitMetas), len(uniqueSHAs))
 
 	// Run bisect for each test
 	reports := make([]TestBisectReport, 0, len(targetTests))
 	for _, testName := range targetTests {
 		start := time.Now()
-		report := runBisectForTest(cfg, testName, allRuns, commitOrderSlice, runToSHA, commitMetas)
+		report := runBisectForTest(cfg, testName, observationsByTest[testName], commitMetas)
 		fmt.Printf("  Bisected %s in %s (skipped=%v)\n", testName, time.Since(start).Round(time.Millisecond), report.Skipped)
 		reports = append(reports, report)
 	}
@@ -477,9 +514,9 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 }
 
 // fetchCommitMetasParallel fetches commit metadata for a list of SHAs concurrently,
-// bounded by maxConcurrency. Returns an immutable map of SHA → github.Commit; failed
-// fetches are logged and omitted (heuristic priors fall back to 1.0).
-func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, maxConcurrency int) map[string]github.Commit {
+// bounded by maxConcurrency. Returns an immutable map of SHA → github.Commit; non-rate-limit
+// fetch failures are logged and omitted because heuristic priors fall back to 1.0.
+func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, maxConcurrency int) (map[string]github.Commit, error) {
 	metas := make([]github.Commit, len(shas))
 	ok := make([]bool, len(shas))
 
@@ -489,6 +526,9 @@ func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, m
 		g.Go(func() error {
 			meta, err := github.GetCommit(ctx, repo, sha)
 			if err != nil {
+				if isGitHubRateLimitError(err) {
+					return fmt.Errorf("GitHub API rate limit while fetching metadata for commit %s: %w", sha[:7], err)
+				}
 				fmt.Printf("Warning: failed to fetch metadata for commit %s: %v\n", sha[:7], err)
 				return nil
 			}
@@ -497,7 +537,9 @@ func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, m
 			return nil
 		})
 	}
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("cannot generate complete report: %w", err)
+	}
 
 	commitMetas := make(map[string]github.Commit, len(shas))
 	for i, sha := range shas {
@@ -505,5 +547,5 @@ func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, m
 			commitMetas[sha] = metas[i]
 		}
 	}
-	return commitMetas
+	return commitMetas, nil
 }

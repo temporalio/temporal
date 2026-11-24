@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"time"
 
@@ -70,7 +71,7 @@ func UpdateActivityInfoForRetries(
 	ai.ScheduledTime = nextScheduledTime
 	ClearActivityStartedState(ai)
 	// Mark per-attempt timers for recreation.
-	ai.TimerTaskStatus &^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
+	ai.TimerTaskStatus &^= TimerTaskStatusCreatedPerAttempt
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
 	// this flag means the user resets the activity with "--reset-heartbeat" flag
@@ -91,11 +92,10 @@ func UpdateActivityInfoForRetries(
 
 func GetPendingActivityInfo(
 	ctx context.Context, // only used as a passthrough to GetActivityType
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 ) (*workflowpb.PendingActivityInfo, error) {
-	now := shardContext.GetTimeSource().Now().UTC()
+	now := mutableState.Now().UTC()
 
 	p := &workflowpb.PendingActivityInfo{
 		ActivityId:                  ai.ActivityId,
@@ -278,7 +278,6 @@ func PauseActivity(
 
 func ResetActivity(
 	ctx context.Context,
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	activityId string,
 	resetHeartbeats bool,
@@ -299,7 +298,10 @@ func ResetActivity(
 	if resetOptions {
 		event, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
 		if err != nil {
-			return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+			if errors.Is(err, ErrMissingActivityScheduledEvent) {
+				return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+			}
+			return err
 		}
 		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
 		if !ok {
@@ -313,6 +315,8 @@ func ResetActivity(
 	}
 
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
+		wasPaused := activityInfo.Paused
+
 		// reset the number of attempts
 		activityInfo.Attempt = 1
 		activityInfo.ActivityReset = true
@@ -339,14 +343,18 @@ func ResetActivity(
 			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 		}
 
-		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
-		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && keepPaused) {
+		if wasPaused && !keepPaused {
+			unpauseActivityInfo(activityInfo)
+		}
+
+		// if activity is running, or it remains paused, we don't need to schedule a new run
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_STARTED || activityInfo.Paused {
 			return nil
 		}
 
-		activityInfo.Stamp++
-		if activityInfo.Paused && !keepPaused {
-			activityInfo.Paused = false
+		// unpauseActivityInfo already incremented the activity stamp.
+		if !wasPaused {
+			activityInfo.Stamp++
 		}
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
@@ -357,7 +365,7 @@ func ResetActivity(
 				ai.LastHeartbeatUpdateTime = nil
 			}
 
-			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			scheduleTime := ms.Now().UTC()
 			if jitter != 0 {
 				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
 				scheduleTime = scheduleTime.Add(randomOffset)
@@ -376,10 +384,13 @@ func unpauseActivityInfo(ai *persistencespb.ActivityInfo) {
 	ai.PauseInfo = nil
 	ai.Stamp++
 
+	// Timer tasks can be dropped while paused without clearing this mask. Clear all
+	// bits so transaction close recreates the earliest timer. This can create duplicate
+	// timer tasks, but after one processes the timeout, the others become no-ops.
+	ai.TimerTaskStatus = TimerTaskStatusNone
 }
 
 func UnpauseActivity(
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	resetAttempts bool,
@@ -399,7 +410,7 @@ func UnpauseActivity(
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			scheduleTime := ms.Now().UTC()
 			if jitter != 0 {
 				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
 				scheduleTime = scheduleTime.Add(randomOffset)
@@ -418,7 +429,6 @@ func UnpauseActivity(
 }
 
 func UnpauseActivityWithResume(
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
@@ -430,7 +440,7 @@ func UnpauseActivityWithResume(
 
 		// regenerate the retry task if needed
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms, shardContext); err != nil {
+			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms); err != nil {
 				return err
 			}
 		}
@@ -443,7 +453,6 @@ func UnpauseActivityWithResume(
 }
 
 func UnpauseActivityWithReset(
-	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
@@ -457,7 +466,7 @@ func UnpauseActivityWithReset(
 		activityInfo.Attempt = 1
 
 		if needRegenerateRetryTask(activityInfo, scheduleNewRun) {
-			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms, shardContext); err != nil {
+			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms); err != nil {
 				return err
 			}
 		}
@@ -479,10 +488,10 @@ func regenerateActivityRetryTask(
 	scheduleNewRun bool,
 	jitter time.Duration,
 	ms historyi.MutableState,
-	shardContext historyi.ShardContext) error {
+) error {
 	scheduleTime := activityInfo.ScheduledTime.AsTime()
 	if scheduleNewRun {
-		scheduleTime = shardContext.GetTimeSource().Now().UTC()
+		scheduleTime = ms.Now().UTC()
 		if jitter != 0 {
 			randomOffset := time.Duration(rand.Int63n(int64(jitter)))
 			scheduleTime = scheduleTime.Add(randomOffset)

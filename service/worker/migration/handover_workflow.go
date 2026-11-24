@@ -6,6 +6,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/wideevents"
 )
 
 const (
@@ -62,6 +63,22 @@ func NamespaceHandoverWorkflowV2(ctx workflow.Context, params NamespaceHandoverP
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {
 	if err := validateAndSetNamespaceHandoverParams(&params); err != nil {
 		return err
+	}
+	if workflow.GetVersion(ctx, migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1) > workflow.DefaultVersion {
+		lifecycle := newMigrationWorkflowLifecycle(
+			ctx,
+			params.Namespace,
+			wideevents.PhaseNamespaceHandoverStarted,
+			wideevents.PhaseNamespaceHandoverFinished,
+			map[string]any{
+				"remote_cluster":           params.RemoteCluster,
+				"allowed_lagging_seconds":  params.AllowedLaggingSeconds,
+				"allowed_lagging_tasks":    params.AllowedLaggingTasks,
+				"handover_timeout_seconds": params.HandoverTimeoutSeconds,
+			},
+		)
+		defer func() { lifecycle.emitFinished(ctx, retErr, nil) }()
+		lifecycle.emitStarted(ctx)
 	}
 	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second,

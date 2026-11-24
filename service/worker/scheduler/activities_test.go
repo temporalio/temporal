@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporal"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -16,7 +17,8 @@ import (
 
 type mockSchedulerClient struct {
 	schedulerpb.SchedulerServiceClient
-	migrateErr error
+	migrateErr  error
+	createCalls int
 }
 
 func (m *mockSchedulerClient) CreateFromMigrationState(
@@ -24,6 +26,7 @@ func (m *mockSchedulerClient) CreateFromMigrationState(
 	_ *schedulerpb.CreateFromMigrationStateRequest,
 	_ ...grpc.CallOption,
 ) (*schedulerpb.CreateFromMigrationStateResponse, error) {
+	m.createCalls++
 	return &schedulerpb.CreateFromMigrationStateResponse{}, m.migrateErr
 }
 
@@ -34,7 +37,8 @@ func newTestActivities(client schedulerpb.SchedulerServiceClient, nsID namespace
 			SchedulerClient: client,
 			MetricsHandler:  metrics.NoopMetricsHandler,
 		},
-		namespaceID: nsID,
+		namespaceID:      nsID,
+		migrationEnabled: func() bool { return true },
 	}
 }
 
@@ -99,4 +103,111 @@ func TestMigrateScheduleToChasm_NamespaceMismatch(t *testing.T) {
 	require.Contains(t, err.Error(), "namespace_mismatch")
 	require.Contains(t, err.Error(), "different-namespace-id")
 	require.Contains(t, err.Error(), testNamespaceID)
+}
+
+// TestMigrateScheduleToChasm_MigrationDisabled verifies the activity performs
+// its own live check of EnableCHASMSchedulerMigration -- independent of
+// whatever the calling workflow last cached -- and refuses when it's off.
+// This is what stops a pending migration from completing after a rollback,
+// even if the workflow retrying it has been asleep since before the rollback.
+func TestMigrateScheduleToChasm_MigrationDisabled(t *testing.T) {
+	client := &mockSchedulerClient{}
+	a := newTestActivities(client, testNamespaceID)
+	a.migrationEnabled = func() bool { return false }
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: testNamespaceID,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "migration is currently disabled")
+}
+
+// The guard must refuse before touching the scheduler service, not merely translate its
+// error -- otherwise it creates the V2 target and then reports failure, leaving both a V1
+// workflow and a V2 schedule behind.
+func TestMigrateScheduleToChasm_MigrationDisabledShortCircuits(t *testing.T) {
+	client := &mockSchedulerClient{}
+	a := newTestActivities(client, testNamespaceID)
+	a.migrationEnabled = func() bool { return false }
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: testNamespaceID,
+	})
+	require.Error(t, err)
+	require.Zero(t, client.createCalls, "the V2 schedule must not be created while migration is disabled")
+}
+
+// The non-retryable namespace mismatch must not be masked by the retryable disabled
+// error, which would turn a permanent misroute into an endless retry loop.
+func TestMigrateScheduleToChasm_NamespaceMismatchBeatsDisabledCheck(t *testing.T) {
+	client := &mockSchedulerClient{}
+	a := newTestActivities(client, testNamespaceID)
+	a.migrationEnabled = func() bool { return false }
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: "different-namespace-id",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "does not match activity namespace ID")
+	require.Zero(t, client.createCalls)
+}
+
+// Documents the fail-open default of the `migrationEnabled != nil` guard: an unwired
+// dependency migrates as if enabled, which is the wrong polarity for a rollback guard.
+func TestMigrateScheduleToChasm_MigrationEnabledUnwired(t *testing.T) {
+	client := &mockSchedulerClient{}
+	a := newTestActivities(client, testNamespaceID)
+	a.migrationEnabled = nil
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: testNamespaceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, client.createCalls, "unwired migrationEnabled currently fails open")
+}
+
+func TestMigrateScheduleToChasm_DeferredWhileBackfilling(t *testing.T) {
+	withBackfill := &schedulerpb.SchedulerMigrationState{
+		SchedulerState: &schedulerpb.SchedulerState{ScheduleId: "sched"},
+		Backfillers:    map[string]*schedulerpb.BackfillerState{"bf": {}},
+	}
+	noBackfill := &schedulerpb.SchedulerMigrationState{
+		SchedulerState: &schedulerpb.SchedulerState{ScheduleId: "sched"},
+	}
+	for _, tc := range []struct {
+		name     string
+		selected func(string) bool
+		state    *schedulerpb.SchedulerMigrationState
+		deferred bool
+	}{
+		{name: "auto-selected with backfill", selected: func(string) bool { return true }, state: withBackfill, deferred: true},
+		{name: "auto-selected without backfill", selected: func(string) bool { return true }, state: noBackfill},
+		{name: "not auto-selected with backfill", selected: func(string) bool { return false }, state: withBackfill},
+		{name: "nil selector with backfill", state: withBackfill},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &mockSchedulerClient{}
+			a := newTestActivities(client, testNamespaceID)
+			var gotID string
+			if tc.selected != nil {
+				a.autoMigrationSelected = func(id string) bool { gotID = id; return tc.selected(id) }
+			}
+
+			err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+				NamespaceId: testNamespaceID,
+				State:       tc.state,
+			})
+			if !tc.deferred {
+				require.NoError(t, err)
+				require.Equal(t, 1, client.createCalls)
+				return
+			}
+			var appErr *temporal.ApplicationError
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, errTypeMigrationDeferredBackfill, appErr.Type())
+			require.True(t, appErr.NonRetryable())
+			require.Equal(t, "sched", gotID)
+			require.Zero(t, client.createCalls, "must not create the V2 schedule while deferred")
+		})
+	}
 }

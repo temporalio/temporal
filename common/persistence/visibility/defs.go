@@ -2,9 +2,7 @@ package visibility
 
 import (
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const (
@@ -25,7 +23,10 @@ func AllowListForValidation(
 	}
 
 	switch storeNames[0] {
-	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
+	case sqlplugin.PluginNameMySQL,
+		sqlplugin.PluginNamePostgreSQL,
+		sqlplugin.PluginNamePostgreSQLPGX,
+		sqlplugin.PluginNameSQLite:
 		// Advanced visibility with SQL DB don't support list of values
 		return dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	default:

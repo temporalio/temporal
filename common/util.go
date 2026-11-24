@@ -15,8 +15,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -567,17 +569,21 @@ func CreateHistoryStartWorkflowRequest(
 	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
 		startRequest = CloneProto(startRequest)
 	}
+	// TODO: derive deadlines in history from the virtual start time instead. Until then, callers that
+	// pre-shift now (child workflows) must not also set TimeSkippingStatePropagation on startRequest.
+	now = now.Add(startRequest.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration())
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              namespaceID,
-		StartRequest:             startRequest,
-		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
-		Attempt:                  1,
-		ParentExecutionInfo:      parentExecutionInfo,
-		FirstWorkflowTaskBackoff: durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
-		ContinuedFailure:         startRequest.ContinuedFailure,
-		LastCompletionResult:     startRequest.LastCompletionResult,
-		RootExecutionInfo:        rootExecutionInfo,
-		VersioningOverride:       startRequest.GetVersioningOverride(),
+		NamespaceId:                  namespaceID,
+		StartRequest:                 startRequest,
+		ContinueAsNewInitiator:       enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
+		Attempt:                      1,
+		ParentExecutionInfo:          parentExecutionInfo,
+		FirstWorkflowTaskBackoff:     durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
+		ContinuedFailure:             startRequest.ContinuedFailure,
+		LastCompletionResult:         startRequest.LastCompletionResult,
+		RootExecutionInfo:            rootExecutionInfo,
+		VersioningOverride:           startRequest.GetVersioningOverride(),
+		TimeSkippingStatePropagation: startRequest.GetTimeSkippingStatePropagation(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
@@ -691,6 +697,35 @@ func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
+// GrantEagerDispatch asks Matching whether it may eagerly dispatch one task.
+func GrantEagerDispatch(
+	ctx context.Context,
+	client matchingservice.MatchingServiceClient,
+	namespaceID string,
+	taskQueue string,
+	taskQueueType enumspb.TaskQueueType,
+	priority *commonpb.Priority,
+	version *deploymentspb.WorkerDeploymentVersion,
+) bool {
+	if client == nil {
+		return false
+	}
+
+	response, err := client.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: namespaceID,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     taskQueue,
+			TaskQueueType: taskQueueType,
+		},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{
+			Count:    1,
+			Priority: priority,
+			Version:  version,
+		}},
+	})
+	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
+}
+
 func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
 	if src == nil {
 		return nil
@@ -699,6 +734,19 @@ func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
 	result := make(map[K]T, len(src))
 	for k, v := range src {
 		result[k] = CloneProto(v)
+	}
+	return result
+}
+
+// CloneProtoSlice returns a new slice containing a clone of each individual proto.
+func CloneProtoSlice[T proto.Message](src []T) []T {
+	if src == nil {
+		return nil
+	}
+
+	result := make([]T, len(src))
+	for i, v := range src {
+		result[i] = CloneProto(v)
 	}
 	return result
 }
@@ -762,18 +810,35 @@ func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 	return "", serviceerror.NewInternal("field not found in the struct")
 }
 
+// GetRPCStatus returns the gRPC status carried by err, or false if err is not a gRPC-induced
+// error.
+//
+// Wrapped gRPC status errors are supported, but wrapped errors implementing
+// Status() must be unwrapped before calling GetRPCStatus.
+func GetRPCStatus(err error) (*status.Status, bool) {
+	// This isn't correct, but is to maintain existing behavior.
+	//
+	// Exposing gRPC errors via `Status()` was a convention that existed for several years,
+	// but the canonical way to expose error status (from google.golang.org/grpc/status) is
+	// by an `GRPCStatus() *status.Status` method. [status.FromError] below does unwrapping
+	// and checks for that.
+	if stGetter, ok := err.(interface{ Status() *status.Status }); ok {
+		return stGetter.Status(), true
+	}
+	return status.FromError(err)
+}
+
 // IsRetryableRPCError checks if the error is a retryable gRPC error.
+//
+// Wrapping is handled exactly as [GetRPCStatus] handles it, which is not the
+// same for both status conventions: a wrapped error carrying a GRPCStatus()
+// method is still recognized, while one implementing only the older Status()
+// method must be unwrapped by the caller first.
 func IsRetryableRPCError(err error) bool {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// Not a gRPC induced error
-			return false
-		}
+	st, ok := GetRPCStatus(err)
+	if !ok {
+		// Not a gRPC induced error
+		return false
 	}
 	// nolint:exhaustive
 	switch st.Code() {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	_ "time/tzdata" // Embed tzdata as a fallback.
 
 	"go.temporal.io/server/tools/tdbg"
 )

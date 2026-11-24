@@ -2,7 +2,9 @@ package workflow
 
 import (
 	"github.com/nexus-rpc/sdk-go/nexus"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -15,6 +17,7 @@ type library struct {
 	config                      Config
 	saMapperProvider            searchattribute.MapperProvider
 	saValidator                 *searchattribute.Validator
+	linkValidator               commonlinks.Validator
 }
 
 func newLibrary(
@@ -23,12 +26,14 @@ func newLibrary(
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	linkValidator commonlinks.Validator,
 ) *library {
 	return &library{
 		registry:         registry,
 		config:           config,
 		saMapperProvider: saMapperProvider,
 		saValidator:      saValidator,
+		linkValidator:    linkValidator,
 		workflowServiceNexusHandler: &workflowServiceNexusHandler{
 			config:            config,
 			namespaceRegistry: namespaceRegistry,
@@ -40,6 +45,12 @@ func newLibrary(
 // Use newLibrary (via fx) for the full setup including Nexus services.
 func NewLibrary(registry *Registry) chasm.Library {
 	return &library{registry: registry}
+}
+
+// NewNilLibrary returns a Library with nil handlers, for decoding contexts such as tdbg where
+// no task execution happens.
+func NewNilLibrary() chasm.Library {
+	return &library{registry: NewRegistry()}
 }
 
 func (l *library) Name() string {
@@ -64,9 +75,13 @@ func workflowContextFromChasm(ctx chasm.Context) *workflowContext {
 
 func (l *library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
-			ctxKeyWorkflowContext: &workflowContext{registry: l.registry},
-		})),
+		chasm.NewRegistrableComponent[*Workflow](
+			chasm.WorkflowComponentName,
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
+			chasm.WithContextValues(map[any]any{
+				ctxKeyWorkflowContext: &workflowContext{registry: l.registry},
+			}),
+		),
 		chasm.NewRegistrableComponent[*WorkflowUpdate]("update"),
 	}
 }
@@ -91,6 +106,6 @@ func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
 		return nil
 	}
 	return []*chasm.NexusServiceProcessor{
-		NewWorkflowServiceNexusServiceProcessor(l.config, l.saMapperProvider, l.saValidator),
+		NewWorkflowServiceNexusServiceProcessor(l.config, l.saMapperProvider, l.saValidator, l.linkValidator),
 	}
 }

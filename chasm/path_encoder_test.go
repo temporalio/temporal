@@ -86,3 +86,30 @@ func TestDefaultPathEncoder_EncodeDecode(t *testing.T) {
 		require.Equal(t, tt.path, decodedPath)
 	}
 }
+
+func TestIsRootPath(t *testing.T) {
+	testCases := []struct {
+		name     string
+		path     []string
+		expected bool
+	}{
+		{name: "nil path", path: nil, expected: true},
+		{name: "empty path", path: []string{}, expected: true},
+		{name: "rootPath", path: rootPath, expected: true},
+		{name: "non-root", path: []string{"base"}, expected: false},
+		{name: "root child", path: []string{"base", "level2"}, expected: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, isRootPath(tc.path))
+		})
+	}
+}
+
+func TestIsRootPath_DecodedRoot(t *testing.T) {
+	e := &defaultPathEncoder{}
+	decodedRoot, err := e.Decode("")
+	require.NoError(t, err)
+	require.True(t, isRootPath(decodedRoot))
+}

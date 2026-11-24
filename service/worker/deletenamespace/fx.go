@@ -3,6 +3,7 @@ package deletenamespace
 import (
 	"context"
 
+	otellog "go.opentelemetry.io/otel/log"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/cluster"
@@ -10,6 +11,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
@@ -23,14 +25,17 @@ import (
 type (
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
-		atWorkerCfg          sdkworker.Options
-		visibilityManager    manager.VisibilityManager
-		metadataManager      persistence.MetadataManager
-		clusterMetadata      cluster.Metadata
-		nexusEndpointManager persistence.NexusEndpointManager
-		historyClient        resource.HistoryClient
-		metricsHandler       metrics.Handler
-		logger               log.Logger
+		atWorkerCfg                  sdkworker.Options
+		visibilityManager            manager.VisibilityManager
+		metadataManager              persistence.MetadataManager
+		clusterMetadata              cluster.Metadata
+		replicationResolverFactory   namespace.ReplicationResolverFactory
+		nexusEndpointManager         persistence.NexusEndpointManager
+		historyClient                resource.HistoryClient
+		metricsHandler               metrics.Handler
+		logger                       log.Logger
+		eventLogger                  otellog.Logger
+		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 
 		protectedNamespaces                       dynamicconfig.TypedPropertyFn[[]string]
 		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
@@ -41,14 +46,16 @@ type (
 	}
 	componentParams struct {
 		fx.In
-		DynamicCollection    *dynamicconfig.Collection
-		VisibilityManager    manager.VisibilityManager
-		MetadataManager      persistence.MetadataManager
-		ClusterMetadata      cluster.Metadata
-		NexusEndpointManager persistence.NexusEndpointManager
-		HistoryClient        resource.HistoryClient
-		MetricsHandler       metrics.Handler
-		Logger               log.Logger
+		DynamicCollection          *dynamicconfig.Collection
+		VisibilityManager          manager.VisibilityManager
+		MetadataManager            persistence.MetadataManager
+		ClusterMetadata            cluster.Metadata
+		ReplicationResolverFactory namespace.ReplicationResolverFactory
+		NexusEndpointManager       persistence.NexusEndpointManager
+		HistoryClient              resource.HistoryClient
+		MetricsHandler             metrics.Handler
+		Logger                     log.Logger
+		EventLogger                otellog.Logger
 	}
 )
 
@@ -58,15 +65,18 @@ func newComponent(
 	params componentParams,
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
-		atWorkerCfg:          dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
-		visibilityManager:    params.VisibilityManager,
-		metadataManager:      params.MetadataManager,
-		clusterMetadata:      params.ClusterMetadata,
-		nexusEndpointManager: params.NexusEndpointManager,
-		historyClient:        params.HistoryClient,
-		metricsHandler:       params.MetricsHandler,
-		logger:               params.Logger,
-		protectedNamespaces:  dynamicconfig.ProtectedNamespaces.Get(params.DynamicCollection),
+		atWorkerCfg:                  dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
+		visibilityManager:            params.VisibilityManager,
+		metadataManager:              params.MetadataManager,
+		clusterMetadata:              params.ClusterMetadata,
+		replicationResolverFactory:   params.ReplicationResolverFactory,
+		nexusEndpointManager:         params.NexusEndpointManager,
+		historyClient:                params.HistoryClient,
+		metricsHandler:               params.MetricsHandler,
+		logger:                       params.Logger,
+		eventLogger:                  params.EventLogger,
+		emitNamespaceLifecycleEvents: dynamicconfig.EmitNamespaceLifecycleEvents.Get(params.DynamicCollection),
+		protectedNamespaces:          dynamicconfig.ProtectedNamespaces.Get(params.DynamicCollection),
 		allowDeleteNamespaceIfNexusEndpointTarget: dynamicconfig.AllowDeleteNamespaceIfNexusEndpointTarget.Get(params.DynamicCollection),
 		nexusEndpointListDefaultPageSize:          dynamicconfig.NexusEndpointListDefaultPageSize.Get(params.DynamicCollection),
 		deleteActivityRPS:                         dynamicconfig.DeleteNamespaceDeleteActivityRPS.Subscribe(params.DynamicCollection),
@@ -113,8 +123,11 @@ func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActiv
 	return newLocalActivities(
 		wc.metadataManager,
 		wc.clusterMetadata,
+		wc.replicationResolverFactory,
 		wc.nexusEndpointManager,
 		wc.logger,
+		wc.eventLogger,
+		wc.emitNamespaceLifecycleEvents,
 		wc.protectedNamespaces,
 		wc.allowDeleteNamespaceIfNexusEndpointTarget,
 		wc.nexusEndpointListDefaultPageSize)

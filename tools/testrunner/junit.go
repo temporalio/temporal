@@ -1,16 +1,13 @@
 package testrunner
 
 import (
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"iter"
-	"log"
-	"os"
 	"slices"
 	"strings"
 
-	"github.com/jstemmer/go-junit-report/v2/junit"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 // alertsSuiteName is the JUnit suite name used for structural alerts (data
@@ -33,22 +30,15 @@ const (
 
 type junitReport struct {
 	junit.Testsuites
-	path          string
 	reportingErrs []error
 }
 
-func (j *junitReport) read() error {
-	f, err := os.Open(j.path)
+func readReport(path string) (*junitReport, error) {
+	testsuites, err := junit.Read(path)
 	if err != nil {
-		return fmt.Errorf("failed to open junit report file: %w", err)
+		return nil, err
 	}
-	defer f.Close()
-
-	decoder := xml.NewDecoder(f)
-	if err = decoder.Decode(&j.Testsuites); err != nil {
-		return fmt.Errorf("failed to read junit report file: %w", err)
-	}
-	return nil
+	return &junitReport{Testsuites: *testsuites}, nil
 }
 
 // generateReport builds a JUnit report for failures that the runner
@@ -81,22 +71,6 @@ func generateFailure(kind failureType, data string) *junit.Result {
 		Type:    string(kind),
 		Data:    data,
 	}
-}
-
-func (j *junitReport) write() error {
-	f, err := os.Create(j.path)
-	if err != nil {
-		return fmt.Errorf("failed to open junit report file: %w", err)
-	}
-	defer f.Close()
-
-	encoder := xml.NewEncoder(f)
-	encoder.Indent("", "    ")
-	if err = encoder.Encode(j.Testsuites); err != nil {
-		return fmt.Errorf("failed to write junit report file: %w", err)
-	}
-	log.Printf("wrote junit report to %s", j.path)
-	return nil
 }
 
 // appendSyntheticFailure adds a failure entry under a "testrunner" suite for

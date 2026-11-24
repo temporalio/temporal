@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/callbacks"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
@@ -74,6 +76,8 @@ const (
 const (
 	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
 	queueMetricUpdateInterval = 5 * time.Minute
+	// Spreads the emit, and the task read it does, so shards owned by a host don't align on it.
+	queueMetricUpdateJitterCoefficient = 0.15
 )
 
 var (
@@ -154,6 +158,7 @@ type (
 		chasmRegistry         *chasm.Registry
 		chasmWorkflowRegistry *chasmworkflow.Registry
 		endpointRegistry      chasm.EndpointRegistry
+		callbackValidator     callbacks.Validator
 
 		businessIDRateLimiters cache.Cache
 	}
@@ -537,6 +542,9 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
+	if err := s.validateWorkflowEventsTransactionIDs(ctx, request.NewWorkflowEvents); err != nil {
+		return nil, err
+	}
 
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
@@ -596,6 +604,10 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	if err := s.validateWorkflowEventsTransactionIDs(ctx, request.UpdateWorkflowEvents, request.NewWorkflowEvents); err != nil {
+		return nil, err
+	}
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -674,6 +686,15 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+	if err := s.validateWorkflowEventsTransactionIDs(
+		ctx,
+		request.ResetWorkflowEvents,
+		request.NewWorkflowEvents,
+		request.CurrentWorkflowEvents,
+	); err != nil {
+		return nil, err
+	}
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -878,6 +899,18 @@ func (s *ContextImpl) AppendHistoryEvents(
 
 	request.ShardID = s.shardID
 
+	if len(request.Events) > 0 {
+		if err := s.validateTransactionIDs(
+			ctx,
+			request.BranchToken,
+			request.Events[0].EventId,
+			request.PrevTransactionID,
+			request.TransactionID,
+		); err != nil {
+			return 0, err
+		}
+	}
+
 	size := 0
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
@@ -905,14 +938,91 @@ func (s *ContextImpl) AppendHistoryEvents(
 	return size, err0
 }
 
+func (s *ContextImpl) AppendRawHistoryEvents(
+	ctx context.Context,
+	request *persistence.AppendRawHistoryNodesRequest,
+) (*persistence.AppendHistoryNodesResponse, error) {
+	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
+	request.ShardID = s.shardID
+
+	if err := s.validateTransactionIDs(
+		ctx,
+		request.BranchToken,
+		request.NodeID,
+		request.PrevTransactionID,
+		request.TransactionID,
+	); err != nil {
+		return nil, err
+	}
+	return s.GetExecutionManager().AppendRawHistoryNodes(ctx, request)
+}
+
+func (s *ContextImpl) validateWorkflowEventsTransactionIDs(
+	ctx context.Context,
+	workflowEventsSlices ...[]*persistence.WorkflowEvents,
+) error {
+	for _, workflowEventsSlice := range workflowEventsSlices {
+		for _, workflowEvents := range workflowEventsSlice {
+			if len(workflowEvents.Events) == 0 {
+				continue
+			}
+			if err := s.validateTransactionIDs(
+				ctx,
+				workflowEvents.BranchToken,
+				workflowEvents.Events[0].EventId,
+				workflowEvents.PrevTxnID,
+				workflowEvents.TxnID,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// validateTransactionIDs rejects a history node whose transaction ID is not greater than the previous node's. History
+// node writes are not fenced by RangeID, and a newer owner's higher transaction ID causes this, so it first asserts
+// shard ownership, which stops this shard if it is the stale one. It acquires the shard lock, so call it without the
+// lock held.
+func (s *ContextImpl) validateTransactionIDs(
+	ctx context.Context,
+	branchToken []byte,
+	nodeID int64,
+	prevTransactionID int64,
+	transactionID int64,
+) error {
+	if transactionID > prevTransactionID || !s.config.EnableHistoryNodeTransactionIDValidation() {
+		return nil
+	}
+	if err := s.AssertOwnership(ctx); err != nil {
+		return err
+	}
+	softassert.Fail(
+		s.contextTaggedLogger,
+		"history node transaction ID is not greater than previous transaction ID",
+		tag.WorkflowBranchToken(branchToken),
+		tag.NewInt64("node-id", nodeID),
+		tag.NewInt64("transaction-id", transactionID),
+		tag.NewInt64("prev-transaction-id", prevTransactionID),
+	)
+	return &persistence.InvalidPersistenceRequestError{
+		Msg: fmt.Sprintf("transaction ID %v must be greater than prevTransaction ID %v", transactionID, prevTransactionID),
+	}
+}
+
 func (s *ContextImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	archetypeID chasm.ArchetypeID,
+	lastWriteVersion int64,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
 	workflowStartTime time.Time,
+	workflowCreateTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
 	retentionDelete bool,
 ) (retErr error) {
@@ -993,6 +1103,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 							CloseTime:                      workflowCloseTime,
 							StartTime:                      workflowStartTime,
+							CreateTime:                     workflowCreateTime,
 							IsRetentionDelete:              retentionDelete,
 						},
 					}
@@ -1008,6 +1119,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							&tasks.DeleteExecutionReplicationTask{
 								WorkflowKey: key,
 								ArchetypeID: archetypeID,
+								Version:     lastWriteVersion,
 							},
 						}
 					}
@@ -1204,7 +1316,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 }
 
 func (s *ContextImpl) monitorQueueMetrics() {
-	timer := time.NewTimer(queueMetricUpdateInterval)
+	timer := time.NewTimer(backoff.Jitter(queueMetricUpdateInterval, queueMetricUpdateJitterCoefficient))
 	defer timer.Stop()
 
 	done := s.lifecycleCtx.Done()
@@ -1216,7 +1328,7 @@ func (s *ContextImpl) monitorQueueMetrics() {
 			s.emitShardInfoMetricsLogs()
 			// We reset the timer (rather than using a ticker) so that delays in grabbing the shard lock
 			// don't cause us to pile up
-			timer.Reset(queueMetricUpdateInterval)
+			timer.Reset(backoff.Jitter(queueMetricUpdateInterval, queueMetricUpdateJitterCoefficient))
 		}
 	}
 }
@@ -1255,6 +1367,21 @@ func (s *ContextImpl) updateShardInfo(
 	s.tasksCompletedSinceLastUpdate = 0
 
 	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo))
+
+	metrics.ShardInfoSize.With(s.metricsHandler).Record(int64(updatedShardInfo.Size()))
+	for categoryID, queueState := range updatedShardInfo.QueueStates {
+		category, ok := s.taskCategoryRegistry.GetCategoryByID(int(categoryID))
+		if !ok {
+			continue
+		}
+		sizeBytes := int64(queueState.Size())
+		categoryTag := metrics.TaskCategoryTag(category.Name())
+		// The counter is a true accumulator; the histogram's _sum is not, since tally's Prometheus
+		// reporter replays each sample as its bucket's upper bound, not the recorded value.
+		metrics.QueueStateSize.With(s.metricsHandler).Record(sizeBytes, categoryTag)
+		metrics.QueueStateSizeTotal.With(s.metricsHandler).Record(sizeBytes, categoryTag)
+	}
+
 	request := &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
@@ -1282,15 +1409,79 @@ func (s *ContextImpl) updateShardInfo(
 	return nil
 }
 
-// Take the shard lock and update queue metrics
+type immediateBacklogRange struct {
+	category        tasks.Category
+	inclusiveMinKey tasks.Key
+	exclusiveMaxKey tasks.Key
+}
+
 func (s *ContextImpl) emitShardInfoMetricsLogs() {
+	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	immediateBacklogs := s.emitQueueLagMetrics(metricsHandler)
+
+	if !s.config.EmitImmediateQueueBacklogAge() {
+		return
+	}
+
+	// Immediate task keys carry no timestamp, so the age needs the task itself, read off the lock.
+	for _, backlog := range immediateBacklogs {
+		if s.lifecycleCtx.Err() != nil {
+			return
+		}
+		oldest, ok := s.oldestImmediateTaskVisibilityTime(
+			backlog.category,
+			backlog.inclusiveMinKey,
+			backlog.exclusiveMaxKey,
+		)
+		if !ok {
+			continue
+		}
+		metrics.ShardInfoImmediateQueueBacklogAge.
+			With(metricsHandler).
+			Record(max(0, s.timeSource.Now().Sub(oldest)), metrics.TaskCategoryTag(backlog.category.Name()))
+	}
+}
+
+func (s *ContextImpl) emitImmediateQueueLagLocked(
+	category tasks.Category,
+	queueState *persistencespb.QueueState,
+	metricsHandler metrics.Handler,
+	emitShardLagLog bool,
+) (immediateBacklogRange, bool) {
+	minTaskKey := getMinTaskKey(queueState)
+	if minTaskKey == nil {
+		return immediateBacklogRange{}, false
+	}
+	highWatermark := s.taskKeyManager.getExclusiveReaderHighWatermark(category)
+	lag := highWatermark.TaskID - minTaskKey.TaskID
+	if emitShardLagLog && lag > logWarnImmediateTaskLag {
+		s.contextTaggedLogger.Warn(
+			"Shard queue lag exceeds warn threshold.",
+			tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
+		)
+	}
+	metrics.ShardInfoImmediateQueueLagHistogram.
+		With(metricsHandler).
+		Record(lag, metrics.TaskCategoryTag(category.Name()))
+
+	if lag <= 0 {
+		return immediateBacklogRange{}, false
+	}
+	return immediateBacklogRange{
+		category:        category,
+		inclusiveMinKey: *minTaskKey,
+		exclusiveMaxKey: highWatermark,
+	}, true
+}
+
+func (s *ContextImpl) emitQueueLagMetrics(metricsHandler metrics.Handler) []immediateBacklogRange {
+	var immediateBacklogs []immediateBacklogRange
+
 	s.rLock()
 	defer s.rUnlock()
 
 	queueStates := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo)).QueueStates
 	emitShardLagLog := s.config.EmitShardLagLog()
-
-	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 
 Loop:
 	for categoryID, queueState := range queueStates {
@@ -1301,20 +1492,9 @@ Loop:
 
 		switch category.Type() {
 		case tasks.CategoryTypeImmediate:
-			minTaskKey := getMinTaskKey(queueState)
-			if minTaskKey == nil {
-				continue Loop
+			if backlog, ok := s.emitImmediateQueueLagLocked(category, queueState, metricsHandler, emitShardLagLog); ok {
+				immediateBacklogs = append(immediateBacklogs, backlog)
 			}
-			lag := s.taskKeyManager.getExclusiveReaderHighWatermark(category).TaskID - minTaskKey.TaskID
-			if emitShardLagLog && lag > logWarnImmediateTaskLag {
-				s.contextTaggedLogger.Warn(
-					"Shard queue lag exceeds warn threshold.",
-					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
-				)
-			}
-			metrics.ShardInfoImmediateQueueLagHistogram.
-				With(metricsHandler).
-				Record(lag, metrics.TaskCategoryTag(category.Name()))
 
 		case tasks.CategoryTypeScheduled:
 			minTaskKey := getMinTaskKey(queueState)
@@ -1334,6 +1514,42 @@ Loop:
 			s.contextTaggedLogger.Error("Unknown task category type", tag.Stringer("task-category", category.Type()))
 		}
 	}
+
+	return immediateBacklogs
+}
+
+func (s *ContextImpl) oldestImmediateTaskVisibilityTime(
+	category tasks.Category,
+	inclusiveMinKey tasks.Key,
+	exclusiveMaxKey tasks.Key,
+) (time.Time, bool) {
+	ctx, cancel := s.newIOContext()
+	defer cancel()
+	// Task loading holds a reserved persistence priority; a metric should be shed before it.
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+
+	resp, err := s.executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+		ShardID:             s.shardID,
+		TaskCategory:        category,
+		InclusiveMinTaskKey: inclusiveMinKey,
+		ExclusiveMaxTaskKey: exclusiveMaxKey,
+		BatchSize:           1,
+	})
+	if err != nil {
+		if !common.IsContextCanceledErr(err) {
+			s.throttledLogger.Warn("Failed to read oldest task for backlog age metric",
+				tag.Error(err), tag.TaskCategoryID(category.ID()))
+		}
+		return time.Time{}, false
+	}
+	if len(resp.Tasks) == 0 {
+		return time.Time{}, false
+	}
+	// An unset visibility time would date the age from the epoch.
+	if oldest := resp.Tasks[0].GetVisibilityTime(); !oldest.IsZero() {
+		return oldest, true
+	}
+	return time.Time{}, false
 }
 
 func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
@@ -1413,6 +1629,7 @@ func (s *ContextImpl) handleWriteErrorLocked(
 
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
+		*persistence.WorkflowRunAlreadyExistsError,
 		*persistence.ConditionFailedError,
 		*persistence.InvalidPersistenceRequestError,
 		*persistence.TransactionSizeLimitError,
@@ -2070,6 +2287,7 @@ func newContext(
 	chasmRegistry *chasm.Registry,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	endpointRegistry chasm.EndpointRegistry,
+	callbackValidator callbacks.Validator,
 	handoverTrackerFactory HandoverTrackerFactory,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
@@ -2122,6 +2340,7 @@ func newContext(
 		chasmRegistry:           chasmRegistry,
 		chasmWorkflowRegistry:   chasmWorkflowRegistry,
 		endpointRegistry:        endpointRegistry,
+		callbackValidator:       callbackValidator,
 		businessIDRateLimiters: cache.New(
 			historyConfig.BusinessIDReuseLimiterCacheSize(),
 			&cache.Options{TTL: historyConfig.BusinessIDReuseLimiterCacheTTL()},
@@ -2137,12 +2356,15 @@ func newContext(
 		},
 	)
 	shardContext.handoverTracker = handoverTrackerFactory(HandoverTrackerParams{
-		ClusterMetadata:         clusterMetadata,
-		GetMaxReplicationTaskID: shardContext.getMaxReplicationTaskID,
-		ErrorByStateFn:          shardContext.errorByState,
-		NotifyReplicationFn:     shardContext.notifyReplicationQueueProcessor,
-		NamespaceRegistry:       namespaceRegistry,
-		Logger:                  taggedLogger,
+		ShardID:                      shardID,
+		ClusterMetadata:              clusterMetadata,
+		GetMaxReplicationTaskID:      shardContext.getMaxReplicationTaskID,
+		ErrorByStateFn:               shardContext.errorByState,
+		NotifyReplicationFn:          shardContext.notifyReplicationQueueProcessor,
+		NamespaceRegistry:            namespaceRegistry,
+		Logger:                       taggedLogger,
+		EventLogger:                  eventLogger,
+		EmitNamespaceLifecycleEvents: historyConfig.EmitNamespaceLifecycleEvents,
 	})
 	if shardContext.GetConfig().EnableHostLevelEventsCache() {
 		shardContext.eventsCache = eventsCache
@@ -2255,13 +2477,17 @@ func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
 	return s.endpointRegistry
 }
 
-func (s *ContextImpl) BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
-	rps := s.config.BusinessIDReuseRate(namespaceID.String())
+func (s *ContextImpl) CallbackValidator() callbacks.Validator {
+	return s.callbackValidator
+}
+
+func (s *ContextImpl) BusinessIDReuseRateLimiter(namespaceName namespace.Name, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
+	rps := s.config.BusinessIDReuseRate(namespaceName.String())
 	if rps <= 0 {
 		return nil
 	}
-	burst := max(1, int(float64(rps)*s.config.BusinessIDReuseBurstRatio(namespaceID.String())))
-	key := namespaceID.String() + "/" + businessID + "/" + strconv.Itoa(int(archetypeID))
+	burst := max(1, int(float64(rps)*s.config.BusinessIDReuseBurstRatio(namespaceName.String())))
+	key := namespaceName.String() + "/" + businessID + "/" + strconv.Itoa(int(archetypeID))
 	existing := s.businessIDRateLimiters.Get(key)
 	if existing == nil {
 		rl := quotas.NewRateLimiter(float64(rps), burst)

@@ -46,26 +46,35 @@ func NewBackfillerTaskHandler(opts BackfillerTaskHandlerOptions) *BackfillerTask
 
 // BackfillerTask invalidation reasons. Limited cardinality for ReasonTag.
 const (
-	backfillerInvalidatedStaleHWM metrics.ReasonString = "stale_hwm"
+	backfillerInvalidatedStaleStamp metrics.ReasonString = "stale_stamp"
 )
 
 func (b *BackfillerTaskHandler) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
-	attrs chasm.TaskInvocation,
-	_ *schedulerpb.BackfillerTask,
+	_ chasm.TaskInvocation,
+	task *schedulerpb.BackfillerTask,
 ) (bool, error) {
 	if backfiller.Scheduler.Get(ctx).WorkflowMigration != nil {
 		return false, nil
 	}
-	valid, err := validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
-	if err != nil {
-		return false, err
+	taskStamp := task.GetStamp()
+	currentStamp := backfiller.GetTaskStamp()
+	attempt := backfiller.GetAttempt()
+	valid := taskStamp == currentStamp && currentStamp > attempt
+	if taskStamp == 0 {
+		// An old binary schedules zero-stamp tasks and advances only Attempt.
+		valid = currentStamp == 0 || attempt >= currentStamp
 	}
 	if !valid {
+		ctx.Logger().Debug("dropping invalid backfiller task",
+			tag.String("backfill-id", backfiller.GetBackfillId()),
+			tag.Int64("task-stamp", taskStamp),
+			tag.Int64("current-stamp", currentStamp),
+			tag.Int64("attempt", attempt))
 		newTaggedMetricsHandler(b.metricsHandler, backfiller.Scheduler.Get(ctx)).
 			Counter(metrics.ScheduleBackfillerTask.Name()).
-			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleHWM))
+			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleStamp))
 	}
 	return valid, nil
 }
@@ -74,14 +83,22 @@ func (b *BackfillerTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	backfiller *Backfiller,
 	_ chasm.TaskAttributes,
-	_ *schedulerpb.BackfillerTask,
+	task *schedulerpb.BackfillerTask,
 ) error {
-	defer func() { backfiller.Attempt++ }()
-
 	scheduler := backfiller.Scheduler.Get(ctx)
-	logger := newTaggedLogger(b.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(b.metricsHandler, scheduler)
 	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
+
+	if task.GetStamp() == 0 {
+		// A legacy binary ignored TaskStamp. Use its zero-stamp task only to
+		// schedule a current stamped task, without allowing it to process a range.
+		backfiller.TaskStamp = backfiller.Attempt
+		b.rescheduleBackfill(ctx, backfiller)
+		return nil
+	}
+	defer func() { backfiller.Attempt++ }()
+
+	logger := newTaggedLogger(b.baseLogger, scheduler)
 
 	invoker := scheduler.Invoker.Get(ctx)
 
@@ -157,17 +174,18 @@ func (b *BackfillerTaskHandler) processBackfill(
 ) (result backfillProgressResult, err error) {
 	request := backfiller.GetBackfillRequest()
 
-	// Restore high watermark if we've already started processing the backfill.
+	endTime := request.GetEndTime().AsTime()
+	// Resume from the high watermark only once genuine progress has been recorded.
+	// The watermark is left unset until a batch is actually processed (see Execute),
+	// so a fresh or capacity-stalled backfiller starts from the range start.
 	var startTime time.Time
 	lastProcessed := backfiller.GetLastProcessedTime()
-	if backfiller.GetAttempt() > 0 {
+	if hasRecordedProgress(lastProcessed) {
 		startTime = lastProcessed.AsTime()
 	} else {
-		// On the first attempt, the start time is set slightly behind in order to make
-		// the backfill start time inclusive.
+		// On the first attempt, start slightly behind to make the range inclusive.
 		startTime = request.GetStartTime().AsTime().Add(-1 * time.Millisecond)
 	}
-	endTime := request.GetEndTime().AsTime()
 	specResult, err := b.specProcessor.ProcessTimeRange(
 		scheduler,
 		startTime,
@@ -193,6 +211,13 @@ func (b *BackfillerTaskHandler) processBackfill(
 	result.BufferedStarts = specResult.BufferedStarts
 
 	return
+}
+
+// hasRecordedProgress reports whether a backfiller's high watermark reflects a
+// batch that was actually processed. An unset (nil or zero) watermark means no
+// progress yet - a fresh backfiller.
+func hasRecordedProgress(lastProcessed *timestamppb.Timestamp) bool {
+	return lastProcessed != nil && (lastProcessed.GetSeconds() != 0 || lastProcessed.GetNanos() != 0)
 }
 
 // backoffDelay returns the amount of delay that should be added when retrying.

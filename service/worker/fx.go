@@ -4,10 +4,11 @@ import (
 	"context"
 	"os"
 
+	otellog "go.opentelemetry.io/otel/log"
 	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/namespacereplication"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -22,15 +24,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -50,6 +50,7 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	chasmscheduler.Module,
 	callback.Module,
+	namespacereplication.Module,
 	scheduler.Module,
 	batcher.Module,
 	workerdeployment.Module,
@@ -57,6 +58,7 @@ var Module = fx.Options(
 	dlq.Module,
 	dummy.Module,
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c
@@ -80,6 +82,7 @@ var Module = fx.Options(
 		},
 	),
 	fx.Provide(HostInfoProvider),
+	fx.Provide(VisibilityManagerConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(ConfigProvider),
@@ -92,6 +95,9 @@ var Module = fx.Options(
 		dataMerger nsreplication.NamespaceDataMerger,
 		admitter nsreplication.NamespaceReplicationAdmitter,
 		logger log.Logger,
+		metricsHandler metrics.Handler,
+		eventLogger otellog.Logger,
+		serviceConfig *Config,
 		testHooks testhooks.TestHooks,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
@@ -101,10 +107,16 @@ var Module = fx.Options(
 			admitter,
 			logger,
 			testHooks,
+			nsreplication.WithNamespaceReplicationMetrics(metricsHandler),
+			nsreplication.WithNamespaceReplicationLifecycleEvents(
+				eventLogger,
+				serviceConfig.EmitNamespaceLifecycleEvents,
+			),
 		)
 	}),
 	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(nsreplication.NewDefaultAdmitter),
+	fx.Provide(wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
@@ -156,42 +168,27 @@ func ConfigProvider(
 	)
 }
 
+func VisibilityManagerConfigProvider(serviceConfig *Config) *visibility.ManagerConfig {
+	return &visibility.ManagerConfig{
+		EsProcessorConfig: nil, // worker visibility never write
+
+		MaxReadQPS:                     serviceConfig.VisibilityPersistenceMaxReadQPS,
+		MaxWriteQPS:                    serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		OperatorRPSRatio:               serviceConfig.OperatorRPSRatio,
+		SlowQueryThreshold:             serviceConfig.VisibilityPersistenceSlowQueryThreshold,
+		EnableReadFromSecondary:        serviceConfig.EnableReadFromSecondaryVisibility,
+		EnableShadowReadMode:           serviceConfig.VisibilityEnableShadowReadMode,
+		SecondaryVisibilityWritingMode: dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // worker visibility never write
+		DisableOrderByClause:           serviceConfig.VisibilityDisableOrderByClause,
+		EnableManualPagination:         serviceConfig.VisibilityEnableManualPagination,
+	}
+}
+
 func VisibilityManagerProvider(
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	persistenceConfig *config.Persistence,
-	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
-	serviceConfig *Config,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
-	saProvider searchattribute.Provider,
-	namespaceRegistry namespace.Registry,
-	chasmRegistry *chasm.Registry,
-	serializer serialization.Serializer,
+	managerParams visibility.ManagerParams,
+	managerConfig *visibility.ManagerConfig,
 ) (manager.VisibilityManager, error) {
-	return visibility.NewManager(
-		*persistenceConfig,
-		persistenceServiceResolver,
-		customVisibilityStoreFactory,
-		nil, // worker visibility never write
-		saProvider,
-		searchAttributesMapperProvider,
-		namespaceRegistry,
-		chasmRegistry,
-		serviceConfig.VisibilityPersistenceMaxReadQPS,
-		serviceConfig.VisibilityPersistenceMaxWriteQPS,
-		serviceConfig.OperatorRPSRatio,
-		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
-		serviceConfig.EnableReadFromSecondaryVisibility,
-		serviceConfig.VisibilityEnableShadowReadMode,
-		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // worker visibility never write
-		serviceConfig.VisibilityDisableOrderByClause,
-		serviceConfig.VisibilityEnableManualPagination,
-		serviceConfig.VisibilityEnableUnifiedQueryConverter,
-		metricsHandler,
-		logger,
-		serializer,
-	)
+	return visibility.NewManager(&managerParams, managerConfig)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

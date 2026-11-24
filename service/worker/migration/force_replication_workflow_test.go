@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 )
 
@@ -67,7 +68,15 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	namespaceID := uuid.NewString()
 
 	var a *activities
-	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 4}, nil)
+	var lifecycleEvents []wideevents.NamespaceMigrationWorkflowLifecycleInput
+	env.OnGetVersion(migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1).Return(workflow.Version(1))
+	env.OnActivity(a.EmitNamespaceMigrationWorkflowLifecycle, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			lifecycleEvents = append(lifecycleEvents, args.Get(1).(wideevents.NamespaceMigrationWorkflowLifecycleInput))
+		}).
+		Return(nil).
+		Twice()
+	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
 	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	totalPageCount := 4
@@ -109,6 +118,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
 		TargetClusterEndpoint:   "test-target",
+		ReplicatedWorkflowCount: 6,
 	})
 
 	s.True(env.IsWorkflowCompleted())
@@ -126,9 +136,14 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	s.Equal(closeTime, status.LastCloseTime)
 	s.True(status.TaskQueueUserDataReplicationStatus.Done)
 	s.Equal("", status.TaskQueueUserDataReplicationStatus.FailureMessage)
-	s.Equal(int64(4), status.TotalWorkflowCount)
-	s.Equal(int64(4), status.ReplicatedWorkflowCount)
+	s.Equal(int64(10), status.TotalWorkflowCount)
+	s.Equal(int64(10), status.ReplicatedWorkflowCount)
 	s.Equal([]byte(nil), status.PageTokenForRestart)
+	s.Equal(wideevents.PhaseNamespaceForceReplicationStarted, lifecycleEvents[0].Phase)
+	s.Equal(wideevents.PhaseNamespaceForceReplicationFinished, lifecycleEvents[1].Phase)
+	s.Equal(wideevents.NamespaceMigrationWorkflowSucceeded, lifecycleEvents[1].Status)
+	s.Require().NotNil(lifecycleEvents[1].VerifiedWorkflowCount)
+	s.Equal(int64(10), *lifecycleEvents[1].VerifiedWorkflowCount)
 }
 
 func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
@@ -184,7 +199,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 	expectContinueAsNew := true
 
 	// Run the workflow once. We should get a continue as new error.
-	continueAsNewInput, queryStatus := s.testRunForceReplicationForContinueAsNew(
+	continueAsNewInput, queryStatus, lifecycleEvents := s.testRunForceReplicationForContinueAsNew(
 		mockListWorkflows,
 		ForceReplicationParams{
 			Namespace:               "test-ns",
@@ -232,6 +247,8 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 	s.Equal(startTime, queryStatus.LastStartTime)
 	s.Equal(1, queryStatus.ContinuedAsNewCount)
 	s.Equal([]byte("fake-initial-page-token"), queryStatus.PageTokenForRestart)
+	s.Require().Len(lifecycleEvents, 1)
+	s.Equal(wideevents.PhaseNamespaceForceReplicationStarted, lifecycleEvents[0].Phase)
 }
 
 func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAsNew(
@@ -239,13 +256,21 @@ func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAs
 	input ForceReplicationParams,
 	expectContinueAsNew bool,
 	expMaxPageCountPerExecution int,
-) (*ForceReplicationParams, ForceReplicationStatus) {
+) (*ForceReplicationParams, ForceReplicationStatus, []wideevents.NamespaceMigrationWorkflowLifecycleInput) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.NewString()
 
 	var a *activities
+	var lifecycleEvents []wideevents.NamespaceMigrationWorkflowLifecycleInput
+	env.OnGetVersion(migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1).Return(workflow.Version(1))
+	env.OnActivity(a.EmitNamespaceMigrationWorkflowLifecycle, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			lifecycleEvents = append(lifecycleEvents, args.Get(1).(wideevents.NamespaceMigrationWorkflowLifecycleInput))
+		}).
+		Return(nil).
+		Once()
 	if input.TotalForceReplicateWorkflowCount == 0 {
 		env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
 	}
@@ -284,7 +309,7 @@ func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAs
 	var status ForceReplicationStatus
 	s.NoError(envValue.Get(&status))
 
-	return continueAsNewParams, status
+	return continueAsNewParams, status, lifecycleEvents
 }
 
 func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput() {

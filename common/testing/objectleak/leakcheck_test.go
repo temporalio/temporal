@@ -1,12 +1,21 @@
 package objectleak
 
 import (
+	"fmt"
 	"reflect"
+	"regexp"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	testGCSettleTimeout = 100 * time.Millisecond
+	testGCSettleMinWait = 5 * time.Millisecond
+	testGCSettleQuiet   = 5 * time.Millisecond
 )
 
 type graphRoot struct {
@@ -20,12 +29,34 @@ type graphNode struct {
 
 type graphLeaf struct {
 	Value int
+	_     [8]byte
+}
+
+type tinyValue byte
+
+type tinyZeroLengthPointerArrayValue struct {
+	Pointers [0]*byte
+	Value    byte
+}
+
+var diagnosticAddressesPattern = regexp.MustCompile(`(?m)^(    addresses: )\[[^\n]*\]$`)
+
+type aliasOuter struct {
+	aliasInner
+	_ [8]byte
+}
+
+type aliasInner struct {
+	Value int
+	_     [8]byte
 }
 
 func TestObjectLeak_Check(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		opts            []Option
+		setup           func(*ObjectLeakCheck, []any) Baseline
+		gcSettleTimeout time.Duration
 		wantErrContains []string
 		wantReport      string
 	}{
@@ -37,15 +68,21 @@ func TestObjectLeak_Check(t *testing.T) {
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 6 total, 0 expected, 6 unexpected
-retained objects: 4 total, 0 expected, 4 unexpected
+retained paths: 6 total, 0 baseline, 0 expected, 6 unexpected
+retained objects: 4 total, 0 baseline, 0 expected, 4 unexpected
 
 unexpected retained objects:
   2 objects: *objectleak.graphRoot
+    addresses: [...]
   2 paths, 1 object: Node (*objectleak.graphNode)
+    addresses: [...]
   2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+    addresses: [...]
 
 expected retained objects:
+  none
+
+baseline retained objects:
   none`,
 		},
 		{
@@ -59,8 +96,8 @@ expected retained objects:
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 6 total, 6 expected, 0 unexpected
-retained objects: 4 total, 4 expected, 0 unexpected
+retained paths: 6 total, 0 baseline, 6 expected, 0 unexpected
+retained objects: 4 total, 0 baseline, 4 expected, 0 unexpected
 
 unexpected retained objects:
   none
@@ -68,7 +105,10 @@ unexpected retained objects:
 expected retained objects:
   2 objects: *objectleak.graphRoot
   2 paths, 1 object: Node (*objectleak.graphNode)
-  2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)`,
+  2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+
+baseline retained objects:
+  none`,
 		},
 		{
 			name: "fails stale expected pattern",
@@ -83,8 +123,8 @@ expected retained objects:
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 6 total, 6 expected, 0 unexpected
-retained objects: 4 total, 4 expected, 0 unexpected
+retained paths: 6 total, 0 baseline, 6 expected, 0 unexpected
+retained objects: 4 total, 0 baseline, 4 expected, 0 unexpected
 
 unexpected retained objects:
   none
@@ -93,6 +133,9 @@ expected retained objects:
   2 objects: *objectleak.graphRoot
   2 paths, 1 object: Node (*objectleak.graphNode)
   2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+
+baseline retained objects:
+  none
 
 stale expected patterns:
   does.not.match`,
@@ -110,8 +153,8 @@ stale expected patterns:
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 6 total, 6 expected, 0 unexpected
-retained objects: 4 total, 4 expected, 0 unexpected
+retained paths: 6 total, 0 baseline, 6 expected, 0 unexpected
+retained objects: 4 total, 0 baseline, 4 expected, 0 unexpected
 
 unexpected retained objects:
   none
@@ -120,6 +163,9 @@ expected retained objects:
   2 objects: *objectleak.graphRoot
   2 paths, 1 object: Node (*objectleak.graphNode)
   2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+
+baseline retained objects:
+  none
 
 stale prunes:
   does.not.Match`,
@@ -130,19 +176,200 @@ stale prunes:
 				WithExpected("*objectleak.graphRoot"),
 				WithExpected("*objectleak.graphNode"),
 				WithPruneType(reflect.TypeFor[graphNode]().PkgPath() + ".graphNode"),
+				WithPruneType(reflect.TypeFor[graphNode]().PkgPath() + ".graphN*"),
 			},
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 4 total, 4 expected, 0 unexpected
-retained objects: 3 total, 3 expected, 0 unexpected
+retained paths: 4 total, 0 baseline, 4 expected, 0 unexpected
+retained objects: 3 total, 0 baseline, 3 expected, 0 unexpected
 
 unexpected retained objects:
   none
 
 expected retained objects:
   2 objects: *objectleak.graphRoot
-  2 paths, 1 object: Node (*objectleak.graphNode)`,
+  2 paths, 1 object: Node (*objectleak.graphNode)
+
+baseline retained objects:
+  none`,
+		},
+		{
+			name: "reports baseline-only expected patterns stale",
+			opts: []Option{
+				WithExpected("*objectleak.graphLeaf"),
+			},
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				check.Track(roots[0])
+				baseline := check.IgnoreCurrent()
+				check.Track(roots[1]) // shared node and leaf remain baseline-covered
+				return baseline
+			},
+			wantErrContains: []string{
+				"unexpected retained objects",
+				"stale expected patterns",
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+retained paths: 4 total, 3 baseline, 0 expected, 1 unexpected
+retained objects: 4 total, 3 baseline, 0 expected, 1 unexpected
+
+unexpected retained objects:
+  1 object: *objectleak.graphRoot
+    addresses: [...]
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  1 object: *objectleak.graphRoot
+  1 object: Node (*objectleak.graphNode)
+  1 object: Node.Leaf (*objectleak.graphLeaf)
+
+stale expected patterns:
+  *objectleak.graphLeaf`,
+		},
+		{
+			name:            "reports check GC settle timeout",
+			gcSettleTimeout: time.Nanosecond,
+			wantErrContains: []string{
+				"check GC settling timed out",
+				"unexpected retained objects",
+			},
+			wantReport: `object leak report
+
+tracked root objects: 2
+check GC settling timed out
+retained paths: 6 total, 0 baseline, 0 expected, 6 unexpected
+retained objects: 4 total, 0 baseline, 0 expected, 4 unexpected
+
+unexpected retained objects:
+  2 objects: *objectleak.graphRoot
+    addresses: [...]
+  2 paths, 1 object: Node (*objectleak.graphNode)
+    addresses: [...]
+  2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+    addresses: [...]
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  none`,
+		},
+		{
+			name:            "reports baseline GC settle timeout",
+			gcSettleTimeout: time.Nanosecond,
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				check.Track(roots[0])
+				baseline := check.IgnoreCurrent()           // records the baseline settle timeout
+				check.gcSettleTimeout = testGCSettleTimeout // lets Check settle normally
+				check.Track(roots[1])
+				return baseline
+			},
+			wantErrContains: []string{
+				"baseline GC settling timed out",
+				"unexpected retained objects",
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+baseline GC settling timed out
+retained paths: 4 total, 3 baseline, 0 expected, 1 unexpected
+retained objects: 4 total, 3 baseline, 0 expected, 1 unexpected
+
+unexpected retained objects:
+  1 object: *objectleak.graphRoot
+    addresses: [...]
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  1 object: *objectleak.graphRoot
+  1 object: Node (*objectleak.graphNode)
+  1 object: Node.Leaf (*objectleak.graphLeaf)`,
+		},
+		{
+			name: "deduplicates baseline objects across roots",
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				check.Track(roots[0])
+				check.Track(roots[1]) // duplicates the shared node and leaf across Track calls
+				baseline := check.IgnoreCurrent()
+				check.Track(roots[0]) // all objects remain covered by the deduplicated baseline
+				return baseline
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+retained paths: 6 total, 6 baseline, 0 expected, 0 unexpected
+retained objects: 4 total, 4 baseline, 0 expected, 0 unexpected
+
+unexpected retained objects:
+  none
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  2 objects: *objectleak.graphRoot
+  2 paths, 1 object: Node (*objectleak.graphNode)
+  2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)`,
+		},
+		{
+			name: "matches baseline objects by address",
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				outer := &aliasOuter{}
+				roots[0] = outer
+				check.Track(outer)
+				baseline := check.IgnoreCurrent()
+				check.Track(&outer.aliasInner) // same address as outer, but a different pointer type
+				return baseline
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+retained paths: 1 total, 1 baseline, 0 expected, 0 unexpected
+retained objects: 1 total, 1 baseline, 0 expected, 0 unexpected
+
+unexpected retained objects:
+  none
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  1 object: *objectleak.aliasOuter`,
+		},
+		{
+			name: "drops collected baseline objects",
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				check.Track(roots[0])
+				baseline := check.IgnoreCurrent()
+				roots[0] = nil // allows the baselined root to be collected before Check
+				check.Track(roots[1])
+				return baseline
+			},
+			wantErrContains: []string{
+				"unexpected retained objects",
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+retained paths: 3 total, 2 baseline, 0 expected, 1 unexpected
+retained objects: 3 total, 2 baseline, 0 expected, 1 unexpected
+
+unexpected retained objects:
+  1 object: *objectleak.graphRoot
+    addresses: [...]
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  1 object: Node (*objectleak.graphNode)
+  1 object: Node.Leaf (*objectleak.graphLeaf)`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -156,16 +383,29 @@ expected retained objects:
 				&graphRoot{Node: node},
 				&graphRoot{Node: node},
 			}
+
 			opts := append([]Option{}, tc.opts...)
-			opts = append(opts, WithGCSettleTimeout(10*time.Millisecond))
+			gcSettleTimeout := tc.gcSettleTimeout
+			if gcSettleTimeout == 0 {
+				gcSettleTimeout = testGCSettleTimeout
+			}
+			opts = append(opts, WithGCSettleTimeout(gcSettleTimeout))
 
 			check, err := NewObjectLeakCheck(opts...)
 			require.NoError(t, err)
-			for _, root := range roots {
-				check.Track(root)
+			check.gcSettleMinWait = testGCSettleMinWait
+			check.gcSettleQuiet = testGCSettleQuiet
+
+			var baseline Baseline
+			if tc.setup != nil {
+				baseline = tc.setup(&check, roots)
+			} else {
+				for _, root := range roots {
+					check.Track(root)
+				}
 			}
 
-			report, err := check.Check()
+			report, err := check.Check(baseline)
 			runtime.KeepAlive(roots) // prevent GC from reclaiming roots
 
 			if len(tc.wantErrContains) > 0 {
@@ -176,7 +416,100 @@ expected retained objects:
 			for _, expected := range tc.wantErrContains {
 				require.Contains(t, err.Error(), expected)
 			}
-			require.Equal(t, tc.wantReport, report)
+			require.Equal(t, tc.wantReport, diagnosticAddressesPattern.ReplaceAllString(report, "${1}[...]"))
 		})
 	}
+}
+
+func TestReportStringIncludesSortedUnexpectedAddresses(t *testing.T) {
+	roots := []*graphRoot{{}, {}}
+	addresses := []uintptr{
+		reflect.ValueOf(roots[0]).Pointer(),
+		reflect.ValueOf(roots[1]).Pointer(),
+	}
+	slices.Sort(addresses)
+	check, err := NewObjectLeakCheck(WithGCSettleTimeout(testGCSettleTimeout))
+	require.NoError(t, err)
+	check.gcSettleMinWait = testGCSettleMinWait
+	check.gcSettleQuiet = testGCSettleQuiet
+	for _, root := range roots {
+		check.Track(root)
+	}
+
+	report, err := check.Check(Baseline{})
+	runtime.KeepAlive(roots)
+	require.Error(t, err)
+	require.Contains(t, report, fmt.Sprintf("    addresses: %#x", addresses))
+}
+
+func TestReportStringLimitsUnexpectedAddresses(t *testing.T) {
+	addresses := make(map[uintptr]struct{}, 34)
+	for address := uintptr(1); address <= 34; address++ {
+		addresses[address] = struct{}{}
+	}
+	r := report{}
+	r.retained[retentionUnexpected].groups = []objectGroup{{
+		typeName:  "*objectleak.graphRoot",
+		addresses: addresses,
+	}}
+
+	require.Contains(
+		t,
+		r.string(),
+		"    addresses: [0x1 0x2 0x3 0x4 0x5 0x6 0x7 0x8 0x9 0xa 0xb 0xc 0xd 0xe 0xf 0x10 0x11 0x12 0x13 0x14 0x15 0x16 0x17 0x18 0x19 0x1a 0x1b 0x1c 0x1d 0x1e 0x1f 0x20] ... and 2 more",
+	)
+}
+
+func TestObjectLeak_CheckSkipsTinyPointerFreeObjects(t *testing.T) {
+	values := []any{
+		new(tinyValue),
+		new(tinyZeroLengthPointerArrayValue),
+	}
+	check, err := NewObjectLeakCheck(WithGCSettleTimeout(testGCSettleTimeout))
+	require.NoError(t, err)
+	check.gcSettleMinWait = testGCSettleMinWait
+	check.gcSettleQuiet = testGCSettleQuiet
+	for _, value := range values {
+		check.Track(value)
+	}
+
+	report, err := check.Check(Baseline{})
+	runtime.KeepAlive(values)
+	require.NoError(t, err)
+	require.Equal(t, `object leak report
+
+tracked root objects: 2
+retained paths: 0 total, 0 baseline, 0 expected, 0 unexpected
+retained objects: 0 total, 0 baseline, 0 expected, 0 unexpected
+
+unexpected retained objects:
+  none
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  none`, report)
+}
+
+func TestSettleGCToZeroSucceedsWhenObjectsDrainNearTimeout(t *testing.T) {
+	start := time.Now()
+	require.True(t, settleGCToZero(testGCSettleTimeout, testGCSettleMinWait, testGCSettleQuiet, func() int {
+		if time.Since(start) < testGCSettleMinWait {
+			return 1
+		}
+		return 0
+	}))
+}
+
+func TestSettleGCToZeroWaitsForQuietAfterObjectsDrain(t *testing.T) {
+	calls := 0
+	require.True(t, settleGCToZero(testGCSettleTimeout, testGCSettleMinWait, testGCSettleQuiet, func() int {
+		calls++
+		if calls == 1 {
+			return 1
+		}
+		return 0
+	}))
+	require.Greater(t, calls, 2)
 }

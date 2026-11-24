@@ -68,7 +68,7 @@ func (eh *RequestErrorHandler) HandleError(
 
 	isExpectedError := isExpectedErrorByStatusCode(statusCode) || isExpectedErrorByType(err)
 
-	recordErrorMetrics(metricsHandler, err, isExpectedError)
+	recordErrorMetrics(req, metricsHandler, err, isExpectedError)
 	eh.logError(req, fullMethod, nsName, err, statusCode, isExpectedError, logTags)
 }
 
@@ -96,15 +96,19 @@ func (eh *RequestErrorHandler) logError(
 	eh.logger.Error("service failures", append(logTags, tag.Error(err))...)
 }
 
-func recordErrorMetrics(metricsHandler metrics.Handler, err error, isExpectedError bool) {
+func recordErrorMetrics(req any, metricsHandler metrics.Handler, err error, isExpectedError bool) {
 	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		limitGroup := ""
+		if errors.Is(err, ErrNamespaceCountLimitServerBusy) {
+			limitGroup = concurrencyLimitGroup(isInternalPerNSPoll(req))
+		}
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
 			1,
 			metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause),
 			metrics.ResourceExhaustedScopeTag(resourceExhaustedErr.Scope),
+			metrics.ConcurrencyLimitGroupTag(limitGroup),
 		)
 	}
 

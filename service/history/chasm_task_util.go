@@ -100,8 +100,9 @@ func discardChasmSideEffectTask(
 	clientBean client.Bean,
 	namespaceRegistry namespace.Registry,
 ) error {
-	if !executionExistsOnSource(
+	exists, err := executionExistsOnSource(
 		ctx,
+		task,
 		taskWorkflowKey(task),
 		getTaskArchetypeID(task),
 		logger,
@@ -109,7 +110,11 @@ func discardChasmSideEffectTask(
 		clientBean,
 		namespaceRegistry,
 		registry,
-	) {
+	)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return nil
 	}
 
@@ -134,7 +139,7 @@ func discardChasmSideEffectTask(
 	}
 
 	engineCtx := chasm.NewEngineContext(ctx, engine)
-	err := tree.ExecuteSideEffectDiscardTask(
+	err = tree.ExecuteSideEffectDiscardTask(
 		engineCtx,
 		executionKey,
 		task,

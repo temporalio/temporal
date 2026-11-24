@@ -1,6 +1,7 @@
 package tdbg
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -25,16 +26,31 @@ type (
 		ErrWriter io.Writer
 		// TaskBlobEncoder is needed for custom task serialization. The default uses PredefinedTaskBlobDeserializer.
 		TaskBlobEncoder TaskBlobEncoder
+
+		namespaceReplication namespaceReplicationOptions
 	}
 	// Option modifies the Params for tdbg.
 	Option func(params *Params)
 )
 
+// WithNamespaceReplicationDataKeysToIgnore excludes exact cluster-local namespace data keys from replication verification.
+func WithNamespaceReplicationDataKeysToIgnore(keys ...string) Option {
+	keys = append([]string(nil), keys...)
+	return func(params *Params) {
+		params.namespaceReplication.dataKeysToIgnore = append(
+			params.namespaceReplication.dataKeysToIgnore,
+			keys...,
+		)
+	}
+}
+
 // NewCliApp instantiates a new instance of the CLI application.
 func NewCliApp(opts ...Option) *cli.App {
+	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
+	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
 	params := Params{
 		ClientFactory:        NewClientFactory(),
-		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
+		TaskCategoryRegistry: taskCategoryRegistry,
 		Writer:               os.Stdout,
 		ErrWriter:            os.Stderr,
 		TaskBlobEncoder:      NewProtoTaskBlobEncoder(NewPredefinedTaskBlobDeserializer()),
@@ -131,6 +147,7 @@ func NewCliApp(opts ...Option) *cli.App {
 		params.TaskCategoryRegistry,
 		prompterFactory,
 		params.TaskBlobEncoder,
+		params.namespaceReplication,
 	)
 	app.ExitErrHandler = handleError
 	app.Writer = params.Writer
@@ -152,5 +169,12 @@ func handleError(c *cli.Context, err error) {
 		_, _ = fmt.Fprintf(c.App.ErrWriter, "('export %s=1' to see stack traces)\n", showErrorStackEnv)
 	}
 
-	cli.OsExiter(1)
+	cli.OsExiter(tdbgExitCode(err))
+}
+
+func tdbgExitCode(err error) int {
+	if exitCoder, ok := errors.AsType[cli.ExitCoder](err); ok {
+		return exitCoder.ExitCode()
+	}
+	return 1
 }

@@ -13,6 +13,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -62,7 +65,23 @@ type (
 		chasmMapper   *chasm.VisibilitySearchAttributesMapper
 		archetypeID   chasm.ArchetypeID
 
-		seenNamespaceDivision bool
+		// queryTime is the reference time used to resolve NOW() expressions. When zero,
+		// getQueryTime() falls back to time.Now().UTC() at resolution time.
+		queryTime time.Time
+
+		// If disableDefaultNsDivision is true, don't auto add TemporalNamespaceDivision
+		// filter if missing.
+		disableDefaultNsDivision bool
+		seenNamespaceDivision    bool
+
+		// seenIllegalFieldName tracks illegal usage of field names in filters.
+		// Eg: Keyword01 is a field name to be mapped to an alias. Using it directly
+		// in a filter should be illegal.
+		// This flag is only used to emit metric and log at this moment.
+		seenIllegalFieldName bool
+
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 
 	QueryConverterOptionFunc[ExprT any] func(*QueryConverter[ExprT])
@@ -78,6 +97,7 @@ type (
 var (
 	groupByFieldAllowlist = []string{
 		sadefs.ExecutionStatus,
+		sadefs.TemporalNamespaceDivision,
 	}
 
 	groupByFieldPrefixAllowlist = []string{
@@ -128,11 +148,15 @@ var (
 	}
 )
 
+var fieldNameFilterAccepted = metrics.NewCounterDef("visibility_field_name_filter_accepted")
+
 func NewQueryConverter[ExprT any](
 	storeQC StoreQueryConverter[ExprT],
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *QueryConverter[ExprT] {
 	c := &QueryConverter[ExprT]{
 		storeQC:       storeQC,
@@ -142,7 +166,12 @@ func NewQueryConverter[ExprT any](
 		saTypeMap:     saTypeMap,
 		saMapper:      saMapper,
 
-		seenNamespaceDivision: false,
+		disableDefaultNsDivision: false,
+		seenNamespaceDivision:    false,
+		seenIllegalFieldName:     false,
+
+		metricsHandler: metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String())),
+		logger:         logger,
 	}
 	return c
 }
@@ -155,6 +184,23 @@ func (c *QueryConverter[ExprT]) WithSearchAttributeInterceptor(
 	}
 	c.saInterceptor = saInterceptor
 	return c
+}
+
+// WithQueryTime sets the reference time used to resolve NOW() expressions in the query.
+// When not set, NOW() resolves to time.Now().UTC() at the time the query is converted.
+func (c *QueryConverter[ExprT]) WithQueryTime(t time.Time) *QueryConverter[ExprT] {
+	c.queryTime = t.UTC()
+	return c
+}
+
+// getQueryTime returns the configured query time. If no query time was set via WithQueryTime,
+// it computes time.Now().UTC() once on first call and caches it, so that all NOW()
+// expressions within a single query evaluate to the same timestamp.
+func (c *QueryConverter[ExprT]) getQueryTime() time.Time {
+	if c.queryTime.IsZero() {
+		c.queryTime = time.Now().UTC()
+	}
+	return c.queryTime
 }
 
 func (c *QueryConverter[ExprT]) WithChasmMapper(
@@ -171,28 +217,46 @@ func (c *QueryConverter[ExprT]) WithArchetypeID(
 	return c
 }
 
+func (c *QueryConverter[ExprT]) WithDisableDefaultNamespaceDivision() *QueryConverter[ExprT] {
+	c.disableDefaultNsDivision = true
+	return c
+}
+
 func (c *QueryConverter[ExprT]) SeenNamespaceDivision() bool {
 	return c.seenNamespaceDivision
 }
 
 func (c *QueryConverter[ExprT]) Convert(
 	queryString string,
-) (*QueryParams[ExprT], error) {
+) (_ *QueryParams[ExprT], retError error) {
+	// Convert function may throw unexpected panics (eg: bugs).
+	// Capture them here to replace with an error.
+	defer metrics.CapturePanic(c.logger, c.metricsHandler, &retError)
+
 	queryParams, err := c.convertWhereString(queryString)
 	if err != nil {
 		return nil, err
 	}
 
+	if c.seenIllegalFieldName {
+		c.logger.Warn(
+			"Visibility query contains a filter on a field name",
+			tag.WorkflowNamespace(c.namespaceName.String()),
+			tag.String("query", queryString),
+		)
+		fieldNameFilterAccepted.With(c.metricsHandler).Record(1)
+	}
+
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
 	// try setting the namespace division filter based on the archetype ID,
 	// else filter by null (no division).
-	var namespaceDivisionExpr ExprT
-	if !c.seenNamespaceDivision {
+	if !c.seenNamespaceDivision && !c.disableDefaultNsDivision {
 		nsDivisionCol := NamespaceDivisionSAColumn()
 		if err := c.saInterceptor.Intercept(nsDivisionCol); err != nil {
 			return nil, err
 		}
 
+		var namespaceDivisionExpr ExprT
 		if c.archetypeID != chasm.UnspecifiedArchetypeID {
 			// For CHASM queries, filter by archetype ID
 			namespaceDivisionExpr, err = c.storeQC.ConvertComparisonExpr(
@@ -210,11 +274,11 @@ func (c *QueryConverter[ExprT]) Convert(
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
-	if err != nil {
-		return nil, err
+		queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return queryParams, nil
@@ -281,8 +345,9 @@ func (c *QueryConverter[ExprT]) convertSelectStmt(
 		}
 		if !IsGroupByFieldAllowed(colName.FieldName) {
 			return nil, NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				NotSupportedErrMessage,
+				colName.Alias,
 			)
 		}
 		res.GroupBy = append(res.GroupBy, colName)
@@ -476,9 +541,20 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 		)
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName, saType, err := c.resolveSearchAttributeAlias(saAlias)
+	saFieldName, saType, err := ResolveSearchAttributeAlias(
+		saAlias,
+		c.namespaceName,
+		c.saMapper,
+		c.saTypeMap,
+		c.chasmMapper,
+		c.archetypeID,
+	)
 	if err != nil {
 		return nil, err
+	}
+
+	if c.isIllegalFieldName(saAlias, saFieldName, saType) {
+		c.seenIllegalFieldName = true
 	}
 
 	if saFieldName == sadefs.TemporalNamespaceDivision {
@@ -492,77 +568,27 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 	return colName, nil
 }
 
-func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
-	alias string,
-) (fieldName string, fieldType enumspb.IndexedValueType, retErr error) {
-	// resolveCSA only returns true if `alias` is a custom search attribute.
-	resolveCSA := func(alias string) bool {
-		fn, err := c.saMapper.GetFieldName(alias, c.namespaceName.String())
-		if err != nil {
-			return false
-		}
-		ft, err := c.saTypeMap.GetType(fn)
-		if err != nil {
-			return false
-		}
-		fieldName, fieldType = fn, ft
+// isIllegalFieldName returns true if saAlias is a field name used directly in the query instead
+// of its alias, ie, it's either a CHASM field name or a preallocated custom search attribute field
+// name. A namespace may register an alias identical to the field name it's mapped to, in which
+// case using it is a legitimate use of the alias, and not of the field name.
+func (c *QueryConverter[ExprT]) isIllegalFieldName(
+	saAlias string,
+	saFieldName string,
+	saType enumspb.IndexedValueType,
+) bool {
+	if _, ok := c.chasmMapper.SATypeMap()[saAlias]; ok && !sadefs.IsSystem(saAlias) {
 		return true
 	}
-	// resolveChasmSA only returns true if `alias` is a CHASM search attribute.
-	resolveChasmSA := func(alias string) bool {
-		if c.chasmMapper == nil {
-			return false
-		}
-		fn, err := c.chasmMapper.Field(alias)
-		if err != nil {
-			return false
-		}
-		ft, err := c.chasmMapper.ValueType(fn)
-		if err != nil {
-			return false
-		}
-		fieldName, fieldType = fn, ft
-		return true
+	if saAlias != saFieldName || !sadefs.IsPreallocatedCSAFieldName(saAlias, saType) {
+		return false
 	}
-
-	var err error
-	fieldName = alias
-	// First, check if it's a custom search attribute.
-	if sadefs.IsMappable(alias) && resolveCSA(alias) {
-		return
+	if c.saMapper != nil {
+		// Check if the alias actually has the same name as the field name.
+		fieldName, err := c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
+		return err != nil || fieldName != saAlias
 	}
-	// Second, check if it's a CHASM search attribute.
-	if resolveChasmSA(alias) {
-		return
-	}
-	// Third, check if it's a system/reserved search attribute.
-	fieldType, err = c.saTypeMap.GetType(fieldName)
-	if err == nil {
-		return
-	}
-	// Fourth, check for special aliases or adding/removing the `Temporal` prefix.
-	if strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID {
-		fieldName = sadefs.WorkflowID
-	} else if c.archetypeID == chasm.SchedulerArchetypeID && alias == "TemporalSystemExecutionStatus" {
-		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
-		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
-		fieldName = "ExecutionStatus"
-	} else if strings.HasPrefix(fieldName, sadefs.ReservedPrefix) {
-		fieldName = fieldName[len(sadefs.ReservedPrefix):]
-	} else {
-		fieldName = sadefs.ReservedPrefix + fieldName
-	}
-	fieldType, err = c.saTypeMap.GetType(fieldName)
-	if err == nil {
-		return
-	}
-
-	retErr = NewConverterError(
-		"%s: column name '%s' is not a valid search attribute",
-		InvalidExpressionErrMessage,
-		alias,
-	)
-	return
+	return true
 }
 
 func (c *QueryConverter[ExprT]) parseValueExpr(
@@ -579,8 +605,7 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		}
 		return value, nil
 	case sqlparser.BoolVal:
-		// no-op: no validation needed
-		return bool(e), nil
+		return c.validateValueType(saName, saType, bool(e))
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
 		values := make([]any, 0, len(e))
@@ -592,10 +617,64 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 			values = append(values, item)
 		}
 		return values, nil
+	case *sqlparser.UnaryExpr:
+		// Negative value may be parsed as UnaryExpr
+		if e.Operator != sqlparser.UPlusStr && e.Operator != sqlparser.UMinusStr {
+			return nil, NewConverterError(
+				"%s: unary operator %q",
+				NotSupportedErrMessage,
+				e.Operator,
+			)
+		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); !ok || value.Type == sqlparser.StrVal {
+			return nil, NewConverterError(
+				"%s: unary operator not supported in %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		value, err := c.parseValueExpr(e.Expr, saName, saFieldName, saType)
+		if err != nil {
+			return nil, err
+		}
+		switch v := value.(type) {
+		case int64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		case float64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		default:
+			// This should never happen, but here to catch any unexpected case.
+			return nil, NewConverterError(
+				"%s: unary expression %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		return value, nil
 	case *sqlparser.GroupConcatExpr:
 		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
-		return nil, NewConverterError("%s: nested func", NotSupportedErrMessage)
+		// Allow NOW() as a value, e.g. StartTime > NOW().
+		if saType != enumspb.INDEXED_VALUE_TYPE_DATETIME {
+			return nil, NewConverterError(
+				"%s: function calls are only supported with Datetime search attributes",
+				NotSupportedErrMessage,
+			)
+		}
+		return c.parseDatetimeValueExpr(e)
+	case *sqlparser.BinaryExpr:
+		// Allow NOW() +/- 'duration', e.g. StartTime > NOW() - '5h'.
+		if saType != enumspb.INDEXED_VALUE_TYPE_DATETIME {
+			return nil, NewConverterError(
+				"%s: binary operators are only supported with Datetime search attributes",
+				NotSupportedErrMessage,
+			)
+		}
+		return c.parseDatetimeValueExpr(e)
 	case *sqlparser.ColName:
 		return nil, NewConverterError(
 			"%s: column name on the right side of comparison expression (did you forget to quote %q?)",
@@ -609,6 +688,83 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 			expr,
 		)
 	}
+}
+
+// parseDatetimeValueExpr evaluates a NOW() or NOW() +/- 'duration' expression relative to the
+// query time, and formats the result as a Datetime value.
+func (c *QueryConverter[ExprT]) parseDatetimeValueExpr(expr sqlparser.Expr) (any, error) {
+	t, err := evalDatetimeExpr(expr, c.getQueryTime())
+	if err != nil {
+		return nil, err
+	}
+	return t.UTC().Format(c.storeQC.GetDatetimeFormat()), nil
+}
+
+// evalDatetimeExpr evaluates NOW() to queryTime, and NOW() +/- 'duration' to queryTime shifted
+// by the duration. Any other expression is an error.
+func evalDatetimeExpr(expr sqlparser.Expr, queryTime time.Time) (time.Time, error) {
+	unsupportedErr := NewConverterError(
+		"%s: expression %q, only NOW() and NOW() +/- 'duration' are supported",
+		NotSupportedErrMessage,
+		sqlparser.String(expr),
+	)
+	switch e := expr.(type) {
+	case *sqlparser.FuncExpr:
+		return resolveNowFunc(e, queryTime)
+	case *sqlparser.BinaryExpr:
+		// Only a single offset applied directly to NOW() is supported.
+		funcExpr, ok := e.Left.(*sqlparser.FuncExpr)
+		if !ok {
+			return time.Time{}, unsupportedErr
+		}
+		now, err := resolveNowFunc(funcExpr, queryTime)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if e.Operator != sqlparser.PlusStr && e.Operator != sqlparser.MinusStr {
+			return time.Time{}, NewConverterError(
+				"%s: operator %q in %q, only + and - are supported",
+				NotSupportedErrMessage,
+				e.Operator,
+				sqlparser.String(expr),
+			)
+		}
+		sqlVal, ok := e.Right.(*sqlparser.SQLVal)
+		if !ok || (sqlVal.Type != sqlparser.StrVal && sqlVal.Type != sqlparser.IntVal) {
+			return time.Time{}, NewConverterError(
+				"%s: duration offset in %q must be a quoted string or integer nanoseconds, e.g. NOW() - '5h' or NOW() - 300000000000",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		duration, err := ParseDurationStr(string(sqlVal.Val))
+		if err != nil {
+			return time.Time{}, NewConverterError(
+				"%s: invalid duration in %q: %v",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+				err,
+			)
+		}
+		if e.Operator == sqlparser.MinusStr {
+			duration = -duration
+		}
+		return now.Add(duration), nil
+	default:
+		return time.Time{}, unsupportedErr
+	}
+}
+
+// resolveNowFunc returns queryTime if funcExpr is NOW(), and an error for any other function.
+func resolveNowFunc(funcExpr *sqlparser.FuncExpr, queryTime time.Time) (time.Time, error) {
+	if !funcExpr.Qualifier.IsEmpty() || !funcExpr.Name.EqualString("now") || len(funcExpr.Exprs) != 0 {
+		return time.Time{}, NewConverterError(
+			"%s: function %q",
+			NotSupportedErrMessage,
+			sqlparser.String(funcExpr),
+		)
+	}
+	return queryTime, nil
 }
 
 // parseSQLVal handles values for specific search attributes.
@@ -650,6 +806,16 @@ func (c *QueryConverter[ExprT]) parseSQLVal(
 	}
 }
 
+// validateValueType validates a single value type against the search attribute type,
+// and returns the value formatted if needed.
+// If search attribute type is:
+//   - Int, Double: value type must be int64 or float64 and returns the input value;
+//   - Bool: value type must be bool and returns the input value;
+//   - Keyword, KeywordList: value type must be string and returns the input value;
+//   - Text: value type must be string with a valid token (empty string or string
+//     with only spaces are not valid) and returns the input value;
+//   - Datetime: value type must be int64 (Unix nanos) or string and returns datetime
+//     formated based on storeQC.GetDatetimeFormat() value.
 func (c *QueryConverter[ExprT]) validateValueType(
 	saName string,
 	saType enumspb.IndexedValueType,
@@ -697,10 +863,20 @@ func (c *QueryConverter[ExprT]) validateValueType(
 		}
 		return tm.UTC().Format(c.storeQC.GetDatetimeFormat()), nil
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		enumspb.INDEXED_VALUE_TYPE_TEXT:
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		if _, ok := value.(string); !ok {
 			return nil, valueTypeErr
+		}
+		return value, nil
+	case enumspb.INDEXED_VALUE_TYPE_TEXT:
+		if v, ok := value.(string); !ok {
+			return nil, valueTypeErr
+		} else if strings.TrimSpace(v) == "" {
+			return nil, NewConverterError(
+				"%s: no tokens found filtering on Text type search attribute %s",
+				InvalidExpressionErrMessage,
+				saName,
+			)
 		}
 		return value, nil
 	default:
@@ -762,7 +938,7 @@ func parseExecutionDurationValue(value any) (int64, error) {
 	case int64:
 		return v, nil
 	case string:
-		duration, err := ParseExecutionDurationStr(v)
+		duration, err := ParseDurationStr(v)
 		if err != nil {
 			return 0, NewConverterError(
 				"%s: invalid duration value for search attribute %s: %v",

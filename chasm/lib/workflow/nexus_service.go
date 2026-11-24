@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/searchattribute"
@@ -35,6 +36,9 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
+	}
+	if err := h.config.validateAndPopulateWorkflowTimeSkippingConfig(req.GetTimeSkippingConfig(), req.GetNamespace()); err != nil {
+		return nil, err
 	}
 	res, err := h.historyHandler.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId:            nsID.String(),
@@ -126,9 +130,10 @@ func NewWorkflowServiceNexusServiceProcessor(
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	linkValidator commonlinks.Validator,
 ) *chasm.NexusServiceProcessor {
 	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
-	op := SignalWithStartOperationProcessor{validator: NewValidator(config, saMapperProvider, saValidator)}
+	op := SignalWithStartOperationProcessor{validator: NewValidator(config, saMapperProvider, saValidator, linkValidator)}
 	sp.MustRegisterOperation(
 		workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 		chasm.NewRegisterableNexusOperationProcessor(op),

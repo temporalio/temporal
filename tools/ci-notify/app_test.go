@@ -137,6 +137,10 @@ func TestSlackMessageStructure(t *testing.T) {
 	}, BuildFailureMessage(report))
 }
 
+func TestFormatPercentagePointComparison(t *testing.T) {
+	require.Equal(t, "↑ 1.5%", formatPercentagePointComparison(91.5, 90, true))
+}
+
 func TestBuildFailureMessageLimitsFailures(t *testing.T) {
 	report := &FailureReport{
 		Run: github.Run{
@@ -247,12 +251,14 @@ func TestFilterCompleted(t *testing.T) {
 
 func TestSlowestRuns(t *testing.T) {
 	report := &DigestReport{
-		Runs: []github.Run{
-			{DisplayTitle: "medium", Duration: 20 * time.Minute},
-			{DisplayTitle: "ignored", Duration: 0},
-			{DisplayTitle: "slowest", Duration: 45 * time.Minute},
-			{DisplayTitle: "fastest", Duration: 5 * time.Minute},
-			{DisplayTitle: "second slowest", Duration: 30 * time.Minute},
+		DigestPeriod: DigestPeriod{
+			Runs: []github.Run{
+				{DisplayTitle: "medium", Duration: 20 * time.Minute},
+				{DisplayTitle: "ignored", Duration: 0},
+				{DisplayTitle: "slowest", Duration: 45 * time.Minute},
+				{DisplayTitle: "fastest", Duration: 5 * time.Minute},
+				{DisplayTitle: "second slowest", Duration: 30 * time.Minute},
+			},
 		},
 	}
 

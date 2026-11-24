@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/faultinjection"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
@@ -198,7 +197,7 @@ func DataStoreFactoryProvider(
 	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
 	switch {
 	case defaultStoreCfg.Cassandra != nil:
-		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler, serializer)
+		dataStoreFactory = newCassandraDataStoreFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler, serializer)
 	case defaultStoreCfg.SQL != nil:
 		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger, metricsHandler, serializer)
 	case defaultStoreCfg.CustomDataStoreConfig != nil:
@@ -227,8 +226,7 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 	return func(f Factory, lc fx.Lifecycle) (T, error) {
 		manager, err := newManagerFn(f) // passing receiver (Factory) as first argument.
 		if err != nil {
-			var unimpl *serviceerror.Unimplemented
-			if errors.As(err, &unimpl) {
+			if _, ok := errors.AsType[*serviceerror.Unimplemented](err); ok {
 				// allow factories to return Unimplemented, and turn into nil so that fx init doesn't fail.
 				err = nil
 			}

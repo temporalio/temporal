@@ -15,6 +15,10 @@ type DeleteExecutionReplicationTask struct {
 	VisibilityTimestamp time.Time
 	TaskID              int64
 	ArchetypeID         uint32
+	// Version is the namespace failover version of the cluster that deleted the execution.
+	// The target cluster uses it to drop deletions that were generated before a failover.
+	// It is common.EmptyVersion for tasks generated before this field was introduced.
+	Version int64
 }
 
 func (a *DeleteExecutionReplicationTask) GetKey() Key {
@@ -22,10 +26,11 @@ func (a *DeleteExecutionReplicationTask) GetKey() Key {
 }
 
 func (a *DeleteExecutionReplicationTask) GetVersion() int64 {
-	return 0
+	return a.Version
 }
 
-func (a *DeleteExecutionReplicationTask) SetVersion(_ int64) {
+func (a *DeleteExecutionReplicationTask) SetVersion(version int64) {
+	a.Version = version
 }
 
 func (a *DeleteExecutionReplicationTask) GetTaskID() int64 {

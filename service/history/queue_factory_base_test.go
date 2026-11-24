@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -127,7 +128,7 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	serializer := serialization.NewSerializer()
 	historyFetcher := eventhandler.NewMockHistoryPaginatedFetcher(controller)
 	return fx.Supply(
-		unusedDependencies{},
+		unusedDependencies{TimeSource: clock.NewRealTimeSource()},
 		cfg,
 		fx.Annotate(registry, fx.As(new(tasks.TaskCategoryRegistry))),
 		fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),
@@ -159,6 +160,7 @@ type unusedDependencies struct {
 	persistence.HistoryTaskQueueManager
 	cache.Cache
 	chasm.Engine
+	fcpb.ConcurrencyServiceClient
 	ChasmRegistry *chasm.Registry
 	worker_versioning.VersionMembershipAndReactivationStatusCache
 }

@@ -224,6 +224,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().Start()
+				worker.EXPECT().Stop()
 				mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
 				mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName,
@@ -299,6 +300,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().Start()
+	worker.EXPECT().Stop()
 	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
 	var wg sync.WaitGroup
 	wg.Add(1)

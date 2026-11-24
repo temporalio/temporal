@@ -8,22 +8,35 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type handler struct {
 	nexusoperationpb.UnimplementedNexusOperationServiceServer
 
-	config *Config
-	logger log.Logger
+	config            *Config
+	callbackValidator callbacks.Validator
+	linkValidator     commonlinks.Validator
+	logger            log.Logger
 }
 
-func newHandler(config *Config, logger log.Logger) *handler {
+func newHandler(
+	config *Config,
+	callbackValidator callbacks.Validator,
+	linkValidator commonlinks.Validator,
+	logger log.Logger,
+) *handler {
 	return &handler{
-		config: config,
-		logger: logger,
+		config:            config,
+		callbackValidator: callbackValidator,
+		linkValidator:     linkValidator,
+		logger:            logger,
 	}
 }
 
@@ -36,20 +49,67 @@ func (h *handler) StartNexusOperation(
 
 	frontendReq := req.GetFrontendRequest()
 
-	result, err := chasm.StartExecution[*Operation](
-		ctx,
-		chasm.ExecutionKey{
-			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  frontendReq.GetOperationId(),
-		},
-		newStandaloneOperation,
-		req,
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetOperationId(),
+	}
+	startFn := func(mutableCtx chasm.MutableContext, req *nexusoperationpb.StartNexusOperationRequest) (*Operation, error) {
+		return newStandaloneOperation(mutableCtx, req, h.callbackValidator, h.linkValidator)
+	}
+	startOpts := []chasm.TransitionOption{
 		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(
 			idReusePolicyFromProto(frontendReq.GetIdReusePolicy()),
 			idConflictPolicyFromProto(frontendReq.GetIdConflictPolicy()),
 		),
+	}
+
+	cbs := frontendReq.GetCompletionCallbacks()
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+
+	var (
+		resultKey chasm.ExecutionKey
+		created   bool
 	)
+	if attachCallbacks || attachLinks {
+		// Start the operation, or apply on_conflict_options to the existing one, in one transaction. A
+		// start usually creates a new operation, so try the create before looking up an existing one.
+		requestID := frontendReq.GetRequestId()
+		namespaceName := frontendReq.GetNamespace()
+		var result chasm.UpdateWithStartExecutionResult[any]
+		result, err = chasm.UpdateWithStartExecution(
+			ctx,
+			executionKey,
+			startFn,
+			// Runs on the new operation too, where startFn already attached the callbacks and links under
+			// this request ID, so both attach calls are no-ops there.
+			func(o *Operation, mutableCtx chasm.MutableContext, _ *nexusoperationpb.StartNexusOperationRequest) (any, error) {
+				if attachCallbacks {
+					regTime := timestamppb.New(mutableCtx.Now(o))
+					if err := callback.ValidateAndAttach(mutableCtx, o, requestID, regTime, cbs, namespaceName, h.callbackValidator); err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := o.attachLinks(mutableCtx, links, requestID, h.linkValidator, namespaceName); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
+			},
+			req,
+			append(startOpts, chasm.WithAssumeNew())...,
+		)
+		resultKey, created = result.ExecutionKey, result.Created
+	} else {
+		var result chasm.StartExecutionResult
+		result, err = chasm.StartExecution(ctx, executionKey, startFn, req, startOpts...)
+		resultKey, created = result.ExecutionKey, result.Created
+	}
+
 	if err != nil {
 		if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 			return nil, serviceerror.NewNexusOperationExecutionAlreadyStartedf(
@@ -65,8 +125,8 @@ func (h *handler) StartNexusOperation(
 
 	return &nexusoperationpb.StartNexusOperationResponse{
 		FrontendResponse: &workflowservice.StartNexusOperationExecutionResponse{
-			RunId:   result.ExecutionKey.RunID,
-			Started: result.Created,
+			RunId:   resultKey.RunID,
+			Started: created,
 		},
 	}, nil
 }
@@ -207,9 +267,10 @@ func (h *handler) RequestCancelNexusOperation(
 		ref,
 		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.RequestCancelNexusOperationRequest) (*nexusoperationpb.RequestCancelNexusOperationResponse, error) {
 			if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{
-				RequestId: req.GetFrontendRequest().GetRequestId(),
-				Identity:  req.GetFrontendRequest().GetIdentity(),
-				Reason:    req.GetFrontendRequest().GetReason(),
+				RequestId:     req.GetFrontendRequest().GetRequestId(),
+				Identity:      req.GetFrontendRequest().GetIdentity(),
+				Reason:        req.GetFrontendRequest().GetReason(),
+				RequestedTime: timestamppb.New(ctx.Now(o)),
 			}); err != nil {
 				return nil, err
 			}

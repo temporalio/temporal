@@ -5,7 +5,9 @@ package ndc
 import (
 	"context"
 
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -57,8 +59,9 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	// NOTE: this function does NOT mutate current workflow or target workflow,
 	//  workflow mutation is done in methods within executeTransaction function
 
-	targetExecutionInfo := targetWorkflow.GetMutableState().GetExecutionInfo()
-	targetExecutionState := targetWorkflow.GetMutableState().GetExecutionState()
+	targetMutableState := targetWorkflow.GetMutableState()
+	targetExecutionInfo := targetMutableState.GetExecutionInfo()
+	targetExecutionState := targetMutableState.GetExecutionState()
 	namespaceID := namespace.ID(targetExecutionInfo.NamespaceId)
 	workflowID := targetExecutionInfo.WorkflowId
 	targetRunID := targetExecutionState.RunId
@@ -79,7 +82,24 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	}
 
 	if currentRunID == "" {
-		// current record does not exists
+		// Preserve non-current snapshots without promoting them to current. A zombie must never own the
+		// current execution record. A completed or corrupted run with a known successor must also remain
+		// non-current; otherwise a deleted successor could cause the older run to be resurrected.
+		targetState := targetExecutionState.GetState()
+		targetHasSuccessor := targetExecutionInfo.GetNewExecutionRunId() != "" ||
+			targetExecutionInfo.GetSuccessorRunId() != ""
+		switch {
+		case targetState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			targetState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && targetHasSuccessor,
+			targetState == enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED && targetHasSuccessor:
+			return r.executeTransaction(
+				ctx,
+				nDCTransactionPolicyCreateBypassCurrent,
+				nil, // no current workflow: the current record was deleted
+				targetWorkflow,
+			)
+		}
+		// current record does not exist, create as brand new
 		return r.executeTransaction(
 			ctx,
 			nDCTransactionPolicyCreateAsCurrent,
@@ -197,6 +217,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 
 	targetWorkflowPolicy, err := targetWorkflow.SuppressBy(
 		currentWorkflow,
+		r.shardContext.GetMetricsHandler(),
 	)
 	if err != nil {
 		return err
@@ -208,11 +229,37 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	// release lock on current workflow, since current cluster maybe the active cluster
 	// and events maybe reapplied to current workflow
 	currentWorkflow.GetReleaseFn()(nil)
-	currentWorkflow = nil
+
+	return r.persistBypassCurrent(ctx, targetWorkflow, targetWorkflowPolicy)
+}
+
+// createBypassCurrent persists the incoming execution state as-is without creating or updating the
+// current execution record. Unlike createAsZombie, it deliberately performs no suppression and no
+// workflow state transition.
+func (r *nDCTransactionMgrForNewWorkflowImpl) createBypassCurrent(
+	ctx context.Context,
+	targetWorkflow Workflow,
+) error {
+	return r.persistBypassCurrent(ctx, targetWorkflow, historyi.TransactionPolicyPassive)
+}
+
+func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
+	ctx context.Context,
+	targetWorkflow Workflow,
+	targetWorkflowPolicy historyi.TransactionPolicy,
+) error {
 
 	ms := targetWorkflow.GetMutableState()
 
-	eventReapplyCandidates := ms.GetReapplyCandidateEvents()
+	// Skip reapplication when the run was sent by the workflow's active cluster: that cluster
+	// already has every event in the run, so reapplying would only send its own events back to it.
+	reapplyEvents := !r.isSentByActiveCluster(ctx, ms)
+
+	// Read the candidates before closing the transaction, which clears them.
+	var eventReapplyCandidates []*historypb.HistoryEvent
+	if reapplyEvents {
+		eventReapplyCandidates = ms.GetReapplyCandidateEvents()
+	}
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := ms.CloseTransactionAsSnapshot(
 		ctx,
 		targetWorkflowPolicy,
@@ -221,33 +268,13 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 
-	if len(targetWorkflowEventsSeq) != 0 {
-		if err := targetWorkflow.GetContext().ReapplyEvents(
-			ctx,
-			r.shardContext,
-			targetWorkflowEventsSeq,
-		); err != nil {
-			return err
-		}
-	} else if len(eventReapplyCandidates) != 0 {
-		eventsToApply := []*persistence.WorkflowEvents{
-			{
-				NamespaceID: ms.GetExecutionInfo().NamespaceId,
-				WorkflowID:  ms.GetExecutionInfo().WorkflowId,
-				RunID:       ms.GetExecutionState().RunId,
-				Events:      eventReapplyCandidates,
-			},
-		}
-		if err := targetWorkflow.GetContext().ReapplyEvents(
-			ctx,
-			r.shardContext,
-			eventsToApply,
-		); err != nil {
+	if reapplyEvents {
+		if err := r.reapplyTargetEvents(ctx, targetWorkflow, targetWorkflowEventsSeq, eventReapplyCandidates); err != nil {
 			return err
 		}
 	}
 
-	// target workflow is in zombie state, no need to update current record.
+	// The target workflow is non-current, so do not create or update the current record.
 	createMode := persistence.CreateWorkflowModeBypassCurrent
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
@@ -273,6 +300,56 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	}
 }
 
+// isSentByActiveCluster reports whether the replicated run was sent by the cluster that is active
+// for its workflow. It returns false when the source is unknown, which keeps reapplication.
+func (r *nDCTransactionMgrForNewWorkflowImpl) isSentByActiveCluster(
+	ctx context.Context,
+	ms historyi.MutableState,
+) bool {
+	sourceClusterName := replicationTaskInfoFromContext(ctx).sourceClusterName
+	if sourceClusterName == "" {
+		return false
+	}
+	executionInfo := ms.GetExecutionInfo()
+	namespaceEntry, err := r.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
+	if err != nil {
+		return false
+	}
+	return namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: executionInfo.GetWorkflowId()}) == sourceClusterName
+}
+
+func (r *nDCTransactionMgrForNewWorkflowImpl) reapplyTargetEvents(
+	ctx context.Context,
+	targetWorkflow Workflow,
+	targetWorkflowEventsSeq []*persistence.WorkflowEvents,
+	eventReapplyCandidates []*historypb.HistoryEvent,
+) error {
+	if len(targetWorkflowEventsSeq) != 0 {
+		return targetWorkflow.GetContext().ReapplyEvents(
+			ctx,
+			r.shardContext,
+			targetWorkflowEventsSeq,
+		)
+	}
+	if len(eventReapplyCandidates) == 0 {
+		return nil
+	}
+	ms := targetWorkflow.GetMutableState()
+	eventsToApply := []*persistence.WorkflowEvents{
+		{
+			NamespaceID: ms.GetExecutionInfo().NamespaceId,
+			WorkflowID:  ms.GetExecutionInfo().WorkflowId,
+			RunID:       ms.GetExecutionState().RunId,
+			Events:      eventReapplyCandidates,
+		},
+	}
+	return targetWorkflow.GetContext().ReapplyEvents(
+		ctx,
+		r.shardContext,
+		eventsToApply,
+	)
+}
+
 func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 	ctx context.Context,
 	currentWorkflow Workflow,
@@ -281,6 +358,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 
 	currentWorkflowPolicy, err := currentWorkflow.SuppressBy(
 		targetWorkflow,
+		r.shardContext.GetMetricsHandler(),
 	)
 	if err != nil {
 		return err
@@ -328,6 +406,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 		return r.createAsZombie(
 			ctx,
 			currentWorkflow,
+			targetWorkflow,
+		)
+
+	case nDCTransactionPolicyCreateBypassCurrent:
+		return r.createBypassCurrent(
+			ctx,
 			targetWorkflow,
 		)
 

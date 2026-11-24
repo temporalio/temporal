@@ -49,7 +49,7 @@ type (
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
 		namespaceID                 namespace.ID
-		standByTaskID               int64
+		standByTaskID               atomic.Int64
 		autoIncrementTaskID         int64
 		passiveClusterName          string
 
@@ -559,7 +559,7 @@ func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 
 func (s *ReplicationMigrationBackTestSuite) GetReplicationMessagesMock() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
 	task := <-s.standByReplicationTasksChan
-	taskID := atomic.AddInt64(&s.standByTaskID, 1)
+	taskID := s.standByTaskID.Add(1)
 	task.SourceTaskId = taskID
 	tasks := []*replicationspb.ReplicationTask{task}
 

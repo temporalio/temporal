@@ -331,15 +331,9 @@ func (p *taskProcessorImpl) handleReplicationTask(
 		return err
 	}
 
-	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			retErr = panicErr
-			p.emitTaskMetrics(operationTagValue, panicErr)
-		}
-	}()
-
-	defer log.CapturePanic(p.logger, &panicErr)
+	defer log.CapturePanicWithHook(p.logger, &retErr, func(err error) {
+		p.emitTaskMetrics(operationTagValue, err)
+	})
 
 	return backoff.ThrottleRetry(operation, p.taskRetryPolicy, p.isRetryableError)
 }
@@ -563,7 +557,8 @@ func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 		metrics.ServiceErrNotFoundCounter.With(metricsScope).Record(1)
 	case *serviceerror.ResourceExhausted:
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(
-			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope),
+			metrics.ConcurrencyLimitGroupTag(""))
 	case *serviceerrors.RetryReplication:
 		metrics.ServiceErrRetryTaskCounter.With(metricsScope).Record(1)
 	default:

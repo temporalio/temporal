@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -73,16 +74,16 @@ func expectScheduleProgressesWhilePaused(policy enumspb.ScheduleOverlapPolicy) b
 	}
 }
 
-func TestScheduleV1WorkflowPauseInteraction(t *testing.T) {
-	t.Parallel()
+func (s *ScheduleV1Suite) TestWorkflowPauseInteraction() {
+	t := s.T()
 	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, v1ContextFactory) })
 	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, v1ContextFactory) })
 	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, v1ContextFactory) })
 	t.Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, v1ContextFactory) })
 }
 
-func TestScheduleCHASMWorkflowPauseInteraction(t *testing.T) {
-	t.Parallel()
+func (s *ScheduleCHASMSuite) TestWorkflowPauseInteraction() {
+	t := s.T()
 	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, chasmContextFactory) })
 	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, chasmContextFactory) })
 	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, chasmContextFactory) })
@@ -522,7 +523,10 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-			s.GetHistoryFunc(s.Namespace().String(), firstRun),
+			func() []*historypb.HistoryEvent {
+				t.Helper()
+				return s.RequireHistoryWithT(t, firstRun)
+			},
 			10*time.Second,
 			250*time.Millisecond,
 		)

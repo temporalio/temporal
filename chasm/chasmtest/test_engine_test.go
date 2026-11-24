@@ -3,16 +3,24 @@ package chasmtest_test
 
 import (
 	"context"
+	"errors"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -39,14 +47,340 @@ func TestTasksArePhysicallyGenerated(t *testing.T) {
 	})
 }
 
-func startStore(t *testing.T, ttl time.Duration) (*chasmtest.Engine, chasm.ComponentRef) {
+func TestInvariantCheckRunsAfterSuccessfulTransitions(t *testing.T) {
+	var calls []string
+	check := func(name string) chasmtest.InvariantCheck {
+		return func(checkT *testing.T, node *chasm.Node, root chasm.RootComponent) {
+			checkT.Helper()
+			require.Same(checkT, t, checkT)
+			require.IsType(checkT, &tests.PayloadStore{}, root)
+			require.NotPanics(checkT, func() { node.Snapshot(nil) })
+			calls = append(calls, name)
+		}
+	}
+
+	e, ref := startStoreWithEngineOptions(
+		t,
+		time.Hour,
+		[]chasmtest.EngineOption{
+			chasmtest.WithInvariantCheck(check("first")),
+			chasmtest.WithInvariantCheck(check("second")),
+		},
+	)
+	require.Equal(t, []string{"first", "second"}, calls)
+
+	_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		}, nil, chasm.WithRequestID("invariant-check"))
+	require.NoError(t, err)
+	require.Equal(t, []string{"first", "second", "first", "second"}, calls)
+
+	_, _, err = chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		}, nil, chasm.WithRequestID("invariant-check"))
+	require.ErrorIs(t, err, chasm.ErrRequestIDAlreadyUsed)
+	require.Equal(t, []string{"first", "second", "first", "second"}, calls)
+
+	transitionErr := errors.New("transition failed")
+	_, _, err = chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, transitionErr
+		}, nil)
+	require.ErrorIs(t, err, transitionErr)
+	require.Equal(t, []string{"first", "second", "first", "second"}, calls)
+
+	executed, err := e.FirePureTasks(ref, time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Equal(t, 1, executed)
+	require.Equal(t, []string{"first", "second", "first", "second", "first", "second"}, calls)
+
+	key := chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "update-with-start"}
+	result, err := chasm.UpdateWithStartExecution(
+		engineContext(e),
+		key,
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		},
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	require.True(t, result.Created)
+	require.Equal(t, []string{
+		"first", "second",
+		"first", "second",
+		"first", "second",
+		"first", "second",
+	}, calls)
+}
+
+// TestUpdateWithStartSyncsSubComponentsAddedByUpdate: when UpdateWithStart creates an execution, the
+// sub-components its update adds must become nodes in the tree, not only exist in memory.
+func TestUpdateWithStartSyncsSubComponentsAddedByUpdate(t *testing.T) {
+	var nodePaths []string
+	check := func(_ *testing.T, node *chasm.Node, _ chasm.RootComponent) {
+		nodePaths = slices.Collect(maps.Keys(node.Snapshot(nil).Nodes))
+	}
+	e, _ := startStoreWithEngineOptions(t, 0, []chasmtest.EngineOption{chasmtest.WithInvariantCheck(check)})
+
+	result, err := chasm.UpdateWithStartExecution(
+		engineContext(e),
+		chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "update-with-start"},
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		},
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "added", 0)
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	require.True(t, result.Created)
+	require.Contains(t, nodePaths, "Payloads#added")
+}
+
+// TestUpdateWithStartHonorsConflictPolicy: UpdateWithStart on a running execution updates it only under
+// BusinessIDConflictPolicyUseExisting, and fails under the default BusinessIDConflictPolicyFail.
+func TestUpdateWithStartHonorsConflictPolicy(t *testing.T) {
+	e, ref := startStore(t, 0)
+	updateCount := 0
+	updateWithStart := func(opts ...chasm.TransitionOption) (chasm.UpdateWithStartExecutionResult[any], error) {
+		return chasm.UpdateWithStartExecution(
+			engineContext(e),
+			ref.ExecutionKey,
+			func(chasm.MutableContext, any) (*tests.PayloadStore, error) {
+				t.Fatal("startFn should not be called when the execution is running")
+				return nil, nil
+			},
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, nil
+			},
+			nil,
+			opts...,
+		)
+	}
+
+	_, err := updateWithStart()
+	_, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err)
+	require.True(t, ok, "expected ExecutionAlreadyStartedError, got %v", err)
+	require.Equal(t, 0, updateCount)
+
+	_, err = updateWithStart(chasm.WithBusinessIDPolicy(
+		chasm.BusinessIDReusePolicyAllowDuplicate,
+		chasm.BusinessIDConflictPolicy(99),
+	))
+	var internal *serviceerror.Internal
+	require.ErrorAs(t, err, &internal)
+	require.Equal(t, 0, updateCount)
+
+	result, err := updateWithStart(chasm.WithBusinessIDPolicy(
+		chasm.BusinessIDReusePolicyAllowDuplicate,
+		chasm.BusinessIDConflictPolicyUseExisting,
+	))
+	require.NoError(t, err)
+	require.False(t, result.Created)
+	require.Equal(t, 1, updateCount)
+}
+
+func TestStartExecutionRejectsSpeculative(t *testing.T) {
+	e, _ := startStore(t, 0)
+	_, err := chasm.StartExecution(engineContext(e),
+		chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "speculative"},
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		}, nil, chasm.WithSpeculative())
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+}
+
+// TestSpeculativeUpdateDefersTasks: a speculative update is visible to reads, but its tasks become physical
+// only when a later non-speculative update closes the transaction.
+func TestSpeculativeUpdateDefersTasks(t *testing.T) {
+	const ttl = time.Hour
+	e, ref := startStore(t, 0)
+
+	_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "speculative", ttl)
+		}, nil, chasm.WithSpeculative())
+	require.NoError(t, err)
+	require.Equal(t, 0, countTasks(t, e, ref, tasks.CategoryTimer))
+
+	hasPayload, err := chasm.ReadComponent(engineContext(e), ref,
+		func(s *tests.PayloadStore, _ chasm.Context, _ any) (bool, error) {
+			_, ok := s.Payloads["speculative"]
+			return ok, nil
+		}, nil)
+	require.NoError(t, err)
+	require.True(t, hasPayload)
+
+	_, _, err = chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, countTasks(t, e, ref, tasks.CategoryTimer))
+}
+
+// TestSpeculativeCloseIsPersisted: a speculative transition that closes the execution is persisted
+// normally, so the invariant check (which runs only after a persisted transition) sees the close.
+func TestSpeculativeCloseIsPersisted(t *testing.T) {
+	worker := &commonpb.Principal{Type: "jwt", Name: "worker"}
+	var rootAttributes *persistencespb.ChasmComponentAttributes
+	captureRoot := func(_ *testing.T, node *chasm.Node, _ chasm.RootComponent) {
+		rootAttributes = node.Snapshot(nil).Nodes[""].GetMetadata().GetComponentAttributes()
+	}
+	e, ref := startStoreWithEngineOptions(t, 0, []chasmtest.EngineOption{chasmtest.WithInvariantCheck(captureRoot)})
+
+	_, _, err := chasm.UpdateComponent(headers.SetPrincipal(engineContext(e), worker), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return s.Close(mc, nil)
+		}, nil, chasm.WithSpeculative())
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, worker, rootAttributes.GetClosedByPrincipal())
+}
+
+func TestUpdateComponentDeduplicatesRequestID(t *testing.T) {
+	e, ref := startStore(t, 0)
+	updateCount := 0
+	update := func() ([]byte, error) {
+		_, updatedRef, err := chasm.UpdateComponent(engineContext(e), ref,
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, nil
+			}, nil, chasm.WithRequestID("request-id"))
+		return updatedRef, err
+	}
+
+	updatedRef, err := update()
+	require.NoError(t, err)
+	require.NotEmpty(t, updatedRef)
+
+	updatedRef, err = update()
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPrecondition)
+	require.ErrorIs(t, err, chasm.ErrRequestIDAlreadyUsed)
+	require.Nil(t, updatedRef)
+	require.Equal(t, 1, updateCount)
+}
+
+func TestUpdateComponentDoesNotRecordFailedRequestID(t *testing.T) {
+	e, ref := startStore(t, 0)
+	updateErr := errors.New("update failed")
+	updateCount := 0
+	update := func(errToReturn error) error {
+		_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, errToReturn
+			}, nil, chasm.WithRequestID("request-id"))
+		return err
+	}
+
+	require.ErrorIs(t, update(updateErr), updateErr)
+	require.NoError(t, update(nil))
+	require.Equal(t, 2, updateCount)
+}
+
+func TestUpdateComponentDeduplicatesCreationRequestID(t *testing.T) {
+	e, ref := startStore(t, 0, chasm.WithRequestID("request-id"))
+	updateCount := 0
+	_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			updateCount++
+			return nil, nil
+		}, nil, chasm.WithRequestID("request-id"))
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPrecondition)
+	require.Equal(t, 0, updateCount)
+}
+
+func TestStartExecutionDeduplicatesUpdateRequestID(t *testing.T) {
+	e, ref := startStore(t, 0)
+	ctx := engineContext(e)
+	_, _, err := chasm.UpdateComponent(ctx, ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		}, nil, chasm.WithRequestID("request-id"))
+	require.NoError(t, err)
+
+	startCount := 0
+	startKey := ref.ExecutionKey
+	startKey.RunID = ""
+	result, err := chasm.StartExecution(ctx, startKey,
+		func(chasm.MutableContext, any) (*tests.PayloadStore, error) {
+			startCount++
+			return nil, nil
+		}, nil, chasm.WithRequestID("request-id"))
+	require.NoError(t, err)
+	require.False(t, result.Created)
+	require.Equal(t, ref.ExecutionKey, result.ExecutionKey)
+	require.Equal(t, 0, startCount)
+}
+
+func TestUpdateWithStartDeduplicatesRequestID(t *testing.T) {
+	e, ref := startStore(t, 0, chasm.WithRequestID("create-request-id"))
+	startKey := ref.ExecutionKey
+	startKey.RunID = ""
+	updateCount := 0
+	updateWithStart := func(requestID string, conflictPolicy chasm.BusinessIDConflictPolicy) chasm.UpdateWithStartExecutionResult[any] {
+		result, err := chasm.UpdateWithStartExecution(
+			engineContext(e),
+			startKey,
+			func(chasm.MutableContext, any) (*tests.PayloadStore, error) {
+				t.Fatal("startFn should not be called when the execution is running")
+				return nil, nil
+			},
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, nil
+			},
+			nil,
+			chasm.WithRequestID(requestID),
+			chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, conflictPolicy),
+		)
+		require.NoError(t, err)
+		require.False(t, result.Created)
+		require.Equal(t, ref.ExecutionKey, result.ExecutionKey)
+		return result
+	}
+
+	require.False(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting).Deduplicated)
+	require.Equal(t, 1, updateCount)
+
+	require.True(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyUseExisting).Deduplicated)
+	require.True(t, updateWithStart("update-request-id", chasm.BusinessIDConflictPolicyFail).Deduplicated)
+	require.True(t, updateWithStart("create-request-id", chasm.BusinessIDConflictPolicyFail).Deduplicated)
+	require.Equal(t, 1, updateCount)
+}
+
+func startStore(
+	t *testing.T,
+	ttl time.Duration,
+	opts ...chasm.TransitionOption,
+) (*chasmtest.Engine, chasm.ComponentRef) {
+	return startStoreWithEngineOptions(t, ttl, nil, opts...)
+}
+
+func startStoreWithEngineOptions(
+	t *testing.T,
+	ttl time.Duration,
+	engineOpts []chasmtest.EngineOption,
+	opts ...chasm.TransitionOption,
+) (*chasmtest.Engine, chasm.ComponentRef) {
 	registry := chasm.NewRegistry(log.NewNoopLogger())
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, registry.Register(tests.Library))
 
 	ts := clock.NewEventTimeSource()
 	ts.Update(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
-	e := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(ts))
+	engineOpts = append([]chasmtest.EngineOption{chasmtest.WithTimeSource(ts)}, engineOpts...)
+	e := chasmtest.NewEngine(t, registry, engineOpts...)
 
 	key := chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "store"}
 	result, err := chasm.StartExecution(engineContext(e), key,
@@ -56,7 +390,7 @@ func startStore(t *testing.T, ttl time.Duration) (*chasmtest.Engine, chasm.Compo
 				return nil, err
 			}
 			return store, addPayload(store, mc, "first", ttl)
-		}, nil)
+		}, nil, opts...)
 	require.NoError(t, err)
 
 	key.RunID = result.ExecutionKey.RunID
@@ -82,4 +416,52 @@ func countTasks(t *testing.T, e *chasmtest.Engine, ref chasm.ComponentRef, categ
 
 func engineContext(e *chasmtest.Engine) context.Context {
 	return chasm.NewEngineContext(context.Background(), e)
+}
+
+// TestRecordsCallerPrincipal: the principal in the request context that creates the execution and the
+// one that closes it are recorded on the root node, and requests in between change neither.
+func TestRecordsCallerPrincipal(t *testing.T) {
+	alice := &commonpb.Principal{Type: "jwt", Name: "alice"}
+	bob := &commonpb.Principal{Type: "jwt", Name: "bob"}
+	worker := &commonpb.Principal{Type: "jwt", Name: "worker"}
+
+	var rootAttributes *persistencespb.ChasmComponentAttributes
+	captureRoot := func(_ *testing.T, node *chasm.Node, _ chasm.RootComponent) {
+		rootAttributes = node.Snapshot(nil).Nodes[""].GetMetadata().GetComponentAttributes()
+	}
+
+	registry := chasm.NewRegistry(log.NewNoopLogger())
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(tests.Library))
+	e := chasmtest.NewEngine(t, registry, chasmtest.WithInvariantCheck(captureRoot))
+	callerContext := func(principal *commonpb.Principal) context.Context {
+		return headers.SetPrincipal(engineContext(e), principal)
+	}
+
+	key := chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "store"}
+	result, err := chasm.StartExecution(callerContext(alice), key,
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		}, nil)
+	require.NoError(t, err)
+	key.RunID = result.ExecutionKey.RunID
+	ref := chasm.NewComponentRef[*tests.PayloadStore](key)
+	protorequire.ProtoEqual(t, alice, rootAttributes.GetStartedByPrincipal())
+	require.Nil(t, rootAttributes.GetClosedByPrincipal())
+
+	_, _, err = chasm.UpdateComponent(callerContext(bob), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "second", 0)
+		}, nil)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, alice, rootAttributes.GetStartedByPrincipal())
+	require.Nil(t, rootAttributes.GetClosedByPrincipal())
+
+	_, _, err = chasm.UpdateComponent(callerContext(worker), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return s.Close(mc, nil)
+		}, nil)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, alice, rootAttributes.GetStartedByPrincipal())
+	protorequire.ProtoEqual(t, worker, rootAttributes.GetClosedByPrincipal())
 }

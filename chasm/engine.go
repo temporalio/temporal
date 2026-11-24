@@ -114,6 +114,7 @@ type TransitionOptions struct {
 	ConsistencyLevel RefConsistencyLevel
 	RequestID        string
 	Speculative      bool
+	AssumeNew        bool
 }
 
 type TransitionOption func(*TransitionOptions)
@@ -153,27 +154,45 @@ type StartExecutionResult struct {
 //     the execution already existed (based on the [BusinessIDReusePolicy] and
 //     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
 //     existing execution was returned instead.
-//   - UpdateOutput: The output value returned by the update function.
+//   - Deduplicated: Indicates the request ID was already applied to the execution, so the update
+//     function was not applied again and UpdateOutput is the zero value.
+//   - UpdateOutput: The output value returned by the update function. It is the zero value when
+//     Deduplicated is true or an error is returned.
 type UpdateWithStartExecutionResult[O any] struct {
 	ExecutionKey ExecutionKey
 	ExecutionRef []byte
 	Created      bool
+	Deduplicated bool
 	UpdateOutput O
 }
 
 // EngineUpdateWithStartExecutionResult is a type alias for the result type returned by the UpdateWithStart Engine implementation.
 type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struct{}]
 
-// (only) this transition will not be persisted
-// The next non-speculative transition will persist this transition as well.
-// Compared to the ExecutionEphemeral() operation on RegistrableComponent,
-// the scope of this operation is limited to a certain transition,
-// while the ExecutionEphemeral() applies to all transitions.
-// TODO: we need to figure out a way to run the tasks
-// generated in a speculative transition
+// WithSpeculative applies the transition to the memory only.
+//
+// A speculative transition is persisted when the next normal transition comes in. The caller must make that
+// a non speculative transition to persist.
+//   - The transition is not durable. Cache eviction, a shard move, a host restart, or any error
+//     from a later transition on the execution drops it. Report normal rejections from the update
+//     function as output rather than as an error.
+//   - Reads and PollComponent waiters see the transition while the execution is cached, so a
+//     waiter can see state that is later lost.
+//   - Immediate pure tasks run. Other tasks added by the transition are created when it is persisted.
+//   - Ref returns ErrSpeculativeComponentRef for a component the transition created until it is persisted.
+//   - Replication ignores states
+//
+// TODO: Add option to support all task.
 func WithSpeculative() TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.Speculative = true
+	}
+}
+
+// WithAssumeNew hints to UpdateWithStartExecution() that the execution most likely does not exist yet.
+func WithAssumeNew() TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.AssumeNew = true
 	}
 }
 
@@ -190,8 +209,12 @@ func WithBusinessIDPolicy(
 	}
 }
 
-// WithRequestID sets the requestID used when creating a new execution.
-// This option only applies to StartExecution() and UpdateWithStartExecution().
+// WithRequestID sets the request ID used to recognize a retry of the request.
+//
+// # On StartExecution() and UpdateWithStartExecution() it is a start request ID
+//
+// On UpdateComponent() it is an update request ID: a retried update is rejected with a
+// FailedPrecondition error ([ErrRequestIDAlreadyUsed])
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
@@ -235,7 +258,7 @@ func WithRefConsistencyLevel(level RefConsistencyLevel) TransitionOption {
 //   - opts: Optional [TransitionOption] functions to configure creation behavior:
 //   - [WithBusinessIDPolicy]: Controls duplicate handling and conflict resolution
 //   - [WithRequestID]: Sets a request ID for idempotency
-//   - [WithSpeculative]: Defers persistence until the next non-speculative transition
+//   - [WithSpeculative] is not supported and returns [ErrSpeculativeStartExecution]
 //
 // Returns:
 //   - O: The output value produced by startFn
@@ -306,14 +329,19 @@ func UpdateWithStartExecution[C RootComponent, I any, O any](
 		opts...,
 	)
 	if err != nil {
-		return UpdateWithStartExecutionResult[O]{
-			UpdateOutput: output,
-		}, err
+		return UpdateWithStartExecutionResult[O]{}, err
+	}
+	// updateFn may have run on a candidate execution that was discarded, so its output only
+	// belongs to the result when the update was applied.
+	if result.Deduplicated {
+		var zero O
+		output = zero
 	}
 	return UpdateWithStartExecutionResult[O]{
 		ExecutionKey: result.ExecutionKey,
 		ExecutionRef: result.ExecutionRef,
 		Created:      result.Created,
+		Deduplicated: result.Deduplicated,
 		UpdateOutput: output,
 	}, nil
 }
@@ -326,12 +354,14 @@ func UpdateWithStartExecution[C RootComponent, I any, O any](
 //
 // UpdateComponent applies updateFn to the component identified by the supplied component reference.
 //
-// The only opts currently honored is [WithRefConsistencyLevel]; it selects the [RefConsistencyLevel] used to
-// resolve and validate the ref (see that type for the ladder of levels). Other options are ignored.
+// Two opts are honored: [WithRefConsistencyLevel] selects the [RefConsistencyLevel] used to resolve
+// and validate the ref (see that type for the ladder of levels); [WithRequestID] enables
+// execution-level idempotency, rejecting a repeated update that carries an already-recorded request
+// ID (see that option). Other options are ignored.
 //
 // It returns the result, along with the new component reference. The returned reference may be
 // nil when updateFn deletes the component in the same transaction and the component is not the
-// root component.
+// root component, or on the [WithRequestID] dedup rejection (along with a FailedPrecondition error).
 func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,

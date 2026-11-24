@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"net/http"
 	"slices"
 	"testing"
 
@@ -92,7 +93,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalHeader
 		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 	s.handler = func(ctx context.Context, req any) (any, error) { return true, nil }
@@ -118,6 +119,52 @@ func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
 	res, err := s.interceptor.Intercept(ctx, startWorkflowExecutionRequest, startWorkflowExecutionInfo, s.handler)
 	s.True(res.(bool))
 	s.NoError(err)
+}
+
+func TestNexusResponseRequiresRequestedNamespaceAuthorization(t *testing.T) {
+	t.Parallel()
+	methods := []struct {
+		name    string
+		request any
+	}{
+		{"RespondNexusTaskCompleted", &workflowservice.RespondNexusTaskCompletedRequest{Namespace: "test-namespace"}},
+		{"RespondNexusTaskFailed", &workflowservice.RespondNexusTaskFailedRequest{Namespace: "test-namespace"}},
+	}
+	for _, method := range methods {
+		t.Run(method.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			mockAuthorizer := NewMockAuthorizer(controller)
+			fullMethod := api.WorkflowServicePrefix + method.name
+			mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, &CallTarget{
+				Namespace: "test-namespace",
+				APIName:   fullMethod,
+				Request:   method.request,
+			}).Return(Result{Decision: DecisionDeny}, nil)
+			interceptor := NewInterceptor(
+				nil,
+				mockAuthorizer,
+				metrics.NoopMetricsHandler,
+				log.NewNoopLogger(),
+				mockNamespaceChecker("test-namespace"),
+				nil,
+				"",
+				"",
+				dynamicconfig.GetBoolPropertyFn(false),
+				dynamicconfig.GetBoolPropertyFn(false),
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+				dynamicconfig.GetBoolPropertyFn(false),
+			)
+			handlerCalled := false
+			_, err := interceptor.Intercept(context.Background(), method.request, &grpc.UnaryServerInfo{FullMethod: fullMethod},
+				func(context.Context, any) (any, error) {
+					handlerCalled = true
+					return struct{}{}, nil
+				})
+			require.ErrorIs(t, err, errUnauthorized)
+			require.False(t, handlerCalled)
+		})
+	}
 }
 
 func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
@@ -169,7 +216,7 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailedExposed() {
 		"",
 		dynamicconfig.GetBoolPropertyFn(true),  // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalHeader
 		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 
@@ -204,7 +251,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalHeader
 		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 	_, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
@@ -223,7 +270,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		"custom-extra-header",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalHeader
 		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 
@@ -332,7 +379,7 @@ func (s *authorizerInterceptorSuite) newCrossNamespaceInterceptor(namespaces ...
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalHeader
 		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 }
@@ -537,7 +584,7 @@ func (s *authorizerInterceptorSuite) TestMultipleCommands_AuthDeduplication() {
 	s.NoError(err)
 }
 
-func (s *authorizerInterceptorSuite) TestPrincipalPropagation_Enabled() {
+func (s *authorizerInterceptorSuite) TestPrincipalHeader_Enabled() {
 	principal := &commonpb.Principal{Type: "user", Name: "alice"}
 	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionAllow, Principal: principal}, nil)
@@ -553,7 +600,7 @@ func (s *authorizerInterceptorSuite) TestPrincipalPropagation_Enabled() {
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true), // enablePrincipalHeader
 		dynamicconfig.GetBoolPropertyFn(false),                   // disableStreamingAuthorizer
 	)
 
@@ -570,7 +617,7 @@ func (s *authorizerInterceptorSuite) TestPrincipalPropagation_Enabled() {
 	s.Equal(principal, gotPrincipal)
 }
 
-func (s *authorizerInterceptorSuite) TestPrincipalPropagation_Disabled() {
+func (s *authorizerInterceptorSuite) TestPrincipalHeader_Disabled() {
 	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionAllow, Principal: &commonpb.Principal{Type: "user", Name: "alice"}}, nil)
 
@@ -581,14 +628,14 @@ func (s *authorizerInterceptorSuite) TestPrincipalPropagation_Disabled() {
 		return true, nil
 	}
 
-	// s.interceptor has enablePrincipalPropagation=false
+	// s.interceptor has enablePrincipalHeader=false
 	res, err := s.interceptor.Intercept(inCtx, describeNamespaceRequest, describeNamespaceInfo, handler)
 	s.True(res.(bool))
 	s.NoError(err)
 	s.Nil(gotPrincipal)
 }
 
-func (s *authorizerInterceptorSuite) TestPrincipalPropagation_SpoofedHeadersStripped() {
+func (s *authorizerInterceptorSuite) TestPrincipalHeader_SpoofedHeadersStripped() {
 	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionAllow}, nil) // no principal returned
 
@@ -603,7 +650,7 @@ func (s *authorizerInterceptorSuite) TestPrincipalPropagation_SpoofedHeadersStri
 		return true, nil
 	}
 
-	// s.interceptor has enablePrincipalPropagation=false
+	// s.interceptor has enablePrincipalHeader=false
 	res, err := s.interceptor.Intercept(inCtx, describeNamespaceRequest, describeNamespaceInfo, handler)
 	s.True(res.(bool))
 	s.NoError(err)
@@ -849,6 +896,43 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_AudienceMapperSkippedWi
 	ss := &mockServerStream{ctx: inCtx}
 	err := interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
 	s.NoError(err)
+}
+
+func (s *authorizerInterceptorSuite) TestHTTPAudience() {
+	newInterceptor := func(audienceGetter JWTAudienceMapper) *Interceptor {
+		return NewInterceptor(
+			s.mockClaimMapper,
+			s.mockAuthorizer,
+			s.mockMetricsHandler,
+			log.NewNoopLogger(),
+			mockNamespaceChecker(testNamespace),
+			audienceGetter,
+			"",
+			"",
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			dynamicconfig.GetBoolPropertyFn(false),
+		)
+	}
+	withToken := http.Header{}
+	withToken.Set("Authorization", "Bearer some-token")
+
+	s.Run("no audience mapper", func() {
+		var audienceGetter JWTAudienceMapper
+		s.Empty(newInterceptor(audienceGetter).HTTPAudience(ctx, withToken))
+	})
+	s.Run("no auth token skips mapper", func() {
+		// No EXPECT: the audienceGetter must not be called for tokenless (e.g. mTLS-only) requests.
+		audienceGetter := NewMockJWTAudienceMapper(s.controller)
+		s.Empty(newInterceptor(audienceGetter).HTTPAudience(ctx, http.Header{}))
+		s.Empty(newInterceptor(audienceGetter).HTTPAudience(ctx, nil))
+	})
+	s.Run("auth token returns mapper audience", func() {
+		audienceGetter := NewMockJWTAudienceMapper(s.controller)
+		audienceGetter.EXPECT().Audience(gomock.Any(), nil, nil).Return("http-audience")
+		s.Equal("http-audience", newInterceptor(audienceGetter).HTTPAudience(ctx, withToken))
+	})
 }
 
 func (s *authorizerInterceptorSuite) TestInterceptStream_ContextPropagated() {

@@ -164,7 +164,7 @@ SignalLoop:
 	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
 	s.ErrorAs(signalErr, new(*serviceerror.InvalidArgument))
 
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -285,11 +285,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		env.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	}()
 
-	select {
-	case <-sigReadyToSendChan:
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for workflow task handler to be ready")
-	}
+	s.Rcv(sigReadyToSendChan)
 
 	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
@@ -304,7 +300,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	// Wait for workflow to fail.
 	var historyEvents []*historypb.HistoryEvent
 	for range 10 {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED {
 			break
@@ -412,7 +408,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
 	s.ErrorAs(signalErr, new(*serviceerror.NotFound))
 
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -510,7 +506,7 @@ SignalLoop:
 	s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
 	s.ErrorAs(signalErr, new(*serviceerror.InvalidArgument))
 
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})

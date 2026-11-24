@@ -2,12 +2,17 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -15,6 +20,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
@@ -22,16 +28,24 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
+	captureNamespaceEventLogger struct {
+		embedded.Logger
+		records []otellog.Record
+	}
+
 	namespaceHandlerCommonSuite struct {
 		suite.Suite
 
@@ -50,6 +64,14 @@ type (
 		handler *namespaceHandler
 	}
 )
+
+func (l *captureNamespaceEventLogger) Emit(_ context.Context, record otellog.Record) {
+	l.records = append(l.records, record)
+}
+
+func (l *captureNamespaceEventLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
 
 var now = time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 
@@ -72,7 +94,13 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.mockMetadataMgr = persistence.NewMockMetadataManager(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
-	s.mockNamespaceReplicator = nsreplication.NewReplicator(s.mockProducer, logger)
+	s.mockNamespaceReplicator = nsreplication.NewReplicator(
+		s.mockProducer,
+		logger,
+		nil,
+		dc.GetBoolPropertyFn(false),
+		"cluster-a",
+	)
 	s.archivalMetadata = archiver.NewArchivalMetadata(
 		dcCollection,
 		"",
@@ -86,6 +114,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.config = NewConfig(dc.NewNoopCollection(), 1024)
 	s.handler = newNamespaceHandler(
 		logger,
+		wideevents.NoopLogger(),
 		s.mockMetadataMgr,
 		namespace.NewMockRegistry(s.controller),
 		s.mockClusterMetadata,
@@ -94,11 +123,311 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockArchiverProvider,
 		s.fakeClock,
 		s.config,
+		nil,
+		metrics.NoopMetricsHandler,
+		namespace.NewDefaultReplicationResolverFactory(),
 	)
 }
 
 func (s *namespaceHandlerCommonSuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsCreatesRamp() {
+	s.fakeClock.Update(now)
+	ramps, err := s.handler.updateReplicationRamps(
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Equal(now, ramps["standby"].GetStartTime().AsTime())
+	s.Equal(time.Hour, ramps["standby"].GetDuration().AsDuration())
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRepeatedRequestIsNoOp() {
+	s.fakeClock.Update(now)
+	request := []*replicationpb.ClusterReplicationConfig{
+		{ClusterName: "active"},
+		{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+	}
+
+	ramps, err := s.handler.updateReplicationRamps(nil, []string{"active"}, request, "active")
+	s.Require().NoError(err)
+	ramp := ramps["standby"]
+	s.Require().NotNil(ramp)
+
+	ramps, err = s.handler.updateReplicationRamps(ramps, []string{"active", "standby"}, request, "active")
+	s.Require().NoError(err)
+	s.Same(ramp, ramps["standby"])
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsLifecycle() {
+	s.fakeClock.Update(now)
+
+	ramps, err := s.handler.updateReplicationRamps(
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby-1", ReplicationRampDuration: durationpb.New(time.Hour)},
+			{ClusterName: "standby-2", ReplicationRampDuration: durationpb.New(2 * time.Hour)},
+			{ClusterName: "without-ramp"},
+			{ClusterName: "zero-ramp", ReplicationRampDuration: durationpb.New(0)},
+			{ClusterName: "negative-ramp", ReplicationRampDuration: durationpb.New(-time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Equal(now, ramps["standby-1"].GetStartTime().AsTime())
+	s.Equal(time.Hour, ramps["standby-1"].GetDuration().AsDuration())
+	s.Equal(2*time.Hour, ramps["standby-2"].GetDuration().AsDuration())
+	s.NotContains(ramps, "active")
+	s.NotContains(ramps, "without-ramp")
+	s.NotContains(ramps, "zero-ramp")
+	s.NotContains(ramps, "negative-ramp")
+
+	unchanged, err := s.handler.updateReplicationRamps(
+		ramps,
+		[]string{"active", "standby-1", "standby-2"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby-1"},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Same(ramps["standby-1"], unchanged["standby-1"])
+	s.NotContains(unchanged, "standby-2")
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsClear() {
+	ramp := &persistencespb.NamespaceReplicationRamp{
+		StartTime: timestamppb.New(now),
+		Duration:  durationpb.New(time.Hour),
+	}
+
+	ramps, err := s.handler.updateReplicationRamps(
+		map[string]*persistencespb.NamespaceReplicationRamp{"standby": ramp},
+		[]string{"active", "standby"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(0)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.NotContains(ramps, "standby")
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsChangingExistingRamp() {
+	ramp := &persistencespb.NamespaceReplicationRamp{
+		StartTime: timestamppb.New(now),
+		Duration:  durationpb.New(time.Hour),
+	}
+	clusters := []string{"active", "standby"}
+
+	unchanged, err := s.handler.updateReplicationRamps(
+		map[string]*persistencespb.NamespaceReplicationRamp{"standby": ramp},
+		clusters,
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Same(ramp, unchanged["standby"])
+
+	_, err = s.handler.updateReplicationRamps(
+		map[string]*persistencespb.NamespaceReplicationRamp{"standby": ramp},
+		clusters,
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(30 * time.Minute)},
+		},
+		"active",
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsStartingForExistingCluster() {
+	_, err := s.handler.updateReplicationRamps(
+		nil,
+		[]string{"active", "standby"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
+		"active",
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsInvalidDuration() {
+	_, err := s.handler.updateReplicationRamps(
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{
+				ClusterName:             "standby",
+				ReplicationRampDuration: &durationpb.Duration{Seconds: 1, Nanos: -1},
+			},
+		},
+		"active",
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespacePersistsRampOnlyOnSource() {
+	const (
+		namespaceName = "test-ns"
+		active        = "active"
+		standby       = "standby"
+	)
+	s.fakeClock.Update(now)
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:    uuid.NewString(),
+			Name:  namespaceName,
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: active,
+			Clusters:          []string{active},
+		},
+		ConfigVersion: 7,
+	}
+
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: 11,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: namespaceName,
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace:         detail,
+		IsGlobalNamespace: true,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		active:  {Enabled: true},
+		standby: {Enabled: true},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			ramp := request.Namespace.GetReplicationConfig().GetClusterReplicationRamps()[standby]
+			s.Require().NotNil(ramp)
+			s.Equal(now, ramp.GetStartTime().AsTime())
+			s.Equal(time.Hour, ramp.GetDuration().AsDuration())
+			return nil
+		},
+	)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			for _, clusterConfig := range task.GetNamespaceTaskAttributes().GetReplicationConfig().GetClusters() {
+				s.Nil(clusterConfig.GetReplicationRampDuration())
+			}
+			return nil
+		},
+	)
+
+	response, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: active},
+				{ClusterName: standby, ReplicationRampDuration: durationpb.New(time.Hour)},
+			},
+		},
+	})
+	s.Require().NoError(err)
+	for _, clusterConfig := range response.GetReplicationConfig().GetClusters() {
+		s.Nil(clusterConfig.GetReplicationRampDuration())
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestDeprecateNamespaceEventUsesPersistedAfterState() {
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dc.GetBoolPropertyFn(true)
+
+	failoverEndTime := timestamppb.New(now)
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:    "namespace-id",
+			Name:  "namespace",
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+		Config:          &persistencespb.NamespaceConfig{},
+		FailoverEndTime: failoverEndTime,
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName},
+		},
+	}
+
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "namespace"}).Return(
+		&persistence.GetNamespaceResponse{Namespace: detail},
+		nil,
+	)
+
+	var persistedAfter wideevents.NamespaceStateFields
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			persistedAfter = namespaceStateFields(request.Namespace, request.IsGlobalNamespace)
+			return nil
+		},
+	)
+
+	_, err := s.handler.DeprecateNamespace(context.Background(), &workflowservice.DeprecateNamespaceRequest{Namespace: "namespace"})
+	s.Require().NoError(err)
+	s.Require().Len(eventLogger.records, 1)
+
+	var detailsJSON string
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Key == "details" {
+			detailsJSON = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(detailsJSON), &details))
+	after, ok := details["after"].(map[string]any)
+	s.Require().True(ok)
+	s.Require().Equal(persistedAfter.FailoverEndTime, after["failover_end_time"])
+	s.Require().NotEqual(failoverEndTime.AsTime().Format(time.RFC3339), after["failover_end_time"])
+}
+
+func (s *namespaceHandlerCommonSuite) TestDeprecateNamespace_SoftDeleted_Rejected() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "namespace"}).Return(
+		&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    "namespace-id",
+				Name:  "namespace",
+				State: enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		}},
+		nil,
+	)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err := s.handler.DeprecateNamespace(context.Background(), &workflowservice.DeprecateNamespaceRequest{Namespace: "namespace"})
+	s.ErrorIs(err, errInvalidNamespaceStateUpdate)
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
@@ -386,18 +715,19 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
-	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
+	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.False(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscaling)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+	s.Equal(int64(40*1024*1024), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
 
 	// Second call: Override the default value of dynamic configs.
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -408,13 +738,14 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.WorkflowPauseEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableChasm = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.config.StandaloneNexusOperationsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.StandaloneNexusOperationsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
 	s.config.MemoSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(512)
-	s.config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.WorkerCommandsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.PollerAutoscalingAutoEnroll = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableWorkflowTaskCompletionPagination = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.WorkflowTaskCompletionBufferSizeLimit = dc.GetIntPropertyFnFilteredByNamespace(4096)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -427,21 +758,22 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.True(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
-	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
+	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+	s.Equal(int64(4096), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
 
-	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.Activity.EnableStandaloneActivityOperatorCommands = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
 	})
 	s.Require().NoError(err)
-	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 }
 
@@ -706,6 +1038,12 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveClusterWit
 				ActiveClusterName: clusterName1,
 				Clusters:          []string{clusterName1, clusterName2},
 				State:             enumspb.REPLICATION_STATE_HANDOVER,
+				ClusterReplicationRamps: map[string]*persistencespb.NamespaceReplicationRamp{
+					clusterName2: {
+						StartTime: timestamppb.New(update1Time),
+						Duration:  durationpb.New(time.Hour),
+					},
+				},
 			},
 		},
 		IsGlobalNamespace: true,
@@ -1136,6 +1474,60 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NoAttrSet() {
 		Namespace: namespace,
 	})
 	s.NoError(err)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_OnlyAddBadBinary() {
+	namespaceName := s.getRandomNamespace()
+	version := int64(100)
+	nid := uuid.NewString()
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: 1,
+		},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   nid,
+				Name: namespaceName,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:   durationpb.New(7 * time.Hour * 24),
+				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters:          []string{cluster.TestCurrentClusterName},
+			},
+		},
+	}, nil)
+	var updateReq *persistence.UpdateNamespaceRequest
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.UpdateNamespaceRequest) error {
+			updateReq = req
+			return nil
+		},
+	)
+
+	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		Config: &namespacepb.NamespaceConfig{
+			BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+				"bad-checksum": {Reason: "some reason", Operator: "some operator"},
+			}},
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().NotNil(updateReq)
+	s.Contains(updateReq.Namespace.Config.BadBinaries.Binaries, "bad-checksum")
+	s.Equal(int64(1), updateReq.Namespace.ConfigVersion)
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
@@ -1739,6 +2131,10 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dc.GetBoolPropertyFn(true)
+
 	namespaceName := "test-namespace"
 	identity := "identity"
 	description := "description"
@@ -1748,7 +2144,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	version := int64(100)
 
 	// first call returns error, because ID is not set
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, false, "")
 	s.Error(err)
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1767,13 +2163,26 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
 
 	spec.Id = "test-id"
-	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, true, "request-id")
 	s.NoError(err)
 	s.NotNil(rule)
 	s.NotNil(rule.Spec)
 	s.NotNil(rule.CreateTime)
 	s.Equal(identity, rule.CreatedByIdentity)
 	s.Equal(description, rule.Description)
+	s.Require().Len(eventLogger.records, 1)
+
+	var detailsJSON string
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Key == "details" {
+			detailsJSON = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(detailsJSON), &details))
+	s.Require().Equal(true, details["workflow_rule_force_scan"])
+	s.Require().Equal("request-id", details["workflow_rule_request_id"])
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
@@ -1806,7 +2215,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 		},
 	}, nil)
 
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, false, "")
 	s.Error(err)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
@@ -1934,10 +2343,11 @@ func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
 	s.Empty(rules)
 }
 
-func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
-	s.fakeClock.Update(time.Now())
-	expiredTime1 := s.fakeClock.Now().Add(-1 * time.Hour)
-	expiredTime2 := s.fakeClock.Now().Add(-2 * time.Hour)
+func TestWorkflowRuleEviction(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	expiredTime1 := now.Add(-time.Hour)
+	expiredTime2 := now.Add(-2 * time.Hour)
 
 	tests := []struct {
 		name        string
@@ -1953,6 +2363,16 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 			},
 		},
 		{
+			name: "unexpired rule is kept", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(now.Add(24 * time.Hour))}},
+			},
+		},
+		{
+			name: "rule expiring now is kept", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(now)}},
+			},
+		},
+		{
 			name: "single rule to delete", deletedRule: "rule 1", rules: map[string]*rulespb.WorkflowRule{
 				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
 			},
@@ -1963,18 +2383,93 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
 			},
 		},
+		{
+			name: "only oldest expired rule is deleted", deletedRule: "rule 2", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
+				"rule 3": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 3", ExpirationTime: timestamppb.New(now.Add(time.Hour))}},
+				"rule 4": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 4"}},
+			},
+		},
 	}
 
 	for _, tt := range tests {
-		oldLens := len(tt.rules)
-		s.handler.removeOldestExpiredWorkflowRule("", tt.rules)
-		if len(tt.deletedRule) == 0 {
-			s.Len(tt.rules, oldLens)
-		} else {
-			if _, exists := tt.rules[tt.deletedRule]; exists {
-				s.True(false, "Rule was not deleted")
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			handler := &namespaceHandler{timeSource: clock.NewEventTimeSource().Update(now), logger: log.NewNoopLogger()}
+			expected := maps.Clone(tt.rules)
+			if tt.deletedRule != "" {
+				delete(expected, tt.deletedRule)
 			}
-		}
+			handler.removeOldestExpiredWorkflowRule("", tt.rules)
+			require.Equal(t, expected, tt.rules)
+		})
+	}
+}
+
+func TestCreateWorkflowRuleAtLimit(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, tt := range []struct {
+		name           string
+		expirationTime *timestamppb.Timestamp
+		canEvict       bool
+	}{
+		{name: "no expiration"},
+		{name: "future expiration", expirationTime: timestamppb.New(now.Add(24 * time.Hour))},
+		{name: "expiration at current time", expirationTime: timestamppb.New(now)},
+		{name: "expired rule", expirationTime: timestamppb.New(now.Add(-time.Hour)), canEvict: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			metadataMgr := persistence.NewMockMetadataManager(gomock.NewController(t))
+			config := NewConfig(dc.NewNoopCollection(), 1024)
+			config.MaxWorkflowRulesPerNamespace = dc.GetIntPropertyFnFilteredByNamespace(2)
+			handler := &namespaceHandler{
+				metadataMgr: metadataMgr,
+				config:      config,
+				timeSource:  clock.NewEventTimeSource().Update(now),
+				logger:      log.NewNoopLogger(),
+				eventLogger: wideevents.NoopLogger(),
+			}
+			nsConfig := &persistencespb.NamespaceConfig{
+				WorkflowRules: map[string]*rulespb.WorkflowRule{
+					"expiring":  {Spec: &rulespb.WorkflowRuleSpec{Id: "expiring", ExpirationTime: tt.expirationTime}},
+					"permanent": {Spec: &rulespb.WorkflowRuleSpec{Id: "permanent"}},
+				},
+			}
+			expectedConfig := &persistencespb.NamespaceConfig{WorkflowRules: maps.Clone(nsConfig.WorkflowRules)}
+			metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
+			metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "test-namespace"}).Return(
+				&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{Config: nsConfig}}, nil,
+			)
+			expectedRule := &rulespb.WorkflowRule{
+				Spec: &rulespb.WorkflowRuleSpec{Id: "new"}, CreateTime: timestamppb.New(now),
+				CreatedByIdentity: "identity", Description: "description",
+			}
+			if tt.canEvict {
+				delete(expectedConfig.WorkflowRules, "expiring")
+				expectedConfig.WorkflowRules["new"] = expectedRule
+				metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, req *persistence.UpdateNamespaceRequest) error {
+						protorequire.ProtoEqual(t, expectedConfig, req.Namespace.Config)
+						return nil
+					},
+				)
+			}
+
+			rule, err := handler.CreateWorkflowRule(t.Context(), expectedRule.Spec, "identity", "description", "test-namespace", false, "")
+			if tt.canEvict {
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, expectedRule, rule)
+			} else {
+				require.ErrorContains(t, err, "Workflow Rule limit exceeded. Max: 2")
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Nil(t, rule)
+			}
+			protorequire.ProtoEqual(t, expectedConfig, nsConfig)
+		})
 	}
 }
 
@@ -2034,5 +2529,159 @@ func (s *namespaceHandlerCommonSuite) TestUpsertCustomSearchAttributesAliases() 
 				s.Equal(tc.expected, result)
 			}
 		})
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) softDeletedNamespaceResponse(nid string, name string) *persistence.GetNamespaceResponse {
+	return &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    nid,
+				Name:  name,
+				State: enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster1",
+				Clusters:          []string{"cluster1", "cluster2"},
+			},
+			ConfigVersion: 5,
+		},
+		IsGlobalNamespace: true,
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_SoftDeleted_StaysSoftDeleted() {
+	testCases := []struct {
+		name    string
+		request *workflowservice.UpdateNamespaceRequest
+		verify  func(*persistence.UpdateNamespaceRequest)
+	}{
+		{
+			name: "failover",
+			request: &workflowservice.UpdateNamespaceRequest{
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{ActiveClusterName: "cluster2"},
+			},
+			verify: func(request *persistence.UpdateNamespaceRequest) {
+				s.Equal("cluster2", request.Namespace.ReplicationConfig.ActiveClusterName)
+			},
+		},
+		{
+			name: "info",
+			request: &workflowservice.UpdateNamespaceRequest{
+				UpdateInfo: &namespacepb.UpdateNamespaceInfo{Description: "new"},
+			},
+			verify: func(request *persistence.UpdateNamespaceRequest) {
+				s.Equal("new", request.Namespace.Info.Description)
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		s.Run(testCase.name, func() {
+			name := "soft-deleted-ns"
+			s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+				NotificationVersion: 100,
+			}, nil)
+			s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+			s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+			s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+				"cluster1": {Enabled: true, InitialFailoverVersion: 1},
+				"cluster2": {Enabled: true, InitialFailoverVersion: 2},
+			}).AnyTimes()
+			s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("cluster1").AnyTimes()
+			s.mockClusterMetadata.EXPECT().GetNextFailoverVersion("cluster2", int64(0)).Return(int64(2)).AnyTimes()
+			s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(
+				s.softDeletedNamespaceResponse(uuid.NewString(), name), nil)
+			s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+					s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, request.Namespace.Info.State)
+					testCase.verify(request)
+					return nil
+				})
+			s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, task *replicationspb.ReplicationTask) error {
+					s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, task.GetNamespaceTaskAttributes().GetInfo().GetState())
+					return nil
+				})
+
+			testCase.request.Namespace = name
+			_, err := s.handler.UpdateNamespace(s.T().Context(), testCase.request)
+			s.NoError(err)
+		})
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_SoftDeleted_RejectsStateChange() {
+	name := "soft-deleted-ns"
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(
+		s.softDeletedNamespaceResponse(uuid.NewString(), name), nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err := s.handler.UpdateNamespace(s.T().Context(), &workflowservice.UpdateNamespaceRequest{
+		Namespace:  name,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: enumspb.NAMESPACE_STATE_REGISTERED},
+	})
+	s.ErrorIs(err, errInvalidNamespaceStateUpdate)
+}
+
+func (s *namespaceHandlerCommonSuite) TestValidateReplicationStateUpdate_NamespaceState() {
+	testCases := []struct {
+		nsState  enumspb.NamespaceState
+		oldState enumspb.ReplicationState
+		newState enumspb.ReplicationState
+		allowed  bool
+	}{
+		{nsState: enumspb.NAMESPACE_STATE_REGISTERED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_SOFT_DELETED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_SOFT_DELETED, oldState: enumspb.REPLICATION_STATE_HANDOVER, newState: enumspb.REPLICATION_STATE_NORMAL, allowed: true},
+		{nsState: enumspb.NAMESPACE_STATE_DEPRECATED, oldState: enumspb.REPLICATION_STATE_NORMAL, newState: enumspb.REPLICATION_STATE_HANDOVER, allowed: false},
+	}
+	for _, tc := range testCases {
+		err := validateReplicationStateUpdate(
+			&persistence.GetNamespaceResponse{
+				Namespace: &persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{State: tc.nsState},
+					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+						State:    tc.oldState,
+						Clusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+					},
+				},
+				IsGlobalNamespace: true,
+			},
+			&workflowservice.UpdateNamespaceRequest{
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{State: tc.newState},
+			},
+		)
+		if tc.allowed {
+			s.NoError(err, "%v: %v -> %v", tc.nsState, tc.oldState, tc.newState)
+		} else {
+			var invalidArg *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArg, "%v: %v -> %v", tc.nsState, tc.oldState, tc.newState)
+		}
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
+	testCases := []struct {
+		oldState enumspb.NamespaceState
+		newState enumspb.NamespaceState
+	}{
+		{oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		{oldState: enumspb.NAMESPACE_STATE_DEPRECATED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		{oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_REGISTERED},
+		{oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_DELETED},
+	}
+	for _, testCase := range testCases {
+		err := validateStateUpdate(
+			&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{State: testCase.oldState},
+			}},
+			&workflowservice.UpdateNamespaceRequest{
+				UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: testCase.newState},
+			},
+		)
+		s.ErrorIs(err, errInvalidNamespaceStateUpdate, "%v -> %v", testCase.oldState, testCase.newState)
 	}
 }

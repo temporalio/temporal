@@ -15,9 +15,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -25,29 +27,37 @@ import (
 type (
 	EngineOption func(*Engine)
 
+	// InvariantCheck validates an execution after a successful transition. The
+	// node is clean, so checks may inspect its snapshot without affecting the
+	// state being validated.
+	InvariantCheck func(*testing.T, *chasm.Node, chasm.RootComponent)
+
 	// Engine is a lightweight in memory CHASM engine for unit tests. It implements
 	// [chasm.Engine] and supports the full set of conflict and reuse policies, as
 	// well as blocking [PollComponent] with [NotifyExecution], matching the behavior
 	// of the production engine as closely as possible without persistence or shard logic.
 	Engine struct {
-		t          *testing.T
-		registry   *chasm.Registry
-		logger     log.Logger
-		metrics    metrics.Handler
-		timeSource clock.TimeSource
+		t              *testing.T
+		registry       *chasm.Registry
+		logger         log.Logger
+		metrics        metrics.Handler
+		timeSource     clock.TimeSource
+		namespaceNames map[string]string
 		// currentExecutions maps (namespaceID, businessID) to the latest run (running or closed).
 		currentExecutions map[businessKey]*execution
 		// allExecutions maps (namespaceID, businessID, runID) to any run, for lookups by specific RunID.
-		allExecutions map[runKey]*execution
-		notifier      *executionNotifier
+		allExecutions   map[runKey]*execution
+		notifier        *executionNotifier
+		invariantChecks []InvariantCheck
 	}
 
 	execution struct {
-		key       chasm.ExecutionKey
-		node      *chasm.Node
-		backend   *chasm.MockNodeBackend
-		root      chasm.RootComponent
-		requestID string
+		key             chasm.ExecutionKey
+		node            *chasm.Node
+		backend         *chasm.MockNodeBackend
+		root            chasm.RootComponent
+		createRequestID string
+		requestIDs      map[string]struct{}
 		// commitTransition advances the backend's committed transition count.
 		commitTransition func()
 	}
@@ -72,6 +82,31 @@ type (
 func WithTimeSource(ts clock.TimeSource) EngineOption {
 	return func(e *Engine) {
 		e.timeSource = ts
+	}
+}
+
+// WithMetricsHandler overrides the engine's default no-op metrics handler.
+func WithMetricsHandler(handler metrics.Handler) EngineOption {
+	return func(e *Engine) {
+		e.metrics = handler
+	}
+}
+
+// WithNamespaceName supplies a name for the given namespace ID in test contexts.
+func WithNamespaceName(id, name string) EngineOption {
+	return func(e *Engine) {
+		if e.namespaceNames == nil {
+			e.namespaceNames = make(map[string]string)
+		}
+		e.namespaceNames[id] = name
+	}
+}
+
+// WithInvariantCheck adds a check that runs after every successful transition.
+// Multiple checks run in the order in which they were added.
+func WithInvariantCheck(check InvariantCheck) EngineOption {
+	return func(e *Engine) {
+		e.invariantChecks = append(e.invariantChecks, check)
 	}
 }
 
@@ -131,12 +166,14 @@ func (e *Engine) StartExecution(
 	opts ...chasm.TransitionOption,
 ) (chasm.StartExecutionResult, error) {
 	options := constructTransitionOptions(opts...)
+	if options.Speculative {
+		return chasm.StartExecutionResult{}, chasm.ErrSpeculativeStartExecution
+	}
 	bKey := newBusinessKey(ref.ExecutionKey)
 
 	current, hasCurrent := e.currentExecutions[bKey]
 	if hasCurrent {
-		// if the requestID matches the original create request, return the existing run.
-		if options.RequestID != "" && options.RequestID == current.requestID {
+		if _, ok := current.requestIDs[options.RequestID]; options.RequestID != "" && ok {
 			serializedRef, err := current.node.Ref(current.root)
 			if err != nil {
 				return chasm.StartExecutionResult{}, err
@@ -175,9 +212,26 @@ func (e *Engine) UpdateWithStartExecution(
 
 	current, hasCurrent := e.currentExecutions[bKey]
 	if hasCurrent {
+		if _, ok := current.requestIDs[options.RequestID]; options.RequestID != "" && ok {
+			serializedRef, err := current.node.Ref(current.root)
+			if err != nil {
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
+			}
+			return chasm.EngineUpdateWithStartExecutionResult{
+				ExecutionKey: current.key,
+				ExecutionRef: serializedRef,
+				Created:      false,
+				Deduplicated: true,
+			}, nil
+		}
+
 		switch current.backend.GetExecutionState().State {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn)
+			// Updating a running execution reuses it, so the conflict policy must allow that.
+			if err := conflictPolicyAllowsUpdate(ref, current, options.ConflictPolicy); err != nil {
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
+			}
+			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, options.RequestID, options.Speculative)
 			if err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
@@ -196,7 +250,7 @@ func (e *Engine) UpdateWithStartExecution(
 							"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 							ref.BusinessID, current.key.RunID, options.ReusePolicy,
 						),
-						current.requestID,
+						current.createRequestID,
 						current.key.RunID,
 					)
 				}
@@ -206,7 +260,7 @@ func (e *Engine) UpdateWithStartExecution(
 						"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 						ref.BusinessID, current.key.RunID, options.ReusePolicy,
 					),
-					current.requestID,
+					current.createRequestID,
 					current.key.RunID,
 				)
 			default:
@@ -228,13 +282,21 @@ func (e *Engine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
-	_ ...chasm.TransitionOption,
+	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	execution, err := e.executionForRef(ref)
 	if err != nil {
 		return nil, err
 	}
-	return e.updateComponentInExecution(ctx, execution, ref, updateFn)
+
+	options := constructTransitionOptions(opts...)
+	if options.RequestID != "" {
+		if _, ok := execution.requestIDs[options.RequestID]; ok {
+			return nil, chasm.ErrRequestIDAlreadyUsed
+		}
+	}
+
+	return e.updateComponentInExecution(ctx, execution, ref, updateFn, options.RequestID, options.Speculative)
 }
 
 func (e *Engine) ReadComponent(
@@ -342,6 +404,42 @@ func (e *Engine) DeleteExecution(
 	return nil
 }
 
+// newConflictPolicyFailErr returns the error for a start that BusinessIDConflictPolicyFail rejects
+// because current is still running.
+func newConflictPolicyFailErr(
+	ref chasm.ComponentRef,
+	current *execution,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	return chasm.NewExecutionAlreadyStartedErr(
+		fmt.Sprintf(
+			"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
+			ref.BusinessID, current.key.RunID, conflictPolicy,
+		),
+		current.createRequestID,
+		current.key.RunID,
+	)
+}
+
+// conflictPolicyAllowsUpdate returns nil if the conflict policy lets UpdateWithStartExecution update the
+// running execution current, or the error to return instead. Like the history engine's version, the
+// switch has no default case so the exhaustive linter flags a new BusinessIDConflictPolicy.
+func conflictPolicyAllowsUpdate(
+	ref chasm.ComponentRef,
+	current *execution,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	switch conflictPolicy {
+	case chasm.BusinessIDConflictPolicyUseExisting:
+		return nil
+	case chasm.BusinessIDConflictPolicyFail:
+		return newConflictPolicyFailErr(ref, current, conflictPolicy)
+	case chasm.BusinessIDConflictPolicyTerminateExisting:
+		return serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not supported for UpdateWithStartExecution")
+	}
+	return serviceerror.NewInternal(fmt.Sprintf("unknown business ID conflict policy: %v", conflictPolicy))
+}
+
 // handleConflictPolicy is called when a StartExecution arrives for a business ID whose
 // current run is still running.
 func (e *Engine) handleConflictPolicy(
@@ -353,14 +451,7 @@ func (e *Engine) handleConflictPolicy(
 ) (chasm.StartExecutionResult, error) {
 	switch options.ConflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
-			fmt.Sprintf(
-				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
-				ref.BusinessID, current.key.RunID, options.ConflictPolicy,
-			),
-			current.requestID,
-			current.key.RunID,
-		)
+		return chasm.StartExecutionResult{}, newConflictPolicyFailErr(ref, current, options.ConflictPolicy)
 	case chasm.BusinessIDConflictPolicyTerminateExisting:
 		_, _ = current.backend.UpdateWorkflowStateStatus(
 			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
@@ -402,7 +493,7 @@ func (e *Engine) handleReusePolicy(
 					"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 					ref.BusinessID, current.key.RunID, options.ReusePolicy,
 				),
-				current.requestID,
+				current.createRequestID,
 				current.key.RunID,
 			)
 		}
@@ -412,7 +503,7 @@ func (e *Engine) handleReusePolicy(
 				"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 				ref.BusinessID, current.key.RunID, options.ReusePolicy,
 			),
-			current.requestID,
+			current.createRequestID,
 			current.key.RunID,
 		)
 	default:
@@ -431,7 +522,8 @@ func (e *Engine) startNew(
 	requestID string,
 ) (chasm.StartExecutionResult, error) {
 	exec := e.newExecution(key)
-	exec.requestID = requestID
+	exec.createRequestID = requestID
+	exec.recordRequestID(requestID)
 
 	mutableCtx := chasm.NewMutableContext(ctx, exec.node)
 	root, err := startFn(mutableCtx)
@@ -441,11 +533,11 @@ func (e *Engine) startNew(
 	if err := exec.node.SetRootComponent(root); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
-	if err = exec.closeTransaction(); err != nil {
+	exec.root = root
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
-	exec.root = root
 	e.currentExecutions[newBusinessKey(exec.key)] = exec
 	e.allExecutions[newRunKey(exec.key)] = exec
 
@@ -471,7 +563,8 @@ func (e *Engine) startAndUpdateNew(
 	requestID string,
 ) (chasm.EngineUpdateWithStartExecutionResult, error) {
 	exec := e.newExecution(key)
-	exec.requestID = requestID
+	exec.createRequestID = requestID
+	exec.recordRequestID(requestID)
 
 	mutableCtx := chasm.NewMutableContext(ctx, exec.node)
 	root, err := startFn(mutableCtx)
@@ -484,11 +577,11 @@ func (e *Engine) startAndUpdateNew(
 	if err := updateFn(mutableCtx, root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
-	if err = exec.closeTransaction(); err != nil {
+	exec.root = root
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
-	exec.root = root
 	e.currentExecutions[newBusinessKey(exec.key)] = exec
 	e.allExecutions[newRunKey(exec.key)] = exec
 
@@ -517,6 +610,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	)
 
 	backend := &chasm.MockNodeBackend{
+		HandleNow: e.timeSource.Now,
 		// NextTransitionCount is the count the in-flight transaction will commit as.
 		HandleNextTransitionCount: func() int64 {
 			bsMu.Lock()
@@ -533,10 +627,26 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			}
 		},
 		HandleGetCurrentVersion: func() int64 { return 1 },
+		// Always run the post-execution validation for scheduled pure tasks so that
+		// FirePureTasks surfaces a TaskNotInvalidatedError when a component fails to
+		// invalidate its task after a successful Execute. Nothing is DLQ'd in unit tests
+		// (there is no queue executor here); the error is returned for tests to assert on.
+		HandleChasmDLQScheduledPureTaskOnValidationEnabled: func() bool { return true },
 		HandleGetWorkflowKey: func() definition.WorkflowKey {
 			return definition.NewWorkflowKey(key.NamespaceID, key.BusinessID, key.RunID)
 		},
 		HandleIsWorkflow: func() bool { return false },
+		HandleGetNamespaceEntry: func() *namespace.Namespace {
+			name := e.namespaceNames[key.NamespaceID]
+			if name == "" {
+				name = key.NamespaceID
+			}
+			return namespace.NewLocalNamespaceForTest(
+				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: name},
+				&persistencespb.NamespaceConfig{},
+				cluster.TestCurrentClusterName,
+			)
+		},
 		// GetExecutionState returns the current lifecycle state, which CloseTransaction
 		// uses to decide whether to call UpdateWorkflowStateStatus on the backend.
 		HandleGetExecutionState: func() *persistencespb.WorkflowExecutionState {
@@ -563,7 +673,6 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		backend: backend,
 		node: chasm.NewEmptyTree(
 			e.registry,
-			e.timeSource,
 			backend,
 			chasm.DefaultPathEncoder,
 			e.logger,
@@ -577,13 +686,60 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	}
 }
 
-// closeTransaction closes the execution's transaction and commits its transition count.
-func (x *execution) closeTransaction() error {
-	if _, err := x.node.CloseTransaction(); err != nil {
+// closeTransaction closes the execution's transaction, commits its transition
+// count, and validates the resulting clean tree.
+func (e *Engine) closeTransaction(ctx context.Context, x *execution) error {
+	if _, err := x.node.CloseTransaction(ctx, true); err != nil {
 		return err
 	}
 	x.commitTransition()
+	for _, check := range e.invariantChecks {
+		check(e.t, x.node, x.root)
+	}
 	return nil
+}
+
+func (x *execution) recordRequestID(requestID string) {
+	if requestID == "" {
+		return
+	}
+	if x.requestIDs == nil {
+		x.requestIDs = make(map[string]struct{})
+	}
+	x.requestIDs[requestID] = struct{}{}
+}
+
+// NodeForRef returns the CHASM tree node backing the execution identified by ref.
+// It is intended for test drivers that dispatch tasks at the node level
+// ([chasm.Node.ExecuteSideEffectTask]), which the [Engine] API does not expose.
+func (e *Engine) NodeForRef(ref chasm.ComponentRef) (*chasm.Node, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.node, nil
+}
+
+// BackendForRef returns the [chasm.MockNodeBackend] backing the execution
+// identified by ref, e.g. to read the earliest pending pure task time via
+// [chasm.MockNodeBackend.LastDeletePureTaskCall].
+func (e *Engine) BackendForRef(ref chasm.ComponentRef) (*chasm.MockNodeBackend, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.backend, nil
+}
+
+// CloseTransaction closes any open transaction on the execution identified by
+// ref, commits its transition count, and runs registered invariant checks.
+// Pair it with node-level dispatch done through [Engine.NodeForRef].
+func (e *Engine) CloseTransaction(ctx context.Context, ref chasm.ComponentRef) error {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return err
+	}
+	return e.closeTransaction(ctx, exec)
 }
 
 // executionForRef looks up an execution by the ref's RunID when present, or falls back
@@ -612,6 +768,8 @@ func (e *Engine) updateComponentInExecution(
 	execution *execution,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
+	requestID string,
+	speculative bool,
 ) ([]byte, error) {
 	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	component, err := execution.node.Component(mutableCtx, ref)
@@ -623,11 +781,29 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if err = execution.closeTransaction(); err != nil {
-		return nil, err
+	decision := chasm.TransitionDecision{PersistNow: true}
+	if speculative {
+		if err = execution.node.ApplySpeculativeTransition(ctx); err != nil {
+			return nil, err
+		}
+		if decision, err = execution.node.SpeculativeTransitionDecision(ctx); err != nil {
+			return nil, err
+		}
 	}
+	// A speculative transition that isn't persisted leaves the transaction open: the next
+	// non-speculative transition closes it and generates the tasks.
+	if decision.PersistNow {
+		if err = e.closeTransaction(ctx, execution); err != nil {
+			return nil, err
+		}
+	}
+	execution.recordRequestID(requestID)
 
-	return mutableCtx.Ref(component)
+	serializedRef, err := mutableCtx.Ref(component)
+	if errors.As(err, new(*serviceerror.NotFound)) {
+		return nil, nil
+	}
+	return serializedRef, err
 }
 
 // refForComponent looks up the ComponentRef for a component instance by scanning
@@ -653,8 +829,6 @@ func constructTransitionOptions(opts ...chasm.TransitionOption) chasm.Transition
 	for _, opt := range opts {
 		opt(&options)
 	}
-	// NOTE: TransitionOptions.Speculative is intentionally not implemented here. It is also
-	// unimplemented in the production engine (see the TODO in service/history/chasm_engine.go).
 	return options
 }
 

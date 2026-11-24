@@ -12,6 +12,7 @@ import "temporal/api/enums/v1/failed_cause.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
+import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/worker/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
@@ -25,6 +26,7 @@ import "temporal/server/api/persistence/v1/chasm.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/update.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
@@ -84,6 +86,7 @@ message WorkflowExecutionInfo {
   google.protobuf.Duration workflow_task_timeout = 25;
   int32 workflow_task_attempt = 26;
   google.protobuf.Timestamp workflow_task_started_time = 27;
+  string workflow_task_worker_control_queue = 119;
   google.protobuf.Timestamp workflow_task_scheduled_time = 28;
   google.protobuf.Timestamp workflow_task_original_scheduled_time = 30;
   string workflow_task_request_id = 31;
@@ -319,41 +322,56 @@ message WorkflowExecutionInfo {
 
   // Time skipping info that contains the config and runtime history of the time skipping for the workflow.
   TimeSkippingInfo time_skipping_info = 115;
+
+  // Time of the most recent AdminRebuildMutableState call for this run, unset if the run
+  // was never rebuilt.
+  google.protobuf.Timestamp mutable_state_rebuild_time = 116;
+
+  // Nexus operation context retained across runs so workers can select payload serialization.
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
+  // Opaque metadata that a persistence implementation can store about this record. The server
+  // never reads or sets it. The value describes the local copy of the record, so it is not
+  // replicated, and applying a replicated snapshot or mutation keeps the local value.
+  bytes persistence_metadata = 118;
 }
 
 message TimeSkippingInfo {
   reserved 3;
   reserved "current_elapsed_duration_bound";
 
-  // Current time-skipping configuration applied to the workflow.
+  // Current time-skipping configuration applied to the execution.
   temporal.api.common.v1.TimeSkippingConfig config = 1;
 
-  // Total skipped duration for the current workflow execution run, including any
-  // inherited skipped duration carried over from a preceding execution that started this run.
+  // Total skipped duration for the current execution, including any
+  // inherited skipped duration carried over from a preceding run that started this one.
   google.protobuf.Duration accumulated_skipped_duration = 2;
 
   // The current fast-forward info for time skipping.
   FastForwardInfo fast_forward_info = 4;
+  VersionedTransition fast_forward_info_last_update_versioned_transition = 7;
 
   // Versioned transition at which this TimeSkippingInfo was last modified (i.e. when a
-  // skip transition changed accumulated_skipped_duration). Used by PartialRefresh to detect
-  // that pending timer tasks must be re-stamped against the new accumulated skip, since a
-  // skip mutates this workflow-level field without bumping any per-timer
-  // last_update_versioned_transition. Mirrors the per-entity stamps on TimerInfo/ActivityInfo.
+  // skip transition changed accumulated_skipped_duration or a request updated the config.)
   VersionedTransition last_update_versioned_transition = 5;
+
+  // Tracks the number of times a time-skipping transition has occurred since time skipping
+  // was most recently enabled. It is reset every time the skipping config is updated.
+  int32 session_skip_count = 6;
+
+  // Skipped duration inherited when this execution started. Unlike accumulated_skipped_duration,
+  // this value remains fixed and can be used to calculate the execution's wall-clock start time.
+  google.protobuf.Duration initial_skipped_duration = 8;
 }
 
 message FastForwardInfo {
-  reserved 3;
-  reserved "source_event_id";
+  reserved 3, 4;
+  reserved "source_event_id", "last_update_versioned_transition";
 
   // Target time for the fast-forward, expressed in virtual time.
   google.protobuf.Timestamp target_time = 1;
 
   // Indicates whether this fast-forward has already been reached, used for idempotency checks.
   bool has_reached = 2;
-
-  VersionedTransition last_update_versioned_transition = 4;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
@@ -375,6 +393,20 @@ message ExecutionStats {
   // Total count of external payloads referenced in the entire history tree of the execution, not just the current branch.
   // This number doesn't include payloads in buffered events.
   int64 external_payload_count = 3;
+  // Running storage usage of this run on this cluster. Each cluster (active or passive) accrues its own;
+  // it is not replicated. Copy or clear this field on its own, not the whole ExecutionStats.
+  StorageUsage storage_usage = 4;
+}
+
+// Running storage usage of a run on one cluster, accrued by that cluster (active or passive) at each
+// state transition it persists, from its own clock and its own sizes.
+message StorageUsage {
+  // (-- api-linter: core::0142::time-field-type=disabled
+  //     aip.dev/not-precedent: byte-seconds is a storage unit, not a time. --)
+  int64 mutable_state_byte_seconds = 1;
+  // (-- api-linter: core::0142::time-field-type=disabled
+  //     aip.dev/not-precedent: byte-seconds is a storage unit, not a time. --)
+  int64 history_byte_seconds = 2;
 }
 
 // execution_state column
@@ -386,8 +418,11 @@ message WorkflowExecutionState {
   VersionedTransition last_update_versioned_transition = 5;
   google.protobuf.Timestamp start_time = 6;
   // Request IDs that are attached to the workflow execution. It can be the request ID that started
-  // the workflow execution or request IDs that were attached to an existing running workflow
-  // execution via StartWorkflowExecutionRequest.OnConflictOptions.
+  // the workflow execution, request IDs that were attached to an existing running workflow
+  // execution via StartWorkflowExecutionRequest.OnConflictOptions, or (for CHASM executions) request
+  // IDs recorded for UpdateComponent idempotency - the latter are marked by RequestIDInfo.attach_time
+  // and are swept per-execution by count (history.maximumRequestIDsPerExecution) and age
+  // (history.requestIDMaxAge).
   map<string, RequestIDInfo> request_ids = 7;
   // Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
   // only for a first run; any continuation (continue-as-new, retry, cron, or reset)
@@ -399,6 +434,9 @@ message WorkflowExecutionState {
 message RequestIDInfo {
   temporal.api.enums.v1.EventType event_type = 1;
   int64 event_id = 2;
+  // Set only for request IDs attached by the CHASM framework for UpdateComponent idempotency.
+  // Used as an ordering key for lazy eviction when set.
+  google.protobuf.Timestamp attach_time = 3;
 }
 
 // transfer column
@@ -424,12 +462,19 @@ message TransferTaskInfo {
     // can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
     // by some other task, so this task doesn't need to worry about it.
     bool can_skip_visibility_archival = 1;
+    // Only standby execution skips verification; active execution still notifies the parent.
+    bool skip_parent_verification = 2;
+  }
+  message ReleaseLimiterTaskDetails {
+    repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 1;
   }
   oneof task_details {
     CloseExecutionTaskDetails close_execution_task_details = 16;
 
     // If the task addresses a CHASM component, this field will be set.
     ChasmTaskInfo chasm_task_info = 18;
+
+    ReleaseLimiterTaskDetails release_limiter_task_details = 19;
   }
   // Stamp represents the "version" of the entity's internal state for which the transfer task was created.
   // It increases monotonically when the entity's options are modified.
@@ -469,6 +514,9 @@ message ReplicationTaskInfo {
   bool is_force_replication = 24;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 25;
+  // Contains the current version-history items captured when this replication task was created.
+  // The branch token is omitted; presence distinguishes captured tasks from legacy tasks.
+  history.v1.VersionHistory current_version_history = 26;
 }
 
 // visibility_task_data column
@@ -486,6 +534,8 @@ message VisibilityTaskInfo {
   google.protobuf.Timestamp close_time = 11;
   google.protobuf.Timestamp start_time = 13;
   bool is_retention_delete = 14;
+  // start_time minus any inherited skipped time.
+  google.protobuf.Timestamp create_time = 15;
 
   oneof task_details {
     // If the task addresses a CHASM component, this field will be set.

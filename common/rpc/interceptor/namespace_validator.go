@@ -2,6 +2,8 @@ package interceptor
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -14,6 +16,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 type (
@@ -23,10 +27,11 @@ type (
 
 	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
-		namespaceRegistry                      namespace.Registry
-		tokenSerializer                        *tasktoken.Serializer
-		enableTokenNamespaceEnforcement        dynamicconfig.BoolPropertyFn
-		maxNamespaceLength                     dynamicconfig.IntPropertyFn
+		namespaceRegistry               namespace.Registry
+		tokenSerializer                 *tasktoken.Serializer
+		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
+		maxNamespaceLength              dynamicconfig.IntPropertyFn
+		// Keyed by full gRPC method, like allowedMethodsDuringHandover.
 		additionalAllowedMethodsDuringHandover map[string]struct{}
 	}
 )
@@ -42,49 +47,116 @@ var (
 	allowedNamespaceStatesPerAPI = map[string][]enumspb.NamespaceState{
 		api.WorkflowServicePrefix + "StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		api.OperatorServicePrefix + "DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
-		api.NexusServicePrefix + "DispatchNexusTask":                   {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.OperatorServicePrefix + "DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		// SOFT_DELETED makes retries idempotent.
+		api.OperatorServicePrefix + "SoftDeleteNamespace": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		// REGISTERED lets a partly applied restore be retried.
+		api.OperatorServicePrefix + "RestoreNamespace":         {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		api.OperatorServicePrefix + "DescribeNamespaceRestore": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		// SOFT_DELETED allows failover and migration; the handler rejects state changes.
+		api.WorkflowServicePrefix + "UpdateNamespace": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		api.NexusServicePrefix + "DispatchNexusTask":  {enumspb.NAMESPACE_STATE_REGISTERED},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs of specific service
 	// that have `namespace` or `task_token` field in the request object.
 	allowedNamespaceStatesPerService = map[string][]enumspb.NamespaceState{
-		api.AdminServicePrefix: {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		api.AdminServicePrefix: {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_SOFT_DELETED},
 	}
 	// If service name is not in the map above, these are allowed states for all APIs
 	// that have `namespace` or `task_token` field in the request object.
 	allowedNamespaceStatesDefault = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
 	// DO NOT allow workflow data read during namespace handover to prevent read-after-write inconsistency.
+	//
+	// Keyed by full gRPC method: the frontend serves three services plus an embedder's,
+	// and GetSearchAttributes below is on two of them.
 	allowedMethodsDuringHandover = map[string]struct{}{
 		// System
-		"GetSystemInfo":       {},
-		"GetSearchAttributes": {},
-		"GetClusterInfo":      {},
+		api.WorkflowServicePrefix + "GetSystemInfo":       {},
+		api.WorkflowServicePrefix + "GetSearchAttributes": {},
+		api.AdminServicePrefix + "GetSearchAttributes":    {},
+		// Search attributes
+		api.OperatorServicePrefix + "ListSearchAttributes":   {},
+		api.OperatorServicePrefix + "AddSearchAttributes":    {},
+		api.OperatorServicePrefix + "RemoveSearchAttributes": {},
+		api.WorkflowServicePrefix + "GetClusterInfo":         {},
 		// Namespace APIs
-		"DeprecateNamespace": {},
-		"DescribeNamespace":  {},
-		"UpdateNamespace":    {},
-		"ListNamespaces":     {},
-		"RegisterNamespace":  {},
+		api.WorkflowServicePrefix + "DeprecateNamespace": {},
+		api.WorkflowServicePrefix + "DescribeNamespace":  {},
+		api.WorkflowServicePrefix + "UpdateNamespace":    {},
+		api.WorkflowServicePrefix + "ListNamespaces":     {},
+		api.WorkflowServicePrefix + "RegisterNamespace":  {},
 		// Replication APIs
-		"GetReplicationMessages":           {},
-		"ReplicateEventsV2":                {},
-		"GetWorkflowExecutionRawHistory":   {},
-		"GetWorkflowExecutionRawHistoryV2": {},
+		api.AdminServicePrefix + "GetReplicationMessages":           {},
+		api.AdminServicePrefix + "GetWorkflowExecutionRawHistory":   {},
+		api.AdminServicePrefix + "GetWorkflowExecutionRawHistoryV2": {},
+		// HistoryService is not served on the frontend, so this matches nothing today.
+		api.HistoryServicePrefix + "ReplicateEventsV2": {},
 		// Visibility APIs
-		"ListTaskQueuePartitions":        {},
-		"ListOpenWorkflowExecutions":     {},
-		"ListClosedWorkflowExecutions":   {},
-		"ListWorkflowExecutions":         {},
-		"ListArchivedWorkflowExecutions": {},
-		"ScanWorkflowExecutions":         {},
-		"CountWorkflowExecutions":        {},
-		"ListSchedules":                  {},
-		"ListBatchOperations":            {},
+		api.WorkflowServicePrefix + "ListTaskQueuePartitions":        {},
+		api.WorkflowServicePrefix + "ListOpenWorkflowExecutions":     {},
+		api.WorkflowServicePrefix + "ListClosedWorkflowExecutions":   {},
+		api.WorkflowServicePrefix + "ListWorkflowExecutions":         {},
+		api.WorkflowServicePrefix + "ListArchivedWorkflowExecutions": {},
+		api.WorkflowServicePrefix + "ScanWorkflowExecutions":         {},
+		api.WorkflowServicePrefix + "CountWorkflowExecutions":        {},
+		api.WorkflowServicePrefix + "ListSchedules":                  {},
+		api.WorkflowServicePrefix + "ListBatchOperations":            {},
+		api.AdminServicePrefix + "ListExecutions":                    {},
+		api.AdminServicePrefix + "CountExecutions":                   {},
 		// Matching
-		"ShutdownWorker": {},
+		api.WorkflowServicePrefix + "ShutdownWorker": {},
 	}
 )
+
+// newAdditionalAllowedMethods builds an embedder's handover allow-list from full gRPC
+// methods. A bad entry is inert rather than fatal, and logged where the list is
+// validated.
+func newAdditionalAllowedMethods(methods []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(methods))
+	for _, method := range methods {
+		out[method] = struct{}{}
+	}
+	return out
+}
+
+// handoverAllowed reports whether fullMethod may proceed while its namespace is handing
+// over.
+func handoverAllowed(fullMethod string, additional map[string]struct{}) bool {
+	if _, ok := allowedMethodsDuringHandover[fullMethod]; ok {
+		return true
+	}
+	_, ok := additional[fullMethod]
+	return ok
+}
+
+// validateFullMethods reports entries that do not name a real method, for the maps this
+// package keys by full gRPC method. A service with no descriptor in this binary is
+// skipped — Nexus has none, and service names come from constants.
+func validateFullMethods(fullMethods ...string) error {
+	var problems []string
+	for _, fullMethod := range fullMethods {
+		service, method, ok := api.ParseFullMethod(fullMethod)
+		if !ok {
+			problems = append(problems, fmt.Sprintf(
+				"%q is not a full gRPC method, want \"/pkg.Service/Method\"", fullMethod))
+			continue
+		}
+		found, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(service))
+		if err != nil {
+			continue
+		}
+		if descriptor, ok := found.(protoreflect.ServiceDescriptor); ok {
+			if descriptor.Methods().ByName(protoreflect.Name(method)) == nil {
+				problems = append(problems, fmt.Sprintf("%s has no method %q", service, method))
+			}
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("invalid full gRPC methods: %s", strings.Join(problems, "; "))
+	}
+	return nil
+}
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).StateValidationIntercept
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).NamespaceValidateIntercept
@@ -95,10 +167,7 @@ func NewNamespaceValidatorInterceptor(
 	maxNamespaceLength dynamicconfig.IntPropertyFn,
 	additionalAllowedMethodsDuringHandover []string,
 ) *NamespaceValidatorInterceptor {
-	additional := make(map[string]struct{}, len(additionalAllowedMethodsDuringHandover))
-	for _, m := range additionalAllowedMethodsDuringHandover {
-		additional[m] = struct{}{}
-	}
+	additional := newAdditionalAllowedMethods(additionalAllowedMethodsDuringHandover)
 	return &NamespaceValidatorInterceptor{
 		namespaceRegistry:                      namespaceRegistry,
 		tokenSerializer:                        tasktoken.NewSerializer(),
@@ -284,9 +353,12 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
-	case *operatorservice.DeleteNamespaceRequest:
-		// special case for Operator.DeleteNamespace API which accept either Namespace ID or Namespace name as input
-		namespaceID := namespace.ID(request.GetNamespaceId())
+	case *operatorservice.DeleteNamespaceRequest,
+		*operatorservice.SoftDeleteNamespaceRequest,
+		*operatorservice.RestoreNamespaceRequest,
+		*operatorservice.DescribeNamespaceRestoreRequest:
+		// Namespace lifecycle APIs accept either Namespace ID or Namespace name as input.
+		namespaceID := namespace.ID(request.(interface{ GetNamespaceId() string }).GetNamespaceId())
 		if namespaceID.IsEmpty() && namespaceName.IsEmpty() {
 			return nil, errNamespaceNotSet
 		}
@@ -308,6 +380,13 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*
 		*operatorservice.ListSearchAttributesRequest:
 		// Namespace is optional for search attributes operations.
 		// It's required when using SQL DB for visibility, but not when using Elasticsearch.
+		if !namespaceName.IsEmpty() {
+			return ni.namespaceRegistry.GetNamespace(namespaceName)
+		}
+		return nil, nil
+	case *adminservice.ListExecutionsRequest,
+		*adminservice.CountExecutionsRequest:
+		// Namespace is optional for admin visibility APIs.
 		if !namespaceName.IsEmpty() {
 			return ni.namespaceRegistry.GetNamespace(namespaceName)
 		}
@@ -393,12 +472,7 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	methodName := api.MethodName(fullMethod)
-
-	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
-		return nil
-	}
-	if _, ok := ni.additionalAllowedMethodsDuringHandover[methodName]; ok {
+	if handoverAllowed(fullMethod, ni.additionalAllowedMethodsDuringHandover) {
 		return nil
 	}
 

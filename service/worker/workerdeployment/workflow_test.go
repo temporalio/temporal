@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
@@ -28,7 +29,8 @@ type WorkerDeploymentSuite struct {
 	env                    *testsuite.TestWorkflowEnvironment
 	workerDeploymentClient *ClientImpl
 
-	workflowVersion DeploymentWorkflowVersion
+	workflowVersion              DeploymentWorkflowVersion
+	versionDemotionSignalEnabled bool
 }
 
 func TestWorkerDeploymentSuite(t *testing.T) {
@@ -39,6 +41,7 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 func (s *WorkerDeploymentSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.NewTestWorkflowEnvironment()
+	s.versionDemotionSignalEnabled = true
 	s.env.RegisterWorkflowWithOptions(s.getDeploymentWorkflowFunc(), workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 
 	// Initialize an empty ClientImpl to use its helper methods
@@ -322,6 +325,251 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+}
+
+func (s *WorkerDeploymentSuite) Test_SetCurrent_DemotesPreviousVersionWithUpdateWhenSignalDisabled() {
+	s.testSetCurrentDemotion(false)
+}
+
+func (s *WorkerDeploymentSuite) Test_SetCurrent_DemotesPreviousVersionWithSignalWhenEnabled() {
+	s.testSetCurrentDemotion(true)
+}
+
+func (s *WorkerDeploymentSuite) testSetCurrentDemotion(versionDemotionSignalEnabled bool) {
+	s.versionDemotionSignalEnabled = versionDemotionSignalEnabled
+
+	tv := testvars.New(s.T())
+	previousVersionTV := tv.WithBuildIDNumber(1)
+	newVersionTV := tv.WithBuildIDNumber(2)
+	previousVersion := previousVersionTV.DeploymentVersionString()
+	newVersion := newVersionTV.DeploymentVersionString()
+	now := timestamppb.New(time.Now())
+
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	getDemoteSignalArgs := s.expectVersionDemotion(
+		versionDemotionSignalEnabled,
+		GenerateVersionWorkflowID(tv.DeploymentSeries(), previousVersionTV.BuildID()),
+		func(args *deploymentspb.SyncVersionStateActivityArgs) bool {
+			return args.GetVersion() == newVersion &&
+				args.GetUpdateArgs().GetCurrentSinceTime() != nil &&
+				args.GetUpdateArgs().GetRoutingConfig().GetCurrentVersion() == newVersion
+		},
+		func(args *deploymentspb.SyncVersionStateActivityArgs) bool {
+			return args.GetVersion() == previousVersion &&
+				args.GetUpdateArgs().GetCurrentSinceTime() == nil &&
+				args.GetUpdateArgs().GetRoutingConfig().GetCurrentVersion() == newVersion
+		},
+	)
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("SetCurrentVersion update should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(_ any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.SetCurrentVersionArgs{
+			Identity:                tv.ClientIdentity(),
+			Version:                 newVersion,
+			IgnoreMissingTaskQueues: true,
+		})
+	}, time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				previousVersion: {
+					Version:           previousVersion,
+					Status:            enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+					CurrentSinceTime:  now,
+					RoutingUpdateTime: now,
+				},
+				newVersion: {
+					Version: newVersion,
+					Status:  enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+				},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentVersion:            previousVersion,
+				CurrentVersionChangedTime: now,
+				RevisionNumber:            1,
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	demoteSignalArgs := getDemoteSignalArgs()
+	if versionDemotionSignalEnabled {
+		s.Require().NotNil(demoteSignalArgs)
+		s.Equal(newVersion, demoteSignalArgs.GetRoutingConfig().GetCurrentVersion())
+	} else {
+		s.Nil(demoteSignalArgs)
+	}
+}
+
+func (s *WorkerDeploymentSuite) Test_SetRamping_DemotesPreviousVersionWithUpdateWhenSignalDisabled() {
+	s.testSetRampingDemotion(false)
+}
+
+func (s *WorkerDeploymentSuite) Test_SetRamping_DemotesPreviousVersionWithSignalWhenEnabled() {
+	s.testSetRampingDemotion(true)
+}
+
+func (s *WorkerDeploymentSuite) testSetRampingDemotion(versionDemotionSignalEnabled bool) {
+	s.versionDemotionSignalEnabled = versionDemotionSignalEnabled
+
+	tv := testvars.New(s.T())
+	currentVersionTV := tv.WithBuildIDNumber(0)
+	previousVersionTV := tv.WithBuildIDNumber(1)
+	newVersionTV := tv.WithBuildIDNumber(2)
+	currentVersion := currentVersionTV.DeploymentVersionString()
+	previousVersion := previousVersionTV.DeploymentVersionString()
+	newVersion := newVersionTV.DeploymentVersionString()
+	now := timestamppb.New(time.Now())
+
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+	getDemoteSignalArgs := s.expectVersionDemotion(
+		versionDemotionSignalEnabled,
+		GenerateVersionWorkflowID(tv.DeploymentSeries(), previousVersionTV.BuildID()),
+		func(args *deploymentspb.SyncVersionStateActivityArgs) bool {
+			return args.GetVersion() == newVersion &&
+				args.GetUpdateArgs().GetRampingSinceTime() != nil &&
+				args.GetUpdateArgs().GetRampPercentage() == 20 &&
+				args.GetUpdateArgs().GetRoutingConfig().GetRampingVersion() == newVersion
+		},
+		func(args *deploymentspb.SyncVersionStateActivityArgs) bool {
+			return args.GetVersion() == previousVersion &&
+				args.GetUpdateArgs().GetRampingSinceTime() == nil &&
+				args.GetUpdateArgs().GetRampPercentage() == 0 &&
+				args.GetUpdateArgs().GetRoutingConfig().GetRampingVersion() == newVersion
+		},
+	)
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("SetRampingVersion update should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(_ any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.SetRampingVersionArgs{
+			Identity:                tv.ClientIdentity(),
+			Version:                 newVersion,
+			Percentage:              20,
+			IgnoreMissingTaskQueues: true,
+		})
+	}, time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				currentVersion: {
+					Version:           currentVersion,
+					Status:            enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+					CurrentSinceTime:  now,
+					RoutingUpdateTime: now,
+				},
+				previousVersion: {
+					Version:           previousVersion,
+					Status:            enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
+					RampingSinceTime:  now,
+					RoutingUpdateTime: now,
+				},
+				newVersion: {
+					Version: newVersion,
+					Status:  enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+				},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentVersion:                      currentVersion,
+				RampingVersion:                      previousVersion,
+				RampingVersionPercentage:            10,
+				CurrentVersionChangedTime:           now,
+				RampingVersionChangedTime:           now,
+				RampingVersionPercentageChangedTime: now,
+				RevisionNumber:                      1,
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	demoteSignalArgs := getDemoteSignalArgs()
+	if versionDemotionSignalEnabled {
+		s.Require().NotNil(demoteSignalArgs)
+		s.Equal(newVersion, demoteSignalArgs.GetRoutingConfig().GetRampingVersion())
+	} else {
+		s.Nil(demoteSignalArgs)
+	}
+}
+
+// This always expects an activity that promotes the new version. When
+// versionDemotionSignalEnabled is true, it expects the previous version to be
+// demoted by signal. When false, it expects another activity to demote the
+// previous version and fails if a signal is sent.
+func (s *WorkerDeploymentSuite) expectVersionDemotion(
+	versionDemotionSignalEnabled bool,
+	previousVersionWorkflowID string,
+	promoteVersionMatcher func(*deploymentspb.SyncVersionStateActivityArgs) bool,
+	demoteVersionMatcher func(*deploymentspb.SyncVersionStateActivityArgs) bool,
+) func() *deploymentspb.DemoteVersionSignalArgs {
+	var a *Activities
+	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
+	syncVersionResult := func(
+		_ context.Context,
+		args *deploymentspb.SyncVersionStateActivityArgs,
+	) (*deploymentspb.SyncVersionStateActivityResult, error) {
+		return &deploymentspb.SyncVersionStateActivityResult{
+			Summary: &deploymentspb.WorkerDeploymentVersionSummary{Version: args.GetVersion()},
+		}, nil
+	}
+	s.env.OnActivity(
+		a.SyncWorkerDeploymentVersion,
+		mock.Anything,
+		mock.MatchedBy(promoteVersionMatcher),
+	).Return(syncVersionResult).Once()
+
+	var demoteSignalArgs *deploymentspb.DemoteVersionSignalArgs
+	if versionDemotionSignalEnabled {
+		s.env.OnSignalExternalWorkflow(
+			mock.Anything,
+			previousVersionWorkflowID,
+			"",
+			DemoteVersionSignalName,
+			mock.Anything,
+		).Run(func(args mock.Arguments) {
+			demoteSignalArgs = args.Get(4).(*deploymentspb.DemoteVersionSignalArgs)
+		}).Return(nil).Once()
+	} else {
+		s.env.OnActivity(
+			a.SyncWorkerDeploymentVersion,
+			mock.Anything,
+			mock.MatchedBy(demoteVersionMatcher),
+		).Return(syncVersionResult).Once()
+		s.env.OnSignalExternalWorkflow(
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+		).Run(func(mock.Arguments) {
+			s.Fail("version demotion should not use a signal when signal demotion is disabled")
+		}).Return(nil).Maybe()
+	}
+
+	return func() *deploymentspb.DemoteVersionSignalArgs {
+		return demoteSignalArgs
+	}
 }
 
 // Test_SetRampingVersion_RejectStaleConcurrentUpdate tests that a stale concurrent update is rejected.
@@ -635,7 +883,8 @@ func (s *WorkerDeploymentSuite) getDeploymentWorkflowFunc() func(ctx workflow.Co
 		maxVersionsGetter := func() int {
 			return 1000
 		}
-		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
+		versionDemotionSignalEnabledGetter := func() bool { return s.versionDemotionSignalEnabled }
+		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, versionDemotionSignalEnabledGetter, args)
 	}
 }
 
@@ -1750,7 +1999,8 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_MaxVersionsLi
 		maxVersionsGetter := func() int {
 			return 1 // Only allow 1 version
 		}
-		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
+		versionDemotionSignalEnabledGetter := func() bool { return true }
+		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, versionDemotionSignalEnabledGetter, args)
 	}, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
@@ -1793,57 +2043,27 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_MaxVersionsLi
 	s.True(s.env.IsWorkflowCompleted())
 }
 
-// Test_CreateWorkerDeploymentVersion_SyncSummaryPreservesCreateRequestID tests that
-// syncing a version summary from the version workflow preserves the create_request_id
-func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPreservesCreateRequestID() {
+func (s *WorkerDeploymentSuite) Test_SyncSummaryPreservesDeploymentOwnedFields() {
 	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
 	requestID := tv.Any().String()
-	identity := tv.ClientIdentity()
 	version := tv.DeploymentVersionString()
+	taskQueueFamilySummary := buildTaskQueueFamilySummary(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		"existing-queue": {},
+	})
+	incomingTaskQueueFamilySummary := buildTaskQueueFamilySummary(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		"other-queue": {},
+	})
 
-	var a *Activities
-	s.env.RegisterActivity(a.StartWorkerDeploymentVersionWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentVersionWorkflow, mock.Anything, mock.Anything).Return(nil).Once()
-
-	// First create the version
-	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(CreateWorkerDeploymentVersion, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("CreateWorkerDeploymentVersion should not have been rejected", err)
-			},
-			OnAccept: func() {},
-			OnComplete: func(result any, err error) {
-				s.Require().NoError(err)
-			},
-		}, &deploymentspb.CreateWorkerDeploymentVersionArgs{
-			Identity:  identity,
-			RequestId: requestID,
-			Version:   version,
-		})
-	}, 1*time.Millisecond)
-
-	// Then send a SyncVersionSummary signal (simulating version workflow syncing back)
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SyncVersionSummarySignal, &deploymentspb.WorkerDeploymentVersionSummary{
-			Version:    version,
-			CreateTime: timestamppb.Now(),
-			Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
-			// Note: no CreateRequestId in the signal - version workflow doesn't set it
+			Version:                version,
+			CreateTime:             timestamppb.Now(),
+			Status:                 enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			TaskQueueFamilySummary: incomingTaskQueueFamilySummary,
 		})
-	}, 5*time.Millisecond)
-
-	// Verify create_request_id is preserved after sync
-	s.env.RegisterDelayedCallback(func() {
-		queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
-		s.Require().NoError(err)
-		var state deploymentspb.QueryDescribeWorkerDeploymentResponse
-		s.Require().NoError(queryResult.Get(&state))
-		s.Require().Contains(state.State.Versions, version)
-		s.Equal(requestID, state.State.Versions[version].CreateRequestId,
-			"create_request_id should be preserved after summary sync")
-	}, 10*time.Millisecond)
+	}, time.Millisecond)
 
 	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  tv.NamespaceName().String(),
@@ -1851,9 +2071,25 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPr
 		DeploymentName: tv.DeploymentSeries(),
 		State: &deploymentspb.WorkerDeploymentLocalState{
 			CreateRequestId: "deployment-request-id",
-			Versions:        map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version: {
+					Version:                version,
+					CreateRequestId:        requestID,
+					TaskQueueFamilySummary: taskQueueFamilySummary,
+				},
+			},
 		},
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+	var workflowErr *temporal.WorkflowExecutionError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &workflowErr)
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(workflowErr.Unwrap(), &canErr)
+	var nextRunArgs deploymentspb.WorkerDeploymentWorkflowArgs
+	s.Require().NoError(sdk.PreferProtoDataConverter.FromPayloads(canErr.Input, &nextRunArgs))
+	versionSummary := nextRunArgs.GetState().GetVersions()[version]
+	s.Require().NotNil(versionSummary)
+	s.Equal(requestID, versionSummary.GetCreateRequestId())
+	s.Equal(taskQueueFamilySummary, versionSummary.GetTaskQueueFamilySummary())
 }

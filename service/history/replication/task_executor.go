@@ -5,6 +5,7 @@ package replication
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -51,6 +52,7 @@ type (
 		workflowCache        wcache.Cache
 		metricsHandler       metrics.Handler
 		logger               log.Logger
+		validateSource       func() bool
 	}
 )
 
@@ -73,6 +75,7 @@ func NewTaskExecutor(
 		workflowCache:        workflowCache,
 		metricsHandler:       shardContext.GetMetricsHandler(),
 		logger:               shardContext.GetLogger(),
+		validateSource:       shardContext.GetConfig().ValidateReplicationTaskSourceCluster,
 	}
 }
 
@@ -377,16 +380,17 @@ func (e *taskExecutorImpl) filterTask(
 		}
 		return false, err
 	}
-
-	shouldProcessTask := false
-FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames(workflowID) {
-		if e.currentCluster == targetCluster {
-			shouldProcessTask = true
-			break FilterLoop
-		}
+	clusterNames := namespaceEntry.ClusterNames(workflowID)
+	if e.validateSource() && !slices.Contains(clusterNames, e.remoteCluster) {
+		e.logger.Warn(
+			"Replication task skipped because source cluster is not in namespace cluster list",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(workflowID),
+			tag.SourceCluster(e.remoteCluster),
+		)
+		return false, nil
 	}
-	return shouldProcessTask, nil
+	return slices.Contains(clusterNames, e.currentCluster), nil
 }
 
 func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespaceID string, workflowID string, runID string) (retErr error) {

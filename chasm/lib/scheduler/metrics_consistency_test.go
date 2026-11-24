@@ -150,14 +150,12 @@ func TestScheduleBackfillerTask_ConsistentLabels(t *testing.T) {
 	ctx = env.MutableContext()
 	sched.Invoker.Get(ctx).BufferedStarts = nil // make room for the next batch
 	require.NoError(t, h.Execute(ctx, backfiller,
-		chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{}))
+		chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{Stamp: backfiller.GetTaskStamp()}))
 	require.NoError(t, env.CloseTransaction())
 
-	// invalidated: a task scheduled before the high water mark is stale.
-	backfiller.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
+	// invalidated: an older task stamp is stale.
 	valid, err := h.Validate(env.ReadContext(), backfiller,
-		chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: env.TimeSource.Now().Add(-time.Hour)}},
-		&schedulerpb.BackfillerTask{})
+		chasm.TaskInvocation{}, &schedulerpb.BackfillerTask{Stamp: backfiller.GetTaskStamp() - 1})
 	require.NoError(t, err)
 	require.False(t, valid)
 

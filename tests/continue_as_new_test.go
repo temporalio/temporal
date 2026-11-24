@@ -13,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -263,7 +264,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 
 	var historyEvents []*historypb.HistoryEvent
 	for range 20 {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		})
 		lastEvent := historyEvents[len(historyEvents)-1]
@@ -448,7 +449,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 	minTaskID := int64(0)
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events := env.GetHistory(env.Namespace().String(), executions[0])
+	events := env.RequireHistory(s, executions[0])
 	s.NotEmpty(events)
 	for _, event := range events {
 		s.Greater(event.GetTaskId(), minTaskID)
@@ -457,7 +458,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = env.GetHistory(env.Namespace().String(), executions[1])
+	events = env.RequireHistory(s, executions[1])
 	s.NotEmpty(events)
 	for _, event := range events {
 		s.Greater(event.GetTaskId(), minTaskID)
@@ -550,7 +551,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	s.False(workflowComplete)
 
 	// The original run's history must record the requested backoff on the continue-as-new event.
-	firstRunEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.RunId})
+	firstRunEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.RunId})
 	continuedAsNewEvent := firstRunEvents[len(firstRunEvents)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, continuedAsNewEvent.GetEventType())
 	canAttrs := continuedAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
@@ -570,7 +571,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	s.True(workflowComplete)
 
 	// The new run started with the requested first-workflow-task backoff and ran to completion.
-	finalEvents := env.GetHistory(env.Namespace().String(), newRunExecution)
+	finalEvents := env.RequireHistory(s, newRunExecution)
 	startedAttrs := finalEvents[0].GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(delayStart, startedAttrs.GetFirstWorkflowTaskBackoff().AsDuration())
 	s.Equal(we.RunId, startedAttrs.GetContinuedExecutionRunId())
@@ -586,6 +587,141 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	startedTime := finalEvents[0].GetEventTime().AsTime()
 	scheduledTime := finalEvents[1].GetEventTime().AsTime()
 	s.GreaterOrEqual(scheduledTime.Sub(startedTime), delayStart)
+}
+
+func (s *ContinueAsNewTestSuite) TestContinueAsNewMinBackoffDoesNotAccumulate() {
+	env := testcore.NewEnv(s.T())
+
+	const minimalInterval = 10 * time.Second
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, minimalInterval)
+
+	id := "functional-continue-as-new-min-backoff-does-not-accumulate-test"
+	wt := "functional-continue-as-new-min-backoff-does-not-accumulate-test-type"
+	tl := "functional-continue-as-new-min-backoff-does-not-accumulate-test-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
+
+	const continueAsNewCount = 3
+	updateErrors := make(chan error, continueAsNewCount)
+	var firstWorkflowTaskBackoffs []time.Duration
+	runIDs := []string{we.RunId}
+	for i := range continueAsNewCount + 1 {
+		// Each task is polled after the run has been made executable. For continued runs,
+		// the admitted update below schedules a workflow task before ExecutionTime.
+		task, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: taskQueue,
+			Identity:  identity,
+		})
+		s.NoError(err)
+		s.NotEmpty(task.GetTaskToken())
+
+		startAttrs := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
+		firstWorkflowTaskBackoff := startAttrs.GetFirstWorkflowTaskBackoff().AsDuration()
+		firstWorkflowTaskBackoffs = append(firstWorkflowTaskBackoffs, firstWorkflowTaskBackoff)
+
+		var messages []*protocolpb.Message
+		var commands []*commandpb.Command
+		if i > 0 {
+			s.NotEmpty(task.Messages, "expected update message in task")
+			updateTV := env.Tv().
+				WithWorkflowID(id).
+				WithRunID(runIDs[i]).
+				WithUpdateIDNumber(i).
+				WithMessageIDNumber(i)
+			messages = env.UpdateAcceptCompleteMessages(updateTV, task.Messages[0])
+			commands = env.UpdateAcceptCompleteCommands(updateTV)
+		}
+		if i < continueAsNewCount {
+			// Continue as new without an explicit backoff. The server applies the default
+			// WorkflowIdReuseMinimalInterval because the previous run closes quickly.
+			commands = append(commands, &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType:        workflowType,
+						TaskQueue:           taskQueue,
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			})
+		} else {
+			commands = append(commands, &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("Done"),
+					},
+				},
+			})
+		}
+
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Identity:  identity,
+			Commands:  commands,
+			Messages:  messages,
+		})
+		s.NoError(err)
+
+		events := env.RequireHistory(s, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      runIDs[len(runIDs)-1],
+		})
+		lastEvent := events[len(events)-1]
+		if i < continueAsNewCount {
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+			newRunID := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
+			runIDs = append(runIDs, newRunID)
+			// Admit a noop update on the delayed continued run. This schedules the next
+			// workflow task immediately, so the run can close before its ExecutionTime.
+			updateTV := env.Tv().
+				WithWorkflowID(id).
+				WithRunID(newRunID).
+				WithUpdateIDNumber(i + 1).
+				WithMessageIDNumber(i + 1)
+			go func(updateTV *testvars.TestVars) {
+				_, updateErr := env.FrontendClient().UpdateWorkflowExecution(
+					testcore.NewContext(),
+					updateWorkflowRequest(env, updateTV, nil),
+				)
+				updateErrors <- updateErr
+			}(updateTV)
+			waitUpdateAdmitted(env, updateTV)
+		} else {
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
+		}
+	}
+
+	for range continueAsNewCount {
+		s.NoError(s.Rcv(updateErrors), "update failed")
+	}
+
+	// The first run has no inherited backoff. Every continued run should stay capped at
+	// the default minimal interval instead of accumulating across the tight loop.
+	s.Len(firstWorkflowTaskBackoffs, continueAsNewCount+1)
+	s.Zero(firstWorkflowTaskBackoffs[0])
+	for i, firstWorkflowTaskBackoff := range firstWorkflowTaskBackoffs[1:] {
+		s.LessOrEqual(firstWorkflowTaskBackoff, minimalInterval, "firstWorkflowTaskBackoff accumulated at run %d: %v", i+1, firstWorkflowTaskBackoff)
+	}
 }
 
 type (
@@ -838,7 +974,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
- 14 WorkflowExecutionCompleted`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+ 14 WorkflowExecutionCompleted`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	}))
@@ -973,14 +1109,14 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
- 10 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+ 10 WorkflowExecutionTerminated`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	}))
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+  2 WorkflowExecutionTerminated`, env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: childID,
 	}))
 }
@@ -1056,7 +1192,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// Verify workflow task failed
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -1226,7 +1362,7 @@ func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunFromDifferentChain_Firs
 	s.Equal(chain2RunID, desc.WorkflowExecutionInfo.GetFirstRunId())
 
 	// Locate the WorkflowTaskCompleted event in chain1's history to use as reset point.
-	chain1Events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: chain1RunID})
+	chain1Events := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: id, RunId: chain1RunID})
 	var wtCompletedEventID int64
 	for _, ev := range chain1Events {
 		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
@@ -1322,7 +1458,7 @@ func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunAfterContinueAsNew_Firs
 	s.NoError(err)
 
 	// Locate the WorkflowTaskCompleted event in the original (non-current) run to use as reset point.
-	originalEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: originalRunID})
+	originalEvents := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: id, RunId: originalRunID})
 	var wtCompletedEventID int64
 	for _, ev := range originalEvents {
 		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {

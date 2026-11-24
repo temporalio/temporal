@@ -4,7 +4,12 @@ package nsreplication
 // during replication task execution.
 type NamespaceDataMerger interface {
 	// MergeData performs a business specific merge of namespace data.
-	MergeData(currentData, taskData map[string]string) (mergedData map[string]string, merged bool)
+	MergeData(
+		currentData map[string]string,
+		taskData map[string]string,
+		currentConfigVersion int64,
+		taskConfigVersion int64,
+	) (mergedData map[string]string, merged bool)
 }
 
 // NoopDataMerger is the default implementation that returns task data directly.
@@ -16,6 +21,11 @@ func NewNoopDataMerger() NamespaceDataMerger {
 }
 
 // MergeData returns taskData directly without any merging.
-func (n *NoopDataMerger) MergeData(currentData, taskData map[string]string) (map[string]string, bool) {
+func (n *NoopDataMerger) MergeData(
+	currentData map[string]string,
+	taskData map[string]string,
+	_ int64,
+	_ int64,
+) (map[string]string, bool) {
 	return taskData, false
 }

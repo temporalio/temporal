@@ -2,7 +2,6 @@ package objectleak
 
 import (
 	"reflect"
-	"slices"
 	"strings"
 )
 
@@ -28,29 +27,30 @@ func (p pattern) matches(value string) bool {
 	return value == p.value
 }
 
-func (p pattern) matchesObject(obj trackedObject) bool {
-	return p.matches(obj.path.normalized()) || p.matches(obj.typeName)
+func (p pattern) matchesObject(path string, typeName string) bool {
+	return p.matches(path) || p.matches(typeName)
 }
 
-func (ps patterns) matchObject(obj trackedObject) []string {
-	var matches []string
+func (ps patterns) matchObject(path string, typeName string) bool {
+	matched := false
 	for i := range ps {
-		if ps[i].matchesObject(obj) {
+		if ps[i].matchesObject(path, typeName) {
 			ps[i].matched = true
-			matches = append(matches, ps[i].String())
+			matched = true
 		}
 	}
-	return matches
+	return matched
 }
 
-func (ps patterns) matchAny(values ...string) bool {
+func (ps patterns) matchValue(value string) bool {
+	matched := false
 	for i := range ps {
-		if slices.ContainsFunc(values, ps[i].matches) {
+		if ps[i].matches(value) {
 			ps[i].matched = true
-			return true
+			matched = true
 		}
 	}
-	return false
+	return matched
 }
 
 func (ps patterns) matchType(t reflect.Type) bool {
@@ -58,9 +58,9 @@ func (ps patterns) matchType(t reflect.Type) bool {
 		t = t.Elem()
 	}
 	if t.Name() != "" {
-		return ps.matchAny(t.PkgPath() + "." + t.Name())
+		return ps.matchValue(t.PkgPath() + "." + t.Name())
 	}
-	return ps.matchAny(t.String())
+	return ps.matchValue(t.String())
 }
 
 func (ps patterns) unmatched() []string {

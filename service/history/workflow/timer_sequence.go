@@ -31,6 +31,15 @@ const (
 	TimerTaskStatusCreatedHeartbeat
 )
 
+// TimerTaskStatusCreatedPerAttempt is the set of activity timer task bits scoped to a
+// single attempt. They must be cleared when an activity moves to a new attempt so the
+// timers are recreated against the new deadlines. TimerTaskStatusCreatedScheduleToClose
+// is deliberately excluded: it is a whole-activity deadline that spans retries, so
+// clearing it would regenerate a timeout task that is already pending.
+const TimerTaskStatusCreatedPerAttempt = TimerTaskStatusCreatedStartToClose |
+	TimerTaskStatusCreatedScheduleToStart |
+	TimerTaskStatusCreatedHeartbeat
+
 type (
 	// TimerSequenceID represent a in mem timer
 	TimerSequenceID struct {
@@ -162,11 +171,7 @@ func (t *timerSequenceImpl) LoadAndSortUserTimers() []TimerSequenceID {
 
 	for _, timerInfo := range pendingTimers {
 
-		if sequenceID := t.getUserTimerTimeout(
-			timerInfo,
-		); sequenceID != nil {
-			timers = append(timers, *sequenceID)
-		}
+		timers = append(timers, t.getUserTimerTimeout(timerInfo))
 	}
 
 	sort.Sort(timers)
@@ -184,28 +189,28 @@ func (t *timerSequenceImpl) LoadAndSortActivityTimers() []TimerSequenceID {
 		if activityInfo.Paused {
 			continue
 		}
-		if sequenceID := t.getActivityScheduleToCloseTimeout(
+		if sequenceID, ok := t.getActivityScheduleToCloseTimeout(
 			activityInfo,
-		); sequenceID != nil {
-			activityTimers = append(activityTimers, *sequenceID)
+		); ok {
+			activityTimers = append(activityTimers, sequenceID)
 		}
 
-		if sequenceID := t.getActivityScheduleToStartTimeout(
+		if sequenceID, ok := t.getActivityScheduleToStartTimeout(
 			activityInfo,
-		); sequenceID != nil {
-			activityTimers = append(activityTimers, *sequenceID)
+		); ok {
+			activityTimers = append(activityTimers, sequenceID)
 		}
 
-		if sequenceID := t.getActivityStartToCloseTimeout(
+		if sequenceID, ok := t.getActivityStartToCloseTimeout(
 			activityInfo,
-		); sequenceID != nil {
-			activityTimers = append(activityTimers, *sequenceID)
+		); ok {
+			activityTimers = append(activityTimers, sequenceID)
 		}
 
-		if sequenceID := t.getActivityHeartbeatTimeout(
+		if sequenceID, ok := t.getActivityHeartbeatTimeout(
 			activityInfo,
-		); sequenceID != nil {
-			activityTimers = append(activityTimers, *sequenceID)
+		); ok {
+			activityTimers = append(activityTimers, sequenceID)
 		}
 	}
 
@@ -215,11 +220,11 @@ func (t *timerSequenceImpl) LoadAndSortActivityTimers() []TimerSequenceID {
 
 func (t *timerSequenceImpl) getUserTimerTimeout(
 	timerInfo *persistencespb.TimerInfo,
-) *TimerSequenceID {
+) TimerSequenceID {
 
 	expiryTime := timerInfo.ExpiryTime
 
-	return &TimerSequenceID{
+	return TimerSequenceID{
 		EventID:      timerInfo.GetStartedEventId(),
 		Timestamp:    timestamp.TimeValue(expiryTime),
 		TimerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
@@ -228,48 +233,113 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 	}
 }
 
+// activityTimerMasks is every activity timer task bit, ordered to match the entries of
+// activityTimerDeadlines.
+var activityTimerMasks = [4]int32{
+	TimerTaskStatusCreatedScheduleToClose,
+	TimerTaskStatusCreatedScheduleToStart,
+	TimerTaskStatusCreatedStartToClose,
+	TimerTaskStatusCreatedHeartbeat,
+}
+
+// activityTimerDeadlines holds, for each entry of activityTimerMasks, when that timer
+// fires. A nil entry means the timer does not currently apply to the activity: it is
+// not scheduled, not started, or has no timeout configured.
+type activityTimerDeadlines [4]*time.Time
+
+// getActivityTimerDeadlines computes all four timer deadlines for a single activity. It
+// goes through the same getters the timer sequence itself uses, so there is exactly one
+// definition of each deadline.
+func getActivityTimerDeadlines(activityInfo *persistencespb.ActivityInfo) activityTimerDeadlines {
+	var deadlines activityTimerDeadlines
+	for i, getTimeout := range [4]func(*persistencespb.ActivityInfo) (TimerSequenceID, bool){
+		getActivityScheduleToCloseTimeout,
+		getActivityScheduleToStartTimeout,
+		getActivityStartToCloseTimeout,
+		getActivityHeartbeatTimeout,
+	} {
+		if sequenceID, ok := getTimeout(activityInfo); ok {
+			deadline := sequenceID.Timestamp
+			deadlines[i] = &deadline
+		}
+	}
+	return deadlines
+}
+
+// changedMask returns the timer task bits whose deadline differs between the two
+// snapshots, i.e. the timers whose already-created task no longer matches the activity
+// and has to be recreated. A timer that appears or disappears counts as changed; a
+// timer whose deadline is untouched keeps its bit, leaving its pending task alone.
+func (d activityTimerDeadlines) changedMask(other activityTimerDeadlines) int32 {
+	var changed int32
+	for i, mask := range activityTimerMasks {
+		curr, next := d[i], other[i]
+		if curr == nil && next == nil {
+			// timer applies to neither state, so there is nothing to recreate
+			continue
+		}
+		if curr == nil || next == nil || !curr.Equal(*next) {
+			// timer appeared, disappeared, or moved
+			changed |= mask
+		}
+	}
+	return changed
+}
+
 func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 	activityInfo *persistencespb.ActivityInfo,
-) *TimerSequenceID {
+) (TimerSequenceID, bool) {
+	return getActivityScheduleToStartTimeout(activityInfo)
+}
+
+func getActivityScheduleToStartTimeout(
+	activityInfo *persistencespb.ActivityInfo,
+) (TimerSequenceID, bool) {
 
 	// activity is not scheduled yet, probably due to retry & backoff
 	if activityInfo.ScheduledEventId == common.EmptyEventID {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	// activity is already started
 	if activityInfo.StartedEventId != common.EmptyEventID {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	scheduleToStartDuration := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 	if scheduleToStartDuration == 0 {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToStartDuration)
 
-	return &TimerSequenceID{
+	return TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    timeoutTime,
 		TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedScheduleToStart) > 0,
 		Attempt:      activityInfo.Attempt,
-	}
+	}, true
 }
 
 func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 	activityInfo *persistencespb.ActivityInfo,
-) *TimerSequenceID {
+) (TimerSequenceID, bool) {
+	return getActivityScheduleToCloseTimeout(activityInfo)
+}
+
+func getActivityScheduleToCloseTimeout(
+	activityInfo *persistencespb.ActivityInfo,
+) (TimerSequenceID, bool) {
 
 	// activity is not scheduled yet, probably due to retry & backoff
 	if activityInfo.ScheduledEventId == common.EmptyEventID {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	scheduleToCloseDuration := timestamp.DurationValue(activityInfo.ScheduleToCloseTimeout)
 	if scheduleToCloseDuration == 0 {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	var timeoutTime time.Time
@@ -281,63 +351,75 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		timeoutTime = timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
 	}
 
-	return &TimerSequenceID{
+	return TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    timeoutTime,
 		TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose) > 0,
 		Attempt:      activityInfo.Attempt,
-	}
+	}, true
 }
 
 func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 	activityInfo *persistencespb.ActivityInfo,
-) *TimerSequenceID {
+) (TimerSequenceID, bool) {
+	return getActivityStartToCloseTimeout(activityInfo)
+}
+
+func getActivityStartToCloseTimeout(
+	activityInfo *persistencespb.ActivityInfo,
+) (TimerSequenceID, bool) {
 
 	// activity is not scheduled yet, probably due to retry & backoff
 	if activityInfo.ScheduledEventId == common.EmptyEventID {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	// activity is not started yet
 	if activityInfo.StartedEventId == common.EmptyEventID {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	startToCloseDuration := timestamp.DurationValue(activityInfo.StartToCloseTimeout)
 	if startToCloseDuration == 0 {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	timeoutTime := timestamp.TimeValue(activityInfo.StartedTime).Add(startToCloseDuration)
 
-	return &TimerSequenceID{
+	return TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    timeoutTime,
 		TimerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedStartToClose) > 0,
 		Attempt:      activityInfo.Attempt,
-	}
+	}, true
 }
 
 func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 	activityInfo *persistencespb.ActivityInfo,
-) *TimerSequenceID {
+) (TimerSequenceID, bool) {
+	return getActivityHeartbeatTimeout(activityInfo)
+}
+
+func getActivityHeartbeatTimeout(
+	activityInfo *persistencespb.ActivityInfo,
+) (TimerSequenceID, bool) {
 
 	// activity is not scheduled yet, probably due to retry & backoff
 	if activityInfo.ScheduledEventId == common.EmptyEventID {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	// activity is not started yet
 	if activityInfo.StartedEventId == common.EmptyEventID {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	// not heartbeat timeout configured
 	heartbeatDuration := timestamp.DurationValue(activityInfo.HeartbeatTimeout)
 	if heartbeatDuration == 0 {
-		return nil
+		return TimerSequenceID{}, false
 	}
 
 	// use the latest time as last heartbeat time
@@ -352,13 +434,13 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 
 	heartbeatTimeout := lastHeartbeat.Add(heartbeatDuration)
 
-	return &TimerSequenceID{
+	return TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    heartbeatTimeout,
 		TimerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0,
 		Attempt:      activityInfo.Attempt,
-	}
+	}, true
 }
 
 func timerTypeToTimerMask(
