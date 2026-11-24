@@ -253,25 +253,7 @@ func replicationStreamLowPrioritySchedulerProvider(
 			"")
 	}
 	taskMetricsTagsFn := func(t TrackableExecutableTask) []metrics.Tag {
-		replicationTask := t.ReplicationTask()
-		var taskType string
-		namespaceTag := metrics.NamespaceUnknownTag()
-		if replicationTask != nil {
-			taskType = replicationTask.TaskType.String()
-			rawTaskInfo := replicationTask.GetRawTaskInfo()
-			if rawTaskInfo != nil {
-				nsName, err := nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
-				if err != nil {
-					namespaceTag = metrics.NamespaceTag(nsName.String())
-				}
-			}
-		}
-		return []metrics.Tag{
-			namespaceTag,
-			metrics.TaskTypeTag(taskType),
-			metrics.OperationTag(taskType), // for backward compatibility
-			metrics.TaskPriorityTag(ctasks.PriorityPreemptable.String()),
-		}
+		return replicationTaskMetricsTags(t, nsRegistry)
 	}
 	// This creates a per cluster channel.
 	// They share the same weight so it just does a round-robin on all clusters' tasks.
@@ -298,6 +280,33 @@ func replicationStreamLowPrioritySchedulerProvider(
 	)
 	lc.Append(fx.StartStopHook(ts.Start, ts.Stop))
 	return ts
+}
+
+// replicationTaskMetricsTags returns the metrics tags for a low priority replication task,
+// tagging it with the task's namespace name when it can be resolved.
+func replicationTaskMetricsTags(
+	t TrackableExecutableTask,
+	nsRegistry namespace.Registry,
+) []metrics.Tag {
+	replicationTask := t.ReplicationTask()
+	var taskType string
+	namespaceTag := metrics.NamespaceUnknownTag()
+	if replicationTask != nil {
+		taskType = replicationTask.TaskType.String()
+		rawTaskInfo := replicationTask.GetRawTaskInfo()
+		if rawTaskInfo != nil {
+			nsName, err := nsRegistry.GetNamespaceName(namespace.ID(rawTaskInfo.GetNamespaceId()))
+			if err == nil {
+				namespaceTag = metrics.NamespaceTag(nsName.String())
+			}
+		}
+	}
+	return []metrics.Tag{
+		namespaceTag,
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
+		metrics.TaskPriorityTag(ctasks.PriorityPreemptable.String()),
+	}
 }
 
 func sequentialTaskQueueFactoryProvider(
