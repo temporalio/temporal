@@ -1,10 +1,13 @@
 package conventions
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/testx/await"
 	ps "go.temporal.io/testx/parallelsuite"
 )
 
@@ -23,6 +26,34 @@ func callbacks(s *testSuite) {
 	s.Run("nested", func(s *testSuite) {
 		s.Run("child", func(s *testSuite) { s.Equal(1, 1) })
 	})
+}
+
+func attempts(s *testSuite) {
+	s.Await(func(child *testSuite) { child.Equal(1, 1) }, time.Second, time.Millisecond)             // want "suite callback parameter must be named s"
+	s.Awaitf(func(child *testSuite) { child.Equal(1, 1) }, time.Second, time.Millisecond, "waiting") // want "suite callback parameter must be named s"
+	s.Await(func(s *testSuite) { s.Equal(1, 1) }, time.Second, time.Millisecond)
+	s.Equal(1, 1)
+}
+
+func awaiting(s, other *testSuite, t *testing.T, ctx context.Context, ch chan int) {
+	attempt := func(*await.T) {}
+	ready := func() bool { return true }
+
+	await.Require(s.Context(), s.T(), attempt, time.Second, time.Millisecond)                // want "use suite Await instead of await.Require"
+	await.Requiref((s).Context(), s.TB(), attempt, time.Second, time.Millisecond, "waiting") // want "use suite Awaitf instead of await.Requiref"
+	await.RequireTrue(s.TB(), ready, time.Second, time.Millisecond)                          // want "use suite AwaitTrue instead of await.RequireTrue"
+	await.RequireTruef(s.T(), ready, time.Second, time.Millisecond, "waiting")               // want "use suite AwaitTruef instead of await.RequireTruef"
+	await.Rcv[int](s.T(), ch)                                                                // want "use suite Rcv instead of await.Rcv"
+	await.Snd(s.TB(), ch, 1)                                                                 // want "use suite Snd instead of await.Snd"
+
+	await.Require(ctx, s.T(), attempt, time.Second, time.Millisecond)
+	await.Require(other.Context(), s.T(), attempt, time.Second, time.Millisecond)
+	await.Require(s.Context(), t, attempt, time.Second, time.Millisecond)
+	await.RequireTrue(t, ready, time.Second, time.Millisecond)
+	await.Rcv(t, ch)
+	s.Await(func(s *testSuite) {}, time.Second, time.Millisecond)
+	s.AwaitTrue(ready, time.Second, time.Millisecond)
+	s.Rcv(ch)
 }
 
 func assertions(s *testSuite) {
