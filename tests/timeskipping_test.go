@@ -2230,7 +2230,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SearchAttributes() {
 		query := fmt.Sprintf("WorkflowId = '%s' AND %s", tv.WorkflowID(), condition)
 		var execution *workflowpb.WorkflowExecutionInfo
 		s.Await(func(s *TimeSkippingTestSuite) {
-			resp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
 				Query:     query,
 			})
