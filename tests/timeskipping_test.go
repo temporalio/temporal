@@ -2299,7 +2299,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_AccumulatedDurationSearchAttrib
 	setSkipLimit(1)
 	_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*commandpb.Command{startTimerCmd("first", time.Hour)},
+			Commands: []*commandpb.Command{startTimerCmd(tv.WithTimerIDNumber(1).TimerID(), time.Hour)},
 		}, nil
 	})
 	s.NoError(err)
@@ -2310,7 +2310,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_AccumulatedDurationSearchAttrib
 	setSkipLimit(defaultMaxSkipPerSession)
 	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*commandpb.Command{startTimerCmd("second", 2*time.Hour)},
+			Commands: []*commandpb.Command{startTimerCmd(tv.WithTimerIDNumber(2).TimerID(), 2*time.Hour)},
 		}, nil
 	})
 	s.NoError(err)
