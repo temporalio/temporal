@@ -121,12 +121,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedByQuery(chasmEnabled bo
 				s.NoError(err)
 				s.NoError(callerRun.Get(ctx, &result))
 
-				hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID()})
+				hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID()})
 				links = s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED).GetLinks()
 			}
 			s.Equal("handler-status", result)
 
-			s.Require().Len(links, 1)
+			s.Len(links, 1)
 			protorequire.ProtoEqual(s.T(), &commonpb.Link{
 				Variant: &commonpb.Link_Workflow_{Workflow: &commonpb.Link_Workflow{
 					Namespace:  env.Namespace().String(),

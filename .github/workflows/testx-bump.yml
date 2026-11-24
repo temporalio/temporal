@@ -55,26 +55,39 @@ jobs:
 
       - name: Update testx on main
         run: |
-          sha=$(git rev-list -1 HEAD -- common/testx/)
-          go get "go.temporal.io/testx@${sha}"
-          go mod tidy
-
-          if git diff --quiet -- go.mod go.sum; then
-            echo "testx version is already current"
-            exit 0
-          fi
-
           git config --local user.name 'Temporal Data'
           git config --local user.email 'commander-data@temporal.io'
 
-          git add go.mod go.sum
-          git commit -m "Bump go.temporal.io/testx to ${sha::9}"
-          git push origin HEAD:main
+          max_attempts=3
+          for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+            echo "testx bump attempt $attempt of $max_attempts"
+            git fetch origin main
+            git switch --detach FETCH_HEAD
+
+            sha=$(git rev-list -1 HEAD -- common/testx/)
+            go get "go.temporal.io/testx@${sha}"
+            go mod tidy
+
+            if git diff --quiet -- go.mod go.sum; then
+              echo "testx version is already current"
+              exit 0
+            fi
+
+            git add go.mod go.sum
+            git commit -m "Bump go.temporal.io/testx to ${sha::9}"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+          done
+
+          echo "::error::Could not push the testx bump after $max_attempts attempts."
+          exit 1
 
   # Fails if the testx version required on main doesn't match common/testx/, e.g. because the bump failed
   # to push. Builds in this repo don't notice, since they use the replace.
   # Runs nightly (US time), when the bump for the day's testx changes should have landed.
   check-pin:
+    needs: bump
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
 
