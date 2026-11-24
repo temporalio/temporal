@@ -119,7 +119,7 @@ func TestReconnectPoolAccumulationDuringOutage(t *testing.T) {
 
 	// simulate a burst of ConvertError calls that all arrive within the same
 	// 1-second throttle window — no time advance between calls
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		dbHandle.reconnect(true)
 	}
 
