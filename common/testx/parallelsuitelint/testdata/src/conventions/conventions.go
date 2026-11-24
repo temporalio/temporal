@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	forwardawait "example.com/await"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/testx/await"
@@ -47,7 +46,6 @@ func awaiting(s, other *testSuite, t *testing.T, ctx context.Context, ch chan in
 	await.Rcv[int](s.T(), ch)                                                                // want "use suite Rcv instead of await.Rcv"
 	await.Snd(s.TB(), ch, 1)                                                                 // want "use suite Snd instead of await.Snd"
 
-	forwardawait.Requiref(s.Context(), s.TB(), attempt, time.Second, time.Millisecond, "waiting")
 	await.Require(ctx, s.T(), attempt, time.Second, time.Millisecond)
 	await.Require(other.Context(), s.T(), attempt, time.Second, time.Millisecond)
 	await.Require(s.Context(), t, attempt, time.Second, time.Millisecond)

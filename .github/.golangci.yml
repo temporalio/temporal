@@ -25,9 +25,6 @@ linters:
       parallelsuitelint:
         type: module
         description: Check parallel suite usage.
-        settings:
-          await-packages:
-            - go.temporal.io/server/common/testing/await
     staticcheck:
       checks:
         - "all"

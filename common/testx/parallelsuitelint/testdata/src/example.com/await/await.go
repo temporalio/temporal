@@ -8,5 +8,18 @@ import (
 	"go.temporal.io/testx/await"
 )
 
-func Requiref(context.Context, testing.TB, func(*await.T), time.Duration, time.Duration, string, ...any) {
+type T = await.T
+
+func Requiref(ctx context.Context, tb testing.TB, attempt func(*T), timeout, interval time.Duration, format string, args ...any) {
+	await.Requiref(ctx, tb, attempt, timeout, interval, format, args...)
 }
+
+func Rcv[V any](tb testing.TB, ch <-chan V) V {
+	return await.Rcv(tb, ch)
+}
+
+func Snd[V any](tb testing.TB, ch chan<- V, value V) {
+	await.Snd(tb, ch, value)
+}
+
+func RequireTruef(testing.TB, func() bool, time.Duration, time.Duration, string) {}

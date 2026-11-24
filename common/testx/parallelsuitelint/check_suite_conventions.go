@@ -2,13 +2,13 @@ package parallelsuitelint
 
 import (
 	"go/ast"
-	"slices"
+	"go/types"
 
 	"golang.org/x/tools/go/analysis"
 )
 
 // checkSuiteConventions enforces suite names and direct use of suite methods while preserving Scope helper APIs.
-func checkSuiteConventions(pass *analysis.Pass, awaitPackages []string) {
+func checkSuiteConventions(pass *analysis.Pass) {
 	for _, file := range pass.Files {
 		for node := range ast.Preorder(file) {
 			switch node := node.(type) {
@@ -17,7 +17,7 @@ func checkSuiteConventions(pass *analysis.Pass, awaitPackages []string) {
 					checkSuiteNames(pass, node.Recv.List, "suite receiver must be named s")
 				}
 			case *ast.CallExpr:
-				checkSuiteCall(pass, node, awaitPackages)
+				checkSuiteCall(pass, node)
 			default:
 			}
 		}
@@ -40,14 +40,13 @@ func checkSuiteNames(pass *analysis.Pass, fields []*ast.Field, message string) {
 	}
 }
 
-func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr, awaitPackages []string) {
+func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr) {
 	fn := calledFunction(pass, call.Fun)
 	if fn == nil || fn.Pkg() == nil {
 		return
 	}
 	sel, isSelector := callTarget(call.Fun).(*ast.SelectorExpr)
-	path := fn.Pkg().Path()
-	switch path {
+	switch fn.Pkg().Path() {
 	case "github.com/stretchr/testify/require", "github.com/stretchr/testify/assert":
 		passesSuiteHandle := fn.Signature().Recv() == nil && len(call.Args) > 0 && suiteHandle(pass, call.Args[0])
 		usesAssertionAccessor := isSelector && assertionAccessor(pass, sel.X)
@@ -70,9 +69,7 @@ func checkSuiteCall(pass *analysis.Pass, call *ast.CallExpr, awaitPackages []str
 		default:
 		}
 	default:
-		if slices.Contains(awaitPackages, path) {
-			checkSuiteAwaitCall(pass, call, fn.Name())
-		}
+		checkSuiteAwaitCall(pass, call, fn)
 	}
 
 	if !isSelector || !suiteHandle(pass, sel.X) {
@@ -115,7 +112,8 @@ func suiteAccessor(pass *analysis.Pass, expr ast.Expr) *ast.SelectorExpr {
 }
 
 // checkSuiteAwaitCall flags standalone await calls that already use the suite's scope.
-func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, name string) {
+func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, fn *types.Func) {
+	name := fn.Name()
 	var method string
 	handleIndex := 0
 	switch name {
@@ -132,7 +130,7 @@ func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, name string) {
 	default:
 		return
 	}
-	if len(call.Args) <= handleIndex {
+	if len(call.Args) <= handleIndex || !isAwaitFunction(fn) {
 		return
 	}
 	handle := suiteAccessor(pass, call.Args[handleIndex])
@@ -146,6 +144,36 @@ func checkSuiteAwaitCall(pass *analysis.Pass, call *ast.CallExpr, name string) {
 		}
 	}
 	pass.Reportf(call.Pos(), "use suite %s instead of await.%s", method, name)
+}
+
+func isAwaitFunction(fn *types.Func) bool {
+	if fn.Signature().Recv() != nil {
+		return false
+	}
+
+	const awaitPath = "go.temporal.io/testx/await"
+	pkg := fn.Pkg()
+	if pkg.Path() == awaitPath {
+		return true
+	}
+
+	alias, ok := pkg.Scope().Lookup("T").(*types.TypeName)
+	if !ok || !alias.IsAlias() {
+		return false
+	}
+	awaitType, ok := types.Unalias(alias.Type()).(*types.Named)
+	if !ok {
+		return false
+	}
+	obj := awaitType.Obj()
+	if obj.Pkg() == nil || obj.Pkg().Path() != awaitPath || obj.Name() != "T" {
+		return false
+	}
+
+	if original, ok := obj.Pkg().Scope().Lookup(fn.Name()).(*types.Func); ok {
+		return types.Identical(fn.Signature(), original.Signature())
+	}
+	return matchesAwaitSignature(fn, awaitType)
 }
 
 func sameSuiteReceiver(pass *analysis.Pass, a, b ast.Expr) bool {
