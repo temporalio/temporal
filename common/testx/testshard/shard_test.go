@@ -9,7 +9,7 @@ import (
 )
 
 func TestFromEnv(t *testing.T) {
-	t.Setenv("TEST_SHARD_SALT", "")
+	t.Setenv("TESTSHARD_SALT", "")
 	for _, tc := range []struct {
 		name    string
 		total   string
@@ -24,18 +24,18 @@ func TestFromEnv(t *testing.T) {
 		{name: "one shard", total: "1", index: "0", salt: "my-suite", want: Shard{total: 1, salt: "my-suite"}},
 		{name: "first shard", total: "4", index: "0", salt: "my-suite", want: Shard{total: 4, salt: "my-suite"}},
 		{name: "last shard", total: "4", index: "3", salt: "my-suite", want: Shard{index: 3, total: 4, salt: "my-suite"}},
-		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TEST_SHARD_SALT or use WithSalt"},
-		{name: "malformed total", total: "four", index: "0", wantErr: `parsing TEST_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
-		{name: "zero total", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
-		{name: "negative total", total: "-1", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: -1"},
-		{name: "malformed index", total: "4", index: "first", wantErr: `parsing TEST_SHARD_INDEX: strconv.Atoi: parsing "first": invalid syntax`},
-		{name: "negative index", total: "4", index: "-1", wantErr: "TEST_SHARD_INDEX out of bounds: -1 must be in [0, 4)"},
-		{name: "index equal to total", total: "4", index: "4", wantErr: "TEST_SHARD_INDEX out of bounds: 4 must be in [0, 4)"},
+		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TESTSHARD_SALT or use WithSalt"},
+		{name: "malformed total", total: "four", index: "0", wantErr: `parsing TESTSHARD_COUNT: strconv.Atoi: parsing "four": invalid syntax`},
+		{name: "zero total", total: "0", index: "0", wantErr: "TESTSHARD_COUNT must be positive: 0"},
+		{name: "negative total", total: "-1", index: "0", wantErr: "TESTSHARD_COUNT must be positive: -1"},
+		{name: "malformed index", total: "4", index: "first", wantErr: `parsing TESTSHARD_INDEX: strconv.Atoi: parsing "first": invalid syntax`},
+		{name: "negative index", total: "4", index: "-1", wantErr: "TESTSHARD_INDEX out of bounds: -1 must be in [0, 4)"},
+		{name: "index equal to total", total: "4", index: "4", wantErr: "TESTSHARD_INDEX out of bounds: 4 must be in [0, 4)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("TEST_TOTAL_SHARDS", tc.total)
-			t.Setenv("TEST_SHARD_INDEX", tc.index)
-			t.Setenv("TEST_SHARD_SALT", tc.salt)
+			t.Setenv("TESTSHARD_COUNT", tc.total)
+			t.Setenv("TESTSHARD_INDEX", tc.index)
+			t.Setenv("TESTSHARD_SALT", tc.salt)
 			shard, err := FromEnv()
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
@@ -64,9 +64,9 @@ func TestSkipUnlessInShardInheritsSelection(t *testing.T) {
 }
 
 func TestFromEnvCustomVariables(t *testing.T) {
-	t.Setenv("TEST_TOTAL_SHARDS", "invalid")
-	t.Setenv("TEST_SHARD_INDEX", "invalid")
-	t.Setenv("TEST_SHARD_SALT", "ignored")
+	t.Setenv("TESTSHARD_COUNT", "invalid")
+	t.Setenv("TESTSHARD_INDEX", "invalid")
+	t.Setenv("TESTSHARD_SALT", "ignored")
 	for _, tc := range []struct {
 		name        string
 		total       string
@@ -132,8 +132,8 @@ func TestSkipUnlessInShard(t *testing.T) {
 		{name: "owns test", total: "4", index: "0", envSalt: "my-suite", wantRun: true},
 		{name: "other shard", total: "4", index: "1", envSalt: "my-suite"},
 		{name: "default salt", total: "4", index: "2", salt: "other", wantRun: true},
-		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TEST_SHARD_SALT or use WithSalt"},
-		{name: "misconfigured", total: "0", index: "0", wantErr: "TEST_TOTAL_SHARDS must be positive: 0"},
+		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TESTSHARD_SALT or use WithSalt"},
+		{name: "misconfigured", total: "0", index: "0", wantErr: "TESTSHARD_COUNT must be positive: 0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -141,7 +141,7 @@ func TestSkipUnlessInShard(t *testing.T) {
 			require.NoError(t, err)
 			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestSkipUnlessInShardProcess$", "-test.v")
 			cmd.Env = append(os.Environ(), "TESTX_SKIP_PROCESS=1", "TESTX_SKIP_SALT="+tc.salt,
-				"TEST_TOTAL_SHARDS="+tc.total, "TEST_SHARD_INDEX="+tc.index, "TEST_SHARD_SALT="+tc.envSalt)
+				"TESTSHARD_COUNT="+tc.total, "TESTSHARD_INDEX="+tc.index, "TESTSHARD_SALT="+tc.envSalt)
 			output, err := cmd.CombinedOutput()
 			if tc.wantErr != "" {
 				require.Error(t, err, "%s", output)
@@ -204,7 +204,7 @@ func TestSetDefaults(t *testing.T) {
 	require.NoError(t, err)
 	cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestSetDefaultsProcess$")
 	cmd.Env = append(os.Environ(), "TESTX_DEFAULTS_PROCESS=1",
-		"TEST_TOTAL_SHARDS=invalid", "TEST_SHARD_INDEX=invalid", "TEST_SHARD_SALT=ignored",
+		"TESTSHARD_COUNT=invalid", "TESTSHARD_INDEX=invalid", "TESTSHARD_SALT=ignored",
 		"CI_TOTAL_SHARDS=4", "CI_SHARD_INDEX=1", "CI_SHARD_SALT=")
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", output)

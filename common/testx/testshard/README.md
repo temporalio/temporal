@@ -10,14 +10,14 @@ testshard.SkipUnlessInShard(t)
 Run each shard in a separate job, using the same total and a different index:
 
 ```sh
-TEST_TOTAL_SHARDS=4 TEST_SHARD_INDEX=0 TEST_SHARD_SALT=my-suite go test ./...
+TESTSHARD_COUNT=4 TESTSHARD_INDEX=0 TESTSHARD_SALT=my-suite go test ./...
 ```
 
 Run indices `0` through `3` for this example. If either variable is empty, all
 tests run; invalid values fail the test. Selected tests and their nested
 subtests stay on the same shard.
 
-Sharded runs require a non-empty salt. Set `TEST_SHARD_SALT`, or configure
+Sharded runs require a non-empty salt. Set `TESTSHARD_SALT`, or configure
 process-wide defaults once in `TestMain` before `m.Run()`:
 
 ```go

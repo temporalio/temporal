@@ -35,9 +35,9 @@ var defaults = struct {
 	cfg config
 }{
 	cfg: config{
-		totalShardsEnv: "TEST_TOTAL_SHARDS",
-		shardIndexEnv:  "TEST_SHARD_INDEX",
-		saltEnv:        "TEST_SHARD_SALT",
+		totalShardsEnv: "TESTSHARD_COUNT",
+		shardIndexEnv:  "TESTSHARD_INDEX",
+		saltEnv:        "TESTSHARD_SALT",
 	},
 }
 
@@ -59,22 +59,22 @@ func WithSalt(salt string) Option {
 	return func(cfg *config) { cfg.salt = salt }
 }
 
-// WithTotalShardsEnv sets the variable used for the shard count; the default is TEST_TOTAL_SHARDS.
+// WithTotalShardsEnv sets the variable used for the shard count; the default is TESTSHARD_COUNT.
 func WithTotalShardsEnv(name string) Option {
 	return func(cfg *config) { cfg.totalShardsEnv = name }
 }
 
-// WithShardIndexEnv sets the variable used for the zero-based index; the default is TEST_SHARD_INDEX.
+// WithShardIndexEnv sets the variable used for the zero-based index; the default is TESTSHARD_INDEX.
 func WithShardIndexEnv(name string) Option {
 	return func(cfg *config) { cfg.shardIndexEnv = name }
 }
 
-// WithSaltEnv sets the variable used for the salt override; the default is TEST_SHARD_SALT.
+// WithSaltEnv sets the variable used for the salt override; the default is TESTSHARD_SALT.
 func WithSaltEnv(name string) Option {
 	return func(cfg *config) { cfg.saltEnv = name }
 }
 
-// FromEnv reads TEST_TOTAL_SHARDS and the zero-based TEST_SHARD_INDEX by default.
+// FromEnv reads TESTSHARD_COUNT and the zero-based TESTSHARD_INDEX by default.
 // SetDefaults supplies defaults, which per-call options can override.
 // Sharding is disabled when either configured variable is empty.
 // A non-empty salt is required when sharding is enabled.
