@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -11,6 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 )
@@ -135,6 +138,67 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 				nexus.StartOperationOptions{},
 			)
 			require.ErrorIs(t, err, test.expected)
+		})
+	}
+}
+
+func TestClientProviderFactoryRejectsRedirects(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusFound, http.StatusTemporaryRedirect} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+
+			var targetHits atomic.Int32
+			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				targetHits.Add(1)
+			}))
+			t.Cleanup(target.Close)
+			redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL, status)
+			}))
+			t.Cleanup(redirector.Close)
+
+			rpcFactory := common.NewMockRPCFactory(ctrl)
+			rpcFactory.EXPECT().CreateLocalFrontendHTTPClient().Return(&common.FrontendHTTPClient{}, nil)
+			clusterMetadata := cluster.NewMockMetadata(ctrl)
+			clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{})
+			clusterMetadata.EXPECT().GetCurrentClusterName().Return("current")
+
+			// Redirect handling must not depend on the transport, since operators can inject their own.
+			provider, err := clientProviderFactory(
+				func(string, string) http.RoundTripper { return http.DefaultTransport },
+				clusterMetadata,
+				nil,
+				rpcFactory,
+				nil,
+				testhooks.NewTestHooks(),
+			)
+			require.NoError(t, err)
+
+			client, err := provider(
+				context.Background(),
+				"namespace-id",
+				&persistencespb.NexusEndpointEntry{
+					Id: "endpoint-id",
+					Endpoint: &persistencespb.NexusEndpoint{
+						Spec: &persistencespb.NexusEndpointSpec{
+							Target: &persistencespb.NexusEndpointTarget{
+								Variant: &persistencespb.NexusEndpointTarget_External_{
+									External: &persistencespb.NexusEndpointTarget_External{Url: redirector.URL},
+								},
+							},
+						},
+					},
+				},
+				"service",
+			)
+			require.NoError(t, err)
+
+			_, err = client.StartOperation(context.Background(), "operation", nil, nexus.StartOperationOptions{})
+			require.ErrorIs(t, err, commonnexus.ErrRedirectNotAllowed)
+			require.Zero(t, targetHits.Load(), "redirect target must not be contacted")
 		})
 	}
 }
