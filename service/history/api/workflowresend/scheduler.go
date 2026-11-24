@@ -182,12 +182,7 @@ type boundedWorkflowSchedulerLimiter struct {
 
 func (l boundedWorkflowSchedulerLimiter) Concurrency() (concurrency int) {
 	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			concurrency = 0
-		}
-	}()
-	defer log.CapturePanic(l.logger, &panicErr)
+	defer log.CapturePanicWithHook(l.logger, &panicErr, func(error) { concurrency = 0 })
 	return l.maxConcurrency()
 }
 

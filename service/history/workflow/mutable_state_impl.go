@@ -3755,12 +3755,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	skipVersioningCheck bool,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	targetRevisionNumber int64,
+	workerControlQueue string,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber, workerControlQueue)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
@@ -7692,10 +7693,30 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 // However, certain in-memory changes (e.g. speculative workflow task) won't be cleared before releasing
 // the lock and have to be excluded from the check.
 func (ms *MutableStateImpl) IsDirty() bool {
+	if ms.isNonChasmDirty() {
+		return true
+	}
+	if !ms.chasmTree.IsDirty() {
+		return false
+	}
+	_, speculative := ms.chasmTree.SpeculativeTransitionFailoverVersion()
+	return !speculative
+}
+
+func (ms *MutableStateImpl) isNonChasmDirty() bool {
 	return ms.hBuilder.IsDirty() ||
 		len(ms.InsertTasks) > 0 ||
-		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty()
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+}
+
+// ValidateChasmSpeculativeTransition returns an error if the current transaction changed state outside the
+// CHASM tree. Only CHASM tree changes can stay in memory.
+func (ms *MutableStateImpl) ValidateChasmSpeculativeTransition() error {
+	if ms.isNonChasmDirty() {
+		// This line means there is a Dev error.
+		return serviceerror.NewInternal("speculative CHASM transition changed state outside the CHASM tree")
+	}
+	return nil
 }
 
 // isStateDirty is used upon closing transaction to determine if application data has been updated, and
@@ -9846,6 +9867,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			AttemptsSinceLastSuccess: incoming.WorkflowTaskAttemptsSinceLastSuccess,
 			Stamp:                    incoming.WorkflowTaskStamp,
 			StartedTime:              incoming.WorkflowTaskStartedTime.AsTime(),
+			WorkerControlQueue:       incoming.WorkflowTaskWorkerControlQueue,
 			ScheduledTime:            incoming.WorkflowTaskScheduledTime.AsTime(),
 
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
@@ -9884,6 +9906,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.WorkflowTaskTimeout,
 			&info.WorkflowTaskAttempt,
 			&info.WorkflowTaskStartedTime,
+			&info.WorkflowTaskWorkerControlQueue,
 			&info.WorkflowTaskScheduledTime,
 			&info.WorkflowTaskOriginalScheduledTime,
 			&info.WorkflowTaskType,

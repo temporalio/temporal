@@ -115,7 +115,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 				OperationId: operationID,
 				RunId:       startResp.GetRunId(),
 			})
-			s.Require().Len(completion.Links, 1)
+			s.Len(completion.Links, 1)
 			s.Equal(wantLink.URL.String(), completion.Links[0].URL.String())
 			s.Equal(wantLink.Type, completion.Links[0].Type)
 			// Unblock CompleteOperation so it returns 200 OK to the callback library.
@@ -166,9 +166,9 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 			s.Equal(nexus.OperationStateFailed, completion.State)
 			s.False(completion.StartTime.IsZero())
 			s.False(completion.CloseTime.IsZero())
-			s.Require().NotNil(completion.Error)
+			s.NotNil(completion.Error)
 			var failureErr *nexus.FailureError
-			s.Require().ErrorAs(completion.Error.Cause, &failureErr)
+			s.ErrorAs(completion.Error.Cause, &failureErr)
 			// The handler's error is wrapped as an OperationError whose cause carries the original
 			// message, which is how a Nexus operation failure round-trips through a completion.
 			tFailure, convErr := commonnexus.NexusFailureToTemporalFailure(failureErr.Failure)
@@ -307,7 +307,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 			cbInfo.GetCallback().GetLinks())
 
 		gotLinks := s.Rcv(inboundLinks)
-		s.Require().Len(gotLinks, 1)
+		s.Len(gotLinks, 1)
 		gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
 		s.NoError(err)
 		protorequire.ProtoEqual(s.T(), &commonpb.Link_Callback{
@@ -378,7 +378,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		s.Equal(startResp.GetRunId(), attachResp.GetRunId())
 
 		callbackInfos := env.describeNexusOperation(ctx, s.T(), operationID).GetCompletionCallbacks()
-		s.Require().Len(callbackInfos, 2)
+		s.Len(callbackInfos, 2)
 		s.Equal("http://localhost/cb1", callbackInfos[0].GetInfo().GetCallback().GetNexus().GetUrl())
 		s.Equal("http://localhost/cb2", callbackInfos[1].GetInfo().GetCallback().GetNexus().GetUrl())
 		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfos[0].GetInfo().GetState())
@@ -452,7 +452,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		s.Equal("first-request", alreadyStartedErr.StartRequestId)
 
 		callbackInfos := env.describeNexusOperation(ctx, s.T(), operationID).GetCompletionCallbacks()
-		s.Require().Len(callbackInfos, 1)
+		s.Len(callbackInfos, 1)
 		s.Equal("http://localhost/cb1", callbackInfos[0].GetInfo().GetCallback().GetNexus().GetUrl())
 	})
 
@@ -496,7 +496,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		s.NotEqual(startResp.GetRunId(), attachResp.GetRunId())
 
 		callbackInfos := env.describeNexusOperation(ctx, s.T(), operationID).GetCompletionCallbacks()
-		s.Require().Len(callbackInfos, 1)
+		s.Len(callbackInfos, 1)
 		s.Equal("http://localhost/cb2", callbackInfos[0].GetInfo().GetCallback().GetNexus().GetUrl())
 	})
 

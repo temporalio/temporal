@@ -69,7 +69,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 			}}, nil
 		}
 
-		historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
+		historyEvents := env.RequireHistory(s, workflowExecution)
 		for _, event := range historyEvents {
 			switch event.GetEventType() { // nolint:exhaustive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
@@ -116,20 +116,20 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
+	historyEvents := env.RequireHistory(s, workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -193,7 +193,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 			}}, nil
 		}
 
-		historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
+		historyEvents := env.RequireHistory(s, workflowExecution)
 		for _, event := range historyEvents {
 			switch event.GetEventType() { // nolint:exhaustive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
@@ -241,20 +241,20 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
 	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
+	historyEvents := env.RequireHistory(s, workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

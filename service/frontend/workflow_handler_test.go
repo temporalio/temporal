@@ -380,6 +380,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		),
 		nil,
 		metrics.NoopMetricsHandler,
+		namespace.NewDefaultReplicationResolverFactory(),
 	)
 }
 
@@ -422,6 +423,8 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueK
 			s.mockMatchingClient.EXPECT().
 				RespondNexusTaskCompleted(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskCompletedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+					s.Require().Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+					s.Require().Equal("test-task-id", req.GetTaskId())
 					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
 					return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
 				})
@@ -474,6 +477,8 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskFailed_PreservesTaskQueueKind
 			s.mockMatchingClient.EXPECT().
 				RespondNexusTaskFailed(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskFailedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+					s.Require().Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+					s.Require().Equal("test-task-id", req.GetTaskId())
 					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
 					return &matchingservice.RespondNexusTaskFailedResponse{}, nil
 				})

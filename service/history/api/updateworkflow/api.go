@@ -66,6 +66,9 @@ type Updater struct {
 	// nexusSerializationContext is a copy of the Update's Nexus serialization context, captured in ApplyRequest
 	// because it must be read while holding the workflow lease.
 	nexusSerializationContext *nexuspb.PropagatedSerializationContext
+	// newUpdateWithNexusContext is set in ApplyRequest when this request admitted a new Update that carries a
+	// Nexus serialization context. (Used in tracking metrics.)
+	newUpdateWithNexusContext bool
 }
 
 func NewUpdater(
@@ -112,12 +115,13 @@ func (u *Updater) Invoke(
 	return u.OnSuccess(ctx)
 }
 
-func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string) {
+func (u *Updater) handleWorkflowHeartbeatNotification(namespaceName string) {
 
 	if !u.bufferedForWorkflowHeartbeatNotification {
 		return
 	}
 
+	// The rollout setting controls WHN dispatch, while these metrics count all admitted Updates buffered behind a task.
 	handler := u.shardCtx.GetMetricsHandler().WithTags(
 		metrics.OperationTag(metrics.WorkflowContextScope),
 		metrics.NamespaceTag(namespaceName),
@@ -127,6 +131,7 @@ func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string)
 
 	if u.firstBufferedForWorkflowHeartbeatNotification {
 		metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
+		workflow.SendWorkflowHeartbeatNotification(u.shardCtx, namespaceName, u.wfKey.WorkflowID)
 	}
 }
 
@@ -217,6 +222,11 @@ func (u *Updater) applyRequest(
 	}
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
+	}
+	// Only set this to true, never back to false. Update-with-start can call ApplyRequest twice for the
+	// same request, and on the second call the Update this request created is already in the registry.
+	if !alreadyExisted && updateRequest.GetPropagatedNexusSerializationContext() != nil {
+		u.newUpdateWithNexusContext = true
 	}
 
 	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
@@ -422,7 +432,10 @@ func (u *Updater) OnSuccess(
 	namespaceName := ns.Name().String()
 
 	// WHN should be before the long polling
-	u.emitWorkflowHeartbeatNotificationMetrics(namespaceName)
+	u.handleWorkflowHeartbeatNotification(namespaceName)
+	if u.newUpdateWithNexusContext {
+		metrics.NexusWorkflowUpdateWithContext.With(u.shardCtx.GetMetricsHandler()).Record(1, metrics.NamespaceTag(namespaceName))
+	}
 
 	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(namespaceName)
 	waitStage := u.req.GetRequest().GetWaitPolicy().GetLifecycleStage()

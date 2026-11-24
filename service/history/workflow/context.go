@@ -457,6 +457,15 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		return nil, err
 	}
 
+	if c.MutableState != nil {
+		// Speculative CHASM changes from an earlier failover version were never replicated. Reload from
+		// the DB so they are not mixed with state written by another cluster.
+		version, pending := c.MutableState.ChasmTree().SpeculativeTransitionFailoverVersion()
+		if pending && version != namespaceEntry.FailoverVersion(c.workflowKey.WorkflowID) {
+			c.Clear()
+		}
+	}
+
 	if c.MutableState == nil {
 		response, err := getWorkflowExecution(ctx, shardContext, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardContext.GetShardID(),
@@ -1115,7 +1124,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		return err
 	}
 	if transactionPolicy == historyi.TransactionPolicyActive {
-		c.emitWorkflowHeartbeatNotificationBufferedInputMetrics(payload.ExecutionMutation.NewBufferedEvents)
+		c.handleWorkflowHeartbeatNotification(shardContext, payload.ExecutionMutation.NewBufferedEvents)
 	}
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
@@ -1689,9 +1698,10 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	)
 }
 
-// CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
+// ApproximateSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
 // which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
-func (c *ContextImpl) CacheSize() int {
+// ApproximateSize reads the mutable state and the update registry, so it requires the workflow lock.
+func (c *ContextImpl) ApproximateSize() int {
 	if !c.config.HistoryCacheLimitSizeBased {
 		return 1
 	}
