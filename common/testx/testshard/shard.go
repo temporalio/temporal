@@ -2,7 +2,6 @@
 package testshard
 
 import (
-	"cmp"
 	"fmt"
 	"os"
 	"strconv"
@@ -24,40 +23,12 @@ type Shard struct {
 }
 
 type config struct {
-	salt           string
 	totalShardsEnv string
 	shardIndexEnv  string
-	saltEnv        string
-}
-
-var defaults = struct {
-	sync.Mutex
-	cfg config
-}{
-	cfg: config{
-		totalShardsEnv: "TESTSHARD_COUNT",
-		shardIndexEnv:  "TESTSHARD_INDEX",
-		saltEnv:        "TESTSHARD_SALT",
-	},
 }
 
 // Option configures shard selection.
 type Option func(*config)
-
-// SetDefaults updates process-wide defaults. Call it before starting tests.
-// Per-call options override these defaults; environment values are read on each FromEnv call.
-func SetDefaults(options ...Option) {
-	defaults.Lock()
-	defer defaults.Unlock()
-	for _, option := range options {
-		option(&defaults.cfg)
-	}
-}
-
-// WithSalt sets the default sharding salt. A non-empty salt environment variable overrides it.
-func WithSalt(salt string) Option {
-	return func(cfg *config) { cfg.salt = salt }
-}
 
 // WithTotalShardsEnv sets the variable used for the shard count; the default is TESTSHARD_COUNT.
 func WithTotalShardsEnv(name string) Option {
@@ -69,21 +40,15 @@ func WithShardIndexEnv(name string) Option {
 	return func(cfg *config) { cfg.shardIndexEnv = name }
 }
 
-// WithSaltEnv sets the variable used for the salt override; the default is TESTSHARD_SALT.
-func WithSaltEnv(name string) Option {
-	return func(cfg *config) { cfg.saltEnv = name }
-}
-
 // FromEnv reads TESTSHARD_COUNT and the zero-based TESTSHARD_INDEX by default.
-// SetDefaults supplies defaults, which per-call options can override.
 // Sharding is disabled when either configured variable is empty.
 // A non-empty salt is required when sharding is enabled.
-// A non-empty salt environment variable overrides the salt supplied with WithSalt.
 // The salt is appended to the full test name before hashing with FarmHash Fingerprint32.
-func FromEnv(options ...Option) (Shard, error) {
-	defaults.Lock()
-	cfg := defaults.cfg
-	defaults.Unlock()
+func FromEnv(salt string, options ...Option) (Shard, error) {
+	cfg := config{
+		totalShardsEnv: "TESTSHARD_COUNT",
+		shardIndexEnv:  "TESTSHARD_INDEX",
+	}
 	for _, option := range options {
 		option(&cfg)
 	}
@@ -106,22 +71,26 @@ func FromEnv(options ...Option) (Shard, error) {
 	if index < 0 || index >= total {
 		return Shard{}, fmt.Errorf("%s out of bounds: %d must be in [0, %d)", cfg.shardIndexEnv, index, total)
 	}
-	salt := cmp.Or(os.Getenv(cfg.saltEnv), cfg.salt)
 	if salt == "" {
-		return Shard{}, fmt.Errorf("sharding salt is required: set %s or use WithSalt", cfg.saltEnv)
+		return Shard{}, fmt.Errorf("sharding salt is required")
 	}
 	return Shard{index: index, total: total, salt: salt}, nil
 }
 
 // SkipUnlessInShard reads shard configuration and skips t if it belongs to another shard.
 // Invalid configuration fails the test.
-func SkipUnlessInShard(t *testing.T, options ...Option) {
+func SkipUnlessInShard(t *testing.T, salt string, options ...Option) {
 	t.Helper()
-	shard, err := FromEnv(options...)
+	shard, err := FromEnv(salt, options...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	shard.SkipUnlessInShard(t)
+}
+
+// ShouldRunTest reports whether the full test name should run on this shard.
+func (s Shard) ShouldRunTest(testName string) bool {
+	return s.total == 0 || alreadySelected(testName) || s.testIndex(testName) == s.index
 }
 
 // SkipUnlessInShard skips t if its full name belongs to another shard.

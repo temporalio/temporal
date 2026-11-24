@@ -15,6 +15,7 @@ import (
 	testifysuite "github.com/stretchr/testify/suite"
 	"go.temporal.io/testx/await"
 	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/testx/testshard"
 )
 
 // TestingSuite is the constraint for suite types.
@@ -185,6 +186,14 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
 }
 
+var shardForTest = func(*testing.T) testshard.Shard { return testshard.Shard{} }
+
+// ConfigureSharding sets how Run and RunLegacySequential select a shard in this test binary.
+// Call it during package initialization, before running suites.
+func ConfigureSharding(resolve func(*testing.T) testshard.Shard) {
+	shardForTest = resolve
+}
+
 // Run discovers and runs all exported Test* methods on the given suite in parallel.
 //
 // Each method gets its own fresh suite instance initialized for the subtest's
@@ -193,7 +202,14 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 //
 // The suite must embed [Suite] and have no other fields.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, true, args...)
+	t.Helper()
+	run(t, s, shardForTest(t), true, args...)
+}
+
+// RunInShard runs the suite methods selected by shard using their full test names.
+// Nested subtests stay with their method. See [testshard.FromEnv] for configuration.
+func RunInShard[T TestingSuite](t *testing.T, shard testshard.Shard, s T, args ...any) {
+	run(t, s, shard, true, args...)
 }
 
 // RunLegacySequential behaves like [Run] but does not mark test methods as parallel.
@@ -201,10 +217,18 @@ func Run[T TestingSuite](t *testing.T, s T, args ...any) {
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
 func RunLegacySequential[T TestingSuite](t *testing.T, s T, args ...any) {
-	run(t, s, false, args...)
+	t.Helper()
+	run(t, s, shardForTest(t), false, args...)
 }
 
-func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
+// RunLegacySequentialInShard runs selected suite methods sequentially.
+//
+// Deprecated: use [RunInShard] for new tests.
+func RunLegacySequentialInShard[T TestingSuite](t *testing.T, shard testshard.Shard, s T, args ...any) {
+	run(t, s, shard, false, args...)
+}
+
+func run[T TestingSuite](t *testing.T, s T, shard testshard.Shard, methodsParallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
@@ -227,6 +251,17 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 		return // all methods filtered by -testify.m; nothing to run
 	}
 
+	ownsMethod := false
+	for _, method := range methods {
+		if shard.ShouldRunTest(t.Name() + "/" + method.Name) {
+			ownsMethod = true
+			break
+		}
+	}
+	if !ownsMethod {
+		t.Skip("Skipping suite: no test methods belong to this shard")
+	}
+
 	argVals := make([]reflect.Value, len(args))
 	for i, a := range args {
 		argVals[i] = reflect.ValueOf(a)
@@ -239,6 +274,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
+			shard.SkipUnlessInShard(t)
 			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)

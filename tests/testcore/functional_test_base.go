@@ -7,7 +7,6 @@ import (
 	"maps"
 	"os"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,7 +48,6 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/temporal"
-	"go.temporal.io/testx/testshard"
 )
 
 type (
@@ -384,7 +382,7 @@ func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persist
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
 func (s *functionalTestBase) SetupTest() {
-	testshard.SkipUnlessInShard(s.T(), testshard.WithSalt(strings.TrimSpace(shardSalt)))
+	FunctionalTestShard(s.T()).SkipUnlessInShard(s.T())
 	testtelemetry.AttachTestName(s.T())
 	s.initAssertions()
 	s.setupSdk()

@@ -9,7 +9,6 @@ import (
 )
 
 func TestFromEnv(t *testing.T) {
-	t.Setenv("TESTSHARD_SALT", "")
 	for _, tc := range []struct {
 		name    string
 		total   string
@@ -24,7 +23,7 @@ func TestFromEnv(t *testing.T) {
 		{name: "one shard", total: "1", index: "0", salt: "my-suite", want: Shard{total: 1, salt: "my-suite"}},
 		{name: "first shard", total: "4", index: "0", salt: "my-suite", want: Shard{total: 4, salt: "my-suite"}},
 		{name: "last shard", total: "4", index: "3", salt: "my-suite", want: Shard{index: 3, total: 4, salt: "my-suite"}},
-		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TESTSHARD_SALT or use WithSalt"},
+		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required"},
 		{name: "malformed total", total: "four", index: "0", wantErr: `parsing TESTSHARD_COUNT: strconv.Atoi: parsing "four": invalid syntax`},
 		{name: "zero total", total: "0", index: "0", wantErr: "TESTSHARD_COUNT must be positive: 0"},
 		{name: "negative total", total: "-1", index: "0", wantErr: "TESTSHARD_COUNT must be positive: -1"},
@@ -35,14 +34,35 @@ func TestFromEnv(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("TESTSHARD_COUNT", tc.total)
 			t.Setenv("TESTSHARD_INDEX", tc.index)
-			t.Setenv("TESTSHARD_SALT", tc.salt)
-			shard, err := FromEnv()
+			shard, err := FromEnv(tc.salt)
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
 				return
 			}
 			require.NoError(t, err)
 			require.Equal(t, tc.want, shard)
+		})
+	}
+}
+
+func TestShouldRunTestCompatibility(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		salt  string
+		owner string
+	}{
+		{name: "TestSuite/TestMethod", salt: "-salt-2827", owner: "2"},
+		{name: "TestSuite/TestOther", salt: "-salt-2827", owner: "0"},
+		{name: "TestSuite/TestMethod", salt: "-test-salt", owner: "1"},
+	} {
+		t.Run(tc.name+tc.salt, func(t *testing.T) {
+			t.Setenv("TESTSHARD_COUNT", "4")
+			for _, index := range []string{"0", "1", "2", "3"} {
+				t.Setenv("TESTSHARD_INDEX", index)
+				shard, err := FromEnv(tc.salt)
+				require.NoError(t, err)
+				require.Equal(t, index == tc.owner, shard.ShouldRunTest(tc.name))
+			}
 		})
 	}
 }
@@ -66,19 +86,17 @@ func TestSkipUnlessInShardInheritsSelection(t *testing.T) {
 func TestFromEnvCustomVariables(t *testing.T) {
 	t.Setenv("TESTSHARD_COUNT", "invalid")
 	t.Setenv("TESTSHARD_INDEX", "invalid")
-	t.Setenv("TESTSHARD_SALT", "ignored")
 	for _, tc := range []struct {
-		name        string
-		total       string
-		index       string
-		salt        string
-		defaultSalt string
-		want        Shard
-		wantErr     string
+		name    string
+		total   string
+		index   string
+		salt    string
+		want    Shard
+		wantErr string
 	}{
 		{name: "custom salt", total: "4", index: "1", salt: "-test-salt", want: Shard{index: 1, total: 4, salt: "-test-salt"}},
-		{name: "default salt", total: "4", index: "2", defaultSalt: "-salt-2827", want: Shard{index: 2, total: 4, salt: "-salt-2827"}},
-		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set CI_SHARD_SALT or use WithSalt"},
+		{name: "second salt", total: "4", index: "2", salt: "-salt-2827", want: Shard{index: 2, total: 4, salt: "-salt-2827"}},
+		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required"},
 		{name: "missing total", index: "1"},
 		{name: "invalid total", total: "four", index: "0", wantErr: `parsing CI_TOTAL_SHARDS: strconv.Atoi: parsing "four": invalid syntax`},
 		{name: "zero total", total: "0", index: "0", wantErr: "CI_TOTAL_SHARDS must be positive: 0"},
@@ -88,12 +106,10 @@ func TestFromEnvCustomVariables(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("CI_TOTAL_SHARDS", tc.total)
 			t.Setenv("CI_SHARD_INDEX", tc.index)
-			t.Setenv("CI_SHARD_SALT", tc.salt)
 			shard, err := FromEnv(
-				WithSalt(tc.defaultSalt),
+				tc.salt,
 				WithTotalShardsEnv("CI_TOTAL_SHARDS"),
 				WithShardIndexEnv("CI_SHARD_INDEX"),
-				WithSaltEnv("CI_SHARD_SALT"),
 			)
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
@@ -109,11 +125,7 @@ func TestSkipUnlessInShardProcess(t *testing.T) {
 	if os.Getenv("TESTX_SKIP_PROCESS") == "" {
 		return
 	}
-	var options []Option
-	if salt := os.Getenv("TESTX_SKIP_SALT"); salt != "" {
-		options = append(options, WithSalt(salt))
-	}
-	SkipUnlessInShard(t, options...)
+	SkipUnlessInShard(t, os.Getenv("TESTX_SKIP_SALT"))
 	t.Log("test body ran")
 }
 
@@ -124,15 +136,14 @@ func TestSkipUnlessInShard(t *testing.T) {
 		total   string
 		index   string
 		salt    string
-		envSalt string
 		wantRun bool
 		wantErr string
 	}{
 		{name: "disabled", wantRun: true},
-		{name: "owns test", total: "4", index: "0", envSalt: "my-suite", wantRun: true},
-		{name: "other shard", total: "4", index: "1", envSalt: "my-suite"},
-		{name: "default salt", total: "4", index: "2", salt: "other", wantRun: true},
-		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required: set TESTSHARD_SALT or use WithSalt"},
+		{name: "owns test", total: "4", index: "0", salt: "my-suite", wantRun: true},
+		{name: "other shard", total: "4", index: "1", salt: "my-suite"},
+		{name: "other salt", total: "4", index: "2", salt: "other", wantRun: true},
+		{name: "missing salt", total: "4", index: "0", wantErr: "sharding salt is required"},
 		{name: "misconfigured", total: "0", index: "0", wantErr: "TESTSHARD_COUNT must be positive: 0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -141,7 +152,7 @@ func TestSkipUnlessInShard(t *testing.T) {
 			require.NoError(t, err)
 			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestSkipUnlessInShardProcess$", "-test.v")
 			cmd.Env = append(os.Environ(), "TESTX_SKIP_PROCESS=1", "TESTX_SKIP_SALT="+tc.salt,
-				"TESTSHARD_COUNT="+tc.total, "TESTSHARD_INDEX="+tc.index, "TESTSHARD_SALT="+tc.envSalt)
+				"TESTSHARD_COUNT="+tc.total, "TESTSHARD_INDEX="+tc.index)
 			output, err := cmd.CombinedOutput()
 			if tc.wantErr != "" {
 				require.Error(t, err, "%s", output)
@@ -157,55 +168,4 @@ func TestSkipUnlessInShard(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSetDefaultsProcess(t *testing.T) {
-	if os.Getenv("TESTX_DEFAULTS_PROCESS") == "" {
-		return
-	}
-	SetDefaults(
-		WithSalt("process-salt"),
-		WithTotalShardsEnv("CI_TOTAL_SHARDS"),
-		WithShardIndexEnv("CI_SHARD_INDEX"),
-		WithSaltEnv("CI_SHARD_SALT"),
-	)
-	want := Shard{index: 1, total: 4, salt: "process-salt"}
-	shard, err := FromEnv()
-	require.NoError(t, err)
-	require.Equal(t, want, shard)
-
-	shard, err = FromEnv(WithSalt("suite-salt"))
-	require.NoError(t, err)
-	require.Equal(t, Shard{index: 1, total: 4, salt: "suite-salt"}, shard)
-	shard, err = FromEnv()
-	require.NoError(t, err)
-	require.Equal(t, want, shard)
-
-	t.Setenv("CI_SHARD_SALT", "env-salt")
-	shard, err = FromEnv(WithSalt("suite-salt"))
-	require.NoError(t, err)
-	require.Equal(t, Shard{index: 1, total: 4, salt: "env-salt"}, shard)
-
-	t.Setenv("CI_SHARD_INDEX", "3")
-	shard, err = FromEnv()
-	require.NoError(t, err)
-	require.Equal(t, Shard{index: 3, total: 4, salt: "env-salt"}, shard)
-
-	SetDefaults(WithSalt("updated-salt"))
-	t.Setenv("CI_SHARD_SALT", "")
-	shard, err = FromEnv()
-	require.NoError(t, err)
-	require.Equal(t, Shard{index: 3, total: 4, salt: "updated-salt"}, shard)
-}
-
-func TestSetDefaults(t *testing.T) {
-	t.Parallel()
-	executable, err := os.Executable()
-	require.NoError(t, err)
-	cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestSetDefaultsProcess$")
-	cmd.Env = append(os.Environ(), "TESTX_DEFAULTS_PROCESS=1",
-		"TESTSHARD_COUNT=invalid", "TESTSHARD_INDEX=invalid", "TESTSHARD_SALT=ignored",
-		"CI_TOTAL_SHARDS=4", "CI_SHARD_INDEX=1", "CI_SHARD_SALT=")
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, "%s", output)
 }

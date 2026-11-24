@@ -3,7 +3,12 @@ package parallelsuite
 import (
 	"context"
 	"flag"
+	"os"
+	"os/exec"
 	"reflect"
+	"slices"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -11,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/testx/testshard"
 )
 
 type validSuite struct{ Suite[*validSuite] }
@@ -245,4 +251,77 @@ func TestGuardSeal(t *testing.T) {
 	t.Run("assertion after Run", func(t *testing.T) {
 		Run(t, &sealAfterRunSuite{})
 	})
+}
+
+type shardingSuite struct{ Suite[*shardingSuite] }
+
+func (s *shardingSuite) TestA(ran chan string) {
+	s.Snd(ran, "TestA")
+	s.Run("nested", func(s *shardingSuite) { s.Snd(ran, "nested") })
+}
+func (s *shardingSuite) TestB(ran chan string) { s.Snd(ran, "TestB") }
+func (s *shardingSuite) TestC(ran chan string) { s.Snd(ran, "TestC") }
+
+func TestRunShardingProcess(t *testing.T) {
+	if os.Getenv("TESTX_SHARD_PROCESS") == "" {
+		return
+	}
+	ran := make(chan string, 4)
+	t.Cleanup(func() {
+		close(ran)
+		got := make([]string, 0)
+		for name := range ran {
+			got = append(got, name)
+		}
+		slices.Sort(got)
+		require.Equal(t, strings.Fields(os.Getenv("TESTX_SHARD_WANT")), got)
+	})
+	t.Run("suite", func(t *testing.T) {
+		if os.Getenv("TESTX_SHARD_PLAIN_RUN") == "true" {
+			Run(t, &shardingSuite{}, ran)
+			return
+		}
+		shard, err := testshard.FromEnv("-test-salt")
+		require.NoError(t, err)
+		if os.Getenv("TESTX_SHARD_LEGACY") == "true" {
+			RunLegacySequentialInShard(t, shard, &shardingSuite{}, ran) //nolint:staticcheck // SA1019: sharding must also work in the legacy runner.
+		} else {
+			RunInShard(t, shard, &shardingSuite{}, ran)
+		}
+	})
+}
+
+func TestRunSharding(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		total    string
+		index    string
+		legacy   bool
+		plainRun bool
+		filter   string
+		want     string
+	}{
+		{name: "unsharded runner ignores environment", total: "4", index: "invalid", plainRun: true, want: "TestA TestB TestC nested"},
+		{name: "disabled", want: "TestA TestB TestC nested"},
+		{name: "one shard", total: "1", index: "0", want: "TestA TestB TestC nested"},
+		{name: "owns nested test", total: "4", index: "2", want: "TestA nested"},
+		{name: "last shard", total: "4", index: "3", want: "TestB"},
+		{name: "empty shard", total: "4", index: "0"},
+		{name: "legacy", total: "4", index: "2", legacy: true, want: "TestA nested"},
+		{name: "method filter", total: "4", index: "3", filter: "^TestB$", want: "TestB"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			executable, err := os.Executable()
+			require.NoError(t, err)
+			cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestRunShardingProcess$", "-testify.m="+tc.filter)
+			cmd.Env = append(os.Environ(),
+				"TESTX_SHARD_PROCESS=1", "TESTSHARD_COUNT="+tc.total, "TESTSHARD_INDEX="+tc.index,
+				"TESTX_SHARD_WANT="+tc.want, "TESTX_SHARD_LEGACY="+strconv.FormatBool(tc.legacy),
+				"TESTX_SHARD_PLAIN_RUN="+strconv.FormatBool(tc.plainRun))
+			output, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s", output)
+		})
+	}
 }
