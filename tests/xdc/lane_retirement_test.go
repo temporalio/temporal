@@ -178,6 +178,19 @@ func completeHistory(ctx context.Context, client workflowservice.WorkflowService
 // TestLaneRetirementBacklogDoesNotBackfill releases a backlog of workflows and gives
 // each a newer event. The passive must receive their prefixes before those new events.
 func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfill() {
+	s.laneRetirementBacklog(0)
+}
+
+// TestLaneRetirementBacklogDrainsUnderCap releases the same backlog with the drain cap set. The
+// withdrawn lane drains it under the cap, which defers some of its sends, and still retires
+// without the passive resending anything.
+func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDrainsUnderCap() {
+	s.laneRetirementBacklog(20)
+}
+
+// laneRetirementBacklog is the backlog retirement drill, with the withdrawn lane's drain capped
+// at drainCap tasks a second, or uncapped when it is zero.
+func (s *streamBasedReplicationTestSuite) laneRetirementBacklog(drainCap float64) {
 	if !s.laneStreams {
 		s.T().Skip("replication lanes require lane streams")
 	}
@@ -250,6 +263,16 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfi
 		return name == metrics.ReplicationTasksBackFill.Name() && recording.Tags["namespace"] == namespaceName
 	})
 	s.T().Cleanup(func() { handler.StopCapture(capture) })
+	var drainCapture *metricstest.Capture
+	if drainCap > 0 {
+		active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneDrainTasksPerSecond, drainCap)
+		activeHandler, ok := active.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		s.Require().True(ok)
+		drainCapture = activeHandler.StartCaptureWithFilter(func(name string, _ *metricstest.CapturedRecording) bool {
+			return name == metrics.ReplicationLaneDrainCapped.Name()
+		})
+		s.T().Cleanup(func() { activeHandler.StopCapture(drainCapture) })
+	}
 	stopIsolation()
 	for _, execution := range executions {
 		_, err := active.FrontendClient().SignalWorkflowExecution(s.T().Context(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -273,4 +296,7 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfi
 		resends += recording.Value.(int64)
 	}
 	s.Zero(resends, "retirement must not recover unsent backlog through history resend")
+	if drainCap > 0 {
+		s.NotEmpty(drainCapture.SnapshotMetric(metrics.ReplicationLaneDrainCapped.Name()), "the drain cap must defer some of the backlog's sends")
+	}
 }
