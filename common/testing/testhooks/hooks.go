@@ -12,6 +12,12 @@ import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
+	testxhooks "go.temporal.io/testx/testhooks"
+	"go.uber.org/fx"
+)
+
+var Module = fx.Options(
+	fx.Provide(NewTestHooks),
 )
 
 // HistoryPassiveReplicationTestHook defines the test-only seams used to replace an
@@ -73,3 +79,8 @@ const (
 	ScopeNamespace ScopeType = iota
 	ScopeGlobal
 )
+
+type Key[T any, S any] struct {
+	key       testxhooks.Key[T, S]
+	scopeType ScopeType
+}

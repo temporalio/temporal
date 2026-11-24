@@ -1,22 +1,10 @@
 package testhooks
 
-import (
-	testxhooks "go.temporal.io/testx/testhooks"
-	"go.uber.org/fx"
-)
-
-var Module = fx.Options(
-	fx.Provide(NewTestHooks),
-)
+import testxhooks "go.temporal.io/testx/testhooks"
 
 // TestHooks is the registry of active test hooks used by the server.
 // It should be obtained through Fx and used with [Get] and [Set].
 type TestHooks = testxhooks.TestHooks
-
-type Key[T any, S any] struct {
-	key       testxhooks.Key[T, S]
-	scopeType ScopeType
-}
 
 func NewTestHooks() TestHooks {
 	return testxhooks.NewTestHooks()

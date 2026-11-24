@@ -44,7 +44,7 @@ jobs:
       - name: Test testx
         run: |
           make test
-          go test -tags test_dep ./testhooks
+          go test ./testhooks
 
       - name: Lint testx
         env:
