@@ -92,6 +92,8 @@ type laneStreamSender struct {
 	// requestedLanes are the lanes in the policy's latest answer.
 	requestedLanes map[string]struct{}
 	laneLimiters   map[string]LaneLimiter
+	// laneDrainLimiters cap the drain of lanes the policy withdrew.
+	laneDrainLimiters map[string]LaneLimiter
 	// laneRefusedAt is when each lane's limiter last refused a send.
 	laneRefusedAt map[string]time.Time
 	laneLoopsOnce sync.Once
@@ -145,6 +147,7 @@ func newLaneStreamSender(
 		lanePolicyFactory:       lanePolicyFactory,
 		initialLaneState:        make(chan struct{}),
 		laneLimiters:            make(map[string]LaneLimiter),
+		laneDrainLimiters:       make(map[string]LaneLimiter),
 		laneRefusedAt:           make(map[string]time.Time),
 	}
 	// Lanes split HIGH priority traffic, so they require the tiered stack.

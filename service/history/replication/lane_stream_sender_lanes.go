@@ -532,7 +532,7 @@ func (s *laneStreamSender) setRequestedLanes(requested map[string]struct{}) {
 }
 
 // laneShouldBeRateLimited reports whether the policy still requests a lane. Withdrawn lanes
-// drain their finite prefix without a rate limit.
+// drain their finite prefix under the drain cap instead of the policy's limit.
 func (s *laneStreamSender) laneShouldBeRateLimited(logicalKey string) bool {
 	s.laneStateMu.Lock()
 	defer s.laneStateMu.Unlock()
@@ -550,6 +550,24 @@ func (s *laneStreamSender) laneLimiter(logicalKey string) LaneLimiter {
 	return s.laneLimiters[logicalKey]
 }
 
+// laneDrainLimiter returns the limiter that caps a withdrawn lane's drain at
+// ReplicationLaneDrainTasksPerSecond on this stream, creating it the first time the lane drains.
+// A drain left uncapped floods the receiver with the lane's backlog, slowing every namespace there.
+func (s *laneStreamSender) laneDrainLimiter(logicalKey string) LaneLimiter {
+	s.laneStateMu.Lock()
+	defer s.laneStateMu.Unlock()
+	limiter, ok := s.laneDrainLimiters[logicalKey]
+	if !ok {
+		limiter = newRateLaneLimiter(s.config.ReplicationLaneDrainTasksPerSecond)
+		s.laneDrainLimiters[logicalKey] = limiter
+		if drainCap := s.config.ReplicationLaneDrainTasksPerSecond(); drainCap > 0 {
+			s.logger.Info("Capping the drain of a withdrawn replication lane.",
+				tag.NewStringTag("lane", logicalKey), tag.NewFloat64("drain-tasks-per-second", drainCap))
+		}
+	}
+	return limiter
+}
+
 func (s *laneStreamSender) markLaneRefused(logicalKey string, at time.Time) {
 	s.laneStateMu.Lock()
 	defer s.laneStateMu.Unlock()
@@ -560,6 +578,7 @@ func (s *laneStreamSender) markLaneRefused(logicalKey string, at time.Time) {
 func (s *laneStreamSender) laneRetired(logicalKey string) {
 	s.laneStateMu.Lock()
 	delete(s.laneLimiters, logicalKey)
+	delete(s.laneDrainLimiters, logicalKey)
 	delete(s.laneRefusedAt, logicalKey)
 	s.laneStateMu.Unlock()
 	s.withLanePolicy("LaneRetired", func(policy LaneStreamPolicy) {
@@ -757,24 +776,40 @@ func laneRetryDelay(retryAfter time.Duration) time.Duration {
 }
 
 // paceLane returns once the lane may send its next task, or with the context's error once the
-// stream ends, so that the send is not retried. The limiter never blocks: when it refuses a
-// send, the lane waits here for laneRetryDelay and asks again.
+// stream ends, so that the send is not retried. A lane the policy requests is paced by the
+// policy's limiter, and a withdrawn lane by the drain cap. Neither limiter blocks: when one
+// refuses a send, the lane waits here for laneRetryDelay and asks again, so a withdrawal takes
+// effect within that delay.
 func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) error {
-	for s.laneShouldBeRateLimited(logicalKey) {
-		limiter := s.laneLimiter(logicalKey)
+	for {
+		requested := s.laneShouldBeRateLimited(logicalKey)
+		var limiter LaneLimiter
+		if requested {
+			limiter = s.laneLimiter(logicalKey)
+		} else {
+			limiter = s.laneDrainLimiter(logicalKey)
+		}
 		if limiter == nil {
 			return nil
 		}
 		now := s.shardContext.GetTimeSource().Now()
 		var ok bool
 		var retryAfter time.Duration
-		if !s.callLanePolicy("Reserve", func() { ok, retryAfter = limiter.Reserve(now) }) {
-			return nil
+		if requested {
+			if !s.callLanePolicy("Reserve", func() { ok, retryAfter = limiter.Reserve(now) }) {
+				return nil
+			}
+		} else {
+			ok, retryAfter = limiter.Reserve(now)
 		}
 		if ok {
 			return nil
 		}
-		s.markLaneRefused(logicalKey, now)
+		if requested {
+			s.markLaneRefused(logicalKey, now)
+		} else {
+			metrics.ReplicationLaneDrainCapped.With(s.metrics).Record(1, metrics.ToClusterTag(s.clientClusterName))
+		}
 		timer := time.NewTimer(laneRetryDelay(retryAfter))
 		select {
 		case <-ctx.Done():
@@ -783,5 +818,4 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 		case <-timer.C:
 		}
 	}
-	return nil
 }

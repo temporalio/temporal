@@ -194,9 +194,59 @@ func (s *laneStreamSenderSuite) TestPaceLane_NotPaced() {
 	s.requestLane(logicalKey, limiter)
 	s.streamSender.requestedLanes = nil
 
-	// A lane the policy no longer requests catches up without its limiter.
-	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	// A lane the policy no longer requests drains without the policy's limiter, and without any
+	// limit while the drain cap is unset.
+	for range 3 {
+		s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	}
 	s.Zero(limiter.calls)
+}
+
+func (s *laneStreamSenderSuite) TestPaceLane_DrainCapPacesWithdrawnLanes() {
+	logicalKey := namespaceLaneKey("ns-a")
+	limiter := &fakeLaneLimiter{refusals: 1, retryAfter: time.Hour}
+	s.requestLane(logicalKey, limiter)
+	s.streamSender.requestedLanes = nil
+	s.config.ReplicationLaneDrainTasksPerSecond = dynamicconfig.GetFloatPropertyFn(2)
+
+	// The drain cap holds a second's worth of tasks: two sends go at once, and the third waits.
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s.ErrorIs(s.streamSender.paceLane(ctx, logicalKey), context.Canceled)
+	s.Zero(limiter.calls, "the policy's limiter no longer paces a withdrawn lane")
+	s.NotContains(s.streamSender.laneRefusedAt, logicalKey, "the drain cap's refusals are not the policy's")
+
+	// Once a second has passed, the next send goes.
+	s.timeSource.Advance(time.Second)
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+}
+
+func (s *laneStreamSenderSuite) TestPaceLane_RequestedLaneIgnoresDrainCap() {
+	logicalKey := namespaceLaneKey("ns-a")
+	limiter := &fakeLaneLimiter{}
+	s.requestLane(logicalKey, limiter)
+	s.config.ReplicationLaneDrainTasksPerSecond = dynamicconfig.GetFloatPropertyFn(0.001)
+
+	// While the policy requests the lane, its own limiter paces it, however low the drain cap is.
+	for range 3 {
+		s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	}
+	s.Equal(3, limiter.calls)
+	s.NotContains(s.streamSender.laneDrainLimiters, logicalKey)
+}
+
+func (s *laneStreamSenderSuite) TestLaneRetired_DropsDrainLimiter() {
+	logicalKey := namespaceLaneKey("ns-a")
+	s.requestLane(logicalKey, &fakeLaneLimiter{})
+	s.streamSender.requestedLanes = nil
+	s.config.ReplicationLaneDrainTasksPerSecond = dynamicconfig.GetFloatPropertyFn(2)
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	s.Contains(s.streamSender.laneDrainLimiters, logicalKey)
+
+	s.streamSender.laneRetired(logicalKey)
+	s.NotContains(s.streamSender.laneDrainLimiters, logicalKey)
 }
 
 func (s *laneStreamSenderSuite) TestSendDefaultTasks_SkipsLaneOwnedTasks() {

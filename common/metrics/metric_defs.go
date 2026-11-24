@@ -1198,6 +1198,10 @@ var (
 		"replication_lane_feedback_dropped",
 		WithDescription("The number of receiver lane feedback payloads omitted because their serialized size exceeds the configured byte limit."),
 	)
+	ReplicationLaneDrainCapped = NewCounterDef(
+		"replication_lane_drain_capped",
+		WithDescription("The number of sends a withdrawn replication lane deferred under ReplicationLaneDrainTasksPerSecond while it drained."),
+	)
 	ReplicationStreamChannelFull = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend         = NewCounterDef("replication_tasks_send")
 	// ReplicationStreamReadBufferHits counts replication queue read pages served from the
