@@ -35,7 +35,7 @@ func ExecuteCtx[T any](ctx context.Context, key Key) (T, bool) {
 
 	// Nothing is injected for the key, and nothing is registered for it or the unscoped key, so
 	// the fallback may inject an error.
-	if state.registry != nil && state.registry.Armed() && !state.registry.registeredAny(key, nil) {
+	if state.registry != nil && state.registry.Armed() && !state.registry.registeredAny(newLookupKeys(key, nil)) {
 		v, set, _ := executeFallback[T](state.registry, key)
 		return v, set
 	}

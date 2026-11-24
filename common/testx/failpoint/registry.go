@@ -43,6 +43,11 @@ type Registry interface {
 	// executions that consult the fallback.
 	ActiveFallback() Fallback
 
+	// activeInstallation returns the installation of the active fallback, else nil. It is the
+	// identity that FallbackCache entries are bound to: it changes whenever the fallback is
+	// replaced, removed, or turned off and on again.
+	activeInstallation() *installedFallback
+
 	// SetFallbackActive turns the fallback f on or off, and reports whether it did. It does
 	// nothing if f is not the installed fallback, so a stale handle can't turn on a fallback that
 	// replaced it. An inactive fallback is not consulted and doesn't arm the registry.
@@ -95,9 +100,9 @@ type Registry interface {
 	// from one snapshot of the registry.
 	lookup(key Key) (any, bool)
 
-	// registeredAny reports whether a failpoint is registered for key or any of others, or for
-	// their unscoped keys, from one snapshot of the registry.
-	registeredAny(key Key, others []Key) bool
+	// registeredAny reports whether a failpoint is registered for any of keys, or for their
+	// unscoped keys, from one snapshot of the registry.
+	registeredAny(keys lookupKeys) bool
 
 	// update runs fn with the failpoints of the registry, while no other change to the registry
 	// runs, so fn can check and change several entries atomically. fn must not call the registry.
@@ -186,7 +191,8 @@ type registryImpl struct {
 	armed     atomic.Bool
 }
 
-// installedFallback boxes a Fallback for an atomic pointer.
+// installedFallback boxes a Fallback for an atomic pointer. Its address identifies one period
+// during which the fallback is active.
 type installedFallback struct {
 	f Fallback
 }
@@ -229,7 +235,11 @@ func (r *registryImpl) setCountLocked() {
 func (r *registryImpl) updateArmedLocked() {
 	var effective *installedFallback
 	if r.fallback != nil && r.fallbackActive {
-		effective = &installedFallback{f: r.fallback}
+		// A change of the failpoints keeps the installation, so entries bound to it stay valid.
+		effective = r.effective.Load()
+		if effective == nil || !sameEntry(effective.f, r.fallback) {
+			effective = &installedFallback{f: r.fallback}
+		}
 	}
 	r.effective.Store(effective)
 	r.armed.Store(len(r.failpoints) > 0 || effective != nil)
@@ -278,21 +288,56 @@ func (r *registryImpl) ActiveFallback() Fallback {
 	return nil
 }
 
-func (r *registryImpl) registeredAny(key Key, others []Key) bool {
+func (r *registryImpl) activeInstallation() *installedFallback {
+	return r.effective.Load()
+}
+
+func (r *registryImpl) registeredAny(keys lookupKeys) bool {
 	if r.count.Load() == 0 {
 		return false
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if _, ok := r.lookupLocked(key); ok {
-		return true
+	for i := range keys.n {
+		if _, ok := r.lookupLocked(keys.keys[i]); ok {
+			return true
+		}
 	}
-	for _, other := range others {
+	for _, other := range keys.more {
 		if _, ok := r.lookupLocked(other); ok {
 			return true
 		}
 	}
 	return false
+}
+
+// maxLookupKeys is the number of keys that a lookupKeys holds without allocating.
+const maxLookupKeys = 3
+
+// lookupKeys are the keys of one lookup in a registry: a key and the other keys of the same
+// operation. They are passed by value, so that a lookup through the Registry interface doesn't
+// make the keys of the caller escape to the heap.
+type lookupKeys struct {
+	n    int
+	keys [maxLookupKeys]Key
+	// more holds the keys that don't fit into keys. It is a copy, so it only allocates if there
+	// are more keys than maxLookupKeys.
+	more []Key
+}
+
+// newLookupKeys returns the lookupKeys of key and others.
+func newLookupKeys(key Key, others []Key) lookupKeys {
+	keys := lookupKeys{n: 1}
+	keys.keys[0] = key
+	for _, other := range others {
+		if keys.n == maxLookupKeys {
+			keys.more = slices.Clone(others[keys.n-1:])
+			break
+		}
+		keys.keys[keys.n] = other
+		keys.n++
+	}
+	return keys
 }
 
 func (r *registryImpl) lookup(key Key) (any, bool) {

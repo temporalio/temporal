@@ -55,6 +55,16 @@ type operationKeys struct {
 	request  failpoint.Key
 	response failpoint.Key
 	exempt   bool
+	// fallbacks keeps the state of the registry's fallback, such as BUGGIFY, for the request and
+	// response keys (see failpoint.FallbackErrorCached). It is nil until a caching fallback is
+	// active for the operation, and for operations whose keys are not cached.
+	fallbacks *fallbackCaches
+}
+
+// fallbackCaches are the failpoint.FallbackCaches of the stages of an operation.
+type fallbackCaches struct {
+	request  failpoint.FallbackCache
+	response failpoint.FallbackCache
 }
 
 // Adapter is a faultinjection.Generator that executes error failpoints, scoped to the namespace ID
@@ -100,7 +110,7 @@ func (a *Adapter[Req, Resp]) GenerateRequest(_ context.Context, operation string
 	if keys.exempt {
 		return nil
 	}
-	return a.execute(keys.request, a.keys.AnyRequest, req, req)
+	return execute(a, operation, keys, false, req, req)
 }
 
 // GenerateResponse executes the response failpoints for the operation with a
@@ -114,7 +124,7 @@ func (a *Adapter[Req, Resp]) GenerateResponse(_ context.Context, operation strin
 		return nil
 	}
 	result := faultinjection.Result[Req, Resp]{Operation: operation, Request: req, Response: resp, Error: err}
-	return a.execute(keys.response, a.keys.AnyResponse, req, result)
+	return execute(a, operation, keys, true, req, result)
 }
 
 // armed reports whether any failpoint is registered or BUGGIFY is enabled, so calls skip the
@@ -124,21 +134,95 @@ func (a *Adapter[Req, Resp]) armed() bool {
 	return registry != nil && registry.Armed()
 }
 
-func (a *Adapter[Req, Resp]) execute(operationKey, anyKey failpoint.Key, req Req, arg any) error {
+// execute executes the failpoints of the request or response stage of an operation with arg, then
+// the fallback. It is generic in the type of arg, so arg is only boxed for a registered failpoint.
+func execute[Req, Resp, Arg any](
+	a *Adapter[Req, Resp],
+	operation string,
+	keys operationKeys,
+	response bool,
+	req Req,
+	arg Arg,
+) error {
+	operationKey, anyKey := keys.request, a.keys.AnyRequest
+	if response {
+		operationKey, anyKey = keys.response, a.keys.AnyResponse
+	}
 	if scope := a.namespaceID(req); scope != "" {
 		operationKey = operationKey.ForScope(scope)
 		anyKey = anyKey.ForScope(scope)
 	}
-	if err, _, fired := failpoint.ExecuteRegistered[error](a.source, operationKey, arg); fired {
+	registry := a.source.Failpoints()
+	if registry == nil {
+		return nil
+	}
+	// Without a registered failpoint, such as while only BUGGIFY is enabled, there is nothing to
+	// execute, so the stage skips boxing arg and goes to the fallback. FallbackErrorIfEmpty reads
+	// the registry once for both, so a failpoint registered in between can't veto the fallback
+	// after the stage already skipped the failpoints.
+	if registry.Len() == 0 {
+		if a.keys.NoBuggify {
+			return nil
+		}
+		if empty, err := failpoint.FallbackErrorIfEmpty(a.source, a.fallbackCache(operation, keys, response), operationKey); empty {
+			return err
+		}
+	}
+	boxed := any(arg)
+	if err, _, fired := failpoint.ExecuteRegistered[error](a.source, operationKey, boxed); fired {
 		return err
 	}
-	if err, _, fired := failpoint.ExecuteRegistered[error](a.source, anyKey, arg); fired {
+	if err, _, fired := failpoint.ExecuteRegistered[error](a.source, anyKey, boxed); fired {
 		return err
 	}
 	if a.keys.NoBuggify {
 		return nil
 	}
-	return failpoint.FallbackError(a.source, operationKey, anyKey)
+	return failpoint.FallbackErrorCached(a.source, a.fallbackCache(operation, keys, response), operationKey, anyKey)
+}
+
+// fallbackCache returns the cache of a stage of an operation for the active fallback, or nil if
+// the fallback doesn't cache or the operation isn't cached. It allocates the caches of an
+// operation when a caching fallback is first active for it.
+func (a *Adapter[Req, Resp]) fallbackCache(operation string, keys operationKeys, response bool) *failpoint.FallbackCache {
+	caches := keys.fallbacks
+	if caches == nil {
+		caches = a.activateFallbackCaches(operation)
+		if caches == nil {
+			return nil
+		}
+	}
+	if response {
+		return &caches.response
+	}
+	return &caches.request
+}
+
+func (a *Adapter[Req, Resp]) activateFallbackCaches(operation string) *fallbackCaches {
+	registry := a.source.Failpoints()
+	if registry == nil {
+		return nil
+	}
+	if _, ok := registry.ActiveFallback().(failpoint.CachingFallback); !ok {
+		return nil
+	}
+	if _, ok := (*a.cache.Load())[operation]; !ok {
+		return nil
+	}
+	a.cacheMu.Lock()
+	defer a.cacheMu.Unlock()
+	cache := *a.cache.Load()
+	keys, ok := cache[operation]
+	if !ok {
+		return nil
+	}
+	if keys.fallbacks == nil {
+		keys.fallbacks = new(fallbackCaches)
+		next := maps.Clone(cache)
+		next[operation] = keys
+		a.cache.Store(&next)
+	}
+	return keys.fallbacks
 }
 
 // namespaceID returns the namespace ID of req, or "" if it has none.
@@ -165,7 +249,10 @@ func (a *Adapter[Req, Resp]) operationKeys(operation string) operationKeys {
 	a.cacheMu.Lock()
 	defer a.cacheMu.Unlock()
 	cache := *a.cache.Load()
-	if _, ok := cache[operation]; !ok && len(cache) < maxCachedOperations {
+	if cached, ok := cache[operation]; ok {
+		return cached
+	}
+	if len(cache) < maxCachedOperations {
 		next := maps.Clone(cache)
 		next[operation] = keys
 		a.cache.Store(&next)

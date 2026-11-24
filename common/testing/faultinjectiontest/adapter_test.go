@@ -3,6 +3,7 @@ package faultinjectiontest_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -318,6 +319,25 @@ func TestAdapter_Buggify(t *testing.T) {
 		require.NoError(t, newAdapter(registry, nil).GenerateRequest(context.Background(), operation, "request"))
 	})
 
+	t.Run("follows a new configuration", func(t *testing.T) {
+		t.Parallel()
+		registry := newRegistry(t)
+		adapter := newAdapter(registry, nil)
+		require.Error(t, adapter.GenerateRequest(context.Background(), operation, "request"))
+		require.NoError(t, buggify.For(registry).Set(buggify.Config{Seed: 1, Activation: 0, Fire: 1, Error: "Unavailable"}))
+		require.NoError(t, adapter.GenerateRequest(context.Background(), operation, "request"))
+		require.NoError(t, buggify.For(registry).Set(buggify.Config{Seed: 2, Activation: 1, Fire: 1, Error: "Unavailable"}))
+		require.Error(t, adapter.GenerateRequest(context.Background(), operation, "request"))
+	})
+
+	t.Run("injects into operations beyond the cached ones", func(t *testing.T) {
+		t.Parallel()
+		adapter := newAdapter(newRegistry(t), nil)
+		for i := range 1100 {
+			require.Error(t, adapter.GenerateRequest(context.Background(), fmt.Sprintf("/test.Service/Method%d", i), "request"), i)
+		}
+	})
+
 	t.Run("exempt operations are never buggified", func(t *testing.T) {
 		t.Parallel()
 		adapter := faultinjectiontest.NewAdapter[any, any](registrySource{registry: newRegistry(t)}, faultinjectiontest.Keys{
@@ -329,4 +349,43 @@ func TestAdapter_Buggify(t *testing.T) {
 		}, nil)
 		require.NoError(t, adapter.GenerateRequest(context.Background(), operation, "request"))
 	})
+}
+
+func TestAdapter_BuggifyDoesNotAllocate(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	// The operation is activated, but its executions don't fire.
+	require.NoError(t, buggify.For(registry).Set(buggify.Config{Seed: 1, Activation: 1, Fire: 0, Error: "Unavailable"}))
+	adapter := newAdapter(registry, nil)
+	request := &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"}
+	require.Zero(t, testing.AllocsPerRun(100, func() {
+		_ = adapter.GenerateRequest(context.Background(), operation, request)
+		_ = adapter.GenerateResponse(context.Background(), operation, request, "response", nil)
+	}))
+
+	// With a failpoint registered for another operation, the stages look up the keys of the
+	// operation with the lock. The request stage still doesn't allocate; the response stage boxes
+	// the result of the handler as the argument of the failpoints.
+	setReturn(registry, failpoint.GRPCKey("/test.Service/Other"), errors.New("other"))
+	require.Zero(t, testing.AllocsPerRun(100, func() {
+		_ = adapter.GenerateRequest(context.Background(), operation, request)
+	}))
+}
+
+func TestAdapter_BuggifyAfterFailpointsDoesNotAllocate(t *testing.T) {
+	registry := failpoint.NewRegistry()
+	adapter := newAdapter(registry, nil)
+	request := &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"}
+
+	// The operation is first seen while only a failpoint for another operation is registered, so
+	// no fallback is active for it.
+	setReturn(registry, failpoint.GRPCKey("/test.Service/Other"), errors.New("other"))
+	require.NoError(t, adapter.GenerateRequest(context.Background(), operation, request))
+
+	// BUGGIFY and a wildcard failpoint that doesn't fire: the stages still don't allocate for
+	// the request, once the caches of the operation exist.
+	require.NoError(t, buggify.For(registry).Set(buggify.Config{Seed: 1, Activation: 1, Fire: 0, Error: "Unavailable"}))
+	require.NoError(t, adapter.GenerateRequest(context.Background(), operation, request))
+	require.Zero(t, testing.AllocsPerRun(100, func() {
+		_ = adapter.GenerateRequest(context.Background(), operation, request)
+	}))
 }

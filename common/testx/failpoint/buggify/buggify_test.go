@@ -605,3 +605,138 @@ func TestFires_ReadsTheRegistryOnce(t *testing.T) {
 	require.True(t, buggify.Fires(switchingSource{first: first, other: failpoint.NewRegistry(), calls: &calls}, key1))
 	require.Equal(t, 1, calls)
 }
+
+func TestBuggify_ErrorCached(t *testing.T) {
+	t.Parallel()
+	registerBuggifyError()
+
+	t.Run("decides like Error", func(t *testing.T) {
+		t.Parallel()
+		config := buggify.Config{Seed: 7, Activation: 0.5, Fire: 0.5, Error: buggifyErrName}
+		// run executes the keys a few times in two scopes, and returns which executions failed and
+		// the events.
+		run := func(cached bool) (failed []string, events []failpoint.Event) {
+			registry, getEvents := newBuggifyRegistry(t, config)
+			src := registrySource{registry: registry}
+			for i := range 20 {
+				name := fmt.Sprintf("key.%d", i)
+				var cache failpoint.FallbackCache
+				for n := range 10 {
+					key := failpoint.KeyFromName(name, []string{"", "a"}[n%2])
+					var err error
+					if cached {
+						err = failpoint.FallbackErrorCached(src, &cache, key)
+					} else {
+						err = failpoint.FallbackError(src, key)
+					}
+					if err != nil {
+						require.ErrorIs(t, err, errBuggify)
+						failed = append(failed, fmt.Sprintf("%s#%d", key, n))
+					}
+				}
+			}
+			return failed, getEvents()
+		}
+		failed, events := run(false)
+		require.NotEmpty(t, failed)
+		cachedFailed, cachedEvents := run(true)
+		require.Equal(t, failed, cachedFailed)
+		require.Equal(t, events, cachedEvents)
+	})
+
+	t.Run("follows a new configuration", func(t *testing.T) {
+		t.Parallel()
+		registry, events := newBuggifyRegistry(t, alwaysConfig())
+		src := registrySource{registry: registry}
+		var cache failpoint.FallbackCache
+		require.ErrorIs(t, failpoint.FallbackErrorCached(src, &cache, key1), errBuggify)
+
+		never := alwaysConfig()
+		never.Activation = 0
+		require.NoError(t, buggify.For(registry).Set(never))
+		require.NoError(t, failpoint.FallbackErrorCached(src, &cache, key1))
+		require.NoError(t, buggify.For(registry).Set(alwaysConfig()))
+		require.ErrorIs(t, failpoint.FallbackErrorCached(src, &cache, key1), errBuggify)
+
+		// Each configuration reported the activation of the name once, before its fire events.
+		require.Equal(t, []failpoint.Event{
+			{Kind: failpoint.FallbackActivationEvent, Key: key1, Activated: true},
+			{Kind: failpoint.FallbackFireEvent, Key: key1, Action: failpoint.Return, Fired: true, Execution: 1},
+			{Kind: failpoint.FallbackActivationEvent, Key: key1, Activated: false},
+			{Kind: failpoint.FallbackActivationEvent, Key: key1, Activated: true},
+			{Kind: failpoint.FallbackFireEvent, Key: key1, Action: failpoint.Return, Fired: true, Execution: 1},
+		}, events())
+	})
+
+	t.Run("caches unselected names", func(t *testing.T) {
+		t.Parallel()
+		config := alwaysConfig()
+		config.Exclude = []string{key2.Name()}
+		registry, _ := newBuggifyRegistry(t, config)
+		src := registrySource{registry: registry}
+		var cache failpoint.FallbackCache
+		require.NoError(t, failpoint.FallbackErrorCached(src, &cache, key2))
+		require.NoError(t, failpoint.FallbackErrorCached(src, &cache, key2))
+	})
+
+	t.Run("doesn't use the state of another name", func(t *testing.T) {
+		t.Parallel()
+		config := alwaysConfig()
+		config.Exclude = []string{key2.Name()}
+		registry, _ := newBuggifyRegistry(t, config)
+		src := registrySource{registry: registry}
+		var cache failpoint.FallbackCache
+		require.ErrorIs(t, failpoint.FallbackErrorCached(src, &cache, key1), errBuggify)
+		require.NoError(t, failpoint.FallbackErrorCached(src, &cache, key2))
+		require.ErrorIs(t, failpoint.FallbackErrorCached(src, &cache, key1), errBuggify)
+	})
+
+	t.Run("does nothing while suppressed", func(t *testing.T) {
+		t.Parallel()
+		registry, _ := newBuggifyRegistry(t, alwaysConfig())
+		src := registrySource{registry: registry}
+		var cache failpoint.FallbackCache
+		require.ErrorIs(t, failpoint.FallbackErrorCached(src, &cache, key1), errBuggify)
+		restore := buggify.For(registry).Suppress()
+		require.NoError(t, failpoint.FallbackErrorCached(src, &cache, key1))
+		restore()
+		require.ErrorIs(t, failpoint.FallbackErrorCached(src, &cache, key1), errBuggify)
+	})
+}
+
+func TestBuggify_OnPathDoesNotAllocate(t *testing.T) {
+	config := alwaysConfig()
+	config.Error = ""
+	registry, _ := newBuggifyRegistry(t, config)
+	var src failpoint.Source = registrySource{registry: registry}
+	key := key1.ForScope("ns")
+	var cache failpoint.FallbackCache
+	_ = failpoint.FallbackErrorCached(src, &cache, key, key2)
+	allocs := testing.AllocsPerRun(100, func() {
+		_ = failpoint.FallbackErrorCached(src, &cache, key, key2)
+		_ = failpoint.FallbackError(src, key, key2)
+		_ = failpoint.Checkpoint(src, key)
+	})
+	require.Zero(t, allocs)
+}
+
+func TestBuggify_FiresOnPathDoesNotAllocate(t *testing.T) {
+	registerBuggifyError()
+	for name, config := range map[string]buggify.Config{
+		"fires":         alwaysConfig(),
+		"activated":     {Seed: 1, Activation: 1, Fire: 0, Error: buggifyErrName},
+		"not activated": {Seed: 1, Activation: 0, Fire: 1, Error: buggifyErrName},
+	} {
+		// No subscriber, since the events of the fires would be appended to its slice.
+		registry := failpoint.NewRegistry()
+		require.NoError(t, buggify.For(registry).Set(config))
+		var src failpoint.Source = registrySource{registry: registry}
+		key := key1.ForScope("ns")
+		_ = buggify.Fires(src, key)
+		allocs := testing.AllocsPerRun(100, func() {
+			_ = buggify.Fires(src, key)
+			_ = buggify.FiresWithProb(src, key, 0.5)
+		})
+		require.Zero(t, allocs, name)
+	}
+}

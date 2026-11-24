@@ -58,7 +58,7 @@ func (b *Buggify) Set(config Config) error {
 	if !config.Enabled() {
 		b.state = nil
 	} else if b.state == nil || !reflect.DeepEqual(b.state.config, config) {
-		b.state = &state{config: config}
+		b.state = &state{config: config, id: stateIDs.Add(1)}
 	}
 	if !b.updateLocked() {
 		return ErrNotInstalled
@@ -129,7 +129,21 @@ func (b *Buggify) Error(key failpoint.Key) error {
 	if s == nil {
 		return nil
 	}
-	k := s.key(key.Name(), b.registry.Emit)
+	return b.inject(s, key, s.key(key.Name(), b.registry.Emit))
+}
+
+// ErrorCached is Error that keeps the state of the name of key in cache. It implements
+// failpoint.CachingFallback; call sites use failpoint.FallbackErrorCached.
+func (b *Buggify) ErrorCached(key failpoint.Key, cache failpoint.FallbackCacheSlot) error {
+	s := b.effective.Load()
+	if s == nil {
+		return nil
+	}
+	return b.inject(s, key, s.cachedKey(key.Name(), cache, b.registry.Emit))
+}
+
+// inject is Error for the state k of the name of key in s, nil if s doesn't select the name.
+func (b *Buggify) inject(s *state, key failpoint.Key, k *keyState) error {
 	if k == nil {
 		return nil
 	}
@@ -215,6 +229,9 @@ const (
 // state is the BUGGIFY state of a registry for one configuration.
 type state struct {
 	config Config
+	// id identifies the state among all states, so a handle can tell whether it is for this state
+	// without keeping it alive.
+	id uint64
 	// keys holds a *keyState per selected key name, created on its first execution, and
 	// unselected caches the names that the configuration doesn't select. Both are only added to
 	// under mu, which keeps their sizes within their bounds.
@@ -235,10 +252,45 @@ type keyState struct {
 	activated bool
 	fire      float64
 	newError  func(msg string) error
-	hits      atomic.Int64
-	fires     atomic.Int64
-	// scopes holds an *atomic.Uint64 per scope, "" for executions without a scope.
+	// nameMix is the hash of the name that its draws use (see Config.Draw), computed once.
+	nameMix uint64
+	hits    atomic.Int64
+	fires   atomic.Int64
+	// scopes holds a *scopeCounter per scope, "" for executions without a scope.
 	scopes sync.Map
+}
+
+// scopeCounter counts the executions of an activated key name in a scope.
+type scopeCounter struct {
+	n atomic.Uint64
+	// scopeMix is the hash of the scope that the draws of the executions use (see
+	// Config.DrawScoped), computed once.
+	scopeMix uint64
+}
+
+// stateIDs numbers the states.
+var stateIDs atomic.Uint64
+
+// keyHandle is the state of a key name that a call site keeps in a failpoint.FallbackCache. key is
+// nil if the state doesn't select the name or is at its bound of names; neither changes for a
+// state. It holds the id of the state, not the state, so an idle cache doesn't keep the names and
+// counters of an obsolete configuration alive; only the state of its one name.
+type keyHandle struct {
+	stateID uint64
+	name    string
+	key     *keyState
+}
+
+// cachedKey is key for a call site that keeps the state of name in cache. It uses the state
+// stored in cache if it is for b and name, and else looks it up and stores it, after key has
+// reported the activation of the name.
+func (b *state) cachedKey(name string, cache failpoint.FallbackCacheSlot, emit func(failpoint.Event)) *keyState {
+	if cached, ok := cache.Load().(*keyHandle); ok && cached.stateID == b.id && cached.name == name {
+		return cached.key
+	}
+	k := b.key(name, emit)
+	cache.Store(&keyHandle{stateID: b.id, name: name, key: k})
+	return k
 }
 
 // key returns the state of a key name, or nil if the configuration doesn't select it. On the first
@@ -268,7 +320,8 @@ func (b *state) key(name string, emit func(failpoint.Event)) *keyState {
 	if b.count >= maxKeys {
 		return nil
 	}
-	k := &keyState{activated: b.config.Draw(name, 0) < params.Activation, fire: params.Fire}
+	nameMix := nameMix(name)
+	k := &keyState{activated: draw(b.config.Seed, nameMix, 0) < params.Activation, fire: params.Fire, nameMix: nameMix}
 	if params.Error != "" {
 		k.newError, _ = failpoint.LookupError(params.Error)
 	}
@@ -289,8 +342,8 @@ func (b *state) fire(key failpoint.Key, k *keyState, p float64) (bool, uint64) {
 	if counter == nil {
 		return false, 0
 	}
-	n := counter.Add(1)
-	fired := b.config.DrawScoped(key.Name(), key.Scope(), n) < p
+	n := counter.n.Add(1)
+	fired := drawScoped(b.config.Seed, k.nameMix, counter.scopeMix, key.Scope() != "", n) < p
 	if fired {
 		k.fires.Add(1)
 	}
@@ -299,19 +352,19 @@ func (b *state) fire(key failpoint.Key, k *keyState, p float64) (bool, uint64) {
 
 // scopeCounter returns the execution counter of an activated key in a scope, or nil if the
 // counters are at their bound.
-func (b *state) scopeCounter(k *keyState, scope string) *atomic.Uint64 {
+func (b *state) scopeCounter(k *keyState, scope string) *scopeCounter {
 	if c, ok := k.scopes.Load(scope); ok {
-		return c.(*atomic.Uint64)
+		return c.(*scopeCounter)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if c, ok := k.scopes.Load(scope); ok {
-		return c.(*atomic.Uint64)
+		return c.(*scopeCounter)
 	}
 	if b.scopeCount >= maxScopes {
 		return nil
 	}
-	c := new(atomic.Uint64)
+	c := &scopeCounter{scopeMix: scopeMix(scope)}
 	k.scopes.Store(scope, c)
 	b.scopeCount++
 	return c

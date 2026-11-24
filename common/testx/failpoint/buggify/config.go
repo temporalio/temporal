@@ -106,18 +106,39 @@ func validateParams(prefix string, activation, fire float64, errorName string) e
 // Code that makes other seeded choices, such as picking a configuration value, uses it to stay
 // reproducible with the same seed.
 func (c Config) Draw(name string, n uint64) float64 {
-	x := mix64(c.Seed ^ mix64(fnv64a(name)) ^ mix64(n+0x9e3779b97f4a7c15))
-	return float64(x>>11) / (1 << 53)
+	return draw(c.Seed, nameMix(name), n)
 }
 
 // DrawScoped is Draw for the executions of a name in a scope, which BUGGIFY numbers separately for
 // each scope, so the executions in one scope don't change which executions fire in another.
 // Without a scope, it is Draw.
 func (c Config) DrawScoped(name, scope string, n uint64) float64 {
-	if scope == "" {
-		return c.Draw(name, n)
+	return drawScoped(c.Seed, nameMix(name), scopeMix(scope), scope != "", n)
+}
+
+// nameMix and scopeMix return the hashes of a name and a scope that the draws use, so callers
+// that draw repeatedly for the same name or scope compute them once.
+func nameMix(name string) uint64 {
+	return mix64(fnv64a(name))
+}
+
+func scopeMix(scope string) uint64 {
+	return mix64(fnv64a(scope) ^ 0x6a09e667f3bcc909)
+}
+
+// draw is Draw for the hash of a name.
+func draw(seed, nameMix, n uint64) float64 {
+	x := mix64(seed ^ nameMix ^ mix64(n+0x9e3779b97f4a7c15))
+	return float64(x>>11) / (1 << 53)
+}
+
+// drawScoped is DrawScoped for the hashes of a name and a scope; scoped reports whether the scope
+// is not "".
+func drawScoped(seed, nameMix, scopeMix uint64, scoped bool, n uint64) float64 {
+	if !scoped {
+		return draw(seed, nameMix, n)
 	}
-	x := mix64(c.Seed ^ mix64(fnv64a(name)) ^ mix64(fnv64a(scope)^0x6a09e667f3bcc909) ^ mix64(n+0x9e3779b97f4a7c15))
+	x := mix64(seed ^ nameMix ^ scopeMix ^ mix64(n+0x9e3779b97f4a7c15))
 	return float64(x>>11) / (1 << 53)
 }
 

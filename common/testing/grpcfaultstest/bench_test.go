@@ -56,7 +56,7 @@ func BenchmarkUnaryServerInterceptor_Buggify(b *testing.B) {
 	} {
 		b.Run(bc.name, func(b *testing.B) {
 			testHooks := testhooks.NewTestHooks()
-			if err := buggify.For(testHooks.Failpoints()).Set(buggify.Config{Seed: 1, Activation: bc.activation, Fire: 0}); err != nil {
+			if err := buggify.For(testHooks.Failpoints()).Set(buggify.Config{Seed: 1, Activation: bc.activation, Fire: 0, Error: "Unavailable"}); err != nil {
 				b.Fatal(err)
 			}
 			interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks, nil, primitives.HistoryService))
