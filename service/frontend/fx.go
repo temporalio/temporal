@@ -990,6 +990,7 @@ func OperatorHandlerProvider(
 	clientFactory client.Factory,
 	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -1006,6 +1007,7 @@ func OperatorHandlerProvider(
 		clientFactory,
 		namespaceRegistry,
 		nexusEndpointClient,
+		namespaceReplicationQueue,
 	}
 	return NewOperatorHandlerImpl(args)
 }

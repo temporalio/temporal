@@ -3,7 +3,6 @@ package replicator
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -194,35 +193,41 @@ func (r *Replicator) cleanupAckedMessages(
 	}
 
 	connectedClusters := r.clusterMetadata.GetAllClusterInfo()
-	highWatermark := deletedMessageID
-	connectedClustersLowWatermark := int64(math.MaxInt64)
-	for clusterName, ackLevel := range ackLevelByCluster {
-		if clusterName == r.clusterMetadata.GetCurrentClusterName() {
-			continue
+	currentClusterName := r.clusterMetadata.GetCurrentClusterName()
+	for clusterName := range ackLevelByCluster {
+		clusterInfo, ok := connectedClusters[clusterName]
+		if clusterName == currentClusterName || !ok || !clusterInfo.Enabled {
+			if err := r.namespaceReplicationQueue.DeleteAckLevel(ctx, clusterName); err != nil {
+				return deletedMessageID, err
+			}
 		}
-		if ackLevel > highWatermark {
-			highWatermark = ackLevel
-		}
-		if _, ok := connectedClusters[clusterName]; !ok {
-			continue
-		}
-		if ackLevel < connectedClustersLowWatermark {
-			connectedClustersLowWatermark = ackLevel
-		}
-	}
-	toDeleteMessageID := connectedClustersLowWatermark
-	if toDeleteMessageID == int64(math.MaxInt64) {
-		toDeleteMessageID = highWatermark
 	}
 
-	if toDeleteMessageID <= deletedMessageID {
+	var (
+		toDeleteMessageID   int64
+		hasConnectedCluster bool
+	)
+	for clusterName, clusterInfo := range connectedClusters {
+		if clusterName == currentClusterName || !clusterInfo.Enabled {
+			continue
+		}
+		ackLevel, ok := ackLevelByCluster[clusterName]
+		if !ok {
+			ackLevel = persistence.EmptyQueueMessageID
+		}
+		if !hasConnectedCluster || ackLevel < toDeleteMessageID {
+			toDeleteMessageID = ackLevel
+			hasConnectedCluster = true
+		}
+	}
+
+	if !hasConnectedCluster || toDeleteMessageID <= deletedMessageID {
 		return deletedMessageID, nil
 	}
 	err = r.namespaceReplicationQueue.DeleteMessagesBefore(ctx, toDeleteMessageID)
 	return toDeleteMessageID, err
 }
 
-// TODO: delete the ack levels on disconnected cluster
 func (r *Replicator) cleanupNamespaceReplicationQueue(
 	ctx context.Context,
 ) error {

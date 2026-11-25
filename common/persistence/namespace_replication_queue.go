@@ -70,6 +70,7 @@ type (
 			maxCount int,
 		) ([]*replicationspb.ReplicationTask, int64, error)
 		UpdateAckLevel(ctx context.Context, lastProcessedMessageID int64, clusterName string) error
+		DeleteAckLevel(ctx context.Context, clusterName string) error
 		GetAckLevels(ctx context.Context) (map[string]int64, error)
 		DeleteMessagesBefore(ctx context.Context, exclusiveMessageID int64) error
 
@@ -151,6 +152,48 @@ func (q *namespaceReplicationQueueImpl) UpdateAckLevel(
 	clusterName string,
 ) error {
 	return q.updateAckLevelWithRetry(ctx, lastProcessedMessageID, clusterName, false)
+}
+
+func (q *namespaceReplicationQueueImpl) DeleteAckLevel(
+	ctx context.Context,
+	clusterName string,
+) error {
+	for {
+		err := q.deleteAckLevel(ctx, clusterName)
+		if _, ok := err.(*ConditionFailedError); ok {
+			continue
+		}
+		return err
+	}
+}
+
+func (q *namespaceReplicationQueueImpl) deleteAckLevel(
+	ctx context.Context,
+	clusterName string,
+) error {
+	internalMetadata, err := q.queue.GetAckLevels(ctx)
+	if err != nil {
+		return err
+	}
+
+	ackLevels, err := q.ackLevelsFromBlob(internalMetadata.Blob)
+	if err != nil {
+		return err
+	}
+	if _, ok := ackLevels[clusterName]; !ok {
+		return nil
+	}
+
+	delete(ackLevels, clusterName)
+	blob, err := q.serializer.QueueMetadataToBlob(&persistencespb.QueueMetadata{
+		ClusterAckLevels: ackLevels,
+	})
+	if err != nil {
+		return err
+	}
+
+	internalMetadata.Blob = blob
+	return q.queue.UpdateAckLevel(ctx, internalMetadata)
 }
 
 func (q *namespaceReplicationQueueImpl) DeleteMessagesBefore(

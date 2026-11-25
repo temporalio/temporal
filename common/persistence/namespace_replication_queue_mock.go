@@ -53,6 +53,20 @@ func (mr *MockNamespaceReplicationQueueMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Close))
 }
 
+// DeleteAckLevel mocks base method.
+func (m *MockNamespaceReplicationQueue) DeleteAckLevel(ctx context.Context, clusterName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteAckLevel", ctx, clusterName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteAckLevel indicates an expected call of DeleteAckLevel.
+func (mr *MockNamespaceReplicationQueueMockRecorder) DeleteAckLevel(ctx, clusterName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAckLevel", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).DeleteAckLevel), ctx, clusterName)
+}
+
 // DeleteMessageFromDLQ mocks base method.
 func (m *MockNamespaceReplicationQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int64) error {
 	m.ctrl.T.Helper()
