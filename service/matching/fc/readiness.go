@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -17,6 +18,9 @@ const (
 
 type (
 	Readiness struct {
+		concurrencyServiceClient fcpb.ConcurrencyServiceClient
+		config                   readinessConfig
+
 		// Readiness state sharding and locking:
 		//
 		// The sharding and locking scheme tries to achieve high concurrency, given that we have to
@@ -38,6 +42,8 @@ type (
 		// lock protects the maps below and everything in concurrencyState and
 		// localLimiterState.
 		lock sync.Mutex
+
+		concurrencyLimiters map[string]*concurrencyState // key is nsID+key
 
 		// forward map, sorted by <pri, pointer(cb)>
 		fwd map[limiterState][]fwdMapEntry
@@ -90,13 +96,16 @@ const (
 	notifySync
 )
 
-func NewReadiness() *Readiness {
+func NewReadiness(concurrencyServiceClient fcpb.ConcurrencyServiceClient, config readinessConfig) *Readiness {
 	r := &Readiness{
-		seed: maphash.MakeSeed(),
+		seed:                     maphash.MakeSeed(),
+		concurrencyServiceClient: concurrencyServiceClient,
+		config:                   config,
 	}
 	for i := range r.shards {
 		rs := &r.shards[i]
 		rs.r = r
+		rs.concurrencyLimiters = make(map[string]*concurrencyState)
 		rs.fwd = make(map[limiterState][]fwdMapEntry)
 		rs.rev = make(map[ReadinessCallback][]revMapEntry)
 	}
@@ -124,6 +133,11 @@ func (rs *readinessShard) stop() {
 	rs.stopped = true
 	clear(rs.fwd)
 	clear(rs.rev)
+	var rsu readinessSyncUpdate
+	for _, v := range rs.concurrencyLimiters {
+		v.syncLocked(&rsu)
+	}
+	clear(rs.concurrencyLimiters)
 }
 
 func (r *Readiness) CancelAllCallbacks(nsID namespace.ID, cb ReadinessCallback) {
