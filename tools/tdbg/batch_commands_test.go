@@ -359,6 +359,14 @@ func (s *batchCommandTestSuite) TestAdminBatchRefreshTasksConfirmationShowsClust
 	}
 }
 
+func (s *batchCommandTestSuite) SetupSubTest() {
+	previousAssertions := s.Assertions
+	s.Assertions = require.New(s.T())
+	s.T().Cleanup(func() {
+		s.Assertions = previousAssertions
+	})
+}
+
 func (s *batchCommandTestSuite) TestAdminAllNamespacesBatchRefreshTasks() {
 	s.Run("starts one batch across all namespaces", func() {
 		s.output.Reset()
