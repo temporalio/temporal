@@ -55,6 +55,8 @@ CREATE TABLE executions_visibility (
   TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadCount"),
   TemporalPriorityKey BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalPriorityKey"),
   TemporalFairnessKey VARCHAR(255) GENERATED ALWAYS AS (search_attributes->>"$.TemporalFairnessKey"),
+  TemporalTimeSkippingState VARCHAR(2) GENERATED ALWAYS AS (JSON_UNQUOTE(search_attributes->"$.TemporalTimeSkippingState")),
+  TemporalTimeSkippingAccumulatedDuration BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalTimeSkippingAccumulatedDuration"),
   PRIMARY KEY (namespace_id, run_id)
 );
 
@@ -92,6 +94,8 @@ CREATE INDEX by_temporal_external_payload_size_bytes ON executions_visibility (n
 CREATE INDEX by_temporal_external_payload_count ON executions_visibility (namespace_id, TemporalExternalPayloadCount, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_priority_key ON executions_visibility (namespace_id, TemporalPriorityKey, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_fairness_key ON executions_visibility (namespace_id, TemporalFairnessKey, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_time_skipping_state ON executions_visibility (namespace_id, TemporalTimeSkippingState, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_time_skipping_accumulated_duration ON executions_visibility (namespace_id, TemporalTimeSkippingAccumulatedDuration, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 
 CREATE TABLE custom_search_attributes (
   namespace_id      CHAR(64)  NOT NULL,
