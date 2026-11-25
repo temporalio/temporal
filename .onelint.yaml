@@ -21,6 +21,7 @@ lint:
   golangci-lint:
     linters:
       # Not enabled today; turn on after the pilot.
+      # onelint:override defaults
       disable: [ineffassign, unused]
       settings:
         revive:
@@ -47,8 +48,10 @@ lint:
             # The testx profile forbids Eventually and assert; these entries
             # use the same patterns, so they replace its messages with ones that
             # name temporal's helpers.
+            # onelint:override testx
             - pattern: '(^|\.)(Eventually|Eventuallyf|EventuallyWithT|EventuallyWithTf)$'
               msg: "Use await.Require / s.Await for assertion conditions, or await.RequireTrue / s.AwaitTrue for bool predicates, instead of testify Eventually helpers"
+            # onelint:override testx
             - pattern: 'assert\.\w+'
               msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure."
             - pattern: 'temporalproto\.DeepEqual'
