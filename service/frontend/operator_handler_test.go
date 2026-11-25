@@ -836,6 +836,49 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_Elasticsearch() {
 	s.Nil(resp)
 }
 
+func (s *operatorHandlerSuite) Test_ListSearchAttributes_ElasticsearchHidesPreallocatedFields() {
+	ctx := context.Background()
+	customSearchAttributes := maps.Clone(searchattribute.TestEsNameTypeMap().Custom())
+	maps.Copy(customSearchAttributes, searchattribute.TestNameTypeMap().Custom())
+	saTypeMap := searchattribute.NewNameTypeMap(customSearchAttributes)
+	legacyOnly := searchattribute.TestEsNameTypeMap().Custom()
+
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(esconfig.PersistenceName).Return(true).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(saTypeMap, nil).AnyTimes()
+
+	// Without a namespace, only the cluster-level custom search attributes are returned.
+	resp, err := s.handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
+	s.Require().NoError(err)
+	s.Equal(legacyOnly, resp.GetCustomAttributes())
+
+	// With a namespace, its aliases of pre-allocated fields are returned too.
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: testNamespace},
+		&persistencespb.NamespaceConfig{CustomSearchAttributeAliases: map[string]string{
+			"Keyword05": "NewAttr",
+			// Same name as a cluster-level custom search attribute: not exposed.
+			"Keyword06": "CustomKeywordField",
+			// A field that is not in cluster metadata (eg: a larger pool on another cluster): not exposed.
+			"Keyword50": "OtherAttr",
+		}},
+		s.currentClusterName,
+	)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name(testNamespace)).Return(ns, nil)
+	resp, err = s.handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{Namespace: testNamespace})
+	s.Require().NoError(err)
+	expected := maps.Clone(legacyOnly)
+	expected["NewAttr"] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
+	s.Equal(expected, resp.GetCustomAttributes())
+
+	// A namespace that can't be read is an error.
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("missing")).
+		Return(nil, serviceerror.NewNamespaceNotFound("missing"))
+	_, err = s.handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{Namespace: "missing"})
+	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+	s.Require().ErrorAs(err, &namespaceNotFoundErr)
+}
+
 func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 	handler := s.handler
 	ctx := context.Background()
