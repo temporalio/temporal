@@ -4,7 +4,9 @@ import (
 	"context"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +22,28 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+func configureSharedSQLite(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+
+	// Both server processes must use the same files; in-memory databases are process-local.
+	setDefaultEnv(t, "DBNAME", filepath.Join(dir, "temporal.db"))
+	setDefaultEnv(t, "VISIBILITY_DBNAME", filepath.Join(dir, "temporal_visibility.db"))
+
+	// Devserver forces SQLITE_MODE=memory and SQLITE_CACHE=shared after inheriting our env.
+	// Override those expressions in a copy of the server template while keeping its port and cluster settings.
+	configTemplate, err := os.ReadFile(filepath.Join(sourceRoot(), "common", "config", "config_template_embedded.yaml"))
+	require.NoError(t, err)
+	configTemplate = []byte(strings.NewReplacer(
+		`(env "SQLITE_MODE")`, `"rwc"`,
+		`(env "SQLITE_CACHE")`, `"private"`,
+	).Replace(string(configTemplate)))
+
+	configPath := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, configTemplate, 0600))
+	t.Setenv("TEMPORAL_SERVER_CONFIG_FILE_PATH", configPath)
+}
 
 func registerNamespace(t *testing.T, conn *grpc.ClientConn, namespace string) {
 	t.Helper()

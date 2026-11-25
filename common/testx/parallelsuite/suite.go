@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -26,32 +27,9 @@ type TestingSuite interface {
 }
 
 // AssertionsInitializer may be implemented by an embedded suite to bind
-// additional assertions after each test, subtest, or await attempt is initialized.
+// additional assertions after each test, subtest, synctest bubble, or await attempt is initialized.
 type AssertionsInitializer interface {
 	InitAssertions()
-}
-
-// Scope provides the context and test handles for a test or await attempt.
-// It is useful for test helpers.
-type Scope interface {
-	Context() context.Context
-	TB() testing.TB
-	Require() *require.Assertions
-	AssertionT() require.TestingT
-}
-
-type contextScope struct {
-	Scope
-	ctx context.Context
-}
-
-// WithContext returns a scope that uses ctx and delegates assertions to scope.
-func WithContext(ctx context.Context, scope Scope) Scope {
-	return contextScope{Scope: scope, ctx: ctx}
-}
-
-func (s contextScope) Context() context.Context {
-	return s.ctx
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
@@ -169,6 +147,16 @@ func (s *Suite[T]) run(name string, parallel bool, fn func(T)) bool {
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
 		fn(s.copySuite(t, parallel, nil, nil).(T))
+	})
+}
+
+// Synctest runs fn with a fresh suite inside a [synctest.Test] bubble.
+// Create subtests outside the bubble.
+func (s *Suite[T]) Synctest(fn func(T)) {
+	t := s.T()
+	t.Helper()
+	synctest.Test(t, func(t *testing.T) {
+		fn(s.copySuite(t, false, nil, nil).(T))
 	})
 }
 

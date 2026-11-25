@@ -34,10 +34,46 @@ func TestCallErrorToFailure_RetriesTransientServiceErrorEvenWhenWrapped(t *testi
 func TestNewInvocationResult_RetriesTransientServiceErrorEvenWhenWrapped(t *testing.T) {
 	t.Parallel()
 
-	result, err := newInvocationResult(nil, wrappedUnavailable())
+	result, err := newInvocationResult(nil, nil, wrappedUnavailable())
 	require.NoError(t, err)
 	require.IsType(t, invocationResultRetry{}, result,
 		"wrapped Unavailable must produce a retry result, not a terminal failure")
+}
+
+// wrappedRedirectRejected returns the error http.Client.Do produces when CheckRedirect refuses a redirect.
+func wrappedRedirectRejected() error {
+	return &url.Error{
+		Op:  "Post",
+		URL: "http://169.254.169.254/latest/meta-data/",
+		Err: commonnexus.ErrRedirectNotAllowed,
+	}
+}
+
+func TestCallErrorToFailure_RedirectIsNonRetryable(t *testing.T) {
+	t.Parallel()
+
+	failure, retryable, err := callErrorToFailure(wrappedRedirectRejected())
+	require.NoError(t, err)
+	require.False(t, retryable)
+	require.True(t, failure.GetServerFailureInfo().GetNonRetryable())
+	require.False(t, isDestinationDown(wrappedRedirectRejected()),
+		"a redirecting destination is reachable and must not trip the circuit breaker")
+}
+
+func TestNewInvocationResult_RedirectFailsOperation(t *testing.T) {
+	t.Parallel()
+
+	result, err := newInvocationResult(nil, nil, wrappedRedirectRejected())
+	require.NoError(t, err)
+	require.IsType(t, invocationResultFail{}, result)
+}
+
+func TestNewCancellationResult_RedirectFailsCancellation(t *testing.T) {
+	t.Parallel()
+
+	result, err := newCancellationResult(wrappedRedirectRejected())
+	require.NoError(t, err)
+	require.IsType(t, cancellationResultFail{}, result)
 }
 
 func TestBuildCallbackURL(t *testing.T) {

@@ -159,7 +159,27 @@ func (d *ShardStore) AssertShardOwnership(
 	ctx context.Context,
 	request *p.AssertShardOwnershipRequest,
 ) error {
-	// AssertShardOwnership is not implemented for cassandra shard store
+	query := d.Session.Query(templateUpdateLeaseQuery,
+		request.RangeID,
+		request.ShardID,
+		rowTypeShard,
+		rowTypeShardNamespaceID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+		request.RangeID,
+	).WithContext(ctx)
+	applied, err := query.MapScanCAS(make(map[string]any))
+	if err != nil {
+		return gocql.ConvertError("AssertShardOwnership", err)
+	}
+	if !applied {
+		return &p.ShardOwnershipLostError{
+			ShardID: request.ShardID,
+			Msg:     fmt.Sprintf("shard %d is no longer owned at range ID %d", request.ShardID, request.RangeID),
+		}
+	}
 	return nil
 }
 
