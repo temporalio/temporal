@@ -40,6 +40,7 @@ func newStoreFaultInjector(
 
 func runtimeFaultInjector(injector config.FaultInjector) faultInjector {
 	return func(target config.FaultInjectionTarget) *fault {
+		target.NamespaceID = requestNamespaceID(target.Request)
 		err := injector(target)
 		if err == nil {
 			return nil

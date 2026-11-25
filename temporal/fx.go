@@ -643,6 +643,7 @@ func ApplyClusterMetadataConfigProvider(
 		metricsHandler,
 		telemetry.NoopTracerProvider,
 		serializer,
+		nil, // failpoints are not installed for the persistence of the cluster metadata setup
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,

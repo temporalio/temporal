@@ -18,3 +18,9 @@ var (
 	// was aborted by a closing workflow. Tests use Call to start a new workflow before the retry.
 	UpdateWithStartClosingWorkflowRetry = failpoint.NewKey("history.updateWithStart.closingWorkflowRetry")
 )
+
+// PersistenceKey returns the key of the failpoint that fires before a persistence store method
+// runs, for example PersistenceKey("ExecutionStore", "UpdateWorkflowExecution").
+func PersistenceKey(store, method string) failpoint.Key {
+	return failpoint.KeyFromName("persistence:"+store+"."+method, "")
+}

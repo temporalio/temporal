@@ -321,7 +321,7 @@ image. A server process only installs them if both of these are set, each read o
 - the `TEMPORAL_FAILPOINTS=1` environment variable.
 
 Neither is enough alone, and dynamic config cannot enable failpoints. With the switch off, nothing
-is installed: there is no failpoint registry and no gRPC fault interceptor or HTTP fault wrapper. Call sites in server
+is installed: there is no failpoint registry, no gRPC fault interceptor or HTTP fault wrapper and no persistence failpoint injector. Call sites in server
 code cost a nil check. The `test_dep` tag is not involved.
 
 When the switch is on, the server logs a warning that names the inputs of the decision, and
@@ -366,7 +366,7 @@ testcore.InjectFailpoint[error](env, failpoints.UpdateWithStartBetweenLockAndSta
 }, failpoint.Once)
 ```
 
-Failpoints also run at the gRPC and HTTP fault injection points, without a declared
+Failpoints also run at the gRPC, HTTP, and persistence fault injection points, without a declared
 key:
 
 - `failpoint.GRPCKey(fullMethod)` fires before the handler of a unary gRPC method on frontend,
@@ -379,12 +379,28 @@ key:
   `failpoint.AnyHTTPResponseKey` fire for every method or request, if the failpoint of the method
   or request did not fire with any action (a pause or a callback that returns nil also counts). A
   `CallWith` callback receives the request before the handler, and a `grpcfaults.Result` or
-  `httpfaults.Result` after it.
+  `httpfaults.Result` after it. - `failpoints.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution")` fires before a
+  persistence store method.
 
-gRPC and HTTP failpoints are scoped to the namespace ID of the request when it has
+gRPC, HTTP, and persistence failpoints are scoped to the namespace ID of the request when it has
 one (frontend resolves the namespace name of a request to its ID), so `testcore.InjectFailpoint` works for them on a shared cluster. A failpoint without a scope
 applies to all namespaces, but only to requests whose namespace has no failpoint registered for the
 same key. A failpoint registered for the namespace takes precedence, even when it is disabled.
+
+Only store methods that take a request after the context have a persistence failpoint. Of these,
+the requests of the following methods have no namespace, so only failpoints without a scope fire for
+them:
+
+- `ShardStore`, `ClusterMetadataStore`, `Queue`, `QueueV2`, and `NexusEndpointStore`: all methods.
+- `ExecutionStore`: history branch methods (`AppendHistoryNodes`, `ReadHistoryBranch`, ...), history
+  task methods (`GetHistoryTasks`, `CompleteHistoryTask`, `RangeCompleteHistoryTasks`),
+  `ListConcreteExecutions`, and the replication DLQ methods except `PutReplicationTaskToDLQ`.
+- `MetadataStore`: `ListNamespaces`, `DeleteNamespaceByName`, and `GetNamespace` by name.
+- `TaskStore`: `ListTaskQueue`.
+
+Inject failpoints for these methods with `testcore.InjectGlobalFailpoint`, which requires a
+dedicated cluster. `common/persistence/faultinjection/namespace.go` maps each request type to its
+namespace.
 
 The server does not serve a gRPC API to configure failpoints. Tests configure the failpoints of
 their cluster in process (`testcore.InjectFailpoint`).

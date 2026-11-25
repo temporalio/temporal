@@ -4,11 +4,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/persistence"
+	persistenceclient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/httpfaultstest"
@@ -20,6 +26,34 @@ func lookupEnv(env map[string]string) func(string) (string, bool) {
 		value, ok := env[name]
 		return value, ok
 	}
+}
+
+// fakeDataStoreFactory is the data store factory of a custom data store.
+type fakeDataStoreFactory struct {
+	persistence.DataStoreFactory
+}
+
+type fakeAbstractDataStoreFactory struct {
+	created *fakeDataStoreFactory
+}
+
+func (f fakeAbstractDataStoreFactory) NewFactory(
+	config.CustomDatastoreConfig, resolver.ServiceResolver, string, log.Logger, metrics.Handler, serialization.Serializer,
+) persistence.DataStoreFactory {
+	return f.created
+}
+
+func newDataStoreFactory(source *failpoints.Source) (persistence.DataStoreFactory, *fakeDataStoreFactory) {
+	created := &fakeDataStoreFactory{}
+	cfg := &config.Persistence{
+		DefaultStore: "custom",
+		DataStores:   map[string]config.DataStore{"custom": {CustomDataStoreConfig: &config.CustomDatastoreConfig{Name: "custom"}}},
+	}
+	factory := persistenceclient.DataStoreFactoryProvider(
+		"cluster", resolver.NewNoopResolver(), cfg, fakeAbstractDataStoreFactory{created: created},
+		log.NewNoopLogger(), metrics.NoopMetricsHandler, telemetry.NoopTracerProvider, nil, source,
+	)
+	return factory, created
 }
 
 // TestResolveFailpoints_RequiresConfigAndEnv checks that neither the config setting nor the
@@ -99,6 +133,10 @@ func TestFailpointsOff(t *testing.T) {
 			}
 			require.Nil(t, httpfaultstest.NewGenerator(source))
 
+			// The persistence factory is not wrapped for failpoints.
+			factory, created := newDataStoreFactory(source)
+			require.Same(t, created, factory)
+
 		})
 	}
 }
@@ -112,6 +150,8 @@ func TestFailpointsOn(t *testing.T) {
 	require.NotNil(t, source.Failpoints())
 	require.NotNil(t, grpcfaultstest.NewGenerator(source, nil, primitives.HistoryService))
 	require.NotNil(t, httpfaultstest.NewGenerator(source))
+	factory, created := newDataStoreFactory(source)
+	require.NotSame(t, created, factory)
 }
 
 func TestWithFailpointSourceObserver_Composes(t *testing.T) {
