@@ -29,15 +29,16 @@ const peerHealthCheckMaxConcurrentProbes = 50
 // minPeerHealthCheckInterval guards against a non-positive dynamic config value, which would panic time.NewTicker or spin time.NewTimer.
 const minPeerHealthCheckInterval = time.Second
 
-// peerProbeOutcome classifies one probe. Only timeouts count as failures.
+// peerProbeOutcome classifies one probe. Timeouts and routing errors count as failures.
 type peerProbeOutcome string
 
 const (
 	peerProbeResponse   peerProbeOutcome = "response"   // the host answered, with any status
 	peerProbeRefused    peerProbeOutcome = "refused"    // connection refused: the host is reachable but not listening
 	peerProbeTimeout    peerProbeOutcome = "timeout"    // no answer in time
-	peerProbeUnresolved peerProbeOutcome = "unresolved" // DNS or routing error
-	peerProbeUnknown    peerProbeOutcome = "unknown"    // cancelled, cut off by the round deadline, or unrecognized
+	peerProbeNetwork    peerProbeOutcome = "network"    // routing error
+	peerProbeUnresolved peerProbeOutcome = "unresolved" // DNS error
+	peerProbeUnknown    peerProbeOutcome = "unknown"    // canceled or unrecognized
 )
 
 const (
@@ -74,7 +75,7 @@ type (
 		logger         log.Logger
 
 		lifecycleMu sync.Mutex // serializes Start and Stop so cancel is set before Stop can read it
-		status      int32
+		status      atomic.Int32
 		cancel      context.CancelFunc
 		wg          sync.WaitGroup
 		probeSlots  chan struct{}
@@ -112,12 +113,13 @@ func newPeerHealthChecker(
 }
 
 // samplePeerHosts returns a random subset of hosts without mutating the input.
-// The size is min(len(hosts), maxHosts, max(1, ceil(len(hosts)*pct))), or 0 when hosts is empty or maxHosts is not positive.
-func samplePeerHosts(hosts []membership.HostInfo, pct float64, maxHosts int) []membership.HostInfo {
-	if len(hosts) == 0 || maxHosts <= 0 {
+// When possible, the sample includes room for the minimum number of failed probes and a reachable host.
+func samplePeerHosts(hosts []membership.HostInfo, pct float64, minFailedHosts int) []membership.HostInfo {
+	if len(hosts) == 0 {
 		return nil
 	}
-	n := min(len(hosts), maxHosts, max(1, int(math.Ceil(float64(len(hosts))*pct))))
+	minSample := min(len(hosts)-1, minFailedHosts) + 1
+	n := min(len(hosts), max(minSample, int(math.Ceil(float64(len(hosts))*pct))))
 	shuffled := slices.Clone(hosts)
 	rand.Shuffle(len(shuffled), func(i, j int) {
 		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
@@ -126,38 +128,37 @@ func samplePeerHosts(hosts []membership.HostInfo, pct float64, maxHosts int) []m
 }
 
 // runRound probes a random sample of hosts for each role and returns the round verdict: pass, fail or unknown.
-// Probes the round deadline cuts off, or that never start, count as unknown. A role without members or a resolver makes the verdict unknown, unless another role fails.
-// The verdict is unknown when no role could be probed.
+// A role without members or a resolver makes the verdict unknown, unless another role fails.
 func (c *peerHealthChecker) runRound(ctx context.Context) string {
-	parentCtx := ctx
-	ctx, cancel := context.WithTimeout(parentCtx, c.roundTimeout())
-	defer cancel()
-
-	targets, plannedPerRole := c.sampleProbeTargets()
+	if ctx.Err() != nil {
+		return peerRoundUnknown
+	}
+	minFailedHosts := c.minFailedHosts()
+	targets, plannedPerRole := c.sampleProbeTargets(minFailedHosts)
 	if len(targets) == 0 {
 		return peerRoundUnknown
 	}
-	// Buffered to the total probe count so probes that outlive the round never block.
-	results := make(chan peerProbeResult, len(targets))
-	c.launchProbes(ctx, targets, results)
+	results := make(chan peerProbeResult)
+	go c.launchProbes(ctx, targets, results)
 	counts, representativeErrors := c.collectProbeResults(ctx, plannedPerRole, results)
-	if parentCtx.Err() != nil {
+	if ctx.Err() != nil {
 		return peerRoundUnknown
 	}
-	return c.evaluateRound(plannedPerRole, counts, representativeErrors)
+	return c.evaluateRound(plannedPerRole, counts, representativeErrors, minFailedHosts)
 }
 
 // sampleProbeTargets samples hosts for every role. A role with a resolver error or no available hosts is logged and left out.
-func (c *peerHealthChecker) sampleProbeTargets() ([]peerProbeTarget, map[primitives.ServiceName]int) {
+func (c *peerHealthChecker) sampleProbeTargets(minFailedHosts int) ([]peerProbeTarget, map[primitives.ServiceName]int) {
 	var targets []peerProbeTarget
 	plannedPerRole := make(map[primitives.ServiceName]int, len(peerHealthCheckRoles))
+	percentage := c.samplePercentage()
 	for _, role := range peerHealthCheckRoles {
 		resolver, err := c.monitor.GetResolver(role)
 		if err != nil {
 			c.logger.Warn("peer health check failed to get resolver", tag.NewStringTag("target-service", string(role)), tag.Error(err))
 			continue
 		}
-		hosts := samplePeerHosts(resolver.AvailableMembers(), c.samplePercentage(), c.maxHostsPerRole())
+		hosts := samplePeerHosts(resolver.AvailableMembers(), percentage, minFailedHosts)
 		if len(hosts) == 0 {
 			c.logger.Warn("peer health check found no available hosts", tag.NewStringTag("target-service", string(role)))
 			continue
@@ -170,21 +171,27 @@ func (c *peerHealthChecker) sampleProbeTargets() ([]peerProbeTarget, map[primiti
 	return targets, plannedPerRole
 }
 
-// launchProbes starts one goroutine per target, with at most peerHealthCheckMaxConcurrentProbes running at once across rounds.
-// A goroutine that is still waiting for a slot when the round ends exits without sending a result.
+// launchProbes acquires a shared slot before starting each probe goroutine.
 func (c *peerHealthChecker) launchProbes(ctx context.Context, targets []peerProbeTarget, results chan<- peerProbeResult) {
 	for _, target := range targets {
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case c.probeSlots <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
 		go func() {
-			select {
-			case c.probeSlots <- struct{}{}:
-			case <-ctx.Done():
-				return
-			}
 			defer func() { <-c.probeSlots }()
 			if ctx.Err() != nil {
 				return
 			}
-			results <- c.runProbe(ctx, target)
+			result := c.runProbe(ctx, target)
+			select {
+			case results <- result:
+			case <-ctx.Done():
+			}
 		}()
 	}
 }
@@ -200,9 +207,9 @@ func (c *peerHealthChecker) runProbe(ctx context.Context, target peerProbeTarget
 	return peerProbeResult{role: target.role, outcome: outcome, err: err}
 }
 
-// classifyPeerProbeError maps a probe error to an outcome using both round and probe context state.
-func classifyPeerProbeError(roundCtx, probeCtx context.Context, err error) peerProbeOutcome {
-	if roundCtx.Err() != nil {
+// classifyPeerProbeError distinguishes checker cancellation from an individual probe timeout.
+func classifyPeerProbeError(ctx, probeCtx context.Context, err error) peerProbeOutcome {
+	if ctx.Err() != nil {
 		return peerProbeUnknown
 	}
 	if err == nil {
@@ -232,9 +239,6 @@ func classifyPeerProbeError(roundCtx, probeCtx context.Context, err error) peerP
 		return peerProbeTimeout
 	case code == codes.DeadlineExceeded:
 		// grpc-go can observe an elapsed deadline before the context timer signals cancellation.
-		if deadline, ok := roundCtx.Deadline(); ok && time.Until(deadline) <= 0 {
-			return peerProbeUnknown
-		}
 		if deadline, ok := probeCtx.Deadline(); ok && time.Until(deadline) <= 0 {
 			return peerProbeTimeout
 		}
@@ -257,15 +261,20 @@ func classifyPeerTransportError(msg string, unavailableStatus bool) peerProbeOut
 		return peerProbeRefused
 	case strings.Contains(msg, "i/o timeout"), strings.Contains(msg, "context deadline exceeded"), strings.Contains(msg, "connection timed out"), strings.Contains(msg, "operation timed out"):
 		return peerProbeTimeout
-	case strings.Contains(msg, "no such host"), strings.Contains(msg, "no route to host"), strings.Contains(msg, "network is unreachable"):
+	case strings.Contains(msg, "no such host"):
 		return peerProbeUnresolved
+	case strings.Contains(msg, "no route to host"), strings.Contains(msg, "network is unreachable"):
+		if strings.Contains(msg, "lookup ") {
+			// The routing error may be for the DNS server.
+			return peerProbeUnresolved
+		}
+		return peerProbeNetwork
 	}
 	return peerProbeUnknown
 }
 
-// collectProbeResults tallies probe outcomes per role until every probe reports or the round ends.
-// Every planned probe that has not reported by then counts as unknown, so each role's counts sum to its planned count.
-// It records one probe metric per planned probe, unless the round was cut short by Stop.
+// collectProbeResults tallies probe outcomes per role and records metrics once all probes report.
+// Cancellation discards the round.
 func (c *peerHealthChecker) collectProbeResults(
 	ctx context.Context,
 	plannedPerRole map[primitives.ServiceName]int,
@@ -273,64 +282,44 @@ func (c *peerHealthChecker) collectProbeResults(
 ) (map[primitives.ServiceName]map[peerProbeOutcome]int, map[primitives.ServiceName]error) {
 	counts := make(map[primitives.ServiceName]map[peerProbeOutcome]int, len(plannedPerRole))
 	representativeErrors := make(map[primitives.ServiceName]error, len(plannedPerRole))
-	record := func(r peerProbeResult) {
-		counts[r.role][r.outcome]++
-		if r.outcome == peerProbeTimeout && representativeErrors[r.role] == nil {
-			representativeErrors[r.role] = r.err
-		}
-	}
 	total := 0
 	for role, planned := range plannedPerRole {
 		counts[role] = make(map[peerProbeOutcome]int)
 		total += planned
 	}
-collect:
 	for range total {
 		select {
 		case r := <-results:
-			record(r)
+			counts[r.role][r.outcome]++
+			if (r.outcome == peerProbeTimeout || r.outcome == peerProbeNetwork) && representativeErrors[r.role] == nil {
+				representativeErrors[r.role] = r.err
+			}
 		case <-ctx.Done():
-			// Results already in the channel are real answers, so count them before giving up on the rest.
-			for len(results) > 0 {
-				record(<-results)
-			}
-			// Only a round deadline is worth a warning; a cancelled parent means shutdown.
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				c.logger.Warn("peer health check round timed out", tag.Error(ctx.Err()))
-			}
-			break collect
+			return nil, nil
 		}
 	}
-	// A round cut short by Stop is discarded by tick, so it records nothing.
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return counts, representativeErrors
+	if ctx.Err() != nil {
+		return nil, nil
 	}
-	for role, planned := range plannedPerRole {
-		reported := 0
-		for _, n := range counts[role] {
-			reported += n
-		}
-		counts[role][peerProbeUnknown] += planned - reported
-		for outcome, n := range counts[role] {
-			if n > 0 {
-				c.metricsHandler.Counter(metrics.FrontendPeerHealthCheckProbe.Name()).
-					Record(int64(n), metrics.StringTag("target_service", string(role)), metrics.OutcomeTag(string(outcome)))
-			}
+	for role, outcomes := range counts {
+		for outcome, n := range outcomes {
+			c.metricsHandler.Counter(metrics.FrontendPeerHealthCheckProbe.Name()).
+				Record(int64(n), metrics.StringTag("target_service", string(role)), metrics.OutcomeTag(string(outcome)))
 		}
 	}
 	return counts, representativeErrors
 }
 
 // evaluateRound judges each role on its own, so roles are never combined.
-// A role fails when its timed-out ratio reaches the threshold and at least minFailedHosts probes timed out.
+// A role fails when timeouts and routing errors meet both the ratio and minimum count thresholds.
 // A role where no sampled host responded or refused is a downstream outage, not a frontend problem, so it does not fail.
 func (c *peerHealthChecker) evaluateRound(
 	plannedPerRole map[primitives.ServiceName]int,
 	counts map[primitives.ServiceName]map[peerProbeOutcome]int,
 	representativeErrors map[primitives.ServiceName]error,
+	minFailedHosts int,
 ) string {
 	threshold := c.failureThreshold()
-	minFailedHosts := c.minFailedHosts()
 	verdict := peerRoundPass
 	for _, role := range peerHealthCheckRoles {
 		planned := plannedPerRole[role]
@@ -342,12 +331,13 @@ func (c *peerHealthChecker) evaluateRound(
 			continue
 		}
 		roleCounts := counts[role]
-		timeouts := roleCounts[peerProbeTimeout]
+		failures := roleCounts[peerProbeTimeout] + roleCounts[peerProbeNetwork]
 		logRole := func(msg string) {
 			tags := []tag.Tag{
 				tag.NewStringTag("target-service", string(role)),
 				tag.NewInt("planned", planned),
-				tag.NewInt("timeout", timeouts),
+				tag.NewInt("timeout", roleCounts[peerProbeTimeout]),
+				tag.NewInt("network", roleCounts[peerProbeNetwork]),
 				tag.NewInt("refused", roleCounts[peerProbeRefused]),
 				tag.NewInt("unresolved", roleCounts[peerProbeUnresolved]),
 				tag.NewInt("unknown", roleCounts[peerProbeUnknown]),
@@ -372,11 +362,11 @@ func (c *peerHealthChecker) evaluateRound(
 		meetsFailureThreshold := func(n int) bool {
 			return n >= minFailedHosts && float64(n)/float64(planned) >= threshold
 		}
-		if meetsFailureThreshold(timeouts) {
+		if meetsFailureThreshold(failures) {
 			logRole("peer health check role failed")
 			verdict = peerRoundFail
-		} else if verdict == peerRoundPass && meetsFailureThreshold(timeouts+roleCounts[peerProbeUnknown]) {
-			// The unfinished or inconclusive probes could still change the verdict.
+		} else if verdict == peerRoundPass && meetsFailureThreshold(failures+roleCounts[peerProbeUnknown]) {
+			// The inconclusive probes could change the verdict.
 			verdict = peerRoundUnknown
 		}
 	}
@@ -387,7 +377,7 @@ func (c *peerHealthChecker) evaluateRound(
 func (c *peerHealthChecker) Start() {
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
-	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+	if !c.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -401,10 +391,10 @@ func (c *peerHealthChecker) Start() {
 func (c *peerHealthChecker) Stop() {
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
-	if atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusInitialized, common.DaemonStatusStopped) {
+	if c.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStopped) {
 		return
 	}
-	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+	if !c.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 	c.cancel()
@@ -421,20 +411,11 @@ func (c *peerHealthChecker) interval() time.Duration {
 
 // The accessors below fall back to defaults for out-of-range dynamic config values, so a bad value cannot fail every frontend closed at once.
 
-// probeTimeout stays below the round timeout: the round cuts off a longer probe as unknown, so a stuck host could never count as timed out.
 func (c *peerHealthChecker) probeTimeout() time.Duration {
-	round := c.roundTimeout()
-	if d := c.config.Settings().ProbeTimeout; d > 0 && d < round {
+	if d := c.config.Settings().ProbeTimeout; d > 0 {
 		return d
 	}
-	return min(dynamicconfig.DefaultPeerHealthCheckSettings.ProbeTimeout, round/2)
-}
-
-func (c *peerHealthChecker) roundTimeout() time.Duration {
-	if d := c.config.Settings().RoundTimeout; d > 0 {
-		return d
-	}
-	return dynamicconfig.DefaultPeerHealthCheckSettings.RoundTimeout
+	return dynamicconfig.DefaultPeerHealthCheckSettings.ProbeTimeout
 }
 
 func (c *peerHealthChecker) samplePercentage() float64 {
@@ -456,13 +437,6 @@ func (c *peerHealthChecker) minFailedHosts() int {
 		return n
 	}
 	return dynamicconfig.DefaultPeerHealthCheckSettings.MinFailedHosts
-}
-
-func (c *peerHealthChecker) maxHostsPerRole() int {
-	if n := c.config.Settings().MaxHostsPerRole; n > 0 {
-		return n
-	}
-	return dynamicconfig.DefaultPeerHealthCheckSettings.MaxHostsPerRole
 }
 
 func (c *peerHealthChecker) loop(ctx context.Context) {
