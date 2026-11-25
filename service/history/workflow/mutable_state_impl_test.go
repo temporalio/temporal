@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -74,6 +73,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/testx/softassert"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -6444,7 +6444,7 @@ func (s *mutableStateSuite) TestCloseTransactionIfClean_VerifyOnly() {
 		s.Run(tc.name, func() {
 			mutableState, mockChasmTree := s.newCleanCheckMutableState(chasm.WorkflowArchetypeID + 101)
 			logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-			failedAssertion := logger.Expect(testlogger.Error, "judged clean", tag.FailedAssertion)
+			failedAssertion := logger.Expect(testlogger.Error, "judged clean", softassert.FailedAssertion)
 			mutableState.logger = logger
 			mockChasmTree.EXPECT().CloseTransactionIfClean(true).Return(true, nil).Times(1)
 
