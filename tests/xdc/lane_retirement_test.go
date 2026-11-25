@@ -27,12 +27,15 @@ import (
 )
 
 // TestLaneRetirementWithContinuousWrites keeps one workflow writing on the source shard
-// throughout retirement, then compares its complete history on both clusters.
+// throughout retirement, then compares its complete history on both clusters. The writer is far
+// faster than the drain cap, so the lane catches up and retires only because its drain adds the
+// tasks that keep arriving to the cap.
 func (s *streamBasedReplicationTestSuite) TestLaneRetirementWithContinuousWrites() {
 	if !s.laneStreams {
 		s.T().Skip("replication lanes require lane streams")
 	}
 	active, standby := s.clusters[0], s.clusters[1]
+	active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneDrainTasksPerSecond, 10.0)
 	stopIsolation := active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, []dynamicconfig.ReplicationLaneIsolationEntry{{
 		RemoteCluster: standby.ClusterName(), NamespaceID: s.namespaceID, TasksPerSecond: 1,
 	}})
@@ -176,7 +179,8 @@ func completeHistory(ctx context.Context, client workflowservice.WorkflowService
 }
 
 // TestLaneRetirementBacklogDoesNotBackfill releases a backlog of workflows and gives
-// each a newer event. The passive must receive their prefixes before those new events.
+// each a newer event, with the drain uncapped. The passive must receive their prefixes before
+// those new events.
 func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfill() {
 	s.laneRetirementBacklog(0)
 }
@@ -263,9 +267,9 @@ func (s *streamBasedReplicationTestSuite) laneRetirementBacklog(drainCap float64
 		return name == metrics.ReplicationTasksBackFill.Name() && recording.Tags["namespace"] == namespaceName
 	})
 	s.T().Cleanup(func() { handler.StopCapture(capture) })
+	active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneDrainTasksPerSecond, drainCap)
 	var drainCapture *metricstest.Capture
 	if drainCap > 0 {
-		active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneDrainTasksPerSecond, drainCap)
 		activeHandler, ok := active.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 		s.Require().True(ok)
 		drainCapture = activeHandler.StartCaptureWithFilter(func(name string, _ *metricstest.CapturedRecording) bool {

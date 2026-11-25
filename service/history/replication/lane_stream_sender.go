@@ -95,6 +95,8 @@ type laneStreamSender struct {
 	laneLimiters   map[string]LaneLimiter
 	// laneDrainLimiters cap the drain of lanes the policy withdrew.
 	laneDrainLimiters map[string]LaneLimiter
+	// laneIntakes measure how fast tasks arrive for each lane, which a drain adds to its cap.
+	laneIntakes map[string]*laneIntake
 	// laneRefusedAt is when each lane's limiter last refused a send.
 	laneRefusedAt map[string]time.Time
 	laneLoopsOnce sync.Once
@@ -152,6 +154,7 @@ func newLaneStreamSender(
 		initialLaneState:        make(chan struct{}),
 		laneLimiters:            make(map[string]LaneLimiter),
 		laneDrainLimiters:       make(map[string]LaneLimiter),
+		laneIntakes:             make(map[string]*laneIntake),
 		laneRefusedAt:           make(map[string]time.Time),
 	}
 	// Lanes split HIGH priority traffic, so they require the tiered stack.
@@ -639,6 +642,8 @@ Loop:
 				metrics.ToClusterTag(s.clientClusterName),
 				metrics.ReplicationLaneTag(owner),
 			)
+			// The lane that owns the task sends it, so the task counts toward that lane's intake.
+			s.laneIntake(owner).recordSkip(s.shardContext.GetTimeSource().Now())
 			continue Loop
 		}
 		if !target.accepts(item) {
