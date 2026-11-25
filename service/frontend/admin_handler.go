@@ -1112,7 +1112,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			Transport: namespaceMutationTransport(request),
 		})
 		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
-		if request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
+		if isOperatorRepair(request) {
 			// Refuse what the payload shows. The executor also checks the stored
 			// namespace that the repair would update.
 			if err := adh.checkNamespaceRepairPolicy(ctx, payloadTask.GetId(), payloadTask.GetInfo().GetName(), payloadTask.GetInfo().GetData()); err != nil {
@@ -1148,7 +1148,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
 			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
 				Admission:      nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer()},
-				OperatorRepair: request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+				OperatorRepair: isOperatorRepair(request),
 			})
 		}, policy, func(err error) bool {
 			_, retryable := errors.AsType[*serviceerror.Unavailable](err)

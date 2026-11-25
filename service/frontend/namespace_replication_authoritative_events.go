@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
@@ -96,43 +95,20 @@ func tagOperatorRepairObservation(
 	request *adminservice.ApplyNamespaceMutationRequest,
 	observation *nsreplication.CHASMAuthoritativeApplyObservation,
 ) {
-	if attribution := request.GetAttribution(); attribution.GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
-		if observation.Details == nil {
-			observation.Details = make(map[string]any)
-		}
-		observation.Transport = nsreplication.OperatorRepair
-		observation.Mode = nsreplication.OperatorRepair
-		observation.Details["repair_id"] = attribution.GetRepairId()
-		observation.Details["operator_reason"] = attribution.GetReason()
+	if !isOperatorRepair(request) {
+		return
 	}
-}
-
-func validateNamespaceMutationAttribution(request *adminservice.ApplyNamespaceMutationRequest) error {
-	attribution := request.GetAttribution()
-	if attribution == nil {
-		return nil
+	if observation.Details == nil {
+		observation.Details = make(map[string]any)
 	}
-	switch attribution.GetOrigin() {
-	case adminservice.NamespaceMutationAttribution_ORIGIN_UNSPECIFIED:
-		if attribution.GetRepairId() != "" || attribution.GetReason() != "" {
-			return serviceerror.NewInvalidArgument("namespace mutation attribution origin is required")
-		}
-		return nil
-	case adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR:
-		if request.GetShadow() {
-			return serviceerror.NewInvalidArgument("operator repair cannot use shadow apply")
-		}
-		if attribution.GetRepairId() == "" || attribution.GetReason() == "" {
-			return serviceerror.NewInvalidArgument("operator repair attribution requires repair_id and reason")
-		}
-		return nil
-	default:
-		return serviceerror.NewInvalidArgument("unknown namespace mutation attribution origin")
-	}
+	observation.Transport = nsreplication.OperatorRepair
+	observation.Mode = nsreplication.OperatorRepair
+	observation.Details["repair_id"] = request.GetAttribution().GetRepairId()
+	observation.Details["operator_reason"] = request.GetAttribution().GetReason()
 }
 
 func namespaceMutationTransport(request *adminservice.ApplyNamespaceMutationRequest) string {
-	if request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
+	if isOperatorRepair(request) {
 		return nsreplication.OperatorRepair
 	}
 	return nsreplication.CHASMReplicationTransport

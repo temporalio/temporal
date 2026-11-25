@@ -91,7 +91,7 @@ func (adh *AdminHandler) ApplyRemoteClusterNamespaceRepair(
 	if mutation.GetShadow() {
 		return nil, serviceerror.NewInvalidArgument("shadow mutations are not relayed")
 	}
-	if mutation.GetAttribution().GetOrigin() != adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
+	if !isOperatorRepair(mutation) {
 		return nil, serviceerror.NewInvalidArgument("only operator-repair mutations are relayed")
 	}
 	// Refuse before contacting the peer. The peer checks the policy again and

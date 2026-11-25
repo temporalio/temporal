@@ -53,6 +53,49 @@ func repairPolicyTestMutation(t *testing.T, data map[string]string) *adminservic
 	}
 }
 
+// Only well-formed operator-repair attribution reaches the operator-repair path;
+// anything else is rejected before the payload is read or applied.
+func TestNamespaceMutationRejectsInvalidAttribution(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		shadow      bool
+		attribution *adminservice.NamespaceMutationAttribution
+		wantError   string
+	}{
+		{name: "audit fields without an origin", attribution: &adminservice.NamespaceMutationAttribution{RepairId: "repair-id"},
+			wantError: "attribution origin is required"},
+		{name: "operator repair as shadow", shadow: true, attribution: &adminservice.NamespaceMutationAttribution{
+			Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR, RepairId: "repair-id", Reason: "repair",
+		}, wantError: "cannot use shadow apply"},
+		{name: "operator repair without repair id", attribution: &adminservice.NamespaceMutationAttribution{
+			Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR, Reason: "repair",
+		}, wantError: "requires repair_id and reason"},
+		{name: "operator repair without reason", attribution: &adminservice.NamespaceMutationAttribution{
+			Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR, RepairId: "repair-id",
+		}, wantError: "requires repair_id and reason"},
+		{name: "unknown origin", attribution: &adminservice.NamespaceMutationAttribution{
+			Origin: adminservice.NamespaceMutationAttribution_Origin(99), RepairId: "repair-id", Reason: "repair",
+		}, wantError: "unknown namespace mutation attribution origin"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			// No executor expectations: a rejected request must not be applied.
+			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t),
+				metricsHandler: metrics.NoopMetricsHandler, namespaceMutationExecutor: nsreplication.NewMockMutationTaskExecutor(ctrl)}
+			payload, err := nsreplication.MarshalNamespaceTask(shadowObservationTask())
+			require.NoError(t, err)
+			_, err = handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
+				NamespaceTaskPayload: payload, SourceCluster: "cellA", Shadow: tc.shadow, Attribution: tc.attribution,
+			})
+			var invalid *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalid)
+			require.ErrorContains(t, err, tc.wantError)
+		})
+	}
+}
+
 func TestNamespaceRepairPolicyGuardsOperatorRepairApply(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
