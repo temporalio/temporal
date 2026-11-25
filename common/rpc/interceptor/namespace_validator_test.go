@@ -1273,9 +1273,9 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_LifecycleRequest
 	s.ErrorIs(err, errBothNamespaceIDAndNameSet)
 }
 
-// Test_Intercept_StartAdminBatchOperation covers that a refresh across all namespaces ignores
+// TestInterceptStartAdminBatchOperation covers that a refresh across all namespaces ignores
 // Namespace, while any other admin batch still requires it.
-func (s *namespaceValidatorSuite) Test_Intercept_StartAdminBatchOperation() {
+func (s *namespaceValidatorSuite) TestInterceptStartAdminBatchOperation() {
 	testCases := []struct {
 		name    string
 		req     *adminservice.StartAdminBatchOperationRequest

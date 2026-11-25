@@ -11,17 +11,18 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tools/tdbg"
@@ -337,24 +338,41 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0
 	s.NoError(err, "admin batch operation should succeed because it uses a separate limit")
 }
 
-// TestTdbgRefreshTasks_AllNamespaces runs one batch job over all namespaces and verifies it
+// TestTdbgRefreshTasksAllNamespaces runs one batch job over all namespaces and verifies it
 // refreshes the matching executions in every namespace.
-func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_AllNamespaces() {
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasksAllNamespaces() {
 	// The batch workflow runs on the system namespace's per-namespace worker.
 	env := s.newTestEnv(testcore.WithWorkerService("batch operations"))
-	workflowTypeName := "admin-batch-refresh-wf-" + uuid.NewString()
-	query := fmt.Sprintf("WorkflowType = '%s'", workflowTypeName)
+	tv := testvars.New(s.T())
+	query := fmt.Sprintf("WorkflowType = '%s'", tv.WorkflowType().GetName())
+	type refreshTarget struct {
+		request *adminservice.DescribeMutableStateRequest
+		clock   int64
+	}
+	var executions []refreshTarget
 	startWorkflows := func(ns string, count int) {
 		for range count {
-			_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
-				RequestId:          uuid.NewString(),
+			workflowVars := tv.WithWorkflowIDNumber(len(executions))
+			resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:          workflowVars.RequestID(),
 				Namespace:          ns,
-				WorkflowId:         "admin-batch-refresh-" + uuid.NewString(),
-				WorkflowType:       &commonpb.WorkflowType{Name: workflowTypeName},
-				TaskQueue:          &taskqueuepb.TaskQueue{Name: "admin-batch-refresh-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				WorkflowId:         workflowVars.WorkflowID(),
+				WorkflowType:       tv.WorkflowType(),
+				TaskQueue:          tv.TaskQueue(),
 				WorkflowRunTimeout: durationpb.New(time.Hour),
 			})
 			s.NoError(err)
+			request := &adminservice.DescribeMutableStateRequest{
+				Namespace: ns,
+				Execution: workflowVars.WithRunID(resp.GetRunId()).WorkflowExecution(),
+				Archetype: chasm.WorkflowArchetype,
+			}
+			state, err := env.AdminClient().DescribeMutableState(s.Context(), request)
+			s.NoError(err)
+			executions = append(executions, refreshTarget{
+				request: request,
+				clock:   state.GetDatabaseMutableState().GetExecutionInfo().GetTaskGenerationShardClockTimestamp(),
+			})
 		}
 		s.Await(func(s *AdminBatchRefreshWorkflowTasksTestSuite) {
 			resp, err := env.AdminClient().CountExecutions(s.Context(), &adminservice.CountExecutionsRequest{Namespace: ns, Query: query})
@@ -367,7 +385,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_AllNamesp
 	startWorkflows(externalNS, 1)
 	startWorkflows(primitives.SystemLocalNamespace, 1)
 
-	jobID := uuid.NewString()
+	jobID := tv.WorkflowID()
 	s.NoError(s.runTdbg(env,
 		"--"+tdbg.FlagYes,
 		"execution", "refresh-tasks",
@@ -388,4 +406,11 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_AllNamesp
 		s.NoError(payload.Decode(resp.GetWorkflowExecutionInfo().GetMemo().GetFields()[batcher.BatchOperationStatsMemo], &stats))
 		s.Equal(batcher.BatchOperationStats{NumSuccess: 4}, stats)
 	}, 60*time.Second, time.Second)
+
+	for _, execution := range executions {
+		state, err := env.AdminClient().DescribeMutableState(s.Context(), execution.request)
+		s.NoError(err)
+		s.Greater(state.GetDatabaseMutableState().GetExecutionInfo().GetTaskGenerationShardClockTimestamp(), execution.clock,
+			"tasks were not refreshed for %s/%s", execution.request.GetNamespace(), execution.request.GetExecution().GetWorkflowId())
+	}
 }
