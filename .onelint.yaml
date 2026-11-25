@@ -1,7 +1,6 @@
 version: 1
 
 profiles:
-  temporal-api-aliases: on
   testx: on
 
 format:
@@ -20,10 +19,23 @@ lint:
     disable: [embedlit]
   golangci-lint:
     linters:
+      enable: [importas]
       # Not enabled today; turn on after the pilot.
       # onelint:override defaults
       disable: [ineffassign, unused]
       settings:
+        importas:
+          no-unaliased: true
+          no-extra-aliases: false
+          alias:
+            # Service packages are not aliased. This entry must come first,
+            # before the general API entry.
+            - pkg: go.temporal.io(/server)?/api/(\w+)service(mock)?/v1
+              alias: ""
+            - pkg: go.temporal.io/api/(\w+)/v1
+              alias: ${1}pb
+            - pkg: go.temporal.io/server/api/(\w+)/v1
+              alias: ${1}spb
         revive:
           rules:
             - name: struct-tag
