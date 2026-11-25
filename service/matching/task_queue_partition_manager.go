@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -81,7 +82,9 @@ type (
 		matchingClient      matchingservice.MatchingServiceClient
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// TODO(stephanos): move cache out of partition manager
-		cache cache.Cache // non-nil for root-partition
+		cache           cache.Cache        // non-nil for root-partition
+		activityStarts  func() cache.Cache // allocated on first use
+		recoveryStopped atomic.Bool
 
 		taskHooks []hooks.TaskHook
 
@@ -184,6 +187,7 @@ func newTaskQueuePartitionManager(
 		versionedQueues:    make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
 		userDataManager:    userDataManager,
 		rateLimitManager:   rateLimitManager,
+		activityStarts:     sync.OnceValue(newActivityStartCache),
 		scaleManager:       scaleManager,
 		defaultQueueFuture: future.NewFuture[physicalTaskQueueManager](),
 		taskHooks:          taskHooks,
@@ -263,6 +267,7 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
 // unloading the partition. For stopping and unloading a partition call unloadFromEngine instead.
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
+	pm.recoveryStopped.Store(true)
 	pm.initCancel()
 	queue, err := pm.defaultQueueFuture.Get(context.Background())
 	if err == nil {
@@ -460,6 +465,7 @@ reredirectTask:
 	}
 
 	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo, taskDispatchRevisionNumber, targetVersion)
+	syncMatchTask.allowActivityRecovery = params.allowActivityRecovery && params.forwardInfo == nil
 	pm.config.setDefaultPriority(syncMatchTask)
 	if spoolQueue != nil && spoolQueue.QueueKey().Version().BuildId() != syncMatchQueue.QueueKey().Version().BuildId() {
 		// Task is not forwarded and build ID is different on the two queues -> redirect rule is being applied.
@@ -500,7 +506,19 @@ reredirectTask:
 	if isActive {
 		outcome, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		syncMatched = outcome == syncMatchSuccess
-		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
+		var withheld *withheldActivityStartError
+		if !forwarded && syncMatched && errors.As(err, &withheld) {
+			// The backlog reader may see the row before SpoolTask returns.
+			key := activityStartKey{params.taskInfo.ActivityTransferInfo.RequestId, withheld.requestID}
+			pm.activityStarts().Put(key, &withheldActivityStart{
+				worker: withheld.worker, queue: syncMatchQueue.QueueKey().Version(), target: targetVersion,
+				redirect: syncMatchTask.redirectInfo, revision: taskDispatchRevisionNumber,
+				expires: time.Now().Add(activityStartReceiptTTL).UnixNano(), ownerStopped: &pm.recoveryStopped,
+			})
+			params.taskInfo = common.CloneProto(params.taskInfo)
+			params.taskInfo.WithheldStartRequestId = withheld.requestID
+			syncMatched = false
+		} else if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
 			if !forwarded {
@@ -1038,6 +1056,14 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		// invalid because a poller did not receive the task.
 		task.finish(nil)
 		return nil
+	}
+	if prior := taskInfo.GetWithheldStartRequestId(); prior != "" {
+		task.activityRecovery = nil
+		key := activityStartKey{taskInfo.GetActivityTransferInfo().GetRequestId(), prior}
+		if start, ok := pm.activityStarts().Get(key).(*withheldActivityStart); ok {
+			task.activityRecovery = &activityRecoveryDispatch{start: start, sameRoute: start.queue == syncMatchQueue.QueueKey().Version() &&
+				start.target.Equal(targetVersion) && start.redirect.Equal(task.redirectInfo) && start.revision == taskDispatchRevisionNumber}
+		}
 	}
 	return syncMatchQueue.AddSpooledTaskToMatcher(task)
 }

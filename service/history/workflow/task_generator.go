@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -583,16 +584,20 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 		return serviceerror.NewInternalf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID)
 	}
 
-	r.mutableState.AddTasks(&tasks.ActivityTask{
-		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		TaskQueue:        activityInfo.TaskQueue,
-		ScheduledEventID: activityInfo.ScheduledEventId,
-		Version:          activityInfo.Version,
-		Stamp:            activityInfo.Stamp,
-	})
-
+	r.mutableState.AddTasks(newActivityTransferTask(r.mutableState.GetWorkflowKey(), activityInfo))
 	return nil
+}
+
+func newActivityTransferTask(key definition.WorkflowKey, activityInfo *persistencespb.ActivityInfo) *tasks.ActivityTask {
+	return &tasks.ActivityTask{
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:          key,
+		TaskQueue:            activityInfo.TaskQueue,
+		ScheduledEventID:     activityInfo.ScheduledEventId,
+		Version:              activityInfo.Version,
+		Stamp:                activityInfo.Stamp,
+		ActivityTransferInfo: activityInfo.ActivityTransferInfo,
+	}
 }
 
 func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error {

@@ -653,6 +653,20 @@ func (c *metricClient) RecordWorkflowTaskStarted(
 	return c.client.RecordWorkflowTaskStarted(ctx, request, opts...)
 }
 
+func (c *metricClient) RecoverActivityTaskStarted(
+	ctx context.Context,
+	request *historyservice.RecoverActivityTaskStartedRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.RecoverActivityTaskStartedResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientRecoverActivityTaskStarted")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RecoverActivityTaskStarted(ctx, request, opts...)
+}
+
 func (c *metricClient) RefreshWorkflowTasks(
 	ctx context.Context,
 	request *historyservice.RefreshWorkflowTasksRequest,

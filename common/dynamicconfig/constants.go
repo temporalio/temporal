@@ -262,6 +262,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		time.Hour,
 		`Minimum retention duration for local namespaces. This value should only be lowered for testing purposes.`,
 	)
+	EnableActivityTransferRecovery = NewNamespaceBoolSetting(
+		"history.enableActivityTransferRecovery",
+		false,
+		`Generate dispatch IDs for embedded Activity transfers. Enable after History and Matching support recovery.`,
+	)
 	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
 		"system.enableActivityRetryStampIncrement",
 		false,

@@ -214,3 +214,9 @@ message LimiterRef {
   // Identifier for the reserved or committed slot. Empty for limiters that don't allocate slots.
   string slot_id = 3;
 }
+
+// Identifies one dispatch of an embedded Activity by the active History cluster.
+message ActivityTransferInfo {
+  string request_id = 1;
+  int64 namespace_failover_version = 2;
+}

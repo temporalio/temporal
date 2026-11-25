@@ -387,6 +387,7 @@ message RecordActivityTaskStartedRequest {
   bytes component_ref = 14;
   // Flow control limiters attached to this task.
   repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 15;
+  temporal.server.api.taskqueue.v1.ActivityTransferInfo activity_transfer_info = 16;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -1483,4 +1484,17 @@ message PollWorkflowExecutionTimeSkippingResponse {
 // because the existing parent coordinates are also immutable WorkflowExecutionStarted history.
 message OrphanedChildReplacementInfo {
   repeated temporal.server.api.history.v1.VersionHistoryItem parent_current_version_history_items = 1;
+}
+
+message RecoverActivityTaskStartedRequest {
+  option (routing).workflow_id = "start_request.workflow_execution.workflow_id";
+
+  string namespace_id = 1;
+  RecordActivityTaskStartedRequest start_request = 2;
+  // Set only when Matching claimed the withheld start for this worker.
+  string withheld_start_request_id = 3;
+}
+
+message RecoverActivityTaskStartedResponse {
+  RecordActivityTaskStartedResponse start_response = 1;
 }

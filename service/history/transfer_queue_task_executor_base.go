@@ -115,6 +115,8 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
+		ActivityTransferInfo:   task.ActivityTransferInfo,
+		AllowSyncMatchRecovery: task.ActivityTransferInfo != nil && transactionPolicy == historyi.TransactionPolicyActive,
 		Priority:               priority,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {

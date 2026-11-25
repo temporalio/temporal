@@ -421,7 +421,7 @@ func deserializeArchivalTask(
 func transferActivityTaskToProto(
 	activityTask *tasks.ActivityTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	info := &persistencespb.TransferTaskInfo{
 		NamespaceId:             activityTask.NamespaceID,
 		WorkflowId:              activityTask.WorkflowID,
 		RunId:                   activityTask.RunID,
@@ -437,6 +437,10 @@ func transferActivityTaskToProto(
 		VisibilityTime:          timestamppb.New(activityTask.VisibilityTimestamp),
 		Stamp:                   activityTask.Stamp,
 	}
+	if activityTask.ActivityTransferInfo != nil {
+		info.TaskDetails = &persistencespb.TransferTaskInfo_ActivityTransferInfo{ActivityTransferInfo: activityTask.ActivityTransferInfo}
+	}
+	return info
 }
 
 func transferActivityTaskFromProto(
@@ -448,12 +452,13 @@ func transferActivityTaskFromProto(
 			activityTask.WorkflowId,
 			activityTask.RunId,
 		),
-		VisibilityTimestamp: activityTask.VisibilityTime.AsTime(),
-		TaskID:              activityTask.TaskId,
-		TaskQueue:           activityTask.TaskQueue,
-		ScheduledEventID:    activityTask.ScheduledEventId,
-		Version:             activityTask.Version,
-		Stamp:               activityTask.Stamp,
+		VisibilityTimestamp:  activityTask.VisibilityTime.AsTime(),
+		TaskID:               activityTask.TaskId,
+		TaskQueue:            activityTask.TaskQueue,
+		ScheduledEventID:     activityTask.ScheduledEventId,
+		Version:              activityTask.Version,
+		Stamp:                activityTask.Stamp,
+		ActivityTransferInfo: activityTask.GetActivityTransferInfo(),
 	}
 }
 

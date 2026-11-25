@@ -297,6 +297,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory:
 		return nil
+	case *historyservice.RecoverActivityTaskStartedRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetStartRequest().GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetStartRequest().GetWorkflowExecution().GetRunId()),
+		}
+	case *historyservice.RecoverActivityTaskStartedResponse:
+		return nil
 	case *historyservice.RefreshWorkflowTasksRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetRequest().GetExecution().GetWorkflowId()),

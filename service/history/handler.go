@@ -365,6 +365,27 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	return response, nil
 }
 
+func (h *Handler) RecoverActivityTaskStarted(ctx context.Context, request *historyservice.RecoverActivityTaskStartedRequest) (*historyservice.RecoverActivityTaskStartedResponse, error) {
+	start := request.GetStartRequest()
+	if request.GetNamespaceId() == "" || start.GetNamespaceId() != request.GetNamespaceId() ||
+		start.GetWorkflowExecution().GetWorkflowId() == "" || start.GetWorkflowExecution().GetRunId() == "" ||
+		start.GetScheduledEventId() <= 0 || start.GetRequestId() == "" || start.GetPollRequest() == nil ||
+		start.GetActivityTransferInfo().GetRequestId() == "" || len(start.GetComponentRef()) != 0 ||
+		start.GetRequestId() == request.GetWithheldStartRequestId() {
+		return nil, serviceerror.NewInvalidArgument("invalid embedded Activity transfer recovery request")
+	}
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.NamespaceId), start.WorkflowExecution.WorkflowId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	response, err := engine.RecoverActivityTaskStarted(ctx, request)
+	return response, h.convertError(err)
+}
+
 // RecordWorkflowTaskStarted - Record Workflow Task started.
 func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())

@@ -33,11 +33,14 @@ const (
 	rejectCodeAccepted
 	rejectCodePaused
 	rejectCodeStartedTransition
+	rejectCodeReplayed
+	rejectCodeReplaced
 )
 
 func Invoke(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
+	recovery *historyservice.RecoverActivityTaskStartedRequest,
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -62,14 +65,14 @@ func Invoke(
 			}
 
 			response, rejectCode, err = recordActivityTaskStarted(
-				ctx, shardContext, mutableState, request, matchingClient, routingInfoCache,
+				ctx, shardContext, mutableState, request, recovery, matchingClient, routingInfoCache,
 			)
 			if err != nil {
 				return nil, err
 			}
 
 			return &api.UpdateWorkflowAction{
-				Noop: false,
+				Noop: rejectCode == rejectCodeReplayed,
 				// Create new wft if a transition started with this activity.
 				// StartDeploymentTransition rescheduled pending wft, but this creates new
 				// one if there is no pending wft.
@@ -85,6 +88,9 @@ func Invoke(
 		return nil, err
 	}
 
+	if rejectCode == rejectCodeReplaced {
+		return nil, serviceerrors.NewObsoleteMatchingTask("Activity transfer replaced by the active namespace")
+	}
 	if rejectCode == rejectCodeStartedTransition {
 		// Rejecting the activity start because the workflow is now in transition. Matching can drop
 		// the task, new activity task will be scheduled after transition completion.
@@ -106,6 +112,7 @@ func recordActivityTaskStarted(
 	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	request *historyservice.RecordActivityTaskStartedRequest,
+	recovery *historyservice.RecoverActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
 	routingInfoCache worker_versioning.RoutingInfoCache,
 ) (*historyservice.RecordActivityTaskStartedResponse, rejectCode, error) {
@@ -136,6 +143,13 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, consts.ErrActivityTaskNotFound
 	}
 
+	if request.ActivityTransferInfo != nil {
+		code, err := checkActivityTransfer(mutableState, ai, request, namespaceEntry.FailoverVersion(request.WorkflowExecution.WorkflowId))
+		if err != nil || code == rejectCodeReplaced {
+			return nil, code, err
+		}
+	}
+
 	scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, scheduledEventID)
 	if err != nil {
 		return nil, rejectCodeUndefined, err
@@ -148,26 +162,28 @@ func recordActivityTaskStarted(
 	}
 
 	if ai.StartedEventId != common.EmptyEventID {
-		// If activity is started as part of the current request scope then return a positive response
-		if ai.RequestId == requestID {
-			response.StartedTime = ai.StartedTime
-			response.Attempt = ai.Attempt
-			if ai.StartedClock != nil {
-				response.Clock = ai.StartedClock
-			} else {
-				// Activity started before the StartedClock field was added.
-				// Create a fresh clock for the shard staleness check.
-				response.Clock, err = shardContext.NewVectorClock()
-				if err != nil {
-					return nil, rejectCodeUndefined, err
-				}
-			}
-			return response, rejectCodeAccepted, nil
+		prior := recovery.GetWithheldStartRequestId()
+		if ai.RequestId != requestID && (prior == "" || ai.RequestId != prior) {
+			return nil, rejectCodeUndefined, serviceerrors.NewTaskAlreadyStarted("Activity")
 		}
-
-		// Looks like ActivityTask already started as a result of another call.
-		// It is OK to drop the task at this point.
-		return nil, rejectCodeUndefined, serviceerrors.NewTaskAlreadyStarted("Activity")
+		response.Clock = ai.StartedClock
+		if request.ActivityTransferInfo != nil {
+			if err := checkRecordedStart(mutableState, ai, request); err != nil {
+				return nil, rejectCodeUndefined, err
+			}
+			populateStartResponse(response, ai, mutableState, namespaceName)
+			return response, rejectCodeReplayed, nil
+		}
+		// Legacy starts may predate the persisted clock.
+		if response.Clock == nil {
+			response.Clock, err = shardContext.NewVectorClock()
+			if err != nil {
+				return nil, rejectCodeUndefined, err
+			}
+		}
+		response.StartedTime = ai.StartedTime
+		response.Attempt = ai.Attempt
+		return response, rejectCodeAccepted, nil
 	}
 
 	code, err := processActivityWorkflowRules(shardContext, request, mutableState, ai)
@@ -299,7 +315,66 @@ func recordActivityTaskStarted(
 	)
 
 	response.Clock = clock
+	populateStartResponse(response, ai, mutableState, namespaceName)
+	return response, rejectCodeAccepted, nil
+}
 
+// checkActivityTransfer runs under the same workflow lease as the start.
+func checkActivityTransfer(ms historyi.MutableState, ai *persistencespb.ActivityInfo, request *historyservice.RecordActivityTaskStartedRequest, currentVersion int64) (rejectCode, error) {
+	transfer := request.ActivityTransferInfo
+	if transfer.RequestId == "" || !transfer.Equal(ai.ActivityTransferInfo) || ai.Stamp != request.Stamp ||
+		ai.Paused || ai.CancelRequested || ms.IsWorkflowExecutionStatusPaused() {
+		return rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask("Activity dispatch changed")
+	}
+	if workflow.ActivityHasTimedOut(ai, ms.Now()) {
+		return rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask("Activity dispatch expired")
+	}
+	if ms.GetCurrentVersion() != currentVersion {
+		return rejectCodeUndefined, consts.ErrStaleState
+	}
+	if transfer.NamespaceFailoverVersion == currentVersion {
+		return rejectCodeAccepted, nil
+	}
+	if ai.StartedEventId != common.EmptyEventID {
+		return rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask("Activity started in a previous namespace version")
+	}
+	// The only queued copy can belong to the previous active cluster. Commit a
+	// replacement before acknowledging it, even if new IDs are disabled.
+	if err := ms.GenerateActivityTask(ai.ScheduledEventId); err != nil {
+		return rejectCodeUndefined, err
+	}
+	return rejectCodeReplaced, nil
+}
+
+func checkRecordedStart(ms historyi.MutableState, ai *persistencespb.ActivityInfo, request *historyservice.RecordActivityTaskStartedRequest) error {
+	poll := request.PollRequest
+	if ai.StartedClock == nil || ai.StartedTime == nil || ai.StartVersion != ai.Version || ai.StartVersion != request.ActivityTransferInfo.NamespaceFailoverVersion ||
+		ai.WorkerControlTaskQueue != poll.GetWorkerControlTaskQueue() || (ai.StartedIdentity != "" && ai.StartedIdentity != poll.GetIdentity()) {
+		return serviceerrors.NewObsoleteMatchingTask("Activity start or worker binding changed")
+	}
+	if ms.GetDeploymentTransition() != nil {
+		return serviceerrors.NewActivityStartDuringTransition()
+	}
+	if wfBuild := ai.GetUseWorkflowBuildIdInfo(); wfBuild.GetLastUsedBuildId() != "" &&
+		(wfBuild.LastUsedBuildId != ms.GetAssignedBuildId() || wfBuild.LastRedirectCounter != ms.GetExecutionInfo().GetBuildIdRedirectCounter()) {
+		return serviceerrors.NewObsoleteMatchingTask("Activity workflow build ID changed")
+	}
+	//nolint:staticcheck // Old workers send WorkerVersionCapabilities.
+	deployment, err := worker_versioning.DeploymentFromCapabilities(poll.GetWorkerVersionCapabilities(), poll.GetDeploymentOptions())
+	if err != nil {
+		return err
+	}
+	if !ai.LastDeploymentVersion.Equal(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)) {
+		return serviceerrors.NewObsoleteMatchingTask("Activity worker deployment changed")
+	}
+	behavior := ms.GetEffectiveVersioningBehavior()
+	if request.VersionDirective.GetBehavior() != behavior {
+		return serviceerrors.NewObsoleteMatchingTask("Workflow versioning behavior changed")
+	}
+	return worker_versioning.ValidateTaskVersionDirective(request.VersionDirective, behavior, ms.GetEffectiveDeployment(), request.ScheduledDeployment)
+}
+
+func populateStartResponse(response *historyservice.RecordActivityTaskStartedResponse, ai *persistencespb.ActivityInfo, mutableState historyi.MutableState, namespaceName string) {
 	response.StartedTime = ai.StartedTime
 	response.Attempt = ai.Attempt
 	response.HeartbeatDetails = ai.LastHeartbeatDetails
@@ -315,8 +390,6 @@ func recordActivityTaskStarted(
 		MaximumAttempts:        ai.RetryMaximumAttempts,
 		NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
 	}
-
-	return response, rejectCodeAccepted, nil
 }
 
 // TODO (Shahab): move this method to a better place

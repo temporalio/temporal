@@ -585,7 +585,15 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.routingInfoCache)
+	return recordactivitytaskstarted.Invoke(ctx, request, nil, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.routingInfoCache)
+}
+
+func (e *historyEngineImpl) RecoverActivityTaskStarted(ctx context.Context, request *historyservice.RecoverActivityTaskStartedRequest) (*historyservice.RecoverActivityTaskStartedResponse, error) {
+	response, err := recordactivitytaskstarted.Invoke(ctx, request.StartRequest, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.routingInfoCache)
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.RecoverActivityTaskStartedResponse{StartResponse: response}, nil
 }
 
 // ScheduleWorkflowTask schedules a workflow task if no outstanding workflow task found

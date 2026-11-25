@@ -475,6 +475,7 @@ message TransferTaskInfo {
     ChasmTaskInfo chasm_task_info = 18;
 
     ReleaseLimiterTaskDetails release_limiter_task_details = 19;
+    temporal.server.api.taskqueue.v1.ActivityTransferInfo activity_transfer_info = 20;
   }
   // Stamp represents the "version" of the entity's internal state for which the transfer task was created.
   // It increases monotonically when the entity's options are modified.
@@ -792,6 +793,7 @@ message ActivityInfo {
 
   // Flow control limiters held by the currently started activity task.
   repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 53;
+  temporal.server.api.taskqueue.v1.ActivityTransferInfo activity_transfer_info = 54;
 }
 
 // timer_map column

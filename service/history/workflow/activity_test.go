@@ -12,13 +12,17 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -350,6 +354,62 @@ func (s *activitySuite) AddActivityInfo() *persistencespb.ActivityInfo {
 	ai, err := s.mutableState.ApplyActivityTaskScheduledEvent(0, activityScheduledEvent)
 	s.NoError(err)
 	return ai
+}
+
+func (s *activitySuite) TestActivityTransferGeneration() {
+	ai := s.AddActivityInfo() // Apply a history event, as on a standby or rebuild.
+	s.Nil(ai.ActivityTransferInfo)
+	ms := s.mutableState
+	ms.config.EnableActivityTransferRecovery = func(string) bool { return true }
+	s.NoError(ms.GenerateActivityTask(ai.ScheduledEventId))
+	original := ai.ActivityTransferInfo
+	s.NotEmpty(original.GetRequestId())
+	s.Equal(ms.GetCurrentVersion(), original.NamespaceFailoverVersion)
+	s.NoError(ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)) // refresh the same dispatch
+	for _, task := range ms.InsertTasks[tasks.CategoryTransfer] {
+		s.True(original.Equal(task.(*tasks.ActivityTask).ActivityTransferInfo))
+	}
+	ai.StartedEventId, ai.Attempt = 2, 1
+	ai.StartedClock = &clockspb.VectorClock{ShardId: 2, Clock: 19}
+	stamp, clock := ai.Stamp, ai.StartedClock
+	s.NoError(ResetActivity(s.T().Context(), ms, ai.ActivityId, false, false, false, 0))
+	s.Nil(ai.ActivityTransferInfo)
+	s.Equal(stamp, ai.Stamp)
+	s.Equal(int32(1), ai.Attempt)
+	s.Equal(clock, ai.StartedClock)
+	ai.ActivityTransferInfo = original
+	UpdateActivityInfoForRetries(ai, ms.GetCurrentVersion(), 2, nil, timestamppb.Now(), false)
+	s.Nil(ai.ActivityTransferInfo)
+	s.Equal(stamp, ai.Stamp)
+
+	// An active route change and its copies in this mutation share one new ID.
+	s.NoError(ms.rescheduleActivityTransfer(ai))
+	s.NoError(ms.rescheduleActivityTransfer(ai))
+	s.Nil(ai.ActivityTransferInfo)
+	ms.bindRescheduledActivityTransfers()
+	s.NotEmpty(ai.ActivityTransferInfo.GetRequestId())
+	s.NotEqual(original.RequestId, ai.ActivityTransferInfo.RequestId)
+	ai.ActivityTransferInfo = &taskqueuespb.ActivityTransferInfo{RequestId: "previous cluster"}
+	ms.config.EnableActivityTransferRecovery = func(string) bool { return false }
+	s.NoError(ms.GenerateActivityTask(ai.ScheduledEventId))
+	s.Nil(ai.ActivityTransferInfo)
+}
+
+func (s *activitySuite) TestLegacyReplicationReplacesTaggedTransfer() {
+	ai := s.AddActivityInfo()
+	ms := s.mutableState
+	ms.config.EnableActivityTransferRecovery = func(string) bool { return true }
+	s.NoError(ms.GenerateActivityTask(ai.ScheduledEventId))
+	s.Empty(ms.syncActivityTasks, "a transfer ID alone cannot be replicated by SyncActivity")
+	s.NoError(ms.UpdateActivityInfo(&historyservice.ActivitySyncInfo{
+		ScheduledEventId: ai.ScheduledEventId, ScheduledTime: timestamppb.New(ms.Now()),
+		Attempt: ai.Attempt, Stamp: ai.Stamp, Version: ai.Version,
+	}, false))
+	s.Nil(ai.ActivityTransferInfo)
+	transfers := ms.InsertTasks[tasks.CategoryTransfer]
+	s.Len(transfers, 2)
+	s.NotNil(transfers[0].(*tasks.ActivityTask).ActivityTransferInfo)
+	s.Nil(transfers[1].(*tasks.ActivityTask).ActivityTransferInfo)
 }
 
 func (s *activitySuite) TestResetPausedActivityAcceptance() {

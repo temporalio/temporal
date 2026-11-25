@@ -228,6 +228,8 @@ type matcherData struct {
 
 	rateLimitTimer         resettableTimer
 	reconsiderForwardTimer resettableTimer
+	recoveryTimer          resettableTimer
+	recoveryWakeAt         int64
 
 	// waiting pollers and tasks
 	// invariant: all pollers and tasks in these data structures have matchResult == nil and queued == true
@@ -259,6 +261,7 @@ func (d *matcherData) Stop() {
 	defer d.lock.Unlock()
 
 	d.stopped = true
+	d.recoveryTimer.unset()
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) error {
@@ -455,6 +458,14 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 
 		var matched *waitingPoller
 		for poller := d.pollers.head; poller != nil; poller = poller.next {
+			if r := task.activityRecovery; r.pending(now) && !r.accepts(poller) {
+				// Reconsider this row even if no other task or poll arrives.
+				if d.recoveryWakeAt <= now || r.start.expires < d.recoveryWakeAt {
+					d.recoveryWakeAt = r.start.expires
+					d.recoveryTimer.set(d.timeSource, d.rematchAfterTimer, time.Duration(r.start.expires-now))
+				}
+				continue
+			}
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
 				// query-only poll only matches with query (but can match poll forwarder)
@@ -554,6 +565,9 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 		}
 
 		// ready to signal match
+		if r := task.activityRecovery; r != nil {
+			r.claimed = r.pending(now) && r.start.used.CompareAndSwap(false, true)
+		}
 		d.tasks.Remove(task)
 		d.pollers.Remove(poller)
 

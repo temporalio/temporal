@@ -6109,3 +6109,77 @@ func (this *OrphanedChildReplacementInfo) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type RecoverActivityTaskStartedRequest to the protobuf v3 wire format
+func (val *RecoverActivityTaskStartedRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RecoverActivityTaskStartedRequest from the protobuf v3 wire format
+func (val *RecoverActivityTaskStartedRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RecoverActivityTaskStartedRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RecoverActivityTaskStartedRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RecoverActivityTaskStartedRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RecoverActivityTaskStartedRequest
+	switch t := that.(type) {
+	case *RecoverActivityTaskStartedRequest:
+		that1 = t
+	case RecoverActivityTaskStartedRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RecoverActivityTaskStartedResponse to the protobuf v3 wire format
+func (val *RecoverActivityTaskStartedResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RecoverActivityTaskStartedResponse from the protobuf v3 wire format
+func (val *RecoverActivityTaskStartedResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RecoverActivityTaskStartedResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RecoverActivityTaskStartedResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RecoverActivityTaskStartedResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RecoverActivityTaskStartedResponse
+	switch t := that.(type) {
+	case *RecoverActivityTaskStartedResponse:
+		that1 = t
+	case RecoverActivityTaskStartedResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

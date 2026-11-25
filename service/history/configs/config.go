@@ -415,6 +415,7 @@ type Config struct {
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityEagerDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
+	EnableActivityTransferRecovery    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsDispatchTimeout     dynamicconfig.DurationPropertyFn
 	WorkerCommandsMaxAttempts         dynamicconfig.IntPropertyFn
@@ -860,6 +861,7 @@ func NewConfig(
 		EnableActivityEagerExecution:      dynamicconfig.EnableActivityEagerExecution.Get(dc),
 		EnableActivityEagerDispatchCheck:  dynamicconfig.EnableActivityEagerDispatchCheck.Get(dc),
 		EnableActivityRetryStampIncrement: dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),
+		EnableActivityTransferRecovery:    dynamicconfig.EnableActivityTransferRecovery.Get(dc),
 		EnableCancelActivityWorkerCommand: dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
 		WorkerCommandsDispatchTimeout:     dynamicconfig.WorkerCommandsDispatchTimeout.Get(dc),
 		WorkerCommandsMaxAttempts:         dynamicconfig.WorkerCommandsMaxAttempts.Get(dc),

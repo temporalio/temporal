@@ -86,6 +86,8 @@ func (s *taskSerializerSuite) TestTransferActivityTask() {
 	}
 
 	s.assertEqualTasks(activityTask)
+	activityTask.ActivityTransferInfo = &taskqueuespb.ActivityTransferInfo{RequestId: uuid.NewString(), NamespaceFailoverVersion: 71}
+	s.assertEqualTasks(activityTask)
 }
 
 func (s *taskSerializerSuite) TestTransferReleaseLimiterTask() {

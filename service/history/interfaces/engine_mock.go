@@ -656,6 +656,21 @@ func (mr *MockEngineMockRecorder) RecordWorkflowTaskStarted(ctx, request any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkflowTaskStarted", reflect.TypeOf((*MockEngine)(nil).RecordWorkflowTaskStarted), ctx, request)
 }
 
+// RecoverActivityTaskStarted mocks base method.
+func (m *MockEngine) RecoverActivityTaskStarted(ctx context.Context, request *historyservice.RecoverActivityTaskStartedRequest) (*historyservice.RecoverActivityTaskStartedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecoverActivityTaskStarted", ctx, request)
+	ret0, _ := ret[0].(*historyservice.RecoverActivityTaskStartedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecoverActivityTaskStarted indicates an expected call of RecoverActivityTaskStarted.
+func (mr *MockEngineMockRecorder) RecoverActivityTaskStarted(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecoverActivityTaskStarted", reflect.TypeOf((*MockEngine)(nil).RecoverActivityTaskStarted), ctx, request)
+}
+
 // RefreshWorkflowTasks mocks base method.
 func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution, archetypeID chasm.ArchetypeID) error {
 	m.ctrl.T.Helper()

@@ -140,6 +140,8 @@ type (
 		deleteActivityInfos            map[int64]struct{}                     // Deleted activities from last update.
 		syncActivityTasks              map[int64]struct{}                     // Activity to be sync to remote
 		releaseLimiterRefs             []*taskqueuespb.LimiterRef
+		// Reschedules shared with replay acquire new transfer IDs only in an active mutation.
+		rescheduledActivityTransfers []*tasks.ActivityTask
 
 		pendingTimerInfoIDs     map[string]*persistencespb.TimerInfo // User Timer ID -> Timer Info.
 		pendingTimerEventIDToID map[int64]string                     // User Timer Start Event ID -> User Timer ID.
@@ -2151,6 +2153,10 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ms.approximateSize -= ai.Size()
 	oldPaused := ai.Paused
 
+	// Legacy activity replication carries only part of the dispatch state.
+	// The replicator already emits a retry timer when the incoming attempt advances.
+	replaceTransfer := ai.ActivityTransferInfo != nil && incomingActivityInfo.GetAttempt() <= ai.Attempt
+	ai.ActivityTransferInfo = nil
 	ai.Version = incomingActivityInfo.GetVersion()
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
 	// we don't need to update FirstScheduledTime
@@ -2197,6 +2203,15 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 		err = ms.updatePauseInfoSearchAttribute()
 	}
 
+	if err == nil && replaceTransfer && ai.StartedEventId == common.EmptyEventID &&
+		!ai.Paused && !ai.CancelRequested && !ms.IsWorkflowExecutionStatusPaused() && ms.IsWorkflowExecutionRunning() {
+		// The old tagged row can no longer start this Activity after failover.
+		// Regenerate local work from the state that was actually replicated.
+		if ai.Attempt > 1 || ai.ScheduledTime.AsTime().After(ms.Now()) {
+			return ms.taskGenerator.GenerateActivityRetryTasks(ai)
+		}
+		return ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+	}
 	return err
 }
 
@@ -3516,7 +3531,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 			}
 		} else {
 			// Generate activity task to resend the activity to matching immediately.
-			if err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId); err != nil {
+			if err := ms.rescheduleActivityTransfer(ai); err != nil {
 				return err
 			}
 		}
@@ -3940,7 +3955,7 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 		}
 
 		// we only need to resend the activities to matching, no need to update timer tasks.
-		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		err = ms.rescheduleActivityTransfer(ai)
 		if err != nil {
 			return err
 		}
@@ -4424,10 +4439,8 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	event, batchID := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
 	ai, err := ms.ApplyActivityTaskScheduledEvent(batchID, event)
 	// TODO merge active & passive task generation
-	if !bypassTaskGeneration {
-		if err := ms.taskGenerator.GenerateActivityTasks(
-			event.GetEventId(),
-		); err != nil {
+	if err == nil && !bypassTaskGeneration {
+		if err := ms.GenerateActivityTask(event.GetEventId()); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -4436,7 +4449,48 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 }
 
 func (ms *MutableStateImpl) GenerateActivityTask(scheduledEventID int64) error {
+	enabled := ms.config.EnableActivityTransferRecovery(ms.namespaceEntry.Name().String())
+	if ai, ok := ms.GetActivityInfo(scheduledEventID); ok && (enabled || ai.ActivityTransferInfo != nil) {
+		ms.setActivityTransferInfo(ai, enabled)
+	}
 	return ms.taskGenerator.GenerateActivityTasks(scheduledEventID)
+}
+
+func (ms *MutableStateImpl) setActivityTransferInfo(ai *persistencespb.ActivityInfo, enabled bool) {
+	ms.approximateSize -= ai.Size()
+	ai.ActivityTransferInfo = nil
+	if enabled {
+		ai.ActivityTransferInfo = &taskqueuespb.ActivityTransferInfo{
+			RequestId: uuid.NewString(), NamespaceFailoverVersion: ms.GetCurrentVersion(),
+		}
+	}
+	ms.approximateSize += ai.Size()
+	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	// State-based replication carries the full Activity. Legacy SyncActivity cannot carry this field.
+	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
+}
+
+func (ms *MutableStateImpl) rescheduleActivityTransfer(ai *persistencespb.ActivityInfo) error {
+	if ai.StartedEventId != common.EmptyEventID || ai.Paused || !ms.config.EnableActivityTransferRecovery(ms.namespaceEntry.Name().String()) {
+		return ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+	}
+	task := newActivityTransferTask(ms.GetWorkflowKey(), ai)
+	ms.AddTasks(task)
+	ms.rescheduledActivityTransfers = append(ms.rescheduledActivityTransfers, task)
+	return nil
+}
+
+func (ms *MutableStateImpl) bindRescheduledActivityTransfers() {
+	for _, at := range ms.rescheduledActivityTransfers {
+		ai, pending := ms.GetActivityInfo(at.ScheduledEventID)
+		if !pending || ai.Stamp != at.Stamp || ai.Paused || ai.StartedEventId != common.EmptyEventID {
+			continue
+		}
+		if ai.ActivityTransferInfo == nil {
+			ms.setActivityTransferInfo(ai, true)
+		}
+		at.ActivityTransferInfo = ai.ActivityTransferInfo
+	}
 }
 
 func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
@@ -7151,6 +7205,7 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 	}
 
 	prevPause := ai.Paused
+	previousStamp := ai.Stamp
 	previousLimiters := ai.Limiters
 	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
@@ -7162,6 +7217,9 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 		return err
 	}
 	ms.trackRemovedLimiterRefs(previousLimiters, ai.Limiters)
+	if previousStamp != ai.Stamp || prevPause != ai.Paused {
+		ai.ActivityTransferInfo = nil
+	}
 
 	if prevPause != ai.Paused {
 		err := ms.updatePauseInfoSearchAttribute()
@@ -7788,6 +7846,9 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
+	if transactionPolicy == historyi.TransactionPolicyActive && len(ms.rescheduledActivityTransfers) != 0 {
+		ms.bindRescheduledActivityTransfers()
+	}
 	result, err := ms.closeTransaction(ctx, transactionPolicy)
 	if err != nil {
 		return nil, nil, err
@@ -8765,6 +8826,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 }
 
 func (ms *MutableStateImpl) cleanupTransaction() error {
+	ms.rescheduledActivityTransfers = nil
 	ms.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
 	ms.deleteActivityInfos = make(map[int64]struct{})
 	ms.syncActivityTasks = make(map[int64]struct{})
@@ -10257,7 +10319,7 @@ func (ms *MutableStateImpl) reschedulePendingActivities(wftScheduleToClose time.
 			return err
 		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
-		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		err = ms.rescheduleActivityTransfer(ai)
 		if err != nil {
 			return err
 		}

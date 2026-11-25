@@ -3,6 +3,7 @@ package recordactivitytaskstarted
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -10,18 +11,23 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -285,6 +291,7 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 	*historyi.MockShardContext,
 	*historyi.MockMutableState,
 	*historyservice.RecordActivityTaskStartedRequest,
+	*persistencespb.ActivityInfo,
 ) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
@@ -297,10 +304,10 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 	requestID := "test-request-id"
 
 	// Namespace registry
-	nsEntry := namespace.NewLocalNamespaceForTest(
+	nsEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: nsID, Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{},
-		testClusterName,
+		&persistencespb.NamespaceReplicationConfig{ActiveClusterName: testClusterName, Clusters: []string{testClusterName}}, 71,
 	)
 	mockNSReg := namespace.NewMockRegistry(ctrl)
 	mockNSReg.EXPECT().GetNamespaceByID(namespace.ID(nsID)).Return(nsEntry, nil)
@@ -324,7 +331,9 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 
 	mockMS.EXPECT().GetActivityInfo(scheduledEventID).Return(ai, true)
 	mockMS.EXPECT().GetActivityScheduledEvent(gomock.Any(), scheduledEventID).Return(
-		&historypb.HistoryEvent{EventId: scheduledEventID}, nil,
+		&historypb.HistoryEvent{EventId: scheduledEventID, Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{ActivityId: "activity", ActivityType: &commonpb.ActivityType{Name: "test"}},
+		}}, nil,
 	)
 	mockMS.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
 
@@ -338,7 +347,75 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 		RequestId:        requestID,
 	}
 
-	return mockShard, mockMS, request
+	return mockShard, mockMS, request, ai
+}
+
+func TestRecoverRecordedActivityStart(t *testing.T) {
+	for _, name := range []string{"transient", "history event"} {
+		t.Run(name, func(t *testing.T) {
+			shard, ms, request, ai := setupMutableStateWithStartedActivity(t, &clockspb.VectorClock{ClusterId: 3, ShardId: 4, Clock: 5})
+			now := ai.StartedTime.AsTime()
+			ai.ScheduledTime = timestamppb.New(now.Add(-time.Minute))
+			ai.ScheduleToStartTimeout = durationpb.New(time.Second) // Only applies before a start.
+			ai.StartToCloseTimeout = durationpb.New(time.Minute)
+			ai.Version, ai.StartVersion = 71, 71
+			if name == "transient" {
+				ai.StartedEventId, ai.HasRetryPolicy, ai.StartedIdentity = common.TransientEventID, true, "worker"
+			}
+			ai.WorkerControlTaskQueue = "control"
+			ai.RetryMaximumAttempts = 3
+			ai.LastHeartbeatDetails = payloads.EncodeString("progress")
+			ai.ActivityTransferInfo = &taskqueuespb.ActivityTransferInfo{RequestId: "transfer", NamespaceFailoverVersion: 71}
+			request.ActivityTransferInfo = common.CloneProto(ai.ActivityTransferInfo)
+			request.RequestId = "next-poll"
+			request.PollRequest = &workflowservice.PollActivityTaskQueueRequest{Identity: "worker", WorkerControlTaskQueue: "control"}
+			ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
+			ms.EXPECT().GetCurrentVersion().Return(int64(71))
+			ms.EXPECT().Now().Return(now)
+			ms.EXPECT().GetDeploymentTransition().Return(nil)
+			ms.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+			ms.EXPECT().GetEffectiveDeployment().Return(nil)
+			ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "workflow"})
+			prior := ai.RequestId
+			recovery := &historyservice.RecoverActivityTaskStartedRequest{StartRequest: request, WithheldStartRequestId: prior}
+			response, code, err := recordActivityTaskStarted(t.Context(), shard, ms, request, recovery, nil, nil)
+			require.NoError(t, err)
+			require.Equal(t, rejectCodeReplayed, code)
+			require.Equal(t, prior, ai.RequestId)
+			require.Equal(t, ai.Attempt, response.Attempt)
+			require.True(t, ai.StartedClock.Equal(response.Clock))
+			require.Equal(t, ai.StartedTime.AsTime(), response.StartedTime.AsTime())
+			require.Equal(t, ai.ScheduledTime.AsTime(), response.CurrentAttemptScheduledTime.AsTime())
+			require.Equal(t, ai.Version, response.Version)
+			require.Equal(t, ai.StartVersion, response.StartVersion)
+			require.True(t, ai.LastHeartbeatDetails.Equal(response.HeartbeatDetails))
+			require.Equal(t, ai.RetryMaximumAttempts, response.RetryPolicy.MaximumAttempts)
+			require.Equal(t, "activity", response.ScheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId())
+			require.Equal(t, "workflow", response.WorkflowType.Name)
+			require.Equal(t, "test-namespace", response.WorkflowNamespace)
+		})
+	}
+}
+
+func TestActivityTransferAfterFailover(t *testing.T) {
+	ms := historyi.NewMockMutableState(gomock.NewController(t))
+	transfer := &taskqueuespb.ActivityTransferInfo{RequestId: "transfer", NamespaceFailoverVersion: 71}
+	ai := &persistencespb.ActivityInfo{ActivityTransferInfo: transfer, ScheduledEventId: 5}
+	request := &historyservice.RecordActivityTaskStartedRequest{ActivityTransferInfo: transfer}
+	ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
+	ms.EXPECT().Now().Return(time.Now()).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(72)).AnyTimes()
+	ms.EXPECT().GenerateActivityTask(int64(5)).Return(nil) // once for the unstarted Activity
+	code, err := checkActivityTransfer(ms, ai, request, 72)
+	require.NoError(t, err)
+	require.Equal(t, rejectCodeReplaced, code)
+	ai.StartedEventId = 6
+	_, err = checkActivityTransfer(ms, ai, request, 72)
+	require.Error(t, err)
+	ai.StartedEventId = common.EmptyEventID
+	ai.ActivityTransferInfo = nil // Unverified generation after a legacy update or history rebuild.
+	_, err = checkActivityTransfer(ms, ai, request, 72)
+	require.Error(t, err)
 }
 
 // TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock verifies that
@@ -346,14 +423,14 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 // started before the StartedClock field was added (StartedClock is nil), the response
 // still contains a non-nil Clock for the shard staleness check.
 func TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock(t *testing.T) {
-	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, nil /* no StartedClock */)
+	mockShard, mockMS, request, _ := setupMutableStateWithStartedActivity(t, nil /* no StartedClock */)
 
 	// Should call NewVectorClock as fallback for nil StartedClock
 	fallbackClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
 	mockShard.EXPECT().NewVectorClock().Return(fallbackClock, nil)
 
 	resp, code, err := recordActivityTaskStarted(
-		context.Background(), mockShard, mockMS, request, nil, nil,
+		context.Background(), mockShard, mockMS, request, nil, nil, nil,
 	)
 	require.NoError(t, err)
 	require.Equal(t, rejectCodeAccepted, code)
@@ -365,13 +442,13 @@ func TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock(t *testing.T
 // when StartedClock is stored, the stored clock is returned without creating a new one.
 func TestRecordActivityTaskStarted_DuplicateRequest_WithStartedClock(t *testing.T) {
 	storedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100}
-	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, storedClock)
+	mockShard, mockMS, request, _ := setupMutableStateWithStartedActivity(t, storedClock)
 
 	// Should NOT call NewVectorClock since StartedClock is available
 	mockShard.EXPECT().NewVectorClock().Times(0)
 
 	resp, code, err := recordActivityTaskStarted(
-		context.Background(), mockShard, mockMS, request, nil, nil,
+		context.Background(), mockShard, mockMS, request, nil, nil, nil,
 	)
 	require.NoError(t, err)
 	require.Equal(t, rejectCodeAccepted, code)

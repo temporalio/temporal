@@ -4,6 +4,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -12,12 +13,13 @@ var _ Task = (*ActivityTask)(nil)
 type (
 	ActivityTask struct {
 		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		TaskQueue           string
-		ScheduledEventID    int64
-		Version             int64
-		Stamp               int32
+		VisibilityTimestamp  time.Time
+		TaskID               int64
+		TaskQueue            string
+		ScheduledEventID     int64
+		Version              int64
+		Stamp                int32
+		ActivityTransferInfo *taskqueuespb.ActivityTransferInfo
 	}
 )
 

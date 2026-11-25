@@ -196,6 +196,11 @@ message AddActivityTaskRequest {
   // necessary start information is carried within this component, obviating the need to use the fields that apply to
   // embedded activities.
   bytes component_ref = 14;
+  temporal.server.api.taskqueue.v1.ActivityTransferInfo activity_transfer_info = 15;
+  // Preserved when a recovery backlog row is forwarded.
+  string withheld_start_request_id = 16;
+  // Only the active History transfer executor can request recovery for a direct sync match.
+  bool allow_sync_match_recovery = 17;
 }
 
 message AddActivityTaskResponse {

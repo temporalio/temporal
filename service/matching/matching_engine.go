@@ -69,6 +69,8 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -120,6 +122,7 @@ type (
 	}
 
 	pollMetadata struct {
+		pollID, identity          string
 		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
@@ -873,17 +876,19 @@ func (e *matchingEngineImpl) AddActivityTask(
 		expirationTime = timestamppb.New(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:      addRequest.NamespaceId,
-		RunId:            addRequest.Execution.GetRunId(),
-		WorkflowId:       addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId: addRequest.GetScheduledEventId(),
-		Clock:            addRequest.GetClock(),
-		CreateTime:       timestamppb.New(now),
-		ExpiryTime:       expirationTime,
-		VersionDirective: addRequest.VersionDirective,
-		Stamp:            addRequest.Stamp,
-		Priority:         addRequest.Priority,
-		ComponentRef:     addRequest.ComponentRef,
+		NamespaceId:            addRequest.NamespaceId,
+		RunId:                  addRequest.Execution.GetRunId(),
+		WorkflowId:             addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId:       addRequest.GetScheduledEventId(),
+		Clock:                  addRequest.GetClock(),
+		CreateTime:             timestamppb.New(now),
+		ExpiryTime:             expirationTime,
+		VersionDirective:       addRequest.VersionDirective,
+		Stamp:                  addRequest.Stamp,
+		Priority:               addRequest.Priority,
+		ComponentRef:           addRequest.ComponentRef,
+		ActivityTransferInfo:   addRequest.GetActivityTransferInfo(),
+		WithheldStartRequestId: addRequest.GetWithheldStartRequestId(),
 	}
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
@@ -898,8 +903,9 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		taskInfo:    taskInfo,
-		forwardInfo: addRequest.ForwardInfo,
+		taskInfo:              taskInfo,
+		forwardInfo:           addRequest.ForwardInfo,
+		allowActivityRecovery: addRequest.GetAllowSyncMatchRecovery(),
 	})
 }
 
@@ -1236,6 +1242,8 @@ pollLoop:
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
 			taskQueueMetadata:         request.TaskQueueMetadata,
+			pollID:                    pollerID,
+			identity:                  request.GetIdentity(),
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
@@ -1263,7 +1271,7 @@ pollLoop:
 			requestClone = common.CloneProto(request)
 			requestClone.WorkerVersionCapabilities.BuildId = ""
 		}
-		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
+		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task, pollMetadata)
 		if err != nil {
 			switch err := err.(type) {
 			case *serviceerror.Internal:
@@ -3871,6 +3879,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	ctx context.Context,
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
+	poller *pollMetadata,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 
 	metrics.OperationCounter.With(e.metricsHandler).Record(
@@ -3891,18 +3900,19 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		}
 	}
 
-	ctx, cancel := newRecordTaskStartedContext(ctx, task)
+	startCtx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
 	recordStartedRequest := &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceId:         task.event.Data.GetNamespaceId(),
-		WorkflowExecution:   task.workflowExecution(),
-		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
-		Clock:               task.event.Data.GetClock(),
-		RequestId:           uuid.NewString(),
-		PollRequest:         pollReq,
-		BuildIdRedirectInfo: task.redirectInfo,
-		Stamp:               task.event.Data.GetStamp(),
+		ActivityTransferInfo: task.event.Data.GetActivityTransferInfo(),
+		NamespaceId:          task.event.Data.GetNamespaceId(),
+		WorkflowExecution:    task.workflowExecution(),
+		ScheduledEventId:     task.event.Data.GetScheduledEventId(),
+		Clock:                task.event.Data.GetClock(),
+		RequestId:            uuid.NewString(),
+		PollRequest:          pollReq,
+		BuildIdRedirectInfo:  task.redirectInfo,
+		Stamp:                task.event.Data.GetStamp(),
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:           task.event.Data.VersionDirective,
@@ -3910,7 +3920,36 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		ComponentRef:               task.event.Data.GetComponentRef(),
 	}
 
-	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
+	if prior := task.event.Data.GetWithheldStartRequestId(); prior != "" || (recordStartedRequest.ActivityTransferInfo != nil && !task.allowActivityRecovery) {
+		request := &historyservice.RecoverActivityTaskStartedRequest{NamespaceId: recordStartedRequest.NamespaceId, StartRequest: recordStartedRequest}
+		if r := task.activityRecovery; r != nil && r.claimed && !r.start.ownerStopped.Load() && time.Now().UnixNano() < r.start.expires {
+			request.WithheldStartRequestId = prior
+		}
+		// During a rolling upgrade an old History host cannot resolve this row.
+		// Back off within the backlog dispatch deadline while using the same poll ID.
+		var response *historyservice.RecoverActivityTaskStartedResponse
+		err := backoff.ThrottleRetryContext(startCtx, func(callCtx context.Context) error {
+			var err error
+			response, err = e.historyClient.RecoverActivityTaskStarted(callCtx, request)
+			return err
+		}, addErrorRetryPolicy, func(err error) bool {
+			var unsupported *serviceerror.Unimplemented
+			return errors.As(err, &unsupported)
+		})
+		return response.GetStartResponse(), err
+	}
+	if !task.allowActivityRecovery || recordStartedRequest.ActivityTransferInfo.GetRequestId() == "" {
+		return e.historyClient.RecordActivityTaskStarted(startCtx, recordStartedRequest)
+	}
+	// gRPC records the peer only for a call that acquired a transport stream.
+	// A local shard lookup or limiter failure cannot establish a withheld start.
+	var destination peer.Peer
+	response, err := e.historyClient.RecordActivityTaskStarted(startCtx, recordStartedRequest, grpc.Peer(&destination))
+	if destination.Addr != nil &&
+		errors.Is(context.Cause(startCtx), errSyncMatchStartDeadline) && ctx.Err() == nil && common.IsContextDeadlineExceededErr(err) {
+		return nil, &withheldActivityStartError{error: err, requestID: recordStartedRequest.RequestId, worker: poller}
+	}
+	return response, err
 }
 
 // newRecordTaskStartedContext creates a context for recording
@@ -3923,12 +3962,13 @@ func newRecordTaskStartedContext(
 	parentCtx context.Context,
 	task *internalTask,
 ) (context.Context, context.CancelFunc) {
-	timeout := recordTaskStartedDefaultTimeout
-	if task.isSyncMatchTask() {
-		timeout = recordTaskStartedSyncMatchTimeout
+	if task.allowActivityRecovery {
+		return context.WithTimeoutCause(parentCtx, recordTaskStartedSyncMatchTimeout, errSyncMatchStartDeadline)
 	}
-
-	return context.WithTimeout(parentCtx, timeout)
+	if task.isSyncMatchTask() {
+		return context.WithTimeout(parentCtx, recordTaskStartedSyncMatchTimeout)
+	}
+	return context.WithTimeout(parentCtx, recordTaskStartedDefaultTimeout)
 }
 
 // Revives a deleted build ID updating its HLC timestamp.

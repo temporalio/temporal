@@ -123,6 +123,89 @@ func (s *MatcherDataSuite) newBacklogTask(id int64, age time.Duration, f func(*i
 	return s.newBacklogTaskWithPriority(id, age, f, nil)
 }
 
+func (s *MatcherDataSuite) TestActivityRecoveryReservesOneDispatch() {
+	worker := &pollMetadata{pollID: "poll-a", identity: "shared", workerInstanceKey: "a", workerControlTaskQueue: "control-a"}
+	start := &withheldActivityStart{worker: worker, expires: s.now().Add(time.Second).UnixNano(), ownerStopped: new(atomic.Bool)}
+	for id := int64(1); id <= 2; id++ {
+		task := s.newBacklogTask(id, 0, nil)
+		task.activityRecovery = &activityRecoveryDispatch{start: start, sameRoute: true}
+		s.Require().NoError(s.md.EnqueueTaskNoWait(task))
+	}
+	s.Nil(s.md.MatchPollerImmediately(&waitingPoller{taskForwarderType: validatorTaskForwarder}))
+	s.Nil(s.md.MatchPollerImmediately(&waitingPoller{taskForwarderType: parentTaskForwarder}))
+	for _, p := range []*pollMetadata{
+		{pollID: "another", identity: "shared", workerControlTaskQueue: "control-a"},
+		{pollID: "another", identity: "shared", workerInstanceKey: "b", workerControlTaskQueue: "control-a"},
+		{pollID: "another", identity: "shared", workerInstanceKey: "a", workerControlTaskQueue: "control-b"},
+	} {
+		s.Nil(s.pollImmediately(p))
+	}
+	s.False((&activityRecoveryDispatch{start: start}).accepts(&waitingPoller{pollMetadata: worker}), "physical queue changed")
+	// A different poll from the same worker may claim the first copy. The second
+	// copy can only try a fresh start, even if the first worker lost the response.
+	next := *worker
+	next.pollID = "next"
+	first := s.pollImmediately(&next)
+	s.Require().NotNil(first)
+	s.True(first.task.activityRecovery.claimed)
+	second := s.pollImmediately(&next)
+	s.Require().NotNil(second)
+	s.False(second.task.activityRecovery.claimed)
+}
+
+func (s *MatcherDataSuite) TestConcurrentActivityRecoveryClaims() {
+	worker := &pollMetadata{pollID: "original"}
+	receipt := &withheldActivityStart{worker: worker, expires: s.now().Add(time.Second).UnixNano(), ownerStopped: new(atomic.Bool)}
+	other := newMatcherData(s.md.config, s.md.logger, s.ts, false, s.md.rateLimitManager, func() {})
+	start := make(chan struct{})
+	results := make(chan bool, 2)
+	for _, matcher := range []*matcherData{&s.md, &other} {
+		task := s.newBacklogTask(1, 0, nil)
+		task.activityRecovery = &activityRecoveryDispatch{start: receipt, sameRoute: true}
+		s.Require().NoError(matcher.EnqueueTaskNoWait(task))
+		go func() {
+			<-start
+			match := matcher.MatchPollerImmediately(&waitingPoller{pollMetadata: worker})
+			results <- match != nil && match.task.activityRecovery.claimed
+		}()
+	}
+	close(start)
+	first, second := <-results, <-results
+	s.NotEqual(first, second, "exactly one copy may recover the withheld start")
+}
+
+func (s *MatcherDataSuite) TestActivityRecoveryExpiryWakesPoll() {
+	task := s.newBacklogTask(1, 0, nil)
+	task.activityRecovery = &activityRecoveryDispatch{sameRoute: true, start: &withheldActivityStart{
+		worker: &pollMetadata{pollID: "original"}, expires: s.now().Add(time.Second).UnixNano(), ownerStopped: new(atomic.Bool),
+	}}
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task))
+	result := make(chan *matchResult, 1)
+	go func() { result <- s.pollRealTime(5 * time.Second) }()
+	s.waitForPollers(1)
+	s.ts.Advance(time.Second)
+	s.Require().Same(task, (<-result).task)
+	s.False(task.activityRecovery.claimed)
+}
+
+func TestActivityStartReceiptsOnPartitionLoss(t *testing.T) {
+	cache := newActivityStartCache()
+	first := activityStartKey{"transfer", "poll-1"}
+	second := activityStartKey{"transfer", "poll-2"}
+	var stopped atomic.Bool
+	for _, key := range []activityStartKey{first, second} {
+		cache.Put(key, &withheldActivityStart{expires: time.Now().Add(time.Minute).UnixNano(), ownerStopped: &stopped})
+	}
+	one := cache.Get(first).(*withheldActivityStart)
+	two := cache.Get(second).(*withheldActivityStart)
+	require.NotSame(t, one, two)
+	r := &activityRecoveryDispatch{start: one}
+	require.True(t, r.pending(time.Now().UnixNano()))
+	stopped.Store(true)
+	require.False(t, r.pending(time.Now().UnixNano()))
+	require.Nil(t, newActivityStartCache().Get(first))
+}
+
 func (s *MatcherDataSuite) newBacklogTaskWithPriority(id int64, age time.Duration, f func(*internalTask, taskResponse), pri *commonpb.Priority) *internalTask {
 	t := &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{

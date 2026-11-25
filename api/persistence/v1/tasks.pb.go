@@ -105,9 +105,12 @@ type TaskInfo struct {
 	Stamp    int32         `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	Priority *v12.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
 	// Reference to any chasm component associated with this task
-	ComponentRef  []byte `protobuf:"bytes,11,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ComponentRef         []byte                    `protobuf:"bytes,11,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	ActivityTransferInfo *v11.ActivityTransferInfo `protobuf:"bytes,12,opt,name=activity_transfer_info,json=activityTransferInfo,proto3" json:"activity_transfer_info,omitempty"`
+	// Lookup key for the Matching partition that withheld this start. It does not authorize delivery.
+	WithheldStartRequestId string `protobuf:"bytes,13,opt,name=withheld_start_request_id,json=withheldStartRequestId,proto3" json:"withheld_start_request_id,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *TaskInfo) Reset() {
@@ -215,6 +218,20 @@ func (x *TaskInfo) GetComponentRef() []byte {
 		return x.ComponentRef
 	}
 	return nil
+}
+
+func (x *TaskInfo) GetActivityTransferInfo() *v11.ActivityTransferInfo {
+	if x != nil {
+		return x.ActivityTransferInfo
+	}
+	return nil
+}
+
+func (x *TaskInfo) GetWithheldStartRequestId() string {
+	if x != nil {
+		return x.WithheldStartRequestId
+	}
+	return ""
 }
 
 // task_queue column
@@ -728,7 +745,7 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x11AllocatedTaskInfo\x12@\n" +
 	"\x04data\x18\x01 \x01(\v2,.temporal.server.api.persistence.v1.TaskInfoR\x04data\x12\x1b\n" +
 	"\ttask_pass\x18\x03 \x01(\x03R\btaskPass\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xac\x04\n" +
+	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xd5\x05\n" +
 	"\bTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -744,7 +761,9 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12#\n" +
-	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\"\x84\x05\n" +
+	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\x12l\n" +
+	"\x16activity_transfer_info\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.ActivityTransferInfoR\x14activityTransferInfo\x129\n" +
+	"\x19withheld_start_request_id\x18\r \x01(\tR\x16withheldStartRequestId\"\x84\x05\n" +
 	"\rTaskQueueInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +
@@ -812,10 +831,11 @@ var file_temporal_server_api_persistence_v1_tasks_proto_goTypes = []any{
 	(*v1.VectorClock)(nil),             // 9: temporal.server.api.clock.v1.VectorClock
 	(*v11.TaskVersionDirective)(nil),   // 10: temporal.server.api.taskqueue.v1.TaskVersionDirective
 	(*v12.Priority)(nil),               // 11: temporal.api.common.v1.Priority
-	(v13.TaskQueueType)(0),             // 12: temporal.api.enums.v1.TaskQueueType
-	(v13.TaskQueueKind)(0),             // 13: temporal.api.enums.v1.TaskQueueKind
-	(*v11.FairLevel)(nil),              // 14: temporal.server.api.taskqueue.v1.FairLevel
-	(*anypb.Any)(nil),                  // 15: google.protobuf.Any
+	(*v11.ActivityTransferInfo)(nil),   // 12: temporal.server.api.taskqueue.v1.ActivityTransferInfo
+	(v13.TaskQueueType)(0),             // 13: temporal.api.enums.v1.TaskQueueType
+	(v13.TaskQueueKind)(0),             // 14: temporal.api.enums.v1.TaskQueueKind
+	(*v11.FairLevel)(nil),              // 15: temporal.server.api.taskqueue.v1.FairLevel
+	(*anypb.Any)(nil),                  // 16: google.protobuf.Any
 }
 var file_temporal_server_api_persistence_v1_tasks_proto_depIdxs = []int32{
 	1,  // 0: temporal.server.api.persistence.v1.AllocatedTaskInfo.data:type_name -> temporal.server.api.persistence.v1.TaskInfo
@@ -824,22 +844,23 @@ var file_temporal_server_api_persistence_v1_tasks_proto_depIdxs = []int32{
 	9,  // 3: temporal.server.api.persistence.v1.TaskInfo.clock:type_name -> temporal.server.api.clock.v1.VectorClock
 	10, // 4: temporal.server.api.persistence.v1.TaskInfo.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
 	11, // 5: temporal.server.api.persistence.v1.TaskInfo.priority:type_name -> temporal.api.common.v1.Priority
-	12, // 6: temporal.server.api.persistence.v1.TaskQueueInfo.task_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	13, // 7: temporal.server.api.persistence.v1.TaskQueueInfo.kind:type_name -> temporal.api.enums.v1.TaskQueueKind
-	8,  // 8: temporal.server.api.persistence.v1.TaskQueueInfo.expiry_time:type_name -> google.protobuf.Timestamp
-	8,  // 9: temporal.server.api.persistence.v1.TaskQueueInfo.last_update_time:type_name -> google.protobuf.Timestamp
-	3,  // 10: temporal.server.api.persistence.v1.TaskQueueInfo.subqueues:type_name -> temporal.server.api.persistence.v1.SubqueueInfo
-	6,  // 11: temporal.server.api.persistence.v1.TaskQueueInfo.partition_scale_state:type_name -> temporal.server.api.persistence.v1.PartitionScaleState
-	5,  // 12: temporal.server.api.persistence.v1.SubqueueInfo.key:type_name -> temporal.server.api.persistence.v1.SubqueueKey
-	14, // 13: temporal.server.api.persistence.v1.SubqueueInfo.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
-	14, // 14: temporal.server.api.persistence.v1.SubqueueInfo.fair_max_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
-	4,  // 15: temporal.server.api.persistence.v1.SubqueueInfo.top_k_fairness_counts:type_name -> temporal.server.api.persistence.v1.FairnessKeyCount
-	15, // 16: temporal.server.api.persistence.v1.PartitionScaleState.private_scaler_state:type_name -> google.protobuf.Any
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	12, // 6: temporal.server.api.persistence.v1.TaskInfo.activity_transfer_info:type_name -> temporal.server.api.taskqueue.v1.ActivityTransferInfo
+	13, // 7: temporal.server.api.persistence.v1.TaskQueueInfo.task_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	14, // 8: temporal.server.api.persistence.v1.TaskQueueInfo.kind:type_name -> temporal.api.enums.v1.TaskQueueKind
+	8,  // 9: temporal.server.api.persistence.v1.TaskQueueInfo.expiry_time:type_name -> google.protobuf.Timestamp
+	8,  // 10: temporal.server.api.persistence.v1.TaskQueueInfo.last_update_time:type_name -> google.protobuf.Timestamp
+	3,  // 11: temporal.server.api.persistence.v1.TaskQueueInfo.subqueues:type_name -> temporal.server.api.persistence.v1.SubqueueInfo
+	6,  // 12: temporal.server.api.persistence.v1.TaskQueueInfo.partition_scale_state:type_name -> temporal.server.api.persistence.v1.PartitionScaleState
+	5,  // 13: temporal.server.api.persistence.v1.SubqueueInfo.key:type_name -> temporal.server.api.persistence.v1.SubqueueKey
+	15, // 14: temporal.server.api.persistence.v1.SubqueueInfo.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
+	15, // 15: temporal.server.api.persistence.v1.SubqueueInfo.fair_max_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
+	4,  // 16: temporal.server.api.persistence.v1.SubqueueInfo.top_k_fairness_counts:type_name -> temporal.server.api.persistence.v1.FairnessKeyCount
+	16, // 17: temporal.server.api.persistence.v1.PartitionScaleState.private_scaler_state:type_name -> google.protobuf.Any
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_tasks_proto_init() }

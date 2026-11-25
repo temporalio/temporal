@@ -983,6 +983,26 @@ func (mr *MockHistoryServiceClientMockRecorder) RecordWorkflowTaskStarted(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkflowTaskStarted", reflect.TypeOf((*MockHistoryServiceClient)(nil).RecordWorkflowTaskStarted), varargs...)
 }
 
+// RecoverActivityTaskStarted mocks base method.
+func (m *MockHistoryServiceClient) RecoverActivityTaskStarted(ctx context.Context, in *historyservice.RecoverActivityTaskStartedRequest, opts ...grpc.CallOption) (*historyservice.RecoverActivityTaskStartedResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RecoverActivityTaskStarted", varargs...)
+	ret0, _ := ret[0].(*historyservice.RecoverActivityTaskStartedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecoverActivityTaskStarted indicates an expected call of RecoverActivityTaskStarted.
+func (mr *MockHistoryServiceClientMockRecorder) RecoverActivityTaskStarted(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecoverActivityTaskStarted", reflect.TypeOf((*MockHistoryServiceClient)(nil).RecoverActivityTaskStarted), varargs...)
+}
+
 // RefreshWorkflowTasks mocks base method.
 func (m *MockHistoryServiceClient) RefreshWorkflowTasks(ctx context.Context, in *historyservice.RefreshWorkflowTasksRequest, opts ...grpc.CallOption) (*historyservice.RefreshWorkflowTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -2468,6 +2488,21 @@ func (m *MockHistoryServiceServer) RecordWorkflowTaskStarted(arg0 context.Contex
 func (mr *MockHistoryServiceServerMockRecorder) RecordWorkflowTaskStarted(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkflowTaskStarted", reflect.TypeOf((*MockHistoryServiceServer)(nil).RecordWorkflowTaskStarted), arg0, arg1)
+}
+
+// RecoverActivityTaskStarted mocks base method.
+func (m *MockHistoryServiceServer) RecoverActivityTaskStarted(arg0 context.Context, arg1 *historyservice.RecoverActivityTaskStartedRequest) (*historyservice.RecoverActivityTaskStartedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecoverActivityTaskStarted", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.RecoverActivityTaskStartedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecoverActivityTaskStarted indicates an expected call of RecoverActivityTaskStarted.
+func (mr *MockHistoryServiceServerMockRecorder) RecoverActivityTaskStarted(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecoverActivityTaskStarted", reflect.TypeOf((*MockHistoryServiceServer)(nil).RecoverActivityTaskStarted), arg0, arg1)
 }
 
 // RefreshWorkflowTasks mocks base method.

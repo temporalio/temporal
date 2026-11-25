@@ -58,6 +58,9 @@ func (c *clientImpl) doAddActivityTask(
 			Stamp:                  request.Stamp,
 			Priority:               request.Priority,
 			ComponentRef:           request.ComponentRef,
+			ActivityTransferInfo:   request.ActivityTransferInfo,
+			WithheldStartRequestId: request.WithheldStartRequestId,
+			AllowSyncMatchRecovery: request.AllowSyncMatchRecovery,
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)

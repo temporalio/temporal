@@ -50,6 +50,7 @@ func activityPendingRetry(ai *persistencespb.ActivityInfo) bool {
 // Called when an activity leaves the started state (retry, pause, etc.) so that stale
 // values from the previous attempt don't leak into the next one.
 func ClearActivityStartedState(ai *persistencespb.ActivityInfo) {
+	ai.ActivityTransferInfo = nil
 	ai.StartedEventId = common.EmptyEventID
 	ai.StartVersion = common.EmptyVersion
 	ai.RequestId = ""
@@ -321,6 +322,7 @@ func ResetActivity(
 		// reset the number of attempts
 		activityInfo.Attempt = 1
 		activityInfo.ActivityReset = true
+		activityInfo.ActivityTransferInfo = nil
 		if resetHeartbeats {
 			activityInfo.ResetHeartbeats = true
 		}

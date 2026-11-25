@@ -118,6 +118,8 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Stamp:                  task.event.Data.GetStamp(),
 				Priority:               task.event.Data.GetPriority(),
 				ComponentRef:           task.event.Data.GetComponentRef(),
+				ActivityTransferInfo:   task.event.Data.GetActivityTransferInfo(),
+				WithheldStartRequestId: task.event.Data.GetWithheldStartRequestId(),
 			},
 		)
 	default:

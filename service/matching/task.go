@@ -67,6 +67,8 @@ type (
 		// redirectedFromBacklog is true if this task was redirectedFromBacklog from the backlog it was read from
 		// (V2 and V3 versioning).
 		redirectedFromBacklog bool
+		activityRecovery      *activityRecoveryDispatch
+		allowActivityRecovery bool
 		// queued is true while this task is in matcherData.tasks. It's a matcher field (see below)
 		// but lives here so it packs into the padding next to redirectedFromBacklog.
 		queued bool

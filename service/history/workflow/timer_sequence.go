@@ -328,6 +328,19 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 	return getActivityScheduleToCloseTimeout(activityInfo)
 }
 
+// ActivityHasTimedOut uses the same deadlines as the History timer tasks, including
+// whether the Activity is still waiting for a start.
+func ActivityHasTimedOut(ai *persistencespb.ActivityInfo, now time.Time) bool {
+	for _, deadline := range [...]func(*persistencespb.ActivityInfo) (TimerSequenceID, bool){
+		getActivityScheduleToCloseTimeout, getActivityScheduleToStartTimeout, getActivityStartToCloseTimeout, getActivityHeartbeatTimeout,
+	} {
+		if timer, ok := deadline(ai); ok && !now.Before(timer.Timestamp) {
+			return true
+		}
+	}
+	return false
+}
+
 func getActivityScheduleToCloseTimeout(
 	activityInfo *persistencespb.ActivityInfo,
 ) (TimerSequenceID, bool) {

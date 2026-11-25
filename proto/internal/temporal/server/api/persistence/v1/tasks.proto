@@ -34,6 +34,9 @@ message TaskInfo {
   temporal.api.common.v1.Priority priority = 10;
   // Reference to any chasm component associated with this task
   bytes component_ref = 11;
+  temporal.server.api.taskqueue.v1.ActivityTransferInfo activity_transfer_info = 12;
+  // Lookup key for the Matching partition that withheld this start. It does not authorize delivery.
+  string withheld_start_request_id = 13;
 }
 
 // task_queue column
