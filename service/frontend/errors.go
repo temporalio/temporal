@@ -83,6 +83,7 @@ var (
 
 	errSearchAttributeIsReservedMessage               = "Search attribute %s is reserved by system."
 	errSearchAttributeIsPreallocatedFieldMessage      = "Search attribute %s is a pre-allocated custom search attribute field name and cannot be registered."
+	errSearchAttributeIsClusterLevelMessage           = "Search attribute %s is already a cluster-level custom search attribute and cannot be used as an alias."
 	errSearchAttributeAlreadyExistsMessage            = "Search attribute %s already exists."
 	errSearchAttributeDoesntExistMessage              = "Search attribute %s doesn't exist."
 	errUnknownSearchAttributeTypeMessage              = "Unknown search attribute type: %v."

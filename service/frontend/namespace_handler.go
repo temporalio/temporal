@@ -34,9 +34,14 @@ import (
 	"go.temporal.io/server/common/namespace/nsmanager"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -55,6 +60,8 @@ type (
 		namespaceAttrValidator *nsmanager.Validator
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
+		visibilityMgr          manager.VisibilityManager
+		saProvider             searchattribute.Provider
 		timeSource             clock.TimeSource
 		config                 *Config
 		chasmNsReplClient      namespacereplicationpb.NamespaceReplicationServiceClient
@@ -98,6 +105,8 @@ func newNamespaceHandler(
 	namespaceReplicator nsreplication.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
+	visibilityMgr manager.VisibilityManager,
+	saProvider searchattribute.Provider,
 	timeSource clock.TimeSource,
 	config *Config,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
@@ -114,6 +123,8 @@ func newNamespaceHandler(
 		namespaceAttrValidator: nsmanager.NewValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
+		visibilityMgr:          visibilityMgr,
+		saProvider:             saProvider,
 		timeSource:             timeSource,
 		config:                 config,
 		chasmNsReplClient:      chasmNsReplClient,
@@ -600,6 +611,9 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 		if len(updatedConfig.CustomSearchAttributeAliases) > 0 {
 			configurationChanged = true
+			if err := d.validateSearchAttributeAliases(updatedConfig.CustomSearchAttributeAliases); err != nil {
+				return nil, err
+			}
 			csaAliases, err := d.upsertCustomSearchAttributesAliases(
 				config.CustomSearchAttributeAliases,
 				updatedConfig.CustomSearchAttributeAliases,
@@ -1308,6 +1322,40 @@ func (d *namespaceHandler) mergeNamespaceData(
 	}
 	maps.Copy(old, new)
 	return old
+}
+
+// validateSearchAttributeAliases rejects aliases of an Elasticsearch visibility store that have
+// the name of a pre-allocated field (eg: Keyword01) or of a cluster-level custom search attribute.
+// Such an alias would make the name refer to two fields.
+// With dual visibility, the namespace aliases are shared by both visibility stores, and the
+// operator API keeps them consistent, so they are not validated here.
+func (d *namespaceHandler) validateSearchAttributeAliases(fieldToAliasMap map[string]string) error {
+	if d.visibilityMgr == nil || d.saProvider == nil {
+		return nil
+	}
+	if _, ok := d.visibilityMgr.(*visibility.VisibilityManagerDual); ok {
+		return nil
+	}
+	if !d.visibilityMgr.HasStoreName(esconfig.PersistenceName) {
+		return nil
+	}
+	searchAttributes, err := d.saProvider.GetSearchAttributes(d.visibilityMgr.GetIndexName(), false)
+	if err != nil {
+		return serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+	}
+	for _, alias := range fieldToAliasMap {
+		if alias == "" {
+			// An empty alias removes the field's alias.
+			continue
+		}
+		if sadefs.IsPreallocatedCSAFieldNameOfAnyType(alias) {
+			return serviceerror.NewInvalidArgumentf(errSearchAttributeIsPreallocatedFieldMessage, alias)
+		}
+		if isClusterLevelCustomSearchAttribute(searchAttributes.Custom(), alias) {
+			return serviceerror.NewInvalidArgumentf(errSearchAttributeIsClusterLevelMessage, alias)
+		}
+	}
+	return nil
 }
 
 func (d *namespaceHandler) upsertCustomSearchAttributesAliases(

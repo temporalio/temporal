@@ -982,8 +982,9 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		`EnableElasticsearchNamespaceSearchAttributeAliases makes AddSearchAttributes register custom search
 attributes of an Elasticsearch visibility store as namespace aliases of pre-allocated fields (eg: Keyword01),
 like SQL visibility stores, instead of adding them to the index mapping and cluster metadata. Namespace aliases
-are replicated, so only enable it once every cluster sharing global namespaces with this one supports namespace
-aliases and its Elasticsearch index maps the pre-allocated fields (visibility schema v16 or later).`,
+are replicated, so only enable it once every cluster sharing global namespaces with this one runs a version that
+supports namespace aliases, and its history service has added the pre-allocated fields to the Elasticsearch index
+mapping at startup.`,
 	)
 	SearchAttributesNumberOfKeysLimit = NewNamespaceIntSetting(
 		"frontend.searchAttributesNumberOfKeysLimit",

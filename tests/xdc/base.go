@@ -253,13 +253,14 @@ func (s *xdcBaseSuite) createGlobalNamespace() string {
 
 func (s *xdcBaseSuite) registerTestSearchAttributes(ns string) {
 	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
-	// For SQL: call AddSearchAttributes on the active cluster only. It calls UpdateNamespace
-	// internally, so the alias mapping replicates to all clusters. Calling it on each cluster
-	// independently is unsafe — alias assignment uses non-deterministic Go map iteration and
-	// can produce different field→alias mappings per cluster, corrupting standby visibility.
-	// For ES: each cluster has its own index and cluster metadata, so register on each.
+	// With namespace aliases (SQL, or Elasticsearch with namespace aliases enabled), call
+	// AddSearchAttributes on the active cluster only. It calls UpdateNamespace internally, so the
+	// alias mapping replicates to all clusters. The other clusters reject alias changes for a
+	// global namespace.
+	// Otherwise (Elasticsearch), each cluster has its own index and cluster metadata, so register
+	// on each.
 	clusters := s.clusters
-	if testcore.UseSQLVisibility() {
+	if testcore.UseSQLVisibility() || s.dynamicConfigOverrides[dynamicconfig.EnableElasticsearchNamespaceSearchAttributeAliases.Key()] == true {
 		clusters = s.clusters[:1]
 	}
 	for _, cl := range clusters {

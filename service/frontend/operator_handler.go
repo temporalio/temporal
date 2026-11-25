@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sync/atomic"
@@ -189,10 +190,18 @@ func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 	visManager manager.VisibilityManager,
 ) error {
 	storeName := visManager.GetStoreNames()[0]
-	if storeName == esconfig.PersistenceName && !h.useElasticsearchNamespaceAliases() {
+	if storeName != esconfig.PersistenceName {
+		return h.addSearchAttributeAliases(ctx, request, visManager)
+	}
+	// Pre-allocated field names are rejected in both modes, so that no new custom search attribute
+	// conflicts with a pre-allocated field before namespace aliases are enabled.
+	if err := validateNoPreallocatedFieldNames(request.GetSearchAttributes()); err != nil {
+		return err
+	}
+	if !h.useElasticsearchNamespaceAliases() {
 		return h.addSearchAttributesElasticsearch(ctx, request, visManager)
 	}
-	return h.addSearchAttributeAliases(ctx, request, visManager, storeName == esconfig.PersistenceName)
+	return h.addSearchAttributeAliases(ctx, request, visManager)
 }
 
 // useElasticsearchNamespaceAliases returns true if custom search attributes of an Elasticsearch
@@ -229,12 +238,21 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
+	// A name that is already a namespace alias (eg: assigned by the SQL visibility store with dual
+	// visibility, or replicated from another cluster) is already usable through the alias.
+	// Registering it in cluster metadata too would give the name two fields.
+	aliasToFieldMap, err := h.namespaceAliasToFieldMap(ctx, request.GetNamespace())
+	if err != nil {
+		return err
+	}
+
 	// Check if custom search attribute already exists in cluster metadata.
 	// This check is not needed in SQL DB because all custom search attributes
 	// are pre-allocated, and only aliases are created.
 	customAttributesToAdd := map[string]enumspb.IndexedValueType{}
 	for saName, saType := range request.GetSearchAttributes() {
-		if !currentSearchAttributes.IsDefined(saName) {
+		_, isAlias := aliasToFieldMap[saName]
+		if !currentSearchAttributes.IsDefined(saName) && !isAlias {
 			customAttributesToAdd[saName] = saType
 		} else {
 			h.logger.Warn(
@@ -274,14 +292,7 @@ func (h *OperatorHandlerImpl) addSearchAttributeAliases(
 	ctx context.Context,
 	request *operatorservice.AddSearchAttributesRequest,
 	visManager manager.VisibilityManager,
-	isElasticsearch bool,
 ) error {
-	if isElasticsearch {
-		if err := validateNoPreallocatedFieldNames(request.GetSearchAttributes()); err != nil {
-			return err
-		}
-	}
-
 	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
@@ -355,9 +366,9 @@ func findFreePreallocatedField(
 	return "", cntUsed
 }
 
-// validateNoPreallocatedFieldNames rejects pre-allocated field names (eg: Keyword01) as aliases of
-// an Elasticsearch visibility store: its schema maps them with a fixed type, and cluster metadata
-// already lists them.
+// validateNoPreallocatedFieldNames rejects pre-allocated field names (eg: Keyword01) as custom
+// search attribute names of an Elasticsearch visibility store. Cluster metadata lists them as
+// pre-allocated fields, and they are added to the index mapping with a fixed type.
 func validateNoPreallocatedFieldNames(searchAttributes map[string]enumspb.IndexedValueType) error {
 	for saName := range searchAttributes {
 		if sadefs.IsPreallocatedCSAFieldNameOfAnyType(saName) {
@@ -422,12 +433,15 @@ func (h *OperatorHandlerImpl) removeSearchAttributesInternal(
 	if storeName != esconfig.PersistenceName {
 		return h.removeSearchAttributeAliases(ctx, request.GetNamespace(), request.GetSearchAttributes(), visManager)
 	}
-	if !h.useElasticsearchNamespaceAliases() {
+	if request.GetNamespace() == "" {
+		// Without a namespace, only custom search attributes registered in cluster metadata can be
+		// removed.
 		return h.removeSearchAttributesElasticsearch(ctx, request, visManager)
 	}
 
 	// Custom search attributes registered in cluster metadata are removed from cluster metadata,
-	// and the rest are removed from the namespace aliases.
+	// and the rest are removed from the namespace aliases. Namespace aliases can exist even when
+	// they are not used to add custom search attributes (eg: replicated from another cluster).
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(visManager.GetIndexName(), true)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -534,6 +548,38 @@ func (h *OperatorHandlerImpl) removeSearchAttributeAliases(
 	}
 
 	return h.updateNamespaceAliases(ctx, nsName, upsertFieldToAliasMap)
+}
+
+// namespaceAliasToFieldMap returns the custom search attribute aliases of the namespace, keyed
+// by alias. It returns nil if the namespace is not set or doesn't exist, since the namespace is
+// optional for cluster-level custom search attributes.
+func (h *OperatorHandlerImpl) namespaceAliasToFieldMap(
+	ctx context.Context,
+	namespaceName string,
+) (map[string]string, error) {
+	if namespaceName == "" {
+		return nil, nil
+	}
+
+	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
+		frontend.DefaultTimeout,
+		frontend.DefaultLongPollTimeout,
+	)
+	if err != nil {
+		return nil, serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
+	}
+
+	resp, err := client.DescribeNamespace(
+		ctx,
+		&workflowservice.DescribeNamespaceRequest{Namespace: namespaceName},
+	)
+	if err != nil {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
+			return nil, nil
+		}
+		return nil, serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, namespaceName, err)
+	}
+	return util.InverseMap(resp.GetConfig().GetCustomSearchAttributeAliases()), nil
 }
 
 func (h *OperatorHandlerImpl) getNamespaceInfo(

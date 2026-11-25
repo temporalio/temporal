@@ -121,6 +121,8 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
+		nil,
+		nil,
 		s.fakeClock,
 		s.config,
 		nil,

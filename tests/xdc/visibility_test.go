@@ -15,6 +15,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -32,8 +33,9 @@ type VisibilityTestSuite struct {
 func TestVisibilityTestSuite(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name                    string
-		enableTransitionHistory bool
+		name                                               string
+		enableTransitionHistory                            bool
+		enableElasticsearchNamespaceSearchAttributeAliases bool
 	}{
 		{
 			name:                    "EnableTransitionHistory",
@@ -43,10 +45,23 @@ func TestVisibilityTestSuite(t *testing.T) {
 			name:                    "DisableTransitionHistory",
 			enableTransitionHistory: false,
 		},
+		{
+			name:                    "ElasticsearchNamespaceSearchAttributeAliases",
+			enableTransitionHistory: true,
+			enableElasticsearchNamespaceSearchAttributeAliases: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.enableElasticsearchNamespaceSearchAttributeAliases && testcore.UseSQLVisibility() {
+				t.Skip("SQL visibility always uses namespace aliases")
+			}
 			s := &VisibilityTestSuite{}
 			s.enableTransitionHistory = tc.enableTransitionHistory
+			if tc.enableElasticsearchNamespaceSearchAttributeAliases {
+				s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+					dynamicconfig.EnableElasticsearchNamespaceSearchAttributeAliases.Key(): true,
+				}
+			}
 			suite.Run(t, s)
 		})
 	}

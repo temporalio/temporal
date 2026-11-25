@@ -83,6 +83,8 @@ func newLegacyPublishTestHandler(
 		nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
 		archiver.NewArchivalMetadata(dc, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
 		nil,
+		nil,
+		nil,
 		clock.NewEventTimeSource(),
 		cfg,
 		nil,
