@@ -1,8 +1,8 @@
 package tag
 
 type (
-	// Implement Tag interface to supply custom tags to Logger interface implementation.
-	Tag interface {
+	// Tag is implemented by custom fields supplied to a logger.
+	Tag = interface {
 		Key() string
 		Value() any
 	}

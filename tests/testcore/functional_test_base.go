@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/testx/softassert"
 )
 
 type (
@@ -306,7 +307,7 @@ func (s *functionalTestBase) setupCluster(options ...TestClusterOption) {
 		}
 		tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 		// Fail tests when a soft assertion fires (see `softassert` package).
-		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+		tl.Expect(testlogger.Error, ".*", softassert.FailedAssertion)
 		s.Logger = tl
 	}
 

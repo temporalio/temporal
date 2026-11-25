@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/dgryski/go-farm"
+	otellog "go.opentelemetry.io/otel/log"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
@@ -88,6 +89,8 @@ func eagerNamespaceRefresherProvider(
 	admitter nsreplication.NamespaceReplicationAdmitter,
 	metricsHandler metrics.Handler,
 	testHooks testhooks.TestHooks,
+	resolverFactory namespace.ReplicationResolverFactory,
+	eventLogger otellog.Logger,
 ) EagerNamespaceRefresher {
 	return NewEagerNamespaceRefresher(
 		metadataManager,
@@ -102,8 +105,10 @@ func eagerNamespaceRefresherProvider(
 			logger,
 			testHooks,
 		),
+		resolverFactory,
 		clusterMetadata.GetCurrentClusterName(),
 		metricsHandler,
+		eventLogger,
 	)
 }
 

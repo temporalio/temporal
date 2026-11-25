@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 func TestMakeWakePriority(t *testing.T) {
@@ -31,4 +32,21 @@ func TestBetterWakePriority(t *testing.T) {
 	require.False(t, betterWakePriority(makeWakePriority(7, age.Add(61*time.Second)), priority))
 	require.True(t, betterWakePriority(makeWakePriority(7, age.Add(24*time.Hour)), makeWakePriority(8, age)))
 	require.False(t, betterWakePriority(makeWakePriority(8, age), makeWakePriority(7, age.Add(24*time.Hour))))
+}
+
+func TestSortLimiters(t *testing.T) {
+	t.Parallel()
+	a := Limiter{Type: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "a", Config: "config-a", ConfigVersion: 1}
+	b := Limiter{Type: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "b", Config: "config-b", ConfigVersion: 2}
+	c := Limiter{
+		Type: enumsspb.LIMITER_TYPE_LOCAL_RATE_LIMIT, Key: "a", Source: LimiterSourceConfig,
+		Config: "config-c", ConfigVersion: 3,
+	}
+	want := []Limiter{a, b, c}
+	for _, input := range [][]Limiter{
+		{a, b, c}, {a, c, b}, {b, a, c}, {b, c, a}, {c, a, b}, {c, b, a},
+	} {
+		sortLimiters(input)
+		require.Equal(t, want, input)
+	}
 }
