@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
@@ -50,12 +51,14 @@ type Updater struct {
 	// Variables referencing mutable state data.
 	// WARNING: any references to mutable state data *have to* be copied
 	// to avoid data races when used outside the workflow lease.
-	taskQueue              *taskqueuepb.TaskQueue
-	priority               *commonpb.Priority
-	normalTaskQueueName    string
-	scheduledEventID       int64
-	scheduleToStartTimeout time.Duration
-	workflowTaskStamp      int32
+	taskQueue                                     *taskqueuepb.TaskQueue
+	priority                                      *commonpb.Priority
+	normalTaskQueueName                           string
+	scheduledEventID                              int64
+	scheduleToStartTimeout                        time.Duration
+	workflowTaskStamp                             int32
+	bufferedForWorkflowHeartbeatNotification      bool
+	firstBufferedForWorkflowHeartbeatNotification bool
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -63,6 +66,9 @@ type Updater struct {
 	// nexusSerializationContext is a copy of the Update's Nexus serialization context, captured in ApplyRequest
 	// because it must be read while holding the workflow lease.
 	nexusSerializationContext *nexuspb.PropagatedSerializationContext
+	// newUpdateWithNexusContext is set in ApplyRequest when this request admitted a new Update that carries a
+	// Nexus serialization context. (Used in tracking metrics.)
+	newUpdateWithNexusContext bool
 }
 
 func NewUpdater(
@@ -106,8 +112,27 @@ func (u *Updater) Invoke(
 	if err != nil {
 		return nil, err
 	}
-
 	return u.OnSuccess(ctx)
+}
+
+func (u *Updater) handleWorkflowHeartbeatNotification(namespaceName string) {
+
+	if !u.bufferedForWorkflowHeartbeatNotification {
+		return
+	}
+
+	// The rollout setting controls WHN dispatch, while these metrics count all admitted Updates buffered behind a task.
+	handler := u.shardCtx.GetMetricsHandler().WithTags(
+		metrics.OperationTag(metrics.WorkflowContextScope),
+		metrics.NamespaceTag(namespaceName),
+		metrics.EventTypeTag(workflow.WorkflowHeartbeatNotificationUpdateAdmittedMetricTag),
+	)
+	metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
+
+	if u.firstBufferedForWorkflowHeartbeatNotification {
+		metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
+		workflow.SendWorkflowHeartbeatNotification(u.shardCtx, namespaceName, u.wfKey.WorkflowID)
+	}
 }
 
 func (u *Updater) ApplyRequest(
@@ -182,7 +207,7 @@ func (u *Updater) applyRequest(
 	if err := validateCallbacks(ctx, updateReg, ms, updateRequest); err != nil {
 		return nil, err
 	}
-
+	startedWorkflowTask := ms.HasStartedWorkflowTask()
 	var (
 		alreadyExisted bool
 		err            error
@@ -190,8 +215,18 @@ func (u *Updater) applyRequest(
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}
+	if startedWorkflowTask && !alreadyExisted {
+		u.bufferedForWorkflowHeartbeatNotification = true
+		// TODO(whn): Refine the mildly relaxed accuracy without scanning all buffered event types.
+		u.firstBufferedForWorkflowHeartbeatNotification = (ms.NumBufferedEvents() == 0 && !updateReg.HasOutgoingMessages(false))
+	}
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
+	}
+	// Only set this to true, never back to false. Update-with-start can call ApplyRequest twice for the
+	// same request, and on the second call the Update this request created is already in the registry.
+	if !alreadyExisted && updateRequest.GetPropagatedNexusSerializationContext() != nil {
+		u.newUpdateWithNexusContext = true
 	}
 
 	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
@@ -394,7 +429,15 @@ func (u *Updater) OnSuccess(
 	if err != nil {
 		return nil, err
 	}
-	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
+	namespaceName := ns.Name().String()
+
+	// WHN should be before the long polling
+	u.handleWorkflowHeartbeatNotification(namespaceName)
+	if u.newUpdateWithNexusContext {
+		metrics.NexusWorkflowUpdateWithContext.With(u.shardCtx.GetMetricsHandler()).Record(1, metrics.NamespaceTag(namespaceName))
+	}
+
+	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(namespaceName)
 	waitStage := u.req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
 	status, err := u.upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)

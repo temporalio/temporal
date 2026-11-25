@@ -227,10 +227,11 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		return nil
 	}
 
-	if err := visManager.AddSearchAttributes(
+	err = visManager.AddSearchAttributes(
 		ctx,
 		&manager.AddSearchAttributesRequest{SearchAttributes: customAttributesToAdd},
-	); err != nil {
+	)
+	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
 
@@ -490,18 +491,47 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 	}
 
 	if h.visibilityMgr.HasStoreName(esconfig.PersistenceName) {
-		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
+		return h.listSearchAttributesElasticsearch(request, searchAttributes)
 	}
 	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
 }
 
+// listSearchAttributesElasticsearch returns the custom search attributes registered at the
+// cluster level, plus the namespace aliases of pre-allocated fields. Pre-allocated fields
+// themselves (eg: Keyword01) are not returned: they can only be used through an alias.
 func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
-	ctx context.Context,
-	indexName string,
+	request *operatorservice.ListSearchAttributesRequest,
 	searchAttributes searchattribute.NameTypeMap,
 ) (*operatorservice.ListSearchAttributesResponse, error) {
+	cmCSA := searchAttributes.Custom()
+	customSearchAttributes := searchattribute.WithoutPreallocatedFields(cmCSA)
+	if nsName := request.GetNamespace(); nsName != "" {
+		ns, err := h.namespaceRegistry.GetNamespace(namespace.Name(nsName))
+		if err != nil {
+			return nil, err
+		}
+		// Like listSearchAttributesSQL, iterate over the fields in cluster metadata and return the
+		// alias of the pre-allocated ones.
+		saMapper := ns.CustomSearchAttributesMapper()
+		fieldToAliasMap := saMapper.FieldToAliasMap()
+		for field, tp := range cmCSA {
+			if !sadefs.IsPreallocatedCSAFieldName(field, tp) {
+				continue
+			}
+			alias, ok := fieldToAliasMap[field]
+			if !ok {
+				continue
+			}
+			// A cluster-level custom search attribute takes precedence over a namespace alias
+			// with the same name.
+			if _, exists := customSearchAttributes[alias]; exists {
+				continue
+			}
+			customSearchAttributes[alias] = tp
+		}
+	}
 	return &operatorservice.ListSearchAttributesResponse{
-		CustomAttributes: searchAttributes.Custom(),
+		CustomAttributes: customSearchAttributes,
 		SystemAttributes: searchAttributes.System(),
 	}, nil
 }

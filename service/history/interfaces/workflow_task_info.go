@@ -33,6 +33,8 @@ type WorkflowTaskInfo struct {
 	// Also used for recording latency metrics
 	ScheduledTime time.Time
 	StartedTime   time.Time
+	// WorkerControlQueue is set only when the worker that started this task supports workflow heartbeat notifications.
+	WorkerControlQueue string
 	// OriginalScheduledTime is to record the first scheduled workflow task during workflow task heartbeat.
 	// Client may to heartbeat workflow task by RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true
 	// In this case, OriginalScheduledTime won't change. Then when time.Now().UTC()-OriginalScheduledTime exceeds

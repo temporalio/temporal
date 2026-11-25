@@ -291,7 +291,7 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Success(
 						signaled = append(signaled, event)
 					}
 				}
-				s.Require().Len(signaled, 1)
+				s.Len(signaled, 1)
 				attrs := signaled[0].GetWorkflowExecutionSignaledEventAttributes()
 				s.Equal("batch-signaler", attrs.GetIdentity())
 				protorequire.ProtoEqual(t, header, attrs.GetHeader())

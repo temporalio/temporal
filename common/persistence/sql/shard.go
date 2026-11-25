@@ -116,8 +116,9 @@ func (m *sqlShardStore) AssertShardOwnership(
 	ctx context.Context,
 	request *persistence.AssertShardOwnershipRequest,
 ) error {
-	// AssertShardOwnership is not implemented for sql shard store
-	return nil
+	return m.txExecute(ctx, "AssertShardOwnership", func(tx sqlplugin.Tx) error {
+		return readLockShard(ctx, tx, request.ShardID, request.RangeID)
+	})
 }
 
 // initiated by the owning shard

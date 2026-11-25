@@ -108,7 +108,8 @@ func isRetryableCallError(err error) bool {
 	if handlerError, ok := errors.AsType[*nexus.HandlerError](err); ok {
 		return handlerError.Retryable()
 	}
-	return true
+	// Redirects are never followed, and the destination will keep redirecting.
+	return !errors.Is(err, commonnexus.ErrRedirectNotAllowed)
 }
 
 func outboundOutcome(callCtx context.Context, callErr error) outcomeTag {

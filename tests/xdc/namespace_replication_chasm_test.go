@@ -823,7 +823,8 @@ func (s *namespaceReplicationCHASMTestSuite) captureNamespaceMutationApply(
 		applyRequest.NamespaceTaskPayload = encodedTask
 		req = applyRequest
 	}
-	if s.failApplyRequests.Load() || (s.failCreateRequests.Load() && applyRequest.GetNamespaceTask().GetNamespaceOperation() == enumsspb.NAMESPACE_OPERATION_CREATE) {
+	operatorRepair := applyRequest.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR
+	if !operatorRepair && (s.failApplyRequests.Load() || (s.failCreateRequests.Load() && applyRequest.GetNamespaceTask().GetNamespaceOperation() == enumsspb.NAMESPACE_OPERATION_CREATE)) {
 		err := serviceerror.NewUnavailable("injected CHASM namespace replication failure")
 		s.recordObservedApply(ctx, applyRequest, nil, err)
 		return nil, err

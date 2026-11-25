@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -192,6 +193,82 @@ func TestApplyRequest_RejectsUpdateOnPausedWorkflow(t *testing.T) {
 	require.Contains(t, err.Error(), "Workflow is paused")
 }
 
+func TestApplyRequestCountsBufferedUpdates(t *testing.T) {
+	newMutableState := func(t *testing.T, numBufferedEvents int) *historyi.MockMutableState {
+		ms := historyi.NewMockMutableState(gomock.NewController(t))
+		ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+		ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+		ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+		ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+		ms.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
+		ms.EXPECT().HasPendingWorkflowTask().Return(true).AnyTimes()
+		ms.EXPECT().NumBufferedEvents().Return(numBufferedEvents).AnyTimes()
+		ms.EXPECT().GetCurrentVersion().Return(int64(1))
+		ms.EXPECT().VisitUpdates(gomock.Any())
+		ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+		return ms
+	}
+	applyUpdate := func(t *testing.T, registry update.Registry, ms historyi.MutableState, id string) *Updater {
+		req := createUpdateRequest(id)
+		req.Request.Request.Input = &updatepb.Input{Name: "update"}
+		updater := &Updater{req: req}
+		action, err := updater.ApplyRequest(context.Background(), registry, ms)
+		require.NoError(t, err)
+		require.True(t, action.Noop)
+		require.True(t, updater.bufferedForWorkflowHeartbeatNotification)
+		return updater
+	}
+
+	t.Run("earlier unsent Update", func(t *testing.T) {
+		ms := newMutableState(t, 0)
+		registry := update.NewRegistry(ms)
+		require.True(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+		require.False(t, applyUpdate(t, registry, ms, "second").firstBufferedForWorkflowHeartbeatNotification)
+	})
+
+	t.Run("buffered events", func(t *testing.T) {
+		ms := newMutableState(t, 1)
+		registry := update.NewRegistry(ms)
+		require.False(t, applyUpdate(t, registry, ms, "first").firstBufferedForWorkflowHeartbeatNotification)
+	})
+}
+
+func TestApplyRequest_MarksNewUpdateWithNexusContext(t *testing.T) {
+	ms := historyi.NewMockMutableState(gomock.NewController(t))
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+	ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+	ms.EXPECT().HasStartedWorkflowTask().Return(false).AnyTimes()
+	ms.EXPECT().HasPendingWorkflowTask().Return(true).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	ms.EXPECT().VisitUpdates(gomock.Any())
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+	registry := update.NewRegistry(ms)
+
+	newUpdater := func(id string, nexusContext *nexuspb.PropagatedSerializationContext) *Updater {
+		req := createUpdateRequest(id)
+		req.Request.Request.Input = &updatepb.Input{Name: "update"}
+		req.Request.Request.PropagatedNexusSerializationContext = nexusContext
+		return &Updater{req: req}
+	}
+	apply := func(updater *Updater) bool {
+		_, err := updater.ApplyRequest(context.Background(), registry, ms)
+		require.NoError(t, err)
+		return updater.newUpdateWithNexusContext
+	}
+	nexusContext := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "service", Operation: "operation"}
+
+	updater := newUpdater("with-context", nexusContext)
+	require.True(t, apply(updater))
+	// Update-with-start can re-apply the same request on the same registry.
+	require.True(t, apply(updater), "re-applying the request that admitted the Update keeps it marked")
+	require.False(t, apply(newUpdater("with-context", nexusContext)), "a duplicate request for an existing Update is not new")
+	require.False(t, apply(newUpdater("without-context", nil)))
+}
+
 // An Update whose callbacks would breach the execution's limits must be rejected before it is
 // admitted and dispatched to a worker: once accepted there, its callbacks are attached without
 // further checks.
@@ -307,6 +384,7 @@ func newRunningMutableStateForCallbacks(ctrl *gomock.Controller) *historyi.MockM
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{}).AnyTimes()
 	ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+	ms.EXPECT().HasStartedWorkflowTask().Return(false).AnyTimes()
 	// Required by update.NewRegistry
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()
