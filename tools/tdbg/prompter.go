@@ -61,10 +61,14 @@ func NewPrompter(c BoolFlagLookup, opts ...PrompterOption) *Prompter {
 // Prompt the user for confirmation. If the user does not respond with "y" or "yes" (case-insensitive and without
 // leading or trailing space), the process will exit with code 1.
 func (p *Prompter) Prompt(msg string) {
+	p.prompt(msg, p.writer)
+}
+
+func (p *Prompter) prompt(msg string, writer io.Writer) {
 	if p.flagLookup.Bool(FlagYes) {
 		return
 	}
-	_, err := p.writer.Write([]byte(msg + " [y/N]: "))
+	_, err := writer.Write([]byte(msg + " [y/N]: "))
 	if err != nil {
 		panic(fmt.Errorf("failed to write prompt: %w", err))
 	}
