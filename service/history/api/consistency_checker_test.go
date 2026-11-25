@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/vclock"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -167,59 +168,92 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 	s.True(released)
 }
 
-func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
-	err := s.checker.clockConsistencyCheck(nil)
-	s.NoError(err)
+func TestClockConsistencyCheck(t *testing.T) {
+	t.Parallel()
 
-	reqClock := &clockspb.VectorClock{
-		ShardId:   1,
-		Clock:     10,
-		ClusterId: 1,
+	requestClock := vclock.NewVectorClock(1, 1, 10)
+	ownershipLostErr := &persistence.ShardOwnershipLostError{
+		ShardID: 1,
+		Msg:     "ownership lost",
 	}
-
-	// not compatible - different shard id
-	differentShardClock := &clockspb.VectorClock{
-		ShardId:   2,
-		Clock:     1,
-		ClusterId: 1,
+	ownershipUnavailableErr := serviceerror.NewUnavailable("ownership check unavailable")
+	testCases := []struct {
+		name           string
+		requestClock   *clockspb.VectorClock
+		currentClock   *clockspb.VectorClock
+		checkOwnership bool
+		ownershipErr   error
+		wantErr        error
+	}{
+		{
+			name: "no request clock",
+		},
+		{
+			name:         "no shard clock",
+			requestClock: requestClock,
+		},
+		{
+			name:         "different shard",
+			requestClock: requestClock,
+			currentClock: vclock.NewVectorClock(1, 2, 1),
+		},
+		{
+			name:         "different cluster",
+			requestClock: requestClock,
+			currentClock: vclock.NewVectorClock(2, 1, 1),
+		},
+		{
+			name:         "request clock behind",
+			requestClock: requestClock,
+			currentClock: vclock.NewVectorClock(1, 1, 20),
+		},
+		{
+			name:         "request clock equal",
+			requestClock: requestClock,
+			currentClock: vclock.NewVectorClock(1, 1, 10),
+		},
+		{
+			name:           "request clock ahead",
+			checkOwnership: true,
+			requestClock:   requestClock,
+			currentClock:   vclock.NewVectorClock(1, 1, 1),
+			wantErr:        serviceerror.NewInvalidArgument("invalid task token"),
+		},
+		{
+			name:           "ownership lost",
+			requestClock:   requestClock,
+			currentClock:   vclock.NewVectorClock(1, 1, 1),
+			checkOwnership: true,
+			ownershipErr:   ownershipLostErr,
+			wantErr:        ownershipLostErr,
+		},
+		{
+			name:           "ownership check unavailable",
+			requestClock:   requestClock,
+			currentClock:   vclock.NewVectorClock(1, 1, 1),
+			checkOwnership: true,
+			ownershipErr:   ownershipUnavailableErr,
+			wantErr:        ownershipUnavailableErr,
+		},
 	}
-	s.shardContext.EXPECT().CurrentVectorClock().Return(differentShardClock)
-	err = s.checker.clockConsistencyCheck(reqClock)
-	s.NoError(err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	// not compatible - different cluster id
-	differentClusterClock := &clockspb.VectorClock{
-		ShardId:   1,
-		Clock:     1,
-		ClusterId: 2,
+			ctx := t.Context()
+			controller := gomock.NewController(t)
+			shardContext := historyi.NewMockShardContext(controller)
+			checker := NewWorkflowConsistencyChecker(shardContext, nil)
+
+			if tc.requestClock != nil {
+				shardContext.EXPECT().CurrentVectorClock().Return(tc.currentClock)
+			}
+			if tc.checkOwnership {
+				shardContext.EXPECT().AssertOwnership(ctx).Return(tc.ownershipErr)
+			}
+
+			err := checker.clockConsistencyCheck(ctx, tc.requestClock)
+			require.Equal(t, tc.wantErr, err)
+		})
 	}
-	s.shardContext.EXPECT().CurrentVectorClock().Return(differentClusterClock)
-	err = s.checker.clockConsistencyCheck(reqClock)
-	s.NoError(err)
-
-	// not compatible - shard context clock is missing
-	s.shardContext.EXPECT().CurrentVectorClock().Return(nil)
-	err = s.checker.clockConsistencyCheck(reqClock)
-	s.NoError(err)
-
-	// shard clock ahead
-	shardClock := &clockspb.VectorClock{
-		ShardId:   1,
-		Clock:     20,
-		ClusterId: 1,
-	}
-	s.shardContext.EXPECT().CurrentVectorClock().Return(shardClock)
-	err = s.checker.clockConsistencyCheck(reqClock)
-	s.NoError(err)
-
-	// shard clock behind
-	shardClock = &clockspb.VectorClock{
-		ShardId:   1,
-		Clock:     1,
-		ClusterId: 1,
-	}
-	s.shardContext.EXPECT().CurrentVectorClock().Return(shardClock)
-	s.shardContext.EXPECT().UnloadForOwnershipLost()
-	err = s.checker.clockConsistencyCheck(reqClock)
-	s.Error(err)
 }

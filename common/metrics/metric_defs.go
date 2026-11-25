@@ -949,8 +949,12 @@ var (
 		WithDescription("The amount of time it took to successfully send a task to the DLQ. This only records the"+
 			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
 	)
-	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
-	TaskSkipped                     = NewCounterDef("task_skipped")
+	TaskDiscarded                 = NewCounterDef("task_errors_discarded")
+	TaskSkipped                   = NewCounterDef("task_skipped")
+	TaskDiscardedByNamespaceState = NewCounterDef(
+		"task_discarded_namespace_state",
+		WithDescription("The number of history tasks acked without running because their namespace is soft-deleted or deleted."),
+	)
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
 	TasksDependencyTaskNotCompleted = NewCounterDef("task_dependency_task_not_completed")
 	TaskStandbyRetryCounter         = NewCounterDef("task_errors_standby_retry_counter")
@@ -1110,6 +1114,9 @@ var (
 	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
 	NexusWorkflowUseExisting                      = NewCounterDef("nexus_workflow_use_existing", WithDescription("Successful callback attachments to existing workflows involving Nexus serialization context, tagged by context match or missing context."))
 	NexusActivityUseExisting                      = NewCounterDef("nexus_activity_use_existing", WithDescription("Successful callback attachments to existing standalone activities involving Nexus serialization context, tagged by context match or missing context."))
+	NexusWorkflowStartWithContext                 = NewCounterDef("nexus_workflow_start_with_context", WithDescription("New workflows started with a Nexus serialization context."))
+	NexusActivityStartWithContext                 = NewCounterDef("nexus_activity_start_with_context", WithDescription("New standalone activities started with a Nexus serialization context."))
+	NexusWorkflowUpdateWithContext                = NewCounterDef("nexus_workflow_update_with_context", WithDescription("New workflow updates admitted with a Nexus serialization context."))
 	OrphanedChildWorkflowReplacement              = NewCounterDef("orphaned_child_workflow_replacement")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
@@ -1900,6 +1907,10 @@ var (
 		"schedule_migration_failed",
 		WithDescription("The number of times a schedule migration fails"),
 	)
+	ScheduleMigrationDeferred = NewCounterDef(
+		"schedule_migration_deferred",
+		WithDescription("The number of times a schedule migration is deferred until a precondition (e.g. an in-progress backfill) clears"),
+	)
 	ScheduleOverlapSkipped = NewCounterDef(
 		"schedule_overlap_skipped",
 		WithDescription("The number of schedule actions skipped due to overlap policy"),
@@ -1957,6 +1968,27 @@ var (
 	VerifyReplicationTaskFailed         = NewCounterDef("verify_replication_task_failed")
 	VerifyReplicationTasksLatency       = NewTimerDef("verify_replication_tasks_latency")
 	VerifyDescribeMutableStateLatency   = NewTimerDef("verify_describe_mutable_state_latency")
+
+	// Sharded force replication. The sharded ReplicateBatch activity runs
+	// many executions per invocation, so per-exec timing is the meaningful
+	// granularity — the batch-level *_tasks_latency timers above scale with
+	// BatchSize and aren't comparable across configurations.
+	GenerateReplicationTaskLatency = NewTimerDef("generate_replication_task_latency")
+	VerifyReplicationTaskLatency   = NewTimerDef("verify_replication_task_latency")
+	// VerifyReplicationTaskBusy counts verify attempts where the passive
+	// cluster returned RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW — the cache
+	// lock is held while history is being applied. A sign of progress that
+	// doesn't reset the per-shard no-progress timer.
+	VerifyReplicationTaskBusy = NewCounterDef("verify_replication_task_busy")
+	// VerifyReplicationTaskPending counts verify attempts where
+	// DescribeMutableState succeeded but the workflowVerifier saw the target
+	// lagging the source. A high pending vs. success ratio means verify is
+	// polling faster than apply can catch up.
+	VerifyReplicationTaskPending = NewCounterDef("verify_replication_task_pending")
+	// ReplicatedWorkflowCount accumulates verified-exec counts across each
+	// ReplicateBatch activity return. Emitted from the workflow so the
+	// counter is monotonic across activity retries.
+	ReplicatedWorkflowCount = NewCounterDef("replicated_workflow_count")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")

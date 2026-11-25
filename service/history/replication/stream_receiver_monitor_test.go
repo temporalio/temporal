@@ -826,11 +826,7 @@ func (s *streamReceiverMonitorSuite) TestMonitorStreamStatus_RecoversPanic() {
 func (s *streamReceiverMonitorSuite) TestStreamReceiverMonitorProvider_GlobalNamespace() {
 	for _, globalNamespaceEnabled := range []bool{true, false} {
 		s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(globalNamespaceEnabled)
-		monitor := streamReceiverMonitorProvider(
-			s.processToolBox,
-			NewExecutableTaskConverter(s.processToolBox),
-			NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()),
-		)
+		monitor := streamReceiverMonitorProvider(s.processToolBox, NewExecutableTaskConverter(s.processToolBox), NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()))
 		s.Equal(globalNamespaceEnabled, monitor.(*StreamReceiverMonitorImpl).enableStreaming)
 	}
 }

@@ -135,6 +135,7 @@ var Module = fx.Options(
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(nsreplication.NewDefaultAdmitter),
+	fx.Provide(nsreplication.NewDefaultRepairPolicy),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
@@ -560,11 +561,11 @@ func RateLimitInterceptorProvider(
 	for api := range configs.PodOnlyAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
 		mapping[api] = rateLimiters.Execution
 	}
-	// EnableDescribeMutableStateRateLimit is read once, here, at fx-graph construction time — toggling
-	// it in production requires bouncing frontend pods to pick up the new value. Once DescribeMutableState's
-	// rollout is complete, move its entry into PodOnlyAPIToPriority above and delete this branch.
-	if serviceConfig.EnableDescribeMutableStateRateLimit() {
-		for api := range configs.DescribeMutableStateAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+	// EnableAdminPodLevelRateLimit is read once, here, at fx-graph construction time — toggling
+	// it in production requires bouncing frontend pods to pick up the new value. Once the admin APIs'
+	// rollout is complete, move their entries into PodOnlyAPIToPriority above and delete this branch.
+	if serviceConfig.EnableAdminPodLevelRateLimit() {
+		for api := range configs.AdminAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
 			mapping[api] = rateLimiters.Execution
 		}
 	}
@@ -884,6 +885,7 @@ func AdminHandlerProvider(
 	matchingClient resource.MatchingClient,
 	chasmRegistry *chasm.Registry,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	repairPolicy nsreplication.RepairPolicy,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
@@ -916,6 +918,7 @@ func AdminHandlerProvider(
 		timeSource,
 		chasmRegistry,
 		namespaceDataMerger,
+		repairPolicy,
 		schedulerClient,
 		metricsHandler,
 		taskCategoryRegistry,
@@ -934,6 +937,7 @@ func NamespaceMutationTaskExecutorProvider(
 	eventLogger otellog.Logger,
 	metricsHandler metrics.Handler,
 	testHooks testhooks.TestHooks,
+	repairPolicy nsreplication.RepairPolicy,
 ) nsreplication.MutationTaskExecutor {
 	return nsreplication.NewMutationTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -947,6 +951,7 @@ func NamespaceMutationTaskExecutorProvider(
 			eventLogger,
 			configuration.EmitNamespaceLifecycleEvents,
 		),
+		nsreplication.WithOperatorRepairPolicy(repairPolicy),
 	)
 }
 
@@ -1069,6 +1074,7 @@ func HandlerProvider(
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -1119,6 +1125,7 @@ func HandlerProvider(
 		),
 		chasmNsReplClient,
 		metricsHandler,
+		replicationResolverFactory,
 	)
 	return wfHandler
 }

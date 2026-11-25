@@ -1124,7 +1124,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		return err
 	}
 	if transactionPolicy == historyi.TransactionPolicyActive {
-		c.emitWorkflowHeartbeatNotificationBufferedInputMetrics(payload.ExecutionMutation.NewBufferedEvents)
+		c.handleWorkflowHeartbeatNotification(shardContext, payload.ExecutionMutation.NewBufferedEvents)
 	}
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
@@ -1698,9 +1698,10 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	)
 }
 
-// CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
+// ApproximateSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
 // which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
-func (c *ContextImpl) CacheSize() int {
+// ApproximateSize reads the mutable state and the update registry, so it requires the workflow lock.
+func (c *ContextImpl) ApproximateSize() int {
 	if !c.config.HistoryCacheLimitSizeBased {
 		return 1
 	}

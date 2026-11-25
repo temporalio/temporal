@@ -4,14 +4,22 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporal"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/migration"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type mockSchedulerClient struct {
@@ -163,4 +171,87 @@ func TestMigrateScheduleToChasm_MigrationEnabledUnwired(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, client.createCalls, "unwired migrationEnabled currently fails open")
+}
+
+func TestMigrateScheduleToChasm_Deferral(t *testing.T) {
+	running := &schedulerpb.InvokerState{BufferedStarts: []*schedulespb.BufferedStart{{RunId: "run"}}}
+	completedOnly := &schedulerpb.InvokerState{BufferedStarts: []*schedulespb.BufferedStart{
+		{RunId: "run", Completed: &schedulespb.CompletedResult{}},
+		{}, // pending, not started
+	}}
+	state := func(backfill bool, invoker *schedulerpb.InvokerState) *schedulerpb.SchedulerMigrationState {
+		st := &schedulerpb.SchedulerMigrationState{
+			SchedulerState: &schedulerpb.SchedulerState{ScheduleId: "sched"},
+			InvokerState:   invoker,
+		}
+		if backfill {
+			st.Backfillers = map[string]*schedulerpb.BackfillerState{"bf": {}}
+		}
+		return st
+	}
+	for _, tc := range []struct {
+		name            string
+		selected        bool
+		allowRunning    bool
+		state           *schedulerpb.SchedulerMigrationState
+		wantDeferredErr string
+	}{
+		{name: "backfill, selected", selected: true, state: state(true, nil), wantDeferredErr: errTypeMigrationDeferredBackfill},
+		// Lowering the rollout must not strip the backfill guard from a pending migration.
+		{name: "backfill, not selected", state: state(true, nil), wantDeferredErr: errTypeMigrationDeferredBackfill},
+		{name: "running, selected", selected: true, state: state(false, running), wantDeferredErr: errTypeMigrationDeferredRunningWorkflows},
+		{name: "running, selected, running allowed", selected: true, allowRunning: true, state: state(false, running)},
+		// Operator signal can force a migration past the running-workflow setting.
+		{name: "running, not selected", state: state(false, running)},
+		{name: "completed and pending starts only, selected", selected: true, state: state(false, completedOnly)},
+		{name: "nothing in flight, selected", selected: true, state: state(false, nil)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &mockSchedulerClient{}
+			a := newTestActivities(client, testNamespaceID)
+			a.autoMigrationSelected = func(id string) bool {
+				require.Equal(t, "sched", id)
+				return tc.selected
+			}
+			a.migrateWithRunningWorkflows = func() bool { return tc.allowRunning }
+
+			err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+				NamespaceId: testNamespaceID,
+				State:       tc.state,
+			})
+			if tc.wantDeferredErr == "" {
+				require.NoError(t, err)
+				require.Equal(t, 1, client.createCalls)
+				return
+			}
+			var appErr *temporal.ApplicationError
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, tc.wantDeferredErr, appErr.Type())
+			require.True(t, appErr.NonRetryable())
+			require.Zero(t, client.createCalls, "must not create the V2 schedule while deferred")
+		})
+	}
+}
+
+// hasRunningWorkflows infers V1 RunningWorkflows from the converted request shape; pin that
+// coupling to the real request builder.
+func TestHasRunningWorkflows_MatchesMigrationRequestBuilder(t *testing.T) {
+	build := func(info *schedulepb.ScheduleInfo) *schedulerpb.SchedulerMigrationState {
+		return migration.LegacyToCreateFromMigrationStateRequest(
+			&schedulepb.Schedule{},
+			info,
+			&schedulespb.InternalState{NamespaceId: testNamespaceID, ScheduleId: "sched"},
+			nil, nil, time.Now(),
+		).GetState()
+	}
+	wf := &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: "run"}
+	require.True(t, hasRunningWorkflows(build(&schedulepb.ScheduleInfo{RunningWorkflows: []*commonpb.WorkflowExecution{wf}})))
+	require.False(t, hasRunningWorkflows(build(&schedulepb.ScheduleInfo{
+		RecentActions: []*schedulepb.ScheduleActionResult{{
+			ScheduleTime:        timestamppb.Now(),
+			ActualTime:          timestamppb.Now(),
+			StartWorkflowResult: wf,
+			StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}},
+	})))
 }

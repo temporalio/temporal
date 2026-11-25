@@ -428,14 +428,28 @@ func (s *scheduler) run() error {
 				}).Counter(metrics.ScheduleMigrationCompleted.Name()).Inc(1)
 				return nil
 			}
-			s.logger.Error("schedule migration to CHASM failed",
-				"namespace", s.State.Namespace,
-				"schedule-id", s.State.ScheduleId,
-				"error", err,
-			)
-			s.metrics.WithTags(map[string]string{
-				metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
-			}).Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
+			// Log/metric-only branch: no commands or state differ, so it is replay- and rollback-safe
+			// without a version bump.
+			if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok &&
+				(appErr.Type() == errTypeMigrationDeferredBackfill || appErr.Type() == errTypeMigrationDeferredRunningWorkflows) {
+				s.logger.Info("schedule migration to CHASM deferred",
+					"namespace", s.State.Namespace,
+					"schedule-id", s.State.ScheduleId,
+					"reason", appErr.Type(),
+				)
+				s.metrics.WithTags(map[string]string{
+					metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
+				}).Counter(metrics.ScheduleMigrationDeferred.Name()).Inc(1)
+			} else {
+				s.logger.Error("schedule migration to CHASM failed",
+					"namespace", s.State.Namespace,
+					"schedule-id", s.State.ScheduleId,
+					"error", err,
+				)
+				s.metrics.WithTags(map[string]string{
+					metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
+				}).Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
+			}
 		}
 
 		// process backfills if we have any too
