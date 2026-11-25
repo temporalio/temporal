@@ -251,7 +251,7 @@ func classifyPeerTransportError(msg string, unavailableStatus bool) peerProbeOut
 	if unavailableStatus {
 		hasTransportDetail := strings.Contains(msg, "transport: Error while dialing") || strings.Contains(msg, "connection error: desc") || strings.Contains(msg, "closing transport due to:") || strings.Contains(msg, "dial tcp ") || strings.Contains(msg, "dial: ") || strings.Contains(msg, "lookup ")
 		if !hasTransportDetail {
-			// The internode client also wraps peer application errors as Unavailable.
+			// An Unavailable status without transport detail can come from the local transport or the peer. Leave its origin unknown.
 			return peerProbeUnknown
 		}
 	}

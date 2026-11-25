@@ -813,7 +813,7 @@ var (
 	)
 	FrontendPeerHealthCheckProbe = NewCounterDef(
 		"frontend_peer_health_check_probe",
-		WithDescription("The number of frontend peer health probes, tagged by target_service and outcome (response, refused, timeout, unresolved, unknown)."),
+		WithDescription("The number of frontend peer health probes, tagged by target_service and outcome (response, refused, timeout, network, unresolved, unknown)."),
 	)
 	NexusLatency = NewTimerDef(
 		"nexus_latency",
