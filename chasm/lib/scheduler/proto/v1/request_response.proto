@@ -89,9 +89,19 @@ message CreateSentinelRequest {
   string namespace = 2;
 
   string schedule_id = 3;
+
+  // The CreateSchedule request ID this sentinel is written on behalf of. When
+  // set, a CHASM create retried with the same request ID recognizes (and
+  // replaces) this sentinel instead of treating it as a foreign reservation.
+  string request_id = 4;
 }
 
-message CreateSentinelResponse {}
+message CreateSentinelResponse {
+  // True when the key already holds a real scheduler created by the same
+  // CreateSchedule request (request_id): a retry that already succeeded on the
+  // CHASM path.
+  bool created_by_request = 1;
+}
 
 message MigrateToWorkflowRequest {
   // The namespace ID of the schedule to migrate.

@@ -197,6 +197,18 @@ func NewSentinel(
 	return s
 }
 
+// SentinelRequestID derives the request ID a sentinel (in either key space) is
+// written with on behalf of a CreateSchedule request. It differs from the
+// request's own ID so a sentinel and the real schedule never dedup into each
+// other, while staying recognizable as the same request's. Returns "" for an
+// empty request ID (the engine then assigns a random one).
+func SentinelRequestID(requestID string) string {
+	if requestID == "" {
+		return ""
+	}
+	return "schedule-sentinel:" + requestID
+}
+
 // CreateSentinelFn is the chasm.StartExecution factory for creating sentinel
 // schedulers. Used by the V1 path to reserve the CHASM key space.
 func CreateSentinelFn(
