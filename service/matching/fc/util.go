@@ -1,8 +1,14 @@
 package fc
 
 import (
+	"cmp"
+	"slices"
 	"time"
 )
+
+// MaxLimiters is the maximum total limiters that can apply to any task. (Currently this includes whole-queue
+// limiters, in the future we may allow whole-queue limiters to be separate from this limit.)
+const MaxLimiters = 3
 
 const betterWakePriorityThreshold = 60 * time.Second
 
@@ -22,4 +28,15 @@ func makeWakePriority(pri int32, age time.Time) wakePriority {
 // Note that this is always true if a has a lower priority portion than b.
 func betterWakePriority(a, b wakePriority) bool {
 	return b-a > wakePriority(betterWakePriorityThreshold.Milliseconds())
+}
+
+// sortLimiters sorts limiters in place into a canonical order, so two partitions don't get in
+// a quasi-deadlock by using opposite orders.
+func sortLimiters(limiters []Limiter) {
+	slices.SortFunc(limiters, func(a, b Limiter) int {
+		if v := cmp.Compare(a.Type, b.Type); v != 0 {
+			return v
+		}
+		return cmp.Compare(a.Key, b.Key)
+	})
 }

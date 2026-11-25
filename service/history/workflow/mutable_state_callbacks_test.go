@@ -173,7 +173,7 @@ func (s *mutableStateSuite) startWithCompletionCallbacks(
 
 	wft, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, "", tq, "", nil, nil, nil, false, nil, 0)
+	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, "", tq, "", nil, nil, nil, false, nil, 0, "")
 	s.NoError(err)
 	completedEvent, err = ms.AddWorkflowTaskCompletedEvent(
 		wft,

@@ -7,6 +7,8 @@ package cache
 // Please be aware that if the size of the cache entry changes while the cache is being used without pinning enabled,
 // the cache won't be able to automatically adjust for this size change. In such instances, it's necessary to call Put()
 // again to ensure the cache size remains accurate.
+// With pinning enabled, the cache calls CacheSize() each time an entry is released. Other callers may still be using
+// the entry at that time, so CacheSize() must be safe to call concurrently with them.
 type (
 	SizeGetter interface {
 		CacheSize() int

@@ -1858,6 +1858,10 @@ var (
 		"schedule_migration_failed",
 		WithDescription("The number of times a schedule migration fails"),
 	)
+	ScheduleMigrationDeferred = NewCounterDef(
+		"schedule_migration_deferred",
+		WithDescription("The number of times a schedule migration is deferred until a precondition (e.g. an in-progress backfill) clears"),
+	)
 	ScheduleOverlapSkipped = NewCounterDef(
 		"schedule_overlap_skipped",
 		WithDescription("The number of schedule actions skipped due to overlap policy"),
