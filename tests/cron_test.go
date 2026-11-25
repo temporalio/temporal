@@ -273,7 +273,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 
 	// first two should be failures
 	for i := range 2 {
-		events := env.GetHistory(env.Namespace().String(), executions[i])
+		events := env.RequireHistory(s, executions[i])
 		s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"memoKey":{"Data":"\"memoVal\""}}},"SearchAttributes":{"IndexedFields":{"CustomKeywordField":{"Data":"\"keyword-value\"","Metadata":{"type":"Keyword"}}}}}
   2 WorkflowTaskScheduled
@@ -284,7 +284,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 	}
 
 	// third should be completed
-	events := env.GetHistory(env.Namespace().String(), executions[2])
+	events := env.RequireHistory(s, executions[2])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"memoKey":{"Data":"\"memoVal\""}}},"SearchAttributes":{"IndexedFields":{"CustomKeywordField":{"Data":"\"keyword-value\"","Metadata":{"type":"Keyword"}}}}}
   2 WorkflowTaskScheduled
@@ -457,7 +457,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 	exec := s.listOpenWorkflowExecutions(env, startTs, time.Now(), id, 1)[0]
 	firstRunID := exec.GetExecution().RunId
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, exec.GetStatus())
-	historyEvents := env.GetHistory(env.Namespace().String(), exec.GetExecution())
+	historyEvents := env.RequireHistory(s, exec.GetExecution())
 	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"","CronSchedule":"@every 3s","FirstExecutionRunId":"%s", "Initiator":3}`, firstRunID), historyEvents)
 	attrs1 := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
@@ -479,7 +479,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 		250*time.Millisecond,
 	)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, exec.GetStatus())
-	historyEvents = env.GetHistory(env.Namespace().String(), exec.GetExecution())
+	historyEvents = env.RequireHistory(s, exec.GetExecution())
 	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s","CronSchedule":"@every 3s","FirstExecutionRunId":"%s", "Initiator":%d}`, firstRunID, firstRunID, enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE), historyEvents)
 	attrs2 := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
@@ -517,7 +517,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[5] // first: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	historyEvents = env.GetHistory(env.Namespace().String(), exec.GetExecution())
+	historyEvents = env.RequireHistory(s, exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -527,7 +527,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[4] // second: fail
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, exec.GetStatus())
-	historyEvents = env.GetHistory(env.Namespace().String(), exec.GetExecution())
+	historyEvents = env.RequireHistory(s, exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -537,7 +537,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[3] // third: timed out
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, exec.GetStatus())
-	historyEvents = env.GetHistory(env.Namespace().String(), exec.GetExecution())
+	historyEvents = env.RequireHistory(s, exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -548,7 +548,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[2] // fourth: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	historyEvents = env.GetHistory(env.Namespace().String(), exec.GetExecution())
+	historyEvents = env.RequireHistory(s, exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -558,7 +558,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[1] // fifth: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	historyEvents = env.GetHistory(env.Namespace().String(), exec.GetExecution())
+	historyEvents = env.RequireHistory(s, exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -568,7 +568,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[0] // sixth: terminated
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, exec.GetStatus())
-	events := env.GetHistory(env.Namespace().String(), exec.GetExecution())
+	events := env.RequireHistory(s, exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowExecutionTerminated {"Reason":"test is over"}`, events)

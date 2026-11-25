@@ -45,7 +45,7 @@ func HTTPCallerProviderProvider(
 	if err != nil {
 		return nil, err
 	}
-	defaultClient := &http.Client{Transport: defaultTransport}
+	defaultClient := &http.Client{Transport: commonnexus.RejectRedirects(defaultTransport)}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 

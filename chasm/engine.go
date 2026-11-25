@@ -113,24 +113,9 @@ type TransitionOptions struct {
 	ConflictPolicy   BusinessIDConflictPolicy
 	ConsistencyLevel RefConsistencyLevel
 	RequestID        string
-	RequestIDType    RequestIDType
 	Speculative      bool
 	AssumeNew        bool
 }
-
-// RequestIDType says which code path checks a request ID for retries, which decides where the request ID
-// must be recorded. It only matters for UpdateComponent().
-type RequestIDType int
-
-const (
-	// RequestIDTypeUpdate is the request ID of an UpdateComponent() call (see [WithRequestID]). A retry
-	// is checked on the execution itself, so it can be recorded in the execution's CHASM tree.
-	RequestIDTypeUpdate RequestIDType = iota
-	// RequestIDTypeStart is the request ID of a start request that an UpdateComponent() call completes
-	// (see [WithStartRequestID]). A retried start is checked on the execution's current record, before
-	// the execution is loaded, so it must be recorded there.
-	RequestIDTypeStart
-)
 
 type TransitionOption func(*TransitionOptions)
 
@@ -184,13 +169,20 @@ type UpdateWithStartExecutionResult[O any] struct {
 // EngineUpdateWithStartExecutionResult is a type alias for the result type returned by the UpdateWithStart Engine implementation.
 type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struct{}]
 
-// (only) this transition will not be persisted
-// The next non-speculative transition will persist this transition as well.
-// Compared to the ExecutionEphemeral() operation on RegistrableComponent,
-// the scope of this operation is limited to a certain transition,
-// while the ExecutionEphemeral() applies to all transitions.
-// TODO: we need to figure out a way to run the tasks
-// generated in a speculative transition
+// WithSpeculative applies the transition to the memory only.
+//
+// A speculative transition is persisted when the next normal transition comes in. The caller must make that
+// a non speculative transition to persist.
+//   - The transition is not durable. Cache eviction, a shard move, a host restart, or any error
+//     from a later transition on the execution drops it. Report normal rejections from the update
+//     function as output rather than as an error.
+//   - Reads and PollComponent waiters see the transition while the execution is cached, so a
+//     waiter can see state that is later lost.
+//   - Immediate pure tasks run. Other tasks added by the transition are created when it is persisted.
+//   - Ref returns ErrSpeculativeComponentRef for a component the transition created until it is persisted.
+//   - Replication ignores states
+//
+// TODO: Add option to support all task.
 func WithSpeculative() TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.Speculative = true
@@ -217,35 +209,17 @@ func WithBusinessIDPolicy(
 	}
 }
 
-// WithRequestID sets the request ID of an update to an execution, for UpdateComponent(). It is used for
-// execution-level idempotency of that update, recording a request's ID on success, and failing
-// subsequent requests reusing a request ID by returning a FailedPrecondition error.
+// WithRequestID sets the request ID used to recognize a retry of the request.
 //
-// The request ID of a start request, including an UpdateComponent() call that completes one, must be
-// set with [WithStartRequestID] instead.
+// # On StartExecution() and UpdateWithStartExecution() it is a start request ID
+//
+// On UpdateComponent() it is an update request ID: a retried update is rejected with a
+// FailedPrecondition error ([ErrRequestIDAlreadyUsed])
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.RequestID = requestID
-		opts.RequestIDType = RequestIDTypeUpdate
-	}
-}
-
-// WithStartRequestID sets the request ID of a start request. A retried start is recognized by this ID
-// on the execution's current record, before any execution is loaded.
-//
-// On StartExecution() and UpdateWithStartExecution() it is the request ID recorded when creating a new
-// execution. On UpdateComponent() it is for a call that completes a start request, for example
-// attaching callbacks to an existing execution when a start conflicts with it: it dedups the update like
-// [WithRequestID], but the ID is recorded on the current record, so a retry of that start that resolves
-// to this execution, even after the execution closed, returns it instead of creating a new execution.
-func WithStartRequestID(
-	requestID string,
-) TransitionOption {
-	return func(opts *TransitionOptions) {
-		opts.RequestID = requestID
-		opts.RequestIDType = RequestIDTypeStart
 	}
 }
 
@@ -284,7 +258,7 @@ func WithRefConsistencyLevel(level RefConsistencyLevel) TransitionOption {
 //   - opts: Optional [TransitionOption] functions to configure creation behavior:
 //   - [WithBusinessIDPolicy]: Controls duplicate handling and conflict resolution
 //   - [WithRequestID]: Sets a request ID for idempotency
-//   - [WithSpeculative]: Defers persistence until the next non-speculative transition
+//   - [WithSpeculative] is not supported and returns [ErrSpeculativeStartExecution]
 //
 // Returns:
 //   - O: The output value produced by startFn
