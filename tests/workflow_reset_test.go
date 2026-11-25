@@ -190,7 +190,7 @@ func (s *WorkflowResetSuite) TestRetriedResetIsDeduplicated() {
 			RequestId:                 requestID,
 			WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflowID, baseRunID),
 		})
-		s.Require().NoError(err)
+		s.NoError(err)
 		return resp.RunId
 	}
 

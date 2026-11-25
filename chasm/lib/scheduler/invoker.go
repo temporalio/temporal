@@ -103,8 +103,8 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 		} else if start.Attempt == 0 {
 			// Start was processed but deferred (e.g., BUFFER_ONE policy with running workflow).
 			// Mark as deferred (-1) to distinguish from newly-enqueued starts so addTasks
-			// won't schedule an immediate ProcessBuffer task for them - they wait on
-			// recordCompletedAction to re-enable.
+			// won't schedule an immediate ProcessBuffer task for them. They are
+			// reconsidered when the blocking start changes state.
 			start.Attempt = -1
 			deferredStarts++
 		}
@@ -249,6 +249,11 @@ func (i *Invoker) recordExecuteResult(
 			removedStarts,
 			retriedStarts))
 
+	// A newly recorded run can now be canceled or terminated by deferred
+	// starts. Re-evaluate their overlap policies against its recorded identity.
+	if newlyStarted > 0 {
+		i.reenableDeferredStarts()
+	}
 	i.addTasks(ctx)
 
 	if newlyStarted > 0 {
@@ -304,11 +309,7 @@ func (i *Invoker) recordCompletedAction(
 	// Re-enable deferred starts (Attempt == -1) so they can be re-processed by
 	// ProcessBuffer now that a workflow has completed. This allows the overlap
 	// policy to be re-evaluated.
-	for _, start := range i.BufferedStarts {
-		if start.Attempt == -1 {
-			start.Attempt = 0
-		}
-	}
+	i.reenableDeferredStarts()
 
 	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
 	// to drive action latency between buffered starts (the time it takes between
@@ -333,9 +334,36 @@ func (i *Invoker) recordCompletedAction(
 	return
 }
 
+// hasPendingOrRunningStart reports whether completion-tracked work can still
+// block another start, including requests executing or backing off before a
+// RunId has been recorded. ALLOW_ALL starts do not block other actions.
+func (i *Invoker) hasPendingOrRunningStart() bool {
+	return slices.ContainsFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+		return start.GetCompleted() == nil &&
+			internal.TracksCompletionResult(start.GetOverlapPolicy()) &&
+			(start.GetRunId() != "" || start.GetAttempt() > 0)
+	})
+}
+
+func (i *Invoker) reenableDeferredStarts() {
+	for _, start := range i.GetBufferedStarts() {
+		if start.GetAttempt() == -1 {
+			start.Attempt = 0
+		}
+	}
+}
+
 // addTasks adds both ProcessBuffer and Execute tasks as needed. It should be
 // called when completing processing/executing tasks, to drive backoff/retry.
 func (i *Invoker) addTasks(ctx chasm.MutableContext) {
+	// Deferred starts need a pending start or running workflow to wake them.
+	// If none remains, reconsider them after discards, terminal start failures,
+	// or removal of start-only actions, rather than waiting for a completion
+	// that cannot arrive.
+	if !i.hasPendingOrRunningStart() {
+		i.reenableDeferredStarts()
+	}
+
 	// If we have Attempt = 0 starts, generate a ProcessBufferTask immediately. If we
 	// have starts that are backing off, add a timer task for the earliest backoff time.
 	if i.hasUnprocessedStarts() {

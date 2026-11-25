@@ -209,7 +209,7 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 		WorkflowId: workflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// Verify if the state is intact even after a CAN
@@ -271,7 +271,7 @@ func (s *WorkerDeploymentSuite) TestForceCAN_WithOverrideState() {
 		WorkflowId: workflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// Verify that the override state is used after CAN
@@ -423,7 +423,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 			break
 		}
 	}
-	s.Require().NotNil(falsePositiveTaskQueue, "expected to find a Bloom filter false positive")
+	s.NotNil(falsePositiveTaskQueue, "expected to find a Bloom filter false positive")
 	currentDeploymentRunID := func() string {
 		describeResponse, err := env.FrontendClient().DescribeWorkflowExecution(
 			s.Context(),
@@ -432,9 +432,9 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 				Execution: &commonpb.WorkflowExecution{WorkflowId: deploymentWorkflowID},
 			},
 		)
-		s.Require().NoError(err)
+		s.NoError(err)
 		runID := describeResponse.GetWorkflowExecutionInfo().GetExecution().GetRunId()
-		s.Require().NotEmpty(runID)
+		s.NotEmpty(runID)
 		return runID
 	}
 	firstRelevantRunID := currentDeploymentRunID()
@@ -452,7 +452,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 			break
 		}
 	}
-	s.Require().NotNil(rejectedTaskQueue, "expected to find a task queue that is definitely absent from the Bloom filter")
+	s.NotNil(rejectedTaskQueue, "expected to find a task queue that is definitely absent from the Bloom filter")
 
 	s.pollFromDeploymentExpectFail(env, rejectedTaskQueue, expectedError(rejectedTaskQueue))
 	s.Await(func(s *WorkerDeploymentSuite) {
@@ -473,7 +473,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 	lastRelevantRunID := currentDeploymentRunID()
 	for runID := firstRelevantRunID; ; {
 		var nextRunID string
-		for _, event := range env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		for _, event := range env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: deploymentWorkflowID,
 			RunId:      runID,
 		}) {
@@ -487,7 +487,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 		if runID == lastRelevantRunID {
 			break
 		}
-		s.Require().NotEmpty(nextRunID, "expected Deployment workflow run %q to continue as new", runID)
+		s.NotEmpty(nextRunID, "expected Deployment workflow run %q to continue as new", runID)
 		runID = nextRunID
 	}
 	s.True(
@@ -3350,7 +3350,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		},
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// Stop the poller so it doesn't keep polling

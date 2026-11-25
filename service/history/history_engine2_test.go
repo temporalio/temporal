@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
@@ -1067,7 +1068,13 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	var updatedWorkflowMutation persistence.WorkflowMutation
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			updatedWorkflowMutation = request.UpdateWorkflowMutation
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
 
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
@@ -1083,6 +1090,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		workflowTaskCompletedEvent.GetEventId(),
 		gomock.Any(),
 	).Return(scheduledEvent, nil)
+	limiters := []*taskqueuespb.LimiterRef{{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "limiter-1"}}
 	response, err := s.historyEngine.RecordActivityTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
@@ -1094,11 +1102,13 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 			},
 			Identity: identity,
 		},
+		Limiters: limiters,
 	})
 	s.Nil(err)
 	s.NotNil(response)
 	s.Equal(scheduledEvent, response.ScheduledEvent)
 	s.NotNil(response.Clock, "Clock must be set for shard staleness check")
+	s.ProtoElementsMatch(limiters, updatedWorkflowMutation.UpsertActivityInfos[scheduledEvent.GetEventId()].Limiters)
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedDuplicateRequest() {
@@ -2279,6 +2289,62 @@ func (s *engine2Suite) TestStartWorkflowExecution_UseExistingNexusContextMetric(
 				s.Require().Len(recordings, 1)
 				s.Require().Equal(tc.expectedOutcome, recordings[0].Tags["context_match"])
 			}
+			s.Require().Empty(capture.SnapshotMetric(metrics.NexusWorkflowStartWithContext.Name()))
+		})
+	}
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_StartWithNexusContextMetric() {
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	for _, tc := range []struct {
+		name            string
+		incomingContext *nexuspb.PropagatedSerializationContext
+		dedup           bool
+		expectRecorded  bool
+	}{
+		{
+			name:            "new workflow with context",
+			incomingContext: serializationContext,
+			expectRecorded:  true,
+		},
+		{
+			name: "new workflow without context",
+		},
+		{
+			name:            "deduped retry with context",
+			incomingContext: serializationContext,
+			dedup:           true,
+		},
+	} {
+		s.Run(tc.name, func() {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.mockShard.SetMetricsHandler(metricsHandler)
+
+			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+			startRequest.StartRequest.PropagatedNexusSerializationContext = tc.incomingContext
+			if tc.dedup {
+				s.setupStartWorkflowExecutionForRunning()
+				startRequest.StartRequest.RequestId = s.tv.RequestID()
+			} else {
+				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
+			}
+
+			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(s.T().Context()), startRequest)
+			s.Require().NoError(err)
+			s.Require().True(resp.GetStarted())
+			recordings := capture.SnapshotMetric(metrics.NexusWorkflowStartWithContext.Name())
+			if !tc.expectRecorded {
+				s.Require().Empty(recordings)
+				return
+			}
+			s.Require().Len(recordings, 1)
+			s.Require().Equal(tests.Namespace.String(), recordings[0].Tags[metrics.NamespaceTag("").Key])
 		})
 	}
 }

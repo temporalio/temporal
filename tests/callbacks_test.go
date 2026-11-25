@@ -196,7 +196,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 	s.NotEmpty(startedWFID)
 
 	var token string
-	for _, e := range env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: startedWFID}) {
+	for _, e := range env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: startedWFID}) {
 		for _, cb := range e.GetWorkflowExecutionStartedEventAttributes().GetCompletionCallbacks() {
 			if cb.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL {
 				token = nexus.Header(cb.GetNexus().GetHeader()).Get(commonnexus.CallbackTokenHeader)
@@ -654,7 +654,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.Test
   			2 WorkflowTaskScheduled
   			3 WorkflowTaskStarted
   			4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -680,7 +680,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.Test
   			3 WorkflowTaskStarted
   			4 WorkflowTaskCompleted
      		5 WorkflowExecutionOptionsUpdated`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -803,7 +803,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		env.RequireHistoryFunc(s, workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 

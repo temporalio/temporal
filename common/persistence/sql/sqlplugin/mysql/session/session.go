@@ -161,6 +161,10 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 	}
 	for k, v := range cfg.ConnectAttributes {
 		k1, v1 := sanitizeAttr(k, v)
+		// Drop blank isolation entries; keeping them would emit an invalid "SET <key> =".
+		if (k1 == isolationLevelAttrName || k1 == isolationLevelAttrNameLegacy) && v1 == "" {
+			continue
+		}
 		attrs[k1] = v1
 	}
 
@@ -192,7 +196,7 @@ func sanitizeAttr(inkey string, invalue string) (string, string) {
 	value := strings.ToLower(strings.TrimSpace(invalue))
 	switch key {
 	case isolationLevelAttrName, isolationLevelAttrNameLegacy:
-		if value[0] != '\'' { // mysql sys variable values must be enclosed in single quotes
+		if len(value) > 0 && value[0] != '\'' { // mysql sys variable values must be enclosed in single quotes
 			value = "'" + value + "'"
 		}
 		return key, value

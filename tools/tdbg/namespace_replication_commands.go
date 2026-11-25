@@ -1,0 +1,476 @@
+package tdbg
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/urfave/cli/v2"
+)
+
+const namespaceReplicationRepairRequiredExitCode = 3
+
+type namespaceReplicationOptions struct {
+	dataKeysToIgnore []string
+}
+
+func newNamespaceReplicationCommands(
+	clientFactory ClientFactory,
+	options namespaceReplicationOptions,
+	prompterFactory PrompterFactory,
+) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "replication",
+			Usage: "Verify namespace replication state",
+			Subcommands: []*cli.Command{
+				{
+					Name:  "verify",
+					Usage: "Compare a global namespace across its configured clusters",
+					Description: "Select the namespace with --namespace or --namespace-id. Names are resolved once on the source, then replicas are identified by ID. " +
+						"Every name given, including an inherited --namespace or TEMPORAL_CLI_NAMESPACE, must agree with the others and with the ID. " +
+						"Run it against the namespace's active cluster; removed peers are not inspected. " +
+						"Peers are read through that cluster's frontend, so only --address and its TLS settings are needed.",
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:  FlagNamespaceID,
+							Usage: "Namespace ID; any namespace name given must belong to it",
+						},
+						&cli.StringFlag{
+							Name:    FlagNamespace,
+							Aliases: FlagNamespaceAlias,
+							Usage:   "Namespace name to resolve on the source, or to cross-check against --namespace-id",
+						},
+						&cli.BoolFlag{
+							Name:  FlagPrintJSON,
+							Usage: "Print structured JSON output",
+						},
+					},
+					Action: func(c *cli.Context) error {
+						return verifyNamespaceReplication(c, clientFactory, options)
+					},
+				},
+				{
+					Name:  "repair",
+					Usage: "Plan or execute guarded namespace replication repair",
+					Description: "Repairs current replicas. SUCCEEDED does not imply former replicas were synchronized. " +
+						"Select the namespace as for verify, with --namespace or --namespace-id; a name is resolved once on the source, and the repair acts on that namespace ID. " +
+						"Run it against the namespace's active cluster, whose frontend reads and writes peers.",
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:  FlagNamespaceID,
+							Usage: "Namespace ID; any namespace name given must belong to it",
+						},
+						&cli.StringFlag{
+							Name:    FlagNamespace,
+							Aliases: FlagNamespaceAlias,
+							Usage:   "Namespace name to resolve on the source, or to cross-check against --namespace-id",
+						},
+						&cli.StringFlag{
+							Name:  FlagReason,
+							Usage: "Operator reason recorded with every repair write",
+						},
+						&cli.BoolFlag{
+							Name:  FlagExecute,
+							Usage: "Execute the displayed repair plan",
+						},
+						&cli.BoolFlag{
+							Name:  FlagPrintJSON,
+							Usage: "Print structured JSON output",
+						},
+					},
+					Action: func(c *cli.Context) error {
+						return repairNamespaceReplication(
+							c,
+							clientFactory,
+							options,
+							prompterFactory(c),
+						)
+					},
+				},
+			},
+		},
+	}
+}
+
+func repairNamespaceReplication(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	options namespaceReplicationOptions,
+	prompter *Prompter,
+) error {
+	verifyRequest, err := namespaceReplicationVerifyRequestFromCLI(c)
+	if err != nil {
+		return cli.Exit(err.Error(), 2)
+	}
+	reason := strings.TrimSpace(c.String(FlagReason))
+	if c.Bool(FlagExecute) && reason == "" {
+		return cli.Exit("--reason is required with --execute", 2)
+	}
+
+	client := clientFactory.AdminClient(c)
+	rpcTimeout := namespaceReplicationRPCTimeout(c)
+	verifier := newNamespaceReplicationVerifier(adminNamespaceReplicationReader{
+		client:     client,
+		rpcTimeout: rpcTimeout,
+	}, options)
+	observation, err := verifier.observe(c.Context, verifyRequest)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("verify before repair: %v", err), 2)
+	}
+	// The repair acts on the namespace the first read resolved. Execution
+	// verifies again after writing, and that read must not resolve a name
+	// that may now belong to a different namespace.
+	verifyRequest.NamespaceID = observation.result.NamespaceID
+	plan, err := planNamespaceReplicationRepair(
+		observation,
+		uuid.NewString(),
+		time.Now().UTC(), // nolint:forbidigo // Operator-visible plan timestamp.
+	)
+	if err != nil {
+		return cli.Exit(err.Error(), 2)
+	}
+	if plan.Status == namespaceReplicationRepairStatusBlocked {
+		if printErr := printNamespaceReplicationRepairPlan(c, plan); printErr != nil {
+			return cli.Exit(printErr.Error(), 2)
+		}
+		return cli.Exit("namespace replication repair is blocked", 2)
+	}
+	if !c.Bool(FlagExecute) {
+		if err := printNamespaceReplicationRepairPlan(c, plan); err != nil {
+			return cli.Exit(err.Error(), 2)
+		}
+		return nil
+	}
+
+	if err := printNamespaceReplicationRepairPlanBeforePrompt(c, plan); err != nil {
+		return cli.Exit(err.Error(), 2)
+	}
+	prompt := fmt.Sprintf(
+		"Repair namespace %s (%s) from active source %s. Quiesce namespace updates before continuing. Execute repair %s?",
+		plan.NamespaceName,
+		plan.NamespaceID,
+		plan.SourceCluster,
+		plan.RepairID,
+	)
+	if c.Bool(FlagPrintJSON) {
+		prompter.prompt(prompt, c.App.ErrWriter)
+	} else {
+		prompter.Prompt(prompt)
+	}
+	repairer := &namespaceReplicationRepairer{verifier: verifier, client: client, rpcTimeout: rpcTimeout}
+	result, executeErr := repairer.Execute(c.Context, namespaceReplicationRepairExecutionRequest{
+		VerifyRequest: verifyRequest,
+		Observation:   observation,
+		Plan:          plan,
+		Reason:        reason,
+	})
+	if printErr := printNamespaceReplicationRepairExecution(c, result); printErr != nil {
+		executeErr = errors.Join(executeErr, printErr)
+	}
+	if executeErr != nil {
+		return cli.Exit(executeErr.Error(), 2)
+	}
+	return nil
+}
+
+func printNamespaceReplicationRepairPlan(
+	c *cli.Context,
+	plan *namespaceReplicationRepairPlan,
+) error {
+	return writeNamespaceReplicationRepairPlan(c.App.Writer, plan, c.Bool(FlagPrintJSON))
+}
+
+func printNamespaceReplicationRepairPlanBeforePrompt(
+	c *cli.Context,
+	plan *namespaceReplicationRepairPlan,
+) error {
+	if c.Bool(FlagYes) {
+		return nil
+	}
+	writer := c.App.Writer
+	printJSON := c.Bool(FlagPrintJSON)
+	if printJSON {
+		// Keep stdout available for the final machine-readable execution result.
+		writer = c.App.ErrWriter
+		printJSON = false
+	}
+	return writeNamespaceReplicationRepairPlan(writer, plan, printJSON)
+}
+
+func writeNamespaceReplicationRepairPlan(
+	writer io.Writer,
+	plan *namespaceReplicationRepairPlan,
+	printJSON bool,
+) error {
+	if printJSON {
+		return writeJSON(writer, plan)
+	}
+	_, err := fmt.Fprintf(
+		writer,
+		"Status: %s\nRepair ID: %s\nNamespace: %s (%s)\nSource cluster: %s\nSource action: %s (%d -> %d)\n",
+		plan.Status,
+		plan.RepairID,
+		plan.NamespaceName,
+		plan.NamespaceID,
+		plan.SourceCluster,
+		plan.SourceAction,
+		plan.SourceConfigVersion,
+		plan.ProposedSourceConfigVersion,
+	)
+	if err != nil {
+		return err
+	}
+	if plan.StatusDetail != "" {
+		if _, err := fmt.Fprintf(writer, "Detail: %s\n", plan.StatusDetail); err != nil {
+			return err
+		}
+	}
+	rows := make([]any, 0, len(plan.Clusters))
+	for _, cluster := range plan.Clusters {
+		rows = append(rows, namespaceReplicationRepairPlanTableRow{
+			Cluster:       cluster.Cluster,
+			Presence:      cluster.Presence,
+			ConfigVersion: optionalInt64String(cluster.CurrentConfigVersion),
+			Action:        cluster.Action,
+			Warnings:      strings.Join(cluster.Warnings, "; "),
+		})
+	}
+	return printTable(rows, writer)
+}
+
+type namespaceReplicationRepairPlanTableRow struct {
+	Cluster       string
+	Presence      string
+	ConfigVersion string
+	Action        string
+	Warnings      string
+}
+
+func printNamespaceReplicationRepairExecution(
+	c *cli.Context,
+	result *namespaceReplicationRepairExecutionResult,
+) error {
+	if result == nil {
+		return errors.New("repair execution returned no result")
+	}
+	if c.Bool(FlagPrintJSON) {
+		return writeJSON(c.App.Writer, result)
+	}
+	_, err := fmt.Fprintf(
+		c.App.Writer,
+		"Status: %s\nRepair ID: %s\nNamespace: %s (%s)\n",
+		result.Status,
+		result.Plan.RepairID,
+		result.Plan.NamespaceName,
+		result.Plan.NamespaceID,
+	)
+	if err != nil {
+		return err
+	}
+	if result.StatusDetail != "" {
+		if _, err := fmt.Fprintf(c.App.Writer, "Detail: %s\n", result.StatusDetail); err != nil {
+			return err
+		}
+	}
+	if result.FinalVerification != nil {
+		if _, err := fmt.Fprintf(c.App.Writer, "Final verification: %s\n", result.FinalVerification.Status); err != nil {
+			return err
+		}
+		if result.FinalVerification.StatusDetail != "" {
+			if _, err := fmt.Fprintf(c.App.Writer, "Final verification detail: %s\n", result.FinalVerification.StatusDetail); err != nil {
+				return err
+			}
+		}
+	}
+	rows := []any{namespaceReplicationRepairExecutionTableRow{
+		Cluster:          result.Source.Cluster,
+		Action:           result.Source.Action,
+		Outcome:          result.Source.Outcome,
+		ReadbackVerified: result.Source.ReadbackVerified,
+		Error:            result.Source.Error,
+	}}
+	for _, target := range result.Targets {
+		rows = append(rows, namespaceReplicationRepairExecutionTableRow(target))
+	}
+	return printTable(rows, c.App.Writer)
+}
+
+type namespaceReplicationRepairExecutionTableRow struct {
+	Cluster          string
+	Action           string
+	Outcome          string
+	ReadbackVerified bool
+	Error            string
+}
+
+func verifyNamespaceReplication(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	options namespaceReplicationOptions,
+) error {
+	verifyRequest, err := namespaceReplicationVerifyRequestFromCLI(c)
+	if err != nil {
+		return cli.Exit(err.Error(), 2)
+	}
+	verifier := newNamespaceReplicationVerifier(adminNamespaceReplicationReader{
+		client:     clientFactory.AdminClient(c),
+		rpcTimeout: namespaceReplicationRPCTimeout(c),
+	}, options)
+	result, err := verifier.Verify(c.Context, verifyRequest)
+	if err != nil {
+		if result != nil {
+			if result.StatusDetail != "" {
+				err = errors.Join(errors.New(result.StatusDetail), err)
+			}
+			result.Status = namespaceReplicationStatusBlocked
+			result.StatusDetail = err.Error()
+			if printErr := printNamespaceReplicationVerification(c, result); printErr != nil {
+				return cli.Exit(errors.Join(err, printErr).Error(), 2)
+			}
+		}
+		return cli.Exit(err.Error(), 2)
+	}
+	if err := printNamespaceReplicationVerification(c, result); err != nil {
+		return cli.Exit(err.Error(), 2)
+	}
+
+	switch result.Status {
+	case namespaceReplicationStatusHealthy:
+		return nil
+	case namespaceReplicationStatusRepairRequired:
+		return cli.Exit("namespace replication repair is required", namespaceReplicationRepairRequiredExitCode)
+	default:
+		return cli.Exit("namespace replication verification is blocked or inconclusive", 2)
+	}
+}
+
+func namespaceReplicationRPCTimeout(c *cli.Context) time.Duration {
+	return contextTimeout(c, defaultContextTimeout)
+}
+
+// namespaceReplicationInheritedNameSource names where an inherited namespace
+// name comes from; urfave/cli does not say whether the flag or the variable set it.
+const namespaceReplicationInheritedNameSource = "tdbg --namespace or TEMPORAL_CLI_NAMESPACE"
+
+// namespaceReplicationVerifyRequestFromCLI requires an explicit selector rather
+// than tdbg's implicit default namespace. Every namespace name given, on this
+// command or inherited from tdbg's --namespace or TEMPORAL_CLI_NAMESPACE, must
+// agree; none takes precedence. With an ID, the name is also checked against it.
+// Without one, an inherited name selects the namespace.
+func namespaceReplicationVerifyRequestFromCLI(c *cli.Context) (namespaceReplicationVerifyRequest, error) {
+	id := strings.TrimSpace(c.String(FlagNamespaceID))
+	if c.IsSet(FlagNamespaceID) && id == "" {
+		return namespaceReplicationVerifyRequest{}, errors.New("--namespace-id is blank")
+	}
+	// The lineage starts with this command, so a conflict is always between the
+	// name given here and an inherited one.
+	var name string
+	inherited := false
+	for i, ancestor := range c.Lineage() {
+		if !ancestor.IsSet(FlagNamespace) {
+			continue
+		}
+		candidate := strings.TrimSpace(ancestor.String(FlagNamespace))
+		switch {
+		case candidate == "" && i > 0:
+			// urfave/cli counts an exported but empty TEMPORAL_CLI_NAMESPACE as
+			// set. A blank inherited name names no namespace, so it is ignored.
+		case candidate == "":
+			return namespaceReplicationVerifyRequest{}, errors.New("--namespace is blank; omit it or give the namespace name")
+		case name == "":
+			name, inherited = candidate, i > 0
+		case candidate != name:
+			return namespaceReplicationVerifyRequest{}, fmt.Errorf(
+				"--namespace %q conflicts with %q from %s",
+				name,
+				candidate,
+				namespaceReplicationInheritedNameSource,
+			)
+		default:
+			// Agrees with the name already seen. Commands between this one and
+			// the root have no flag of their own and report the root's value.
+		}
+	}
+	if id == "" && name == "" {
+		return namespaceReplicationVerifyRequest{}, errors.New("--namespace or --namespace-id is required")
+	}
+	return namespaceReplicationVerifyRequest{
+		NamespaceID:                    id,
+		ExpectedNamespaceName:          name,
+		ExpectedNamespaceNameInherited: inherited,
+	}, nil
+}
+
+func printNamespaceReplicationVerification(
+	c *cli.Context,
+	result *namespaceReplicationVerificationResult,
+) error {
+	if c.Bool(FlagPrintJSON) {
+		return writeJSON(c.App.Writer, result)
+	}
+	_, err := fmt.Fprintf(
+		c.App.Writer,
+		"Status: %s\nNamespace: %s (%s)\nSource cluster: %s\n",
+		result.Status,
+		result.NamespaceName,
+		result.NamespaceID,
+		result.SourceCluster,
+	)
+	if err != nil {
+		return err
+	}
+	if result.StatusDetail != "" {
+		if _, err := fmt.Fprintf(c.App.Writer, "Detail: %s\n", result.StatusDetail); err != nil {
+			return err
+		}
+	}
+
+	rows := make([]any, 0, len(result.Clusters))
+	for _, cluster := range result.Clusters {
+		rows = append(rows, namespaceReplicationVerificationTableRow{
+			Cluster:         cluster.Cluster,
+			Role:            cluster.Role,
+			Presence:        cluster.Presence,
+			ConfigVersion:   optionalInt64String(cluster.ConfigVersion),
+			ConfigMatch:     cluster.ConfigMatch,
+			FailoverVersion: optionalInt64String(cluster.FailoverVersion),
+			FailoverMatch:   cluster.FailoverMatch,
+			Differences:     strings.Join(cluster.Differences, ","),
+			Warnings:        strings.Join(cluster.Warnings, "; "),
+			Error:           cluster.Error,
+		})
+	}
+	return printTable(rows, c.App.Writer)
+}
+
+type namespaceReplicationVerificationTableRow struct {
+	Cluster         string
+	Role            string
+	Presence        string
+	ConfigVersion   string
+	ConfigMatch     string
+	FailoverVersion string
+	FailoverMatch   string
+	Differences     string
+	Warnings        string
+	Error           string
+}
+
+func optionalInt64String(value *int64) string {
+	if value == nil {
+		return "-"
+	}
+	return strconv.FormatInt(*value, 10)
+}
+
+func writeJSON(writer io.Writer, value any) error {
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
+}

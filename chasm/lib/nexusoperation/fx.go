@@ -31,7 +31,6 @@ import (
 // sharedOptions provides the dependencies that both the history service and the frontend need.
 var sharedOptions = fx.Options(
 	fx.Provide(configProvider),
-	fx.Provide(linkValidatorProvider),
 	fx.Provide(commonnexus.NewCallbackTokenGenerator),
 	fx.Provide(endpointRegistryProvider),
 	fx.Invoke(endpointRegistryLifetimeHooks),
@@ -146,8 +145,10 @@ func clientProviderFactory(
 	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
+		roundTripper := httpClientTransportInstrumenter.Instrument(responseSizeLimiter{transport})
+		roundTripper = commonnexus.RejectRedirects(roundTripper)
 		return &http.Client{
-			Transport: httpClientTransportInstrumenter.Instrument(responseSizeLimiter{transport}),
+			Transport: roundTripper,
 		}, nil
 	})
 
