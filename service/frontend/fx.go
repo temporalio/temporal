@@ -145,6 +145,7 @@ var Module = fx.Options(
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(NamespaceMutationTaskExecutorProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
+	fx.Provide(NamespaceHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
@@ -980,6 +981,46 @@ func NamespaceDLQHandlerProvider(
 	)
 }
 
+// NamespaceHandlerProvider builds the namespace handler that the workflow and operator handlers
+// share.
+func NamespaceHandlerProvider(
+	configuration *Config,
+	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
+	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
+	persistenceMetadataManager persistence.MetadataManager,
+	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
+	archivalMetadata archiver.ArchivalMetadata,
+	archiverProvider provider.ArchiverProvider,
+	timeSource clock.TimeSource,
+	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
+) *namespaceHandler {
+	return newNamespaceHandler(
+		logger,
+		eventLogger,
+		persistenceMetadataManager,
+		namespaceRegistry,
+		clusterMetadata,
+		nsreplication.NewReplicator(
+			namespaceReplicationQueue,
+			logger,
+			eventLogger,
+			configuration.EmitNamespaceLifecycleEvents,
+			clusterMetadata.GetCurrentClusterName(),
+		),
+		archivalMetadata,
+		archiverProvider,
+		timeSource,
+		configuration,
+		chasmNsReplClient,
+		metricsHandler,
+		replicationResolverFactory,
+	)
+}
+
 func OperatorHandlerProvider(
 	configuration *Config,
 	logger log.SnTaggedLogger,
@@ -995,6 +1036,7 @@ func OperatorHandlerProvider(
 	clientFactory client.Factory,
 	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
+	nsHandler *namespaceHandler,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -1011,6 +1053,7 @@ func OperatorHandlerProvider(
 		clientFactory,
 		namespaceRegistry,
 		nexusEndpointClient,
+		nsHandler,
 	}
 	return NewOperatorHandlerImpl(args)
 }
@@ -1039,24 +1082,19 @@ func HandlerProvider(
 	dcRedirectionPolicy config.DCRedirectionPolicy,
 	serviceConfig *Config,
 	versionChecker *VersionChecker,
-	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
 	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.SnTaggedLogger,
-	eventLogger otellog.Logger,
 	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
-	persistenceMetadataManager persistence.MetadataManager,
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	workerDeploymentStoreClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
-	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -1073,8 +1111,7 @@ func HandlerProvider(
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
-	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
-	replicationResolverFactory namespace.ReplicationResolverFactory,
+	nsHandler *namespaceHandler,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -1087,14 +1124,12 @@ func HandlerProvider(
 		callbackValidator,
 		linkValidator,
 		serviceConfig,
-		namespaceReplicationQueue,
+		nsHandler,
 		visibilityMgr,
 		logger,
-		eventLogger,
 		throttledLogger,
 		persistenceExecutionManager.GetName(),
 		clusterMetadataManager,
-		persistenceMetadataManager,
 		historyClient,
 		matchingClient,
 		workerDeploymentStoreClient,
@@ -1108,7 +1143,6 @@ func HandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
-		timeSource,
 		membershipMonitor,
 		healthInterceptor,
 		scheduleSpecBuilder,
@@ -1123,9 +1157,6 @@ func HandlerProvider(
 			saValidator,
 			linkValidator,
 		),
-		chasmNsReplClient,
-		metricsHandler,
-		replicationResolverFactory,
 	)
 	return wfHandler
 }

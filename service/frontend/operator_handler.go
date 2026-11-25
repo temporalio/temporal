@@ -65,6 +65,7 @@ type (
 		clientFactory          svc.Factory
 		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
+		namespaceHandler       *namespaceHandler
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -82,6 +83,7 @@ type (
 		clientFactory          svc.Factory
 		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
+		namespaceHandler       *namespaceHandler
 	}
 )
 
@@ -112,6 +114,7 @@ func NewOperatorHandlerImpl(
 		clientFactory:          args.clientFactory,
 		namespaceRegistry:      args.namespaceRegistry,
 		nexusEndpointClient:    args.nexusEndpointClient,
+		namespaceHandler:       args.namespaceHandler,
 	}
 
 	return handler
@@ -632,6 +635,26 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
 	}, nil
+}
+
+// SoftDeleteNamespace moves a namespace to SOFT_DELETED and replicates the change.
+func (h *OperatorHandlerImpl) SoftDeleteNamespace(
+	ctx context.Context,
+	request *operatorservice.SoftDeleteNamespaceRequest,
+) (_ *operatorservice.SoftDeleteNamespaceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if !h.config.EnableNamespaceSoftDelete() {
+		return nil, errNamespaceSoftDeleteNotAllowed
+	}
+	err := h.namespaceHandler.SoftDeleteNamespace(ctx, namespace.Name(request.GetNamespace()), namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	return &operatorservice.SoftDeleteNamespaceResponse{}, nil
 }
 
 // AddOrUpdateRemoteCluster adds or updates the connection config to a remote cluster.

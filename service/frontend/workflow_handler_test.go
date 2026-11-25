@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -324,18 +325,37 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
 	)
+	nsHandler := newNamespaceHandler(
+		s.mockResource.GetLogger(),
+		wideevents.NoopLogger(),
+		s.mockResource.GetMetadataManager(),
+		s.mockResource.GetNamespaceRegistry(),
+		s.mockResource.GetClusterMetadata(),
+		nsreplication.NewReplicator(
+			s.mockProducer,
+			s.mockResource.GetLogger(),
+			wideevents.NoopLogger(),
+			config.EmitNamespaceLifecycleEvents,
+			s.mockResource.GetClusterMetadata().GetCurrentClusterName(),
+		),
+		s.mockResource.GetArchivalMetadata(),
+		s.mockResource.GetArchiverProvider(),
+		clock.NewRealTimeSource(),
+		config,
+		nil,
+		metrics.NoopMetricsHandler,
+		namespace.NewDefaultReplicationResolverFactory(),
+	)
 	return NewWorkflowHandler(
 		cbValidator,
 		linkValidator,
 		config,
-		s.mockProducer,
+		nsHandler,
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
-		wideevents.NoopLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager().GetName(),
 		s.mockResource.GetClusterMetadataManager(),
-		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetMatchingClient(),
 		nil,
@@ -349,7 +369,6 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
-		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
 		scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }),
@@ -378,9 +397,6 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			saValidator,
 			linkValidator,
 		),
-		nil,
-		metrics.NoopMetricsHandler,
-		namespace.NewDefaultReplicationResolverFactory(),
 	)
 }
 
