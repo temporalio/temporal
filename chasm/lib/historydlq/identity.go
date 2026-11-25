@@ -17,15 +17,10 @@ type QueueKey struct {
 	TargetCluster string
 }
 
-// TaskIdentity refers to the original persisted task, before DLQ placement.
-// Execution fields are metadata and do not participate in deduplication.
+// TaskIdentity identifies the original persisted task by its source shard and task ID.
 type TaskIdentity struct {
 	SourceShardID int32
 	TaskID        int64
-	NamespaceID   string
-	BusinessID    string
-	RunID         string
-	ArchetypeID   uint32
 }
 
 type EnqueueRequest struct {

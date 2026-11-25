@@ -21,6 +21,6 @@ func testEnqueueRequest() EnqueueRequest {
 func testRequest() EnqueueRequest {
 	return EnqueueRequest{
 		Queue:              QueueKey{CategoryID: 1, SourceCluster: "source", TargetCluster: "target"},
-		SourceTaskIdentity: TaskIdentity{SourceShardID: 7, TaskID: 123, NamespaceID: "namespace", BusinessID: "workflow", RunID: "run", ArchetypeID: 1},
+		SourceTaskIdentity: TaskIdentity{SourceShardID: 7, TaskID: 123},
 	}
 }

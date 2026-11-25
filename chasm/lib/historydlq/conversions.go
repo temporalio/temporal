@@ -23,11 +23,7 @@ func queueProtoToKey(queue *commonspb.HistoryDLQKey) QueueKey {
 
 func taskIdentityToEntryProto(identity TaskIdentity) *historydlqpb.EntryTaskIdentity {
 	return &historydlqpb.EntryTaskIdentity{
-		TaskId:      identity.TaskID,
-		NamespaceId: identity.NamespaceID,
-		BusinessId:  identity.BusinessID,
-		RunId:       identity.RunID,
-		ArchetypeId: identity.ArchetypeID,
+		TaskId: identity.TaskID,
 	}
 }
 
@@ -35,9 +31,5 @@ func entryTaskIdentityProtoToIdentity(identity *historydlqpb.EntryTaskIdentity, 
 	return TaskIdentity{
 		SourceShardID: sourceShardID,
 		TaskID:        identity.GetTaskId(),
-		NamespaceID:   identity.GetNamespaceId(),
-		BusinessID:    identity.GetBusinessId(),
-		RunID:         identity.GetRunId(),
-		ArchetypeID:   identity.GetArchetypeId(),
 	}
 }

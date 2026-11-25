@@ -95,10 +95,6 @@ func TestSegmentRoutingByQueueAndSourceShard(t *testing.T) {
 		mutate      func(*EnqueueRequest)
 		sameSegment bool
 	}{
-		{"namespace", func(r *EnqueueRequest) { r.SourceTaskIdentity.NamespaceID += "-other" }, true},
-		{"archetype", func(r *EnqueueRequest) { r.SourceTaskIdentity.ArchetypeID++ }, true},
-		{"business", func(r *EnqueueRequest) { r.SourceTaskIdentity.BusinessID += "-other" }, true},
-		{"run", func(r *EnqueueRequest) { r.SourceTaskIdentity.RunID += "-other" }, true},
 		{"task", func(r *EnqueueRequest) { r.SourceTaskIdentity.TaskID += 1 << 40 }, true},
 		{"category", func(r *EnqueueRequest) { r.Queue.CategoryID++ }, false},
 		{"source cluster", func(r *EnqueueRequest) { r.Queue.SourceCluster += "-other" }, false},

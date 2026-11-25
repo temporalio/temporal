@@ -162,15 +162,7 @@ func (x *SegmentState) GetMinMessageId() int64 {
 type EntryTaskIdentity struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// ID assigned when the original task was persisted.
-	TaskId int64 `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	// Original execution namespace.
-	NamespaceId string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Original execution Business ID (Workflow ID for workflows).
-	BusinessId string `protobuf:"bytes,3,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
-	// Original execution Run ID.
-	RunId string `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// Original execution archetype; zero is permitted for workflow tasks.
-	ArchetypeId   uint32 `protobuf:"varint,5,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
+	TaskId        int64 `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -208,34 +200,6 @@ func (*EntryTaskIdentity) Descriptor() ([]byte, []int) {
 func (x *EntryTaskIdentity) GetTaskId() int64 {
 	if x != nil {
 		return x.TaskId
-	}
-	return 0
-}
-
-func (x *EntryTaskIdentity) GetNamespaceId() string {
-	if x != nil {
-		return x.NamespaceId
-	}
-	return ""
-}
-
-func (x *EntryTaskIdentity) GetBusinessId() string {
-	if x != nil {
-		return x.BusinessId
-	}
-	return ""
-}
-
-func (x *EntryTaskIdentity) GetRunId() string {
-	if x != nil {
-		return x.RunId
-	}
-	return ""
-}
-
-func (x *EntryTaskIdentity) GetArchetypeId() uint32 {
-	if x != nil {
-		return x.ArchetypeId
 	}
 	return 0
 }
@@ -322,14 +286,9 @@ const file_temporal_server_chasm_lib_historydlq_proto_v1_message_proto_rawDesc =
 	"\x05queue\x18\x01 \x01(\v2,.temporal.server.api.common.v1.HistoryDLQKeyR\x05queue\x12&\n" +
 	"\x0fsource_shard_id\x18\x02 \x01(\x05R\rsourceShardId\x12%\n" +
 	"\x0eretained_bytes\x18\x04 \x01(\x03R\rretainedBytes\x12$\n" +
-	"\x0emin_message_id\x18\x06 \x01(\x03R\fminMessageId\"\xaa\x01\n" +
+	"\x0emin_message_id\x18\x06 \x01(\x03R\fminMessageId\",\n" +
 	"\x11EntryTaskIdentity\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
-	"\vbusiness_id\x18\x03 \x01(\tR\n" +
-	"businessId\x12\x15\n" +
-	"\x06run_id\x18\x04 \x01(\tR\x05runId\x12!\n" +
-	"\farchetype_id\x18\x05 \x01(\rR\varchetypeId\"\x8a\x02\n" +
+	"\atask_id\x18\x01 \x01(\x03R\x06taskId\"\x8a\x02\n" +
 	"\n" +
 	"EntryState\x12r\n" +
 	"\x14source_task_identity\x18\x01 \x01(\v2@.temporal.server.chasm.lib.historydlq.proto.v1.EntryTaskIdentityR\x12sourceTaskIdentity\x12\x1d\n" +
