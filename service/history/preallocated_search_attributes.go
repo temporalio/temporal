@@ -77,8 +77,6 @@ func registerPreallocatedSearchAttributeMappings(
 		if visManager.GetStoreNames()[0] != esconfig.PersistenceName {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), registerPreallocatedSearchAttributesTimeout)
-		defer cancel()
 		indexName := visManager.GetIndexName()
 		err := backoff.ThrottleRetryContext(
 			ctx,
