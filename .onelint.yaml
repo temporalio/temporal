@@ -1,7 +1,7 @@
 version: 1
 
 profiles:
-  temporal-api: on
+  temporal-api-aliases: on
   testx: on
 
 format:
