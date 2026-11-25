@@ -540,6 +540,8 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		// Pollers aren't notified then, just as for a persisted write without CHASM node changes: no persisted state
 		// changed, so no poll predicate can change. In verify mode the write isn't skipped, but is checked to persist
 		// nothing that skipping it would have dropped.
+		// TODO: Remove verify mode (VerifyCHASMSkipCleanUpdates and verifyOnly) once the skip is enabled by default.
+		// It's only there to validate the skip during its rollout.
 		nsName := mutableState.GetNamespaceEntry().Name().String()
 		verifyOnly := e.config.VerifyCHASMSkipCleanUpdates(nsName)
 		skipped := false

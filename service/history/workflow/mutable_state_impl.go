@@ -238,8 +238,13 @@ type (
 
 		// verifyCleanTransaction is set when CloseTransactionIfClean judged the transaction clean in verify mode. The
 		// transaction is then closed as usual, and closing it reports a failed assertion if it persists anything that
-		// skipping it would have dropped.
+		// skipping it would have dropped. Verify mode is temporary, for the rollout of the skip; see
+		// dynamicconfig.VerifyCHASMSkipCleanUpdates.
 		verifyCleanTransaction bool
+		// cleanTransactionBaseline holds copies of the execution info and state from the start of the transaction, in
+		// verify mode for non-workflow executions. Closing a transaction judged clean compares them with the final
+		// state, which catches changes that set no dirty flag.
+		cleanTransactionBaseline *cleanTransactionBaseline
 
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
@@ -7790,11 +7795,38 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 
+	ms.captureCleanTransactionBaseline(namespaceEntry)
 	return flushBeforeReady, nil
+}
+
+// captureCleanTransactionBaseline copies the execution info and state at the start of a transaction, in verify mode
+// for non-workflow executions.
+func (ms *MutableStateImpl) captureCleanTransactionBaseline(namespaceEntry *namespace.Namespace) {
+	ms.cleanTransactionBaseline = nil
+	if ms.config.VerifyCHASMSkipCleanUpdates == nil ||
+		!ms.config.VerifyCHASMSkipCleanUpdates(namespaceEntry.Name().String()) ||
+		ms.IsWorkflow() {
+		return
+	}
+	ms.cleanTransactionBaseline = &cleanTransactionBaseline{
+		executionInfo:  common.CloneProto(ms.executionInfo),
+		executionState: common.CloneProto(ms.executionState),
+	}
+}
+
+// cleanTransactionBaseline is the execution info and state at the start of a transaction, see
+// MutableStateImpl.cleanTransactionBaseline.
+type cleanTransactionBaseline struct {
+	executionInfo  *persistencespb.WorkflowExecutionInfo
+	executionState *persistencespb.WorkflowExecutionState
 }
 
 func (ms *MutableStateImpl) CloseTransactionIfClean(verifyOnly bool) (bool, error) {
 	if ms.IsWorkflow() || len(ms.InsertTasks) > 0 || ms.isNonChasmStateDirty() {
+		return false, nil
+	}
+	if verifyOnly && ms.cleanTransactionBaseline == nil {
+		// Verify mode was turned on during the transaction, so there is nothing to compare with. Persist as usual.
 		return false, nil
 	}
 	clean, err := ms.chasmTree.CloseTransactionIfClean(verifyOnly)
@@ -7827,8 +7859,15 @@ func (ms *MutableStateImpl) cleanTransactionViolations(chasmNodesMutation chasm.
 	if ms.isNonChasmStateDirty() {
 		violations = append(violations, "state outside the CHASM tree")
 	}
-	if ms.executionState.State != ms.stateInDB {
-		violations = append(violations, "execution state")
+	// Comparing the protos rather than trusting dirty flags also catches changes that set none, such as turning a run
+	// into a zombie. Nothing in them is bumped for the new transition yet, so any difference would be dropped.
+	if baseline := ms.cleanTransactionBaseline; baseline != nil {
+		if !proto.Equal(baseline.executionInfo, ms.executionInfo) {
+			violations = append(violations, "execution info")
+		}
+		if !proto.Equal(baseline.executionState, ms.executionState) {
+			violations = append(violations, "execution state")
+		}
 	}
 	return violations
 }
@@ -8848,6 +8887,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
 	ms.verifyCleanTransaction = false
+	ms.cleanTransactionBaseline = nil
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})

@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -32,6 +33,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
@@ -1174,6 +1176,10 @@ func (s *chasmEngineSuite) TestUpdateComponent_VerifyCHASMSkipCleanUpdates() {
 	// Verify mode takes precedence over skipping.
 	s.config.EnableCHASMSkipCleanUpdates = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.VerifyCHASMSkipCleanUpdates = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	// The execution's mutable state logs through the shard's logger, so a failed assertion in the close shows up here.
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	failedAssertion := logger.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+	s.mockShard.SetLoggers(logger)
 	ref := s.loadRunningTestExecution(1)
 
 	// The clean update is persisted, but without the CHASM nodes skipping it would have dropped, so pollers aren't
@@ -1188,6 +1194,8 @@ func (s *chasmEngineSuite) TestUpdateComponent_VerifyCHASMSkipCleanUpdates() {
 	_, err := s.engine.UpdateComponent(context.Background(), ref,
 		func(chasm.MutableContext, chasm.Component) error { return nil })
 	s.NoError(err)
+	// The close persisted nothing that skipping the update would have dropped.
+	s.False(failedAssertion.Matched())
 }
 
 func (s *chasmEngineSuite) TestUpdateComponent_SetsContextMetadata() {

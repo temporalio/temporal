@@ -3527,8 +3527,12 @@ anything.`,
 		"history.verifyCHASMSkipCleanUpdates",
 		false,
 		`VerifyCHASMSkipCleanUpdates makes a CHASM UpdateComponent call that would skip persisting a clean update persist
-it anyway, and report a failed assertion if the write changes anything that skipping it would have dropped. It's meant
-for tests, and takes precedence over history.enableCHASMSkipCleanUpdates.`,
+it anyway, and log a failed assertion ("CHASM transaction judged clean has changes to persist") if the write changes
+anything that skipping it would have dropped. It takes precedence over history.enableCHASMSkipCleanUpdates, and costs a
+copy of the execution info and state per transaction of a non-workflow execution.
+This setting is temporary, for the rollout of history.enableCHASMSkipCleanUpdates: turn it on first, and turn on the
+skip only after it has run for a while without logging that assertion. Functional tests run with it on. It will be
+removed once the skip is enabled by default.`,
 	)
 
 	ChasmDLQScheduledPureTaskOnValidation = NewNamespaceBoolSetting(

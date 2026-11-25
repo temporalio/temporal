@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -58,6 +59,7 @@ import (
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -6336,7 +6338,8 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workf
 }
 
 // newCleanCheckMutableState returns a mutable state in an open transaction with nothing pending, whose CHASM tree is a
-// mock reporting the given archetype.
+// mock reporting the given archetype. Verify mode is on, so the transaction has a clean-transaction baseline unless the
+// archetype is the workflow's.
 func (s *mutableStateSuite) newCleanCheckMutableState(
 	archetypeID chasm.ArchetypeID,
 ) (*MutableStateImpl, *historyi.MockChasmTree) {
@@ -6355,6 +6358,12 @@ func (s *mutableStateSuite) newCleanCheckMutableState(
 	mutableState.chasmTree = mockChasmTree
 	mockChasmTree.EXPECT().ArchetypeID().Return(archetypeID).AnyTimes()
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
+
+	// StartTransaction ran with the real tree, so capture the baseline again now that the archetype is the mock's.
+	original := s.mockConfig.VerifyCHASMSkipCleanUpdates
+	s.mockConfig.VerifyCHASMSkipCleanUpdates = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.T().Cleanup(func() { s.mockConfig.VerifyCHASMSkipCleanUpdates = original })
+	mutableState.captureCleanTransactionBaseline(s.namespaceEntry)
 	return mutableState, mockChasmTree
 }
 
@@ -6415,54 +6424,103 @@ func (s *mutableStateSuite) TestCloseTransactionIfClean() {
 }
 
 func (s *mutableStateSuite) TestCloseTransactionIfClean_VerifyOnly() {
-	mutableState, mockChasmTree := s.newCleanCheckMutableState(chasm.WorkflowArchetypeID + 101)
-	mockChasmTree.EXPECT().CloseTransactionIfClean(true).Return(true, nil).Times(1)
+	testCases := []struct {
+		name string
+		// changeDuringClose is made after the transaction was judged clean, as a step of the close could.
+		changeDuringClose func(*MutableStateImpl)
+		wantAssertion     bool
+	}{
+		{name: "clean close"},
+		{
+			name: "close changes state without a dirty flag",
+			changeDuringClose: func(ms *MutableStateImpl) {
+				ms.executionInfo.TaskQueue = "changed-during-close"
+			},
+			wantAssertion: true,
+		},
+	}
 
-	// A clean transaction isn't skipped, but its close is verified.
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			mutableState, mockChasmTree := s.newCleanCheckMutableState(chasm.WorkflowArchetypeID + 101)
+			logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+			failedAssertion := logger.Expect(testlogger.Error, "judged clean", tag.FailedAssertion)
+			mutableState.logger = logger
+			mockChasmTree.EXPECT().CloseTransactionIfClean(true).Return(true, nil).Times(1)
+
+			// A clean transaction isn't skipped, but its close is verified.
+			clean, err := mutableState.CloseTransactionIfClean(true)
+			s.NoError(err)
+			s.False(clean)
+			s.True(mutableState.verifyCleanTransaction)
+
+			if tc.changeDuringClose != nil {
+				tc.changeDuringClose(mutableState)
+			}
+			mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
+			mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(0), false).AnyTimes()
+			mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), true).Return(chasm.NodesMutation{}, nil).Times(1)
+			_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+			s.NoError(err)
+			s.False(mutableState.verifyCleanTransaction)
+			s.Equal(tc.wantAssertion, failedAssertion.Matched())
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestCloseTransactionIfClean_VerifyOnlyWithoutBaseline() {
+	mutableState, _ := s.newCleanCheckMutableState(chasm.WorkflowArchetypeID + 101)
+	// Verify mode was turned on during the transaction, so there is nothing to compare the close with. The strict
+	// mock tree fails the test if it's asked.
+	mutableState.cleanTransactionBaseline = nil
+
 	clean, err := mutableState.CloseTransactionIfClean(true)
 	s.NoError(err)
 	s.False(clean)
-	s.True(mutableState.verifyCleanTransaction)
-
-	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().SpeculativeTransitionFailoverVersion().Return(int64(0), false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), true).Return(chasm.NodesMutation{}, nil).Times(1)
-	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
 	s.False(mutableState.verifyCleanTransaction)
 }
 
 func (s *mutableStateSuite) TestCleanTransactionViolations() {
 	testCases := []struct {
-		name          string
-		change        func(*MutableStateImpl)
-		mutation      chasm.NodesMutation
-		wantViolation string
+		name           string
+		change         func(*MutableStateImpl)
+		mutation       chasm.NodesMutation
+		wantViolations []string
 	}{
 		{name: "none"},
 		{
-			name:          "updated CHASM nodes",
-			mutation:      chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}},
-			wantViolation: "updated CHASM nodes",
+			name:           "updated CHASM nodes",
+			mutation:       chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}},
+			wantViolations: []string{"updated CHASM nodes"},
 		},
 		{
-			name:          "deleted CHASM nodes",
-			mutation:      chasm.NodesMutation{DeletedNodes: map[string]struct{}{"child": {}}},
-			wantViolation: "deleted CHASM nodes",
+			name:           "deleted CHASM nodes",
+			mutation:       chasm.NodesMutation{DeletedNodes: map[string]struct{}{"child": {}}},
+			wantViolations: []string{"deleted CHASM nodes"},
 		},
 		{
 			name: "tasks",
 			change: func(ms *MutableStateImpl) {
 				ms.AddTasks(&tasks.ChasmTaskPure{WorkflowKey: ms.GetWorkflowKey(), VisibilityTimestamp: time.Now()})
 			},
-			wantViolation: "tasks",
+			wantViolations: []string{"tasks"},
 		},
 		{
 			name: "state outside the CHASM tree",
 			change: func(ms *MutableStateImpl) {
 				ms.AttachChasmRequestID("request-id")
 			},
-			wantViolation: "state outside the CHASM tree",
+			// The request ID both sets a dirty flag and changes the execution state.
+			wantViolations: []string{"state outside the CHASM tree", "execution state"},
+		},
+		{
+			// A change that sets no dirty flag is still caught by comparing with the baseline.
+			name: "execution info",
+			change: func(ms *MutableStateImpl) {
+				ms.executionInfo.TaskQueue = "changed-without-dirty-flag"
+				s.False(ms.isNonChasmStateDirty())
+			},
+			wantViolations: []string{"execution info"},
 		},
 		{
 			// Turning a run into a zombie doesn't set a dirty flag.
@@ -6474,7 +6532,7 @@ func (s *mutableStateSuite) TestCleanTransactionViolations() {
 				)
 				s.NoError(err)
 			},
-			wantViolation: "execution state",
+			wantViolations: []string{"execution state"},
 		},
 	}
 
@@ -6484,12 +6542,7 @@ func (s *mutableStateSuite) TestCleanTransactionViolations() {
 			if tc.change != nil {
 				tc.change(mutableState)
 			}
-			violations := mutableState.cleanTransactionViolations(tc.mutation)
-			if tc.wantViolation == "" {
-				s.Empty(violations)
-			} else {
-				s.Equal([]string{tc.wantViolation}, violations)
-			}
+			s.ElementsMatch(tc.wantViolations, mutableState.cleanTransactionViolations(tc.mutation))
 		})
 	}
 }
