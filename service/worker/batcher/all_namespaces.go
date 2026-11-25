@@ -38,12 +38,12 @@ func ValidateAllNamespacesQuery(query string) error {
 	return nil
 }
 
-// isSystemOrPredefinedSearchAttribute accepts the same alternate names as query.ResolveSearchAttributeAlias:
-// ScheduleId and names with or without the Temporal prefix.
+// isSystemOrPredefinedSearchAttribute accepts canonical names and reserved aliases.
+// Unprefixed aliases can collide with custom fields, which take precedence during query resolution.
 func isSystemOrPredefinedSearchAttribute(name string) bool {
-	trimmed := strings.TrimPrefix(name, sadefs.ReservedPrefix)
-	return trimmed == sadefs.ScheduleID ||
-		!sadefs.IsMappable(name) ||
-		!sadefs.IsMappable(trimmed) ||
-		!sadefs.IsMappable(sadefs.ReservedPrefix+trimmed)
+	if !sadefs.IsMappable(name) {
+		return true
+	}
+	trimmed, prefixed := strings.CutPrefix(name, sadefs.ReservedPrefix)
+	return prefixed && (trimmed == sadefs.ScheduleID || !sadefs.IsMappable(trimmed))
 }

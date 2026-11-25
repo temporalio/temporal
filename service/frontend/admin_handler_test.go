@@ -3300,6 +3300,8 @@ func TestStartAdminBatchOperationRejectsInvalidAllNamespacesQuery(t *testing.T) 
 		{name: "blank", query: " \t", wantErr: "requires a visibility query"},
 		{name: "raw custom field", query: "Keyword01='x'", wantErr: "cannot filter on custom search attributes"},
 		{name: "custom alias", query: "WorkflowType='w' AND CustomerId='x'", wantErr: "cannot filter on custom search attributes"},
+		{name: "ambiguous schedule alias", query: "ScheduleId='s'", wantErr: "cannot filter on custom search attributes"},
+		{name: "ambiguous predefined alias", query: "NamespaceDivision IS NULL", wantErr: "cannot filter on custom search attributes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

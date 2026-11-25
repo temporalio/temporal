@@ -58,6 +58,8 @@ This command can run in either the active or passive cluster of a global target 
 
 Add `--all-namespaces` to refresh tasks for the workflows matching `--query` in every namespace, including `temporal-system`, with one batch job. `--query` is required, and `--workflow-id` and `--run-id` are rejected. `--namespace` is ignored, so a namespace set through `TEMPORAL_CLI_NAMESPACE` does not need to be unset. The query can only use system search attributes (such as `ExecutionStatus`, `StartTime`, `TaskQueue`) and predefined search attributes; tdbg and the Admin API reject a blank query or a query that uses any other field, including raw custom field names such as `Keyword01`. Set an accurate query so the job includes only the executions that need a refresh.
 
+Use canonical field names such as `TemporalNamespaceDivision`. Unprefixed aliases such as `NamespaceDivision` and `ScheduleId` are rejected because custom fields can have those names. Use `TemporalScheduleId` for the schedule ID alias.
+
 Unlike a query in one namespace, an all-namespaces query also matches executions whose `TemporalNamespaceDivision` is set: schedules, batch jobs, worker deployments, and CHASM executions. Add `TemporalNamespaceDivision IS NULL` to skip them. It does not skip `temporal-system` workflows that leave `TemporalNamespaceDivision` unset, such as scanners, so the query can still match those:
 
 ```sh

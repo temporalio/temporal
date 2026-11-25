@@ -16,7 +16,9 @@ func TestValidateAllNamespacesQuery(t *testing.T) {
 	}{
 		{name: "system search attributes", query: "ExecutionStatus='Running' AND StartTime < '2026-11-20T00:00:00Z'"},
 		{name: "predefined search attribute", query: "TemporalNamespaceDivision IS NULL"},
-		{name: "alternate names", query: "ScheduleId='s' AND NamespaceDivision IS NULL"},
+		{name: "reserved aliases", query: "TemporalScheduleId='s' AND TemporalBuildIds='build' AND TemporalWorkflowId='w'"},
+		{name: "ambiguous schedule alias", query: "ScheduleId='s'", wantErr: "got: ScheduleId"},
+		{name: "ambiguous predefined alias", query: "NamespaceDivision IS NULL", wantErr: "got: NamespaceDivision"},
 		{name: "empty query", query: "", wantErr: "requires a visibility query"},
 		{name: "whitespace-only query", query: " \t", wantErr: "requires a visibility query"},
 		{name: "custom search attribute", query: "CustomerId='abc'", wantErr: "got: CustomerId"},

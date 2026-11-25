@@ -373,7 +373,7 @@ func (s *batchCommandTestSuite) TestAdminAllNamespacesBatchRefreshTasks() {
 		s.client.admin.lastRequest = nil
 		s.NoError(s.app.Run([]string{
 			"tdbg", "--yes", "execution", "refresh-tasks", "--all-namespaces",
-			"--query", "WorkflowType='MyWorkflow' AND TemporalScheduledById='s' AND ScheduleId='s' AND ExecutionStatus='Running' AND TemporalNamespaceDivision IS NULL",
+			"--query", "WorkflowType='MyWorkflow' AND TemporalScheduledById='s' AND TemporalScheduleId='s' AND ExecutionStatus='Running' AND TemporalNamespaceDivision IS NULL",
 			"--reason", "refresh", "--job-id", "my-job",
 		}))
 		s.True(s.client.admin.lastRequest.GetRefreshTasksOperation().GetAllNamespaces())
