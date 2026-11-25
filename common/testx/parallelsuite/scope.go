@@ -19,8 +19,16 @@ type Scope interface {
 	AssertionT() require.TestingT
 
 	// Common assertions for test helpers.
+	Containsf(container, element any, msg string, args ...any)
+	Failf(failureMessage, msg string, args ...any)
 	NoError(err error, msgAndArgs ...any)
 	Equal(expected, actual any, msgAndArgs ...any)
+	EqualValuesf(expected, actual any, msg string, args ...any)
+	Greater(actual, threshold any, msgAndArgs ...any)
+	GreaterOrEqual(actual, threshold any, msgAndArgs ...any)
+	GreaterOrEqualf(actual, threshold any, msg string, args ...any)
+	Len(object any, length int, msgAndArgs ...any)
+	LessOrEqual(actual, threshold any, msgAndArgs ...any)
 	Nil(object any, msgAndArgs ...any)
 	NotNil(object any, msgAndArgs ...any)
 	NotEmpty(object any, msgAndArgs ...any)
