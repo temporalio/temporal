@@ -37,6 +37,7 @@ func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
 		Error:               applyErr,
 		Details:             details,
 	}
+	tagOperatorRepairObservation(request, &observation)
 	nsreplication.RecordCHASMAuthoritativeApply(adh.metricsHandler, observation)
 	// The executor emits successful receiver outcomes, including no-ops,
 	// with pre-mutation state and persistence requests when applicable.
@@ -58,15 +59,15 @@ func (adh *AdminHandler) withAuthoritativeNamespaceMutationEvent(
 	observationCtx = ctx
 	var telemetryPanic error
 	defer log.CapturePanic(adh.logger, &telemetryPanic)
-	eventData, ok := nsreplication.CHASMAuthoritativeApplyEventData(
-		nsreplication.CHASMAuthoritativeApplyObservation{
-			Task:                task,
-			Stage:               nsreplication.CHASMApplyStageReceive,
-			ComponentBusinessID: request.GetComponentBusinessId(),
-			ComponentRunID:      request.GetComponentRunId(),
-			Details:             details,
-		},
-	)
+	observation := nsreplication.CHASMAuthoritativeApplyObservation{
+		Task:                task,
+		Stage:               nsreplication.CHASMApplyStageReceive,
+		ComponentBusinessID: request.GetComponentBusinessId(),
+		ComponentRunID:      request.GetComponentRunId(),
+		Details:             details,
+	}
+	tagOperatorRepairObservation(request, &observation)
+	eventData, ok := nsreplication.CHASMAuthoritativeApplyEventData(observation)
 	if !ok {
 		return ctx
 	}
@@ -93,4 +94,27 @@ func authoritativeReceiveOutcome(outcome nsreplication.ApplyOutcome) string {
 	default:
 		return nsreplication.CHASMApplyOutcomeError
 	}
+}
+
+func tagOperatorRepairObservation(
+	request *adminservice.ApplyNamespaceMutationRequest,
+	observation *nsreplication.CHASMAuthoritativeApplyObservation,
+) {
+	if !isOperatorRepair(request) {
+		return
+	}
+	if observation.Details == nil {
+		observation.Details = make(map[string]any)
+	}
+	observation.Transport = nsreplication.OperatorRepair
+	observation.Mode = nsreplication.OperatorRepair
+	observation.Details["repair_id"] = request.GetAttribution().GetRepairId()
+	observation.Details["operator_reason"] = request.GetAttribution().GetReason()
+}
+
+func namespaceMutationTransport(request *adminservice.ApplyNamespaceMutationRequest) string {
+	if isOperatorRepair(request) {
+		return nsreplication.OperatorRepair
+	}
+	return nsreplication.CHASMReplicationTransport
 }

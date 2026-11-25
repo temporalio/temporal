@@ -90,6 +90,7 @@ func TestNamespaceMutationExecutorUsesMutationDataMerger(t *testing.T) {
 		wideevents.NoopLogger(),
 		metrics.NoopMetricsHandler,
 		testhooks.TestHooks{},
+		nsreplication.NewDefaultRepairPolicy(),
 	)
 	_, err := executor.ExecuteWithOutcome(t.Context(), removalTestTask(false), nsreplication.MutationApplyOptions{})
 	require.NoError(t, err)

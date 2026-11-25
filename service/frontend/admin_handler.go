@@ -118,6 +118,7 @@ type (
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
+		repairPolicy               nsreplication.RepairPolicy
 		schedulerClient            schedulerpb.SchedulerServiceClient
 		metricsHandler             metrics.Handler
 
@@ -154,6 +155,7 @@ type (
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
+		RepairPolicy                        nsreplication.RepairPolicy
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
 		MetricsHandler                      metrics.Handler
 
@@ -217,6 +219,7 @@ func NewAdminHandler(
 		taskCategoryRegistry:       args.CategoryRegistry,
 		matchingClient:             args.matchingClient,
 		chasmRegistry:              args.ChasmRegistry,
+		repairPolicy:               args.RepairPolicy,
 		schedulerClient:            args.SchedulerClient,
 		metricsHandler:             args.MetricsHandler,
 	}
@@ -1075,6 +1078,9 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if request == nil {
 		return nil, serviceerror.NewInvalidArgument("request is required")
 	}
+	if err := validateNamespaceMutationAttribution(request); err != nil {
+		return nil, err
+	}
 	// Shadow must expose the same feature prerequisite as authoritative applies.
 	if !adh.clusterMetadata.IsGlobalNamespaceEnabled() {
 		comparisonReason = "global_namespace_disabled"
@@ -1109,7 +1115,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if !request.GetShadow() {
 		ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
 			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
-			Transport: nsreplication.CHASMReplicationTransport,
+			Transport: namespaceMutationTransport(request),
 		})
 		// deliveryDetails records how the receiver treats the delivery on its events.
 		deliveryDetails := map[string]any{"removed_peer": request.GetRemovedPeer()}
@@ -1134,6 +1140,14 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		trusted := request.GetTargetCluster() != "" && policyTrusts
 		deliveryDetails["trusted"] = trusted
 		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask, deliveryDetails)
+		if isOperatorRepair(request) {
+			// Refuse what the payload shows. The executor also checks the stored
+			// namespace that the repair would update.
+			if err := adh.checkNamespaceRepairPolicy(ctx, payloadTask.GetId(), payloadTask.GetInfo().GetName(), payloadTask.GetInfo().GetData()); err != nil {
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
+				return nil, err
+			}
+		}
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after
@@ -1161,7 +1175,8 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
 			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
-				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer(), Trusted: trusted},
+				Admission:      nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer(), Trusted: trusted},
+				OperatorRepair: isOperatorRepair(request),
 			})
 		}, policy, func(err error) bool {
 			_, retryable := errors.AsType[*serviceerror.Unavailable](err)
@@ -2124,6 +2139,13 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
 		RestoreInfo:       info.GetRestoreInfo(),
+	}
+	// Always set, so repair can tell this server from one that predates operator
+	// repair. A refusal is reported instead of failing the read: GetNamespace
+	// serves other callers, and verify and repair stop on the reason.
+	nsResponse.RepairScope = &adminservice.NamespaceRepairScope{}
+	if err := adh.checkNamespaceRepairPolicy(ctx, info.GetId(), info.GetName(), info.GetData()); err != nil {
+		nsResponse.RepairScope.RefusalReason = err.Error()
 	}
 	return nsResponse, nil
 }

@@ -55,6 +55,7 @@ func ClearActivityStartedState(ai *persistencespb.ActivityInfo) {
 	ai.RequestId = ""
 	ai.StartedTime = nil
 	ai.StartedClock = nil
+	ai.Limiters = nil
 }
 
 func UpdateActivityInfoForRetries(

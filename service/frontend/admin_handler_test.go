@@ -216,6 +216,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		clock.NewRealTimeSource(),
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
+		nil, // repair policy
 		nil, // schedulerClient - not needed for most admin handler tests
 		nil, // metricsHandler
 		tasks.NewDefaultTaskCategoryRegistry(),
@@ -1492,6 +1493,7 @@ func (s *adminHandlerSuite) TestGetNamespace_ReturnsReplicatedFields() {
 		FailoverHistory:   transmitted.FailoverHistory,
 		IsGlobalNamespace: true,
 		RestoreInfo:       transmitted.RestoreInfo,
+		RepairScope:       &adminservice.NamespaceRepairScope{},
 	}
 	expected.Info.Id = transmitted.Id
 	s.ProtoEqual(expected, resp)

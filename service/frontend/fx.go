@@ -137,6 +137,7 @@ var Module = fx.Options(
 	fx.Provide(nsreplication.NewDefaultMutationDataMerger),
 	fx.Provide(nsreplication.NewDefaultAdmitter),
 	fx.Provide(nsreplication.NewDefaultDeliveryPolicy),
+	fx.Provide(nsreplication.NewDefaultRepairPolicy),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
@@ -886,6 +887,7 @@ func AdminHandlerProvider(
 	matchingClient resource.MatchingClient,
 	chasmRegistry *chasm.Registry,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	repairPolicy nsreplication.RepairPolicy,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
@@ -919,6 +921,7 @@ func AdminHandlerProvider(
 		timeSource,
 		chasmRegistry,
 		namespaceDataMerger,
+		repairPolicy,
 		schedulerClient,
 		metricsHandler,
 		taskCategoryRegistry,
@@ -938,6 +941,7 @@ func NamespaceMutationTaskExecutorProvider(
 	eventLogger otellog.Logger,
 	metricsHandler metrics.Handler,
 	testHooks testhooks.TestHooks,
+	repairPolicy nsreplication.RepairPolicy,
 ) nsreplication.MutationTaskExecutor {
 	return nsreplication.NewMutationTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -951,6 +955,7 @@ func NamespaceMutationTaskExecutorProvider(
 			eventLogger,
 			configuration.EmitNamespaceLifecycleEvents,
 		),
+		nsreplication.WithOperatorRepairPolicy(repairPolicy),
 	)
 }
 
