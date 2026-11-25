@@ -3281,13 +3281,13 @@ RemoteCluster are ignored with a diagnostic.`,
 	)
 	ReplicationLaneDrainTasksPerSecond = NewGlobalFloatSetting(
 		"history.ReplicationLaneDrainTasksPerSecond",
-		0,
-		`ReplicationLaneDrainTasksPerSecond caps the send rate of a replication lane whose isolation
-entry was removed, on each source shard's stream, while the lane drains its backlog before it
-retires. An uncapped drain sends a throttled lane's backlog as fast as the stream allows, which can
-flood the receiver and slow every namespace there. The lane retires only once it has caught up with
-the default lane, so the cap must exceed the namespace's own write rate on each shard, or the lane
-keeps draining at the cap. Non-positive values leave the drain uncapped.`,
+		3,
+		`ReplicationLaneDrainTasksPerSecond caps how fast a replication lane whose isolation entry was
+removed drains its backlog before it retires, on each source shard's stream. The lane may send as
+fast as its namespace's tasks arrive on the shard, averaged over the last several seconds, plus this
+many tasks a second, so it catches up with the default lane and retires however fast the namespace
+writes. An uncapped drain sends a throttled lane's backlog as fast as the stream allows, which can
+flood the receiver and slow every namespace there. Non-positive values leave the drain uncapped.`,
 	)
 	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderMaxLanes",

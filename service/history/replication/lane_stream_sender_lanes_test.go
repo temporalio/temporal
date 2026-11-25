@@ -193,6 +193,7 @@ func (s *laneStreamSenderSuite) TestPaceLane_NotPaced() {
 	limiter := &fakeLaneLimiter{refusals: 1, retryAfter: time.Hour}
 	s.requestLane(logicalKey, limiter)
 	s.streamSender.requestedLanes = nil
+	s.config.ReplicationLaneDrainTasksPerSecond = dynamicconfig.GetFloatPropertyFn(0)
 
 	// A lane the policy no longer requests drains without the policy's limiter, and without any
 	// limit while the drain cap is unset.
@@ -223,6 +224,115 @@ func (s *laneStreamSenderSuite) TestPaceLane_DrainCapPacesWithdrawnLanes() {
 	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
 }
 
+func (s *laneStreamSenderSuite) TestPaceLane_DrainAddsIntake() {
+	logicalKey := namespaceLaneKey("ns-a")
+	s.requestLane(logicalKey, &fakeLaneLimiter{})
+	s.config.ReplicationLaneDrainTasksPerSecond = dynamicconfig.GetFloatPropertyFn(2)
+	// While the lane is throttled, the default lane skips eight of its tasks a second.
+	intake := s.streamSender.laneIntake(logicalKey)
+	const intakePerSecond = 8
+	step := time.Second / intakePerSecond
+	for range 30 * intakePerSecond {
+		intake.recordSkip(s.timeSource.Now())
+		s.timeSource.Advance(step)
+	}
+	s.streamSender.requestedLanes = nil
+
+	// Withdrawn, the lane drains at its intake plus the cap while the default lane keeps skipping.
+	sent := 0
+	for range 60 * intakePerSecond {
+		intake.recordSkip(s.timeSource.Now())
+		sent += s.drainSends(logicalKey, 100)
+		s.timeSource.Advance(step)
+	}
+	// Ten tasks a second for a minute, plus the bucket's first burst of ten.
+	s.InDelta(610, sent, 5)
+}
+
+// TestPaceLane_DrainCatchesUpWithFasterIntake drains a lane whose namespace writes four times faster
+// than the cap. A drain held to the cap alone would never catch up with the default lane, so the
+// lane would never retire.
+func (s *laneStreamSenderSuite) TestPaceLane_DrainCatchesUpWithFasterIntake() {
+	logicalKey := namespaceLaneKey("ns-a")
+	s.requestLane(logicalKey, &fakeLaneLimiter{})
+	s.config.ReplicationLaneDrainTasksPerSecond = dynamicconfig.GetFloatPropertyFn(5)
+	intake := s.streamSender.laneIntake(logicalKey)
+	const intakePerSecond = 20
+	step := time.Second / intakePerSecond
+	// Throttled for ten seconds, the lane holds back every task the default lane skips.
+	backlog := 0
+	for range 10 * intakePerSecond {
+		intake.recordSkip(s.timeSource.Now())
+		backlog++
+		s.timeSource.Advance(step)
+	}
+	s.streamSender.requestedLanes = nil
+
+	start := s.timeSource.Now()
+	for backlog > 0 && s.timeSource.Now().Sub(start) < 5*time.Minute {
+		intake.recordSkip(s.timeSource.Now())
+		backlog++
+		backlog -= s.drainSends(logicalKey, backlog)
+		s.timeSource.Advance(step)
+	}
+	s.Zero(backlog, "the lane must catch up with a namespace that writes faster than the cap")
+	// The backlog of 200 shrinks by the cap of five a second, after the bucket's first burst, so the
+	// drain still spares the receiver.
+	drained := s.timeSource.Now().Sub(start)
+	s.Greater(drained, 25*time.Second)
+	s.Less(drained, time.Minute)
+}
+
+// drainSends counts the sends a withdrawn lane may make now, up to most, without waiting.
+func (s *laneStreamSenderSuite) drainSends(logicalKey string, most int) int {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for sent := range most {
+		if err := s.streamSender.paceLane(ctx, logicalKey); err != nil {
+			s.ErrorIs(err, context.Canceled)
+			return sent
+		}
+	}
+	return most
+}
+
+func TestLaneIntake(t *testing.T) {
+	var intake laneIntake
+	now := time.Unix(1_000_000, 0)
+	require.Zero(t, intake.tasksPerSecond(now), "there is no intake before the first skip")
+
+	// A steady intake of five tasks a second.
+	for range 30 {
+		for range 5 {
+			intake.recordSkip(now)
+		}
+		now = now.Add(time.Second)
+	}
+	require.InDelta(t, 5, intake.tasksPerSecond(now), 0.01)
+
+	// The average follows a new rate within a few time constants.
+	for range 10 {
+		for range 20 {
+			intake.recordSkip(now)
+		}
+		now = now.Add(time.Second)
+	}
+	require.InDelta(t, 20, intake.tasksPerSecond(now), 0.2)
+
+	// A sample shorter than laneIntakeSampleInterval leaves the average as it was.
+	rate := intake.tasksPerSecond(now)
+	intake.recordSkip(now)
+	require.InDelta(t, rate, intake.tasksPerSecond(now.Add(laneIntakeSampleInterval/2)), 0)
+
+	// Once the skips stop, the intake decays toward zero within seconds, so a burst that built a
+	// backlog does not speed up its drain.
+	for range 15 {
+		now = now.Add(time.Second)
+		intake.tasksPerSecond(now)
+	}
+	require.Less(t, intake.tasksPerSecond(now), 0.1)
+}
+
 func (s *laneStreamSenderSuite) TestPaceLane_RequestedLaneIgnoresDrainCap() {
 	logicalKey := namespaceLaneKey("ns-a")
 	limiter := &fakeLaneLimiter{}
@@ -247,6 +357,7 @@ func (s *laneStreamSenderSuite) TestLaneRetired_DropsDrainLimiter() {
 
 	s.streamSender.laneRetired(logicalKey)
 	s.NotContains(s.streamSender.laneDrainLimiters, logicalKey)
+	s.NotContains(s.streamSender.laneIntakes, logicalKey)
 }
 
 func (s *laneStreamSenderSuite) TestSendDefaultTasks_SkipsLaneOwnedTasks() {
@@ -277,6 +388,9 @@ func (s *laneStreamSenderSuite) TestSendDefaultTasks_SkipsLaneOwnedTasks() {
 	err = s.streamSender.sendDefaultTasks(enumsspb.TASK_PRIORITY_HIGH, 100, 200)
 	s.NoError(err)
 	s.Equal(int64(200), registry.DefaultReservedCursor())
+	// The skipped task counts toward the intake of the lane that owns it.
+	s.Equal(int64(1), s.streamSender.laneIntakes[namespaceLaneKey("ns-a")].skipped)
+	s.NotContains(s.streamSender.laneIntakes, namespaceLaneKey("ns-b"))
 }
 
 func (s *laneStreamSenderSuite) TestSendDefaultTasks_LowPriorityIgnoresLanes() {
