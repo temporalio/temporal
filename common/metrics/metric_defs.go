@@ -1655,6 +1655,20 @@ var (
 		WithDescription("The number of workflow executions that wasn't found by DeleteExecutions workflow"),
 	)
 
+	// Namespace restore metrics.
+	NamespaceRestoreRefreshFailureCount = NewCounterDef(
+		"namespace_restore_refresh_failure",
+		WithDescription("The number of failed attempts by a namespace restore job to refresh an execution, tagged by target cluster"),
+	)
+	NamespaceRestoreRefreshThrottledCount = NewCounterDef(
+		"namespace_restore_refresh_throttled",
+		WithDescription("The number of namespace restore refreshes history rejected because the namespace's task processing rate limit had no room, tagged by namespace"),
+	)
+	NamespaceRestoreSkippedCount = NewCounterDef(
+		"namespace_restore_skipped",
+		WithDescription("The number of executions a namespace restore job skipped on a cluster because retrying can't help, such as when their mutable state can't be read, tagged by target cluster"),
+	)
+
 	// Batcher metrics.
 	BatcherProcessorSuccess = NewCounterDef(
 		"batcher_processor_requests",

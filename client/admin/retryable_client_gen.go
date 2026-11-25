@@ -101,6 +101,21 @@ func (c *retryableClient) CancelDLQJob(
 	return resp, err
 }
 
+func (c *retryableClient) CloseNamespaceRestore(
+	ctx context.Context,
+	request *adminservice.CloseNamespaceRestoreRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CloseNamespaceRestoreResponse, error) {
+	var resp *adminservice.CloseNamespaceRestoreResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CloseNamespaceRestore(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,

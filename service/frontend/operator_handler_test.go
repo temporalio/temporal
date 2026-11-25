@@ -108,6 +108,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 			metrics.NoopMetricsHandler,
 			namespace.NewDefaultReplicationResolverFactory(),
 		),
+		s.mockResource.ClientBean,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()

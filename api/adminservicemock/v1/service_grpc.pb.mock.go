@@ -163,6 +163,26 @@ func (mr *MockAdminServiceClientMockRecorder) CancelDLQJob(ctx, in any, opts ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelDLQJob", reflect.TypeOf((*MockAdminServiceClient)(nil).CancelDLQJob), varargs...)
 }
 
+// CloseNamespaceRestore mocks base method.
+func (m *MockAdminServiceClient) CloseNamespaceRestore(ctx context.Context, in *adminservice.CloseNamespaceRestoreRequest, opts ...grpc.CallOption) (*adminservice.CloseNamespaceRestoreResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CloseNamespaceRestore", varargs...)
+	ret0, _ := ret[0].(*adminservice.CloseNamespaceRestoreResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CloseNamespaceRestore indicates an expected call of CloseNamespaceRestore.
+func (mr *MockAdminServiceClientMockRecorder) CloseNamespaceRestore(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseNamespaceRestore", reflect.TypeOf((*MockAdminServiceClient)(nil).CloseNamespaceRestore), varargs...)
+}
+
 // CloseShard mocks base method.
 func (m *MockAdminServiceClient) CloseShard(ctx context.Context, in *adminservice.CloseShardRequest, opts ...grpc.CallOption) (*adminservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -1313,6 +1333,21 @@ func (m *MockAdminServiceServer) CancelDLQJob(arg0 context.Context, arg1 *admins
 func (mr *MockAdminServiceServerMockRecorder) CancelDLQJob(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelDLQJob", reflect.TypeOf((*MockAdminServiceServer)(nil).CancelDLQJob), arg0, arg1)
+}
+
+// CloseNamespaceRestore mocks base method.
+func (m *MockAdminServiceServer) CloseNamespaceRestore(arg0 context.Context, arg1 *adminservice.CloseNamespaceRestoreRequest) (*adminservice.CloseNamespaceRestoreResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseNamespaceRestore", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.CloseNamespaceRestoreResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CloseNamespaceRestore indicates an expected call of CloseNamespaceRestore.
+func (mr *MockAdminServiceServerMockRecorder) CloseNamespaceRestore(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseNamespaceRestore", reflect.TypeOf((*MockAdminServiceServer)(nil).CloseNamespaceRestore), arg0, arg1)
 }
 
 // CloseShard mocks base method.

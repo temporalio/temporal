@@ -464,7 +464,8 @@ func (d *namespaceHandler) UpdateNamespace(
 	ctx context.Context,
 	updateRequest *workflowservice.UpdateNamespaceRequest,
 ) (*workflowservice.UpdateNamespaceResponse, error) {
-	return d.updateNamespace(ctx, updateRequest, internalUpdateOptions{})
+	response, _, err := d.updateNamespace(ctx, updateRequest, internalUpdateOptions{})
+	return response, err
 }
 
 // internalUpdateOptions let the namespace lifecycle APIs reuse UpdateNamespace. The public
@@ -474,6 +475,11 @@ type internalUpdateOptions struct {
 	namespaceID namespace.ID
 	// allowSoftDelete permits the REGISTERED to SOFT_DELETED state change.
 	allowSoftDelete bool
+	// allowRestore permits the SOFT_DELETED to REGISTERED state change.
+	allowRestore bool
+	// mutate runs on the namespace as read, before the request is applied, and can change it in the
+	// same write. It returns whether it changed anything, which makes the update a write.
+	mutate func(*persistence.GetNamespaceResponse) (bool, error)
 }
 
 //nolint:revive // cognitive complexity grandfathered
@@ -481,12 +487,21 @@ func (d *namespaceHandler) updateNamespace(
 	ctx context.Context,
 	updateRequest *workflowservice.UpdateNamespaceRequest,
 	opts internalUpdateOptions,
-) (*workflowservice.UpdateNamespaceResponse, error) {
+) (*workflowservice.UpdateNamespaceResponse, *persistencespb.NamespaceDetail, error) {
 	getResponse, notificationVersion, err := d.readNamespaceForWrite(ctx, namespace.Name(updateRequest.GetNamespace()), opts.namespaceID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	previousReplicationClusters := d.replicationClusters(common.CloneProto(getResponse.Namespace))
+	// Snapshot pre-mutation namespace fields for the namespace_updated wide event emitted on success
+	// below; the after-snapshot is taken from the persisted record once the mutations complete.
+	eventBefore := namespaceStateFields(getResponse.Namespace, getResponse.IsGlobalNamespace)
+	mutated := false
+	if opts.mutate != nil {
+		if mutated, err = opts.mutate(getResponse); err != nil {
+			return nil, nil, err
+		}
+	}
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
@@ -497,10 +512,6 @@ func (d *namespaceHandler) updateNamespace(
 	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
 	isGlobalNamespace := getResponse.IsGlobalNamespace || updateRequest.PromoteNamespace
 	needsNamespacePromotion := !getResponse.IsGlobalNamespace && updateRequest.PromoteNamespace
-
-	// Snapshot pre-mutation namespace fields for the namespace_updated wide event emitted on success
-	// below; the after-snapshot is taken from the persisted record once the mutations complete.
-	eventBefore := namespaceStateFields(getResponse.Namespace, getResponse.IsGlobalNamespace)
 
 	currentHistoryArchivalState := &namespace.ArchivalConfigState{
 		State: config.HistoryArchivalState,
@@ -513,11 +524,11 @@ func (d *namespaceHandler) updateNamespace(
 		cfg := updateRequest.GetConfig()
 		archivalEvent, err := d.toArchivalUpdateEvent(cfg.HistoryArchivalState, cfg.GetHistoryArchivalUri(), clusterHistoryArchivalConfig.GetNamespaceDefaultURI())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		nextHistoryArchivalState, historyArchivalConfigChanged, err = currentHistoryArchivalState.GetNextState(archivalEvent, d.validateHistoryArchivalURI)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -532,18 +543,18 @@ func (d *namespaceHandler) updateNamespace(
 		cfg := updateRequest.GetConfig()
 		archivalEvent, err := d.toArchivalUpdateEvent(cfg.VisibilityArchivalState, cfg.GetVisibilityArchivalUri(), clusterVisibilityArchivalConfig.GetNamespaceDefaultURI())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		nextVisibilityArchivalState, visibilityArchivalConfigChanged, err = currentVisibilityArchivalState.GetNextState(archivalEvent, d.validateVisibilityArchivalURI)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	// whether active cluster is changed
 	activeClusterChanged := false
 	// whether anything other than active cluster is changed
-	configurationChanged := false
+	configurationChanged := mutated
 	// whether replication cluster list is changed
 	clusterListChanged := false
 
@@ -564,8 +575,8 @@ func (d *namespaceHandler) updateNamespace(
 		}
 		if updatedInfo.State != enumspb.NAMESPACE_STATE_UNSPECIFIED && info.State != updatedInfo.State {
 			configurationChanged = true
-			if err := validateStateUpdate(getResponse, updateRequest, opts.allowSoftDelete); err != nil {
-				return nil, err
+			if err := validateStateUpdate(getResponse, updateRequest, opts); err != nil {
+				return nil, nil, err
 			}
 			info.State = updatedInfo.State
 		}
@@ -580,7 +591,7 @@ func (d *namespaceHandler) updateNamespace(
 				config.Retention,
 				isGlobalNamespace,
 			); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		if historyArchivalConfigChanged {
@@ -602,7 +613,7 @@ func (d *namespaceHandler) updateNamespace(
 			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UTC())
 			config.BadBinaries = &bb
 			if len(config.BadBinaries.Binaries) > maxLength {
-				return nil, serviceerror.NewInvalidArgumentf("Total resetBinaries cannot exceed the max limit: %v", maxLength)
+				return nil, nil, serviceerror.NewInvalidArgumentf("Total resetBinaries cannot exceed the max limit: %v", maxLength)
 			}
 		}
 		if len(updatedConfig.CustomSearchAttributeAliases) > 0 {
@@ -612,7 +623,7 @@ func (d *namespaceHandler) updateNamespace(
 				updatedConfig.CustomSearchAttributeAliases,
 			)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			config.CustomSearchAttributeAliases = csaAliases
 		}
@@ -622,7 +633,7 @@ func (d *namespaceHandler) updateNamespace(
 		binChecksum := updateRequest.GetDeleteBadBinary()
 		_, ok := config.BadBinaries.Binaries[binChecksum]
 		if !ok {
-			return nil, serviceerror.NewInvalidArgumentf("Bad binary checksum %v doesn't exists.", binChecksum)
+			return nil, nil, serviceerror.NewInvalidArgumentf("Bad binary checksum %v doesn't exists.", binChecksum)
 		}
 		configurationChanged = true
 		delete(config.BadBinaries.Binaries, binChecksum)
@@ -649,14 +660,14 @@ func (d *namespaceHandler) updateNamespace(
 				effectiveActiveCluster,
 			)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			replicationConfig.ClusterReplicationRamps = updatedRamps
 		}
 		if updateReplicationConfig.State != enumspb.REPLICATION_STATE_UNSPECIFIED &&
 			updateReplicationConfig.State != replicationConfig.State {
 			if err := validateReplicationStateUpdate(getResponse, updateRequest); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			configurationChanged = true
 			replicationConfig.State = updateReplicationConfig.State
@@ -673,28 +684,28 @@ func (d *namespaceHandler) updateNamespace(
 	}
 
 	if err := d.namespaceAttrValidator.ValidateNamespaceConfig(config); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if isGlobalNamespace {
 		if err := d.namespaceAttrValidator.ValidateNamespaceReplicationConfigForGlobalNamespace(
 			replicationConfig,
 		); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !d.clusterMetadata.IsGlobalNamespaceEnabled() {
-			return nil, serviceerror.NewInvalidArgumentf("global namespace is not enabled on this "+
+			return nil, nil, serviceerror.NewInvalidArgumentf("global namespace is not enabled on this "+
 				"cluster, cannot update global namespace or promote local namespace: %v", updateRequest.Namespace)
 		}
 	} else {
 		if err := d.namespaceAttrValidator.ValidateNamespaceReplicationConfigForLocalNamespace(
 			replicationConfig,
 		); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
-		return nil, errCannotDoNamespaceFailoverAndUpdate
+		return nil, nil, errCannotDoNamespaceFailoverAndUpdate
 	}
 	transportMode := d.effectiveNamespaceReplicationTransportMode()
 	namespaceChanged := configurationChanged || activeClusterChanged || needsNamespacePromotion
@@ -826,7 +837,7 @@ func (d *namespaceHandler) updateNamespace(
 		err = applyLegacy()
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	response := &workflowservice.UpdateNamespaceResponse{
@@ -839,7 +850,7 @@ func (d *namespaceHandler) updateNamespace(
 		tag.WorkflowNamespace(info.Name),
 		tag.WorkflowNamespaceID(info.Id),
 	)
-	return response, nil
+	return response, detail, nil
 }
 
 // readNamespaceForWrite reads the notification version, which is the lock on the namespace table,
@@ -864,15 +875,21 @@ func (d *namespaceHandler) readNamespaceForWrite(
 	return getResponse, metadata.NotificationVersion, nil
 }
 
-// SoftDeleteNamespace moves a REGISTERED namespace to SOFT_DELETED. It is an UpdateNamespace of the
-// state, so it gets the same validation, versioning, and replication. On a namespace that is
-// already SOFT_DELETED the update changes nothing and replicates the record again, so a retry
-// still reaches peers.
+// SoftDeleteNamespace moves a REGISTERED namespace to SOFT_DELETED, marking a running restore
+// FAILED in the same write. It is an UpdateNamespace of the state, so it gets the same validation,
+// versioning, and replication. On a namespace that is already SOFT_DELETED the update changes
+// nothing and replicates the record again, so a retry still reaches peers. If the namespace has a
+// running restore and is active on another cluster, it returns a *restoreActiveElsewhereError
+// without writing.
 func (d *namespaceHandler) SoftDeleteNamespace(ctx context.Context, nsName namespace.Name, nsID namespace.ID) error {
-	_, err := d.updateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, _, err := d.updateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace:  nsName.String(),
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: enumspb.NAMESPACE_STATE_SOFT_DELETED},
-	}, internalUpdateOptions{namespaceID: nsID, allowSoftDelete: true})
+	}, internalUpdateOptions{
+		namespaceID:     nsID,
+		allowSoftDelete: true,
+		mutate:          d.failRunningRestore,
+	})
 	return err
 }
 
@@ -1533,12 +1550,12 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 	return nil
 }
 
-// validateStateUpdate checks the request's namespace state change. allowSoftDelete permits
-// REGISTERED to SOFT_DELETED, which only SoftDeleteNamespace requests.
+// validateStateUpdate checks the request's namespace state change. The options permit the soft
+// delete and restore changes, which only SoftDeleteNamespace and RestoreNamespace request.
 func validateStateUpdate(
 	existingNamespace *persistence.GetNamespaceResponse,
 	nsUpdateRequest *workflowservice.UpdateNamespaceRequest,
-	allowSoftDelete bool,
+	opts internalUpdateOptions,
 ) error {
 	if nsUpdateRequest.UpdateInfo == nil {
 		return nil // no change
@@ -1560,7 +1577,7 @@ func validateStateUpdate(
 		case enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_DEPRECATED:
 			return nil
 		case enumspb.NAMESPACE_STATE_SOFT_DELETED:
-			if !allowSoftDelete {
+			if !opts.allowSoftDelete {
 				return errInvalidNamespaceStateUpdate
 			}
 			if existingNamespace.Namespace.Info.Id == primitives.SystemNamespaceID {
@@ -1582,7 +1599,10 @@ func validateStateUpdate(
 	case enumspb.NAMESPACE_STATE_DELETED:
 		return errInvalidNamespaceStateUpdate
 	case enumspb.NAMESPACE_STATE_SOFT_DELETED:
-		// Changed only by SoftDeleteNamespace and RestoreNamespace.
+		// Changed only by RestoreNamespace.
+		if newState == enumspb.NAMESPACE_STATE_REGISTERED && opts.allowRestore {
+			return nil
+		}
 		return errInvalidNamespaceStateUpdate
 	default:
 		return errInvalidNamespaceStateUpdate

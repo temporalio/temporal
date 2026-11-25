@@ -891,6 +891,7 @@ func AdminHandlerProvider(
 	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
+	nsHandler *namespaceHandler,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -925,7 +926,7 @@ func AdminHandlerProvider(
 		taskCategoryRegistry,
 		matchingClient,
 	}
-	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)
+	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor, nsHandler)
 }
 
 func NamespaceMutationTaskExecutorProvider(
@@ -981,8 +982,8 @@ func NamespaceDLQHandlerProvider(
 	)
 }
 
-// NamespaceHandlerProvider builds the namespace handler that the workflow and operator handlers
-// share.
+// NamespaceHandlerProvider builds the namespace handler that the workflow, operator, and admin
+// handlers share.
 func NamespaceHandlerProvider(
 	configuration *Config,
 	logger log.SnTaggedLogger,
@@ -1037,6 +1038,7 @@ func OperatorHandlerProvider(
 	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
 	nsHandler *namespaceHandler,
+	clientBean client.Bean,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -1054,6 +1056,7 @@ func OperatorHandlerProvider(
 		namespaceRegistry,
 		nexusEndpointClient,
 		nsHandler,
+		clientBean,
 	}
 	return NewOperatorHandlerImpl(args)
 }

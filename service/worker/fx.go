@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/migration"
+	"go.temporal.io/server/service/worker/restorenamespace"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
@@ -48,6 +49,7 @@ var Module = fx.Options(
 	migration.Module,
 	resource.Module,
 	deletenamespace.Module,
+	restorenamespace.Module,
 	chasmscheduler.Module,
 	callback.Module,
 	namespacereplication.Module,

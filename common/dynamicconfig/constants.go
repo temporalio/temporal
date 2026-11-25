@@ -1311,6 +1311,26 @@ to a version that supports the DeleteExecution API.`,
 Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
 Default value is 100. Despite starting with 'frontend.' this setting is used by a worker and can be changed while namespace is deleted.`,
 	)
+	NamespaceRestoreConvergenceWait = NewGlobalDurationSetting(
+		"frontend.namespaceRestoreConvergenceWait",
+		5*time.Second,
+		`NamespaceRestoreConvergenceWait is how long RestoreNamespace waits for every cluster in the
+namespace's replication config to apply the restore before it returns UNAVAILABLE.`,
+	)
+	NamespaceRestoreRefreshRPS = NewNamespaceIntSetting(
+		"worker.namespaceRestoreRefreshRPS",
+		100,
+		`NamespaceRestoreRefreshRPS is the rate at which the restore job of a namespace sends refresh
+requests. Each execution is refreshed on every cluster that holds it, one request per cluster, and
+failed requests are retried. Can be changed while a restore runs, to slow a restore whose tasks
+history can't keep up with.`,
+	)
+	NamespaceRestoreRefreshConcurrency = NewGlobalIntSetting(
+		"worker.namespaceRestoreRefreshConcurrency",
+		20,
+		`NamespaceRestoreRefreshConcurrency is the number of executions a namespace restore job refreshes
+concurrently. Read at the start of each page of executions.`,
+	)
 	DeleteNamespacePageSize = NewGlobalIntSetting(
 		"frontend.deleteNamespaceDeletePageSize",
 		1000,

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -41,7 +42,11 @@ func NewFrontendServiceErrorInterceptor(
 		case *serviceerrors.ShardOwnershipLost:
 			err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
 		case *serviceerror.DataLoss:
-			err = serviceerror.NewUnavailable("internal history service error")
+			// A namespace restore job refreshes every execution through this RPC, on every cluster,
+			// and needs DataLoss to tell an unreadable execution from an unavailable cluster.
+			if info.FullMethod != adminservice.AdminService_RefreshWorkflowTasks_FullMethodName {
+				err = serviceerror.NewUnavailable("internal history service error")
+			}
 		case *serviceerror.ResourceExhausted:
 			if headerErr := grpc.SetHeader(ctx, metadata.Pairs(
 				ResourceExhaustedCauseHeader, serviceErr.Cause.String(),

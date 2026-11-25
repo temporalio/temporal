@@ -235,7 +235,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetLogger(),
 		testhooks.TestHooks{},
 	)
-	s.handler = NewAdminHandler(args, namespaceDLQHandler, nsreplication.NewMockMutationTaskExecutor(s.controller))
+	s.handler = NewAdminHandler(args, namespaceDLQHandler, nsreplication.NewMockMutationTaskExecutor(s.controller), nil)
 	s.handler.Start()
 }
 
