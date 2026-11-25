@@ -784,8 +784,9 @@ func TestStop_InterruptsInFlightRound(t *testing.T) {
 			primitives.MatchingService: testPeerHosts("matching", 1),
 		})
 		// Let one probe report before cancellation so the round has a partial result to discard.
-		probe := func(ctx context.Context, _ primitives.ServiceName, address string) error {
-			if address == "history-0:7234" {
+		var responded atomic.Bool
+		probe := func(ctx context.Context, _ primitives.ServiceName, _ string) error {
+			if responded.CompareAndSwap(false, true) {
 				return nil
 			}
 			started <- struct{}{}
