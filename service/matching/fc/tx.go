@@ -8,9 +8,66 @@ import (
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/matching/simplelimiter"
 )
 
 var errInvalidTxState = serviceerror.NewInternal("invalid fc tx state")
+
+// NewTx should be called when a client of the flow control system is ready to match a task, to
+// perform the flow control commit protocol. It should then call:
+//   - tx.Check() -> checks readiness, if not ready atomically registers cb to be called when
+//     possibly ready (or tx.SkipCheck() for a task forwarded from another partition)
+//   - tx.Reserve(ctx) -> on error retry the task
+//   - tx.LimiterRefs() to get refs to pass to history (for releasing later)
+//   - history.RecordTaskStarted(refs) -> on error call tx.Rollback()
+//   - tx.Commit(ctx) -> on error DROP the task
+//   - tx.Close() -> release limiter pins (also called by Rollback)
+//   - tx.Hints() after Close, to pass back to the partition that forwarded the task, if any
+//
+// If the task is forwarded to another partition after Check, call tx.ApplyHints() with the hints
+// that the other partition returns, and then tx.Rollback() if the forward failed.
+//
+// A nil callback checks readiness without registering for notifications.
+// A nil *Tx is valid and all operations are no-ops.
+// Tx is not safe for concurrent use.
+// TODO(fc): consider getting rid of fcTask and passing []Limiter and (int32,time.Time)?
+// but may need task identity for choosing slot id
+func (r *Readiness) NewTx(nsID namespace.ID, task fcTask, cb ReadinessCallback) *Tx {
+	lims := task.Limiters()
+	if len(lims) == 0 {
+		return nil
+	}
+	sortLimiters(lims)
+
+	tx := &Tx{cb: cb}
+	tx.limiters = tx.limitersBuf[:0]
+	for _, lim := range lims {
+		tx.limiters = append(tx.limiters, txEntry{limiterTx: r.makeLimiterTx(nsID, task, lim)})
+	}
+	return tx
+}
+
+func (r *Readiness) makeLimiterTx(nsID namespace.ID, task fcTask, lim Limiter) limiterTx {
+	switch lim.Type {
+	case enumsspb.LIMITER_TYPE_LOCAL_RATE_LIMIT:
+		lls := r.getLocalLimiter(nsID, lim.Key)
+
+		// if config is missing or wrong type, zero params means "no limit"
+		var config simplelimiter.Params
+		if p, ok := lim.Config.(*simplelimiter.Params); ok && p != nil {
+			config = *p
+		}
+		pri := makeWakePriority(task.PriorityAndAge())
+
+		return newLocalLimiterTx(lls, config, pri)
+
+	default:
+		// TODO(fc): log or notify here
+		return noopLimiterTx{}
+	}
+}
 
 // Tx holds state for an invocation of the flow control commit protocol. See Readiness.NewTx.
 type Tx struct {
@@ -210,3 +267,12 @@ func (tx *Tx) Close() {
 		lim.close()
 	}
 }
+
+type noopLimiterTx struct{}
+
+func (noopLimiterTx) check(cb ReadinessCallback) error { return nil }
+func (noopLimiterTx) cancelCheck()                     {}
+func (noopLimiterTx) reserve(context.Context) error    { return nil }
+func (noopLimiterTx) commit(context.Context) error     { return nil }
+func (noopLimiterTx) cancelReserve(context.Context)    {}
+func (noopLimiterTx) close()                           {}
