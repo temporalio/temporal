@@ -28,6 +28,41 @@ func enabledNamespaceReplicationMetadata(t *testing.T) *cluster.MockMetadata {
 	return metadata
 }
 
+func TestNamespaceRepairApplyAttribution(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	executor := nsreplication.NewMockMutationTaskExecutor(ctrl)
+	mh := metricstest.NewCaptureHandler()
+	capture := mh.StartCapture()
+	defer mh.StopCapture(capture)
+	handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t),
+		metricsHandler: mh, namespaceMutationExecutor: executor}
+	task := shadowObservationTask()
+	payload, err := nsreplication.MarshalNamespaceTask(task)
+	require.NoError(t, err)
+	executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), nsreplication.MutationApplyOptions{OperatorRepair: true}).DoAndReturn(
+		func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes, _ nsreplication.MutationApplyOptions) (nsreplication.ApplyOutcome, error) {
+			metricContext, ok := nsreplication.TaskMetricsContextFromContext(ctx)
+			require.True(t, ok)
+			require.Equal(t, nsreplication.OperatorRepair, metricContext.Transport)
+			eventContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+			require.True(t, ok)
+			require.Equal(t, "repair-id", eventContext.EventData.Details["repair_id"])
+			return nsreplication.ApplyOutcomeApplied, nil
+		})
+	response, err := handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTaskPayload: payload, SourceCluster: "cellA",
+		Attribution: &adminservice.NamespaceMutationAttribution{
+			Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR, RepairId: "repair-id", Reason: "operator repair",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
+	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, nsreplication.OperatorRepair, recordings[0].Tags["mode"])
+}
+
 func TestNamespaceMutationRejectsDisabledGlobalNamespaces(t *testing.T) {
 	t.Parallel()
 	for _, shadow := range []bool{true, false} {
@@ -174,14 +209,16 @@ func TestAuthoritativeNamespaceMutationRejectsMalformedPayload(t *testing.T) {
 func TestAuthoritativeNamespaceMutationShortRetry(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name      string
-		firstErr  error
-		cancel    bool
-		wantRetry bool
-		removed   bool
+		name           string
+		firstErr       error
+		cancel         bool
+		wantRetry      bool
+		removed        bool
+		operatorRepair bool
 	}{
 		{name: "contention clears", firstErr: serviceerror.NewUnavailable("CAS conflict"), wantRetry: true},
 		{name: "removal intent survives retry", firstErr: serviceerror.NewUnavailable("CAS conflict"), wantRetry: true, removed: true},
+		{name: "repair intent survives retry", firstErr: serviceerror.NewUnavailable("CAS conflict"), wantRetry: true, operatorRepair: true},
 		{name: "invalid input", firstErr: serviceerror.NewInvalidArgument("bad task")},
 		{name: "throttled", firstErr: &serviceerror.ResourceExhausted{Message: "busy"}},
 		{name: "cancelled during apply", firstErr: serviceerror.NewUnavailable("CAS conflict"), cancel: true},
@@ -191,7 +228,10 @@ func TestAuthoritativeNamespaceMutationShortRetry(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			executor := nsreplication.NewMockMutationTaskExecutor(gomock.NewController(t))
-			options := nsreplication.MutationApplyOptions{Admission: nsreplication.AdmissionOptions{RemovedPeer: tc.removed}}
+			options := nsreplication.MutationApplyOptions{
+				Admission:      nsreplication.AdmissionOptions{RemovedPeer: tc.removed},
+				OperatorRepair: tc.operatorRepair,
+			}
 			first := executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), options).DoAndReturn(
 				func(context.Context, *replicationspb.NamespaceTaskAttributes, nsreplication.MutationApplyOptions) (nsreplication.ApplyOutcome, error) {
 					if tc.cancel {
@@ -213,7 +253,15 @@ func TestAuthoritativeNamespaceMutationShortRetry(t *testing.T) {
 				metadata.EXPECT().GetCurrentClusterName().Return("cellB").AnyTimes()
 			}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: metadata, namespaceMutationExecutor: executor}
-			response, err := handler.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload, RemovedPeer: tc.removed})
+			request := &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload, RemovedPeer: tc.removed}
+			if tc.operatorRepair {
+				request.Attribution = &adminservice.NamespaceMutationAttribution{
+					Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+					RepairId: "repair-id",
+					Reason:   "operator repair",
+				}
+			}
+			response, err := handler.ApplyNamespaceMutation(ctx, request)
 			if tc.wantRetry {
 				require.NoError(t, err)
 				require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE, response.GetOutcome())

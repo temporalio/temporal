@@ -339,7 +339,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingW
 	// point back at the first task (ScheduledEventId 2) and be attributed to
 	// the history service, not a worker.
 	s.Await(func(s *PauseWorkflowExecutionSuite) {
-		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		})
@@ -439,7 +439,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 
 	// The task resolved as completed (not failed), and the paused event -
 	// buffered while the task was in flight - is flushed right after it.
-	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	})
@@ -508,7 +508,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 	// not be silently dropped as stale - and the buffered paused event flushes
 	// right after it, same as a normal completion would.
 	s.Await(func(s *PauseWorkflowExecutionSuite) {
-		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		})
@@ -613,7 +613,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 	// scheduled: RespondWorkflowTaskFailed's own request to create one is
 	// suppressed by the same paused gate that applies to any in-flight
 	// resolution (completion, failure, or timeout).
-	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	})

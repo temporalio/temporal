@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
@@ -81,6 +82,7 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 
 	nsRegistry := namespace.NewMockRegistry(ctrl)
 	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-ns"), nil).AnyTimes()
+	nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
 	rateLimiter, err := queues.NewPrioritySchedulerRateLimiter(
 		func(string) float64 { return 100 },
@@ -165,4 +167,19 @@ func (e *captureExecutor) Execute(_ context.Context, executable queues.Executabl
 	default:
 	}
 	return queues.ExecuteResponse{}
+}
+
+func TestNexusOperationDestinationThrottled(t *testing.T) {
+	t.Parallel()
+	settings := dynamicconfig.DefaultTaskThrottleControllerSettings
+	settings.Enabled = true
+	state := queues.NewThrottleState(func() dynamicconfig.TaskThrottleControllerSettings { return settings }, clock.NewEventTimeSource(), metrics.NoopMetricsHandler)
+	allowed, _ := state.Admit(queues.ThrottleKey{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, NamespaceName: "caller", Destination: "endpoint",
+	})
+	require.True(t, allowed)
+	isThrottled := NexusOperationDestinationThrottledProvider(state)
+	require.True(t, isThrottled("caller", "endpoint"))
+	require.False(t, isThrottled("other caller", "endpoint"))
+	require.False(t, isThrottled("caller", "other endpoint"))
 }

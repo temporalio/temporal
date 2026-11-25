@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -36,6 +35,7 @@ import (
 	"go.temporal.io/server/common/wideevents"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	historytasks "go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/testx/softassert"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -207,7 +207,7 @@ func TestApplyPeerTaskHandler_Validate(t *testing.T) {
 
 func TestApplyPeerTaskHandler_ValidateSoftAssertsIfLocalApplyDisallowsFanout(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	capture := logger.StartCapture(tag.FailedAssertion)
+	capture := logger.StartCapture(softassert.FailedAssertion)
 	h := &applyPeerTaskHandler{logger: logger}
 	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{
 		NamespaceDetail: &persistencespb.NamespaceDetail{
