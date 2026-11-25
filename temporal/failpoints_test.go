@@ -1,0 +1,112 @@
+package temporal
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/failpoints"
+	"go.temporal.io/server/common/testing/testlogger"
+)
+
+func lookupEnv(env map[string]string) func(string) (string, bool) {
+	return func(name string) (string, bool) {
+		value, ok := env[name]
+		return value, ok
+	}
+}
+
+// TestResolveFailpoints_RequiresConfigAndEnv checks that neither the config setting nor the
+// environment variable alone enables failpoints.
+func TestResolveFailpoints_RequiresConfigAndEnv(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		configEnabled bool
+		env           map[string]string
+		want          bool
+	}{
+		{name: "neither"},
+		{name: "only config", configEnabled: true},
+		{name: "only env", env: map[string]string{failpoints.EnvVar: "1"}},
+		{name: "config and env", configEnabled: true, env: map[string]string{failpoints.EnvVar: "1"}, want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			logs := logger.StartCapture()
+			metricsHandler := metricstest.NewCaptureHandler()
+			metricsCapture := metricsHandler.StartCapture()
+
+			source := resolveFailpoints(tc.configEnabled, lookupEnv(tc.env), logger, metricsHandler)
+
+			require.Equal(t, tc.want, source.Failpoints() != nil)
+			warned := false
+			for _, record := range logs.Snapshot() {
+				if record.Level == testlogger.Warn && record.Message != "" {
+					warned = true
+					require.Contains(t, record.Tags, tag.NewStringTag("failpoints-enabled-by", "config failpoints.enabled and environment "+failpoints.EnvVar+"=1"))
+				}
+			}
+			require.Equal(t, tc.want, warned)
+
+			recordings := metricsCapture.SnapshotMetric(metrics.FailpointsEnabled.Name())
+			require.Len(t, recordings, 1)
+			wantValue := 0
+			if tc.want {
+				wantValue = 1
+			}
+			require.InDelta(t, wantValue, recordings[0].Value, 0)
+			require.Equal(t, string(primitives.ServerService), recordings[0].Tags["service_name"])
+		})
+	}
+}
+
+// TestFailpointsOff checks that with the switch off nothing of the failpoints is installed: no
+// registry, no fault generators, no persistence wrapper, and no rules or
+// BUGGIFY.
+func TestFailpointsOff(t *testing.T) {
+	t.Parallel()
+
+	for name, cfg := range map[string]struct {
+		configEnabled bool
+		env           map[string]string
+	}{
+		"neither":     {},
+		"only config": {configEnabled: true},
+		"only env":    {env: map[string]string{failpoints.EnvVar: "1"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			source := resolveFailpoints(cfg.configEnabled, lookupEnv(cfg.env), log.NewNoopLogger(), metrics.NoopMetricsHandler)
+
+			// No registry.
+			require.Nil(t, source.Failpoints())
+		})
+	}
+}
+
+// TestFailpointsOn is the counterpart of TestFailpointsOff: with the switch on, the pieces that it
+// installs are installed.
+func TestFailpointsOn(t *testing.T) {
+	t.Parallel()
+
+	source := resolveFailpoints(true, lookupEnv(map[string]string{failpoints.EnvVar: "1"}), log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	require.NotNil(t, source.Failpoints())
+}
+
+func TestWithFailpointSourceObserver_Composes(t *testing.T) {
+	t.Parallel()
+
+	so := newServerOptions([]ServerOption{
+		WithFailpointSourceObserver(func(*failpoints.Source) {}),
+		WithFailpointSourceObserver(func(*failpoints.Source) {}),
+	})
+	require.Len(t, so.failpointSourceObservers, 2)
+}

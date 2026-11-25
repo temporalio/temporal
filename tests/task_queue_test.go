@@ -28,12 +28,13 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -1028,7 +1029,7 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore
 		var forwardDelay time.Duration
 		if b.ForceTaskForward {
 			forwardDelay = 100 * time.Millisecond
-			s.InjectHook(testhooks.NewHook(testhooks.MatchingForwardTaskDelay, forwardDelay))
+			testcore.InjectFailpoint[error](s, failpoints.MatchingForwardTask).Pause(forwardDelay, failpoint.Always)
 			forwardDelay *= 2 // two forward hops
 		}
 

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -54,6 +55,7 @@ type (
 		DestinationThrottled            chasmnexus.DestinationThrottledFn `optional:"true"`
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
+		FailpointSource                 *failpoints.Source
 		ChasmEngine                     chasm.Engine
 		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
 		WorkerDeploymentClient          workerdeployment.Client
@@ -100,5 +102,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ChasmEngine,
 		WithWorkflowResendScheduler(f.WorkflowResendScheduler),
 		WithDestinationThrottled(f.DestinationThrottled),
+		WithFailpointSource(f.FailpointSource),
 	)
 }

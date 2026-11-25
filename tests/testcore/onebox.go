@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -51,8 +53,10 @@ type (
 		logger       log.Logger
 		serverConfig *config.Config
 
-		dcClient                 *dynamicconfig.MemoryClient
-		testHooks                testhooks.TestHooks
+		dcClient  *dynamicconfig.MemoryClient
+		testHooks testhooks.TestHooks
+		// failpointSource is the failpoint source that the server resolved when it started.
+		failpointSource          atomic.Pointer[failpoints.Source]
 		hostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		baseServerOptions        []temporal.ServerOption
 		workerConfig             WorkerConfig
@@ -151,6 +155,16 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 			mockAdminClient: params.MockAdminClient,
 		}),
 		temporal.WithTestHooks(impl.testHooks),
+		// Test clusters run the normal server with failpoints enabled by the startup switch: the
+		// config setting is set in Start, and the environment variable is supplied here instead of
+		// set in the environment, which clusters running in parallel share.
+		temporal.WithEnvLookup(func(name string) (string, bool) {
+			if name == failpoints.EnvVar {
+				return "1", true
+			}
+			return os.LookupEnv(name)
+		}),
+		temporal.WithFailpointSourceObserver(impl.failpointSource.Store),
 		temporal.WithAuthorizer(impl),
 		temporal.WithClaimMapper(func(*config.Config) authorization.ClaimMapper { return impl }),
 		temporal.WithAudienceGetter(func(*config.Config) authorization.JWTAudienceMapper { return nil }),
@@ -258,6 +272,7 @@ func (c *temporalImpl) Start() error {
 	// Keep the shared test config immutable; each server start needs its own
 	// persistence copy and per-service RPC addresses.
 	cfg := *c.serverConfig
+	cfg.Failpoints.Enabled = true
 	cfg.Persistence = copyPersistenceConfig(c.serverConfig.Persistence)
 	cfg.Services = make(map[string]config.Service, len(services))
 	for _, serviceName := range services {

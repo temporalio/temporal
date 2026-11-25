@@ -15,7 +15,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
@@ -23,6 +23,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"go.temporal.io/testx/failpoint"
 )
 
 var multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
@@ -42,7 +43,7 @@ type (
 		shardContext       historyi.ShardContext
 		namespaceId        namespace.ID
 		consistencyChecker api.WorkflowConsistencyChecker
-		testHooks          testhooks.TestHooks
+		failpointSource    *failpoints.Source
 
 		updateReq *historyservice.UpdateWorkflowExecutionRequest
 		startReq  *historyservice.StartWorkflowExecutionRequest
@@ -62,7 +63,7 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
-	testHooks testhooks.TestHooks,
+	failpointSource *failpoints.Source,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
 	if err != nil {
@@ -89,7 +90,7 @@ func Invoke(
 			shardContext:       shardContext,
 			namespaceId:        namespace.ID(req.NamespaceId),
 			consistencyChecker: workflowConsistencyChecker,
-			testHooks:          testHooks,
+			failpointSource:    failpointSource,
 			updateReq:          updateReq,
 			startReq:           startReq,
 		}
@@ -143,7 +144,9 @@ func Invoke(
 			return nil, err
 		}
 
-		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry, uws.namespaceId)
+		if err := uws.checkpoint(failpoints.UpdateWithStartClosingWorkflowRetry); err != nil {
+			return nil, err
+		}
 
 		res, err = uws.Invoke(ctx)
 		if err != nil {
@@ -165,6 +168,15 @@ func Invoke(
 	}
 
 	return res, nil
+}
+
+// checkpoint executes the failpoint key, scoped to the namespace. Without a failpoint registry it
+// costs a nil check.
+func (uws *updateWithStart) checkpoint(key failpoint.Key) error {
+	if !failpoint.Armed(uws.failpointSource) {
+		return nil
+	}
+	return failpoint.Checkpoint(uws.failpointSource, key.ForScope(uws.namespaceId.String()))
 }
 
 func (uws *updateWithStart) updateOnlyWasAbortedByClosingWorkflow(err error) bool {
@@ -243,7 +255,9 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart, uws.namespaceId)
+	if err := uws.checkpoint(failpoints.UpdateWithStartBetweenLockAndStart); err != nil {
+		return nil, err
+	}
 
 	// Workflow does not exist or requires a new run - start and update it!
 	return uws.startAndUpdateWorkflow(ctx)

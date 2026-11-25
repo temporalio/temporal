@@ -28,14 +28,15 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -5813,10 +5814,11 @@ func (s *UpdateWithStartSuite) TestWorkflowStartConflict() {
 			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 
 		// simulate a race condition
-		env.InjectHook(testhooks.NewHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
+		testcore.InjectFailpoint[error](env, failpoints.UpdateWithStartBetweenLockAndStart).Call(func() error {
 			_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), startReq)
 			s.NoError(err)
-		}))
+			return nil
+		}, failpoint.Always)
 
 		uwsCh := s.sendUpdateWithStart(env, startReq, updateReq)
 
@@ -5916,10 +5918,11 @@ func (s *UpdateWithStartSuite) TestUpdateIsAbortedByClosingWorkflow() {
 		// wait until the update is admitted
 		waitUpdateAdmitted(env, env.Tv())
 
-		env.InjectHook(testhooks.NewHook(testhooks.UpdateWithStartOnClosingWorkflowRetry, func() {
+		testcore.InjectFailpoint[error](env, failpoints.UpdateWithStartClosingWorkflowRetry).Call(func() error {
 			_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), s.updateWithStartReq(env, env.Tv()))
 			s.NoError(err)
-		}))
+			return nil
+		}, failpoint.Always)
 
 		// complete workflow (twice including retry)
 		for range 2 {

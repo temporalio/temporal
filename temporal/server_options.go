@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
@@ -66,6 +67,8 @@ type (
 		eventLoggerProvider             otellog.LoggerProvider
 		tokenProvider                   auth.TokenProvider
 		testHooks                       *testhooks.TestHooks
+		lookupEnv                       func(string) (string, bool)
+		failpointSourceObservers        []func(*failpoints.Source)
 	}
 )
 

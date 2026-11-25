@@ -5,7 +5,7 @@ This document describes the project's testing setup, utilities and best practice
 ## Setup
 
 ### Build tags
-- `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled.
+- `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled. It does not control failpoints, which are compiled into every build; see [Enabling failpoints](#enabling-failpoints).
 - `TEMPORAL_DEBUG`: Extends functional test timeouts to allow sufficient time for debugging sessions.
 
 ### Environment variables
@@ -20,6 +20,7 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Each can be used by one test only at a time.
 - `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`.
 - `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
+- `TEMPORAL_FAILPOINTS`: Set to `1`, together with the `failpoints.enabled` server config setting, to enable failpoints in a server process. See [Enabling failpoints](#enabling-failpoints). Test clusters enable them themselves.
 
 ### Debugging via IDE
 
@@ -296,14 +297,70 @@ The test fails if no matching call reaches the gate.
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise
 difficult to test. This is a **last resort** - prefer mocking and dependency injection when possible.
 
-**Example:**
-
-The UpdateWithStart API has a race window between releasing a lock and starting a workflow where
-another request could create the same workflow first. The `UpdateWithStartInBetweenLockAndStart`
-hook lets tests inject a callback at this exact point, making it possible to reliably test
-conflict handling.
-
 _NOTE: Tests using testhooks must be run with `-tags=test_dep`._
+
+### failpoint package
+
+The `failpoint` package injects faults and timing control at named points in server code. Prefer
+it over a new testhooks key when the test only needs to fail, delay, block, or run a callback at
+a point in the code.
+
+#### Enabling failpoints
+
+Failpoints are compiled into every build, including release binaries; there is no separate test
+image. A server process only installs them if both of these are set, each read once at startup:
+
+- `failpoints.enabled: true` in the server config (`config.Failpoints`), and
+- the `TEMPORAL_FAILPOINTS=1` environment variable.
+
+Neither is enough alone, and dynamic config cannot enable failpoints. With the switch off, nothing
+is installed: there is no failpoint registry. Call sites in server
+code cost a nil check. The `test_dep` tag is not involved.
+
+When the switch is on, the server logs a warning that names the inputs of the decision, and
+the `failpoints_enabled` gauge is 1 (0 otherwise). Test clusters (`testcore`) run the normal server
+with the switch on: they set the config setting and supply the environment variable to each server
+through `temporal.WithEnvLookup`, so clusters in one process don't change the process environment.
+
+A failpoint is declared once as a `failpoint.Key` in `common/testing/failpoints`, with a
+comment that says where it fires and what tests use it for. Server code executes it through the
+server's `*failpoints.Source`, which fx provides to every service, scoped to a namespace ID:
+
+```go
+if err := failpoint.Checkpoint(f.failpointSource, failpoints.MatchingForwardTask.ForScope(nsID)); err != nil {
+    return err
+}
+```
+
+`Checkpoint` returns an error only if the failpoint returns one. Use `failpoint.Execute[T]` when
+the failpoint must return a value of another type. Without failpoints enabled, the source has
+no failpoint registry, so both do nothing.
+
+Tests configure the failpoint for the test's namespace. It is removed when the test ends:
+
+```go
+fp := testcore.InjectFailpoint[error](env, failpoints.MatchingForwardTask)
+fp.Pause(100*time.Millisecond, failpoint.Always)  // Delay every forward.
+fp.Return(serviceerror.NewUnavailable("injected"), failpoint.Once)  // Fail the next forward.
+fp.Block(failpoint.Once)                         // Hold the next forward ...
+require.NoError(t, fp.Wait(ctx))                 // ... until it arrives ...
+fp.Disable()                                     // ... then release it.
+```
+
+`Call` runs a callback at the failpoint. For example, Update-with-Start has a race window between
+releasing the workflow lock and starting the workflow, in which another request could start the
+same workflow first. `failpoints.UpdateWithStartBetweenLockAndStart` lets a test start a
+conflicting workflow at exactly this point:
+
+```go
+testcore.InjectFailpoint[error](env, failpoints.UpdateWithStartBetweenLockAndStart).Call(func() error {
+    // Start the conflicting workflow here.
+    return nil
+}, failpoint.Once)
+```
+
+The server does not serve a gRPC API to configure failpoints. Tests configure the failpoints of
+their cluster in process (`testcore.InjectFailpoint`).
 
 ### softassert package
 

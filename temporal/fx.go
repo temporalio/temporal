@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/frontend"
@@ -127,6 +128,9 @@ type (
 		MetricsHandler             metrics.Handler
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
+		// FailpointSource holds the failpoint registry, or none if the startup switch did not
+		// enable failpoints.
+		FailpointSource *failpoints.Source
 	}
 )
 
@@ -233,6 +237,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			dcClient = dynamicconfig.NewNoopClient()
 		}
 	}
+	failpointSource := resolveFailpoints(so.config.Failpoints.Enabled, so.lookupEnv, logger, metricHandler)
+	for _, observe := range so.failpointSourceObservers {
+		observe(failpointSource)
+	}
 
 	testHooks := testhooks.NewTestHooks()
 	if so.testHooks != nil {
@@ -311,6 +319,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		MetricsHandler:             metricHandler,
 		TestHooks:                  testHooks,
 		EventLoggerProvider:        eventLoggerProvider,
+		FailpointSource:            failpointSource,
 	}, nil
 }
 
@@ -379,6 +388,7 @@ type (
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		TestHooks                       testhooks.TestHooks
+		FailpointSource                 *failpoints.Source
 	}
 )
 
@@ -459,6 +469,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() tasks.TaskCategoryRegistry {
 				return params.TaskCategoryRegistry
+			},
+			func() *failpoints.Source {
+				return params.FailpointSource
 			},
 		),
 		fx.Decorate(func() testhooks.TestHooks {

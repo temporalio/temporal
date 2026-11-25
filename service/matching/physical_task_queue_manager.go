@@ -212,7 +212,7 @@ func newPhysicalTaskQueueManager(
 	var err error
 	if queue.Partition().IsChild() {
 		// Every DB Queue needs its own forwarder so that the throttles do not interfere
-		fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.testHooks)
+		fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.failpointSource)
 		if err != nil {
 			return nil, err
 		}

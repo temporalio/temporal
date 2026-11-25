@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -50,7 +49,7 @@ func (t *ForwarderTestSuite) SetupTest() {
 	t.NoError(err)
 	t.partition = tqFam.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 
-	t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, testhooks.TestHooks{})
+	t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, nil)
 	t.NoError(err)
 }
 
@@ -376,7 +375,7 @@ func (t *ForwarderTestSuite) usingTaskqueuePartition(taskType enumspb.TaskQueueT
 	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
-	t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, testhooks.TestHooks{})
+	t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, nil)
 	t.NoError(err)
 }
 
@@ -384,7 +383,7 @@ func (t *ForwarderTestSuite) usingBuildIdQueue(taskType enumspb.TaskQueueType, b
 	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
-	t.fwdr, err = newPriForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client, testhooks.TestHooks{})
+	t.fwdr, err = newPriForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client, nil)
 	t.NoError(err)
 }
 

@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/matching/hooks"
@@ -68,6 +69,7 @@ type (
 		VisibilityManager             manager.VisibilityManager
 		NexusEndpointManager          persistence.NexusEndpointManager
 		TestHooks                     testhooks.TestHooks
+		Failpoints                    *failpoints.Source
 		SearchAttributeProvider       searchattribute.Provider
 		SearchAttributeMapperProvider searchattribute.MapperProvider
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
@@ -113,6 +115,7 @@ func NewHandler(
 			params.VisibilityManager,
 			params.NexusEndpointManager,
 			params.TestHooks,
+			params.Failpoints,
 			params.SearchAttributeProvider,
 			params.SearchAttributeMapperProvider,
 			params.RateLimiter,
