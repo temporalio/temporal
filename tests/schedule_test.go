@@ -855,6 +855,164 @@ func (suite *ScheduleCHASMSuite) testAllowAllCompletionPersistsPendingTimeSkip(c
 	}
 }
 
+func (suite *ScheduleCHASMSuite) TestAllowAllTerminationPersistsPendingTimeSkipWithDefaultBudget() {
+	suite.testAllowAllCompletionPersistsPendingTimeSkipWithDefaultBudget(false)
+}
+
+func (suite *ScheduleCHASMSuite) TestAllowAllWorkflowSuccessPersistsPendingTimeSkipWithDefaultBudget() {
+	suite.testAllowAllCompletionPersistsPendingTimeSkipWithDefaultBudget(true)
+}
+
+func (suite *ScheduleCHASMSuite) testAllowAllCompletionPersistsPendingTimeSkipWithDefaultBudget(completeNormally bool) {
+	for _, tc := range []struct {
+		name      string
+		skipClean bool
+	}{
+		{name: "normal close"},
+		{name: "clean skip enabled", skipClean: true},
+	} {
+		suite.Run(tc.name, func(suite *ScheduleCHASMSuite) {
+			t := suite.T()
+			const maxAccumulatedSkip = 10 * 365 * 24 * time.Hour
+			env := newScheduleEnv(t,
+				testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSkipCleanUpdates, tc.skipClean),
+				testcore.WithDynamicConfig(dynamicconfig.VerifyCHASMSkipCleanUpdates, false),
+			)
+			ctx := chasmContextFactory(testcontext.For(t))
+			chasmCtx, err := env.GetTestCluster().Host().ChasmContext(ctx)
+			require.NoError(t, err)
+			tv := testvars.New(t)
+			scheduleID := tv.Any().String()
+			fastForwardID := tv.Any().String()
+			workflowType := tv.WorkflowType().GetName()
+			if completeNormally {
+				registerGatedWorkflow(env, workflowType, new(atomic.Int32))
+			}
+
+			schedule := &schedulepb.Schedule{
+				Spec:     intervalSpec(24 * time.Hour),
+				Action:   startWorkflowAction(env, tv.WorkflowID(), workflowType),
+				Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
+				State:    &schedulepb.ScheduleState{Paused: true},
+			}
+			// Keep the first scheduled action later than the fast-forward target.
+			schedule.Spec.StartTime = timestamppb.New(time.Now().Add(12 * 365 * 24 * time.Hour))
+			createSchedule(ctx, t, env, scheduleID, schedule)
+			patchSchedule(ctx, t, env, scheduleID, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
+
+			// The scheduler removes an ALLOW_ALL start from its buffer after recording it.
+			var started *commonpb.WorkflowExecution
+			await.Require(ctx, t, func(at *await.T) {
+				desc, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+					Namespace: env.Namespace().String(), ScheduleId: scheduleID,
+				})
+				require.NoError(at, err)
+				actions := desc.GetInfo().GetRecentActions()
+				require.Len(at, actions, 1)
+				started = actions[0].GetStartWorkflowResult()
+				require.NotEmpty(at, started.GetRunId())
+			}, awaitTimeout, pollInterval)
+
+			describe := &adminservice.DescribeMutableStateRequest{
+				Namespace: env.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{WorkflowId: scheduleID},
+				Archetype: chasm.SchedulerArchetype,
+			}
+			// Spend part of the fixed execution-wide budget with a successful first session.
+			patchSchedule(ctx, t, env, scheduleID, &schedulepb.SchedulePatch{
+				Unpause: "fast-forward",
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+					Enabled: true,
+					FastForwardConfig: &commonpb.FastForwardConfig{
+						Id: "first-fast-forward", Duration: durationpb.New(5 * 365 * 24 * time.Hour),
+					},
+				},
+			})
+			var alreadySkipped time.Duration
+			await.Require(ctx, t, func(at *await.T) {
+				response, err := env.AdminClient().DescribeMutableState(at.Context(), describe)
+				require.NoError(at, err)
+				info := response.GetDatabaseMutableState().GetExecutionInfo().GetTimeSkippingInfo()
+				require.True(at, info.GetFastForwardInfo().GetHasReached())
+				alreadySkipped = info.GetAccumulatedSkippedDuration().AsDuration()
+				require.Positive(at, alreadySkipped)
+			}, awaitTimeout, pollInterval)
+
+			// The second request is valid on its own, but initially exceeds the remaining budget.
+			remainingBudget := maxAccumulatedSkip - alreadySkipped
+			patchSchedule(ctx, t, env, scheduleID, &schedulepb.SchedulePatch{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+					Enabled: true,
+					FastForwardConfig: &commonpb.FastForwardConfig{
+						Id: fastForwardID, Duration: durationpb.New(remainingBudget + 8*time.Second),
+					},
+				},
+			})
+
+			ref := chasm.NewComponentRef[*chasmscheduler.Scheduler](chasm.ExecutionKey{
+				NamespaceID: env.NamespaceID().String(),
+				BusinessID:  scheduleID,
+			})
+			await.Require(chasmCtx, t, func(at *await.T) {
+				ready, err := chasm.ReadComponent(at.Context(), ref,
+					func(s *chasmscheduler.Scheduler, readCtx chasm.Context, _ chasm.NoValue) (bool, error) {
+						return s.IsExecutionSkippable(readCtx), nil
+					}, nil)
+				require.NoError(at, err)
+				require.True(at, ready)
+			}, awaitTimeout, pollInterval)
+
+			before, err := env.AdminClient().DescribeMutableState(ctx, describe)
+			require.NoError(t, err)
+			beforeTime := before.GetDatabaseMutableState().GetExecutionInfo().GetTimeSkippingInfo()
+			require.True(t, beforeTime.GetConfig().GetEnabled())
+			require.Equal(t, fastForwardID, beforeTime.GetConfig().GetFastForwardConfig().GetId())
+			require.False(t, beforeTime.GetFastForwardInfo().GetHasReached())
+			require.Equal(t, alreadySkipped, beforeTime.GetAccumulatedSkippedDuration().AsDuration())
+
+			// The target is fixed while the logical clock continues to tick.
+			await.Require(ctx, t, func(at *await.T) {
+				desc, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+					Namespace: env.Namespace().String(), ScheduleId: scheduleID,
+				})
+				require.NoError(at, err)
+				tsi := desc.GetInfo().GetTimeSkippingInfo()
+				require.True(at, tsi.GetEffectiveConfig().GetEnabled())
+				require.False(at, tsi.GetFastForwardInfo().GetHasCompleted())
+				jump := tsi.GetFastForwardInfo().GetTargetTime().AsTime().Sub(tsi.GetCurrentTime().AsTime())
+				require.Positive(at, jump)
+				require.LessOrEqual(at, jump, remainingBudget)
+			}, awaitTimeout, pollInterval)
+			capture := env.StartNamespaceMetricCapture()
+			if completeNormally {
+				client := env.SdkClient()
+				require.NoError(t, client.SignalWorkflow(ctx, started.GetWorkflowId(), started.GetRunId(), completeSignalName, nil))
+				require.NoError(t, client.GetWorkflow(ctx, started.GetWorkflowId(), started.GetRunId()).Get(ctx, nil))
+			} else {
+				_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+					Namespace:         env.Namespace().String(),
+					WorkflowExecution: started,
+					Identity:          "test",
+				})
+				require.NoError(t, err)
+			}
+			await.Require(ctx, t, func(at *await.T) {
+				ignored := capture.CollectMetric(metrics.ScheduleCallbackIgnored.Name(), func(record *metricstest.CapturedRecording) bool {
+					return record.Tags["reason"] == "unrecognized_request_id"
+				})
+				require.NotEmpty(at, ignored, "the scheduler must receive and ignore the completion callback")
+			}, awaitTimeout, pollInterval)
+
+			after, err := env.AdminClient().DescribeMutableState(ctx, describe)
+			require.NoError(t, err)
+			afterTime := after.GetDatabaseMutableState().GetExecutionInfo().GetTimeSkippingInfo()
+			require.True(t, afterTime.GetFastForwardInfo().GetHasReached(), "the pending time advance requires a write")
+			require.Greater(t, afterTime.GetAccumulatedSkippedDuration().AsDuration(), alreadySkipped)
+		})
+	}
+}
+
 func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRuns() {
 	t := suite.T()
 	s := newScheduleEnv(t, append(
