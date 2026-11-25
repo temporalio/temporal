@@ -28,9 +28,8 @@ Before starting the implementation or review of any request, you MUST REVIEW the
 
 ## Development Commands
 
-- Fast Go linting (changed packages): `make lint-code-fast`
-- Full Go linting (all packages): `make lint-code`
-- Formatting imports: `make fmt-imports`
+- Go linting of changed code, with onelint and the rules in `.onelint.yaml`: `make lint-code`
+- Formatting Go code and imports: `make fmt-imports`
 - Code generation: `make proto`
 - Update API proto: `make update-go-api`
 - Always include `-tags test_dep` when running tests. Include the `integration` tag only for integration tests.
@@ -39,4 +38,4 @@ Before starting the implementation or review of any request, you MUST REVIEW the
 
 1. Inspect surrounding code, tests, and configuration before making changes.
 2. Implement the change using existing patterns and regenerate code when interface definitions change, including changes to `.proto` files or code annotated with `//go:generate`.
-3. Determine the relevant test commands from repository documentation and build configuration, then run those tests and `make lint-code-fast` after code changes.
+3. Determine the relevant test commands from repository documentation and build configuration, then run those tests and `make lint-code` after code changes.

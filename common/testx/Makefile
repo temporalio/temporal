@@ -1,6 +1,4 @@
-GOLANGCI_LINT_VERSION ?= v2.14.0
-GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-GOLANGCI_LINT_CONFIG ?= ../../.github/.golangci.yml
+ONELINT ?= go run github.com/temporalio/onelint@v0.5.0
 GOLANGCI_LINT_BASE_REV ?= main
 
 .PHONY: test lint fmt tidy
@@ -8,14 +6,12 @@ GOLANGCI_LINT_BASE_REV ?= main
 test:
 	go test ./...
 
+# onelint uses the repository's .onelint.yaml.
 lint:
-	$(GOLANGCI_LINT) run --timeout 10m --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=$(GOLANGCI_LINT_CONFIG) ./...
-	go vet ./...
-	go fix -diff ./...
+	$(ONELINT) check --since=$(GOLANGCI_LINT_BASE_REV)
 
 fmt:
-	go fix ./...
-	$(GOLANGCI_LINT) fmt --config=$(GOLANGCI_LINT_CONFIG) ./...
+	$(ONELINT) fix --only=format,gofix ./...
 
 tidy:
 	go mod tidy
