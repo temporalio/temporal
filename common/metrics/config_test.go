@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/testx/freeport"
+	"go.temporal.io/testx/softassert"
 	"go.uber.org/mock/gomock"
 )
 
@@ -190,7 +191,7 @@ func TestPrometheusReporterErrors(t *testing.T) {
 			logTags := []tag.Tag{tag.String("error", "^"+regexp.QuoteMeta(tc.wantError)+"$")}
 			wantDefinitionConflicts := 0
 			if tc.wantLogLevel == testlogger.Error {
-				logTags = append(logTags, tag.FailedAssertion)
+				logTags = append(logTags, softassert.FailedAssertion)
 				wantDefinitionConflicts = 1
 			}
 			expected := logger.Expect(tc.wantLogLevel, "error in prometheus reporter$", logTags...)

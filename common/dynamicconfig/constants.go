@@ -35,11 +35,12 @@ var (
 		true,
 		`AdminEnableListHistoryTasks is the key for enabling listing history tasks`,
 	)
-	AdminEnableDescribeMutableStateRateLimit = NewGlobalBoolSetting(
-		"admin.enableDescribeMutableStateRateLimit",
-		false,
-		`AdminEnableDescribeMutableStateRateLimit gates whether AdminService.DescribeMutableState is subject to
-pod-level rate limiting. Read once at process startup: changing this value requires a restart to take effect.`,
+	AdminEnablePodLevelRateLimit = NewGlobalBoolSetting(
+		"admin.enablePodLevelRateLimit",
+		true,
+		`AdminEnablePodLevelRateLimit gates whether AdminService.DescribeMutableState, GetWorkflowExecutionRawHistory
+and GetWorkflowExecutionRawHistoryV2 are subject to pod-level rate limiting. Read once at process startup:
+changing this value requires a restart to take effect.`,
 	)
 	AdminMatchingNamespaceToPartitionDispatchRate = NewNamespaceFloatSetting(
 		"admin.matchingNamespaceToPartitionDispatchRate",
