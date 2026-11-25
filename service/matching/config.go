@@ -43,6 +43,7 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
+		EnableFairness                           dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -297,6 +298,7 @@ func NewConfig(
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		PollWaitForNamespaceRateLimitToken:       dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		RangeSize:                                100000,
+		EnableFairness:                           dynamicconfig.MatchingEnableFairness.Get(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),

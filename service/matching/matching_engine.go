@@ -1506,13 +1506,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		return nil, err
 	}
 	if request.WorkerInstanceKey != "" {
-		// Mark the worker as shut down before the fan-out. Matching skips that fan-out
-		// when the root partition isn't loaded, and this host still needs to refuse
-		// late polls on their way. Shutdown state is local to each matching host.
-		// Without the fan-out, other hosts don't learn about the shutdown and still
-		// accept late polls on their partitions.
-		// This also runs before active poll cancellation. Poll registration uses the
-		// opposite order, so a concurrent poll can't miss both.
+		// Reject late polls on this host even if we cannot notify the other hosts.
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
@@ -1520,7 +1514,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		// fully rolled out. This check is only needed during the transition since the legacy
 		// frontend fan-out path may send non-root partitions to this handler.
 		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
-			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
+			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition, ns)
 		}
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
@@ -1536,26 +1530,24 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 	rootPartition tqid.Partition,
+	ns namespace.Name,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
 	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, false, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
 	}
+	var numPartitions int
 	if rootPM == nil {
-		// Root not loaded means no pending polls anywhere — child partitions loading
-		// triggers root to load via user data fetch chain.
-		e.logger.Debug("Skipping poll cancellation fan-out: root partition not loaded",
-			tag.WorkflowNamespaceID(request.GetNamespaceId()),
-			tag.TaskQueueName(rootPartition.TaskQueue().Name()),
-			tag.TaskQueueType(request.GetTaskQueueType()),
-			tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
-		)
-		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
+		numPartitions, err = e.readPersistedPartitionCount(ctx, rootPartition, ns)
+		if _, notFound := errors.AsType[*serviceerror.NotFound](err); err != nil && !notFound {
+			return nil, fmt.Errorf("could not read partition count: %w", err)
+		}
+	} else {
+		numPartitions = int(rootPM.GetUserDataManager().PartitionScale().GetRead())
 	}
-	// Ephemeral data carries the real read partition count once dynamic partitioning is active.
-	numPartitions := int(rootPM.GetUserDataManager().PartitionScale().GetRead())
+	tq := rootPartition.TaskQueue()
 	if numPartitions <= 0 {
-		numPartitions = rootPM.GetConfig().NumReadPartitions()
+		numPartitions = max(1, e.config.NumTaskqueueReadPartitions(ns.String(), tq.Name(), tq.TaskType()))
 	}
 
 	e.logger.Debug("Initiating fan-out for worker poll cancellation",
@@ -1575,7 +1567,6 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	// unroutable partition gets a synthetic key so it's sent as an individual RPC.
 	routingClient, _ := e.matchingRawClient.(matching.RoutingClient) //nolint:revive // unchecked-type-assertion: nil is the desired zero value
 	self := e.hostInfoProvider.HostInfo().Identity()
-	tq := rootPartition.TaskQueue()
 	partitionsByTarget := make(map[string][]*tqid.NormalPartition, numPartitions)
 
 	for i := range numPartitions {
@@ -1644,6 +1635,32 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{
 		CancelledCount: totalCancelled.Load(),
 	}, nil
+}
+
+// readPersistedPartitionCount returns the saved read count without loading the queue.
+func (e *matchingEngineImpl) readPersistedPartitionCount(
+	ctx context.Context,
+	rootPartition tqid.Partition,
+	ns namespace.Name,
+) (int, error) {
+	queue := UnversionedQueueKey(rootPartition)
+	queueName := queue.PersistenceName()
+	taskType := queue.TaskType()
+	taskManager := e.taskManager
+	fairness := e.config.EnableFairness(ns.String(), queueName, taskType)
+	if rootPartition.SupportsFairness() && fairness.Value(rootPartition.GradualChangeKey(), e.timeSource.Now()) {
+		taskManager = e.fairTaskManager
+	}
+
+	response, err := taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: queue.NamespaceId(),
+		TaskQueue:   queueName,
+		TaskType:    taskType,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int(scaleStateToReadCount(response.TaskQueueInfo.GetPartitionScaleState())), nil
 }
 
 // CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the

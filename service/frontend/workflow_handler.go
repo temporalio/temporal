@@ -3219,7 +3219,9 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 			})
 			if err != nil {
 				wh.logger.Warn("Failed to cancel outstanding polls for worker.",
+					tag.WorkflowNamespace(request.GetNamespace()),
 					tag.TaskQueueName(rootPartition.RpcName()),
+					tag.TaskQueueType(taskType),
 					tag.String("worker-instance-key", workerInstanceKey),
 					tag.Error(err))
 			} else {
