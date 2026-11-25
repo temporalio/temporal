@@ -86,6 +86,7 @@ message WorkflowExecutionInfo {
   google.protobuf.Duration workflow_task_timeout = 25;
   int32 workflow_task_attempt = 26;
   google.protobuf.Timestamp workflow_task_started_time = 27;
+  string workflow_task_worker_control_queue = 119;
   google.protobuf.Timestamp workflow_task_scheduled_time = 28;
   google.protobuf.Timestamp workflow_task_original_scheduled_time = 30;
   string workflow_task_request_id = 31;
@@ -788,6 +789,9 @@ message ActivityInfo {
   // Replication: This field is part of ActivityInfo and is automatically replicated
   // via state-based replication. No special handling is needed.
   temporal.server.api.clock.v1.VectorClock started_clock = 52;
+
+  // Flow control limiters held by the currently started activity task.
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 53;
 }
 
 // timer_map column

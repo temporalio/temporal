@@ -117,6 +117,10 @@ func NewWorkflowWithSignal(
 
 	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.
 	if requestEagerExecution && newMutableState.HasPendingWorkflowTask() {
+		var workerControlQueue string
+		if startRequest.StartRequest.GetEagerWorkerCapabilities().GetSupportsWorkflowHeartbeatNotification() {
+			workerControlQueue = startRequest.StartRequest.GetEagerWorkerControlTaskQueue()
+		}
 		// TODO: get build ID from Starter so eager workflows can be versioned
 		_, _, err = newMutableState.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
@@ -129,6 +133,7 @@ func NewWorkflowWithSignal(
 			false,
 			nil,
 			-1, // sentinel: eager-exec path didn't consult matching, has no routing revision
+			workerControlQueue,
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history

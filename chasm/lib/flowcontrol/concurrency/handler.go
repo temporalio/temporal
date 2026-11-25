@@ -9,9 +9,12 @@ import (
 	"go.temporal.io/server/chasm"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/streambatcher"
 )
 
 type batchKey struct {
@@ -40,6 +43,7 @@ type Handler struct {
 	logger         log.Logger
 	longPollOpts   dynamicconfig.TypedPropertyFn[WaitLongPollOptions]
 	reserveTimeout dynamicconfig.DurationPropertyFn
+	batchers       *streambatcher.KeyedBatcher[batchKey, batchReq, batchRes]
 }
 
 func NewHandler(
@@ -51,6 +55,11 @@ func NewHandler(
 		longPollOpts:   WaitLongPoll.Get(dc),
 		reserveTimeout: ReserveTimeout.Get(dc),
 	}
+	h.batchers = streambatcher.NewKeyedBatcherWithPerItemResults(
+		h.applyBatch,
+		ServerBatcherOptions.Get(dc)(),
+		clock.NewRealTimeSource(),
+	)
 	return h
 }
 
@@ -154,7 +163,15 @@ func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.C
 func (h *Handler) applyBatch(
 	key batchKey,
 	items []batchReq,
-) []batchRes {
+) (retBatchRes []batchRes) {
+	defer func() {
+		if r := recover(); r != nil {
+			// log, then fill results with an Internal error for each item
+			h.logger.Error("panic in applyBatch", tag.Value(r))
+			retBatchRes = makeBatchResults(len(items), nil, serviceerror.NewInternal("panic in applyBatch"))
+		}
+	}()
+
 	needStart := false
 	canSpeculate := true
 
@@ -176,13 +193,18 @@ func (h *Handler) applyBatch(
 		reserveTimeout: h.reserveTimeout(),
 	}
 
+	// TODO(fc): instead of depending on some arbitrary context, we should take the longest
+	// deadline among the input calls, create a detached context from that, add that deadline,
+	// and run the batch with that one.
+	batchCtx := items[0].ctx
+
 	if needStart {
 		opts = append(opts, chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyAllowDuplicate,
 			chasm.BusinessIDConflictPolicyUseExisting,
 		))
 		updateRes, err := chasm.UpdateWithStartExecution(
-			items[0].ctx,
+			batchCtx,
 			chasm.ExecutionKey{
 				NamespaceID: key.namespaceID,
 				BusinessID:  key.key,
@@ -196,7 +218,7 @@ func (h *Handler) applyBatch(
 	}
 
 	ress, _, err := chasm.UpdateComponent(
-		items[0].ctx,
+		batchCtx,
 		chasm.NewComponentRef[*Component](chasm.ExecutionKey{
 			NamespaceID: key.namespaceID,
 			BusinessID:  key.key,
@@ -231,11 +253,13 @@ func makeBatchResults(
 func (h *Handler) Batch(ctx context.Context, req *fcpb.ConcurrencyServiceBatchRequest) (retRes *fcpb.ConcurrencyServiceBatchResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 
-	results := h.applyBatch(batchKey{
+	res, err := h.batchers.Add(ctx, batchKey{
 		namespaceID: req.GetNamespaceId(),
 		key:         req.GetKey(),
-	}, []batchReq{{ctx: ctx, req: req}})
-	res := results[0]
+	}, batchReq{ctx: ctx, req: req})
+	if err != nil {
+		return nil, err
+	}
 	if res.res == nil && res.err == nil {
 		res.err = serviceerror.NewInternal("nil response")
 	}

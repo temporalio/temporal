@@ -160,6 +160,10 @@ func Invoke(
 				return nil, err
 			}
 
+			var workerControlQueue string
+			if req.PollRequest.GetCapabilities().GetSupportsWorkflowHeartbeatNotification() {
+				workerControlQueue = req.PollRequest.GetWorkerControlTaskQueue()
+			}
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
@@ -171,6 +175,7 @@ func Invoke(
 				false,
 				req.TargetDeploymentVersion,
 				req.TaskDispatchRevisionNumber,
+				workerControlQueue,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
