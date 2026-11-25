@@ -1319,12 +1319,12 @@ func (s *namespaceValidatorSuite) TestInterceptStartAdminBatchOperation() {
 				},
 			)
 			if testCase.wantErr != nil {
-				s.ErrorIs(err, testCase.wantErr)
-				s.False(handlerCalled)
+				s.Require().ErrorIs(err, testCase.wantErr)
+				s.Require().False(handlerCalled)
 				return
 			}
-			s.NoError(err)
-			s.True(handlerCalled)
+			s.Require().NoError(err)
+			s.Require().True(handlerCalled)
 		})
 	}
 }
