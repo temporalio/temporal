@@ -61,6 +61,7 @@ func TestShadowReceiverObservability(t *testing.T) {
 		differingFields []any
 		receivedTask    map[string]any
 		disableEvents   bool
+		misrouted       bool
 	}{
 		{name: "match ignores typed diagnostic field", outcome: "match", reason: "none"},
 		{name: "legacy payload mismatch", outcome: "mismatch", reason: "legacy_payload_mismatch", differingFields: []any{"info"}, mutate: func(req *adminservice.ApplyNamespaceMutationRequest) {
@@ -91,6 +92,9 @@ func TestShadowReceiverObservability(t *testing.T) {
 		{name: "invalid actual payload", outcome: "error", reason: "invalid_payload", mutate: func(req *adminservice.ApplyNamespaceMutationRequest) {
 			req.NamespaceTaskPayload = []byte{0xff}
 		}},
+		{name: "match addressed to this cluster", outcome: "match", reason: "none", mutate: func(req *adminservice.ApplyNamespaceMutationRequest) { req.TargetCluster = "cellB" }},
+		// An authoritative apply refuses a misrouted delivery, so shadow must not report a match for it.
+		{name: "addressed to another cluster", outcome: "error", reason: "wrong_target_cluster", misrouted: true, mutate: func(req *adminservice.ApplyNamespaceMutationRequest) { req.TargetCluster = "cellC" }},
 		{name: "events disabled", outcome: "match", reason: "none", disableEvents: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -119,6 +123,10 @@ func TestShadowReceiverObservability(t *testing.T) {
 			response, err := handler.ApplyNamespaceMutation(t.Context(), req)
 			if tc.outcome == "error" {
 				require.Error(t, err)
+				if tc.misrouted {
+					var failedPrecondition *serviceerror.FailedPrecondition
+					require.ErrorAs(t, err, &failedPrecondition)
+				}
 			} else {
 				require.NoError(t, err)
 				want := adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH

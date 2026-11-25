@@ -1112,19 +1112,25 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		comparisonOutcome, comparisonReason = "error", "invalid_payload"
 		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
 	}
+	// deliveryDetails records how the receiver treats an authoritative delivery on its events.
+	deliveryDetails := map[string]any{"removed_peer": request.GetRemovedPeer()}
+	currentCluster := adh.clusterMetadata.GetCurrentClusterName()
+	// Reject a misrouted delivery in both modes, so shadow cannot report a match
+	// that an authoritative apply would refuse.
+	if target := request.GetTargetCluster(); target != "" && target != currentCluster {
+		err := serviceerror.NewFailedPreconditionf("namespace mutation addressed to cluster %q reached cluster %q", target, currentCluster)
+		if request.GetShadow() {
+			comparisonOutcome, comparisonReason = "error", "wrong_target_cluster"
+		} else {
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
+		}
+		return nil, err
+	}
 	if !request.GetShadow() {
 		ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
-			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
+			SourceCluster: request.GetSourceCluster(), TargetCluster: currentCluster,
 			Transport: namespaceMutationTransport(request),
 		})
-		// deliveryDetails records how the receiver treats the delivery on its events.
-		deliveryDetails := map[string]any{"removed_peer": request.GetRemovedPeer()}
-		currentCluster := adh.clusterMetadata.GetCurrentClusterName()
-		if target := request.GetTargetCluster(); target != "" && target != currentCluster {
-			err := serviceerror.NewFailedPreconditionf("namespace mutation addressed to cluster %q reached cluster %q", target, currentCluster)
-			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
-			return nil, err
-		}
 		// The delivery policy validates the payload before any namespace membership check.
 		policyTrusts := false
 		if adh.deliveryPolicy != nil {

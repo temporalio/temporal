@@ -370,7 +370,8 @@ type NamespaceRegisteredInput struct {
 // NamespaceReplicationRoute records how the source replicates one namespace write. It is set only on
 // writes that replicate.
 type NamespaceReplicationRoute struct {
-	// Transport is the path that replicated the write: legacy, shadow, or chasm.
+	// Transport is the path selected to replicate the write: legacy, shadow, or chasm. The event
+	// confirms the local write; replication events report submission and delivery.
 	Transport string `json:"transport"`
 	// PeerCells and RemovedPeers are the cells a chasm write is delivered to and the ones it removes,
 	// as the source's replication resolver decided them.
