@@ -4463,8 +4463,11 @@ func (s *chasmEngineSuite) TestNamespaceValidationNewerExecution() {
 							s.False(result.Created)
 						}
 						switch {
-						case remote, closed && !duplicate:
+						case remote:
 							s.Equal(serviceerror.NewNamespaceNotActive(s.namespaceEntry.Name().String(), cluster.TestCurrentClusterName, owner), err)
+							s.Empty(resultKey)
+						case closed && !duplicate:
+							s.Equal(serviceerror.NewUnavailablef("execution write version %d is older than existing execution version %d", tests.Version, executionVersion), err)
 							s.Empty(resultKey)
 						default:
 							s.NoError(err)

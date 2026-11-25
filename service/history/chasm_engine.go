@@ -1378,13 +1378,11 @@ func (e *ChasmEngine) handleReusePolicy(
 
 	// Reject a new run whose version is older than the closed run's. The new run can be prepared
 	// before newer state for this execution is found.
-	if newExecutionParams.mutableState.GetCurrentVersion() < currentRunInfo.LastWriteVersion {
-		// CONSIDER: return Unavailable when this cluster owns LastWriteVersion and only the namespace cache is stale.
-		clusterMetadata := shardContext.GetClusterMetadata()
-		return chasm.StartExecutionResult{}, serviceerror.NewNamespaceNotActive(
-			nsEntry.Name().String(),
-			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(), currentRunInfo.LastWriteVersion),
+	if writeVersion := newExecutionParams.mutableState.GetCurrentVersion(); writeVersion < currentRunInfo.LastWriteVersion {
+		return chasm.StartExecutionResult{}, serviceerror.NewUnavailablef(
+			"execution write version %d is older than existing execution version %d",
+			writeVersion,
+			currentRunInfo.LastWriteVersion,
 		)
 	}
 
