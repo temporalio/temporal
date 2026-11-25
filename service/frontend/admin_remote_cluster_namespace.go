@@ -5,9 +5,11 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/proto"
 )
 
 // GetRemoteClusterNamespace reads a namespace from a connected remote cluster
@@ -47,11 +49,84 @@ func (adh *AdminHandler) GetRemoteClusterNamespace(
 	default:
 		return nil, serviceerror.NewInvalidArgument("exactly one of namespace name or ID is required")
 	}
-	if clusterName == adh.clusterMetadata.GetCurrentClusterName() {
-		return nil, serviceerror.NewInvalidArgumentf("cluster %q is the current cluster; read it with GetNamespace", clusterName)
+	remoteClient, err := adh.getVerifiedRemoteAdminClient(ctx, clusterName)
+	if err != nil {
+		return nil, err
 	}
-	// Eligibility depends on the connection, not on replication streams, so the
-	// read still works while replication to the peer is paused.
+	namespaceResponse, err := remoteClient.GetNamespace(ctx, namespaceRequest)
+	if err != nil {
+		// The peer is verified, so its NamespaceNotFound means the namespace is
+		// absent there and passes through unchanged.
+		return nil, err
+	}
+	return &adminservice.GetRemoteClusterNamespaceResponse{
+		ClusterName: clusterName,
+		Namespace:   namespaceResponse,
+	}, nil
+}
+
+// ApplyRemoteClusterNamespaceRepair relays an operator-repair namespace
+// mutation to a connected remote cluster through this cluster's remote-cluster
+// client. Repair stays usable when CHASM delivery is unhealthy, because the
+// write does not depend on delivery making progress. Only operator repairs are
+// relayed, so this cannot become a general way to push namespace state to
+// another cluster.
+func (adh *AdminHandler) ApplyRemoteClusterNamespaceRepair(
+	ctx context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+) (_ *adminservice.ApplyRemoteClusterNamespaceRepairResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	clusterName := request.GetClusterName()
+	if clusterName == "" {
+		return nil, serviceerror.NewInvalidArgument("cluster name is required")
+	}
+	mutation := request.GetMutation()
+	if mutation == nil {
+		return nil, serviceerror.NewInvalidArgument("mutation is required")
+	}
+	if mutation.GetShadow() {
+		return nil, serviceerror.NewInvalidArgument("shadow mutations are not relayed")
+	}
+	if !isOperatorRepair(mutation) {
+		return nil, serviceerror.NewInvalidArgument("only operator-repair mutations are relayed")
+	}
+	// Refuse before contacting the peer. The peer checks the policy again and
+	// rejects a payload that does not decode, as it did before this check.
+	task := &replicationspb.NamespaceTaskAttributes{}
+	if proto.Unmarshal(mutation.GetNamespaceTaskPayload(), task) == nil {
+		if err := adh.checkNamespaceRepairPolicy(ctx, task.GetId(), task.GetInfo().GetName(), task.GetInfo().GetData()); err != nil {
+			return nil, err
+		}
+	}
+	remoteClient, err := adh.getVerifiedRemoteAdminClient(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	response, err := remoteClient.ApplyNamespaceMutation(ctx, mutation)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.ApplyRemoteClusterNamespaceRepairResponse{
+		ClusterName: clusterName,
+		Response:    response,
+	}, nil
+}
+
+// getVerifiedRemoteAdminClient returns an admin client for a connected
+// remote cluster after confirming that the cluster at its address identifies
+// itself by the requested name. Eligibility depends on the connection, not on
+// replication streams, so relays still work while replication is paused.
+func (adh *AdminHandler) getVerifiedRemoteAdminClient(
+	ctx context.Context,
+	clusterName string,
+) (adminservice.AdminServiceClient, error) {
+	if clusterName == adh.clusterMetadata.GetCurrentClusterName() {
+		return nil, serviceerror.NewInvalidArgumentf("cluster %q is the current cluster; call it directly", clusterName)
+	}
 	clusterInfo, ok := adh.clusterMetadata.GetAllClusterInfo()[clusterName]
 	if !ok {
 		return nil, serviceerror.NewFailedPreconditionf("unknown remote cluster %q", clusterName)
@@ -62,7 +137,6 @@ func (adh *AdminHandler) GetRemoteClusterNamespace(
 	if clusterInfo.RPCAddress == "" {
 		return nil, serviceerror.NewFailedPreconditionf("remote cluster %q has no frontend address", clusterName)
 	}
-
 	remoteClient := adh.clientFactory.NewRemoteAdminClientWithTimeout(
 		clusterInfo.RPCAddress,
 		admin.DefaultTimeout,
@@ -79,16 +153,7 @@ func (adh *AdminHandler) GetRemoteClusterNamespace(
 			describe.GetClusterName(),
 		)
 	}
-	namespaceResponse, err := remoteClient.GetNamespace(ctx, namespaceRequest)
-	if err != nil {
-		// The peer is verified, so its NamespaceNotFound means the namespace is
-		// absent there and passes through unchanged.
-		return nil, err
-	}
-	return &adminservice.GetRemoteClusterNamespaceResponse{
-		ClusterName: describe.GetClusterName(),
-		Namespace:   namespaceResponse,
-	}, nil
+	return remoteClient, nil
 }
 
 // remoteClusterRelayError keeps a failure to reach or identify the peer from

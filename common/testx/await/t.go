@@ -45,6 +45,18 @@ func (t *T) AssertionT() require.TestingT {
 	return t
 }
 
+// Containsf requires the container to contain the element for the current attempt.
+func (t *T) Containsf(container, element any, msg string, args ...any) {
+	t.Helper()
+	require.Containsf(t, container, element, msg, args...)
+}
+
+// Failf reports a formatted failure and stops the current attempt.
+func (t *T) Failf(failureMessage, msg string, args ...any) {
+	t.Helper()
+	require.Failf(t, failureMessage, msg, args...)
+}
+
 // NoError requires err to be nil for the current attempt.
 func (t *T) NoError(err error, msgAndArgs ...any) {
 	t.Helper()
@@ -55,6 +67,42 @@ func (t *T) NoError(err error, msgAndArgs ...any) {
 func (t *T) Equal(expected, actual any, msgAndArgs ...any) {
 	t.Helper()
 	require.Equal(t, expected, actual, msgAndArgs...)
+}
+
+// EqualValuesf requires equivalent values, allowing comparable numeric types.
+func (t *T) EqualValuesf(expected, actual any, msg string, args ...any) {
+	t.Helper()
+	require.EqualValuesf(t, expected, actual, msg, args...)
+}
+
+// Greater requires actual to exceed threshold for the current attempt.
+func (t *T) Greater(actual, threshold any, msgAndArgs ...any) {
+	t.Helper()
+	require.Greater(t, actual, threshold, msgAndArgs...)
+}
+
+// GreaterOrEqual requires actual to meet or exceed threshold.
+func (t *T) GreaterOrEqual(actual, threshold any, msgAndArgs ...any) {
+	t.Helper()
+	require.GreaterOrEqual(t, actual, threshold, msgAndArgs...)
+}
+
+// GreaterOrEqualf reports a formatted failure if actual is below threshold.
+func (t *T) GreaterOrEqualf(actual, threshold any, msg string, args ...any) {
+	t.Helper()
+	require.GreaterOrEqualf(t, actual, threshold, msg, args...)
+}
+
+// Len requires object to have the given length.
+func (t *T) Len(object any, length int, msgAndArgs ...any) {
+	t.Helper()
+	require.Len(t, object, length, msgAndArgs...)
+}
+
+// LessOrEqual requires actual to be at or below threshold.
+func (t *T) LessOrEqual(actual, threshold any, msgAndArgs ...any) {
+	t.Helper()
+	require.LessOrEqual(t, actual, threshold, msgAndArgs...)
 }
 
 // Nil requires object to be nil for the current attempt.

@@ -29,6 +29,8 @@ import (
 const namespaceReplicationWarningInitialHistory = "target is missing the initial failover history entry; configuration repair will not change failover history"
 
 const (
+	namespaceReplicationRoleSource                      = "SOURCE"
+	namespaceReplicationRoleTarget                      = "TARGET"
 	namespaceReplicationStatusHealthy                   = "HEALTHY"
 	namespaceReplicationStatusRepairRequired            = "REPAIR_REQUIRED"
 	namespaceReplicationStatusBlocked                   = "BLOCKED"
@@ -107,6 +109,10 @@ type namespaceReplicationObservation struct {
 	// the first source read and must not be used as a baseline.
 	sourceSnapshot  *adminservice.GetNamespaceResponse
 	targetSnapshots map[string]*adminservice.GetNamespaceResponse
+	// sourceStable is set only after the final source read matches the source
+	// snapshot used to compare targets. Repair must not write from a partial
+	// observation whose authority may have moved mid-scan.
+	sourceStable bool
 }
 
 // namespaceReplicationReader reads namespace state for verification. The source
@@ -349,6 +355,11 @@ func (v *namespaceReplicationVerifier) observe(
 		return observation, nil
 	}
 
+	if err := namespaceRepairRefusal(result.SourceCluster, source); err != nil {
+		blockNamespaceReplicationVerification(result, err)
+		return observation, nil
+	}
+
 	configProjection, failoverProjection, err := namespaceReplicationProjections(source, v.dataKeysToIgnore)
 	if err != nil {
 		blockNamespaceReplicationVerification(result, fmt.Errorf("source namespace cannot be compared: %w", err))
@@ -366,7 +377,7 @@ func (v *namespaceReplicationVerifier) observe(
 	sourceFailoverVersion := source.GetFailoverVersion()
 	result.Clusters = append(result.Clusters, namespaceReplicationClusterVerification{
 		Cluster:             result.SourceCluster,
-		Role:                "SOURCE",
+		Role:                namespaceReplicationRoleSource,
 		Presence:            namespaceReplicationPresencePresent,
 		ConfigVersion:       &sourceConfigVersion,
 		ConfigFingerprint:   result.SourceConfigFingerprint,
@@ -405,6 +416,10 @@ func (v *namespaceReplicationVerifier) observe(
 			blockNamespaceReplicationVerification(result, errNamespaceReplicationRelayUnsupported)
 			return observation, nil
 		}
+		if err := namespaceRepairRefusal(cluster, target); err != nil {
+			blockNamespaceReplicationVerification(result, err)
+			return observation, nil
+		}
 	}
 
 	// Targets were read after the source, possibly seconds later. If the source
@@ -430,6 +445,7 @@ func (v *namespaceReplicationVerifier) observe(
 	// The source is unchanged across the scan, so this snapshot is the baseline
 	// that callers such as repair may act on.
 	observation.sourceSnapshot = finalSource
+	observation.sourceStable = true
 
 	deriveNamespaceReplicationStatus(result)
 	return observation, nil
@@ -444,7 +460,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 ) (result namespaceReplicationClusterVerification, namespace *adminservice.GetNamespaceResponse) {
 	result = namespaceReplicationClusterVerification{
 		Cluster:       cluster,
-		Role:          "TARGET",
+		Role:          namespaceReplicationRoleTarget,
 		Presence:      namespaceReplicationPresenceUnavailable,
 		ConfigMatch:   namespaceReplicationMatchUnknown,
 		FailoverMatch: namespaceReplicationMatchUnknown,
@@ -950,6 +966,17 @@ func namespaceReplicationFailoverBlocks(
 	return (cluster.FailoverMatch != namespaceReplicationMatchMatch &&
 		!cluster.initialHistoryMissing) ||
 		(cluster.FailoverVersion != nil && *cluster.FailoverVersion > sourceFailoverVersion)
+}
+
+// namespaceRepairRefusal reports a cluster's refusal to have this namespace
+// verified or repaired. The cluster's deployment decides which namespaces
+// these tools support; a refusal from any replica stops them.
+func namespaceRepairRefusal(cluster string, response *adminservice.GetNamespaceResponse) error {
+	reason := response.GetRepairScope().GetRefusalReason()
+	if reason == "" {
+		return nil
+	}
+	return fmt.Errorf("cluster %q does not support verifying or repairing this namespace: %s", cluster, reason)
 }
 
 func blockNamespaceReplicationVerification(

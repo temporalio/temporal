@@ -123,6 +123,26 @@ func (mr *MockAdminServiceClientMockRecorder) ApplyNamespaceMutation(ctx, in any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyNamespaceMutation", reflect.TypeOf((*MockAdminServiceClient)(nil).ApplyNamespaceMutation), varargs...)
 }
 
+// ApplyRemoteClusterNamespaceRepair mocks base method.
+func (m *MockAdminServiceClient) ApplyRemoteClusterNamespaceRepair(ctx context.Context, in *adminservice.ApplyRemoteClusterNamespaceRepairRequest, opts ...grpc.CallOption) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ApplyRemoteClusterNamespaceRepair", varargs...)
+	ret0, _ := ret[0].(*adminservice.ApplyRemoteClusterNamespaceRepairResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyRemoteClusterNamespaceRepair indicates an expected call of ApplyRemoteClusterNamespaceRepair.
+func (mr *MockAdminServiceClientMockRecorder) ApplyRemoteClusterNamespaceRepair(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyRemoteClusterNamespaceRepair", reflect.TypeOf((*MockAdminServiceClient)(nil).ApplyRemoteClusterNamespaceRepair), varargs...)
+}
+
 // CancelDLQJob mocks base method.
 func (m *MockAdminServiceClient) CancelDLQJob(ctx context.Context, in *adminservice.CancelDLQJobRequest, opts ...grpc.CallOption) (*adminservice.CancelDLQJobResponse, error) {
 	m.ctrl.T.Helper()
@@ -1263,6 +1283,21 @@ func (m *MockAdminServiceServer) ApplyNamespaceMutation(arg0 context.Context, ar
 func (mr *MockAdminServiceServerMockRecorder) ApplyNamespaceMutation(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyNamespaceMutation", reflect.TypeOf((*MockAdminServiceServer)(nil).ApplyNamespaceMutation), arg0, arg1)
+}
+
+// ApplyRemoteClusterNamespaceRepair mocks base method.
+func (m *MockAdminServiceServer) ApplyRemoteClusterNamespaceRepair(arg0 context.Context, arg1 *adminservice.ApplyRemoteClusterNamespaceRepairRequest) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyRemoteClusterNamespaceRepair", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ApplyRemoteClusterNamespaceRepairResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyRemoteClusterNamespaceRepair indicates an expected call of ApplyRemoteClusterNamespaceRepair.
+func (mr *MockAdminServiceServerMockRecorder) ApplyRemoteClusterNamespaceRepair(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyRemoteClusterNamespaceRepair", reflect.TypeOf((*MockAdminServiceServer)(nil).ApplyRemoteClusterNamespaceRepair), arg0, arg1)
 }
 
 // CancelDLQJob mocks base method.

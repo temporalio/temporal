@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -518,7 +519,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 
 	// Wait until the first workflow task is complete so event 3 is a valid reset point.
 	afterStart := func(s *testcore.TestEnv, firstRun *commonpb.WorkflowExecution) {
-		s.WaitForHistoryEvents(`
+		historyrequire.New(t).WaitForHistoryEvents(`
 			1 WorkflowExecutionStarted
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
