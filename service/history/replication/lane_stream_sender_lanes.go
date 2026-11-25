@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -29,6 +31,11 @@ const (
 	// laneMaxRetryAfter makes a refused lane re-check within a second whether it is still
 	// paced, so that a handover or retirement takes effect promptly.
 	laneMaxRetryAfter = time.Second
+	// laneIntakeSampleInterval is the shortest interval a lane's intake is sampled over.
+	laneIntakeSampleInterval = time.Second
+	// laneIntakeSmoothing is the time constant of the moving average of a lane's intake. It is
+	// short so that the drain follows what arrives now rather than the burst that built the backlog.
+	laneIntakeSmoothing = 2 * time.Second
 
 	// Reasons on replication_lane_policy_failures.
 	lanePolicyFailureError metrics.ReasonString = "error"
@@ -589,22 +596,97 @@ func (s *laneStreamSender) laneLimiter(logicalKey string) LaneLimiter {
 	return s.laneLimiters[logicalKey]
 }
 
-// laneDrainLimiter returns the limiter that caps a withdrawn lane's drain at
-// ReplicationLaneDrainTasksPerSecond on this stream, creating it the first time the lane drains.
-// A drain left uncapped floods the receiver with the lane's backlog, slowing every namespace there.
+// laneDrainLimiter returns the limiter that paces a withdrawn lane's drain on this stream,
+// creating it the first time the lane drains. The lane may send as fast as its tasks arrive plus
+// ReplicationLaneDrainTasksPerSecond, so it catches up with the default lane and retires however
+// fast its namespace writes. A drain left uncapped floods the receiver with the lane's backlog,
+// slowing every namespace there.
 func (s *laneStreamSender) laneDrainLimiter(logicalKey string) LaneLimiter {
 	s.laneStateMu.Lock()
 	defer s.laneStateMu.Unlock()
 	limiter, ok := s.laneDrainLimiters[logicalKey]
 	if !ok {
-		limiter = newRateLaneLimiter(s.config.ReplicationLaneDrainTasksPerSecond)
+		intake := s.laneIntakeLocked(logicalKey)
+		limiter = newRateLaneLimiter(func() float64 { return s.laneDrainRate(intake) })
 		s.laneDrainLimiters[logicalKey] = limiter
 		if drainCap := s.config.ReplicationLaneDrainTasksPerSecond(); drainCap > 0 {
 			s.logger.Info("Capping the drain of a withdrawn replication lane.",
-				tag.NewStringTag("lane", logicalKey), tag.NewFloat64("drain-tasks-per-second", drainCap))
+				tag.NewStringTag("lane", logicalKey), tag.NewFloat64("drain-tasks-per-second", drainCap),
+				tag.NewFloat64("intake-tasks-per-second", intake.tasksPerSecond(s.shardContext.GetTimeSource().Now())))
 		}
 	}
 	return limiter
+}
+
+// laneDrainRate is how fast a withdrawn lane may send: its intake plus
+// ReplicationLaneDrainTasksPerSecond, or zero, which means no limit, while the cap is unset.
+func (s *laneStreamSender) laneDrainRate(intake *laneIntake) float64 {
+	drainCap := s.config.ReplicationLaneDrainTasksPerSecond()
+	if drainCap <= 0 {
+		return 0
+	}
+	return drainCap + intake.tasksPerSecond(s.shardContext.GetTimeSource().Now())
+}
+
+// laneIntake returns a lane's intake, creating it the first time the default lane skips one of
+// the lane's tasks.
+func (s *laneStreamSender) laneIntake(logicalKey string) *laneIntake {
+	s.laneStateMu.Lock()
+	defer s.laneStateMu.Unlock()
+	return s.laneIntakeLocked(logicalKey)
+}
+
+func (s *laneStreamSender) laneIntakeLocked(logicalKey string) *laneIntake {
+	intake, ok := s.laneIntakes[logicalKey]
+	if !ok {
+		intake = &laneIntake{}
+		s.laneIntakes[logicalKey] = intake
+	}
+	return intake
+}
+
+// laneIntake measures how fast tasks arrive for a lane on one stream: the rate at which the
+// default lane skips the tasks the lane owns. It counts them from the lane's creation, so a lane
+// that was throttled for a while starts its drain with its intake already known.
+type laneIntake struct {
+	mu sync.Mutex
+	// skipped counts the tasks skipped since sampledAt, which is zero until the first sample.
+	skipped   int64
+	sampledAt time.Time
+	// rate is the moving average of the intake, in tasks per second.
+	rate float64
+}
+
+func (i *laneIntake) recordSkip(now time.Time) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.sample(now)
+	i.skipped++
+}
+
+// tasksPerSecond returns the intake as of now.
+func (i *laneIntake) tasksPerSecond(now time.Time) float64 {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.sample(now)
+	return i.rate
+}
+
+// sample folds the tasks skipped since the last sample into the moving average, once at least
+// laneIntakeSampleInterval has passed.
+func (i *laneIntake) sample(now time.Time) {
+	if i.sampledAt.IsZero() {
+		i.sampledAt = now
+		return
+	}
+	elapsed := now.Sub(i.sampledAt)
+	if elapsed < laneIntakeSampleInterval {
+		return
+	}
+	sample := float64(i.skipped) / elapsed.Seconds()
+	i.rate += (1 - math.Exp(-elapsed.Seconds()/laneIntakeSmoothing.Seconds())) * (sample - i.rate)
+	i.skipped = 0
+	i.sampledAt = now
 }
 
 func (s *laneStreamSender) markLaneRefused(logicalKey string, at time.Time) {
@@ -618,6 +700,7 @@ func (s *laneStreamSender) laneRetired(logicalKey string) {
 	s.laneStateMu.Lock()
 	delete(s.laneLimiters, logicalKey)
 	delete(s.laneDrainLimiters, logicalKey)
+	delete(s.laneIntakes, logicalKey)
 	delete(s.laneRefusedAt, logicalKey)
 	s.laneStateMu.Unlock()
 	s.withLanePolicy("LaneRetired", func(policy LaneStreamPolicy) {
