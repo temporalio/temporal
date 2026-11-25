@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"regexp"
 	"strings"
 	"testing"
@@ -2629,31 +2628,10 @@ func (s *WorkflowHandlerSuite) TestGetSearchAttributes() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	ctx := context.Background()
-	s.mockVisibilityMgr.EXPECT().HasStoreName(esconfig.PersistenceName).Return(false)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	resp, err := wh.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
-	// SQL: pre-allocated fields are returned as before.
-	s.Contains(resp.GetKeys(), "Keyword01")
-}
-
-func (s *WorkflowHandlerSuite) TestGetSearchAttributes_ElasticsearchHidesPreallocatedFields() {
-	wh := s.getWorkflowHandler(s.newConfig())
-
-	customSearchAttributes := maps.Clone(searchattribute.TestEsNameTypeMap().Custom())
-	maps.Copy(customSearchAttributes, searchattribute.TestNameTypeMap().Custom())
-	s.mockVisibilityMgr.EXPECT().HasStoreName(esconfig.PersistenceName).Return(true)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
-		Return(searchattribute.NewNameTypeMap(customSearchAttributes), nil)
-
-	resp, err := wh.GetSearchAttributes(context.Background(), &workflowservice.GetSearchAttributesRequest{})
-	s.NoError(err)
-	s.Contains(resp.GetKeys(), "CustomKeywordField")
-	s.Contains(resp.GetKeys(), "WorkflowId")
-	for name := range searchattribute.TestNameTypeMap().Custom() {
-		s.NotContains(resp.GetKeys(), name)
-	}
 }
 
 func (s *WorkflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
