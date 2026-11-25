@@ -258,6 +258,13 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, err
 	}
 	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions) //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
+	err = mutableState.UpdateActivity(scheduledEventID, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		activityInfo.Limiters = request.GetLimiters()
+		return nil
+	})
+	if err != nil {
+		return nil, rejectCodeUndefined, err
+	}
 	if _, err := mutableState.AddActivityTaskStartedEvent(
 		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
 		versioningStamp, pollerDeployment, request.GetBuildIdRedirectInfo(),
