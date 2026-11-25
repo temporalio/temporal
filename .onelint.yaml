@@ -10,6 +10,10 @@ format:
   gofumpt: off
 
 lint:
+  # Off on purpose: the protos import temporal/api, which no buf module or
+  # dependency provides, so buf cannot compile them from source. make
+  # lint-protos lints the images that protoc builds with the api descriptors.
+  buf-lint: off
   # Its style check, which reports correct but confusing errors.As calls,
   # stays off.
   errortype:
