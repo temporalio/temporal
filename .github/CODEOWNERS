@@ -79,7 +79,7 @@
 
 # Worker Service
 
-/service/worker/batcher/ @temporalio/act
+/service/worker/batcher/ @temporalio/act @temporalio/oss-foundations
 /service/worker/scheduler/ @temporalio/act
 
 /service/worker/workerdeployment/ @temporalio/oss-matching
