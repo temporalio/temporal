@@ -102,3 +102,5 @@ operation use `ExecuteRegistered` for each key and `FallbackError(src, key, othe
 fallback reports its decisions to subscribers with `registry.Emit` (`FallbackActivationEvent`,
 `FallbackFireEvent`), and its per-key counters through `FallbackStatsReporter`. While nothing is registered and no fallback is active,
 `registry.Armed()` is false and executions cost one atomic load.
+
+[`buggify`](buggify) is a fallback that implements FoundationDB-style BUGGIFY.
