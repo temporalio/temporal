@@ -65,6 +65,20 @@ func (c *metricClient) ApplyNamespaceMutation(
 	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
 }
 
+func (c *metricClient) ApplyRemoteClusterNamespaceRepair(
+	ctx context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ApplyRemoteClusterNamespaceRepairResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientApplyRemoteClusterNamespaceRepair")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ApplyRemoteClusterNamespaceRepair(ctx, request, opts...)
+}
+
 func (c *metricClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -301,6 +315,20 @@ func (c *metricClient) GetNamespaceReplicationMessages(
 	}()
 
 	return c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
+}
+
+func (c *metricClient) GetRemoteClusterNamespace(
+	ctx context.Context,
+	request *adminservice.GetRemoteClusterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetRemoteClusterNamespaceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetRemoteClusterNamespace")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetRemoteClusterNamespace(ctx, request, opts...)
 }
 
 func (c *metricClient) GetReplicationMessages(

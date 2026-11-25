@@ -74,14 +74,19 @@ func isDestinationDown(err error) bool {
 	if errors.Is(err, errOpProcessorFailed) {
 		return false
 	}
-	if errors.Is(err, ErrResponseBodyTooLarge) {
-		return false
-	}
-	if errors.Is(err, ErrInvalidOperationToken) {
+	if isNonRetryableCallError(err) {
 		return false
 	}
 	_, ok := errors.AsType[*operationTimeoutBelowMinError](err)
 	return !ok
+}
+
+// isNonRetryableCallError reports whether a call error that is not a service, handler or operation error should fail
+// the request permanently: retrying would get the same response.
+func isNonRetryableCallError(err error) bool {
+	return errors.Is(err, ErrResponseBodyTooLarge) ||
+		errors.Is(err, ErrInvalidOperationToken) ||
+		errors.Is(err, commonnexus.ErrRedirectNotAllowed)
 }
 
 func failureSourceFromContext(ctx context.Context) string {
@@ -198,7 +203,7 @@ func callErrorToFailure(callErr error) (*failurepb.Failure, bool, error) {
 	}
 
 	// Fallback to server failure.
-	retryable := !errors.Is(callErr, ErrResponseBodyTooLarge) && !errors.Is(callErr, ErrInvalidOperationToken)
+	retryable := !isNonRetryableCallError(callErr)
 	failure := &failurepb.Failure{
 		Message: callErr.Error(),
 		FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -217,6 +222,8 @@ type invocationResult interface {
 
 type invocationResultOK struct {
 	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
+	// links are the handler's response links, already converted and sanitized.
+	links []*commonpb.Link
 }
 
 func (invocationResultOK) mustImplementInvocationResult() {}
@@ -247,10 +254,11 @@ func (invocationResultTimeout) mustImplementInvocationResult() {}
 
 func newInvocationResult(
 	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
+	links []*commonpb.Link,
 	callErr error,
 ) (invocationResult, error) {
 	if callErr == nil {
-		return invocationResultOK{response: response}, nil
+		return invocationResultOK{response: response, links: links}, nil
 	}
 
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
@@ -324,7 +332,7 @@ func newInvocationResult(
 			ServerFailureInfo: &failurepb.ServerFailureInfo{},
 		},
 	}
-	if errors.Is(callErr, ErrResponseBodyTooLarge) || errors.Is(callErr, ErrInvalidOperationToken) {
+	if isNonRetryableCallError(callErr) {
 		failure.GetServerFailureInfo().NonRetryable = true
 		return invocationResultFail{failure: failure}, nil
 	}

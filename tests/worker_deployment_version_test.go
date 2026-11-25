@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -232,7 +231,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 		WorkflowId: versionWorkflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// verifying we see our registered workers in the version deployment even after a CAN
@@ -309,7 +308,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 		WorkflowId: versionWorkflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
 	s.NoError(err)
 
 	// Verify that the override state is used after CAN (metadata should be present)
@@ -848,13 +847,12 @@ func requireWorkerDeploymentMetricTags(
 	metricNames ...string,
 ) {
 	for _, metricName := range metricNames {
-		await.Require(s.Context(), s.TB(), func(t *await.T) {
-			r := t.Require()
+		parallelsuite.Await(s, func(s parallelsuite.Scope) {
 			recordings := capture.CollectMetric(metricName, func(recording *metricstest.CapturedRecording) bool {
 				taskQueue, hasTaskQueue := recording.Tags["taskqueue"]
 				return !hasTaskQueue || taskQueue == tv.TaskQueue().GetName()
 			})
-			r.NotEmpty(recordings, "expected %s in namespace %s", metricName, tv.NamespaceName())
+			s.NotEmpty(recordings, "expected %s in namespace %s", metricName, tv.NamespaceName())
 			hasExpectedTags := false
 			for _, recording := range recordings {
 				if recording.Tags["worker_deployment_name"] == tv.DeploymentSeries() &&
@@ -863,7 +861,7 @@ func requireWorkerDeploymentMetricTags(
 					break
 				}
 			}
-			r.True(hasExpectedTags, "expected %s with deployment %q and build ID %q", metricName, tv.DeploymentSeries(), tv.BuildID())
+			s.True(hasExpectedTags, "expected %s with deployment %q and build ID %q", metricName, tv.DeploymentSeries(), tv.BuildID())
 		}, 5*time.Second, 50*time.Millisecond)
 	}
 }
@@ -901,7 +899,7 @@ func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRa
 			},
 		},
 	}
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
 	s.NoError(err)
 
 	// describe version and confirm that it is not drained
@@ -1086,7 +1084,7 @@ func (s *DeploymentVersionSuite) signalAndWaitForDrained(env *testcore.TestEnv, 
 			},
 		},
 	}
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv.ClientIdentity())
+	err = env.SendSignal(env.Namespace(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv.ClientIdentity())
 	s.NoError(err)
 
 	// wait for drained

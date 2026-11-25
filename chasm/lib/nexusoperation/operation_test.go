@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -248,6 +249,24 @@ func TestHandleNexusCompletion(t *testing.T) {
 			},
 		}
 	}
+
+	t.Run("InvalidRequestID", func(t *testing.T) {
+		for _, tc := range []struct{ name, requestID string }{
+			{"empty", ""},
+			{"mismatched", "other-request-id"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx := newCtx()
+				op := newScheduledTestOperation(t, ctx)
+				err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+					RequestId: tc.requestID,
+					Outcome:   &persistencespb.ChasmNexusCompletion_Success{Success: mustToPayload(t, "result")},
+				})
+				require.ErrorAs(t, err, new(*serviceerror.NotFound))
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.GetStatus())
+			})
+		}
+	})
 
 	t.Run("Success", func(t *testing.T) {
 		t.Run("AfterStarted", func(t *testing.T) {
@@ -618,4 +637,53 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 	info.GetSearchAttributes().GetIndexedFields()["injected"] = payload.EncodeString("x")
 	require.NotContains(t, op.Visibility.Get(ctx).CustomSearchAttributes(ctx), "injected",
 		"DescribeNexusOperation response SearchAttributes must be a copy, not the live Visibility map")
+}
+
+func TestDescribeCallerRPSThrottled(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		breakerOpen bool
+		backingOff  bool
+		wantReason  string
+	}{
+		{name: "throttled", wantReason: "Requests from this namespace to the endpoint are being rate limited."},
+		{name: "breaker takes precedence", breakerOpen: true, wantReason: "The circuit breaker is open."},
+		{name: "backing off", backingOff: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := newCallbackTestContext()
+			ctx.GoCtx = context.WithValue(t.Context(), OperationContextKey, &OperationContext{
+				DestinationBlocked: func(string, string) bool { return tc.breakerOpen },
+				DestinationThrottled: func(ns namespace.Name, destination string) bool {
+					require.Equal(t, namespace.Name("ns-name"), ns)
+					require.Equal(t, "endpoint", destination)
+					return true
+				},
+			})
+			op := newTestOperation()
+			op.Endpoint = "endpoint"
+			op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
+			cancel := newCancellation(&nexusoperationpb.CancellationState{Status: nexusoperationpb.CANCELLATION_STATUS_SCHEDULED})
+			if tc.backingOff {
+				op.Status = nexusoperationpb.OPERATION_STATUS_BACKING_OFF
+				cancel.Status = nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF
+			}
+			op.Cancellation = chasm.NewComponentField(ctx, cancel)
+			op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
+			op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
+			opStatus, cancelStatus := op.Status, cancel.Status
+			info := op.buildExecutionInfo(ctx)
+			wantState, wantCancelState := PendingOperationState(opStatus), CancellationAPIState(cancelStatus)
+			if tc.wantReason != "" {
+				wantState = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+				wantCancelState = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			}
+			require.Equal(t, wantState, info.State)
+			require.Equal(t, wantCancelState, info.CancellationInfo.State)
+			require.Equal(t, tc.wantReason, info.BlockedReason)
+			require.Equal(t, tc.wantReason, info.CancellationInfo.BlockedReason)
+		})
+	}
 }
