@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/buggify"
 	"google.golang.org/grpc"
 )
 
@@ -29,6 +30,34 @@ func newInterceptor(t *testing.T, source *failpoints.Source) grpc.UnaryServerInt
 	}, primitives.FrontendService))
 	require.NotNil(t, interceptor)
 	return interceptor
+}
+
+func TestNewGenerator_BuggifyByService(t *testing.T) {
+	t.Parallel()
+	handler := func(context.Context, any) (any, error) { return "ok", nil }
+	info := &grpc.UnaryServerInfo{FullMethod: fullMethod}
+	for service, wantBuggify := range map[primitives.ServiceName]bool{
+		primitives.FrontendService:         false,
+		primitives.InternalFrontendService: true,
+		primitives.HistoryService:          true,
+		primitives.MatchingService:         true,
+		primitives.WorkerService:           true,
+	} {
+		source := failpoints.NewEnabledSource()
+		require.NoError(t, buggify.For(source.Failpoints()).Set(buggify.Config{
+			Seed: 1, Activation: 1, Fire: 1, Error: "Unavailable",
+		}))
+		interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(source, nil, service))
+		_, err := interceptor(context.Background(), "request", info, handler)
+		require.Equal(t, wantBuggify, err != nil, service)
+
+		// Registered failpoints apply to every service.
+		setFailpoint(source, failpoint.GRPCKey(fullMethod), func(fp *failpoint.Failpoint[error]) {
+			fp.Return(errors.New("registered"), failpoint.Always)
+		})
+		_, err = interceptor(context.Background(), "request", info, handler)
+		require.EqualError(t, err, "registered", service)
+	}
 }
 
 func setFailpoint(source *failpoints.Source, key failpoint.Key, configure func(*failpoint.Failpoint[error])) {

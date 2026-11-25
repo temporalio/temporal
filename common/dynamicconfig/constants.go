@@ -1433,11 +1433,12 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		250,
 		`MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends`,
 	)
-	MatchingMaxTaskBatchSize = NewTaskQueueIntSetting(
+	// Small task writer batches split concurrent task appends into several writes.
+	MatchingMaxTaskBatchSize = Buggifiable(NewTaskQueueIntSetting(
 		"matching.maxTaskBatchSize",
 		100,
 		`MatchingMaxTaskBatchSize is max batch size for task writer`,
-	)
+	), 1, 2, 10)
 	MatchingMaxTaskDeleteBatchSize = NewTaskQueueIntSetting(
 		"matching.maxTaskDeleteBatchSize",
 		100,
@@ -2357,11 +2358,12 @@ When this limit is reached, new workflows will fall back to the base FIFO schedu
 Higher values allow limited parallelism per workflow. Values <= 0 are capped to 1.`,
 	)
 
-	TimerTaskBatchSize = NewGlobalIntSetting(
+	// Small batches make the timer queue page through its tasks and advance its reader often.
+	TimerTaskBatchSize = Buggifiable(NewGlobalIntSetting(
 		"history.timerTaskBatchSize",
 		100,
 		`TimerTaskBatchSize is batch size for timer processor to process tasks`,
-	)
+	), 1, 2, 10)
 	TimerProcessorSchedulerWorkerCount = NewGlobalIntSetting(
 		"history.timerProcessorSchedulerWorkerCount",
 		512,
@@ -2434,11 +2436,12 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 		`MemoryTimerProcessorSchedulerWorkerCount is the number of workers in the task scheduler for in memory timer processor.`,
 	)
 
-	TransferTaskBatchSize = NewGlobalIntSetting(
+	// Small batches make the transfer queue page through its tasks and advance its reader often.
+	TransferTaskBatchSize = Buggifiable(NewGlobalIntSetting(
 		"history.transferTaskBatchSize",
 		100,
 		`TransferTaskBatchSize is batch size for transferQueueProcessor`,
-	)
+	), 1, 2, 10)
 	TransferProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.transferProcessorMaxPollRPS",
 		20,

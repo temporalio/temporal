@@ -21,6 +21,7 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`.
 - `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
 - `TEMPORAL_FAILPOINTS`: Set to `1`, together with the `failpoints.enabled` server config setting, to enable failpoints in a server process. See [Enabling failpoints](#enabling-failpoints). Test clusters enable them themselves.
+- `FAILPOINT_BUGGIFY_SEED`, `FAILPOINT_BUGGIFY_ACTIVATION`, `FAILPOINT_BUGGIFY_FIRE`, `FAILPOINT_GOMAD_EVENTS`: Run servers with BUGGIFY (only with failpoints enabled). Meant for test clusters and gomad, not functional test runs. See [BUGGIFY](#buggify).
 
 ### Debugging via IDE
 
@@ -321,7 +322,9 @@ image. A server process only installs them if both of these are set, each read o
 - the `TEMPORAL_FAILPOINTS=1` environment variable.
 
 Neither is enough alone, and dynamic config cannot enable failpoints. With the switch off, nothing
-is installed: there is no failpoint registry, no gRPC fault interceptor or HTTP fault wrapper and no persistence failpoint injector, and the rules (`testing.failpointRules`) do nothing. Call sites in server
+is installed: there is no failpoint registry, no gRPC fault interceptor, HTTP fault wrapper or
+persistence failpoint injector, and the rules, BUGGIFY and
+knob randomization (`testing.failpointRules`, `testing.buggify`) do nothing. Call sites in server
 code cost a nil check. The `test_dep` tag is not involved.
 
 When the switch is on, the server logs a warning that names the inputs of the decision, and
@@ -438,6 +441,76 @@ the value changes. A dynamic config file with a non-string map key in a rule is 
 whole by the file loader, which keeps the previous dynamic config and logs an error. Functional
 tests set the setting with `env.OverrideDynamicConfig(failpointrules.Setting, ...)` on a dedicated
 cluster.
+
+#### BUGGIFY
+
+BUGGIFY, after [FoundationDB](https://apple.github.io/foundationdb/testing.html), runs a server
+"mostly normal, with a few weird things". It is meant for test clusters (a development server or a
+test cell with failpoints enabled) and gomad runs, not for the functional tests, which run
+without it, except `TestBuggify`. With a seed, each failpoint key name that has
+nothing registered is activated for the whole run with some probability, and each execution of an
+activated key fires with another probability. Both decisions are pure functions of the seed, the key
+name and the number of the execution of the key in its namespace, so the same seed activates the
+same keys in every namespace, and one namespace's traffic doesn't change which executions fire in
+another. Which executions fire also depends on the order of executions of a key in a namespace, so
+outside gomad a seed reproduces the set of activated keys, not the whole run.
+
+When an activated key fires:
+
+- `grpc:` and `http:` keys (10% of the methods are activated, 1% of their executions fire) fail
+  the request before it is handled with `Unavailable`, which callers retry. Only calls between
+  services are failed, the requests that history, matching, worker and the internal frontend
+  receive, and outgoing HTTP requests. Requests from clients to the public frontend are not: an
+  error there would test the client's retries, not the server (see
+  `buggify.InjectsInboundGRPCErrors`). Registered failpoints still apply to the frontend.
+- Hand-placed keys (25% activated, 25% fire) take the branch of their `buggify.Fires` call
+  site, such as `failpoints.MatchingSkipSyncMatch`, which persists a task to the backlog instead
+  of offering it to a waiting poller. A `buggify.Fires` branch must only make legal but
+  unlikely states more likely, never produce one that cannot happen in production.
+- Dynamic config settings marked with `dynamicconfig.Buggifiable` (25% of them) get one of the
+  alternative values that their owner listed, such as a batch size of 1, for the whole run.
+
+Persistence keys, response keys and health checks are never buggified (see
+`buggify.Defaults` in `common/testing/buggify`), nor are the failpoints of any method or request,
+whose names (`grpc-any:request` and so on) don't match `grpc:*` or `http:*`. A failpoint registered
+for a key, by a test or a rule, takes precedence over BUGGIFY even while it
+is disabled, and so does an explicitly set dynamic config value over a randomized one. For gRPC and
+HTTP requests, a failpoint registered for any method or request also does: for example
+`InjectRequestFault` keeps BUGGIFY away from the gRPC requests of the test's namespace.
+
+Enable it on a server with failpoints enabled with one of:
+
+- `FAILPOINT_BUGGIFY_SEED=N` in the environment of the server process, read with
+  `buggify.ConfigFromEnv` (`go.temporal.io/testx/failpoint/buggify`). `FAILPOINT_BUGGIFY_SEED=random` picks a seed, which the server
+  logs. Under gomad, `FAILPOINT_BUGGIFY_SEED=gomad` derives the seed from `GOMADSEED` (which
+  alone doesn't enable BUGGIFY), and `FAILPOINT_GOMAD_EVENTS=1` prints a `GOMAD failpoint ...`
+  line per activation decision and per execution that fired. `FAILPOINT_BUGGIFY_ACTIVATION` and
+  `FAILPOINT_BUGGIFY_FIRE` replace the probabilities of hand-placed keys (default 0.25); the
+  per-prefix defaults and the setting below apply on top.
+- The `testing.buggify` dynamic config setting, which also overrides the defaults:
+
+```yaml
+testing.buggify:
+  - value:
+      seed: 42                    # 0: FAILPOINT_BUGGIFY_SEED.
+      disabled: false             # true turns BUGGIFY off, also with a seed in the environment.
+      prefixes:                   # Replace or add per-prefix probabilities and errors.
+        - {prefix: "grpc:", activation: 0.2, fire: 0.05, error: Unavailable}
+        - {prefix: "dynamicconfig:", activation: 0}  # Don't randomize settings.
+      exclude: ["persistence:*", "grpc-response:*", "http-response:*"]  # Replaces the defaults.
+```
+
+The server logs the seed (`BUGGIFY enabled; reproduce with FAILPOINT_BUGGIFY_SEED=N`), every key it
+activates, and every randomized setting. Tests can read, per registry, each key name that BUGGIFY saw with its
+activation, hits and fires from `buggify.For(registry).FallbackStats()`, for example to check that a
+run reached the keys it meant to stress. An invalid setting or
+BUGGIFY environment variable stops the server. Settings are randomized once, when the server starts. To
+reproduce a run, start the server with the logged seed and the same `testing.buggify` overrides.
+
+A functional test of BUGGIFY itself sets `buggify.Setting` with `testcore.WithDynamicConfig`, which
+gives it a dedicated cluster, since BUGGIFY applies to the whole cluster (see `TestBuggify`).
+`testcore.FailpointRegistry(env)` lets it subscribe to the BUGGIFY events. Unit tests that run
+with BUGGIFY and need exact behavior call `buggify.For(registry).Suppress()`.
 
 ### softassert package
 

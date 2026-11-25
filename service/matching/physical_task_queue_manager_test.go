@@ -31,11 +31,13 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1317,5 +1319,82 @@ func userDataWithDeploymentVersion(deploymentName, buildID string) *persistences
 				},
 			},
 		},
+	}
+}
+
+// TestBuggifySkipSyncMatch is not parallel, since AllocsPerRun doesn't allow it.
+func TestBuggifySkipSyncMatch(t *testing.T) {
+	// Without failpoints enabled, or with an idle registry, the call site costs a nil check or an
+	// atomic load, and allocates nothing.
+	for name, source := range map[string]*failpoints.Source{
+		"nil source":      nil,
+		"disabled source": failpoints.NewSource(failpoints.Decision{}),
+		"idle source":     failpoints.NewEnabledSource(),
+	} {
+		require.False(t, buggifySkipSyncMatch(source, "ns-id"), name)
+		allocs := testing.AllocsPerRun(100, func() { _ = buggifySkipSyncMatch(source, "ns-id") })
+		require.Zero(t, allocs, name)
+	}
+
+	forced := failpoints.NewEnabledSource()
+	key := failpoints.MatchingSkipSyncMatch.ForScope("ns-id")
+	fp := failpoint.NewFailpoint[error](key)
+	fp.On(failpoint.Always)
+	forced.Failpoints().Set(key, fp)
+	require.True(t, buggifySkipSyncMatch(forced, "ns-id"))
+	require.False(t, buggifySkipSyncMatch(forced, "other-ns-id"))
+}
+
+func BenchmarkBuggifySkipSyncMatch_Off(b *testing.B) {
+	for name, source := range map[string]*failpoints.Source{
+		"disabled": failpoints.NewSource(failpoints.Decision{}),
+		"idle":     failpoints.NewEnabledSource(),
+	} {
+		b.Run(name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = buggifySkipSyncMatch(source, "ns-id")
+			}
+		})
+	}
+}
+
+// TestPriForwarder_CheckpointForwardTask is not parallel, since AllocsPerRun doesn't allow it.
+func TestPriForwarder_CheckpointForwardTask(t *testing.T) {
+	// Without failpoints enabled, or with an idle registry, the call site costs a nil check or an
+	// atomic load, and allocates nothing.
+	for name, source := range map[string]*failpoints.Source{
+		"nil source":      nil,
+		"disabled source": failpoints.NewSource(failpoints.Decision{}),
+		"idle source":     failpoints.NewEnabledSource(),
+	} {
+		fwdr := &priForwarder{failpointSource: source}
+		require.NoError(t, fwdr.checkpointForwardTask("ns-id"), name)
+		allocs := testing.AllocsPerRun(100, func() { _ = fwdr.checkpointForwardTask("ns-id") })
+		require.Zero(t, allocs, name)
+	}
+
+	source := failpoints.NewEnabledSource()
+	key := failpoints.MatchingForwardTask.ForScope("ns-id")
+	fp := failpoint.NewFailpoint[error](key)
+	fp.Return(errors.New("forward failpoint"), failpoint.Always)
+	source.Failpoints().Set(key, fp)
+	fwdr := &priForwarder{failpointSource: source}
+	require.ErrorContains(t, fwdr.checkpointForwardTask("ns-id"), "forward failpoint")
+	require.NoError(t, fwdr.checkpointForwardTask("other-ns-id"))
+}
+
+func BenchmarkPriForwarder_CheckpointForwardTask_Off(b *testing.B) {
+	for name, source := range map[string]*failpoints.Source{
+		"disabled": failpoints.NewSource(failpoints.Decision{}),
+		"idle":     failpoints.NewEnabledSource(),
+	} {
+		fwdr := &priForwarder{failpointSource: source}
+		b.Run(name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = fwdr.checkpointForwardTask("ns-id")
+			}
+		})
 	}
 }

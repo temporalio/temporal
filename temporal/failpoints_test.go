@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/buggify"
 	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
@@ -144,15 +145,21 @@ func TestFailpointsOff(t *testing.T) {
 			factory, created := newDataStoreFactory(source)
 			require.Same(t, created, factory)
 
-			// No rules: the module ignores even invalid settings.
+			// No rules, no BUGGIFY and no randomized knobs: the modules ignore even invalid settings.
 			client := dynamicconfig.NewMemoryClient()
 			client.OverrideSetting(failpointrules.Setting, []any{map[string]any{"key": "on", "action": "Of"}})
+			client.OverrideSetting(buggify.Setting, map[string]any{"sead": 5})
+			wrapped, startup, err := buggify.WrapDynamicConfigClient(client, log.NewNoopLogger(), source.Enabled())
+			require.NoError(t, err)
+			require.Same(t, client, wrapped)
+			require.Equal(t, buggify.Startup{}, startup)
 			collection := dynamicconfig.NewCollection(client, log.NewNoopLogger())
 			collection.Start()
 			t.Cleanup(collection.Stop)
 			app := fxtest.New(t,
 				fx.Supply(source, collection, fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger)))),
 				failpointrules.Module,
+				buggify.Module,
 				failpointrules.ReleaseModule,
 			)
 			app.RequireStart()
@@ -187,6 +194,9 @@ testing.failpointRules:
       - key: on
         action: Of
         trigger: {1: 2}
+testing.buggify:
+  - value:
+      sead: 5
 `), 0o600))
 	done := make(chan any)
 	t.Cleanup(func() { close(done) })
@@ -195,16 +205,20 @@ testing.failpointRules:
 	require.NoError(t, err)
 
 	source := resolveFailpoints(false, lookupEnv(nil), logger, metrics.NoopMetricsHandler)
-	collection := dynamicconfig.NewCollection(client, logger)
+	wrapped, _, err := buggify.WrapDynamicConfigClient(client, logger, source.Enabled())
+	require.NoError(t, err)
+	collection := dynamicconfig.NewCollection(wrapped, logger)
 	collection.Start()
 	t.Cleanup(collection.Stop)
-	// The converter runs, without failing, whenever the setting is read.
+	// The converters run, without failing, whenever the settings are read.
 	require.NotPanics(t, func() {
 		_ = failpointrules.Setting.Get(collection)()
+		_ = buggify.Setting.Get(collection)()
 	})
 	app := fxtest.New(t,
 		fx.Supply(source, collection, fx.Annotate(logger, fx.As(new(log.Logger)))),
 		failpointrules.Module,
+		buggify.Module,
 		failpointrules.ReleaseModule,
 	)
 	app.RequireStart()
