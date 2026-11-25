@@ -1,8 +1,6 @@
 package grpcfaultstest
 
 import (
-	"strings"
-
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/buggify"
@@ -25,18 +23,6 @@ func NewGenerator(source *failpoints.Source, namespaces faultinjectiontest.Names
 		Response:    failpoint.GRPCResponseKey,
 		AnyRequest:  failpoint.AnyGRPCKey,
 		AnyResponse: failpoint.AnyGRPCResponseKey,
-		Exempt:      isFailpointService,
 		NoBuggify:   !buggify.InjectsInboundGRPCErrors(service),
 	}, namespaces)
-}
-
-// FailpointServicePrefix is the prefix of the full method names of the FailpointService. It is a
-// constant rather than derived from failpointpb, so that servers don't link the
-// service in this package.
-const FailpointServicePrefix = "/temporal.testx.failpoint.v1.FailpointService/"
-
-// isFailpointService reports whether fullMethod belongs to the FailpointService. Its methods run no
-// failpoints, so a failpoint for every method doesn't block the requests that remove it.
-func isFailpointService(fullMethod string) bool {
-	return strings.HasPrefix(fullMethod, FailpointServicePrefix)
 }

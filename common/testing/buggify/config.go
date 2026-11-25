@@ -7,7 +7,6 @@ package buggify
 import (
 	"fmt"
 
-	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/primitives"
 	_ "go.temporal.io/server/common/testing/failpointerrors" // the errors that the defaults name
 	"go.temporal.io/server/common/testing/failpointrules"
@@ -44,8 +43,8 @@ type Startup struct {
 // FoundationDB's probabilities, and only fire at fpbuggify.Fires call sites. Keys derived from
 // gRPC methods and outgoing HTTP requests, of which there are hundreds, are activated and fire
 // much less often, and fail the request before it is handled with Unavailable, which callers
-// retry. Persistence keys (out of scope for now), response keys (the handler already ran), the
-// FailpointService and health checks are excluded. The failpoints of any gRPC method or HTTP
+// retry. Persistence keys (out of scope for now), response keys (the handler already ran) and
+// health checks are excluded. The failpoints of any gRPC method or HTTP
 // request (failpoint.AnyGRPCKey and the others) don't match these prefixes, and their adapters
 // never buggify them.
 func Defaults() fpbuggify.Config {
@@ -60,7 +59,6 @@ func Defaults() fpbuggify.Config {
 			"persistence:*",
 			"grpc-response:*",
 			"http-response:*",
-			"grpc:" + api.FailpointServicePrefix + "*",
 			"grpc:/grpc.health.v1.Health/*",
 		},
 	}

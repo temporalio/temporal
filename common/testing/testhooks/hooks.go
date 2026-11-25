@@ -9,7 +9,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	testxhooks "go.temporal.io/testx/testhooks"
 	"go.uber.org/fx"
@@ -52,10 +51,6 @@ var (
 	// NamespaceReplicationBeforeLocalCommit injects a test failure after the
 	// metadata write succeeds but before the CHASM component commit begins.
 	NamespaceReplicationBeforeLocalCommit = testxhooks.NewKey[func(context.Context) error, namespace.Name]()
-	// FailpointFanOutServices limits the services that a frontend forwards failpoint requests to.
-	// Test clusters whose static membership lists services that they don't start set it to the
-	// services they start.
-	FailpointFanOutServices = testxhooks.NewGlobalKey[[]primitives.ServiceName]()
 )
 
 const (

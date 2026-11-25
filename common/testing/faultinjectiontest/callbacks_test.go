@@ -8,10 +8,6 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/testx/failpoint"
-	"go.temporal.io/testx/failpoint/failpointgrpc"
-	"go.temporal.io/testx/failpoint/failpointpb"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var callbackKey = failpoint.KeyFromName("callback", "namespace-id")
@@ -180,15 +176,4 @@ func TestAddCallback_OwnedFailpoint(t *testing.T) {
 	t.Cleanup(remove)
 	fp := registry.Get(callbackKey)
 	require.Equal(t, faultinjectiontest.CallbackOwner, fp.(*failpoint.Failpoint[error]).Owner())
-
-	// The FailpointService neither reconfigures nor removes it.
-	server := failpointgrpc.NewServer(registry)
-	_, err = server.InjectReturn(t.Context(), &failpointpb.InjectReturnRequest{Key: callbackKey.Name(), Scope: callbackKey.Scope()})
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
-	_, err = server.DisableFailpoint(t.Context(), &failpointpb.DisableFailpointRequest{Key: callbackKey.Name(), Scope: callbackKey.Scope()})
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
-	_, err = server.DisableAllFailpoints(t.Context(), &failpointpb.DisableAllFailpointsRequest{})
-	require.NoError(t, err)
-	require.Same(t, fp, registry.Get(callbackKey))
-	require.True(t, fp.(*failpoint.Failpoint[error]).Info().Enabled)
 }

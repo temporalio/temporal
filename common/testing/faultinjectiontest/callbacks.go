@@ -31,7 +31,7 @@ type callback struct {
 }
 
 // CallbackOwner is the Owner of the failpoints that AddCallback registers, so that other code, such
-// as the FailpointService, neither reconfigures nor removes them.
+// as rules, neither reconfigures nor removes them.
 const CallbackOwner = "fault injection callbacks"
 
 // AddCallback adds fn to the callbacks of the error failpoint for key in registry, so that several

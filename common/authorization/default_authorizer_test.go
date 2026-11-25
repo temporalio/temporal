@@ -67,9 +67,6 @@ var (
 		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
 		Namespace: testNamespace,
 	}
-	targetFailpointAPI = CallTarget{
-		APIName: "/temporal.testx.failpoint.v1.FailpointService/InjectReturn",
-	}
 	targetAdminAPI = CallTarget{
 		APIName:   "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes",
 		Namespace: testNamespace,
@@ -111,13 +108,11 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 		// SystemAdmin is allowed on everything
 		{"SystemAdminOnFooBar", claimsSystemAdmin, targetNamespaceWriteBar, DecisionAllow},
 		{"SystemAdminOnAdminAPI", claimsSystemAdmin, targetAdminAPI, DecisionAllow},
-		{"SystemAdminOnFailpointAPI", claimsSystemAdmin, targetFailpointAPI, DecisionAllow},
 		{"SystemAdminOnStartWorkflow", claimsSystemAdmin, targetStartWorkflow, DecisionAllow},
 
 		// SystemWriter is allowed on all read only APIs and non-admin APIs on every namespaces
 		{"SystemWriterOnFooBar", claimsSystemWriter, targetNamespaceWriteBar, DecisionAllow},
 		{"SystemWriterOnAdminAPI", claimsSystemWriter, targetAdminAPI, DecisionDeny},
-		{"SystemWriterOnFailpointAPI", claimsSystemWriter, targetFailpointAPI, DecisionDeny},
 		{"SystemWriterOnStartWorkflow", claimsSystemWriter, targetStartWorkflow, DecisionAllow},
 
 		// SystemReader is allowed on all read only APIs and blocked
@@ -127,7 +122,6 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 
 		// NamespaceAdmin is allowed on admin service to their own namespaces (test-namespace)
 		{"NamespaceAdminOnAdminAPI", claimsNamespaceAdmin, targetAdminAPI, DecisionDeny},
-		{"NamespaceAdminOnFailpointAPI", claimsNamespaceAdmin, targetFailpointAPI, DecisionDeny},
 		{"NamespaceAdminOnStartWorkflow", claimsNamespaceAdmin, targetStartWorkflow, DecisionAllow},
 		{"NamespaceAdminOnFooBar", claimsNamespaceAdmin, targetNamespaceWriteBar, DecisionDeny}, // namespace mismatch
 
@@ -149,7 +143,6 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 
 		// healthcheck allowed to everyone
 		{"RoleNoneOnGetSystemInfo", claimsNone, targetGetSystemInfo, DecisionAllow},
-		{"RoleNoneOnFailpointAPI", claimsNone, targetFailpointAPI, DecisionDeny},
 		{"NamespaceReaderOnGetSystemInfo", claimsNamespaceReader, targetGetSystemInfo, DecisionAllow},
 		{"RoleNoneOnHealthCheck", claimsNone, targetGrpcHealthCheck, DecisionAllow},
 		{"NamespaceReaderOnHealthCheck", claimsNamespaceReader, targetGrpcHealthCheck, DecisionAllow},

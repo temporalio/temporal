@@ -294,11 +294,6 @@ func (c *temporalImpl) Start() error {
 	}
 	options = append(options, c.baseServerOptions...)
 
-	// The static host map lists every service, even the ones this cluster doesn't start, so tell
-	// the frontend which services to forward failpoint requests to. It stays set for the lifetime
-	// of the cluster.
-	_ = testhooks.Set(c.testHooks, testhooks.FailpointFanOutServices, services, testhooks.GlobalScope)
-
 	// Capture Chasm runtime handles while the server graph is constructed.
 	cleanupHooks := testhooks.Set(
 		c.testHooks,

@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/failpoints"
-	"go.temporal.io/server/common/testing/failpointserver"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -160,9 +159,6 @@ var Module = fx.Options(
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	// Frontends serve the fan-out, so one call configures the failpoints of the whole cluster.
-	// After ServiceLifetimeHooks, so failpoint waits are cancelled before the gRPC server drains.
-	failpointserver.FanOutModule,
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
 	chasmnexus.FrontendModule,

@@ -64,9 +64,6 @@ const (
 	MatchingServicePrefix = "/temporal.server.api.matchingservice.v1.MatchingService/"
 	// Technically not a gRPC service, but still using this format for metadata.
 	NexusServicePrefix = "/temporal.api.nexusservice.v1.NexusService/"
-	// FailpointServicePrefix is the test-only service that configures failpoints. Servers only
-	// serve it if the startup switch enabled failpoints.
-	FailpointServicePrefix = "/temporal.testx.failpoint.v1.FailpointService/"
 )
 
 var (
@@ -222,7 +219,7 @@ var (
 )
 
 // GetMethodMetadata gets metadata for a given API method in one of the services exported by
-// frontend (WorkflowService, OperatorService, AdminService, and FailpointService with failpoints enabled).
+// frontend (WorkflowService, OperatorService, AdminService).
 func GetMethodMetadata(fullApiName string) MethodMetadata {
 	switch {
 	case strings.HasPrefix(fullApiName, WorkflowServicePrefix):
@@ -233,10 +230,6 @@ func GetMethodMetadata(fullApiName string) MethodMetadata {
 		return nexusServiceMetadata[MethodName(fullApiName)]
 	case strings.HasPrefix(fullApiName, AdminServicePrefix):
 		return MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin}
-	case strings.HasPrefix(fullApiName, FailpointServicePrefix):
-		// Failpoints can fail or stall any request of the cluster, so only system admins may
-		// configure them. Its requests carry a namespace ID, not a Namespace.
-		return MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin, Polling: PollingNone}
 	default:
 		return MethodMetadata{Scope: ScopeUnknown, Access: AccessUnknown}
 	}

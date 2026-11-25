@@ -29,7 +29,7 @@ func resolveFailpoints(
 	if decision.Enabled {
 		enabled = 1
 		logger.Warn("Failpoints are enabled: tests and tools can make this server fail, stall or return errors. "+
-			"Without an authorizer or TLS anyone who can reach a server port can change failpoints; use only on isolated test clusters.",
+			"This is not meant for production use.",
 			tag.NewStringTag("failpoints-enabled-by", decision.Reason))
 	}
 	metrics.FailpointsEnabled.With(metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))).Record(enabled)

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/testx/failpoint/failpointpb"
 	expmaps "golang.org/x/exp/maps"
 )
 
@@ -85,12 +84,6 @@ func TestGetMethodMetadata(t *testing.T) {
 	assert.Equal(t, ScopeCluster, md.Scope)
 	assert.Equal(t, AccessAdmin, md.Access)
 
-	// all FailpointService is cluster/admin
-	for _, method := range failpointpb.FailpointService_ServiceDesc.Methods {
-		md = GetMethodMetadata(FailpointServicePrefix + method.MethodName)
-		require.Equal(t, MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin, Polling: PollingNone}, md, method.MethodName)
-	}
-
 	md = GetMethodMetadata("/OtherService/Method1")
 	assert.Equal(t, ScopeUnknown, md.Scope)
 	assert.Equal(t, AccessUnknown, md.Access)
@@ -107,10 +100,6 @@ func getMethodNames(tp reflect.Type) []string {
 		}
 	}
 	return out
-}
-
-func TestFailpointServicePrefix(t *testing.T) {
-	require.Equal(t, FailpointServicePrefix, "/"+failpointpb.FailpointService_ServiceDesc.ServiceName+"/")
 }
 
 func TestServiceName(t *testing.T) {

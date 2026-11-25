@@ -2,10 +2,6 @@ package testcore
 
 import (
 	"go.temporal.io/testx/failpoint"
-	"go.temporal.io/testx/failpoint/failpointpb"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 // InjectFailpoint registers a failpoint for key in the test cluster, scoped to the test's
@@ -37,29 +33,13 @@ func injectFailpoint[T any](env *TestEnv, key failpoint.Key) *failpoint.Failpoin
 	fp := failpoint.NewFailpoint[T](key)
 	registry.Set(key, fp)
 	env.t.Cleanup(func() {
-		// Only remove this failpoint, not one that replaced it, such as through FailpointClient.
-		// Remove it before disabling it, as the FailpointService does, so a concurrent injection
+		// Only remove this failpoint, not one that replaced it, such as a rule of dynamic config.
+		// Remove it before disabling it, so a concurrent injection
 		// either configures it before it is disabled, or configures a new one.
 		registry.CompareAndDelete(key, fp)
 		fp.Disable()
 	})
 	return fp
-}
-
-// FailpointClient returns a FailpointService client for the frontend of the test cluster, the way
-// a test or tool outside the cluster's process configures failpoints. The frontend fans each
-// request out to every host of the cluster. The connection is closed when the test ends.
-func FailpointClient(env *TestEnv) failpointpb.FailpointServiceClient {
-	creds := insecure.NewCredentials()
-	if provider := env.cluster.host.tlsConfigProvider; provider != nil && provider.FrontendClientConfig != nil {
-		creds = credentials.NewTLS(provider.FrontendClientConfig)
-	}
-	conn, err := grpc.NewClient(env.FrontendGRPCAddress(), grpc.WithTransportCredentials(creds))
-	if err != nil {
-		env.t.Fatalf("FailpointClient: %v", err)
-	}
-	env.t.Cleanup(func() { _ = conn.Close() })
-	return failpointpb.NewFailpointServiceClient(conn)
 }
 
 // FailpointRegistry returns the failpoint registry of the test cluster, for example to subscribe

@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/buggify"
-	"go.temporal.io/testx/failpoint/failpointpb"
 	"google.golang.org/grpc"
 )
 
@@ -193,30 +192,4 @@ func TestUnaryServerInterceptor_AfterHandler(t *testing.T) {
 			}, results)
 		})
 	}
-}
-
-func TestUnaryServerInterceptor_FailpointServiceExempt(t *testing.T) {
-	t.Parallel()
-
-	source := failpoints.NewEnabledSource()
-	injectedErr := errors.New("injected")
-	method := failpointpb.FailpointService_DisableAllFailpoints_FullMethodName
-	for _, key := range []failpoint.Key{
-		failpoint.AnyGRPCKey,
-		failpoint.AnyGRPCResponseKey,
-		failpoint.GRPCKey(method),
-		failpoint.GRPCResponseKey(method),
-	} {
-		setFailpoint(source, key, func(fp *failpoint.Failpoint[error]) { fp.Return(injectedErr, failpoint.Always) })
-	}
-	interceptor := newInterceptor(t, source)
-	handler := func(context.Context, any) (any, error) { return "response", nil }
-
-	response, err := interceptor(context.Background(), &failpointpb.DisableAllFailpointsRequest{}, &grpc.UnaryServerInfo{FullMethod: method}, handler)
-	require.NoError(t, err)
-	require.Equal(t, "response", response)
-
-	// Other methods still fail.
-	_, err = interceptor(context.Background(), "request", &grpc.UnaryServerInfo{FullMethod: fullMethod}, handler)
-	require.ErrorIs(t, err, injectedErr)
 }

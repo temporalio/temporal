@@ -22,13 +22,11 @@ import (
 	"go.temporal.io/server/common/testing/buggify"
 	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/failpoints"
-	"go.temporal.io/server/common/testing/failpointserver"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
-	"google.golang.org/grpc"
 )
 
 func lookupEnv(env map[string]string) func(string) (string, bool) {
@@ -115,7 +113,7 @@ func TestResolveFailpoints_RequiresConfigAndEnv(t *testing.T) {
 }
 
 // TestFailpointsOff checks that with the switch off nothing of the failpoints is installed: no
-// registry, no fault generators, no persistence wrapper, no FailpointService, and no rules or
+// registry, no fault generators, no persistence wrapper, and no rules or
 // BUGGIFY.
 func TestFailpointsOff(t *testing.T) {
 	t.Parallel()
@@ -146,11 +144,6 @@ func TestFailpointsOff(t *testing.T) {
 			// The persistence factory is not wrapped for failpoints.
 			factory, created := newDataStoreFactory(source)
 			require.Same(t, created, factory)
-
-			// No FailpointService.
-			server := grpc.NewServer()
-			failpointserver.Register(server, source, fxtest.NewLifecycle(t))
-			require.Empty(t, server.GetServiceInfo())
 
 			// No rules, no BUGGIFY and no randomized knobs: the modules ignore even invalid settings.
 			client := dynamicconfig.NewMemoryClient()
@@ -187,9 +180,6 @@ func TestFailpointsOn(t *testing.T) {
 	require.NotNil(t, httpfaultstest.NewGenerator(source))
 	factory, created := newDataStoreFactory(source)
 	require.NotSame(t, created, factory)
-	server := grpc.NewServer()
-	failpointserver.Register(server, source, fxtest.NewLifecycle(t))
-	require.Contains(t, server.GetServiceInfo(), "temporal.testx.failpoint.v1.FailpointService")
 }
 
 // TestFailpointsOff_InvalidDynamicConfigFile loads a dynamic config file with invalid failpoint

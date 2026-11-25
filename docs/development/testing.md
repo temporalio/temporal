@@ -323,14 +323,9 @@ image. A server process only installs them if both of these are set, each read o
 
 Neither is enough alone, and dynamic config cannot enable failpoints. With the switch off, nothing
 is installed: there is no failpoint registry, no gRPC fault interceptor, HTTP fault wrapper or
-persistence failpoint injector, the `FailpointService` is not registered, and the rules, BUGGIFY and
+persistence failpoint injector, and the rules, BUGGIFY and
 knob randomization (`testing.failpointRules`, `testing.buggify`) do nothing. Call sites in server
 code cost a nil check. The `test_dep` tag is not involved.
-
-The `FailpointService` follows the cluster's authorizer like every admin API (system admins only).
-With the default allow-all authorizer and no internode or frontend TLS, anyone who can reach a
-server port can change failpoints, as with the other admin APIs, so enable failpoints only on test
-clusters with authorization or network isolation.
 
 When the switch is on, the server logs a warning that names the inputs of the decision, and
 the `failpoints_enabled` gauge is 1 (0 otherwise). Test clusters (`testcore`) run the normal server
@@ -387,9 +382,7 @@ key:
   `failpoint.AnyHTTPResponseKey` fire for every method or request, if the failpoint of the method
   or request did not fire with any action (a pause or a callback that returns nil also counts). A
   `CallWith` callback receives the request before the handler, and a `grpcfaults.Result` or
-  `httpfaults.Result` after it. The methods of the `FailpointService` run no gRPC failpoints, so a
-  failpoint for every method can't block the requests that remove it.
-- `failpoints.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution")` fires before a
+  `httpfaults.Result` after it. - `failpoints.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution")` fires before a
   persistence store method.
 
 gRPC, HTTP, and persistence failpoints are scoped to the namespace ID of the request when it has
@@ -412,30 +405,9 @@ Inject failpoints for these methods with `testcore.InjectGlobalFailpoint`, which
 dedicated cluster. `common/persistence/faultinjection/namespace.go` maps each request type to its
 namespace.
 
-With failpoints enabled, every server process also serves the `FailpointService` gRPC API
-(`common/testx/proto`) on its gRPC port, so tests and tools outside the process can configure
-failpoints by key name. Only system admins may call it on a frontend. History, matching, and
-worker serve their own failpoints. Frontends fan each request out: they apply it locally and
-forward it to every member of the frontend, history, matching, and worker services, so one call
-toggles a failpoint in the whole cluster. Services that share a registry, such as the services of
-a test cluster, get each request once.
-
-- Inject and disable requests fail if any host fails, but the hosts that succeeded keep the
-  change, so a failed request can be partially applied.
-- `WaitForBlock` succeeds as soon as any host reports that an execution reached the block. It
-  fails only if every host fails, such as with `NotFound` or `FailedPrecondition` where the
-  failpoint is not registered or not configured to block.
-- `ListFailpoints` reports the hosts that serve the registry of each failpoint.
-
-`testcore.FailpointClient(env)` returns a client for the test cluster's frontend:
-
-```go
-client := testcore.FailpointClient(env)
-_, err := client.InjectReturn(ctx, &failpointpb.InjectReturnRequest{
-	Key:       failpoint.GRPCKey(historyservice.HistoryService_StartWorkflowExecution_FullMethodName).Name(),
-	ErrorName: "InvalidArgument", // A name from the failpoint error catalog.
-})
-```
+The server does not serve a gRPC API to configure failpoints. Tests configure the failpoints of
+their cluster in process (`testcore.InjectFailpoint`), and a server or test cluster is configured
+from outside through the `testing.failpointRules` dynamic config setting, see below.
 
 #### Failpoint rules in dynamic config
 
@@ -463,9 +435,8 @@ testing.failpointRules:
 failpoint fire without a value, for call sites that check `failpoint.Active`. Changing the setting
 creates, reconfigures and removes the failpoints of the rules; a rule that didn't change keeps its
 failpoint's state. Rules and other injections stay separate: if a rule names the key of a failpoint
-that a test or the `FailpointService` registered, the server logs an error and keeps the previous
-rules, and the `FailpointService` and `testcore.InjectFailpoint` refuse to change a failpoint of a
-rule. An invalid `testing.failpointRules` value stops the server: it fails to start, or exits when
+that a test registered, the server logs an error and keeps the previous rules, and
+`testcore.InjectFailpoint` refuses to change a failpoint of a rule. An invalid `testing.failpointRules` value stops the server: it fails to start, or exits when
 the value changes. A dynamic config file with a non-string map key in a rule is rejected as a
 whole by the file loader, which keeps the previous dynamic config and logs an error. Functional
 tests set the setting with `env.OverrideDynamicConfig(failpointrules.Setting, ...)` on a dedicated
@@ -499,10 +470,10 @@ When an activated key fires:
 - Dynamic config settings marked with `dynamicconfig.Buggifiable` (25% of them) get one of the
   alternative values that their owner listed, such as a batch size of 1, for the whole run.
 
-Persistence keys, response keys, the `FailpointService` and health checks are never buggified (see
+Persistence keys, response keys and health checks are never buggified (see
 `buggify.Defaults` in `common/testing/buggify`), nor are the failpoints of any method or request,
 whose names (`grpc-any:request` and so on) don't match `grpc:*` or `http:*`. A failpoint registered
-for a key, by a test, a rule or the `FailpointService`, takes precedence over BUGGIFY even while it
+for a key, by a test or a rule, takes precedence over BUGGIFY even while it
 is disabled, and so does an explicitly set dynamic config value over a randomized one. For gRPC and
 HTTP requests, a failpoint registered for any method or request also does: for example
 `InjectRequestFault` keeps BUGGIFY away from the gRPC requests of the test's namespace.
@@ -530,11 +501,9 @@ testing.buggify:
 ```
 
 The server logs the seed (`BUGGIFY enabled; reproduce with FAILPOINT_BUGGIFY_SEED=N`), every key it
-activates, and every randomized setting. `ListFailpoints` of the `FailpointService` reports, per
-registry, each key name that BUGGIFY saw with its activation, hits and fires, for example to check
-that a run reached the keys it meant to stress. Activated names come first; the list only takes the
-room that the failpoints leave in a 2 MiB response, and `fallback_keys_omitted` counts the names
-left out. An invalid setting or
+activates, and every randomized setting. Tests can read, per registry, each key name that BUGGIFY saw with its
+activation, hits and fires from `buggify.For(registry).FallbackStats()`, for example to check that a
+run reached the keys it meant to stress. An invalid setting or
 BUGGIFY environment variable stops the server. Settings are randomized once, when the server starts. To
 reproduce a run, start the server with the logged seed and the same `testing.buggify` overrides.
 

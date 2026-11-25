@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/testing/failpointserver"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service"
@@ -119,8 +118,6 @@ var Module = fx.Options(
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	// After ServiceLifetimeHooks, so failpoint waits are cancelled before the gRPC server drains.
-	failpointserver.Module,
 	fx.Invoke(func(
 		chasmEngine chasm.Engine,
 		chasmVisibilityManager chasm.VisibilityManager,

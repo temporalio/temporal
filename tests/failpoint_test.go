@@ -2,7 +2,6 @@ package tests
 
 import (
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,7 +20,6 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/testx/failpoint"
 	fpbuggify "go.temporal.io/testx/failpoint/buggify"
-	"go.temporal.io/testx/failpoint/failpointpb"
 )
 
 func TestFailpoint(t *testing.T) {
@@ -94,65 +92,6 @@ func TestFailpoint(t *testing.T) {
 			require.NoError(t, err)
 		}, 10*time.Second, 100*time.Millisecond)
 	})
-
-	// The services of the test cluster share one failpoint registry, so the frontend applies each
-	// request to it once, and ListFailpoints reports which services serve it. That shows the
-	// frontend reached every service; that each registry is only changed once is covered by the
-	// fan-out's unit tests.
-	t.Run("frontend FailpointService toggles a failpoint for the test namespace", func(t *testing.T) {
-		t.Parallel()
-		env := testcore.NewEnv(t)
-		testFailpointService(t, env, env.NamespaceID().String(), []string{"frontend", "history", "matching"})
-	})
-
-	t.Run("frontend FailpointService toggles a failpoint in the whole cluster", func(t *testing.T) {
-		t.Parallel()
-		// mTLS covers dialing the frontend and internode peers with their TLS configs.
-		env := testcore.NewEnv(t,
-			testcore.WithWorkerService("frontend fans failpoint requests out to the worker"),
-			testcore.WithMTLS(),
-		)
-		testFailpointService(t, env, "", []string{"frontend", "history", "matching", "worker"})
-	})
-}
-
-// testFailpointService fails StartWorkflowExecution in history with a failpoint configured through
-// the frontend's FailpointService, then disables it.
-func testFailpointService(t *testing.T, env *testcore.TestEnv, namespaceID string, wantServices []string) {
-	t.Helper()
-	client := testcore.FailpointClient(env)
-	key := failpoint.GRPCKey(historyservice.HistoryService_StartWorkflowExecution_FullMethodName)
-
-	_, err := client.InjectReturn(testcore.NewContext(), &failpointpb.InjectReturnRequest{
-		Key:          key.Name(),
-		Scope:        namespaceID,
-		ErrorName:    "InvalidArgument",
-		ErrorMessage: "injected",
-	})
-	require.NoError(t, err)
-
-	list, err := client.ListFailpoints(testcore.NewContext(), &failpointpb.ListFailpointsRequest{})
-	require.NoError(t, err)
-	var services []string
-	for _, info := range list.Failpoints {
-		if info.Key != key.Name() || info.Scope != namespaceID {
-			continue // A failpoint of another test on a shared cluster.
-		}
-		for _, host := range info.Hosts {
-			service, _, _ := strings.Cut(host, "/")
-			services = append(services, service)
-		}
-	}
-	require.ElementsMatch(t, wantServices, services)
-
-	_, err = env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowRequest(env, env.Tv()))
-	var invalidArgument *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalidArgument)
-	require.ErrorContains(t, err, "injected")
-
-	_, err = client.DisableFailpoint(testcore.NewContext(), &failpointpb.DisableFailpointRequest{Key: key.Name(), Scope: namespaceID})
-	require.NoError(t, err)
-	mustStartWorkflow(env, env.Tv())
 }
 
 // TestBuggify runs a dedicated cluster with BUGGIFY, since BUGGIFY applies to the whole cluster.
@@ -231,17 +170,15 @@ func TestBuggify(t *testing.T) {
 		require.Less(t, activated, len(activations))
 	})
 
-	t.Run("ListFailpoints reports the BUGGIFY counters of reached keys", func(t *testing.T) {
-		list, err := testcore.FailpointClient(env).ListFailpoints(testcontext.For(t), &failpointpb.ListFailpointsRequest{})
-		require.NoError(t, err)
-		counters := map[string]*failpointpb.FallbackKeyInfo{}
-		for _, info := range list.FallbackKeys {
-			counters[info.Key] = info
+	t.Run("BUGGIFY reports counters of reached keys", func(t *testing.T) {
+		counters := map[string]failpoint.FallbackKeyStats{}
+		for _, st := range fpbuggify.For(registry).FallbackStats() {
+			counters[st.Name] = st
 		}
 		// The first subtest's call fired; the second subtest's calls had a failpoint registered.
-		require.True(t, counters[startKey.Name()].GetActivated())
-		require.Equal(t, int64(1), counters[startKey.Name()].GetHits())
-		require.Equal(t, int64(1), counters[startKey.Name()].GetFires())
-		require.Positive(t, counters[failpoints.MatchingSkipSyncMatch.Name()].GetHits())
+		require.True(t, counters[startKey.Name()].Activated)
+		require.Equal(t, int64(1), counters[startKey.Name()].Hits)
+		require.Equal(t, int64(1), counters[startKey.Name()].Fires)
+		require.Positive(t, counters[failpoints.MatchingSkipSyncMatch.Name()].Hits)
 	})
 }

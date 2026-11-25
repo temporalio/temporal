@@ -184,13 +184,12 @@ func TestDefaults(t *testing.T) {
 	for name, want := range map[string]bool{
 		"matching.skipSyncMatch": true,
 		"grpc:/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution": true,
-		"http:POST /callback": true,
-		"grpc:/temporal.testx.failpoint.v1.FailpointService/InjectReturn":                            false,
-		"grpc:/grpc.health.v1.Health/Check":                                                          false,
+		"http:POST /callback":               true,
+		"grpc:/grpc.health.v1.Health/Check": false,
 		"grpc-response:/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution": false,
-		"http-response:POST /callback":                                                               false,
-		"persistence:ExecutionStore.UpdateWorkflowExecution":                                         false,
-		KnobPrefix + "history.transferTaskBatchSize":                                                 true,
+		"http-response:POST /callback":                       false,
+		"persistence:ExecutionStore.UpdateWorkflowExecution": false,
+		KnobPrefix + "history.transferTaskBatchSize":         true,
 	} {
 		require.Equal(t, want, config.Activated(name), name)
 	}
