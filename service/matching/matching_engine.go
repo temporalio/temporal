@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -927,6 +928,15 @@ func (e *matchingEngineImpl) AddActivityTask(
 }
 
 func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
+	info, err := e.persistedTaskQueueInfo(ctx, partition)
+	if err != nil {
+		return false, err
+	}
+	return info.GetExclusiveWorkerAssignment() != nil, nil
+}
+
+// persistedTaskQueueInfo reads the partition's metadata from persistence without loading it, or nil if it has none.
+func (e *matchingEngineImpl) persistedTaskQueueInfo(ctx context.Context, partition tqid.Partition) (*persistencespb.TaskQueueInfo, error) {
 	queue := UnversionedQueueKey(partition)
 	response, err := e.taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: queue.NamespaceId(),
@@ -934,12 +944,12 @@ func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partit
 		TaskType:    queue.TaskType(),
 	})
 	if _, notFound := errors.AsType[*serviceerror.NotFound](err); notFound {
-		return false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return response.TaskQueueInfo.GetExclusiveWorkerAssignment() != nil, nil
+	return response.TaskQueueInfo, nil
 }
 
 func (e *matchingEngineImpl) GrantEagerDispatch(
@@ -2979,6 +2989,70 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 
 	wasLoaded := e.unloadTaskQueuePartitionByKey(partition, nil, unloadCauseForce)
 	return &matchingservice.ForceUnloadTaskQueuePartitionResponse{WasLoaded: wasLoaded}, nil
+}
+
+// drainExpiredSessionWorker drains the queue of a multi-session worker whose heartbeats stopped.
+func drainExpiredSessionWorker(
+	client matchingservice.MatchingServiceClient,
+	logger log.Logger,
+) func(namespace.ID, *workerpb.WorkerHeartbeat) {
+	return func(nsID namespace.ID, hb *workerpb.WorkerHeartbeat) {
+		// A multi-session worker's queue is named after its instance key.
+		workerQueue := hb.GetWorkerInstanceKey()
+		if hb.GetSessionOptions().GetMultiSession() == nil || workerQueue == "" {
+			return
+		}
+		for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+			ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+			_, err := client.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: nsID.String(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue: hb.GetTaskQueue(), TaskQueueType: taskType,
+					PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: workerQueue},
+				},
+			})
+			cancel()
+			// Known limitation: a failed drain is not retried, so tasks already queued for this worker wait until their
+			// workflow's run timeout. To be addressed in public preview.
+			if err != nil {
+				logger.Warn("Failed to drain the queue of an expired multi-session worker",
+					tag.WorkflowNamespaceID(nsID.String()), tag.TaskQueueName(workerQueue), tag.Error(err))
+			}
+		}
+	}
+}
+
+func (e *matchingEngineImpl) DrainSessionWorkerQueue(
+	ctx context.Context,
+	req *matchingservice.DrainSessionWorkerQueueRequest,
+) (*matchingservice.DrainSessionWorkerQueueResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), req.GetNamespaceId())
+	if partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		return nil, serviceerror.NewInvalidArgument("only a sticky task queue partition can be drained")
+	}
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(req.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	//nolint:forbidigo // a worker's queue holds tasks of many workflows, so this is a namespace-level check
+	if !ns.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
+		return &matchingservice.DrainSessionWorkerQueueResponse{}, nil
+	}
+	// No metadata means nothing was ever queued, and an exclusive worker's tasks wait for its replacement.
+	info, err := e.persistedTaskQueueInfo(ctx, partition)
+	if err != nil {
+		return nil, err
+	}
+	if info == nil || info.GetExclusiveWorkerAssignment() != nil {
+		return &matchingservice.DrainSessionWorkerQueueResponse{}, nil
+	}
+	// An unload at any point stops the drain part-way; the drain is best effort.
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseSessionWorkerQueueDrain)
+	if err != nil {
+		return nil, err
+	}
+	pm.StartSessionWorkerQueueDrain()
+	return &matchingservice.DrainSessionWorkerQueueResponse{}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {

@@ -368,6 +368,18 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) Start() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Start))
 }
 
+// StartSessionWorkerQueueDrain mocks base method.
+func (m *MocktaskQueuePartitionManager) StartSessionWorkerQueueDrain() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StartSessionWorkerQueueDrain")
+}
+
+// StartSessionWorkerQueueDrain indicates an expected call of StartSessionWorkerQueueDrain.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) StartSessionWorkerQueueDrain() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartSessionWorkerQueueDrain", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).StartSessionWorkerQueueDrain))
+}
+
 // Stop mocks base method.
 func (m *MocktaskQueuePartitionManager) Stop(arg0 unloadCause) {
 	m.ctrl.T.Helper()

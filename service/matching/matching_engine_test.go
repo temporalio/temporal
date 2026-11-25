@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
@@ -7651,6 +7653,108 @@ func (s *matchingEngineSuite) TestDescribeStickyTaskQueueStats() {
 		_, err := describe(t.Context(), tv, &taskqueuepb.TaskQueue{Name: partition.RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 		require.ErrorContains(t, err, "root partition or a sticky task queue")
+	})
+}
+
+// TestDrainExpiredSessionWorker tests that only a multi-session worker's expiry drains its workflow and activity queues.
+func TestDrainExpiredSessionWorker(t *testing.T) {
+	t.Parallel()
+	client := matchingservicemock.NewMockMatchingServiceClient(gomock.NewController(t))
+	drain := drainExpiredSessionWorker(client, log.NewNoopLogger())
+
+	drain("ns", &workerpb.WorkerHeartbeat{TaskQueue: "tq"})
+
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		client.EXPECT().DrainSessionWorkerQueue(gomock.Any(), protomock.Eq(&matchingservice.DrainSessionWorkerQueueRequest{
+			NamespaceId: "ns",
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue: "tq", TaskQueueType: taskType,
+				PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: "worker-queue"},
+			},
+		})).Return(&matchingservice.DrainSessionWorkerQueueResponse{}, nil)
+	}
+	drain("ns", &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker-queue", TaskQueue: "tq", SessionOptions: &sessionpb.WorkerSessionOptions{
+		Admission: &sessionpb.WorkerSessionOptions_MultiSession{MultiSession: &sessionpb.MultiSessionOptions{}},
+	}})
+}
+
+/*
+TestDrainSessionWorkerQueue tests draining a dead multi-session worker's sticky queue:
+ 1. A task queued on the worker's sticky queue is handed to History to unbind its workflow, then dropped, and the
+    partition unloads once nothing is left.
+ 2. While the drain runs, new tasks are refused with StickyWorkerUnavailable.
+ 3. A queue that was never persisted is not loaded.
+*/
+func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
+	addTask := func(ctx context.Context, tv *testvars.TestVars, taskType enumspb.TaskQueueType) error {
+		// The exclusive directive skips the bound-worker liveness check; nothing is assigned in persistence.
+		sessionDirective := &taskqueuespb.TaskSessionDirective{
+			BoundWorkerInfo:           &taskqueuespb.BoundWorkerInfo{WorkerQueue: tv.StickyTaskQueue().GetName()},
+			IsExclusiveWorkerAssigned: true,
+		}
+		var err error
+		if taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+			_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+				ScheduledEventId: 7, SessionDirective: sessionDirective,
+			})
+		} else {
+			_, _, err = s.matchingEngine.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+				ScheduledEventId: 7, SessionDirective: sessionDirective,
+			})
+		}
+		return err
+	}
+	stickyPartition := func(tv *testvars.TestVars, taskType enumspb.TaskQueueType) *taskqueuespb.TaskQueuePartition {
+		return &taskqueuespb.TaskQueuePartition{
+			TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: taskType,
+			PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: tv.StickyTaskQueue().GetName()},
+		}
+	}
+	loaded := func(ctx context.Context, tv *testvars.TestVars, taskType enumspb.TaskQueueType) taskQueuePartitionManager {
+		partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+		pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+		s.Require().NoError(err)
+		return pm
+	}
+
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		s.Run(taskType.String(), func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			require.NoError(t, addTask(ctx, tv, taskType))
+
+			release := make(chan struct{})
+			s.mockHistoryClient.EXPECT().UnbindWorkflowFromSessionWorker(gomock.Any(), protomock.Eq(&historyservice.UnbindWorkflowFromSessionWorkerRequest{
+				NamespaceId: tv.NamespaceID().String(), Execution: tv.WorkflowExecution(), WorkerQueue: tv.StickyTaskQueue().GetName(),
+			})).DoAndReturn(func(context.Context, *historyservice.UnbindWorkflowFromSessionWorkerRequest, ...grpc.CallOption) (*historyservice.UnbindWorkflowFromSessionWorkerResponse, error) {
+				<-release
+				return &historyservice.UnbindWorkflowFromSessionWorkerResponse{}, nil
+			})
+
+			_, err := s.matchingEngine.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueuePartition: stickyPartition(tv, taskType),
+			})
+			require.NoError(t, err)
+
+			err = addTask(ctx, tv, taskType)
+			require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+
+			close(release)
+			await.RequireTrue(t, func() bool { return loaded(ctx, tv, taskType) == nil }, 10*time.Second, 50*time.Millisecond)
+		})
+	}
+
+	s.Run("never persisted", func() {
+		t := s.T()
+		tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+		_, err := s.matchingEngine.DrainSessionWorkerQueue(t.Context(), &matchingservice.DrainSessionWorkerQueueRequest{
+			NamespaceId: tv.NamespaceID().String(), TaskQueuePartition: stickyPartition(tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		})
+		require.NoError(t, err)
+		require.Nil(t, loaded(t.Context(), tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 	})
 }
 

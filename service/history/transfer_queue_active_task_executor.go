@@ -366,8 +366,8 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// timeout timer task is already created which will timeout this task if no worker pick it up in 5s anyway.
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
-		// will re-create a new non-sticky task and reset sticky; a workflow bound to a worker keeps its sticky queue
-		// and is re-offered there until Matching reports the worker unavailable.
+		// will re-create a new non-sticky task and reset sticky. A bound workflow's task has no such timer and waits for
+		// its worker or the queue's drain.
 		err = t.pushWorkflowTask(
 			ctx,
 			transferTask,

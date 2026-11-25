@@ -1073,6 +1073,21 @@ func (mr *MockEngineMockRecorder) TerminateWorkflowExecution(ctx, request any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).TerminateWorkflowExecution), ctx, request)
 }
 
+// UnbindWorkflowFromSessionWorker mocks base method.
+func (m *MockEngine) UnbindWorkflowFromSessionWorker(ctx context.Context, request *historyservice.UnbindWorkflowFromSessionWorkerRequest) (*historyservice.UnbindWorkflowFromSessionWorkerResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnbindWorkflowFromSessionWorker", ctx, request)
+	ret0, _ := ret[0].(*historyservice.UnbindWorkflowFromSessionWorkerResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnbindWorkflowFromSessionWorker indicates an expected call of UnbindWorkflowFromSessionWorker.
+func (mr *MockEngineMockRecorder) UnbindWorkflowFromSessionWorker(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnbindWorkflowFromSessionWorker", reflect.TypeOf((*MockEngine)(nil).UnbindWorkflowFromSessionWorker), ctx, request)
+}
+
 // UnpauseActivity mocks base method.
 func (m *MockEngine) UnpauseActivity(ctx context.Context, request *historyservice.UnpauseActivityRequest) (*historyservice.UnpauseActivityResponse, error) {
 	m.ctrl.T.Helper()

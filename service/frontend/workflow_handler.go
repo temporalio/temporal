@@ -3169,6 +3169,28 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 		})
 	}
 
+	// A multi-session worker's queue, named after its instance key, is drained instead, so its workflows move to other
+	// workers; the drain unloads the queue once it is empty. The final heartbeat has removed the worker first.
+	// DrainSessionWorkerQueue returns once the drain has started, so a failure to start fails the shutdown like the
+	// unload below; the drain itself runs in Matching and is best effort.
+	heartbeat := request.GetWorkerHeartbeat()
+	if workerQueue := heartbeat.GetWorkerInstanceKey(); heartbeat.GetSessionOptions().GetMultiSession() != nil && workerQueue != "" {
+		waitGroup.Wait()
+		for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+			_, err := wh.matchingClient.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: namespaceID.String(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue: request.GetTaskQueue(), TaskQueueType: taskType,
+					PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: workerQueue},
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &workflowservice.ShutdownWorkerResponse{}, nil
+	}
+
 	// Unload sticky task queue (required - error fails shutdown)
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
 	_, unloadError := wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -76,11 +77,13 @@ type (
 		// used for non-sticky versioned queues (one for each version)
 		versionedQueues     map[PhysicalTaskQueueVersion]physicalTaskQueueManager
 		versionedQueuesLock sync.RWMutex // locks mutation of versionedQueues
-		userDataManager     userDataManager
-		logger              log.Logger
-		throttledLogger     log.ThrottledLogger
-		matchingClient      matchingservice.MatchingServiceClient
-		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
+		// sessionWorkerQueueDraining is true while this sticky queue of a dead multi-session worker is being drained.
+		sessionWorkerQueueDraining atomic.Bool
+		userDataManager            userDataManager
+		logger                     log.Logger
+		throttledLogger            log.ThrottledLogger
+		matchingClient             matchingservice.MatchingServiceClient
+		metricsHandler             metrics.Handler // namespace/taskqueue tagged metric scope
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
@@ -455,6 +458,13 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	defer pm.sendPartitionCountTrailer(ctx)
 	if err := pm.checkPartitionCounts(ctx, true); err != nil {
 		return "", false, err
+	}
+	// TODO (Shivam): an add that passed this check just before a drain started can commit after the drain found the
+	// backlog empty and unloaded the partition, leaving the task on a queue nobody loads. Re-checking the flag after the
+	// spool closes it.
+	if pm.sessionWorkerQueueDraining.Load() {
+		// The queue's worker is dead: History sends the task to the normal queue instead.
+		return "", false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 	if params.forwardInfo == nil {
 		pm.signalPartitionScaler(ctx)
@@ -2078,6 +2088,25 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	// (including the default queue). We need to ensure we send those tasks back to get
 	// reprocessed (which may end up reloading a new instance of this queue).
 	unloadedDbq.ReprocessRedirectedTasksAfterStop()
+}
+
+// StartSessionWorkerQueueDrain drains this dead multi-session worker's queue unless a drain is running. The partition
+// unloads once drained, and takes tasks again if the drain stops early.
+func (pm *taskQueuePartitionManagerImpl) StartSessionWorkerQueueDrain() {
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return
+	}
+	if !pm.sessionWorkerQueueDraining.CompareAndSwap(false, true) {
+		return
+	}
+	dbq.StartSessionWorkerQueueDrain(func(drained bool) {
+		if drained {
+			pm.unloadFromEngine(unloadCauseSessionWorkerQueueDrained)
+			return
+		}
+		pm.sessionWorkerQueueDraining.Store(false)
+	})
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadFromEngine(unloadCause unloadCause) {

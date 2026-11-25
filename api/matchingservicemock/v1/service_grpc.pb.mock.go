@@ -362,6 +362,26 @@ func (mr *MockMatchingServiceClientMockRecorder) DispatchNexusTask(ctx, in any, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockMatchingServiceClient)(nil).DispatchNexusTask), varargs...)
 }
 
+// DrainSessionWorkerQueue mocks base method.
+func (m *MockMatchingServiceClient) DrainSessionWorkerQueue(ctx context.Context, in *matchingservice.DrainSessionWorkerQueueRequest, opts ...grpc.CallOption) (*matchingservice.DrainSessionWorkerQueueResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DrainSessionWorkerQueue", varargs...)
+	ret0, _ := ret[0].(*matchingservice.DrainSessionWorkerQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DrainSessionWorkerQueue indicates an expected call of DrainSessionWorkerQueue.
+func (mr *MockMatchingServiceClientMockRecorder) DrainSessionWorkerQueue(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainSessionWorkerQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).DrainSessionWorkerQueue), varargs...)
+}
+
 // ForceLoadTaskQueuePartition mocks base method.
 func (m *MockMatchingServiceClient) ForceLoadTaskQueuePartition(ctx context.Context, in *matchingservice.ForceLoadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1164,6 +1184,21 @@ func (m *MockMatchingServiceServer) DispatchNexusTask(arg0 context.Context, arg1
 func (mr *MockMatchingServiceServerMockRecorder) DispatchNexusTask(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockMatchingServiceServer)(nil).DispatchNexusTask), arg0, arg1)
+}
+
+// DrainSessionWorkerQueue mocks base method.
+func (m *MockMatchingServiceServer) DrainSessionWorkerQueue(arg0 context.Context, arg1 *matchingservice.DrainSessionWorkerQueueRequest) (*matchingservice.DrainSessionWorkerQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DrainSessionWorkerQueue", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.DrainSessionWorkerQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DrainSessionWorkerQueue indicates an expected call of DrainSessionWorkerQueue.
+func (mr *MockMatchingServiceServerMockRecorder) DrainSessionWorkerQueue(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainSessionWorkerQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).DrainSessionWorkerQueue), arg0, arg1)
 }
 
 // ForceLoadTaskQueuePartition mocks base method.

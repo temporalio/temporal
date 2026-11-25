@@ -14,6 +14,7 @@ import (
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -39,14 +40,14 @@ type sessionMoveEnv struct {
 	firstRunID string
 }
 
-func newSessionMoveEnv(t *testing.T, workflowTaskTimeout time.Duration) *sessionMoveEnv {
-	return newSessionMoveEnvForNextRun(t, workflowTaskTimeout, nextRunCase{})
+func newSessionMoveEnv(t *testing.T, workflowTaskTimeout time.Duration, opts ...testcore.TestOption) *sessionMoveEnv {
+	return newSessionMoveEnvForNextRun(t, workflowTaskTimeout, nextRunCase{}, opts...)
 }
 
 // newSessionMoveEnvForNextRun is newSessionMoveEnv for a workflow started with the retry policy or cron schedule that
 // nextRun needs.
-func newSessionMoveEnvForNextRun(t *testing.T, workflowTaskTimeout time.Duration, nextRun nextRunCase) *sessionMoveEnv {
-	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true))
+func newSessionMoveEnvForNextRun(t *testing.T, workflowTaskTimeout time.Duration, nextRun nextRunCase, opts ...testcore.TestOption) *sessionMoveEnv {
+	env := testcore.NewEnv(t, append([]testcore.TestOption{testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true)}, opts...)...)
 	tv := env.Tv()
 	started, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
@@ -64,9 +65,10 @@ func (e *sessionMoveEnv) stickyQueue(worker string) *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{Name: e.tv.TaskQueue().GetName() + "-sticky-" + worker, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: e.tv.TaskQueue().GetName()}
 }
 
-// instanceKey is the worker process's instance key, which Matching uses to look up its heartbeats.
+// instanceKey is the worker process's instance key, which Matching uses to look up its heartbeats. A multi-session
+// worker's sticky queue is named after it.
 func (e *sessionMoveEnv) instanceKey(worker string) string {
-	return e.tv.WorkerInstanceKey() + "-" + worker
+	return e.stickyQueue(worker).GetName()
 }
 
 func (e *sessionMoveEnv) stickyAttributes(worker string, scheduleToStart time.Duration) *taskqueuepb.StickyExecutionAttributes {
@@ -203,11 +205,11 @@ func (e *sessionMoveEnv) bindToAWith(stickyScheduleToStart time.Duration, comman
 	require.NoError(e.t, err)
 }
 
-// completeOn completes a workflow task as worker, and checks the latest started event records the binding mutable
-// state holds.
-func (e *sessionMoveEnv) completeOn(worker string, queue *taskqueuepb.TaskQueue, timeout time.Duration) {
+// completeOn completes a workflow task as worker with commands, and checks the latest started event records the binding
+// mutable state holds.
+func (e *sessionMoveEnv) completeOn(worker string, queue *taskqueuepb.TaskQueue, timeout time.Duration, commands ...*commandpb.Command) {
 	err := e.pollWorkflowTask(worker, queue, timeout, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		response := &workflowservice.RespondWorkflowTaskCompletedRequest{}
+		response := &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}
 		if worker != "" {
 			response.StickyAttributes = e.stickyAttributes(worker, time.Second)
 		}
@@ -229,6 +231,43 @@ func (e *sessionMoveEnv) requireNextRunOn(worker string, queue *taskqueuepb.Task
 	err := e.pollWorkflowTask(worker, queue, 10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.NotEqual(e.t, e.firstRunID, task.GetWorkflowExecution().GetRunId(), "expected the next run's task")
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	require.NoError(e.t, err)
+}
+
+// awaitQueuedOn waits until a task is queued on worker's sticky queue of taskType.
+func (e *sessionMoveEnv) awaitQueuedOn(worker string, taskType enumspb.TaskQueueType) {
+	await.Require(e.t.Context(), e.t, func(t *await.T) {
+		response, err := e.env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace: e.env.Namespace().String(), TaskQueue: e.stickyQueue(worker), TaskQueueType: taskType, ReportStats: true,
+		})
+		require.NoError(t, err)
+		require.Positive(t, response.GetStats().GetApproximateBacklogCount())
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// shutDownWorker shuts worker down as an SDK does, which drains its queues.
+func (e *sessionMoveEnv) shutDownWorker(worker string) {
+	_, err := e.env.FrontendClient().ShutdownWorker(e.t.Context(), &workflowservice.ShutdownWorkerRequest{
+		Namespace: e.env.Namespace().String(), StickyTaskQueue: e.stickyQueue(worker).GetName(), Identity: "worker-" + worker,
+		WorkerInstanceKey: e.instanceKey(worker), TaskQueue: e.tv.TaskQueue().GetName(),
+		WorkerHeartbeat: &workerpb.WorkerHeartbeat{
+			WorkerInstanceKey: e.instanceKey(worker), TaskQueue: e.tv.TaskQueue().GetName(), Status: enumspb.WORKER_STATUS_SHUTDOWN,
+			SessionOptions: multiSessionWorkerOptions(e.stickyQueue(worker).GetName()),
+		},
+	})
+	require.NoError(e.t, err)
+}
+
+// recordHeartbeat records worker's last heartbeat as a multi-session worker. With no heartbeat after it, Matching
+// evicts the worker once the registry TTL passes, which drains its queues.
+func (e *sessionMoveEnv) recordHeartbeat(worker string) {
+	_, err := e.env.FrontendClient().RecordWorkerHeartbeat(e.t.Context(), &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace: e.env.Namespace().String(), Identity: "worker-" + worker,
+		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{{
+			WorkerInstanceKey: e.instanceKey(worker), TaskQueue: e.tv.TaskQueue().GetName(), Status: enumspb.WORKER_STATUS_RUNNING,
+			SessionOptions: multiSessionWorkerOptions(e.stickyQueue(worker).GetName()),
+		}},
 	})
 	require.NoError(e.t, err)
 }
@@ -260,8 +299,8 @@ func TestWorkflowSessionMovesWithWorkflowTask(t *testing.T) {
 /*
 TestWorkflowSessionStaysOnBusyWorker tests hard stickiness while the worker is alive:
  1. Worker A binds the session and polls its sticky queue once, so Matching sees it as alive.
- 2. A workflow task waits in A's backlog past its schedule-to-start timeout while B polls the normal queue.
- 3. The timeout re-offers the task to A instead of the normal queue: B gets nothing and A completes it.
+ 2. A workflow task waits in A's backlog while B polls the normal queue.
+ 3. The task never times out to the normal queue: B gets nothing and A completes it.
 */
 func TestWorkflowSessionStaysOnBusyWorker(t *testing.T) {
 	t.Parallel()
@@ -283,14 +322,122 @@ func TestWorkflowSessionStaysOnBusyWorker(t *testing.T) {
 			timedOut = true
 		}
 	}
-	require.True(t, timedOut, "the busy worker's task should have timed out at least once without moving")
+	require.False(t, timedOut, "a bound workflow task has no schedule-to-start timeout")
+}
+
+/*
+TestWorkflowSessionDrainMovesQueuedActivity tests draining a dead worker's queued session activity:
+ 1. Worker A is alive on its sticky activity queue when it binds the session, so the session activity is queued there.
+ 2. A dies with the activity still queued; nothing else would ever move it.
+ 3. A shuts down, or its heartbeats stop until Matching evicts it, which drains its queues: the workflow is unbound and
+    the activity is delivered on the normal queue.
+ 4. A worker without session options starts it; or session worker B starts it, moving the session to B, so the
+    workflow task its completion schedules is delivered on B's sticky queue.
+*/
+func TestWorkflowSessionDrainMovesQueuedActivity(t *testing.T) {
+	t.Parallel()
+	for _, tc := range sessionWorkerStopCases() {
+		for _, pickup := range drainPickupCases() {
+			t.Run(tc.name+"/"+pickup.name, func(t *testing.T) {
+				t.Parallel()
+				e := newSessionMoveEnv(t, 10*time.Second, tc.envOptions...)
+				e.registerStickyActivityPoller("A")
+				e.bindToA(time.Second)
+				e.requireNoActivityOn(e.tv.TaskQueue())
+
+				tc.stop(e, "A")
+
+				if pickup.worker == "" {
+					e.requireSessionActivityOn(e.tv.TaskQueue())
+					return
+				}
+				e.registerStickyPoller(pickup.worker)
+				require.Equal(t, "session-activity", e.completeActivityAs(pickup.worker, e.tv.TaskQueue()).GetActivityId())
+				e.completeOn(pickup.worker, e.stickyQueue(pickup.worker), 10*time.Second)
+			})
+		}
+	}
+}
+
+/*
+TestWorkflowSessionDrainMovesQueuedWorkflowTask tests draining a dead worker's queued workflow task:
+ 1. Worker A binds the session and is alive on its sticky queue, so the next workflow task is queued there.
+ 2. A dies with the task queued; a session workflow task has no schedule-to-start timeout to move it.
+ 3. A shuts down, or its heartbeats stop until Matching evicts it, which drains its queues: the workflow is unbound and
+    the task is delivered on the normal queue.
+ 4. A worker without session options completes it; or session worker B completes it, binding the workflow to B, and
+    schedules a session activity, which is delivered on B's sticky queue.
+*/
+func TestWorkflowSessionDrainMovesQueuedWorkflowTask(t *testing.T) {
+	t.Parallel()
+	for _, tc := range sessionWorkerStopCases() {
+		for _, pickup := range drainPickupCases() {
+			t.Run(tc.name+"/"+pickup.name, func(t *testing.T) {
+				t.Parallel()
+				e := newSessionMoveEnv(t, 10*time.Second, tc.envOptions...)
+				e.bindToAWith(time.Second)
+				e.registerStickyPoller("A")
+				e.signal()
+				e.awaitQueuedOn("A", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+				tc.stop(e, "A")
+
+				if pickup.worker == "" {
+					e.completeOn("", e.tv.TaskQueue(), 30*time.Second)
+					return
+				}
+				e.registerStickyActivityPoller(pickup.worker)
+				e.completeOn(pickup.worker, e.tv.TaskQueue(), 30*time.Second, e.scheduleSessionActivity("session-activity"))
+				e.requireSessionActivityOn(e.stickyQueue(pickup.worker))
+			})
+		}
+	}
+}
+
+// drainPickupCase is a worker that takes a drained task from the normal queue.
+type drainPickupCase struct {
+	name string
+	// worker is the session worker that takes the task, or "" for a worker without session options.
+	worker string
+}
+
+func drainPickupCases() []drainPickupCase {
+	return []drainPickupCase{
+		{name: "worker without session options"},
+		{name: "session worker", worker: "B"},
+	}
+}
+
+// sessionWorkerStopCase is one way a multi-session worker stops, after which Matching drains its queues.
+type sessionWorkerStopCase struct {
+	name string
+	// envOptions configure the test cluster this way of stopping needs.
+	envOptions []testcore.TestOption
+	stop       func(e *sessionMoveEnv, worker string)
+}
+
+func sessionWorkerStopCases() []sessionWorkerStopCase {
+	return []sessionWorkerStopCase{
+		{name: "shutdown", stop: (*sessionMoveEnv).shutDownWorker},
+		{
+			name: "heartbeat expiry",
+			// The registry's eviction loop reads its interval only between runs, so these must be set when Matching
+			// starts, on a dedicated cluster.
+			envOptions: []testcore.TestOption{
+				testcore.WithDynamicConfig(dynamicconfig.MatchingWorkerRegistryEntryTTL, time.Second),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingWorkerRegistryEvictionInterval, time.Second),
+			},
+			stop: (*sessionMoveEnv).recordHeartbeat,
+		},
+	}
 }
 
 /*
 TestWorkflowSessionRecoversWhenNewWorkerCrashesMidTask tests the window between a move and its completion:
  1. B polls its sticky queue once, the session moves from A to B, and B crashes while running the task.
- 2. The retry goes to B's sticky queue with a schedule-to-start timer, because the move already set stickiness.
- 3. Once Matching considers B dead, the retry falls back and worker C takes over the session.
+ 2. The retry goes to B's sticky queue, because the move already set stickiness, and waits there with no
+    schedule-to-start timeout.
+ 3. B's shutdown drains its queue, unbinding the workflow, and worker C takes over the session from the normal queue.
 */
 func TestWorkflowSessionRecoversWhenNewWorkerCrashesMidTask(t *testing.T) {
 	t.Parallel()
@@ -314,23 +461,16 @@ func TestWorkflowSessionRecoversWhenNewWorkerCrashesMidTask(t *testing.T) {
 	})
 	require.Error(t, err, "B's late failure response is rejected because its task already timed out")
 
+	e.awaitQueuedOn("B", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	e.shutDownWorker("B")
 	e.registerStickyActivityPoller("C")
 	e.completeOn("C", e.tv.TaskQueue(), time.Minute)
 	e.requireSessionActivityOn(e.stickyQueue("C"))
 
-	// The retry waited on B's sticky queue, timing out there, before it fell back to C. Without the binding's
-	// sticky queue, the retry would have gone straight to the normal queue with no such timeout.
-	startToCloseTimedOut, retryTimedOutOnB := false, false
 	for _, event := range e.env.GetHistory(e.env.Namespace().String(), e.tv.WorkflowExecution()) {
-		switch event.GetWorkflowTaskTimedOutEventAttributes().GetTimeoutType() {
-		case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-			startToCloseTimedOut = true
-		case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-			retryTimedOutOnB = retryTimedOutOnB || startToCloseTimedOut
-		default:
-		}
+		require.NotEqual(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, event.GetWorkflowTaskTimedOutEventAttributes().GetTimeoutType(),
+			"the retry waits on B's sticky queue without timing out until the queue is drained")
 	}
-	require.True(t, retryTimedOutOnB, "the retry after B's crash should time out on B's sticky queue first")
 }
 
 /*

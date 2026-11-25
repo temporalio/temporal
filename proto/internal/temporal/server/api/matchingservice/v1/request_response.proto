@@ -589,6 +589,14 @@ message ForceUnloadTaskQueuePartitionResponse {
   bool was_loaded = 1;
 }
 
+message DrainSessionWorkerQueueRequest {
+  string namespace_id = 1;
+  // The sticky partition of the dead worker's queue, with its normal task queue name.
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+}
+
+message DrainSessionWorkerQueueResponse {}
+
 // (-- api-linter: core::0134::request-mask-required=disabled
 //     aip.dev/not-precedent: UpdateTaskQueueUserDataRequest doesn't follow Google API format --)
 // (-- api-linter: core::0134::request-resource-required=disabled

@@ -260,7 +260,8 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		// Task queue is ignored here because at standby, always use original normal task queue,
 		// disregards the transferTask.TaskQueue which could be sticky.
 		// NOTE: scheduleToStart timeout is respected. If workflow was sticky before namespace become standby,
-		// transferTask.TaskQueue is sticky, and there is timer already created for this timeout.
+		// transferTask.TaskQueue is sticky, and there is timer already created for this timeout, unless the workflow is
+		// bound to a worker.
 		// Use this sticky timeout as TTL.
 		taskQueue := &taskqueuepb.TaskQueue{
 			Name: mutableState.GetExecutionInfo().TaskQueue,

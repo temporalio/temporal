@@ -436,6 +436,23 @@ func (c *clientImpl) doDispatchNexusTask(
 	return client.DispatchNexusTask(ctx, request, opts...)
 }
 
+func (c *clientImpl) DrainSessionWorkerQueue(
+	ctx context.Context,
+	request *matchingservice.DrainSessionWorkerQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DrainSessionWorkerQueueResponse, error) {
+
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DrainSessionWorkerQueue(ctx, request, opts...)
+}
+
 func (c *clientImpl) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,

@@ -1441,6 +1441,26 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return response, nil
 }
 
+func (c *clientImpl) UnbindWorkflowFromSessionWorker(
+	ctx context.Context,
+	request *historyservice.UnbindWorkflowFromSessionWorkerRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UnbindWorkflowFromSessionWorkerResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
+	var response *historyservice.UnbindWorkflowFromSessionWorkerResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.UnbindWorkflowFromSessionWorker(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) UnpauseActivity(
 	ctx context.Context,
 	request *historyservice.UnpauseActivityRequest,

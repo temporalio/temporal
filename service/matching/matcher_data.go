@@ -47,9 +47,10 @@ const (
 type taskForwarderType int32
 
 const (
-	notTaskForwarder       taskForwarderType = iota
-	parentTaskForwarder                      // forwards tasks to parent partition
-	validatorTaskForwarder                   // validates local backlog tasks
+	notTaskForwarder                     taskForwarderType = iota
+	parentTaskForwarder                                    // forwards tasks to parent partition
+	validatorTaskForwarder                                 // validates local backlog tasks
+	sessionWorkerQueueDrainTaskForwarder                   // moves a dead multi-session worker's backlog to the normal queue
 )
 
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
@@ -62,7 +63,7 @@ const maxTokens = 1
 
 // pollerList is an intrusive doubly-linked list of waiting pollers. Pollers are matched
 // by walking from the head, so the list is kept in the order we want to match them:
-// local pollers, parent forwarders, then validators. Within each type, earlier
+// local pollers, parent forwarders, validators, then the session worker queue drainer. Within each type, earlier
 // poll start times come first; ties retain insertion order.
 //
 // It's intrusive (next/prev live in waitingPoller) so there's no per-poller allocation
@@ -474,8 +475,9 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 			} else if poller.taskForwarderType == parentTaskForwarder && !allowForwarding {
 				// task forwarder only matches when forwarding is allowed
 				continue
-			} else if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
-				// validator only matches local backlog tasks
+			} else if (poller.taskForwarderType == validatorTaskForwarder || poller.taskForwarderType == sessionWorkerQueueDrainTaskForwarder) &&
+				task.forwardCtx != nil {
+				// validator and drainer only match local backlog tasks
 				continue
 			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
 				// Note the ">" above: "min" priority is a numeric max.

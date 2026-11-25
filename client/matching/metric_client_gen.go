@@ -239,6 +239,20 @@ func (c *metricClient) DispatchNexusTask(
 	return c.client.DispatchNexusTask(ctx, request, opts...)
 }
 
+func (c *metricClient) DrainSessionWorkerQueue(
+	ctx context.Context,
+	request *matchingservice.DrainSessionWorkerQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DrainSessionWorkerQueueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientDrainSessionWorkerQueue")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DrainSessionWorkerQueue(ctx, request, opts...)
+}
+
 func (c *metricClient) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,

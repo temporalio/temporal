@@ -93,13 +93,8 @@ const (
 	// Retained size for one activity failure once the limit MutableStateActivityFailureTotalSizeLimitError is exceeded.
 	minRetainedActivityFailureSize = 128
 
-	// defaultSessionStickyScheduleToStartTimeout is used when a workflow gets a non-exclusive binding to a worker before
-	// that worker has reported its sticky schedule-to-start timeout, which only arrives with a task completion.
-	// In practice, this default timeout is only used for non-exclusive bindings on the very first workflow task of a
-	// workflow that is bound to a worker or if the user has set a 0 value for the sticky schedule-to-start timeout.
-	// It is also used until the worker's next task completion after a binding is rebuilt from history (reset,
-	// rebuild) or inherited by a new run (continue-as-new, retry, cron), since history does not record the worker's
-	// timeout.
+	// defaultSessionStickyScheduleToStartTimeout bounds how long a query waits on a non-exclusive bound worker that has
+	// not reported its own sticky timeout.
 	defaultSessionStickyScheduleToStartTimeout = 5 * time.Second
 )
 
@@ -1608,7 +1603,7 @@ func (ms *MutableStateImpl) ClearStickyTaskQueueUnlessPartOfSession() bool {
 // task or one of its session activities, and reports whether the binding changed. instanceKey is the starting
 // worker's instance key. previousWorkerQueue and previousStickyTimeout are captured before the start cleared
 // stickiness. Any change of binding reschedules the pending workflow task and pending session activities so they
-// follow the worker.
+// follow the worker. Called with no options and the bound worker's queue, it unbinds the workflow without a start.
 func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	options *sessionpb.WorkerSessionOptions,
 	instanceKey string,
@@ -1625,7 +1620,7 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 		// A worker without session options, and no binding to drop: ordinary or already-unbound workflow.
 		return false, nil
 	case workerQueue == "":
-		// Unbind: a worker without session options took over. Session activities move to the normal queue.
+		// Unbind: a worker without session options took over, or the bound worker is gone.
 		ms.unbindNonExclusiveWorker()
 	case workerQueue == previousWorkerQueue:
 		// Stickiness, and with it the binding, is only missing here if this start cleared it: the task came
@@ -1663,7 +1658,7 @@ func (ms *MutableStateImpl) unbindNonExclusiveWorker() {
 	ms.setSessionState(nil)
 }
 
-// bindNonExclusiveWorker is setSessionState plus a real sticky schedule-to-start timeout for a non-exclusive binding.
+// bindNonExclusiveWorker is setSessionState plus the worker's sticky timeout, which bounds sticky queries.
 func (ms *MutableStateImpl) bindNonExclusiveWorker(workerQueue string, instanceKey string, previousStickyTimeout *durationpb.Duration) {
 	ms.setSessionState(&persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: workerQueue, InstanceKey: instanceKey}})
 	stickyTimeout := previousStickyTimeout
@@ -1687,9 +1682,9 @@ func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*tas
 	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
 	if isStickyTq {
 		stickyTimeout := ms.executionInfo.StickyScheduleToStartTimeout
-		// A bound workflow's timed-out task is re-offered to the same worker, so a missing or 0 timeout would loop.
-		if ms.SessionWorkerQueue() != "" && stickyTimeout.AsDuration() <= 0 {
-			stickyTimeout = durationpb.New(defaultSessionStickyScheduleToStartTimeout)
+		// A bound workflow's task waits for its worker or the queue's drain, so it has no schedule-to-start timeout.
+		if ms.SessionWorkerQueue() != "" {
+			stickyTimeout = ms.executionInfo.WorkflowRunTimeout
 		}
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,

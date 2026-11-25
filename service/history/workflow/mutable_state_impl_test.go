@@ -10971,10 +10971,9 @@ func (s *mutableStateSuite) TestCurrentStorageUsage_Closed() {
 /*
 TestNonExclusiveBindingSurvivesWorkflowTaskFailures tests failures on a live worker with a non-exclusive binding:
  1. Bind the session and sticky queue to worker queue X and start a workflow task there.
- 2. Time the task out by start-to-close, then time the retry out by schedule-to-start.
- 3. Both keep X as the bound worker and sticky queue, so each retry goes back to X with a
-    schedule-to-start timer that can detect X's death. Start-to-close increments the attempt; schedule-to-start
-    resets it, as for ordinary sticky tasks.
+ 2. Time the task out by start-to-close.
+ 3. X stays the bound worker and sticky queue, and the retry goes back to X with an incremented attempt and no
+    schedule-to-start timer: it waits on X until X starts it or X's queue is drained.
 */
 func (s *mutableStateSuite) TestNonExclusiveBindingSurvivesWorkflowTaskFailures() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
@@ -10997,17 +10996,14 @@ func (s *mutableStateSuite) TestNonExclusiveBindingSurvivesWorkflowTaskFailures(
 		s.Equal("X", ms.GetExecutionInfo().GetStickyTaskQueue())
 		s.Equal(5*time.Second, ms.GetExecutionInfo().GetStickyScheduleToStartTimeout().AsDuration())
 	}
-	requireScheduleToStartTimer := func() {
+	requireNoScheduleToStartTimer := func() {
 		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 		s.Require().NoError(err)
-		var found bool
 		for _, task := range mutation.Tasks[tasks.CategoryTimer] {
-			if timer, ok := task.(*tasks.WorkflowTaskTimeoutTask); ok && timer.TimeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
-				found = true
+			if timer, ok := task.(*tasks.WorkflowTaskTimeoutTask); ok {
+				s.NotEqual(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, timer.TimeoutType, "a bound workflow task has no schedule-to-start timer")
 			}
 		}
-		s.True(found, "schedule-to-start timer must be created for a workflow task on the session's worker queue")
-		s.Require().NoError(ms.UpdateCurrentVersion(tests.Version, false))
 	}
 
 	wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
@@ -11026,11 +11022,7 @@ func (s *mutableStateSuite) TestNonExclusiveBindingSurvivesWorkflowTaskFailures(
 	wt, err = ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.Require().NoError(err)
 	s.Equal("X", wt.TaskQueue.GetName())
-	requireScheduleToStartTimer()
-	_, err = ms.AddWorkflowTaskScheduleToStartTimeoutEvent(wt)
-	s.Require().NoError(err)
-	requireSessionOnX()
-	s.Equal(int32(1), ms.GetExecutionInfo().GetWorkflowTaskAttempt(), "a schedule-to-start timeout schedules a fresh, non-transient task")
+	requireNoScheduleToStartTimer()
 }
 
 func (s *mutableStateSuite) addSessionTestActivity(scheduledEventID int64, inSession bool) *persistencespb.ActivityInfo {
@@ -11194,6 +11186,8 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 			wantUpdated: true, wantSessionState: bound("Y", "k1"), wantSticky: "Y", wantStickyTimeout: 7 * time.Second, wantReschedule: true},
 		{name: "non-session worker drops the session", sessionState: &persistencespb.SessionState{}, previousWorkerQueue: "X",
 			wantUpdated: true, wantReschedule: true},
+		{name: "drained worker is unbound without a start", sessionState: bound("X", "k1"), stickyTaskQueue: "X",
+			previousWorkerQueue: "X", wantUpdated: true, wantReschedule: true},
 		{name: "exclusive session is untouched", options: multiSession("Y"), sessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}},
 			stickyTaskQueue: "S", previousWorkerQueue: "S",
 			wantSessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}, wantSticky: "S"},
@@ -11395,9 +11389,9 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEventInheritsSessio
 
 /*
 TestStickyScheduleToStartTimeoutForBoundWorkflow tests the sticky timeout used for a workflow task's timer:
- 1. A workflow bound to a worker whose reported sticky timeout is missing or 0 gets the default, since its
-    timed-out task is re-offered to the same worker and a 0 timer would loop.
- 2. A bound workflow with a positive timeout, and an unbound sticky workflow, keep the stored value.
+ 1. A workflow bound to a worker gets the run timeout whatever the worker reported, since its task waits on that
+    worker's queue until the worker starts it or the queue is drained.
+ 2. An unbound sticky workflow keeps the stored value.
 */
 func (s *mutableStateSuite) TestStickyScheduleToStartTimeoutForBoundWorkflow() {
 	for _, tc := range []struct {
@@ -11406,9 +11400,9 @@ func (s *mutableStateSuite) TestStickyScheduleToStartTimeoutForBoundWorkflow() {
 		timeout     *durationpb.Duration
 		wantTimeout time.Duration
 	}{
-		{name: "bound with missing timeout", bound: true, wantTimeout: defaultSessionStickyScheduleToStartTimeout},
-		{name: "bound with zero timeout", bound: true, timeout: durationpb.New(0), wantTimeout: defaultSessionStickyScheduleToStartTimeout},
-		{name: "bound with timeout", bound: true, timeout: durationpb.New(3 * time.Second), wantTimeout: 3 * time.Second},
+		{name: "bound with missing timeout", bound: true, wantTimeout: time.Hour},
+		{name: "bound with timeout", bound: true, timeout: durationpb.New(3 * time.Second), wantTimeout: time.Hour},
+		{name: "unbound sticky with timeout", timeout: durationpb.New(3 * time.Second), wantTimeout: 3 * time.Second},
 		{name: "unbound sticky with missing timeout"},
 	} {
 		s.Run(tc.name, func() {
@@ -11418,6 +11412,7 @@ func (s *mutableStateSuite) TestStickyScheduleToStartTimeoutForBoundWorkflow() {
 			}
 			s.mutableState.executionInfo.StickyTaskQueue = "X"
 			s.mutableState.executionInfo.StickyScheduleToStartTimeout = tc.timeout
+			s.mutableState.executionInfo.WorkflowRunTimeout = durationpb.New(time.Hour)
 
 			_, timeout := s.mutableState.TaskQueueScheduleToStartTimeout("X")
 

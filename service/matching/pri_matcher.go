@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -136,12 +137,16 @@ func newPriTaskMatcher(
 	return tm
 }
 
-func (tm *priTaskMatcher) Start() {
+// newBacklogTaskRetrier backs off between attempts to process a backlog task, up to BacklogTaskForwardTimeout.
+func (tm *priTaskMatcher) newBacklogTaskRetrier() backoff.Retrier {
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
 		WithExpirationInterval(backoff.NoInterval)
-	validatorRetrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
-	go tm.validateTasks(validatorRetrier)
+	return backoff.NewRetrier(policy, clock.NewRealTimeSource())
+}
+
+func (tm *priTaskMatcher) Start() {
+	go tm.validateTasks(tm.newBacklogTaskRetrier())
 
 	if tm.fwdr == nil {
 		return
@@ -152,8 +157,7 @@ func (tm *priTaskMatcher) Start() {
 	// Forwarders share a synchronized per-task validation cache. Each worker owns
 	// its retrier so one worker's success cannot reset another worker's backoff.
 	for range tm.config.ForwarderMaxOutstandingTasks() {
-		retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
-		go tm.forwardTasks(lim, retrier)
+		go tm.forwardTasks(lim, tm.newBacklogTaskRetrier())
 	}
 
 	if normal, ok := tm.partition.(*tqid.NormalPartition); ok { // always true here, sticky has nil tm.fwdr
@@ -321,6 +325,53 @@ func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 		// retrier's max interval is BacklogTaskForwardTimeout, so for just valid tasks,
 		// this loop will essentially be limited to that interval.
 		_ = util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(nil))
+	}
+}
+
+// drainSessionWorkerQueue unbinds each backlog task's workflow from this dead worker in History and drops the task. It
+// calls done(true) once the backlog is empty, or done(false) if the queue closes.
+func (tm *priTaskMatcher) drainSessionWorkerQueue(
+	unbind func(context.Context, *persistencespb.AllocatedTaskInfo) error,
+	isDrained func() bool,
+	done func(drained bool),
+) {
+	retrier := tm.newBacklogTaskRetrier()
+	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
+	for {
+		// A draining queue has no pollers and refuses new tasks, so it would otherwise be unloaded as idle.
+		tm.markAlive()
+		if lim.Wait(tm.tqCtx) != nil {
+			done(false)
+			return
+		}
+		// Wake up periodically without a task to check whether the backlog is empty.
+		waitCtx, cancel := context.WithTimeout(tm.tqCtx, time.Second)
+		res := tm.data.EnqueuePollerAndWait([]context.Context{tm.tqCtx, waitCtx}, &waitingPoller{taskForwarderType: sessionWorkerQueueDrainTaskForwarder})
+		cancel()
+		if res.ctxErr != nil {
+			if res.ctxErrIdx == 0 {
+				done(false)
+				return
+			}
+			if isDrained() {
+				done(true)
+				return
+			}
+			continue
+		}
+
+		task := res.task
+		err := unbind(tm.tqCtx, task.event.AllocatedTaskInfo)
+		_, namespaceGone := errors.AsType[*serviceerror.NamespaceNotFound](err)
+		if err == nil || common.IsNotFoundError(err) || namespaceGone {
+			// History moved the workflow's tasks to the normal queue, or the workflow or its namespace is gone.
+			task.finish(dropReasonSessionWorkerQueueDrained)
+			retrier.Reset()
+			continue
+		}
+		// The task reader retries transient errors in memory and re-spools the task on other errors.
+		task.finish(err)
+		_ = util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(err))
 	}
 }
 

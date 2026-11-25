@@ -32,18 +32,7 @@ func Invoke(
 			resetRequest.Execution.RunId,
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowLease.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			// TODO (Shivam): Confirm whether this API is still worth handling for workflow sessions at all, now that
-			// ShutdownWorker is preferred. Clearing stickiness here also drops a non-exclusive binding.
-			mutableState.ClearStickyTaskQueue()
-			return &api.UpdateWorkflowAction{
-				Noop:               true,
-				CreateWorkflowTask: false,
-			}, nil
+			return resetStickyTaskQueue(workflowLease.GetMutableState())
 		},
 		nil,
 		shardContext,
@@ -54,4 +43,23 @@ func Invoke(
 		return nil, err
 	}
 	return &historyservice.ResetStickyTaskQueueResponse{}, nil
+}
+
+func resetStickyTaskQueue(mutableState historyi.MutableState) (*api.UpdateWorkflowAction, error) {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return nil, consts.ErrWorkflowCompleted
+	}
+	// Forgetting a bound worker unbinds the workflow, which also moves its session activities to the normal queue.
+	if workerQueue := mutableState.SessionWorkerQueue(); workerQueue != "" {
+		unbound, err := mutableState.UpdateNonExclusiveWorkerBinding(nil, "", workerQueue, nil)
+		if err != nil {
+			return nil, err
+		}
+		return &api.UpdateWorkflowAction{Noop: !unbound}, nil
+	}
+	mutableState.ClearStickyTaskQueue()
+	return &api.UpdateWorkflowAction{
+		Noop:               true,
+		CreateWorkflowTask: false,
+	}, nil
 }

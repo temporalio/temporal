@@ -438,6 +438,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.TerminateWorkflowExecutionResponse:
 		return nil
+	case *historyservice.UnbindWorkflowFromSessionWorkerRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
+	case *historyservice.UnbindWorkflowFromSessionWorkerResponse:
+		return nil
 	case *historyservice.UnpauseActivityRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetFrontendRequest().GetExecution().GetWorkflowId()),

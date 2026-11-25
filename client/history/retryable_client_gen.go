@@ -1061,6 +1061,21 @@ func (c *retryableClient) TerminateWorkflowExecution(
 	return resp, err
 }
 
+func (c *retryableClient) UnbindWorkflowFromSessionWorker(
+	ctx context.Context,
+	request *historyservice.UnbindWorkflowFromSessionWorkerRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UnbindWorkflowFromSessionWorkerResponse, error) {
+	var resp *historyservice.UnbindWorkflowFromSessionWorkerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UnbindWorkflowFromSessionWorker(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UnpauseActivity(
 	ctx context.Context,
 	request *historyservice.UnpauseActivityRequest,
