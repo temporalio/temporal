@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
@@ -2285,4 +2287,124 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_AllNamespace
 	}).Return(&historyservice.RefreshWorkflowTasksResponse{}, nil)
 
 	s.NoError(a.processAdminTask(context.Background(), batchOperation, testTask, limiter))
+}
+
+func TestProcessWorkflowsWithProactiveFetchingAllNamespaces(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	adminClient := adminservicemock.NewMockAdminServiceClient(controller)
+	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
+	a := &activities{activityDeps: activityDeps{AdminClient: adminClient, HistoryClient: historyClient}}
+	config := batchProcessorConfig{
+		allNamespaces:    true,
+		adjustedQuery:    "WorkflowType='MyWorkflow'",
+		concurrency:      1,
+		heartbeatTimeout: 40 * time.Millisecond,
+	}
+	batchOperation := &batchspb.BatchOperationInput{
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{AllNamespaces: true},
+			},
+		},
+	}
+	pages := []struct {
+		token     []byte
+		nextToken []byte
+		execution *adminservice.VisibilityExecutionInfo
+	}{
+		{nextToken: []byte("page-2"), execution: &adminservice.VisibilityExecutionInfo{
+			NamespaceId: "ns-1", BusinessId: "wf-1", RunId: "run-1", ArchetypeId: 1,
+		}},
+		{token: []byte("page-2"), execution: &adminservice.VisibilityExecutionInfo{
+			NamespaceId: "ns-2", BusinessId: "wf-2", RunId: "run-2", ArchetypeId: 2,
+		}},
+	}
+	releaseLastPage := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(releaseLastPage) })
+	defer unblock()
+	for i, pg := range pages {
+		adminClient.EXPECT().ListExecutions(gomock.Any(), &adminservice.ListExecutionsRequest{
+			Query: config.adjustedQuery, PageSize: pageSize, NextPageToken: pg.token,
+		}).Return(&adminservice.ListExecutionsResponse{
+			Executions: []*adminservice.VisibilityExecutionInfo{pg.execution}, NextPageToken: pg.nextToken,
+		}, nil)
+		refresh := historyClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &historyservice.RefreshWorkflowTasksRequest{
+			NamespaceId: pg.execution.GetNamespaceId(),
+			ArchetypeId: pg.execution.GetArchetypeId(),
+			Request: &adminservice.RefreshWorkflowTasksRequest{
+				NamespaceId: pg.execution.GetNamespaceId(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: pg.execution.GetBusinessId(), RunId: pg.execution.GetRunId(),
+				},
+			},
+		})
+		if i == len(pages)-1 {
+			refresh.DoAndReturn(func(ctx context.Context, _ *historyservice.RefreshWorkflowTasksRequest, _ ...any) (*historyservice.RefreshWorkflowTasksResponse, error) {
+				select {
+				case <-releaseLastPage:
+					return &historyservice.RefreshWorkflowTasksResponse{}, nil
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			})
+		} else {
+			refresh.Return(&historyservice.RefreshWorkflowTasksResponse{}, nil)
+		}
+	}
+
+	var testSuite testsuite.WorkflowTestSuite
+	env := testSuite.NewTestActivityEnvironment()
+	heartbeats := make(chan converter.EncodedValues, 1)
+	env.SetOnActivityHeartbeatListener(func(_ *activity.Info, details converter.EncodedValues) {
+		select {
+		case heartbeats <- details:
+		default:
+		}
+	})
+	processor := func(ctx context.Context, tasks chan task, responses chan taskResponse, limiter quotas.RequestRateLimiter,
+		frontend workflowservice.WorkflowServiceClient, metricsHandler metrics.Handler, logger log.Logger,
+	) {
+		a.startTaskProcessor(ctx, batchOperation, "", tasks, responses, limiter, frontend, metricsHandler, logger)
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
+	runner := func(ctx context.Context) (HeartBeatDetails, error) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		return a.processWorkflowsWithProactiveFetching(ctx, config, processor, limiter, nil,
+			metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{TotalEstimate: 2})
+	}
+	env.RegisterActivity(runner)
+	type result struct {
+		details HeartBeatDetails
+		err     error
+	}
+	results := make(chan result, 1)
+	go func() {
+		encoded, err := env.ExecuteActivity(runner)
+		var details HeartBeatDetails
+		if err == nil {
+			err = encoded.Get(&details)
+		}
+		results <- result{details: details, err: err}
+	}()
+
+	// Keep the last page in flight until the first page's resume token is recorded.
+	await.Require(t.Context(), t, func(t *await.T) {
+		var details HeartBeatDetails
+		select {
+		case encoded := <-heartbeats:
+			require.NoError(t, encoded.Get(&details))
+		case <-t.Context().Done():
+			require.NoError(t, t.Context().Err())
+		}
+		require.Equal(t, HeartBeatDetails{
+			PageToken: []byte("page-2"), CurrentPage: 1, TotalEstimate: 2, SuccessCount: 1,
+		}, details)
+	}, 5*time.Second, time.Millisecond)
+	unblock()
+	completed := await.Rcv(t, results)
+	require.NoError(t, completed.err)
+	require.Equal(t, HeartBeatDetails{CurrentPage: 2, TotalEstimate: 2, SuccessCount: 2}, completed.details)
 }

@@ -3288,3 +3288,35 @@ func TestValidateAdminBatchOperation_AllNamespaces(t *testing.T) {
 		})
 	}
 }
+
+func TestStartAdminBatchOperationRejectsInvalidAllNamespacesQuery(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		query   string
+		wantErr string
+	}{
+		{name: "blank", query: " \t", wantErr: "requires a visibility query"},
+		{name: "raw custom field", query: "Keyword01='x'", wantErr: "cannot filter on custom search attributes"},
+		{name: "custom alias", query: "WorkflowType='w' AND CustomerId='x'", wantErr: "cannot filter on custom search attributes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := &AdminHandler{logger: log.NewTestLogger()}
+			resp, err := handler.StartAdminBatchOperation(t.Context(), &adminservice.StartAdminBatchOperationRequest{
+				JobId:           "repair",
+				Reason:          "refresh tasks",
+				VisibilityQuery: tc.query,
+				Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+					RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{AllNamespaces: true},
+				},
+			})
+			require.Nil(t, resp)
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
