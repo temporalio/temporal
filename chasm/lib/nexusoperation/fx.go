@@ -23,8 +23,8 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/httpfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
 
@@ -131,7 +131,7 @@ func clientProviderFactory(
 	namespaceRegistry namespace.Registry,
 	rpcFactory common.RPCFactory,
 	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
-	testHooks testhooks.TestHooks,
+	failpointSource *failpoints.Source,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -142,7 +142,7 @@ func clientProviderFactory(
 	if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
 		clusterID = clusterInfo.ClusterID
 	}
-	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
+	httpFaultGenerator := httpfaultstest.NewGenerator(failpointSource)
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		roundTripper := httpClientTransportInstrumenter.Instrument(responseSizeLimiter{transport})

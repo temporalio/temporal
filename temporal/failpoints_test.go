@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/failpoints"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testlogger"
 )
 
@@ -88,6 +90,15 @@ func TestFailpointsOff(t *testing.T) {
 
 			// No registry.
 			require.Nil(t, source.Failpoints())
+
+			// No gRPC fault interceptor or HTTP fault wrapper.
+			for _, service := range []primitives.ServiceName{
+				primitives.FrontendService, primitives.HistoryService, primitives.MatchingService, primitives.WorkerService,
+			} {
+				require.Nil(t, grpcfaultstest.NewGenerator(source, nil, service), service)
+			}
+			require.Nil(t, httpfaultstest.NewGenerator(source))
+
 		})
 	}
 }
@@ -99,6 +110,8 @@ func TestFailpointsOn(t *testing.T) {
 
 	source := resolveFailpoints(true, lookupEnv(map[string]string{failpoints.EnvVar: "1"}), log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	require.NotNil(t, source.Failpoints())
+	require.NotNil(t, grpcfaultstest.NewGenerator(source, nil, primitives.HistoryService))
+	require.NotNil(t, httpfaultstest.NewGenerator(source))
 }
 
 func TestWithFailpointSourceObserver_Composes(t *testing.T) {

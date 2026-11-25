@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"go.temporal.io/server/common/rpc/faultinjection"
@@ -23,28 +24,25 @@ type Request struct {
 func (r *Request) FaultScope() Scope { return r.Scope }
 
 type (
-	// Outcome defines the result of a matched HTTP fault.
-	Outcome = faultinjection.Outcome[*http.Response]
-	// RequestCallback checks a request before the HTTP call.
-	RequestCallback = faultinjection.RequestCallback[*Request, *http.Response]
-	// ResponseCallback checks a result after the HTTP call.
-	ResponseCallback = faultinjection.ResponseCallback[*Request, *http.Response]
 	// Generator checks for faults before and after an HTTP call.
 	Generator = faultinjection.Generator[*Request, *http.Response]
-	// Hooks installs callbacks outside the generator.
-	Hooks = faultinjection.Hooks[*Request, *http.Response]
-	// CallbackGenerator stores HTTP callbacks in the shared fault registry.
-	CallbackGenerator = faultinjection.CallbackGenerator[*Request, *http.Response]
+	// Result is the result of an HTTP call that a response fault checks.
+	Result = faultinjection.Result[*Request, *http.Response]
 )
 
-// NewCallbackGenerator returns a callback generator.
-func NewCallbackGenerator() *CallbackGenerator {
-	return faultinjection.NewCallbackGenerator[*Request, *http.Response]()
+// ResponseOverride is a fault that makes the HTTP call return Response without an error, instead of
+// failing it. Before the call, the call is not sent; after the call, Response replaces its result.
+// Both ResponseOverride and *ResponseOverride work. An override without a Response fails the call
+// with the override as its error, since callers expect a response when there is no error.
+type ResponseOverride struct {
+	Response *http.Response
 }
 
-// NewCallbackGeneratorWithHooks returns a callback generator that uses hooks.
-func NewCallbackGeneratorWithHooks(hooks Hooks) *CallbackGenerator {
-	return faultinjection.NewCallbackGeneratorWithHooks[*Request, *http.Response](hooks)
+func (o ResponseOverride) Error() string {
+	if o.Response == nil {
+		return "httpfaults: response override without a response"
+	}
+	return "httpfaults: response override with status " + o.Response.Status
 }
 
 // Wrap applies faults before and after an HTTP call. A nil generator returns inner as is.
@@ -60,23 +58,65 @@ func Wrap(
 		wrapped := &Request{Raw: req, Scope: scope}
 		operation := req.Method + " " + req.URL.Path
 
-		if outcome := generator.GenerateRequest(req.Context(), operation, wrapped); outcome != nil {
-			return outcome.Response, outcome.Error
+		if faultErr := generator.GenerateRequest(req.Context(), operation, wrapped); faultErr != nil {
+			if replacement, ok := asResponseOverride(faultErr); ok {
+				return replacement, nil
+			}
+			return nil, faultErr
 		}
 
 		resp, err := inner(req)
-		if outcome := generator.GenerateResponse(req.Context(), operation, wrapped, resp, err); outcome != nil {
-			return applyOutcome(resp, outcome)
+		if faultErr := generator.GenerateResponse(req.Context(), operation, wrapped, resp, err); faultErr != nil {
+			return applyFault(resp, faultErr)
 		}
 		return resp, err
 	}
 }
 
-func applyOutcome(original *http.Response, outcome *Outcome) (*http.Response, error) {
-	if original == outcome.Response {
-		return outcome.Response, outcome.Error
+// responseOverride is implemented by ResponseOverride and *ResponseOverride, so that
+// asResponseOverride finds both forms with one errors.As.
+type responseOverride interface {
+	overrideResponse() *http.Response
+}
+
+func (o ResponseOverride) overrideResponse() *http.Response { return o.Response }
+
+// asResponseOverride returns the response of a ResponseOverride or *ResponseOverride in err. It
+// returns false for an override without a response.
+func asResponseOverride(err error) (*http.Response, bool) {
+	var override responseOverride
+	if !errors.As(err, &override) {
+		return nil, false
 	}
-	return outcome.Response, errors.Join(outcome.Error, closeResponse(original))
+	resp := override.overrideResponse()
+	return resp, resp != nil
+}
+
+// applyFault replaces the result of the call whose response is original with the fault. It closes
+// the original response, unless the fault overrides the response with one that shares its body.
+func applyFault(original *http.Response, faultErr error) (*http.Response, error) {
+	replacement, ok := asResponseOverride(faultErr)
+	if !ok {
+		return nil, errors.Join(faultErr, closeResponse(original))
+	}
+	if original != nil && !mayShareBody(original.Body, replacement.Body) {
+		// The caller gets the replacement without an error, so it closes the replacement's body.
+		// An error closing the original would make it drop the replacement and leak its body.
+		_ = closeResponse(original)
+	}
+	return replacement, nil
+}
+
+// mayShareBody reports whether a and b may be the same body. Bodies of a type that == can't
+// compare are treated as shared, so a body the replacement still uses is never closed.
+func mayShareBody(a, b io.ReadCloser) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	if t := reflect.TypeOf(a); t == reflect.TypeOf(b) && !t.Comparable() {
+		return true
+	}
+	return a == b
 }
 
 func closeResponse(resp *http.Response) error {

@@ -222,25 +222,32 @@ executing. `InjectResponseFault` runs _after_ the handler, so an injected error 
 operation that executed but whose response was lost. The test fails if the fault never triggers.
 Only unary RPCs are intercepted; streaming RPCs are unaffected.
 
-The `env` methods scope faults to the test's namespace.
+The `env` methods scope faults to the test's namespace. They are callbacks of the
+`failpoint.AnyGRPCKey` and `failpoint.AnyGRPCResponseKey` failpoints (see the
+[failpoint package](#failpoint-package)), so they only see requests that carry the namespace ID, or
+the namespace name on frontend. Several faults injected by a test all run, in order, until one
+returns an error.
 
 ### HTTP fault injection
 
 `InjectHTTPRequestFault` and `InjectHTTPResponseFault` inject faults into HTTP clients that install
 the test fault generator. Callback delivery and Nexus operation clients support these faults. The
-faults are scoped to the test namespace and are unavailable in builds without `test_dep`.
+faults are scoped to the test namespace. They are
+callbacks of the `failpoint.AnyHTTPKey` and `failpoint.AnyHTTPResponseKey` failpoints.
 
-Return an `httpfaults.Outcome` with one action:
+Return one of:
 
-- `Response` returns a synthetic HTTP response.
-- `Error` returns a transport error.
+- `nil` to leave the call alone.
+- An `httpfaults.ResponseOverride` to return a synthetic HTTP response without an error. An override
+  without a response is returned as an error.
+- Any other error to return it as a transport error.
 
 ```go
-env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfaults.Outcome {
+env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) error {
     if req.URL.Path != "/callback" {
         return nil
     }
-    return &httpfaults.Outcome{
+    return httpfaults.ResponseOverride{
         Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"),
     }
 })
@@ -314,7 +321,7 @@ image. A server process only installs them if both of these are set, each read o
 - the `TEMPORAL_FAILPOINTS=1` environment variable.
 
 Neither is enough alone, and dynamic config cannot enable failpoints. With the switch off, nothing
-is installed: there is no failpoint registry. Call sites in server
+is installed: there is no failpoint registry and no gRPC fault interceptor or HTTP fault wrapper. Call sites in server
 code cost a nil check. The `test_dep` tag is not involved.
 
 When the switch is on, the server logs a warning that names the inputs of the decision, and
@@ -358,6 +365,26 @@ testcore.InjectFailpoint[error](env, failpoints.UpdateWithStartBetweenLockAndSta
     return nil
 }, failpoint.Once)
 ```
+
+Failpoints also run at the gRPC and HTTP fault injection points, without a declared
+key:
+
+- `failpoint.GRPCKey(fullMethod)` fires before the handler of a unary gRPC method on frontend,
+  history, and matching; `failpoint.GRPCResponseKey(fullMethod)` fires after it. An error from the
+  latter replaces the result of the handler.
+- `failpoint.HTTPKey("POST /path")` fires before an outgoing callback or Nexus HTTP request;
+  `failpoint.HTTPResponseKey("POST /path")` fires after it. An `httpfaults.ResponseOverride` error
+  makes the call return its response.
+- `failpoint.AnyGRPCKey`, `failpoint.AnyGRPCResponseKey`, `failpoint.AnyHTTPKey` and
+  `failpoint.AnyHTTPResponseKey` fire for every method or request, if the failpoint of the method
+  or request did not fire with any action (a pause or a callback that returns nil also counts). A
+  `CallWith` callback receives the request before the handler, and a `grpcfaults.Result` or
+  `httpfaults.Result` after it.
+
+gRPC and HTTP failpoints are scoped to the namespace ID of the request when it has
+one (frontend resolves the namespace name of a request to its ID), so `testcore.InjectFailpoint` works for them on a shared cluster. A failpoint without a scope
+applies to all namespaces, but only to requests whose namespace has no failpoint registered for the
+same key. A failpoint registered for the namespace takes precedence, even when it is disabled.
 
 The server does not serve a gRPC API to configure failpoints. Tests configure the failpoints of
 their cluster in process (`testcore.InjectFailpoint`).

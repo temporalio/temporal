@@ -768,12 +768,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationRetriesAfterHTTPFault(chasmEn
 
 	// The first request fails before it reaches the handler. The retry succeeds.
 	var attempts atomic.Int32
-	env.InjectHTTPRequestFault(func(_ context.Context, req *http.Request) *httpfaults.Outcome {
+	env.InjectHTTPRequestFault(func(_ context.Context, req *http.Request) error {
 		if !strings.HasSuffix(req.URL.Path, "/operation") {
 			return nil
 		}
 		if attempts.Add(1) == 1 {
-			return &httpfaults.Outcome{Error: errors.New("simulated transport failure")}
+			return errors.New("simulated transport failure")
 		}
 		return nil
 	})
@@ -3398,14 +3398,14 @@ func (s *NexusWorkflowTestSuite) TestTimeoutCleanupWithLateCallbackAndCancellati
 			return nil
 		},
 	}
-	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, resp *http.Response, callErr error) *httpfaults.Outcome {
+	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, resp *http.Response, callErr error) error {
 		if !strings.HasSuffix(req.URL.Path, "/cancel") || resp == nil || callErr != nil {
 			return nil
 		}
 		responseHeld <- resp.StatusCode
 		<-releaseCancel
 		responseReleased <- struct{}{}
-		return &httpfaults.Outcome{Response: resp}
+		return httpfaults.ResponseOverride{Response: resp}
 	})
 	endpoint := env.createRandomExternalNexusServer(ctx, s.T(), handler)
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: tq}, "workflow")

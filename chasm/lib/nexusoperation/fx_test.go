@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -112,7 +111,7 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 				nil,
 				rpcFactory,
 				nil,
-				testhooks.NewTestHooks(),
+				nil,
 			)
 			require.NoError(t, err)
 
@@ -173,7 +172,7 @@ func TestClientProviderFactoryRejectsRedirects(t *testing.T) {
 				nil,
 				rpcFactory,
 				nil,
-				testhooks.NewTestHooks(),
+				nil,
 			)
 			require.NoError(t, err)
 
