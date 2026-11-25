@@ -60,6 +60,8 @@ Add `--all-namespaces` to refresh tasks for the workflows matching `--query` in 
 
 Use canonical field names such as `TemporalNamespaceDivision`. Unprefixed aliases such as `NamespaceDivision` and `ScheduleId` are rejected because custom fields can have those names. Use `TemporalScheduleId` for the schedule ID alias.
 
+With dual visibility configured, counting and listing use the store selected by `system.enableReadFromSecondaryVisibility` evaluated for an empty namespace, as in the existing Admin visibility APIs. Namespace-specific reader overrides do not apply. During a visibility store migration, ensure the selected store contains the executions you intend to refresh. To use namespace-specific routing, run separate refresh batches with `--namespace` instead.
+
 Unlike a query in one namespace, an all-namespaces query also matches executions whose `TemporalNamespaceDivision` is set: schedules, batch jobs, worker deployments, and CHASM executions. Add `TemporalNamespaceDivision IS NULL` to skip them. It does not skip `temporal-system` workflows that leave `TemporalNamespaceDivision` unset, such as scanners, so the query can still match those:
 
 ```sh
