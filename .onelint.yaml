@@ -157,6 +157,7 @@ lint:
           # checks them in full.
           - path-except: ^service/worker/
             linters: [workflowcheck]
+  gomodtidy: on
   govet: on
   # Nil-safety analysis. Widen include-pkgs, and the matching exclusion above,
   # as more packages are made nil-clean; without include-pkgs, NilAway
