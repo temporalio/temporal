@@ -321,7 +321,7 @@ image. A server process only installs them if both of these are set, each read o
 - the `TEMPORAL_FAILPOINTS=1` environment variable.
 
 Neither is enough alone, and dynamic config cannot enable failpoints. With the switch off, nothing
-is installed: there is no failpoint registry, no gRPC fault interceptor or HTTP fault wrapper and no persistence failpoint injector. Call sites in server
+is installed: there is no failpoint registry, no gRPC fault interceptor or HTTP fault wrapper and no persistence failpoint injector, and the rules (`testing.failpointRules`) do nothing. Call sites in server
 code cost a nil check. The `test_dep` tag is not involved.
 
 When the switch is on, the server logs a warning that names the inputs of the decision, and
@@ -403,7 +403,41 @@ dedicated cluster. `common/persistence/faultinjection/namespace.go` maps each re
 namespace.
 
 The server does not serve a gRPC API to configure failpoints. Tests configure the failpoints of
-their cluster in process (`testcore.InjectFailpoint`).
+their cluster in process (`testcore.InjectFailpoint`), and a server or test cluster is configured
+from outside through the `testing.failpointRules` dynamic config setting, see below.
+
+#### Failpoint rules in dynamic config
+
+With failpoints enabled, a server process applies the failpoint rules of the `testing.failpointRules`
+dynamic config setting to its failpoints. This configures failpoints without code, for example in a
+development server's dynamic config file:
+
+```yaml
+testing.failpointRules:
+  - value:
+      - key: "grpc:/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution"
+        scope: "<namespace ID>"   # Optional.
+        action: Return            # Return, Panic, Block, Pause, Call or On.
+        error: InvalidArgument    # A name from the failpoint error catalog, for Return and Panic.
+        message: "injected"
+        recurrence: Always        # Once or Always (default).
+        trigger: {probability: 0.5, after: 1, max: 10}
+      - key: "grpc:/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask"
+        action: Pause
+        delay: 2s
+        enabled: false            # Keeps the rule configured but suspended.
+```
+
+`Call` names a behavior registered with `failpoint.RegisterBehavior` in `behavior`. `On` makes the
+failpoint fire without a value, for call sites that check `failpoint.Active`. Changing the setting
+creates, reconfigures and removes the failpoints of the rules; a rule that didn't change keeps its
+failpoint's state. Rules and other injections stay separate: if a rule names the key of a failpoint
+that a test registered, the server logs an error and keeps the previous rules, and
+`testcore.InjectFailpoint` refuses to change a failpoint of a rule. An invalid `testing.failpointRules` value stops the server: it fails to start, or exits when
+the value changes. A dynamic config file with a non-string map key in a rule is rejected as a
+whole by the file loader, which keeps the previous dynamic config and logs an error. Functional
+tests set the setting with `env.OverrideDynamicConfig(failpointrules.Setting, ...)` on a dedicated
+cluster.
 
 ### softassert package
 

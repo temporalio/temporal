@@ -1,10 +1,14 @@
 package temporal
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -15,10 +19,13 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/failpoints"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 )
 
 func lookupEnv(env map[string]string) func(string) (string, bool) {
@@ -137,6 +144,20 @@ func TestFailpointsOff(t *testing.T) {
 			factory, created := newDataStoreFactory(source)
 			require.Same(t, created, factory)
 
+			// No rules: the module ignores even invalid settings.
+			client := dynamicconfig.NewMemoryClient()
+			client.OverrideSetting(failpointrules.Setting, []any{map[string]any{"key": "on", "action": "Of"}})
+			collection := dynamicconfig.NewCollection(client, log.NewNoopLogger())
+			collection.Start()
+			t.Cleanup(collection.Stop)
+			app := fxtest.New(t,
+				fx.Supply(source, collection, fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger)))),
+				failpointrules.Module,
+				failpointrules.ReleaseModule,
+			)
+			app.RequireStart()
+			app.RequireStop()
+			require.Nil(t, source.Failpoints())
 		})
 	}
 }
@@ -152,6 +173,43 @@ func TestFailpointsOn(t *testing.T) {
 	require.NotNil(t, httpfaultstest.NewGenerator(source))
 	factory, created := newDataStoreFactory(source)
 	require.NotSame(t, created, factory)
+}
+
+// TestFailpointsOff_InvalidDynamicConfigFile loads a dynamic config file with invalid failpoint
+// settings, with the YAML file loader. With the switch off it has no effect and causes no error.
+func TestFailpointsOff_InvalidDynamicConfigFile(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "dynamicconfig.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`
+testing.failpointRules:
+  - value:
+      - key: on
+        action: Of
+        trigger: {1: 2}
+`), 0o600))
+	done := make(chan any)
+	t.Cleanup(func() { close(done) })
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	client, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{Filepath: path, PollInterval: time.Hour}, logger, done)
+	require.NoError(t, err)
+
+	source := resolveFailpoints(false, lookupEnv(nil), logger, metrics.NoopMetricsHandler)
+	collection := dynamicconfig.NewCollection(client, logger)
+	collection.Start()
+	t.Cleanup(collection.Stop)
+	// The converter runs, without failing, whenever the setting is read.
+	require.NotPanics(t, func() {
+		_ = failpointrules.Setting.Get(collection)()
+	})
+	app := fxtest.New(t,
+		fx.Supply(source, collection, fx.Annotate(logger, fx.As(new(log.Logger)))),
+		failpointrules.Module,
+		failpointrules.ReleaseModule,
+	)
+	app.RequireStart()
+	app.RequireStop()
+	require.Nil(t, source.Failpoints())
 }
 
 func TestWithFailpointSourceObserver_Composes(t *testing.T) {
