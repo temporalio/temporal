@@ -70,6 +70,8 @@ func (m *backCompMapper) GetAlias(fieldName string, namespaceName string) (strin
 	if err != nil {
 		return "", err
 	}
+	// TODO: Remove this check once custom search attributes of Elasticsearch visibility stores
+	// are only registered as namespace aliases and no cluster-level custom search attribute is left.
 	if m.isLegacyCustomSearchAttribute(alias) {
 		return "", serviceerror.NewInvalidArgumentf(
 			"search attribute field %s is aliased to %s, which is already a cluster-level custom search attribute",

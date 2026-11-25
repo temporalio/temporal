@@ -1,16 +1,20 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"testing"
+	"time"
 
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 )
 
@@ -50,20 +54,37 @@ func TestRegisterPreallocatedSearchAttributeMappings(t *testing.T) {
 			},
 		},
 		{
-			name: "elasticsearch failure doesn't block startup",
+			name: "elasticsearch failure is retried",
 			setup: func(ctrl *gomock.Controller, saProvider *searchattribute.MockProvider) manager.VisibilityManager {
 				visManager := newMockVisibilityManager(ctrl, esconfig.PersistenceName)
-				saProvider.EXPECT().GetSearchAttributes(preallocatedFieldsTestIndex, false).Return(esClusterMetadataTypeMap(), nil)
-				visManager.EXPECT().AddSearchAttributes(gomock.Any(), expectedRequest).Return(errors.New("forbidden"))
+				saProvider.EXPECT().GetSearchAttributes(preallocatedFieldsTestIndex, false).Return(esClusterMetadataTypeMap(), nil).Times(2)
+				gomock.InOrder(
+					visManager.EXPECT().AddSearchAttributes(gomock.Any(), expectedRequest).Return(errors.New("unavailable")),
+					visManager.EXPECT().AddSearchAttributes(gomock.Any(), expectedRequest).Return(nil),
+				)
 				return visManager
 			},
 		},
 		{
-			name: "cluster metadata lookup failure skips registration",
+			name: "elasticsearch failure gives up after the retries",
 			setup: func(ctrl *gomock.Controller, saProvider *searchattribute.MockProvider) manager.VisibilityManager {
 				visManager := newMockVisibilityManager(ctrl, esconfig.PersistenceName)
-				saProvider.EXPECT().GetSearchAttributes(preallocatedFieldsTestIndex, false).
-					Return(searchattribute.NameTypeMap{}, errors.New("unavailable"))
+				saProvider.EXPECT().GetSearchAttributes(preallocatedFieldsTestIndex, false).Return(esClusterMetadataTypeMap(), nil).Times(3)
+				visManager.EXPECT().AddSearchAttributes(gomock.Any(), expectedRequest).Return(errors.New("forbidden")).Times(3)
+				return visManager
+			},
+		},
+		{
+			name: "cluster metadata lookup failure is retried",
+			setup: func(ctrl *gomock.Controller, saProvider *searchattribute.MockProvider) manager.VisibilityManager {
+				visManager := newMockVisibilityManager(ctrl, esconfig.PersistenceName)
+				gomock.InOrder(
+					saProvider.EXPECT().GetSearchAttributes(preallocatedFieldsTestIndex, false).
+						Return(searchattribute.NameTypeMap{}, errors.New("unavailable")),
+					saProvider.EXPECT().GetSearchAttributes(preallocatedFieldsTestIndex, false).
+						Return(esClusterMetadataTypeMap(), nil),
+				)
+				visManager.EXPECT().AddSearchAttributes(gomock.Any(), expectedRequest).Return(nil)
 				return visManager
 			},
 		},
@@ -93,13 +114,39 @@ func TestRegisterPreallocatedSearchAttributeMappings(t *testing.T) {
 		},
 	}
 
+	retryPolicy := backoff.NewExponentialRetryPolicy(time.Millisecond).WithMaximumAttempts(3)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			saProvider := searchattribute.NewMockProvider(ctrl)
 			visManager := tc.setup(ctrl, saProvider)
-			// Unexpected calls on the mocks fail the test.
-			RegisterPreallocatedSearchAttributeMappings(visManager, saProvider, log.NewNoopLogger())
+			// Unexpected or missing calls on the mocks fail the test.
+			registerPreallocatedSearchAttributeMappings(context.Background(), visManager, saProvider, retryPolicy, log.NewNoopLogger())
 		})
 	}
+}
+
+func TestRegisterPreallocatedSearchAttributeMappings_RunsInBackgroundUntilStopped(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	saProvider := searchattribute.NewMockProvider(ctrl)
+	visManager := newMockVisibilityManager(ctrl, esconfig.PersistenceName)
+	saProvider.EXPECT().GetSearchAttributes(preallocatedFieldsTestIndex, false).Return(esClusterMetadataTypeMap(), nil).AnyTimes()
+	attempted := make(chan struct{}, 1)
+	// Elasticsearch is unavailable: the registration keeps retrying until the service stops.
+	visManager.EXPECT().AddSearchAttributes(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *manager.AddSearchAttributesRequest) error {
+			select {
+			case attempted <- struct{}{}:
+			default:
+			}
+			return errors.New("unavailable")
+		},
+	).MinTimes(1)
+
+	lc := fxtest.NewLifecycle(t)
+	RegisterPreallocatedSearchAttributeMappings(lc, visManager, saProvider, log.NewNoopLogger())
+	lc.RequireStart()
+	<-attempted
+	// Stop cancels the retries and waits for the registration to return.
+	lc.RequireStop()
 }

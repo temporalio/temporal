@@ -859,6 +859,8 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_ElasticsearchHidesPreal
 			"Keyword05": "NewAttr",
 			// Same name as a cluster-level custom search attribute: not exposed.
 			"Keyword06": "CustomKeywordField",
+			// A field that is not in cluster metadata (eg: a larger pool on another cluster): not exposed.
+			"Keyword50": "OtherAttr",
 		}},
 		s.currentClusterName,
 	)
@@ -869,12 +871,12 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_ElasticsearchHidesPreal
 	expected["NewAttr"] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 	s.Equal(expected, resp.GetCustomAttributes())
 
-	// The namespace is optional for Elasticsearch: a lookup failure is not an error.
+	// A namespace that can't be read is an error.
 	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("missing")).
 		Return(nil, serviceerror.NewNamespaceNotFound("missing"))
-	resp, err = s.handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{Namespace: "missing"})
-	s.Require().NoError(err)
-	s.Equal(legacyOnly, resp.GetCustomAttributes())
+	_, err = s.handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{Namespace: "missing"})
+	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+	s.Require().ErrorAs(err, &namespaceNotFoundErr)
 }
 
 func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
