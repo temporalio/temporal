@@ -618,6 +618,9 @@ func (h *OperatorHandlerImpl) SoftDeleteNamespace(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+	if !h.config.EnableNamespaceSoftDelete() {
+		return nil, errNamespaceSoftDeleteNotAllowed
+	}
 	err := h.namespaceHandler.SoftDeleteNamespace(ctx, namespace.Name(request.GetNamespace()), namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err

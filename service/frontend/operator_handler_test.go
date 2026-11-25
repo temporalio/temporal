@@ -1880,7 +1880,15 @@ func (s *operatorHandlerSuite) TestSoftDeleteNamespace_NilRequest() {
 	s.ErrorIs(err, errRequestNotSet)
 }
 
+func (s *operatorHandlerSuite) TestSoftDeleteNamespace_Disabled() {
+	s.handler.config.EnableNamespaceSoftDelete = dynamicconfig.GetBoolPropertyFn(false)
+
+	_, err := s.handler.SoftDeleteNamespace(context.Background(), &operatorservice.SoftDeleteNamespaceRequest{Namespace: "ns"})
+	s.ErrorIs(err, errNamespaceSoftDeleteNotAllowed)
+}
+
 func (s *operatorHandlerSuite) TestSoftDeleteNamespace_ReturnsHandlerError() {
+	s.handler.config.EnableNamespaceSoftDelete = dynamicconfig.GetBoolPropertyFn(true)
 	s.mockResource.MetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
 	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "ns"}).
 		Return(nil, serviceerror.NewNamespaceNotFound("ns"))

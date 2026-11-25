@@ -4,12 +4,14 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 )
 
 func (s *FunctionalClustersTestSuite) TestSoftDeleteNamespace_ReplicatesAndSurvivesFailover() {
 	namespace := s.createGlobalNamespace()
+	s.clusters[0].OverrideDynamicConfig(s.T(), dynamicconfig.EnableNamespaceSoftDelete, true)
 
 	_, err := s.clusters[0].OperatorClient().SoftDeleteNamespace(testcore.NewContext(), &operatorservice.SoftDeleteNamespaceRequest{
 		Namespace: namespace,
