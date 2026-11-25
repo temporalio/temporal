@@ -119,6 +119,146 @@ func (s *sessionTestSuite) TestBuildDSN() {
 			outIsolationVal: "'repeatable-read'",
 			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
 		},
+		{
+			name: "empty isolation level falls back to default",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"transaction_isolation": ""},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "whitespace isolation level falls back to default",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"transaction_isolation": " "},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "tab and newline isolation level falls back to default",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"transaction_isolation": "\t\n"},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "empty legacy isolation level falls back to default",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"tx_isolation": ""},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "whitespace legacy isolation level falls back to default",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"tx_isolation": " "},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "tab and newline legacy isolation level falls back to default",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"tx_isolation": "\t\n"},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "both isolation aliases blank fall back to default",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"transaction_isolation": "", "tx_isolation": ""},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "valid isolation level with blank legacy alias",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"transaction_isolation": "REPEATABLE-READ", "tx_isolation": ""},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'repeatable-read'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "valid legacy isolation level with blank full-name alias",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"tx_isolation": "REPEATABLE-READ", "transaction_isolation": ""},
+			},
+			outIsolationKey: "tx_isolation",
+			outIsolationVal: "'repeatable-read'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
+		{
+			name: "unrelated blank attribute is preserved",
+			in: config.SQL{
+				User:              "test",
+				Password:          "pass",
+				ConnectProtocol:   "tcp",
+				ConnectAddr:       "192.168.0.1:3306",
+				DatabaseName:      "db1",
+				ConnectAttributes: map[string]string{"readTimeout": ""},
+			},
+			outIsolationKey: "transaction_isolation",
+			outIsolationVal: "'READ-COMMITTED'",
+			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
+		},
 	}
 
 	for _, dbKind := range []sqlplugin.DbKind{sqlplugin.DbKindMain, sqlplugin.DbKindVisibility} {
@@ -163,6 +303,10 @@ func (s *sessionTestSuite) Test_Visibility_DoesntSupport_interpolateParams() {
 func buildExpectedURLParams(dbKind sqlplugin.DbKind, attrs map[string]string, isolationKey string, isolationValue string) url.Values {
 	result := make(map[string][]string, len(dsnAttrOverrides)+len(attrs)+1)
 	for k, v := range attrs {
+		key := strings.ToLower(strings.TrimSpace(k))
+		if (key == isolationLevelAttrName || key == isolationLevelAttrNameLegacy) && strings.TrimSpace(v) == "" {
+			continue
+		}
 		result[k] = []string{v}
 	}
 	result[isolationKey] = []string{isolationValue}

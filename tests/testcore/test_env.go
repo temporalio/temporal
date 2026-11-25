@@ -147,7 +147,7 @@ func WithSpanExporter(exporter sdktrace.SpanExporter) TestOption {
 
 // WithDisableTestloggerFailure disables the test logger's behavior of failing
 // the test when an error log matches a registered expectation (e.g. soft-assert
-// errors tagged with tag.FailedAssertion). Use for tests that intentionally
+// errors tagged with the failed-assertion marker). Use for tests that intentionally
 // trigger and then verify soft-assert errors. Implies WithDedicatedCluster,
 // because FailOnError is cluster-wide and disabling it on a shared cluster may
 // hide failures in concurrent tests.

@@ -141,6 +141,7 @@ func (c *mutationTestCase) startWFT(
 		false,
 		nil,
 		0,
+		"",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -453,6 +454,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				false,
 				nil,
 				0,
+				"",
 			)
 			require.NoError(t, err)
 			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
