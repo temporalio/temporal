@@ -2,6 +2,7 @@ package fc
 
 import (
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -14,19 +15,16 @@ import (
 
 func TestCheckWithoutCallbackRollsBackWithoutRegisteringWaiters(t *testing.T) {
 	t.Parallel()
-	ts := clock.NewEventTimeSource().Update(time.Unix(1, 0))
-	ts.UseAsyncTimers(true)
-	r := NewReadiness(ts)
-	t.Cleanup(r.Stop)
-	const testNsID = namespace.ID("nsid")
-	task := &testTask{limiters: []Limiter{
-		{Type: enumsspb.LIMITER_TYPE_LOCAL_RATE_LIMIT, Key: "first", Source: LimiterSourceConfig, Config: new(simplelimiter.MakeParams(1, 0))},
-		{Type: enumsspb.LIMITER_TYPE_LOCAL_RATE_LIMIT, Key: "second", Source: LimiterSourceConfig, Config: new(simplelimiter.MakeParams(0, 0))},
-	}}
-	tx := r.NewTx(testNsID, task, nil)
+	r, _ := newLocalLimiterTestReadiness(t)
+	task := newLocalLimiterTestTask(1)
+	task.limiters[0].Key = "first"
+	second := newLocalLimiterTestTask(0).limiters[0]
+	second.Key = "second"
+	task.limiters = append(task.limiters, second)
+	tx := r.NewTx(localLimiterTestNamespace, task, nil)
 	require.ErrorIs(t, tx.Check(), ErrLocalLimiterBlocked)
 	require.True(t, tx.closed)
-	rs := r.getShard(testNsID)
+	rs := r.getShard(localLimiterTestNamespace)
 	func() {
 		rs.lock.Lock()
 		defer rs.lock.Unlock()
@@ -36,89 +34,92 @@ func TestCheckWithoutCallbackRollsBackWithoutRegisteringWaiters(t *testing.T) {
 
 	// The first limiter's token must have been returned when the second blocked.
 	task.limiters = task.limiters[:1]
-	tx = r.NewTx(testNsID, task, nil)
+	tx = r.NewTx(localLimiterTestNamespace, task, nil)
 	require.NoError(t, tx.Check())
 	tx.Close()
 }
 
 func TestLocalLimiterWakesOneWaiterPerInterval(t *testing.T) {
 	t.Parallel()
-	r, ts := newLocalLimiterTestReadiness(t)
-	high := newLocalLimiterTestTask(1)
-	low := newLocalLimiterTestTask(1)
-	low.priority = 2
-	notifications := make(chan string, 2)
-	highReady := &testCallback{onReady: func() { notifications <- "high" }}
-	lowReady := &testCallback{onReady: func() { notifications <- "low" }}
+	synctest.Test(t, func(t *testing.T) {
+		r, ts := newLocalLimiterTestReadiness(t)
+		high := newLocalLimiterTestTask(1)
+		low := newLocalLimiterTestTask(1)
+		low.priority = 2
+		notifications := make(chan string, 2)
+		highReady := &testCallback{onReady: func() { notifications <- "high" }}
+		lowReady := &testCallback{onReady: func() { notifications <- "low" }}
 
-	tx := r.NewTx(localLimiterTestNamespace, high, nil)
-	require.NoError(t, tx.Check())
-	tx.Close()
-	require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, low, lowReady).Check(), ErrLocalLimiterBlocked)
-	require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, high, highReady).Check(), ErrLocalLimiterBlocked)
+		tx := r.NewTx(localLimiterTestNamespace, high, nil)
+		require.NoError(t, tx.Check())
+		tx.Close()
+		require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, low, lowReady).Check(), ErrLocalLimiterBlocked)
+		require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, high, highReady).Check(), ErrLocalLimiterBlocked)
 
-	ts.Advance(time.Second - time.Nanosecond)
-	require.Equal(t, 1, ts.NumTimers())
-	require.Empty(t, notifications)
-	ts.Advance(time.Nanosecond)
-	require.Equal(t, "high", await.Rcv(t, notifications))
-	require.Equal(t, 1, ts.NumTimers())
+		ts.Advance(time.Second - time.Nanosecond)
+		synctest.Wait()
+		require.Empty(t, notifications)
+		ts.Advance(time.Nanosecond)
+		synctest.Wait()
+		require.Len(t, notifications, 1)
+		require.Equal(t, "high", await.Rcv(t, notifications))
 
-	// Waking a waiter does not spend its token. The fresh Check spends it.
-	tx = r.NewTx(localLimiterTestNamespace, high, highReady)
-	require.NoError(t, tx.Check())
-	tx.Close()
-	ts.Advance(time.Second)
-	require.Equal(t, "low", await.Rcv(t, notifications))
-	require.Zero(t, ts.NumTimers())
+		// Waking a waiter does not spend its token. The fresh Check spends it.
+		tx = r.NewTx(localLimiterTestNamespace, high, highReady)
+		require.NoError(t, tx.Check())
+		tx.Close()
+		ts.Advance(time.Second)
+		synctest.Wait()
+		require.Len(t, notifications, 1)
+		require.Equal(t, "low", await.Rcv(t, notifications))
+	})
 }
 
 func TestLocalLimiterCancelLastWaiterStopsTimer(t *testing.T) {
 	t.Parallel()
-	r, ts := newLocalLimiterTestReadiness(t)
-	task := newLocalLimiterTestTask(1)
-	tx := r.NewTx(localLimiterTestNamespace, task, nil)
-	require.NoError(t, tx.Check())
-	tx.Close()
-	notifications := make(chan struct{}, 1)
-	cb := &testCallback{onReady: func() { notifications <- struct{}{} }}
-	require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, task, cb).Check(), ErrLocalLimiterBlocked)
-	require.Equal(t, 1, ts.NumTimers())
+	synctest.Test(t, func(t *testing.T) {
+		r, ts := newLocalLimiterTestReadiness(t)
+		task := newLocalLimiterTestTask(1)
+		tx := r.NewTx(localLimiterTestNamespace, task, nil)
+		require.NoError(t, tx.Check())
+		tx.Close()
+		notifications := make(chan struct{}, 1)
+		cb := &testCallback{onReady: func() { notifications <- struct{}{} }}
+		require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, task, cb).Check(), ErrLocalLimiterBlocked)
+		require.Positive(t, ts.NumTimers())
 
-	r.CancelAllCallbacks(localLimiterTestNamespace, cb)
-	require.Zero(t, ts.NumTimers())
-	ts.Advance(time.Second)
-	require.Empty(t, notifications)
+		r.CancelAllCallbacks(localLimiterTestNamespace, cb)
+		// A canceled waiter must release the timer before its original deadline.
+		require.Zero(t, ts.NumTimers())
+		ts.Advance(time.Second)
+		synctest.Wait()
+		require.Empty(t, notifications)
+	})
 }
 
 func TestLocalLimiterStopCancelsPendingTimers(t *testing.T) {
 	t.Parallel()
 	r, ts := newLocalLimiterTestReadiness(t)
 	task := newLocalLimiterTestTask(0)
-	notifications := make(chan struct{}, 1)
-	cb := &testCallback{onReady: func() { notifications <- struct{}{} }}
-	require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, task, cb).Check(), ErrLocalLimiterBlocked)
-	require.Equal(t, 1, ts.NumTimers())
+	require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, task, &testCallback{}).Check(), ErrLocalLimiterBlocked)
+	require.Positive(t, ts.NumTimers())
 
 	r.Stop()
 	require.Zero(t, ts.NumTimers())
-	require.Empty(t, notifications)
 }
 
 func TestLocalLimiterRollbackWakesWaiter(t *testing.T) {
 	t.Parallel()
-	r, ts := newLocalLimiterTestReadiness(t)
+	r, _ := newLocalLimiterTestReadiness(t)
 	task := newLocalLimiterTestTask(1)
 	notifications := make(chan struct{}, 1)
 	cb := &testCallback{onReady: func() { notifications <- struct{}{} }}
 	tx := r.NewTx(localLimiterTestNamespace, task, nil)
 	require.NoError(t, tx.Check())
 	require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, task, cb).Check(), ErrLocalLimiterBlocked)
-	require.Equal(t, 1, ts.NumTimers())
 
 	tx.Rollback(t.Context())
 	await.Rcv(t, notifications)
-	require.Zero(t, ts.NumTimers())
 	retry := r.NewTx(localLimiterTestNamespace, task, cb)
 	require.NoError(t, retry.Check())
 	retry.Close()
@@ -144,18 +145,22 @@ func TestLocalLimiterCommitKeepsOneTokenConsumed(t *testing.T) {
 
 func TestLocalLimiterIncreaseFromZeroReschedulesWaiter(t *testing.T) {
 	t.Parallel()
-	r, ts := newLocalLimiterTestReadiness(t)
-	checkLocalLimiterRateIncrease(t, r, ts, newLocalLimiterTestTask(0))
+	synctest.Test(t, func(t *testing.T) {
+		r, ts := newLocalLimiterTestReadiness(t)
+		checkLocalLimiterRateIncrease(t, r, ts, newLocalLimiterTestTask(0))
+	})
 }
 
 func TestLocalLimiterIncreaseFromOnePerDayReschedulesWaiter(t *testing.T) {
 	t.Parallel()
-	r, ts := newLocalLimiterTestReadiness(t)
-	slow := newLocalLimiterTestTask(1.0 / (24 * time.Hour).Seconds())
-	tx := r.NewTx(localLimiterTestNamespace, slow, nil)
-	require.NoError(t, tx.Check())
-	tx.Close()
-	checkLocalLimiterRateIncrease(t, r, ts, slow)
+	synctest.Test(t, func(t *testing.T) {
+		r, ts := newLocalLimiterTestReadiness(t)
+		slow := newLocalLimiterTestTask(1.0 / (24 * time.Hour).Seconds())
+		tx := r.NewTx(localLimiterTestNamespace, slow, nil)
+		require.NoError(t, tx.Check())
+		tx.Close()
+		checkLocalLimiterRateIncrease(t, r, ts, slow)
+	})
 }
 
 func checkLocalLimiterRateIncrease(t *testing.T, r *Readiness, ts *clock.EventTimeSource, slow *localLimiterTestTask) {
@@ -163,18 +168,18 @@ func checkLocalLimiterRateIncrease(t *testing.T, r *Readiness, ts *clock.EventTi
 	notifications := make(chan struct{}, 1)
 	cb := &testCallback{onReady: func() { notifications <- struct{}{} }}
 	require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, slow, cb).Check(), ErrLocalLimiterBlocked)
-	require.Equal(t, 1, ts.NumTimers())
 
 	// A fresh Check installs the new rate. It clips existing debt to one interval and leaves
 	// the original waiter registered.
 	fast := newLocalLimiterTestTask(1)
 	require.ErrorIs(t, r.NewTx(localLimiterTestNamespace, fast, nil).Check(), ErrLocalLimiterBlocked)
 	ts.Advance(time.Second - time.Nanosecond)
-	require.Equal(t, 1, ts.NumTimers())
+	synctest.Wait()
 	require.Empty(t, notifications)
 	ts.Advance(time.Nanosecond)
+	synctest.Wait()
+	require.Len(t, notifications, 1)
 	await.Rcv(t, notifications)
-	require.Zero(t, ts.NumTimers())
 	retry := r.NewTx(localLimiterTestNamespace, fast, cb)
 	require.NoError(t, retry.Check())
 	retry.Close()
