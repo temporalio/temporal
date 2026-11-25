@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -526,6 +527,9 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(memoMap))
 		searchAttributes = getSearchAttributes(copyMapPayload(searchAttributesMap))
 	)
+	if mutableState.IsWorkflow() {
+		searchAttributes = withTimeSkippingSearchAttributes(searchAttributes, executionInfo.GetTimeSkippingInfo())
+	}
 
 	var parentExecution *commonpb.WorkflowExecution
 	if executionInfo.ParentWorkflowId != "" && executionInfo.ParentRunId != "" {
@@ -736,6 +740,33 @@ func getWorkflowMemo(
 		return nil
 	}
 	return &commonpb.Memo{Fields: memoFields}
+}
+
+// withTimeSkippingSearchAttributes sets the packed flags from TimeSkippingInfo.
+// Every visibility request must carry them because an upsert replaces the whole record.
+func withTimeSkippingSearchAttributes(
+	searchAttributes *commonpb.SearchAttributes,
+	tsi *persistencespb.TimeSkippingInfo,
+) *commonpb.SearchAttributes {
+	if tsi == nil {
+		return searchAttributes
+	}
+	if searchAttributes == nil {
+		searchAttributes = &commonpb.SearchAttributes{}
+	}
+	if searchAttributes.IndexedFields == nil {
+		searchAttributes.IndexedFields = make(map[string]*commonpb.Payload, 1)
+	}
+	state := sadefs.TimeSkippingStateDisabledUnused
+	if tsi.GetConfig().GetEnabled() {
+		state = sadefs.TimeSkippingStateEnabledUnused
+	}
+	if tsi.GetAccumulatedSkippedDuration().AsDuration() > 0 {
+		state = state[:1] + "T"
+	}
+	searchAttributes.IndexedFields[sadefs.TemporalTimeSkippingState] = sadefs.MustEncodeValue(
+		state, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	return searchAttributes
 }
 
 func getSearchAttributes(

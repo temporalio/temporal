@@ -235,6 +235,8 @@ type (
 
 		// timeSkippingInfoUpdated is used to track if executionInfo.TimeSkippingInfo is updated.
 		timeSkippingInfoUpdated bool
+		// timeSkippingVisibilityUpdated defers flag visibility writes until transaction close.
+		timeSkippingVisibilityUpdated bool
 
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
@@ -7978,6 +7980,9 @@ func (ms *MutableStateImpl) closeTransaction(
 	if isStateDirty {
 		regenTimerTasksForWorkflowTimeSkipping = ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
 	}
+	if err := ms.closeTransactionGenerateTimeSkippingVisibilityTask(); err != nil {
+		return closeTransactionResult{}, err
+	}
 
 	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
 	// the latter might fail the workflow task and buffered events must be flushed afterwards.
@@ -8791,6 +8796,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.chasmRequestIDsAdded = false
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
+	ms.timeSkippingVisibilityUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})

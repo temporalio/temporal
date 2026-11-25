@@ -3142,3 +3142,22 @@ func TestEvalDatetimeExpr(t *testing.T) {
 		})
 	}
 }
+
+func TestTimeSkippingHasSkippedDurationInvalidQueries(t *testing.T) {
+	t.Parallel()
+	for _, filter := range []string{
+		"TimeSkippingHasSkippedDuration = 1",
+		"TimeSkippingHasSkippedDuration = '01'",
+		"TimeSkippingHasSkippedDuration > true",
+		"TimeSkippingHasSkippedDuration BETWEEN false AND true",
+		"TimeSkippingHasSkippedDuration = (true, false)",
+		"TimeSkippingHasSkippedDuration IN ((true, false))",
+	} {
+		t.Run(filter, func(t *testing.T) {
+			t.Parallel()
+			converter := NewNilQueryConverter(testNamespaceName, searchattribute.TestNameTypeMap(), nil, metrics.NoopMetricsHandler, log.NewNoopLogger())
+			_, err := converter.Convert(filter)
+			require.Error(t, err)
+		})
+	}
+}

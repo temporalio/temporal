@@ -1,8 +1,10 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -31,12 +33,15 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/server/tools/tdbg"
+	"go.temporal.io/server/tools/tdbg/tdbgtest"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -2210,4 +2215,203 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 	s.Less(elapsed, maxTestDuration,
 		"the whole test took %v: %v of that is the fast-forward and settle waits, so the rest is RPC time — the 5min timer must be skipped, not waited out",
 		elapsed, fastForward+settleWindow)
+}
+
+// TestTimeSkipping_SearchAttributes verifies visibility tracks whether time skipping is enabled.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_SearchAttributes() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	start, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId: tv.RequestID(), Namespace: env.Namespace().String(),
+		WorkflowId: tv.WorkflowID(), WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+		WorkflowRunTimeout: durationpb.New(24 * time.Hour),
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{},
+	})
+	s.NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: start.GetRunId()}
+	awaitVisible := func(condition string) *workflowpb.WorkflowExecutionInfo {
+		query := fmt.Sprintf("WorkflowId = '%s' AND %s", tv.WorkflowID(), condition)
+		var result *workflowpb.WorkflowExecutionInfo
+		s.Await(func(s *TimeSkippingTestSuite) {
+			resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(), Query: query,
+			})
+			s.NoError(err)
+			s.Len(resp.GetExecutions(), 1, query)
+			result = resp.GetExecutions()[0]
+			s.assertTdbgTimeSkippingQuery(env, query, tv.WorkflowID())
+		}, 10*time.Second, 100*time.Millisecond)
+		return result
+	}
+
+	awaitVisible("TimeSkippingEnabled = false AND TimeSkippingHasSkippedDuration = false")
+	for _, enabled := range []bool{true, false, true, false} {
+		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			Namespace: env.Namespace().String(), WorkflowExecution: execution,
+			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: enabled}},
+			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+		})
+		s.NoError(err)
+		visible := awaitVisible(fmt.Sprintf("TimeSkippingEnabled = %t AND TimeSkippingHasSkippedDuration = false", enabled))
+		fields := visible.GetSearchAttributes().GetIndexedFields()
+		actual, err := sadefs.DecodeValue(fields[sadefs.TimeSkippingEnabled], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
+		s.NoError(err)
+		s.Equal(enabled, actual)
+		skipped, err := sadefs.DecodeValue(fields[sadefs.TimeSkippingHasSkippedDuration], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
+		s.NoError(err)
+		s.Equal(false, skipped)
+	}
+
+	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "test cleanup",
+	})
+	s.NoError(err)
+	awaitVisible("ExecutionStatus = 'Terminated' AND TimeSkippingEnabled = false")
+}
+
+// TestTimeSkipping_FirstSkippedDurationSearchAttribute verifies the first skip becomes visible
+// while the workflow is still running with time skipping enabled.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_FirstSkippedDurationSearchAttribute() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	s.startWorkflowWithTimeSkipping(env, tv, 24*time.Hour)
+
+	awaitVisible := func(hasSkipped bool) {
+		query := fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Running' AND TimeSkippingEnabled = true AND TimeSkippingHasSkippedDuration = %t", tv.WorkflowID(), hasSkipped)
+		s.Await(func(s *TimeSkippingTestSuite) {
+			resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(), Query: query,
+			})
+			s.NoError(err)
+			s.Len(resp.GetExecutions(), 1, query)
+			fields := resp.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()
+			used, err := sadefs.DecodeValue(fields[sadefs.TimeSkippingHasSkippedDuration], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
+			s.NoError(err)
+			s.Equal(hasSkipped, used)
+			count, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(), Query: query,
+			})
+			s.NoError(err)
+			s.Equal(int64(1), count.GetCount())
+			s.assertTdbgTimeSkippingQuery(env, query, tv.WorkflowID())
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+	// Finish the start and first-worker visibility writes before the first skip.
+	awaitVisible(false)
+	_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{scheduleActivityCmd(tv)},
+		}, nil
+	})
+	s.NoError(err)
+	s.Await(func(s *TimeSkippingTestSuite) {
+		resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowId = '%s' AND BuildIds = 'unversioned' AND TimeSkippingHasSkippedDuration = false", tv.WorkflowID()),
+		})
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 1)
+	}, 10*time.Second, 100*time.Millisecond)
+	_, err = env.TaskPoller().PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
+	s.NoError(err)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd(tv.TimerID(), time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+	awaitVisible(true)
+}
+
+// TestTimeSkipping_HasSkippedDurationSearchAttribute verifies skipped time is visible after automatic
+// disabling and remains visible at completion after another session.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_HasSkippedDurationSearchAttribute() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+	runID := s.startWorkflowWithTimeSkipping(env, tv, 24*time.Hour)
+	execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID}
+
+	setSkipLimit := func(limit int32) {
+		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			Namespace: env.Namespace().String(), WorkflowExecution: execution,
+			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+				Enabled: true, MaxSessionSkipCount: limit,
+			}},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+		})
+		s.NoError(err)
+	}
+	awaitVisible := func(condition string) {
+		query := fmt.Sprintf("WorkflowId = '%s' AND %s", tv.WorkflowID(), condition)
+		s.Await(func(s *TimeSkippingTestSuite) {
+			resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(), Query: query,
+			})
+			s.NoError(err)
+			s.Len(resp.GetExecutions(), 1, query)
+			fields := resp.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()
+			used, err := sadefs.DecodeValue(fields[sadefs.TimeSkippingHasSkippedDuration], enumspb.INDEXED_VALUE_TYPE_BOOL, false)
+			s.NoError(err)
+			s.Equal(true, used)
+			count, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(), Query: query,
+			})
+			s.NoError(err)
+			s.Equal(int64(1), count.GetCount())
+			s.assertTdbgTimeSkippingQuery(env, query, tv.WorkflowID())
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+
+	setSkipLimit(1)
+	_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd(tv.WithTimerIDNumber(1).TimerID(), time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+	awaitVisible("TimeSkippingEnabled = false AND TimeSkippingHasSkippedDuration = true")
+	firstSkip := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+
+	setSkipLimit(defaultMaxSkipPerSession)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd(tv.WithTimerIDNumber(2).TimerID(), 2*time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{completeWorkflowCmd()}}, nil
+	})
+	s.NoError(err)
+	totalSkip := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	s.Greater(totalSkip, firstSkip)
+	awaitVisible("ExecutionStatus = 'Completed' AND TimeSkippingHasSkippedDuration = true")
+}
+
+// assertTdbgTimeSkippingQuery verifies the admin CLI uses the same Boolean filters as the public API.
+func (s *TimeSkippingTestSuite) assertTdbgTimeSkippingQuery(env *testcore.TestEnv, query, workflowID string) {
+	for _, command := range []string{"list", "count"} {
+		var output bytes.Buffer
+		app := tdbgtest.NewCliApp(func(params *tdbg.Params) {
+			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(env.FrontendGRPCAddress()))
+			params.Writer = &output
+			params.ErrWriter = &output
+		})
+		args := []string{"tdbg", "--namespace", env.Namespace().String(), "visibility", command, "--query", query}
+		if command == "list" {
+			args = append(args, "--print-json")
+		}
+		s.NoError(app.RunContext(s.Context(), args), output.String())
+		if command == "list" {
+			s.Contains(output.String(), workflowID)
+		} else {
+			s.Equal("\nTotal Count: 1\n", output.String())
+		}
+	}
 }

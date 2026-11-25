@@ -460,6 +460,10 @@ func (c *QueryConverter[ExprT]) convertComparisonExpr(
 		return out, err
 	}
 
+	if colName.FieldName == sadefs.TimeSkippingEnabled || colName.FieldName == sadefs.TimeSkippingHasSkippedDuration {
+		return c.convertTimeSkippingFlagComparison(expr.Operator, colName, values)
+	}
+
 	switch colName.ValueType {
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		if !isSupportedKeywordOperator(expr.Operator) {
@@ -518,6 +522,10 @@ func (c *QueryConverter[ExprT]) convertIsExpr(expr *sqlparser.IsExpr) (ExprT, er
 	colName, err := c.convertColName(expr.Expr)
 	if err != nil {
 		return out, err
+	}
+
+	if colName.FieldName == sadefs.TimeSkippingEnabled || colName.FieldName == sadefs.TimeSkippingHasSkippedDuration {
+		colName = NewSAColumn(colName.Alias, sadefs.TemporalTimeSkippingState, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	}
 
 	switch expr.Operator {

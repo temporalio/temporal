@@ -654,6 +654,9 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessExecution_InheritedTimeSki
 		startTime := timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
 		s.Equal(startTime, request.StartTime)
 		s.Equal(startTime.Add(-initialSkip), request.CreateTime)
+		state, err := sadefs.DecodeValue(request.SearchAttributes.GetIndexedFields()[sadefs.TemporalTimeSkippingState], enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
+		s.NoError(err)
+		s.Equal("FT", state)
 	}
 
 	s.Run("Start", func() {
@@ -676,6 +679,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessExecution_InheritedTimeSki
 
 	s.Run("Upsert", func() {
 		execution, mutableState := newSkippedMutableState()
+		mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(3 * time.Hour)
 		wt := addWorkflowTaskScheduledEvent(mutableState)
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 			&persistence.GetWorkflowExecutionResponse{State: s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)}, nil)
@@ -693,6 +697,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessExecution_InheritedTimeSki
 
 	s.Run("Close", func() {
 		execution, mutableState := newSkippedMutableState()
+		mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(4 * time.Hour)
 		wt := addWorkflowTaskScheduledEvent(mutableState)
 		event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 		wt.StartedEventID = event.GetEventId()
@@ -1211,4 +1216,51 @@ func (s *visibilityQueueTaskExecutorSuite) TestCopyMapPayload() {
 	s.Equal(input, result)
 	result[key].GetData()[0] = '0'
 	s.Equal(byte('1'), val.GetData()[0])
+}
+
+func TestWithTimeSkippingSearchAttributes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		info  *persistencespb.TimeSkippingInfo
+		state string
+	}{
+		{name: "no time-skipping info"},
+		{name: "empty time-skipping info", info: &persistencespb.TimeSkippingInfo{}, state: "FF"},
+		{name: "disabled config", info: &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{}}, state: "FF"},
+		{
+			name:  "enabled before any skip",
+			info:  &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}},
+			state: "TF",
+		},
+		{
+			name:  "inherited skipped time without config",
+			info:  &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(time.Hour)},
+			state: "FT",
+		},
+		{
+			name:  "enabled with inherited skipped time",
+			info:  &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}, AccumulatedSkippedDuration: durationpb.New(time.Hour)},
+			state: "TT",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			existing := payload.EncodeString("value")
+			attributes := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": existing}}
+			expected := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"CustomKeywordField": existing}}
+			if tc.info != nil {
+				expected.IndexedFields[sadefs.TemporalTimeSkippingState] = sadefs.MustEncodeValue(tc.state, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+			}
+			require.Equal(t, expected, withTimeSkippingSearchAttributes(attributes, tc.info))
+		})
+	}
+
+	t.Run("allocates search attributes", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalTimeSkippingState: sadefs.MustEncodeValue("FF", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+		}}, withTimeSkippingSearchAttributes(nil, &persistencespb.TimeSkippingInfo{}))
+	})
 }

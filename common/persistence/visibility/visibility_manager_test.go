@@ -318,3 +318,46 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 	_, err = s.visibilityManager.GetWorkflowExecution(context.Background(), request)
 	s.Equal(persistence.ErrPersistenceSystemLimitExceeded, err)
 }
+
+// TestTimeSkippingDecodedSearchAttributes verifies public booleans are decoded without mutating stored attributes.
+func TestTimeSkippingDecodedSearchAttributes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		state       *commonpb.Payload
+		enabled     bool
+		hasDuration bool
+		wantError   bool
+	}{
+		{name: "missing"},
+		{name: "null", state: sadefs.MustEncodeValue(nil, enumspb.INDEXED_VALUE_TYPE_KEYWORD)},
+		{name: "disabled without duration", state: sadefs.MustEncodeValue("FF", enumspb.INDEXED_VALUE_TYPE_KEYWORD)},
+		{name: "disabled with duration", state: sadefs.MustEncodeValue("FT", enumspb.INDEXED_VALUE_TYPE_KEYWORD), hasDuration: true},
+		{name: "enabled without duration", state: sadefs.MustEncodeValue("TF", enumspb.INDEXED_VALUE_TYPE_KEYWORD), enabled: true},
+		{name: "enabled with duration", state: sadefs.MustEncodeValue("TT", enumspb.INDEXED_VALUE_TYPE_KEYWORD), enabled: true, hasDuration: true},
+		{name: "invalid state", state: sadefs.MustEncodeValue("01", enumspb.INDEXED_VALUE_TYPE_KEYWORD), wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			attributes := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{}}
+			if tc.state != nil {
+				attributes.IndexedFields[sadefs.TemporalTimeSkippingState] = tc.state
+			}
+			visManager := newVisibilityManagerImpl(nil, log.NewNoopLogger(), searchattribute.NewTestMapperProvider(nil), nil, nil)
+			info, err := visManager.convertToWorkflowExecutionInfo(&store.InternalExecutionInfo{SearchAttributes: attributes}, testNamespace)
+			if tc.wantError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			expected := map[string]*commonpb.Payload{}
+			if tc.name != "missing" && tc.name != "null" {
+				expected[sadefs.TimeSkippingEnabled] = sadefs.MustEncodeValue(tc.enabled, enumspb.INDEXED_VALUE_TYPE_BOOL)
+				expected[sadefs.TimeSkippingHasSkippedDuration] = sadefs.MustEncodeValue(tc.hasDuration, enumspb.INDEXED_VALUE_TYPE_BOOL)
+			}
+			require.Equal(t, expected, info.GetSearchAttributes().GetIndexedFields())
+			require.NotContains(t, attributes.IndexedFields, sadefs.TimeSkippingHasSkippedDuration)
+			require.NotContains(t, attributes.IndexedFields, sadefs.TimeSkippingEnabled)
+		})
+	}
+}
