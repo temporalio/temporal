@@ -42,10 +42,17 @@ func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 
 // newTaggedMetricsHandler returns a metrics handler tagged with the Scheduler's namespace and backend.
 func newTaggedMetricsHandler(baseHandler metrics.Handler, scheduler *Scheduler) metrics.Handler {
-	return baseHandler.WithTags(
-		metrics.NamespaceTag(scheduler.Namespace),
+	return newNamespaceTaggedMetricsHandler(baseHandler, scheduler.Namespace)
+}
+
+// newNamespaceTaggedMetricsHandler carries the V1-compatible label set; see
+// metrics.ScheduleSDKCompatTags.
+func newNamespaceTaggedMetricsHandler(baseHandler metrics.Handler, namespace string) metrics.Handler {
+	return baseHandler.WithTags(append(
+		metrics.ScheduleSDKCompatTags(),
+		metrics.NamespaceTag(namespace),
 		metrics.StringTag(metrics.ScheduleBackendTag, metrics.ScheduleBackendChasm),
-	)
+	)...)
 }
 
 // Outcomes for task-lifecycle counters (e.g. ScheduleIdleTask). Mutually

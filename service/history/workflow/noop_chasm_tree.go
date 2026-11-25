@@ -56,6 +56,10 @@ func (*noopChasmTree) IsDirty() bool {
 	return false
 }
 
+func (*noopChasmTree) SpeculativeTransitionFailoverVersion() (int64, bool) {
+	return 0, false
+}
+
 func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error {
 	return nil
 }

@@ -153,11 +153,12 @@ func newStartTestHandler(t *testing.T) (*handler, context.Context, *metricstest.
 	capture := metricsHandler.StartCapture()
 	t.Cleanup(func() { metricsHandler.StopCapture(capture) })
 
-	maxLinks := func(string) int { return 10 }
+	linksConfig := test.NewLinksValidatorConfig()
+	linksConfig.MaxLinksPerExecution = func(string) int { return 10 }
 	h := &handler{
 		config:            config,
 		callbackValidator: test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig()),
-		linkValidator:     newLinkValidator(maxLinks, maxLinks, func(string) int { return 4000 }),
+		linkValidator:     test.NewLinksValidator(t, linksConfig),
 		logger:            log.NewTestLogger(),
 		metricsHandler:    metricsHandler,
 	}
@@ -208,9 +209,9 @@ func callbackCount(ctx context.Context, t *testing.T) int {
 	return count
 }
 
-// TestStartActivityExecution_UseExistingMetric verifies that the attach update, which also runs on a new
-// activity, records NexusActivityUseExisting only when it attaches to an existing activity.
-func TestStartActivityExecution_UseExistingMetric(t *testing.T) {
+// TestStartActivityExecution_UseExistingNexusContextMetric verifies that the attach update, which also runs on a
+// new activity, records NexusActivityUseExisting only when it attaches to an existing activity.
+func TestStartActivityExecution_UseExistingNexusContextMetric(t *testing.T) {
 	h, ctx, capture := newStartTestHandler(t)
 
 	resp, err := startWithAttach(ctx, h, "request-1", enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING)
@@ -231,6 +232,43 @@ func TestStartActivityExecution_UseExistingMetric(t *testing.T) {
 	require.False(t, resp.GetStarted())
 	require.Equal(t, 2, callbackCount(ctx, t))
 	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityUseExisting.Name()), 1)
+}
+
+// TestStartActivityExecution_StartWithNexusContextMetric verifies that NexusActivityStartWithContext counts only
+// new activities started with a Nexus serialization context.
+func TestStartActivityExecution_StartWithNexusContextMetric(t *testing.T) {
+	h, ctx, capture := newStartTestHandler(t)
+
+	resp, err := startWithAttach(ctx, h, "request-1", enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING)
+	require.NoError(t, err)
+	require.True(t, resp.GetStarted())
+	recordings := capture.SnapshotMetric(metrics.NexusActivityStartWithContext.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, "namespace", recordings[0].Tags[metrics.NamespaceTag("").Key])
+
+	// Attaching to the existing activity is not a new start.
+	resp, err = startWithAttach(ctx, h, "request-2", enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING)
+	require.NoError(t, err)
+	require.False(t, resp.GetStarted())
+	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityStartWithContext.Name()), 1)
+
+	// A new activity without a Nexus context is not counted.
+	plainResp, err := h.StartActivityExecution(ctx, &activitypb.StartActivityExecutionRequest{
+		NamespaceId: "namespace-id",
+		FrontendRequest: &workflowservice.StartActivityExecutionRequest{
+			Namespace:           "namespace",
+			ActivityId:          "activity-id-2",
+			ActivityType:        &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+			StartToCloseTimeout: durationpb.New(time.Minute),
+			RequestId:           "request-3",
+			IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, plainResp.GetFrontendResponse().GetStarted())
+	require.Len(t, capture.SnapshotMetric(metrics.NexusActivityStartWithContext.Name()), 1)
 }
 
 // TestStartActivityExecution_FailRejectsAttach verifies that under ACTIVITY_ID_CONFLICT_POLICY_FAIL,

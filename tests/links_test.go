@@ -268,11 +268,11 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToEvent()
 		ls.Positive(gotRequestInfo.GetEventId())
 	}
 
-	s.Run("SignalExistingWorkflow", func(ls *LinksSuite) {
-		testImpl(ls, true)
+	s.Run("SignalExistingWorkflow", func(s *LinksSuite) {
+		testImpl(s, true)
 	})
-	s.Run("SignalStartsNewWorkflow", func(ls *LinksSuite) {
-		testImpl(ls, false)
+	s.Run("SignalStartsNewWorkflow", func(s *LinksSuite) {
+		testImpl(s, false)
 	})
 }
 
@@ -473,11 +473,11 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BacklinkSurvivesReset(
 		ls.False(resetSignalInfo.GetBuffered())
 	}
 
-	s.Run("SignalExistingWorkflow", func(ls *LinksSuite) {
-		testImpl(ls, true)
+	s.Run("SignalExistingWorkflow", func(s *LinksSuite) {
+		testImpl(s, true)
 	})
-	s.Run("SignalStartsNewWorkflow", func(ls *LinksSuite) {
-		testImpl(ls, false)
+	s.Run("SignalStartsNewWorkflow", func(s *LinksSuite) {
+		testImpl(s, false)
 	})
 }
 
@@ -616,11 +616,11 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BufferedDuringWorkflow
 		}
 	}
 
-	s.Run("SignalExistingWorkflow", func(ls *LinksSuite) {
-		testImpl(ls, true)
+	s.Run("SignalExistingWorkflow", func(s *LinksSuite) {
+		testImpl(s, true)
 	})
-	s.Run("SignalStartsNewWorkflow", func(ls *LinksSuite) {
-		testImpl(ls, false)
+	s.Run("SignalStartsNewWorkflow", func(s *LinksSuite) {
+		testImpl(s, false)
 	})
 }
 
