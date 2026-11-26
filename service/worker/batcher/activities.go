@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -33,7 +32,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
-	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 const (
@@ -46,8 +44,7 @@ const (
 )
 
 var (
-	errNamespaceMismatch            = errors.New("namespace mismatch")
-	errAdminBatchNamespaceNotSystem = errors.New("admin batches should run in the system namespace")
+	errNamespaceMismatch = errors.New("namespace mismatch")
 
 	batchQuotaRequest = quotas.Request{
 		Token: 1,
@@ -233,32 +230,6 @@ func fetchPage(
 		executionInfos:      executionInfos,
 		targetExecutionInfo: targetExecutionInfo,
 		nextPageToken:       nextPageToken,
-		pageNumber:          pageNumber,
-	}, nil
-}
-
-// fetchAllNamespacesPage fetches the next page of an admin batch across all namespaces.
-func fetchAllNamespacesPage(
-	ctx context.Context,
-	adminClient adminservice.AdminServiceClient,
-	config batchProcessorConfig,
-	pageToken []byte,
-	pageNumber int,
-) (*page, error) {
-	resp, err := adminClient.ListExecutions(ctx, &adminservice.ListExecutionsRequest{
-		Query:         config.adjustedQuery,
-		PageSize:      int32(pageSize),
-		NextPageToken: pageToken,
-	})
-	if err != nil {
-		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
-			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
-		}
-		return nil, err
-	}
-	return &page{
-		adminExecutionInfos: resp.GetExecutions(),
-		nextPageToken:       resp.GetNextPageToken(),
 		pageNumber:          pageNumber,
 	}, nil
 }
@@ -455,15 +426,6 @@ func (a *activities) checkAndGetTargetNamespace(batchParams *batchspb.BatchOpera
 	return a.namespace.String(), nil
 }
 
-func isAdminRequest(batchParams *batchspb.BatchOperationInput) bool {
-	return batchParams.AdminRequest != nil
-}
-
-func isAdminDelegatedRequest(batchParams *batchspb.BatchOperationInput) bool {
-	_, ok := batchParams.GetAdminRequest().GetOperation().(*adminservice.StartAdminBatchOperationRequest_DelegationOperation)
-	return ok
-}
-
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
 // nolint:revive,cognitive-complexity
 func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
@@ -620,21 +582,6 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 	default:
 		return query
 	}
-}
-
-func (a *activities) adjustQueryAdminBatchType(
-	batchParams *batchspb.BatchOperationInput,
-) string {
-	adminReq := batchParams.GetAdminRequest()
-	// if a user batch is delegated as an admin batch
-	if isAdminDelegatedRequest(batchParams) {
-		batchType := batchParams.BatchType
-		return a.adjustQueryBatchTypeEnum(adminReq.GetVisibilityQuery(), batchType)
-	}
-	// other admin batch:
-	// RefreshWorkflowTasks applies to both open and closed workflows,
-	// so no additional filter is needed - return query as-is.
-	return adminReq.GetVisibilityQuery()
 }
 
 // getOperationRPS returns the rate for a batch operation.
@@ -1049,56 +996,6 @@ func isRetryableTaskError(err error, batchOperation *batchspb.BatchOperationInpu
 		isNonRetryableError(err, batchOperation.BatchType) ||
 		slices.Contains(batchOperation.NonRetryableErrors, err.Error())
 	return !nonRetryable
-}
-
-func (a *activities) processAdminTask(
-	ctx context.Context,
-	batchOperation *batchspb.BatchOperationInput,
-	task task,
-	limiter quotas.RequestRateLimiter,
-) error {
-	adminReq := batchOperation.AdminRequest
-	switch adminReq.Operation.(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
-		if info := task.adminExecutionInfo; info != nil {
-			return processTask(ctx, limiter, task,
-				func(*workflowpb.WorkflowExecutionInfo) error {
-					execution := &commonpb.WorkflowExecution{WorkflowId: info.GetBusinessId(), RunId: info.GetRunId()}
-					return a.refreshWorkflowTasks(ctx, info.GetNamespaceId(), info.GetArchetypeId(), execution)
-				})
-		}
-		return processTask(ctx, limiter, task,
-			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(executionInfo)
-				if err != nil {
-					return fmt.Errorf("archetypeID extraction error: %w", err)
-				}
-				return a.refreshWorkflowTasks(ctx, batchOperation.NamespaceId, uint32(archetypeID), executionInfo.Execution)
-			})
-	default:
-		return fmt.Errorf("unknown admin batch type: %T", adminReq.Operation)
-	}
-}
-
-func (a *activities) refreshWorkflowTasks(
-	ctx context.Context,
-	namespaceID string,
-	archetypeID uint32,
-	execution *commonpb.WorkflowExecution,
-) error {
-	_, err := a.HistoryClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-		NamespaceId: namespaceID,
-		ArchetypeId: archetypeID,
-		Request: &adminservice.RefreshWorkflowTasksRequest{
-			NamespaceId: namespaceID,
-			Execution:   execution,
-		},
-	})
-	return err
-}
-
-func allNamespaces(batchParams *batchspb.BatchOperationInput) bool {
-	return batchParams.GetAdminRequest().GetRefreshTasksOperation().GetAllNamespaces()
 }
 
 func processTask(
