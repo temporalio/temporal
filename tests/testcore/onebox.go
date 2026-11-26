@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/multierr"
 )
 
@@ -53,6 +54,7 @@ type (
 
 		dcClient                 *dynamicconfig.MemoryClient
 		testHooks                testhooks.TestHooks
+		failpointSource          *failpoint.Registry
 		hostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		baseServerOptions        []temporal.ServerOption
 		workerConfig             WorkerConfig
@@ -131,6 +133,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		captureMetricsHandler:     params.CaptureMetricsHandler,
 		dcClient:                  dynamicconfig.NewMemoryClient(),
 		testHooks:                 testhooks.NewTestHooks(),
+		failpointSource:           failpoint.NewRegistry(),
 		hostsByProtocolByService:  params.HostsByProtocolByService,
 		workerConfig:              params.WorkerConfig,
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
@@ -186,6 +189,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 			}
 		}))
 	}
+	baseServerOptions = append(baseServerOptions, temporal.WithFailpointSource(impl.failpointSource))
 	impl.baseServerOptions = append(baseServerOptions, params.AdditionalServerOptions...)
 
 	impl.clients = newClients(

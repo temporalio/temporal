@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/matching/workers"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -68,6 +69,7 @@ type (
 		VisibilityManager             manager.VisibilityManager
 		NexusEndpointManager          persistence.NexusEndpointManager
 		TestHooks                     testhooks.TestHooks
+		FailpointSource               *failpoint.Registry
 		SearchAttributeProvider       searchattribute.Provider
 		SearchAttributeMapperProvider searchattribute.MapperProvider
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
@@ -113,6 +115,7 @@ func NewHandler(
 			params.VisibilityManager,
 			params.NexusEndpointManager,
 			params.TestHooks,
+			params.FailpointSource,
 			params.SearchAttributeProvider,
 			params.SearchAttributeMapperProvider,
 			params.RateLimiter,

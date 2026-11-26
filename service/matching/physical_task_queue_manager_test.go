@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1318,4 +1319,19 @@ func userDataWithDeploymentVersion(deploymentName, buildID string) *persistences
 			},
 		},
 	}
+}
+
+func TestSkipSyncMatch(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, skipSyncMatch(nil, "ns-id", "ns"))
+
+	// A failpoint matches the namespace ID.
+	forced := failpoint.NewRegistry()
+	fp := failpoint.NewFailpoint(SkipSyncMatchKey.ForScope("ns-id"))
+	fp.On()
+	forced.Set(fp)
+	require.True(t, skipSyncMatch(forced, "ns-id", "ns"))
+	require.False(t, skipSyncMatch(forced, "other-ns-id", "ns"))
+	require.False(t, skipSyncMatch(forced, "ns-id-of-another-name", "other"))
 }

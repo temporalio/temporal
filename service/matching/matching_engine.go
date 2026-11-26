@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -192,6 +193,7 @@ type (
 		partitionScalerFactory        PartitionScalerFactory
 		versionChecker                headers.VersionChecker
 		testHooks                     testhooks.TestHooks
+		failpointSource               *failpoint.Registry
 		// Partitions loaded during a gradual membership change, whose ownership may change
 		// without a membership changed event. watchMembership picks them up from here.
 		routeChecksLock   sync.Mutex
@@ -305,6 +307,7 @@ func NewEngine(
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
 	testHooks testhooks.TestHooks,
+	failpointSource *failpoint.Registry,
 	saProvider searchattribute.Provider,
 	saMapperProvider searchattribute.MapperProvider,
 	rateLimiter TaskDispatchRateLimiter,
@@ -347,6 +350,7 @@ func NewEngine(
 		config:                    config,
 		versionChecker:            headers.NewDefaultVersionChecker(),
 		testHooks:                 testHooks,
+		failpointSource:           failpointSource,
 		queryResults:              collection.NewSyncMap[taskResultKey, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[taskResultKey, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),

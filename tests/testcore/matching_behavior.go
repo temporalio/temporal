@@ -1,8 +1,13 @@
 package testcore
 
 import (
+	"testing"
+
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/matching"
+	"go.temporal.io/testx/failpoint"
 )
 
 // MatchingBehavior describes a test scenario for matching service behavior.
@@ -14,6 +19,9 @@ type MatchingBehavior struct {
 
 type hookInjector interface {
 	InjectHook(hook testhooks.Hook) (cleanup func())
+	T() *testing.T
+	NamespaceID() namespace.ID
+	GetTestCluster() *TestCluster
 }
 
 // Name returns a descriptive name for this behavior combination.
@@ -66,11 +74,19 @@ func (b MatchingBehavior) InjectHooks(env hookInjector) {
 	} else {
 		env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
 	}
+	// Without ForceAsync the failpoint doesn't fire, but its registration keeps BUGGIFY from
+	// skipping the sync match.
+	registry := FailpointRegistry(env.GetTestCluster())
+	key := matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String())
+	fp := failpoint.NewFailpoint(key)
 	if b.ForceAsync {
-		env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, true))
-	} else {
-		env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
+		fp.On()
 	}
+	registry.Set(fp)
+	env.T().Cleanup(func() {
+		registry.Delete(key)
+		fp.Disable()
+	})
 }
 
 // AllMatchingBehaviors returns all 8 combinations of matching behaviors for testing.
