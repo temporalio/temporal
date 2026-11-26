@@ -14,18 +14,6 @@ import "temporal/server/api/enums/v1/task.proto";
 
 option go_package = "go.temporal.io/server/api/taskqueue/v1;taskqueue";
 
-// BoundWorkerInfo identifies the worker a workflow is bound to. Currently only used for session bindings (exclusive or
-// not)
-message BoundWorkerInfo {
-  // Sticky task queue the worker polls; the workflow's tasks are pushed here. Admission and validation of bindings
-  // are done using this bit .
-  string worker_queue = 1;
-  // Instance key of the worker process. Not used for admission or validation of worker bindings: History only sends it so Matching can
-  // look up the worker's heartbeats, which keeps a live worker bound after Matching restarts or reloads its sticky
-  // partition and forgets the worker's polls. Empty when unknown.
-  string instance_key = 2;
-}
-
 // TaskVersionDirective controls how matching should direct a task.
 message TaskVersionDirective {
   // Default (if build_id is not present) is "unversioned":

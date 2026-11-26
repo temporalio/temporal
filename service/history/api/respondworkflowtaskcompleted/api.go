@@ -169,7 +169,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			errForRelease = retError
 		}
 		if retError != nil && currentWorkflowTask != nil && currentWorkflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && ms.IsStickyTaskQueueSet() &&
-			!ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
+			!ms.HasExclusiveBinding() {
 			// If, while completing WFT, error is occurred and returned to the worker then worker will clear its cache.
 			// New WFT will also be created on sticky task queue and sent to worker.
 			// Because worker doesn't have a workflow in cache, it needs to replay it from the beginning,
@@ -213,11 +213,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	executionInfo := ms.GetExecutionInfo()
-	sessionState := executionInfo.GetSessionState()
-	if sessionState.GetExclusiveWorker() {
+	if ms.HasExclusiveBinding() {
 		requestedStickyQueue := request.GetStickyAttributes().GetWorkerTaskQueue()
-		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != sessionState.GetBoundWorkerInfo().GetWorkerQueue() {
+		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != ms.SessionWorkerQueue() {
 			releaseLeaseWithError = false
 			return nil, serviceerror.NewInvalidArgument("workflow is bound to another single-session destination")
 		}
@@ -364,7 +362,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			if err != nil {
 				return nil, err
 			}
-			ms.ClearStickyTaskQueue()
+			ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure)
 			wtHeartbeatTimedOut = true
 		}
 	}
@@ -382,7 +380,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		metrics.CompleteWorkflowTaskWithStickyDisabledCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-		ms.ClearStickyTaskQueue()
+		ms.ClearStickyTaskQueue(historyi.StickyClearForCacheDisabled)
 	} else {
 		metrics.CompleteWorkflowTaskWithStickyEnabledCounter.With(handler.metricsHandler).Record(
 			1,
@@ -1210,7 +1208,7 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 	if err != nil {
 		return err
 	}
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure)
 	err = wfContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 	if err != nil {
 		return err

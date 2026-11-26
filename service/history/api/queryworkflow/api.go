@@ -384,10 +384,8 @@ func queryDirectlyThroughMatching(
 
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickiness
-		// Note: For session based queries, the timeout used is the timeout provided by the caller itself and
-		// not the default sticky query timeout. This is because unlike the non-session query, the session based query
-		// is not dispatched to the normal queue on timeout.
-		// TODO (Shivam): Think about how session moves shall be done with queries that are dispatched via matching.
+		// Note: A workflow bound to a worker servicing sessions has no sticky timeout, so its query is sent with the
+		// caller's own deadline.
 		var stickyContext context.Context
 		var cancel context.CancelFunc
 		if exclusiveWorker {
@@ -408,7 +406,7 @@ func queryDirectlyThroughMatching(
 				}}, nil
 		}
 		if exclusiveWorker {
-			// Return errors without clearing stickiness if single-session is enabled
+			// A query never moves a workflow off its bound worker, so its error is returned as is.
 			return nil, err
 		}
 		if !common.IsContextDeadlineExceededErr(err) && !common.IsContextCanceledErr(err) && !common.IsStickyWorkerUnavailable(err) {

@@ -59,6 +59,9 @@ func Invoke(
 				// to prevent clearing and reloading mutable state while releasing the lock
 				return nil, consts.ErrWorkflowCompleted
 			}
+			if err := rejectVersioningOverrideForSessionBinding(mutableState, req.GetUpdateMask()); err != nil {
+				return nil, err
+			}
 
 			// If the requested override is pinned and omitted optional pinned version, fill in the current pinned version if it exists,
 			// or error if no pinned version exists.
@@ -145,6 +148,9 @@ func MergeAndApply(
 	updateMask *fieldmaskpb.FieldMask,
 	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
+	if err := rejectVersioningOverrideForSessionBinding(ms, updateMask); err != nil {
+		return nil, false, err
+	}
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
 	mergedOpts, optionsToReapply, err := mergeWorkflowExecutionOptions(
 		getOptionsFromMutableState(ms),
@@ -169,6 +175,21 @@ func MergeAndApply(
 		return nil, hasChanges, err
 	}
 	return mergedOpts, hasChanges, nil
+}
+
+// rejectVersioningOverrideForSessionBinding fails an update that sets or unsets the versioning override of a workflow
+// bound to a worker servicing sessions: the binding would keep sending its tasks to a worker on another version.
+func rejectVersioningOverrideForSessionBinding(ms historyi.MutableState, updateMask *fieldmaskpb.FieldMask) error {
+	if ms.GetExecutionInfo().GetSessionState() == nil {
+		return nil
+	}
+	for path := range util.ParseFieldMask(updateMask) {
+		if path == "versioningOverride" || strings.HasPrefix(path, "versioningOverride.") {
+			// TODO (Shivam): Session bindings do not follow versioning overrides yet (MTC-934).
+			return serviceerror.NewInvalidArgument("versioning override is not supported for a workflow bound to a worker servicing sessions")
+		}
+	}
+	return nil
 }
 
 func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {

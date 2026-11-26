@@ -18,7 +18,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/archiver"
@@ -2234,8 +2233,10 @@ func TestSingleSessionWorkflowTaskTimers(t *testing.T) {
 				WorkflowRunTimeout:           tc.runTimeout,
 			}
 			if tc.bound {
-				info.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
+				info.SessionState = &persistencespb.SessionState{ExclusiveWorker: true}
+				info.StickyTaskQueue = "S"
 			}
+			ms.EXPECT().HasExclusiveBinding().Return(tc.bound).AnyTimes()
 			ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 			ms.EXPECT().IsStickyTaskQueueSet().Return(true).AnyTimes()
 			ms.EXPECT().GetWorkflowKey().Return(key).AnyTimes()
