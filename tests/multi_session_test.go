@@ -538,6 +538,28 @@ func multiSessionWorkerOptions() *sessionpb.WorkerSessionOptions {
 }
 
 /*
+TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot be given a
+versioning override:
+ 1. Worker A binds the session and is alive on its sticky queue.
+ 2. UpdateWorkflowExecutionOptions pinning the workflow to a version is rejected.
+ 3. The binding is unchanged: the next workflow task is delivered on A's sticky queue, and A completes it.
+*/
+func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToA(time.Second)
+	e.registerStickyPoller("A")
+
+	err := updateWithPinnedOverride(t, e.env, e.tv.WorkflowExecution())
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+	require.ErrorContains(t, err, "bound to a worker servicing sessions")
+
+	e.signal()
+	e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
+}
+
+/*
 TestWorkflowSessionBindingSurvivesRebuild tests that a non-exclusive binding is rebuilt from history:
  1. A multi-session worker binds the workflow, another one takes it over, or a worker without session options unbinds it.
  2. The workflow is reset to its last workflow task, or its mutable state is rebuilt from history.
@@ -636,6 +658,16 @@ func resetToLastWorkflowTask(e *sessionMoveEnv) string {
 	return resetWorkflowTo(e.t, e.env, e.tv.WorkflowExecution(), lastCompleted)
 }
 
+// resetWorkflowTo resets execution to workflowTaskFinishEventID and returns the reset run's ID.
+func resetWorkflowTo(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution, workflowTaskFinishEventID int64) string {
+	response, err := env.FrontendClient().ResetWorkflowExecution(t.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "test",
+		WorkflowTaskFinishEventId: workflowTaskFinishEventID, RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+	return response.GetRunId()
+}
+
 // requireStartedEventRecordsBinding requires the last workflow task started event to record the binding mutable state
 // holds, so a rebuild from history restores it.
 func requireStartedEventRecordsBinding(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) {
@@ -645,8 +677,11 @@ func requireStartedEventRecordsBinding(t *testing.T, env *testcore.TestEnv, exec
 	require.NoError(t, err)
 	state := response.GetDatabaseMutableState().GetExecutionInfo().GetSessionState()
 	var want *sessionpb.SessionInfo
-	if workerQueue := state.GetBoundWorkerInfo().GetWorkerQueue(); workerQueue != "" {
-		want = &sessionpb.SessionInfo{ExclusiveWorker: state.GetExclusiveWorker(), BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: workerQueue}}
+	if state != nil {
+		want = &sessionpb.SessionInfo{
+			ExclusiveWorker: state.GetExclusiveWorker(),
+			WorkerQueue:     response.GetDatabaseMutableState().GetExecutionInfo().GetStickyTaskQueue(),
+		}
 	}
 	var recorded *sessionpb.SessionInfo
 	history := env.SdkClient().GetWorkflowHistory(t.Context(), execution.GetWorkflowId(), execution.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
@@ -658,14 +693,4 @@ func requireStartedEventRecordsBinding(t *testing.T, env *testcore.TestEnv, exec
 		}
 	}
 	protorequire.ProtoEqual(t, want, recorded)
-}
-
-// resetWorkflowTo resets execution to workflowTaskFinishEventID and returns the reset run's ID.
-func resetWorkflowTo(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution, workflowTaskFinishEventID int64) string {
-	response, err := env.FrontendClient().ResetWorkflowExecution(t.Context(), &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "test",
-		WorkflowTaskFinishEventId: workflowTaskFinishEventID, RequestId: uuid.NewString(),
-	})
-	require.NoError(t, err)
-	return response.GetRunId()
 }

@@ -1515,49 +1515,12 @@ func (ms *MutableStateImpl) setStickyTaskQueueAndBinding(name string, timeout *d
 	if ms.HasExclusiveBinding() {
 		return
 	}
-	ms.executionInfo.SessionState = state
-	// Note: executionInfo.StickyTaskQueue and SessionState.BoundWorkerInfo.WorkerQueue are mirror values of each other
-	ms.SetStickyTaskQueue(state.GetBoundWorkerInfo().GetWorkerQueue(), nil)
-}
-
-// SessionInfo returns the workflow's binding in the shape recorded on history events, or nil when it is not bound to a
-// worker.
-func (ms *MutableStateImpl) SessionInfo() *sessionpb.SessionInfo {
-	return sessionInfo(ms.executionInfo.GetSessionState())
-}
-
-// ApplySessionInfo sets the workflow's binding from a replayed workflow task started event. History wins, so it replaces
-// any binding. The instance key is not in history and stays empty until the worker starts another task.
-func (ms *MutableStateImpl) ApplySessionInfo(info *sessionpb.SessionInfo) {
-	var state *persistencespb.SessionState
-	var stickyTimeout *durationpb.Duration
-	if workerQueue := info.GetBoundWorkerInfo().GetWorkerQueue(); workerQueue != "" {
-		state = &persistencespb.SessionState{
-			ExclusiveWorker: info.GetExclusiveWorker(),
-			BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: workerQueue},
-		}
-		if !info.GetExclusiveWorker() {
-			stickyTimeout = durationpb.New(defaultSessionStickyScheduleToStartTimeout)
-		}
+	// A bound workflow's tasks wait for their worker instead of falling back to the normal queue, so it has no sticky
+	// timeout.
+	if session != nil {
+		timeout = nil
 	}
-	ms.executionInfo.SessionState = state
-	ms.SetStickyTaskQueue(state.GetBoundWorkerInfo().GetWorkerQueue(), stickyTimeout)
-}
-
-// sessionInfo is the binding in the shape recorded on history events, or nil when the workflow is not bound to a
-// worker. The instance key is not recorded.
-func sessionInfo(state *persistencespb.SessionState) *sessionpb.SessionInfo {
-	workerQueue := state.GetBoundWorkerInfo().GetWorkerQueue()
-	if workerQueue == "" {
-		return nil
-	}
-	return &sessionpb.SessionInfo{
-		ExclusiveWorker: state.GetExclusiveWorker(),
-		BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: workerQueue},
-	}
-}
-
-func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
+	ms.executionInfo.SessionState = session
 	ms.executionInfo.StickyTaskQueue = name
 	ms.executionInfo.StickyScheduleToStartTimeout = timeout
 }
@@ -1565,6 +1528,32 @@ func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeo
 // HasExclusiveBinding reports whether the workflow is bound to a single-session worker.
 func (ms *MutableStateImpl) HasExclusiveBinding() bool {
 	return ms.executionInfo.GetSessionState().GetExclusiveWorker()
+}
+
+// SessionInfo returns the workflow's binding in the shape recorded on history events, or nil when it is not bound to a
+// worker.
+func (ms *MutableStateImpl) SessionInfo() *sessionpb.SessionInfo {
+	if ms.executionInfo.GetSessionState() == nil {
+		return nil
+	}
+	return &sessionpb.SessionInfo{
+		ExclusiveWorker: ms.HasExclusiveBinding(),
+		WorkerQueue:     ms.executionInfo.GetStickyTaskQueue(),
+	}
+}
+
+// ApplySessionInfo sets the workflow's binding from a replayed history event: a workflow task started event, or the
+// started event of a run that inherited the binding. A non-exclusive binding follows the event; an exclusive binding is
+// never replaced.
+func (ms *MutableStateImpl) ApplySessionInfo(info *sessionpb.SessionInfo) {
+	if info.GetWorkerQueue() == "" {
+		// The task was started by a worker without sessions, which unbinds a non-exclusive binding.
+		if ms.executionInfo.GetSessionState() != nil {
+			ms.setStickyTaskQueueAndBinding("", nil, nil)
+		}
+		return
+	}
+	ms.setStickyTaskQueueAndBinding(info.GetWorkerQueue(), nil, &persistencespb.SessionState{ExclusiveWorker: info.GetExclusiveWorker()})
 }
 
 // SetStickyTaskQueue sets the sticky queue a worker asked for, keeping the workflow's binding. A workflow bound to a
@@ -1634,22 +1623,13 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	case newWorkerStickyQueue == "" && previousWorkerStickyQueue == "":
 		// A worker without sessions, and no binding to drop: an ordinary or already-unbound workflow.
 		return false, nil
-	case workerQueue == "":
-		// Unbind: a worker without session options took over. Session activities move to the normal queue.
-		ms.unbindNonExclusiveWorker()
-	case workerQueue == previousWorkerQueue:
-		// Stickiness, and with it the binding, is only missing here if this start cleared it: the task came
-		// from the normal queue, or a deployment transition ran.
-		if ms.executionInfo.GetStickyTaskQueue() == workerQueue {
-			// The bound worker picked the task up from its sticky queue. A binding rebuilt from history has no instance
-			// key, since SessionInfo does not record it, so take it from this start. If SessionInfo starts recording the
-			// instance key, this is no longer needed.
-			boundWorkerInfo := ms.executionInfo.GetSessionState().GetBoundWorkerInfo()
-			if boundWorkerInfo.GetInstanceKey() != "" || instanceKey == "" {
-				return false, nil
-			}
-			boundWorkerInfo.InstanceKey = instanceKey
-			return true, nil
+	case newWorkerStickyQueue == "":
+		// Unbind: a worker without sessions took over.
+		ms.ClearStickyTaskQueue(historyi.StickyClearForBoundWorkerLost)
+	case newWorkerStickyQueue == previousWorkerStickyQueue:
+		if ms.SessionWorkerQueue() == newWorkerStickyQueue {
+			// The bound worker started the task from its own sticky queue: nothing changed.
+			return false, nil
 		}
 		// Restore: the bound worker started the task from the normal queue, for example after it looked dead for a
 		// moment and came back, and the start cleared stickiness. Its session activities are already queued for it,
