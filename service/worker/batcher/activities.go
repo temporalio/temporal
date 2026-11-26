@@ -88,8 +88,9 @@ type page struct {
 	// batches and single-namespace admin batches use these fields.
 	//
 	// crossNamespaceExecutionInfos holds results from the Visibility Admin API
-	// for admin refreshes across all namespaces. Each result includes the target
-	// namespace ID and archetype ID needed to route the refresh.
+	// for admin tasks across all namespaces (currently only task refresh).
+	// Each result includes the target namespace ID and archetype ID needed to
+	// route the task.
 	// Only one execution slice is populated per page.
 	executionInfos               []*workflowpb.WorkflowExecutionInfo
 	targetExecutionInfo          []*commonpb.Execution
