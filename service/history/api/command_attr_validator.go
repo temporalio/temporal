@@ -37,6 +37,14 @@ type (
 	}
 )
 
+// InitiatedChildExecution identifies a child workflow execution started
+// within a workflow task, by the namespace it was started in and its workflow ID.
+// A cancel is only blocked when it targets the same namespace and workflow ID.
+type InitiatedChildExecution struct {
+	NamespaceID namespace.ID
+	WorkflowID  string
+}
+
 func NewCommandAttrValidator(
 	namespaceRegistry namespace.Registry,
 	config *configs.Config,
@@ -256,7 +264,7 @@ func (v *CommandAttrValidator) ValidateCancelExternalWorkflowExecutionAttributes
 	namespaceID namespace.ID,
 	workflowID string,
 	targetNamespaceID namespace.ID,
-	initiatedChildExecutionsInSession map[string]struct{},
+	initiatedChildExecutionsInSession map[InitiatedChildExecution]struct{},
 	attributes *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
@@ -291,7 +299,7 @@ func (v *CommandAttrValidator) ValidateCancelExternalWorkflowExecutionAttributes
 	if runID != "" && uuid.Validate(runID) != nil {
 		return failedCause, serviceerror.NewInvalidArgumentf("Invalid RunId set on RequestCancelExternalWorkflowExecutionCommand. WorkflowId=%s RunId=%s Namespace=%s", targetWorkflowID, runID, ns)
 	}
-	if _, ok := initiatedChildExecutionsInSession[targetWorkflowID]; ok {
+	if _, ok := initiatedChildExecutionsInSession[InitiatedChildExecution{NamespaceID: targetNamespaceID, WorkflowID: targetWorkflowID}]; ok {
 		return failedCause, serviceerror.NewInvalidArgumentf("Start and RequestCancel for child workflow is not allowed in same workflow task. WorkflowId=%s RunId=%s Namespace=%s", targetWorkflowID, runID, ns)
 	}
 

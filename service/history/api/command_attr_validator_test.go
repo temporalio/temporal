@@ -356,6 +356,86 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal(
 	s.Nil(err)
 }
 
+func (s *commandAttrValidatorSuite) TestValidateCancelExternalWorkflowExecutionAttributesSameIDInDifferentNamespace() {
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
+
+	startAttributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		Namespace:    s.testTargetNamespaceID.String(),
+		WorkflowId:   "child-workflow-id",
+		WorkflowType: &commonpb.WorkflowType{Name: "child-workflow-type"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "child-task-queue"},
+	}
+	_, err := s.validator.ValidateStartChildExecutionAttributes(
+		s.testNamespaceID,
+		s.testTargetNamespaceID,
+		namespace.Name(s.testTargetNamespaceID),
+		startAttributes,
+		&persistencespb.WorkflowExecutionInfo{
+			WorkflowId: "parent-workflow-id",
+			TaskQueue:  "parent-task-queue",
+		},
+		dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Second),
+	)
+	s.NoError(err)
+
+	// The cancel targets an existing child in the parent namespace, not the child started above.
+	cancelAttributes := &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
+		Namespace:         s.testNamespaceID.String(),
+		WorkflowId:        startAttributes.GetWorkflowId(),
+		ChildWorkflowOnly: true,
+	}
+	cause, err := s.validator.ValidateCancelExternalWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		"parent-workflow-id",
+		s.testNamespaceID,
+		nil,
+		cancelAttributes,
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, cause)
+
+	initiatedChildren := map[InitiatedChildExecution]struct{}{{NamespaceID: s.testTargetNamespaceID, WorkflowID: startAttributes.GetWorkflowId()}: {}}
+	cause, err = s.validator.ValidateCancelExternalWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		"parent-workflow-id",
+		s.testNamespaceID,
+		initiatedChildren,
+		cancelAttributes,
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, cause)
+
+	// A cancel targeting the same namespace as the started child is still rejected.
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
+
+	sameNamespaceCancelAttributes := &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
+		Namespace:         s.testTargetNamespaceID.String(),
+		WorkflowId:        startAttributes.GetWorkflowId(),
+		ChildWorkflowOnly: true,
+	}
+	cause, err = s.validator.ValidateCancelExternalWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		"parent-workflow-id",
+		s.testTargetNamespaceID,
+		initiatedChildren,
+		sameNamespaceCancelAttributes,
+	)
+	s.Error(err)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES, cause)
+}
+
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
