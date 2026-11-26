@@ -6,8 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
@@ -15,8 +17,10 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -190,6 +194,8 @@ func (e *sessionMoveEnv) bindToAWith(stickyScheduleToStart time.Duration, comman
 	require.NoError(e.t, err)
 }
 
+// completeOn completes a workflow task as worker, and checks the latest started event records the binding mutable
+// state holds.
 func (e *sessionMoveEnv) completeOn(worker string, queue *taskqueuepb.TaskQueue, timeout time.Duration) {
 	err := e.pollWorkflowTask(worker, queue, timeout, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		response := &workflowservice.RespondWorkflowTaskCompletedRequest{}
@@ -199,6 +205,7 @@ func (e *sessionMoveEnv) completeOn(worker string, queue *taskqueuepb.TaskQueue,
 		return response, nil
 	})
 	require.NoError(e.t, err)
+	requireStartedEventRecordsBinding(e.t, e.env, e.tv.WorkflowExecution())
 }
 
 func (e *sessionMoveEnv) requireSessionActivityOn(queue *taskqueuepb.TaskQueue) {
@@ -550,4 +557,140 @@ func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
 
 	e.signal()
 	e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
+}
+
+/*
+TestWorkflowSessionBindingSurvivesRebuild tests that a non-exclusive binding is rebuilt from history:
+ 1. A multi-session worker binds the workflow, another one takes it over, or a worker without session options unbinds it.
+ 2. The workflow is reset to its last workflow task, or its mutable state is rebuilt from history.
+ 3. The next workflow task goes to the bound worker's sticky queue, or to the normal queue after an unbind.
+*/
+func TestWorkflowSessionBindingSurvivesRebuild(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		// bind leaves the workflow bound to the returned worker ("" for unbound) after its last workflow task.
+		bind func(e *sessionMoveEnv) string
+		// rebuild resets or rebuilds the workflow and returns the run that receives the next workflow task.
+		rebuild func(e *sessionMoveEnv) string
+	}{
+		{
+			name: "reset after a bind",
+			bind: func(e *sessionMoveEnv) string {
+				e.completeOn("Y", e.tv.TaskQueue(), 30*time.Second)
+				return "Y"
+			},
+			rebuild: resetToLastWorkflowTask,
+		},
+		{
+			name: "rebuild from history after a bind",
+			bind: func(e *sessionMoveEnv) string {
+				e.completeOn("Y", e.tv.TaskQueue(), 30*time.Second)
+				return "Y"
+			},
+			rebuild: func(e *sessionMoveEnv) string {
+				described, err := e.env.FrontendClient().DescribeWorkflowExecution(e.t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: e.env.Namespace().String(), Execution: e.tv.WorkflowExecution(),
+				})
+				require.NoError(e.t, err)
+				execution := described.GetWorkflowExecutionInfo().GetExecution()
+				_, err = e.env.AdminClient().RebuildMutableState(e.t.Context(), &adminservice.RebuildMutableStateRequest{
+					Namespace: e.env.Namespace().String(), Execution: execution,
+				})
+				require.NoError(e.t, err)
+				e.signal()
+				return execution.GetRunId()
+			},
+		},
+		{
+			name: "reset after a move",
+			bind: func(e *sessionMoveEnv) string {
+				e.bindToA(time.Second)
+				e.signal()
+				e.completeOn("Y", e.tv.TaskQueue(), 30*time.Second)
+				return "Y"
+			},
+			rebuild: resetToLastWorkflowTask,
+		},
+		{
+			name: "reset after an unbind",
+			bind: func(e *sessionMoveEnv) string {
+				e.bindToA(time.Second)
+				e.signal()
+				e.completeOn("", e.tv.TaskQueue(), 30*time.Second)
+				return ""
+			},
+			rebuild: resetToLastWorkflowTask,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newSessionMoveEnv(t, 10*time.Second)
+			e.registerStickyPoller("Y")
+			worker := tc.bind(e)
+
+			runID := tc.rebuild(e)
+
+			queue := e.tv.TaskQueue()
+			if worker != "" {
+				queue = e.stickyQueue(worker)
+			}
+			err := e.pollWorkflowTask(worker, queue, 10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				require.Equal(t, runID, task.GetWorkflowExecution().GetRunId())
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+			})
+			require.NoError(t, err)
+		})
+	}
+}
+
+// resetToLastWorkflowTask resets the workflow to its last completed workflow task and returns the reset run's ID.
+func resetToLastWorkflowTask(e *sessionMoveEnv) string {
+	var lastCompleted int64
+	history := e.env.SdkClient().GetWorkflowHistory(e.t.Context(), e.tv.WorkflowID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for history.HasNext() {
+		event, err := history.Next()
+		require.NoError(e.t, err)
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			lastCompleted = event.GetEventId()
+		}
+	}
+	return resetWorkflowTo(e.t, e.env, e.tv.WorkflowExecution(), lastCompleted)
+}
+
+// resetWorkflowTo resets execution to workflowTaskFinishEventID and returns the reset run's ID.
+func resetWorkflowTo(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution, workflowTaskFinishEventID int64) string {
+	response, err := env.FrontendClient().ResetWorkflowExecution(t.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "test",
+		WorkflowTaskFinishEventId: workflowTaskFinishEventID, RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+	return response.GetRunId()
+}
+
+// requireStartedEventRecordsBinding requires the last workflow task started event to record the binding mutable state
+// holds, so a rebuild from history restores it.
+func requireStartedEventRecordsBinding(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) {
+	response, err := env.AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(), Execution: execution,
+	})
+	require.NoError(t, err)
+	state := response.GetDatabaseMutableState().GetExecutionInfo().GetSessionState()
+	var want *sessionpb.SessionInfo
+	if state != nil {
+		want = &sessionpb.SessionInfo{
+			ExclusiveWorker: state.GetExclusiveWorker(),
+			WorkerQueue:     response.GetDatabaseMutableState().GetExecutionInfo().GetStickyTaskQueue(),
+		}
+	}
+	var recorded *sessionpb.SessionInfo
+	history := env.SdkClient().GetWorkflowHistory(t.Context(), execution.GetWorkflowId(), execution.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for history.HasNext() {
+		event, err := history.Next()
+		require.NoError(t, err)
+		if attributes := event.GetWorkflowTaskStartedEventAttributes(); attributes != nil {
+			recorded = attributes.GetSessionInfo()
+		}
+	}
+	protorequire.ProtoEqual(t, want, recorded)
 }

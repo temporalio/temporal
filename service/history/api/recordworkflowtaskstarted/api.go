@@ -9,6 +9,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -172,6 +174,12 @@ func Invoke(
 				return nil, err
 			}
 
+			// The worker this workflow is bound to once this task starts, recorded on the started event. Mutable state
+			// is only updated further below, by BindExclusiveWorker and UpdateNonExclusiveWorkerBinding.
+			var sessionInfo *sessionpb.SessionInfo
+			if workerQueue := taskqueue.SessionWorkerStickyQueue(req.PollRequest.GetSessionOptions(), req.PollRequest.GetWorkerInstanceKey()); workerQueue != "" {
+				sessionInfo = &sessionpb.SessionInfo{ExclusiveWorker: singleSession != nil, WorkerQueue: workerQueue}
+			}
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
@@ -183,6 +191,7 @@ func Invoke(
 				false,
 				req.TargetDeploymentVersion,
 				req.TaskDispatchRevisionNumber,
+				sessionInfo,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history

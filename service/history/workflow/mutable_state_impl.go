@@ -1530,6 +1530,32 @@ func (ms *MutableStateImpl) HasExclusiveBinding() bool {
 	return ms.executionInfo.GetSessionState().GetExclusiveWorker()
 }
 
+// SessionInfo returns the workflow's binding in the shape recorded on history events, or nil when it is not bound to a
+// worker.
+func (ms *MutableStateImpl) SessionInfo() *sessionpb.SessionInfo {
+	if ms.executionInfo.GetSessionState() == nil {
+		return nil
+	}
+	return &sessionpb.SessionInfo{
+		ExclusiveWorker: ms.HasExclusiveBinding(),
+		WorkerQueue:     ms.executionInfo.GetStickyTaskQueue(),
+	}
+}
+
+// ApplySessionInfo sets the workflow's binding from a replayed history event: a workflow task started event, or the
+// started event of a run that inherited the binding. A non-exclusive binding follows the event; an exclusive binding is
+// never replaced.
+func (ms *MutableStateImpl) ApplySessionInfo(info *sessionpb.SessionInfo) {
+	if info.GetWorkerQueue() == "" {
+		// The task was started by a worker without sessions, which unbinds a non-exclusive binding.
+		if ms.executionInfo.GetSessionState() != nil {
+			ms.setStickyTaskQueueAndBinding("", nil, nil)
+		}
+		return
+	}
+	ms.setStickyTaskQueueAndBinding(info.GetWorkerQueue(), nil, &persistencespb.SessionState{ExclusiveWorker: info.GetExclusiveWorker()})
+}
+
 // SetStickyTaskQueue sets the sticky queue a worker asked for, keeping the workflow's binding. A workflow bound to a
 // multi-session worker keeps its bound worker's queue: if Matching wrongly took the bound worker for dead while it ran
 // this task, another worker may have taken the binding meanwhile; the late completion must not move it back.
@@ -3878,12 +3904,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	skipVersioningCheck bool,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	targetRevisionNumber int64,
+	sessionInfo *sessionpb.SessionInfo,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber, sessionInfo)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(

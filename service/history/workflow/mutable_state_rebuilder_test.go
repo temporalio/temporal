@@ -13,6 +13,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -1076,6 +1077,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	scheduledEventID := int64(111)
 	workflowTaskRequestID := uuid.NewString()
 	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED
+	sessionInfo := &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "stable-identity"}
 	event := &historypb.HistoryEvent{
 		TaskId:    rand.Int63(),
 		Version:   version,
@@ -1085,6 +1087,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 			ScheduledEventId: scheduledEventID,
 			RequestId:        workflowTaskRequestID,
+			SessionInfo:      sessionInfo,
 		}},
 	}
 	wt := &historyi.WorkflowTaskInfo{
@@ -1101,6 +1104,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 		false, gomock.Any(), nil, int64(0), nil,
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
+	s.mockMutableState.EXPECT().ApplySessionInfo(protomock.Eq(sessionInfo))
 	s.mockTaskGenerator.EXPECT().GenerateStartWorkflowTaskTasks(
 		wt.ScheduledEventID,
 	).Return(nil)

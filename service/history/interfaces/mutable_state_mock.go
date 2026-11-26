@@ -950,9 +950,9 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskScheduledEventAsHeartbeat
 }
 
 // AddWorkflowTaskStartedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, arg2 *taskqueue.TaskQueue, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *taskqueue0.BuildIdRedirectInfo, arg6 update0.Registry, arg7 bool, arg8 *deployment.WorkerDeploymentVersion, arg9 int64) (*history.HistoryEvent, *WorkflowTaskInfo, error) {
+func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, arg2 *taskqueue.TaskQueue, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *taskqueue0.BuildIdRedirectInfo, arg6 update0.Registry, arg7 bool, arg8 *deployment.WorkerDeploymentVersion, arg9 int64, arg10 *session.SessionInfo) (*history.HistoryEvent, *WorkflowTaskInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(*WorkflowTaskInfo)
 	ret2, _ := ret[2].(error)
@@ -960,9 +960,9 @@ func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, 
 }
 
 // AddWorkflowTaskStartedEvent indicates an expected call of AddWorkflowTaskStartedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
 }
 
 // AddWorkflowTaskTimedOutEvent mocks base method.
@@ -1246,6 +1246,18 @@ func (m *MockMutableState) ApplyRequestCancelExternalWorkflowExecutionInitiatedE
 func (mr *MockMutableStateMockRecorder) ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent), arg0, arg1, arg2)
+}
+
+// ApplySessionInfo mocks base method.
+func (m *MockMutableState) ApplySessionInfo(info *session.SessionInfo) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ApplySessionInfo", info)
+}
+
+// ApplySessionInfo indicates an expected call of ApplySessionInfo.
+func (mr *MockMutableStateMockRecorder) ApplySessionInfo(info any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySessionInfo", reflect.TypeOf((*MockMutableState)(nil).ApplySessionInfo), info)
 }
 
 // ApplySignalExternalWorkflowExecutionFailedEvent mocks base method.
@@ -3581,6 +3593,20 @@ func (m *MockMutableState) RetryActivity(ai *persistence.ActivityInfo, arg1 *fai
 func (mr *MockMutableStateMockRecorder) RetryActivity(ai, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, arg1)
+}
+
+// SessionInfo mocks base method.
+func (m *MockMutableState) SessionInfo() *session.SessionInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SessionInfo")
+	ret0, _ := ret[0].(*session.SessionInfo)
+	return ret0
+}
+
+// SessionInfo indicates an expected call of SessionInfo.
+func (mr *MockMutableStateMockRecorder) SessionInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SessionInfo", reflect.TypeOf((*MockMutableState)(nil).SessionInfo))
 }
 
 // SessionWorkerQueue mocks base method.

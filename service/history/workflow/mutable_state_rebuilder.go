@@ -147,7 +147,8 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 	taskGenerator := GetTaskGeneratorProvider().NewTaskGenerator(b.shard, b.mutableState)
 
-	// Need to clear the sticky task queue because workflow turned to passive.
+	// Need to clear the sticky task queue because workflow turned to passive. A worker binding is kept though: it is rebuilt
+	// from history.
 	b.mutableState.ClearStickyTaskQueue(historyi.StickyClearForStateRebuild)
 	executionInfo := b.mutableState.GetExecutionInfo()
 	executionInfo.LastFirstEventId = firstEvent.GetEventId()
@@ -275,6 +276,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err != nil {
 				return nil, err
 			}
+			b.mutableState.ApplySessionInfo(attributes.GetSessionInfo())
 
 			if err := taskGenerator.GenerateStartWorkflowTaskTasks(
 				workflowTask.ScheduledEventID,

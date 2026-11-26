@@ -346,6 +346,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("b2", wft.BuildId)
@@ -400,6 +401,7 @@ func (s *mutableStateSuite) TestDirtySpeculativeWorkflowTaskConvertsToNormalOnTr
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.Nil(startedEvent)
@@ -433,6 +435,75 @@ func (s *mutableStateSuite) TestDirtySpeculativeWorkflowTaskConvertsToNormalOnTr
 	s.Equal("1.0.0", persistedStartedEvent.GetWorkflowTaskStartedEventAttributes().GetWorkerVersion().GetBuildId())
 }
 
+/*
+TestWorkflowTaskStartedEventRecordsSessionInfo tests the binding written on workflow task started events:
+ 1. A start records the binding it is given, even though mutable state is only updated after the event is built.
+ 2. A speculative task's started event, written when the task is persisted, records the binding mutable state holds
+    by then.
+*/
+func (s *mutableStateSuite) TestWorkflowTaskStartedEventRecordsSessionInfo() {
+	exclusive := &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"}
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	startWorkflow := func() {
+		s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+		_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+			&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+			&historyservice.StartWorkflowExecutionRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+					WorkflowId:          tests.WorkflowID,
+					WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+					TaskQueue:           tq,
+					WorkflowRunTimeout:  durationpb.New(time.Hour),
+					WorkflowTaskTimeout: durationpb.New(time.Minute),
+				},
+			},
+		)
+		s.Require().NoError(err)
+	}
+
+	s.Run("start records the given binding", func() {
+		s.SetupTest()
+		startWorkflow()
+		wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+		s.Require().NoError(err)
+
+		startedEvent, _, err := s.mutableState.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, "request-id", tq, "worker", nil, nil, nil, false, nil, 0, exclusive)
+
+		s.Require().NoError(err)
+		protorequire.ProtoEqual(s.T(), exclusive, startedEvent.GetWorkflowTaskStartedEventAttributes().GetSessionInfo())
+		s.Require().Empty(s.mutableState.SessionWorkerQueue())
+	})
+
+	s.Run("speculative start records the binding at persistence", func() {
+		s.SetupTest()
+		s.installEngineCapturingSpeculativeTimeout()
+		startWorkflow()
+		_, _, err := s.mutableState.CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+		wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+		s.Require().NoError(err)
+		startedEvent, _, err := s.mutableState.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, "request-id", tq, "worker", nil, nil, nil, false, nil, 0, exclusive)
+		s.Require().NoError(err)
+		s.Require().Nil(startedEvent)
+		s.mutableState.BindExclusiveWorker("S")
+
+		_, workflowEvents, err := s.mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+
+		s.Require().NoError(err)
+		var persistedStartedEvent *historypb.HistoryEvent
+		for _, eventBatch := range workflowEvents {
+			for _, event := range eventBatch.Events {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					persistedStartedEvent = event
+				}
+			}
+		}
+		s.Require().NotNil(persistedStartedEvent)
+		protorequire.ProtoEqual(s.T(), exclusive, persistedStartedEvent.GetWorkflowTaskStartedEventAttributes().GetSessionInfo())
+	})
+}
+
 func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	s.createVersionedMutableStateWithCompletedWFT(tq)
@@ -450,6 +521,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -474,6 +546,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -498,6 +571,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -524,6 +598,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("", wft.BuildId)
@@ -552,6 +627,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -577,6 +653,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -640,6 +717,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 
@@ -695,6 +773,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 
@@ -765,6 +844,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("b1", wft.BuildId)
@@ -1103,6 +1183,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
@@ -1155,6 +1236,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1196,6 +1278,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1240,6 +1323,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1441,6 +1525,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
@@ -1498,6 +1583,7 @@ func (s *mutableStateSuite) TestOneTimeOverrideClearedAfterTargetWorkflowTaskCom
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 
@@ -1531,6 +1617,7 @@ func (s *mutableStateSuite) TestOneTimeOverrideNotClearedAfterDifferentWorkflowT
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 
@@ -1592,6 +1679,7 @@ func (s *mutableStateSuite) TestOneTimeOverrideContinueAsNewAfterTargetWorkflowT
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 
@@ -2068,6 +2156,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -2141,6 +2230,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent_StartedWorkflowT
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	prevWFTStamp := wft.Stamp
@@ -2181,6 +2271,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -2448,6 +2539,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -8072,6 +8164,7 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityResolution() {
 	s.NoError(err)
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		di.ScheduledEventID, di.RequestID, di.TaskQueue, "identity", nil, nil, nil, false, nil, 0,
+		nil,
 	)
 	s.NoError(err)
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -8165,6 +8258,7 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -8262,6 +8356,7 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventApproximateSize() {
 				false,
 				nil,
 				0,
+				nil,
 			)
 			s.NoError(err)
 			completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -8337,6 +8432,7 @@ func (s *mutableStateSuite) TestUpdateActivityProgressApproximateSize() {
 		false,
 		nil,
 		0,
+		nil,
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -10132,6 +10228,7 @@ func (s *mutableStateSuite) scheduleCompletedWFTForBatchIDTest() (
 		wft.ScheduledEventID, "", tq, "",
 		worker_versioning.StampFromBuildId("b1"),
 		nil, nil, false, nil, 0,
+		nil,
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -10490,7 +10587,7 @@ func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
 	wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.Require().NoError(err)
 	s.Equal("S", wt.TaskQueue.GetName())
-	_, wt, err = ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "request", ms.CurrentTaskQueue(), "worker-1", nil, nil, nil, false, nil, 0)
+	_, wt, err = ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "request", ms.CurrentTaskQueue(), "worker-1", nil, nil, nil, false, nil, 0, nil)
 	s.Require().NoError(err)
 	_, err = ms.AddWorkflowTaskTimedOutEvent(wt)
 	s.Require().NoError(err)
@@ -10524,7 +10621,7 @@ func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
 	s.Equal(wt.ScheduledEventID, transferTask.ScheduledEventID)
 	s.Equal(int32(2), wt.Attempt)
 
-	_, resumed, err := reloaded.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "replacement-request", reloaded.CurrentTaskQueue(), "worker-2", nil, nil, nil, false, nil, 0)
+	_, resumed, err := reloaded.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "replacement-request", reloaded.CurrentTaskQueue(), "worker-2", nil, nil, nil, false, nil, 0, nil)
 	s.Require().NoError(err)
 	s.True(reloaded.HasStartedWorkflowTask())
 	s.Equal("S", resumed.TaskQueue.GetName())
@@ -11028,7 +11125,7 @@ func (s *mutableStateSuite) TestNonExclusiveBindingSurvivesWorkflowTaskFailures(
 	wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.Require().NoError(err)
 	s.Equal("X", wt.TaskQueue.GetName())
-	_, wt, err = ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "request", ms.CurrentTaskQueue(), "worker-1", nil, nil, nil, false, nil, 0)
+	_, wt, err = ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "request", ms.CurrentTaskQueue(), "worker-1", nil, nil, nil, false, nil, 0, nil)
 	s.Require().NoError(err)
 	_, err = ms.AddWorkflowTaskTimedOutEvent(wt)
 	s.Require().NoError(err)
@@ -11222,6 +11319,79 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 				s.Equal(stampBefore, activity.Stamp)
 				s.Empty(s.activityTransferTasks())
 			}
+		})
+	}
+}
+
+/*
+TestSessionInfo tests the binding recorded on history events: nil when unbound, otherwise the bound worker's queue and
+whether the binding is exclusive.
+*/
+func (s *mutableStateSuite) TestSessionInfo() {
+	for _, tc := range []struct {
+		name         string
+		sessionState *persistencespb.SessionState
+		want         *sessionpb.SessionInfo
+	}{
+		{name: "unbound"},
+		{
+			name:         "exclusive",
+			sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
+			want:         &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"},
+		},
+		{
+			name:         "non-exclusive",
+			sessionState: &persistencespb.SessionState{},
+			want:         &sessionpb.SessionInfo{WorkerQueue: "S"},
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			s.mutableState.executionInfo.SessionState = tc.sessionState
+			s.mutableState.executionInfo.StickyTaskQueue = "S"
+
+			protorequire.ProtoEqual(s.T(), tc.want, s.mutableState.SessionInfo())
+		})
+	}
+}
+
+/*
+TestApplySessionInfo tests replaying a history event's binding:
+ 1. The workflow starts with some binding, or none.
+ 2. Applying the event's binding replaces a multi-session binding; no binding unbinds a bound workflow and leaves an
+    unbound one, including its ordinary sticky queue, alone.
+ 3. The sticky queue is the bound worker's queue, with no sticky timeout.
+*/
+func (s *mutableStateSuite) TestApplySessionInfo() {
+	multi := &persistencespb.SessionState{}
+	single := &persistencespb.SessionState{ExclusiveWorker: true}
+	for _, tc := range []struct {
+		name             string
+		sessionState     *persistencespb.SessionState
+		stickyTaskQueue  string
+		info             *sessionpb.SessionInfo
+		wantSessionState *persistencespb.SessionState
+		wantSticky       string
+	}{
+		{name: "no binding unbinds a bound workflow", sessionState: multi, stickyTaskQueue: "X"},
+		{name: "no binding leaves an unbound workflow alone", stickyTaskQueue: "W", wantSticky: "W"},
+		{name: "exclusive", info: &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"}, wantSessionState: single, wantSticky: "S"},
+		{name: "non-exclusive", info: &sessionpb.SessionInfo{WorkerQueue: "X"}, wantSessionState: multi, wantSticky: "X"},
+		{name: "same exclusive binding", sessionState: single, stickyTaskQueue: "S",
+			info: &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"}, wantSessionState: single, wantSticky: "S"},
+		{name: "history moves a non-exclusive binding", sessionState: multi, stickyTaskQueue: "X",
+			info: &sessionpb.SessionInfo{WorkerQueue: "Y"}, wantSessionState: multi, wantSticky: "Y"},
+	} {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			s.mutableState.executionInfo.SessionState = common.CloneProto(tc.sessionState)
+			s.mutableState.executionInfo.StickyTaskQueue = tc.stickyTaskQueue
+
+			s.mutableState.ApplySessionInfo(tc.info)
+
+			protorequire.ProtoEqual(s.T(), tc.wantSessionState, s.mutableState.executionInfo.GetSessionState())
+			s.Require().Equal(tc.wantSticky, s.mutableState.executionInfo.GetStickyTaskQueue())
+			s.Require().Nil(s.mutableState.executionInfo.GetStickyScheduleToStartTimeout())
 		})
 	}
 }

@@ -675,6 +675,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				false,
 				nil,
 				-1, // sentinel: inline path didn't consult matching, has no routing revision
+				ms.SessionInfo(),
 			)
 			if err != nil {
 				return nil, err
@@ -805,6 +806,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			false,
 			nil,
 			-1, // sentinel: inline path didn't consult matching, has no routing revision
+			ms.SessionInfo(),
 		)
 		if err != nil {
 			return nil, err

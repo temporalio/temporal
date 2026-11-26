@@ -890,6 +890,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		false,
 		nil,
 		0,
+		nil,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -970,6 +971,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		false,
 		nil,
 		0,
+		nil,
 	)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: tv.Any().String(),
@@ -988,6 +990,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		false,
 		nil,
 		0,
+		nil,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -1507,6 +1510,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 		false,
 		nil,
 		0,
+		nil,
 	)
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(

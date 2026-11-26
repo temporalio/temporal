@@ -14,6 +14,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -459,6 +460,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	updateReg update.Registry,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	targetRevisionNumber int64,
+	sessionInfo *sessionpb.SessionInfo,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -600,6 +602,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			redirectCounter,
 			suggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
+			sessionInfo,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
@@ -802,6 +805,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
+			m.ms.SessionInfo(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -922,6 +926,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
+			m.ms.SessionInfo(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -995,6 +1000,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
+			m.ms.SessionInfo(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -1572,6 +1578,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.BuildIdRedirectCounter,
 			wt.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
+			m.ms.SessionInfo(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 

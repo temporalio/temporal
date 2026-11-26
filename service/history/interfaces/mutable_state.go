@@ -117,7 +117,8 @@ type (
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *timestamppb.Timestamp, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo, update.Registry, bool, *deploymentpb.WorkerDeploymentVersion, int64) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
+		// AddWorkflowTaskStartedEvent records sessionInfo, the workflow's binding once this task started, on the event.
+		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo, update.Registry, bool, *deploymentpb.WorkerDeploymentVersion, int64, *sessionpb.SessionInfo) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
 		AddWorkflowTaskTimedOutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, namespace.Name, namespace.ID, string, string) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, namespace.Name, namespace.ID, string, string, string) (*historypb.HistoryEvent, error)
@@ -281,6 +282,10 @@ type (
 		SessionWorkerQueue() string
 		// HasExclusiveBinding reports whether the workflow is bound to a single-session worker.
 		HasExclusiveBinding() bool
+		// SessionInfo returns the workflow's binding in the shape recorded on history events, or nil if it is not bound.
+		SessionInfo() *sessionpb.SessionInfo
+		// ApplySessionInfo sets the workflow's binding from a replayed history event.
+		ApplySessionInfo(info *sessionpb.SessionInfo)
 		// UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that just started one of its tasks.
 		// previousWorkerStickyQueue must be read before this start changed stickiness (a binding move or a deployment
 		// transition clears the binding); passing the current value misreads a move as a restore. Call it after the task's

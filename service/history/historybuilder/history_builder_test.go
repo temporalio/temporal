@@ -15,6 +15,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -653,6 +654,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 
 func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 	scheduledEventID := rand.Int63()
+	sessionInfo := &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "stable-identity"}
 	event := s.historyBuilder.AddWorkflowTaskStartedEvent(
 		scheduledEventID,
 		testRequestID,
@@ -664,6 +666,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		int64(0),
 		nil,
 		true,
+		sessionInfo,
 	)
 	s.Equal(event, s.flush())
 	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
@@ -682,6 +685,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 				HistorySizeBytes:            123678,
 
 				TargetWorkerDeploymentVersionChanged: true,
+				SessionInfo:                          sessionInfo,
 			},
 		},
 	}, event)
