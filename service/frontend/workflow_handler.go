@@ -1161,10 +1161,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetDeploymentOptions(), request.GetWorkerVersionCapabilities()); err != nil {
-		return nil, err
-	}
-	if err := wh.checkWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
+	if err := wh.validateWorkerSessionOptions(request.GetNamespace(), request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetDeploymentOptions(), request.GetWorkerVersionCapabilities()); err != nil {
 		return nil, err
 	}
 
@@ -1424,10 +1421,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetDeploymentOptions(), request.GetWorkerVersionCapabilities()); err != nil {
-		return nil, err
-	}
-	if err := wh.checkWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
+	if err := wh.validateWorkerSessionOptions(request.GetNamespace(), request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetDeploymentOptions(), request.GetWorkerVersionCapabilities()); err != nil {
 		return nil, err
 	}
 
@@ -8066,21 +8060,8 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 	return histResp.GetResponse(), nil
 }
 
-func (wh *WorkflowHandler) checkWorkerSessionsEnabled(namespaceName string, options *sessionpb.WorkerSessionOptions) error {
-	switch options.GetAdmission().(type) {
-	case *sessionpb.WorkerSessionOptions_SingleSession:
-		if !wh.config.EnableExclusiveWorkerSessions(namespaceName) {
-			return errExclusiveWorkerSessionsDisabled
-		}
-	case *sessionpb.WorkerSessionOptions_MultiSession:
-		if !wh.config.EnableMultiSessionWorkers(namespaceName) {
-			return errMultiSessionWorkersDisabled
-		}
-	}
-	return nil
-}
-
-func validateWorkerSessionOptions(
+func (wh *WorkflowHandler) validateWorkerSessionOptions(
+	namespaceName string,
 	options *sessionpb.WorkerSessionOptions,
 	taskQueue *taskqueuepb.TaskQueue,
 	workerInstanceKey string,
@@ -8101,12 +8082,18 @@ func validateWorkerSessionOptions(
 	}
 	switch options.GetAdmission().(type) {
 	case *sessionpb.WorkerSessionOptions_MultiSession:
+		if !wh.config.EnableMultiSessionWorkers(namespaceName) {
+			return errMultiSessionWorkersDisabled
+		}
 		// Sent on both normal and sticky polls.
 		if deploymentOptions.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED || versionCapabilities.GetUseVersioning() {
 			// TODO (Shivam): Bindings of multi-session workers do not follow versioning transitions yet (MTC-934).
 			return serviceerror.NewInvalidArgument("multi-session workers do not support worker versioning yet")
 		}
 	case *sessionpb.WorkerSessionOptions_SingleSession:
+		if !wh.config.EnableSingleSessionWorkers(namespaceName) {
+			return errSingleSessionWorkersDisabled
+		}
 		// Sent on sticky polls only.
 		if !sticky {
 			return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")

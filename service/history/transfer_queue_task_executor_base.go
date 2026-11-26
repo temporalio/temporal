@@ -107,6 +107,9 @@ func addActivityTask(
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); !ok {
 		return resp, err
 	}
+	// TODO (Shivam): On the normal queue, a worker that can't service sessions can start a session activity, which
+	// breaks the session promise. Refusing such a start strands the task unless something binds the workflow again, so
+	// the fix needs a re-bind path (https://linear.app/temporal/issue/MTC-1063).
 	request.TaskQueue = &taskqueuepb.TaskQueue{Name: request.GetTaskQueue().GetNormalName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request.SessionDirective = nil
 	return matchingClient.AddActivityTask(ctx, request)

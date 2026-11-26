@@ -11325,7 +11325,7 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 			wantSessionState: multi, wantSticky: "X"},
 		{name: "same worker from normal queue restores the binding", options: multiSession, workerInstanceKey: "X",
 			previousWorkerStickyQueue: "X",
-			wantUpdated:               true, wantSessionState: multi, wantSticky: "X"},
+			wantSessionState:          multi, wantSticky: "X"},
 		{name: "move to another worker", options: multiSession, workerInstanceKey: "Y", previousWorkerStickyQueue: "X",
 			wantUpdated: true, wantSessionState: multi, wantSticky: "Y", wantReschedule: true},
 		{name: "worker without sessions unbinds", workerInstanceKey: "N", previousWorkerStickyQueue: "X",

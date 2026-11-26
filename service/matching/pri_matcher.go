@@ -682,8 +682,8 @@ func (tm *priTaskMatcher) pollForSingleSessionWorker(ctx context.Context, pollMe
 
 func (tm *priTaskMatcher) beginSingleSessionAcquisition(ctx context.Context, noWait bool) (bool, error) {
 	// The main idea here is to have a sequential allowance of pollers that are polling with the
-	// same stable identity so that we do not have multiple pollers for the same identity acquiring tasks
-	// from multiple workflows at the same time
+	// same stable identity so that we do not have multiple pollers with the same identity acquiring tasks
+	// from different workflows at the same time.
 	tm.singleSessionAcquisitionMutex.Lock()
 	defer tm.singleSessionAcquisitionMutex.Unlock()
 

@@ -7668,6 +7668,10 @@ func TestDrainExpiredSessionWorker(t *testing.T) {
 	drain := drainExpiredSessionWorker(client, log.NewNoopLogger())
 
 	drain("ns", &workerpb.WorkerHeartbeat{TaskQueue: "tq"})
+	// A single-session worker's queue is exclusively assigned, so its tasks wait for its replacement.
+	drain("ns", &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker-queue", TaskQueue: "tq", SessionOptions: &sessionpb.WorkerSessionOptions{
+		Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{}},
+	}})
 
 	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
 		client.EXPECT().DrainSessionWorkerQueue(gomock.Any(), protomock.Eq(&matchingservice.DrainSessionWorkerQueueRequest{
@@ -7684,15 +7688,18 @@ func TestDrainExpiredSessionWorker(t *testing.T) {
 }
 
 /*
-TestDrainSessionWorkerQueue tests draining a dead multi-session worker's sticky queue:
+TestDrainSessionWorkerQueue tests draining a dead multi-session worker's sticky queue. The task-type cases add tasks
+with the exclusive directive only to skip the bound-worker liveness check; their queue is not exclusively assigned.
  1. A task queued on the worker's sticky queue is handed to History to unbind its workflow, then dropped, and the
     partition unloads once nothing is left.
  2. While the drain runs, new tasks are refused with StickyWorkerUnavailable.
  3. A queue that was never persisted is not loaded.
+ 4. An exclusively assigned queue is left alone: its tasks wait for the single-session worker's replacement, so nothing
+    is unbound or dropped and new tasks are still admitted.
 */
 func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
 	addTask := func(ctx context.Context, tv *testvars.TestVars, taskType enumspb.TaskQueueType) error {
-		// The exclusive directive skips the bound-worker liveness check; nothing is assigned in persistence.
+		// The exclusive directive skips the bound-worker liveness check; it assigns nothing in persistence.
 		sessionDirective := &taskqueuespb.TaskSessionDirective{
 			IsExclusiveWorkerAssigned: true,
 		}
@@ -7760,6 +7767,31 @@ func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
 		require.NoError(t, err)
 		require.Nil(t, loaded(t.Context(), tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 	})
+
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		s.Run("exclusive assignment/"+taskType.String(), func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
+			require.NoError(t, err)
+			require.NoError(t, pm.WaitUntilInitialized(ctx))
+			queue := pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl)
+			require.NoError(t, queue.AssignExclusiveWorker())
+			require.NoError(t, addTask(ctx, tv, taskType))
+			s.mockHistoryClient.EXPECT().UnbindWorkflowFromSessionWorker(gomock.Any(), gomock.Any()).Times(0)
+
+			_, err = s.matchingEngine.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueuePartition: stickyPartition(tv, taskType),
+			})
+			require.NoError(t, err)
+
+			require.NoError(t, addTask(ctx, tv, taskType))
+			require.Equal(t, 2, s.v1TaskManager.getTaskCount(queue.queue)+s.fairTaskManager.getTaskCount(queue.queue))
+			require.Same(t, pm, loaded(ctx, tv, taskType))
+		})
+	}
 }
 
 // TestQueryWorkflowStickyWithoutExclusiveDirective tests that a sticky query for a workflow without an exclusive binding

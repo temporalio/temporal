@@ -500,11 +500,12 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, err
 	}
 
-	// Only a workflow bound to a worker servicing sessions may schedule workflow-session activities. Core enforces this
-	// in the SDK; the server mirrors it for other clients. If the workflow was unbound while the task ran, the task fails
-	// and is retried from the normal queue.
+	// Only a workflow bound to a worker servicing sessions may schedule workflow-session activities. Core enforces the
+	// equivalent in the SDK (the worker must have session options); the server checks the binding, which a worker
+	// servicing sessions sets when it starts the task. If the workflow was unbound while the task ran, the task fails and
+	// is retried from the normal queue, where a worker servicing sessions binds it again.
 	if attr.GetSessionOptions().GetWorkflowSession() != nil && executionInfo.GetSessionState() == nil {
-		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to be bound to a worker servicing sessions")
+		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to be bound to a worker servicing sessions, and it is not bound now")
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
 

@@ -150,7 +150,10 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 // TestMultiSessionWorkerRejectedWithVersioning tests that a multi-session worker cannot poll with worker versioning:
 // its bindings do not follow versioning transitions yet.
 func (s *Versioning3Suite) TestMultiSessionWorkerRejectedWithVersioning() {
-	env := s.setupEnv(testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true))
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableMultiSessionWorkers, true),
+	)
 	tv := env.Tv()
 	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer cancel()

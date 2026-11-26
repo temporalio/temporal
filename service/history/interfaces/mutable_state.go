@@ -291,11 +291,6 @@ type (
 		SessionInfo() *sessionpb.SessionInfo
 		// ApplySessionInfo sets the workflow's binding from a replayed history event.
 		ApplySessionInfo(info *sessionpb.SessionInfo)
-		// UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that just started one of its tasks.
-		// previousWorkerStickyQueue must be read before this start changed stickiness (a binding move or a deployment
-		// transition clears the binding); passing the current value misreads a move as a restore. Call it after the task's
-		// started event is recorded; for workflow tasks, after the response is built, so a worker coming from the normal
-		// queue gets full history.
 		UpdateNonExclusiveWorkerBinding(options *sessionpb.WorkerSessionOptions, workerInstanceKey string, previousWorkerStickyQueue string) (bool, error)
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 

@@ -1597,10 +1597,17 @@ func (ms *MutableStateImpl) SessionWorkerQueue() string {
 }
 
 // UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that services it: a multi-session worker
-// starting one of its tasks becomes its bound worker, and nil options (a worker without sessions started a task, or the
-// bound worker is gone or was reset) unbind it. It reports whether the binding changed, and reschedules the pending
-// workflow task and session activities when it did. previousWorkerStickyQueue is the bound worker's sticky queue, read
-// before the start cleared stickiness.
+// starting one of its tasks becomes its bound worker, and a worker that can't service sessions unbinds it (nil options:
+// such a worker started a task, or the bound worker was reported dead). The outcomes are:
+//   - non-session: no binding before or after, nothing to do;
+//   - no change: the bound worker started the task from its own sticky queue;
+//   - unbind: a worker that can't service sessions took over, or the bound worker was reported dead;
+//   - restore: the bound worker started the task from the normal queue, because Matching briefly saw it as dead or
+//     after a failover, and that start released the binding;
+//   - bind or move: a multi-session worker binds an unbound workflow or takes it over from another worker.
+//
+// It returns whether the binding changed. On unbind, bind or move it also reschedules the pending workflow task and
+// session activities. previousWorkerStickyQueue is the binding from before this task started.
 func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	options *sessionpb.WorkerSessionOptions,
 	workerInstanceKey string,
@@ -1612,29 +1619,28 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	}
 	var newWorkerStickyQueue string
 	if options.GetMultiSession() == nil {
-		newWorkerStickyQueue = "" // a worker without sessions: unbind
+		newWorkerStickyQueue = "" // a worker that can't service sessions: unbind
 	} else {
 		newWorkerStickyQueue = workerInstanceKey // a multi-session worker's sticky queue is named after its instance key
 	}
 	switch {
 	case newWorkerStickyQueue == "" && previousWorkerStickyQueue == "":
-		// A worker without sessions, and no binding to drop: an ordinary or already-unbound workflow.
+		// Non-session: a worker that can't service sessions, and no binding to drop.
+		return false, nil
+	case newWorkerStickyQueue == previousWorkerStickyQueue && newWorkerStickyQueue == ms.SessionWorkerQueue():
+		// No change: the bound worker started the task from its own sticky queue.
 		return false, nil
 	case newWorkerStickyQueue == "":
-		// Unbind: a worker without sessions took over, or the previous bound worker is gone.
+		// Unbind: a worker that can't service sessions took over, or the bound worker was reported dead.
 		ms.ClearStickyTaskQueue(historyi.StickyClearForBoundWorkerLost)
 	case newWorkerStickyQueue == previousWorkerStickyQueue:
-		if ms.SessionWorkerQueue() == newWorkerStickyQueue {
-			// The bound worker started the task from its own sticky queue: nothing changed.
-			return false, nil
-		}
-		// Restore: the bound worker started the task from the normal queue, for example after it looked dead for a
-		// moment and came back, and the start cleared stickiness. Its session activities are already queued for it,
-		// so nothing is rescheduled.
+		// Restore: the bound worker started the task from the normal queue (Matching briefly saw it as dead, or after a
+		// failover). The start released the binding so the task is answered with full history; this binds the workflow
+		// back to the same worker, so the binding did not change. Its session activities are still queued for it.
 		ms.setStickyTaskQueueAndBinding(newWorkerStickyQueue, nil, &persistencespb.SessionState{})
-		return true, nil
+		return false, nil
 	default:
-		// First bind, rebind after an unbind, or move to another worker.
+		// Bind or move: first bind, rebind after an unbind, or move to another worker.
 		ms.setStickyTaskQueueAndBinding(newWorkerStickyQueue, nil, &persistencespb.SessionState{})
 	}
 	// A workflow task start leaves nothing to reschedule here: its own task is already started. An activity start

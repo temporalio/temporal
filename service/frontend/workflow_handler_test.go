@@ -7099,12 +7099,12 @@ func (s *WorkflowHandlerSuite) TestWorkerSessionPolls() {
 				{name: "ordinary sticky poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY},
 				{name: "multi session disabled by default", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: multiSession, disabled: "Multi-session workers are disabled for this namespace"},
 				{name: "multi session enabled for namespace", namespace: "enabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: multiSession},
-				{name: "exclusive session disabled by default", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession, disabled: "Exclusive-worker sessions are disabled for this namespace"},
-				{name: "exclusive session enabled for namespace", namespace: "enabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession},
+				{name: "single session disabled by default", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession, disabled: "Single-session workers are disabled for this namespace"},
+				{name: "single session enabled for namespace", namespace: "enabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession},
 			} {
 				s.Run(tc.name, func() {
 					client := dc.NewMemoryClient()
-					client.OverrideSetting(dc.EnableExclusiveWorkerSessions, []dc.ConstrainedValue{{
+					client.OverrideSetting(dc.EnableSingleSessionWorkers, []dc.ConstrainedValue{{
 						Constraints: dc.Constraints{Namespace: "enabled-namespace"}, Value: true,
 					}})
 					client.OverrideSetting(dc.EnableMultiSessionWorkers, []dc.ConstrainedValue{{

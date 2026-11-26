@@ -247,9 +247,9 @@ type Config struct {
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableExclusiveWorkerSessions dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableMultiSessionWorkers     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableEagerWorkflowStart   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSingleSessionWorkers dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableMultiSessionWorkers  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -451,7 +451,7 @@ func NewConfig(
 		HistoryHostErrorPercentage:              dynamicconfig.HistoryHostErrorPercentage.Get(dc),
 		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
-		EnableExclusiveWorkerSessions:           dynamicconfig.EnableExclusiveWorkerSessions.Get(dc),
+		EnableSingleSessionWorkers:              dynamicconfig.EnableSingleSessionWorkers.Get(dc),
 		EnableMultiSessionWorkers:               dynamicconfig.EnableMultiSessionWorkers.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
 		MaxWorkflowRulesPerNamespace:            dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),

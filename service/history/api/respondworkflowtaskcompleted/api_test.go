@@ -1549,12 +1549,13 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 
 /*
 TestSingleSessionCompletionDestination tests sticky attributes on an exclusive workflow's completion:
-1. Start a workflow task and bind the workflow to worker queue S.
-2. Accept a completion without sticky attributes, but reject one requesting another destination.
-3. Preserve the exclusive binding and sticky destination S in both cases.
+ 1. Start a workflow task and bind the workflow to worker queue S.
+ 2. Accept a completion naming S as its sticky queue, as SDKs complete, and one without sticky attributes, as with the
+    sticky cache disabled. Reject one requesting another destination.
+ 3. Preserve the exclusive binding and sticky destination S in every case.
 */
 func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestination() {
-	for _, destination := range []string{"S", "other"} {
+	for _, destination := range []string{"S", "no sticky attributes", "other"} {
 		s.Run(destination, func() {
 			tv := testvars.New(s.T())
 			tv = tv.WithRunID(tv.Any().RunID())
@@ -1565,7 +1566,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestinati
 			s.Require().NoError(err)
 			ms.BindExclusiveWorker("S")
 			request := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token, Identity: "worker"}
-			if destination == "other" {
+			if destination != "no sticky attributes" {
 				request.StickyAttributes = tv.StickyExecutionAttributes(time.Second)
 				request.StickyAttributes.WorkerTaskQueue.Name = destination
 			}

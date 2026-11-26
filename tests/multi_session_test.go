@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -301,6 +302,48 @@ func TestWorkflowSessionMovesWithWorkflowTask(t *testing.T) {
 }
 
 /*
+TestWorkflowSessionRestoredOnSameWorker tests the restore path, where the bound worker itself picks up the fallen-back
+workflow task:
+ 1. Worker A starts the workflow, binds the session, and schedules a session activity, which is queued on A's sticky
+    activity queue because A polls it.
+ 2. A never polls its sticky workflow queue, so the next workflow task falls back to the normal queue, and A starts it
+    from there.
+ 3. The workflow stays bound to A without a move: its next workflow task goes to A's sticky queue, and the session
+    activity is never rescheduled. Its stamp is unchanged, and its original task is still on A's sticky activity
+    queue, never on the normal queue.
+*/
+func TestWorkflowSessionRestoredOnSameWorker(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.registerStickyActivityPoller("A")
+	e.bindToA(time.Second)
+	// A reschedule bumps the activity's stamp, which obsoletes the task queued for A.
+	activityStamp := func() int32 {
+		response, err := e.env.AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
+			Namespace: e.env.Namespace().String(), Execution: e.tv.WorkflowExecution(),
+		})
+		require.NoError(t, err)
+		activities := response.GetDatabaseMutableState().GetActivityInfos()
+		require.Len(t, activities, 1)
+		for _, activity := range activities {
+			return activity.GetStamp()
+		}
+		return 0
+	}
+	stamp := activityStamp()
+
+	e.signal()
+	e.completeOn("A", e.tv.TaskQueue(), 30*time.Second)
+	require.Equal(t, stamp, activityStamp())
+
+	e.registerStickyPoller("A")
+	e.signal()
+	e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
+	e.requireNoActivityOn(e.tv.TaskQueue())
+	e.requireSessionActivityOn(e.stickyQueue("A"))
+}
+
+/*
 TestWorkflowSessionStaysOnBusyWorker tests hard stickiness while the worker is alive:
  1. Worker A binds the session and polls its sticky queue once, so Matching sees it as alive.
  2. A workflow task waits in A's backlog while B polls the normal queue.
@@ -327,6 +370,29 @@ func TestWorkflowSessionStaysOnBusyWorker(t *testing.T) {
 		}
 	}
 	require.False(t, timedOut, "a bound workflow task has no schedule-to-start timeout")
+}
+
+/*
+TestWorkflowSessionStaysOnHeartbeatingWorker tests a busy worker kept alive by its heartbeats alone:
+ 1. Worker A binds the session from the normal queue and never polls its sticky queue, so Matching has no recent
+    poller for it, as for a worker busy for longer than the sticky poller window.
+ 2. A records a heartbeat, so the worker heartbeat registry still knows it.
+ 3. The next workflow task is queued for A instead of falling back: B on the normal queue gets nothing, and A gets
+    the task on its sticky queue. Without the heartbeat, the task would go to B (TestWorkflowSessionMovesWithWorkflowTask).
+*/
+func TestWorkflowSessionStaysOnHeartbeatingWorker(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToAWith(time.Second)
+	e.recordHeartbeat("A")
+
+	e.signal()
+	err := e.pollWorkflowTask("B", e.tv.TaskQueue(), stickyPollTimeout, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.FailNow(t, "a heartbeating session worker's task must not reach another worker")
+		return nil, nil
+	})
+	require.Error(t, err)
+	e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
 }
 
 /*
@@ -512,18 +578,7 @@ func TestWorkflowSessionKeepsWorkerAfterFailedUpdateTask(t *testing.T) {
 	e.bindToA(time.Minute)
 	e.registerStickyPoller("A")
 
-	updateCtx, cancelUpdate := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancelUpdate()
-	go func() {
-		_, _ = e.env.FrontendClient().UpdateWorkflowExecution(updateCtx, &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace: e.env.Namespace().String(), WorkflowExecution: e.tv.WorkflowExecution(),
-			Request: &updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: e.tv.UpdateID()},
-				Input: &updatepb.Input{Name: "update"},
-			},
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
-		})
-	}()
+	startUpdate(t, e.env, e.tv)
 
 	// A fails the update's workflow task, and then fails the retry too, which must also arrive on A's sticky queue.
 	for range 2 {
@@ -541,6 +596,23 @@ func TestWorkflowSessionKeepsWorkerAfterFailedUpdateTask(t *testing.T) {
 		return nil, nil
 	})
 	require.Error(t, err)
+}
+
+// startUpdate sends an update in the background until it is accepted or the test ends. On a workflow with nothing
+// else pending, it schedules a speculative workflow task.
+func startUpdate(t *testing.T, env *testcore.TestEnv, tv *testvars.TestVars) {
+	updateCtx, cancelUpdate := context.WithTimeout(t.Context(), 30*time.Second)
+	t.Cleanup(cancelUpdate)
+	go func() {
+		_, _ = env.FrontendClient().UpdateWorkflowExecution(updateCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(), WorkflowExecution: tv.WorkflowExecution(),
+			Request: &updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+				Input: &updatepb.Input{Name: "update"},
+			},
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		})
+	}()
 }
 
 /*
@@ -800,19 +872,7 @@ func TestWorkflowSessionBindingSurvivesRebuild(t *testing.T) {
 				e.completeOn("Y", e.tv.TaskQueue(), 30*time.Second)
 				return "Y"
 			},
-			rebuild: func(e *sessionMoveEnv) string {
-				described, err := e.env.FrontendClient().DescribeWorkflowExecution(e.t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-					Namespace: e.env.Namespace().String(), Execution: e.tv.WorkflowExecution(),
-				})
-				require.NoError(e.t, err)
-				execution := described.GetWorkflowExecutionInfo().GetExecution()
-				_, err = e.env.AdminClient().RebuildMutableState(e.t.Context(), &adminservice.RebuildMutableStateRequest{
-					Namespace: e.env.Namespace().String(), Execution: execution,
-				})
-				require.NoError(e.t, err)
-				e.signal()
-				return execution.GetRunId()
-			},
+			rebuild: rebuildFromHistory,
 		},
 		{
 			name: "reset after a move",
@@ -856,6 +916,57 @@ func TestWorkflowSessionBindingSurvivesRebuild(t *testing.T) {
 	}
 }
 
+/*
+TestWorkflowSessionBindingByUpdateTaskSurvivesRebuild tests that a binding made by a speculative workflow task's start
+is persisted, although such a start is otherwise kept in memory only:
+ 1. A worker without session options completes the first workflow task, so the workflow is unbound.
+ 2. An update schedules a speculative workflow task, which multi-session worker B starts from the normal queue. The
+    start binds the workflow to B and is persisted at once.
+ 3. B accepts the update, and the workflow's mutable state is rebuilt from history.
+ 4. The next workflow task goes to B's sticky queue.
+*/
+func TestWorkflowSessionBindingByUpdateTaskSurvivesRebuild(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.completeOn("", e.tv.TaskQueue(), 30*time.Second)
+	e.registerStickyPoller("B")
+
+	startUpdate(t, e.env, e.tv)
+	err := e.pollWorkflowTask("B", e.tv.TaskQueue(), 30*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Len(t, task.GetMessages(), 1)
+		protorequire.ProtoEqual(t, &sessionpb.SessionInfo{WorkerQueue: e.instanceKey("B")}, persistedBinding(t, e.env, e.tv.WorkflowExecution()))
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Messages:         updateutils.New(t).UpdateAcceptMessages(e.tv, task.GetMessages()[0]),
+			StickyAttributes: e.stickyAttributes("B", time.Second),
+		}, nil
+	})
+	require.NoError(t, err)
+	requireStartedEventRecordsBinding(t, e.env, e.tv.WorkflowExecution())
+
+	runID := rebuildFromHistory(e)
+
+	err = e.pollWorkflowTask("B", e.stickyQueue("B"), 10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Equal(t, runID, task.GetWorkflowExecution().GetRunId())
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	require.NoError(t, err)
+}
+
+// rebuildFromHistory rebuilds the workflow's mutable state from history, signals it, and returns its run's ID.
+func rebuildFromHistory(e *sessionMoveEnv) string {
+	described, err := e.env.FrontendClient().DescribeWorkflowExecution(e.t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: e.env.Namespace().String(), Execution: e.tv.WorkflowExecution(),
+	})
+	require.NoError(e.t, err)
+	execution := described.GetWorkflowExecutionInfo().GetExecution()
+	_, err = e.env.AdminClient().RebuildMutableState(e.t.Context(), &adminservice.RebuildMutableStateRequest{
+		Namespace: e.env.Namespace().String(), Execution: execution,
+	})
+	require.NoError(e.t, err)
+	e.signal()
+	return execution.GetRunId()
+}
+
 // resetToLastWorkflowTask resets the workflow to its last completed workflow task and returns the reset run's ID.
 func resetToLastWorkflowTask(e *sessionMoveEnv) string {
 	var lastCompleted int64
@@ -873,18 +984,7 @@ func resetToLastWorkflowTask(e *sessionMoveEnv) string {
 // requireStartedEventRecordsBinding requires the last workflow task started event to record the binding mutable state
 // holds, so a rebuild from history restores it.
 func requireStartedEventRecordsBinding(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) {
-	response, err := env.AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
-		Namespace: env.Namespace().String(), Execution: execution,
-	})
-	require.NoError(t, err)
-	state := response.GetDatabaseMutableState().GetExecutionInfo().GetSessionState()
-	var want *sessionpb.SessionInfo
-	if state != nil {
-		want = &sessionpb.SessionInfo{
-			ExclusiveWorker: state.GetExclusiveWorker(),
-			WorkerQueue:     response.GetDatabaseMutableState().GetExecutionInfo().GetStickyTaskQueue(),
-		}
-	}
+	want := persistedBinding(t, env, execution)
 	var recorded *sessionpb.SessionInfo
 	history := env.SdkClient().GetWorkflowHistory(t.Context(), execution.GetWorkflowId(), execution.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for history.HasNext() {
@@ -895,6 +995,19 @@ func requireStartedEventRecordsBinding(t *testing.T, env *testcore.TestEnv, exec
 		}
 	}
 	protorequire.ProtoEqual(t, want, recorded)
+}
+
+// persistedBinding returns the binding in the workflow's persisted mutable state, or nil when it is unbound.
+func persistedBinding(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) *sessionpb.SessionInfo {
+	response, err := env.AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(), Execution: execution,
+	})
+	require.NoError(t, err)
+	info := response.GetDatabaseMutableState().GetExecutionInfo()
+	if info.GetSessionState() == nil {
+		return nil
+	}
+	return &sessionpb.SessionInfo{ExclusiveWorker: info.GetSessionState().GetExclusiveWorker(), WorkerQueue: info.GetStickyTaskQueue()}
 }
 
 // resetWorkflowTo resets execution to workflowTaskFinishEventID and returns the reset run's ID.
@@ -911,7 +1024,7 @@ func resetWorkflowTo(t *testing.T, env *testcore.TestEnv, execution *commonpb.Wo
 TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot be given a
 versioning override:
  1. Worker A binds the session and is alive on its sticky queue.
- 2. UpdateWorkflowExecutionOptions pinning the workflow to a version is rejected.
+ 2. UpdateWorkflowExecutionOptions setting a versioning override is rejected.
  3. The binding is unchanged: the next workflow task is delivered on A's sticky queue, and A completes it.
 */
 func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
@@ -920,7 +1033,7 @@ func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
 	e.bindToAWith(time.Second)
 	e.registerStickyPoller("A")
 
-	err := updateWithPinnedOverride(t, e.env, e.tv.WorkflowExecution())
+	err := updateWithAutoUpgradeOverride(t, e.env, e.tv.WorkflowExecution())
 	var invalidArgument *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgument)
 	require.ErrorContains(t, err, "bound to a worker servicing sessions")

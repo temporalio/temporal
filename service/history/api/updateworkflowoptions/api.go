@@ -177,15 +177,19 @@ func MergeAndApply(
 	return mergedOpts, hasChanges, nil
 }
 
-// rejectVersioningOverrideForSessionBinding fails an update that sets or unsets the versioning override of a workflow
-// bound to a worker servicing sessions: the binding would keep sending its tasks to a worker on another version.
-// A workflow bound to a single-session worker may unset its override: its tasks stay on its worker either way, and it
-// is how an auto-upgrade override, which fails every workflow task of such a workflow, is removed.
+// rejectVersioningOverrideForSessionBinding rejects setting a versioning override on a workflow bound to a session
+// worker. The binding keeps sending the workflow's tasks to that worker, so the workflow cannot move to the version the
+// override asks for. Removing the override is allowed: the behavior the worker declares then applies, and it is checked
+// when each workflow task completes. Overrides given when the workflow starts are not checked here either; they are
+// also checked when its workflow tasks complete.
 func rejectVersioningOverrideForSessionBinding(ms historyi.MutableState, opts *workflowpb.WorkflowExecutionOptions, updateMask *fieldmaskpb.FieldMask) error {
 	if ms.GetExecutionInfo().GetSessionState() == nil {
+		// Not bound to a worker servicing sessions.
 		return nil
 	}
-	if ms.HasExclusiveBinding() && opts.GetVersioningOverride() == nil {
+	if opts.GetVersioningOverride() == nil {
+		// Removing the override hands the workflow's behavior back to its worker, which each workflow task completion
+		// validates.
 		return nil
 	}
 	for path := range util.ParseFieldMask(updateMask) {

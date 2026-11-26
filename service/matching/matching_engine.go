@@ -4126,6 +4126,8 @@ func (e *matchingEngineImpl) checkBoundWorker(
 }
 
 // boundWorkerAvailable reports whether the worker that owns this sticky queue is alive according to its heartbeats.
+// The main reason why this method is consulted is to understand if a workflow, bound to a worker servicing multiple
+// sessions, should be moved to the normal queue.
 // It is only consulted for non-exclusive bindings with no recent poller: exclusive bindings never fall back to the
 // normal queue, so their tasks wait for their worker instead.
 func (e *matchingEngineImpl) boundWorkerAvailable(ctx context.Context, pm taskQueuePartitionManager) (bool, error) {
@@ -4143,7 +4145,7 @@ func (e *matchingEngineImpl) boundWorkerAvailable(ctx context.Context, pm taskQu
 			WorkerInstanceKey: workerInstanceKey,
 		},
 	})
-	// A missing registry namespace means no heartbeat observations, not a deleted Temporal namespace.
+	// A missing registry namespace means no heartbeat observations.
 	// Treat it as an unavailable worker so History can fall back to the normal queue.
 	_, namespaceMissing := errors.AsType[*serviceerror.NamespaceNotFound](err)
 	if err != nil && !common.IsNotFoundError(err) && !namespaceMissing {

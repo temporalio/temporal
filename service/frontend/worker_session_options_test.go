@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	dc "go.temporal.io/server/common/dynamicconfig"
 )
 
 func TestValidateWorkerSessionOptions(t *testing.T) {
@@ -74,7 +75,11 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 			if tc.series {
 				versionCapabilities = &commonpb.WorkerVersionCapabilities{BuildId: "build", UseVersioning: true, DeploymentSeriesName: "series"}
 			}
-			err := validateWorkerSessionOptions(tc.options, taskQueue, tc.instanceKey, deploymentOptions, versionCapabilities)
+			config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+			config.EnableSingleSessionWorkers = dc.GetBoolPropertyFnFilteredByNamespace(true)
+			config.EnableMultiSessionWorkers = dc.GetBoolPropertyFnFilteredByNamespace(true)
+			wh := &WorkflowHandler{config: config}
+			err := wh.validateWorkerSessionOptions("namespace", tc.options, taskQueue, tc.instanceKey, deploymentOptions, versionCapabilities)
 			if tc.invalid {
 				require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 			} else {

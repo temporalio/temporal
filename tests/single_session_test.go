@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
@@ -28,6 +27,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -76,7 +76,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	_, err = client.PollWorkflowTaskQueue(testcore.NewContext(t.Context()), workflowPollRequest)
 	var disabled *serviceerror.FailedPrecondition
 	require.ErrorAs(t, err, &disabled)
-	env.OverrideDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true)
 
 	// With SessionOptions.StableIdentity set to the sticky task queue name, the worker will only poll the sticky task queue with poll forwarding to
 	// normal queue to only happen for the very first workflow task
@@ -94,7 +94,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
 
-	env.OverrideDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, false)
+	env.OverrideDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, false)
 	_, err = client.SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: namespace, WorkflowExecution: tv.WorkflowExecution(), SignalName: tv.SignalName(),
 	})
@@ -117,7 +117,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	require.ErrorAs(t, err, &disabled)
 	_, err = client.PollActivityTaskQueue(testcore.NewContext(t.Context()), activityPollRequest)
 	require.ErrorAs(t, err, &disabled)
-	env.OverrideDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true)
 
 	_, err = poller.PollActivityTask(activityPollRequest).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
@@ -215,7 +215,7 @@ TestSingleSessionConcurrentAcquisition tests exclusive acquisition with concurre
 func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
-		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, time.Second),
@@ -314,7 +314,7 @@ attempt 1 from a replacement worker process (same stable identity, new instance 
 func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
-		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -439,7 +439,7 @@ func TestSingleSessionAcquisitionUsesNormalPolling(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := newVersioning3TestEnv(t,
-				testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 3),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 3),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0),
@@ -615,7 +615,7 @@ func (h *singleSessionTaskHook) ProcessTaskAdd(ctx context.Context, event *hooks
 func TestSingleSessionTaskAddHooks(t *testing.T) {
 	t.Parallel()
 	env := newVersioning3TestEnv(t,
-		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
@@ -797,7 +797,7 @@ func TestSingleSessionBindingSurvivesRebuild(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := testcore.NewEnv(t,
-				testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 			)
@@ -840,6 +840,72 @@ func TestSingleSessionBindingSurvivesRebuild(t *testing.T) {
 }
 
 /*
+TestSingleSessionAcquisitionByUpdateTaskSurvivesRebuild tests that an acquisition by a speculative workflow task's
+start is persisted, although such a start is otherwise kept in memory only:
+ 1. A worker without session options completes the first workflow task, so the workflow is unbound.
+ 2. An update schedules a speculative workflow task, which single-session worker S acquires. The acquisition is
+    persisted at once.
+ 3. S accepts the update, and the workflow's mutable state is rebuilt from history.
+ 4. The next workflow task goes to S's sticky queue.
+*/
+func TestSingleSessionAcquisitionByUpdateTaskSurvivesRebuild(t *testing.T) {
+	t.Parallel()
+	env := testcore.NewEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+	tv := env.Tv()
+	client := env.FrontendClient()
+	namespace := env.Namespace().String()
+	started, err := client.StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace: namespace, WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+		WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+		WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	require.NoError(t, err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: started.GetRunId()}
+	poller := taskpoller.New(t, client, namespace)
+	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: tv.TaskQueue()}).HandleTask(tv,
+		func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+		}, taskpoller.WithTimeout(10*time.Second))
+	require.NoError(t, err)
+
+	startUpdate(t, env, tv)
+	sessionPoller := poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), WorkerInstanceKey: tv.WorkerInstanceKey(),
+		SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+		}},
+	})
+	_, err = sessionPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Len(t, task.GetMessages(), 1)
+		protorequire.ProtoEqual(t, &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: tv.StickyTaskQueue().GetName()},
+			persistedBinding(t, env, execution))
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Messages: updateutils.New(t).UpdateAcceptMessages(tv, task.GetMessages()[0]),
+		}, nil
+	}, taskpoller.WithTimeout(10*time.Second))
+	require.NoError(t, err)
+	requireStartedEventRecordsBinding(t, env, execution)
+
+	_, err = env.AdminClient().RebuildMutableState(t.Context(), &adminservice.RebuildMutableStateRequest{
+		Namespace: namespace, Execution: execution,
+	})
+	require.NoError(t, err)
+	_, err = client.SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: namespace, WorkflowExecution: execution, SignalName: "wake", Identity: "client",
+	})
+	require.NoError(t, err)
+	_, err = sessionPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Equal(t, started.GetRunId(), task.GetWorkflowExecution().GetRunId())
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}, taskpoller.WithTimeout(10*time.Second))
+	require.NoError(t, err)
+}
+
+/*
 TestSingleSessionBindingSurvivesResetToAcquisition tests a reset to the workflow task that bound the worker:
  1. A single-session worker acquires the workflow from the normal queue and completes its first workflow task.
  2. The workflow is reset to that workflow task. The task was scheduled on the normal queue, so the binding can only
@@ -873,7 +939,7 @@ func TestSingleSessionInheritedByNextRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := testcore.NewEnv(t,
-				testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 			)
@@ -919,7 +985,7 @@ when its mutable state is rebuilt from history:
 func TestSingleSessionInheritedBindingSurvivesRebuild(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
-		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -984,7 +1050,7 @@ type singleSessionEnv struct {
 // completes with the commands built by commands, if any.
 func newSingleSessionEnv(t *testing.T, workflowTaskTimeout time.Duration, commands func(*testvars.TestVars) []*commandpb.Command) *singleSessionEnv {
 	env := testcore.NewEnv(t,
-		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
@@ -1107,19 +1173,7 @@ TestSingleSessionUpdateTaskStaysOnWorker tests updates on a workflow bound to a 
 func TestSingleSessionUpdateTaskStaysOnWorker(t *testing.T) {
 	t.Parallel()
 	e := newSingleSessionEnv(t, 10*time.Second, nil)
-
-	updateCtx, cancelUpdate := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancelUpdate()
-	go func() {
-		_, _ = e.env.FrontendClient().UpdateWorkflowExecution(updateCtx, &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace: e.env.Namespace().String(), WorkflowExecution: e.tv.WorkflowExecution(),
-			Request: &updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: e.tv.UpdateID()},
-				Input: &updatepb.Input{Name: "update"},
-			},
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
-		})
-	}()
+	startUpdate(t, e.env, e.tv)
 
 	// S fails the update's workflow task, and then fails the retry too, which must also arrive on S's sticky queue.
 	for range 2 {
@@ -1172,16 +1226,15 @@ func TestSingleSessionActivityRetryStaysOnWorker(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// updateWithPinnedOverride asks to pin execution to a version through UpdateWorkflowExecutionOptions.
-func updateWithPinnedOverride(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) error {
+// updateWithAutoUpgradeOverride asks to give the execution an auto-upgrade versioning override through
+// UpdateWorkflowExecutionOptions. Unlike a pinned override, it needs no registered version, so only the session rule
+// can reject it.
+func updateWithAutoUpgradeOverride(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) error {
 	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(t.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: execution,
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: &workflowpb.VersioningOverride{
-			Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-				Version:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "other-build"},
-			}},
+			Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 		}},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
@@ -1192,14 +1245,14 @@ func updateWithPinnedOverride(t *testing.T, env *testcore.TestEnv, execution *co
 TestSingleSessionRejectsVersioningOverride tests that a workflow bound to a single-session worker cannot be given a
 versioning override:
  1. Single-session worker S acquires the workflow.
- 2. UpdateWorkflowExecutionOptions pinning the workflow to another version is rejected.
+ 2. UpdateWorkflowExecutionOptions setting a versioning override is rejected.
  3. The binding is unchanged: the next workflow task is delivered on S's sticky queue, never on the normal queue.
 */
 func TestSingleSessionRejectsVersioningOverride(t *testing.T) {
 	t.Parallel()
 	e := newSingleSessionEnv(t, 10*time.Second, nil)
 
-	err := updateWithPinnedOverride(t, e.env, e.tv.WorkflowExecution())
+	err := updateWithAutoUpgradeOverride(t, e.env, e.tv.WorkflowExecution())
 	var invalidArgument *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgument)
 	require.ErrorContains(t, err, "bound to a worker servicing sessions")
@@ -1221,6 +1274,8 @@ worker can run with:
     pinned, and the retry, still delivered on S, completes.
  4. auto-upgrade override: the workflow starts with an auto-upgrade versioning override, so S's pinned completion
     fails too. Removing the override lets the retry, still delivered on S, complete.
+ 5. pinned override: the workflow starts pinned to S's version, so S's completion passes even when S declares
+    auto-upgrade, and the next workflow task is delivered on S.
 */
 func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
 	t.Parallel()
@@ -1229,16 +1284,18 @@ func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
 		// firstBehavior is the behavior S declares when completing the acquired workflow task.
 		firstBehavior       enumspb.VersioningBehavior
 		autoUpgradeOverride bool
+		pinnedOverride      bool
 		rejected            bool
 	}{
 		{name: "pinned", firstBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED},
+		{name: "pinned override", firstBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, pinnedOverride: true},
 		{name: "auto-upgrade", firstBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, rejected: true},
 		{name: "auto-upgrade override", firstBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED, autoUpgradeOverride: true, rejected: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := newVersioning3TestEnv(t,
-				testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 			)
@@ -1267,6 +1324,9 @@ func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
 				startRequest.VersioningOverride = &workflowpb.VersioningOverride{
 					Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 				}
+			}
+			if tc.pinnedOverride {
+				startRequest.VersioningOverride = tv.VersioningOverridePinned()
 			}
 			_, err = client.StartWorkflowExecution(t.Context(), startRequest)
 			require.NoError(t, err)
@@ -1311,7 +1371,7 @@ func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
 					WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 					UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 				})
-				require.NoError(t, err, "a single-session workflow's override can be removed")
+				require.NoError(t, err, "a bound workflow's override can be removed")
 			}
 			require.NoError(t, complete(enumspb.VERSIONING_BEHAVIOR_PINNED), "the retry is delivered on S and completes as pinned")
 		})
