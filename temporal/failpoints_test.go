@@ -4,7 +4,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 )
 
 // TestResolveFailpoints checks that only the failpoints.enabled config setting enables failpoints,
@@ -43,4 +49,31 @@ func TestResolveFailpoints(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFailpointsDisabledIgnoresBuggify checks that when failpoints are disabled, serverbuggify
+// neither randomizes dynamic config settings nor installs BUGGIFY, even with a seed configured.
+func TestFailpointsDisabledIgnoresBuggify(t *testing.T) {
+	t.Parallel()
+	registry := resolveFailpoints(false, log.NewNoopLogger())
+	client := dynamicconfig.NewMemoryClient()
+	wrapped, buggifyStatic, err := serverbuggify.RandomizeSettings(
+		client,
+		log.NewNoopLogger(),
+		registry != nil,
+		config.FailpointsBuggify{Seed: 5, Trace: true},
+	)
+	require.NoError(t, err)
+	require.Same(t, client, wrapped)
+	require.Equal(t, serverbuggify.StaticConfig{}, buggifyStatic)
+
+	app := fxtest.New(t,
+		fx.Supply(
+			registry,
+			fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger))),
+		),
+		serverbuggify.Module,
+	)
+	app.RequireStart()
+	app.RequireStop()
 }

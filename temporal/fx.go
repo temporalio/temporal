@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/frontend"
@@ -130,6 +131,9 @@ type (
 		EventLoggerProvider        otellog.LoggerProvider
 		// FailpointSource holds the failpoint registry, or nil if it's not enabled.
 		FailpointSource *failpoint.Registry
+		// BuggifyStatic is the BUGGIFY configuration of the static config, which the dynamic config
+		// client and the failpoint registry are set up with.
+		BuggifyStatic serverbuggify.StaticConfig
 	}
 )
 
@@ -153,6 +157,8 @@ var (
 		chasm.Module,
 		serialization.Module,
 		FxLogAdapter,
+		// serverbuggify starts before the services so BUGGIFY is active when they start.
+		serverbuggify.Module,
 		fx.Invoke(ServerLifetimeHooks),
 	)
 )
@@ -191,7 +197,15 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
+	// The file client of the dynamic config polls until stopChan is closed. The server owns it once
+	// the provider returns it; until then the provider closes it on an error.
 	stopChan := make(chan any)
+	provided := false
+	defer func() {
+		if !provided {
+			close(stopChan)
+		}
+	}()
 
 	// ClientFactoryProvider
 	clientFactoryProvider := so.clientFactoryProvider
@@ -221,6 +235,20 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		eventLoggerProvider = lognoop.NewLoggerProvider()
 	}
 
+	failpointSource := so.failpointSource
+	if failpointSource == nil {
+		failpointSource = resolveFailpoints(so.config.Failpoints.Enabled, logger)
+	}
+
+	// The static BUGGIFY block is decoded only with failpoints on, so that a server without them
+	// never rejects it. It is read before the dynamic config client starts its poller.
+	var buggifyBlock config.FailpointsBuggify
+	if failpointSource != nil {
+		if buggifyBlock, err = so.config.Failpoints.ReadBuggify(); err != nil {
+			return serverOptionsProvider{}, err
+		}
+	}
+
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
 	if dcClient == nil {
@@ -236,9 +264,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			dcClient = dynamicconfig.NewNoopClient()
 		}
 	}
-	failpointSource := so.failpointSource
-	if failpointSource == nil {
-		failpointSource = resolveFailpoints(so.config.Failpoints.Enabled, logger)
+	// The client randomizes the settings of serverbuggify.BuggifiableSettings if BUGGIFY is enabled.
+	dcClient, buggifyStatic, err := serverbuggify.RandomizeSettings(dcClient, logger, failpointSource != nil, buggifyBlock)
+	if err != nil {
+		return serverOptionsProvider{}, err
 	}
 
 	testHooks := testhooks.NewTestHooks()
@@ -283,6 +312,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, errors.New("WithTokenProvider is set but no remote-cluster TLS is configured: supply global.tls.remoteClusters in config, or pass a provider via WithTLSConfigProvider")
 	}
 
+	provided = true
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -319,6 +349,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TestHooks:                  testHooks,
 		EventLoggerProvider:        eventLoggerProvider,
 		FailpointSource:            failpointSource,
+		BuggifyStatic:              buggifyStatic,
 	}, nil
 }
 
