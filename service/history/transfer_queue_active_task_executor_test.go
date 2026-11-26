@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/archiver"
@@ -305,7 +306,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 			}
 			if tc.bound {
-				mutableState.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}})
+				mutableState.BindExclusiveWorker("sticky-worker")
 			}
 
 			transferTask := &tasks.ActivityTask{
@@ -329,7 +330,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 					request.TaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 				}
 				if tc.bound {
-					request.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}, IsExclusiveWorkerAssigned: true}
+					request.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true}
 				}
 				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 			}
@@ -729,7 +730,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 						s.Equal(enumspb.TASK_QUEUE_KIND_STICKY, request.GetTaskQueue().GetKind())
 						if tc.bound {
 							s.Equal(workflowRunTimeout.AsDuration(), request.GetScheduleToStartTimeout().AsDuration())
-							protorequire.ProtoEqual(s.T(), &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: stickyTaskQueueName}, IsExclusiveWorkerAssigned: true}, request.GetSessionDirective())
+							protorequire.ProtoEqual(s.T(), &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true}, request.GetSessionDirective())
 						}
 						if tc.unavailable {
 							return nil, &serviceerrors.StickyWorkerUnavailable{}

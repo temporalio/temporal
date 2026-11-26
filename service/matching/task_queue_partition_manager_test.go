@@ -2335,7 +2335,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
 				options = hooks.SingleSessionOptions{}
 			}
 			sessionDirective := &taskqueuespb.TaskSessionDirective{
-				BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: tv.StickyTaskQueue().GetName()}, IsExclusiveWorkerAssigned: !tc.general,
+				IsExclusiveWorkerAssigned: !tc.general,
 			}
 			directive := &taskqueuespb.TaskVersionDirective{
 				Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
@@ -2751,7 +2751,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_ReportsSingle
 			defer cancel()
 
 			req := newTestQueryWorkflowRequest(nil)
-			req.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "session"}, IsExclusiveWorkerAssigned: assigned}
+			req.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: assigned}
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -2763,7 +2763,8 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_ReportsSingle
 			s.Require().Len(calls, 1)
 			expected := hooks.SingleSessionOptions{}
 			if assigned {
-				expected.WorkerStableIdentity = "session"
+				// A single-session worker's sticky queue is named after its stable identity.
+				expected.WorkerStableIdentity = pm.Partition().RpcName()
 			}
 			s.Equal(expected, calls[0].SingleSessionOptions)
 
