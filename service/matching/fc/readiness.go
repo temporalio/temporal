@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -17,6 +18,8 @@ const (
 
 type (
 	Readiness struct {
+		timeSource clock.TimeSource
+
 		// Readiness state sharding and locking:
 		//
 		// The sharding and locking scheme tries to achieve high concurrency, given that we have to
@@ -38,6 +41,8 @@ type (
 		// lock protects the maps below and everything in concurrencyState and
 		// localLimiterState.
 		lock sync.Mutex
+
+		localLimiters map[string]*localLimiterState // key is nsID+key
 
 		// forward map, sorted by <pri, pointer(cb)>
 		fwd map[limiterState][]fwdMapEntry
@@ -90,13 +95,15 @@ const (
 	notifySync
 )
 
-func NewReadiness() *Readiness {
+func NewReadiness(timeSource clock.TimeSource) *Readiness {
 	r := &Readiness{
-		seed: maphash.MakeSeed(),
+		seed:       maphash.MakeSeed(),
+		timeSource: timeSource,
 	}
 	for i := range r.shards {
 		rs := &r.shards[i]
 		rs.r = r
+		rs.localLimiters = make(map[string]*localLimiterState)
 		rs.fwd = make(map[limiterState][]fwdMapEntry)
 		rs.rev = make(map[ReadinessCallback][]revMapEntry)
 	}
@@ -124,6 +131,11 @@ func (rs *readinessShard) stop() {
 	rs.stopped = true
 	clear(rs.fwd)
 	clear(rs.rev)
+	var rsu readinessSyncUpdate
+	for _, v := range rs.localLimiters {
+		v.syncLocked(&rsu)
+	}
+	clear(rs.localLimiters)
 }
 
 func (r *Readiness) CancelAllCallbacks(nsID namespace.ID, cb ReadinessCallback) {
