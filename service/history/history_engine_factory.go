@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/fx"
 )
 
@@ -54,6 +55,7 @@ type (
 		DestinationThrottled            chasmnexus.DestinationThrottledFn `optional:"true"`
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
+		FailpointSource                 *failpoint.Registry
 		ChasmEngine                     chasm.Engine
 		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
 		WorkerDeploymentClient          workerdeployment.Client
@@ -100,5 +102,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ChasmEngine,
 		WithWorkflowResendScheduler(f.WorkflowResendScheduler),
 		WithDestinationThrottled(f.DestinationThrottled),
+		WithFailpointSource(f.FailpointSource),
 	)
 }

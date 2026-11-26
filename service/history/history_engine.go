@@ -102,12 +102,14 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 )
 
 type (
 	engineOptions struct {
 		workflowResendScheduler workflowresend.Scheduler
 		destinationThrottled    chasmnexus.DestinationThrottledFn
+		failpointSource         *failpoint.Registry
 	}
 
 	// EngineOption adds optional history engine dependencies without adding required parameters.
@@ -163,6 +165,7 @@ type (
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		destinationThrottled       chasmnexus.DestinationThrottledFn
 		testHooks                  testhooks.TestHooks
+		failpointSource            *failpoint.Registry
 	}
 )
 
@@ -177,6 +180,13 @@ func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOptio
 func WithDestinationThrottled(fn chasmnexus.DestinationThrottledFn) EngineOption {
 	return func(options *engineOptions) {
 		options.destinationThrottled = fn
+	}
+}
+
+// WithFailpointSource sets the failpoint source of the engine.
+func WithFailpointSource(source *failpoint.Registry) EngineOption {
+	return func(options *engineOptions) {
+		options.failpointSource = source
 	}
 }
 
@@ -274,6 +284,7 @@ func NewEngineWithShardContext(
 		outboundQueueCBPool:        outboundQueueCBPool,
 		destinationThrottled:       engineOptions.destinationThrottled,
 		testHooks:                  testHooks,
+		failpointSource:            engineOptions.failpointSource,
 		chasmEngine:                chasmEngine,
 		versionCache:               versionCache,
 		workerDeploymentClient:     workerDeploymentClient,
@@ -487,7 +498,7 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.matchingClient,
 		e.versionCache,
 		e.workerDeploymentClient.SignalVersionReactivation,
-		e.testHooks,
+		e.failpointSource,
 	)
 }
 

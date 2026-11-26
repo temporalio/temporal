@@ -2,14 +2,15 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -18,8 +19,26 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/buggify"
 )
+
+func TestFailpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("test cluster registers a failpoint for the test namespace", func(t *testing.T) {
+		t.Parallel()
+		env := testcore.NewEnv(t)
+		registry := testcore.FailpointRegistry(env.GetTestCluster())
+		require.NotNil(t, registry, "test clusters enable failpoints with the startup switch")
+
+		key := matching.ForwardTaskKey.ForScope(env.NamespaceID().String())
+		require.Nil(t, registry.Get(key))
+		testcore.InjectFailpoint(env, matching.ForwardTaskKey, testcore.MayNotFire()).Return(errors.New("injected"), failpoint.Trigger{MaxFires: 1})
+		require.NotNil(t, registry.Get(key))
+		require.Nil(t, registry.Get(matching.ForwardTaskKey), "the failpoint is scoped to the test namespace")
+	})
+}
 
 // TestBuggify runs a dedicated cluster with BUGGIFY enabled via the static config and verifies that
 // matching.SkipSyncMatchKey is activated and fires deterministically, and that an explicit
