@@ -1,9 +1,17 @@
+//go:build property_test
+
 package schedulertest_test
 
 import (
+	"flag"
+	"hash/fnv"
+	"os"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -22,7 +30,12 @@ import (
 // The outer *testing.T owns the engine scaffolding (it requires a real
 // testing.TB); invariant violations are reported through the *rapid.T so rapid
 // can shrink them.
+//
+// Opt-in while we establish how reliable failures are:
+//
+//	go test -tags test_dep,property_test ./chasm/lib/scheduler/schedulertest
 func TestSchedulerProperties(t *testing.T) {
+	pinRapidSeedInCI(t)
 	rapid.Check(t, func(rt *rapid.T) {
 		start := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 		// A small IdleTime lets fire-time gaps cross the idle window, which the
@@ -152,4 +165,30 @@ func checkInvariantsIgnoringKnownBugs(rt *rapid.T) func(*schedulertest.Driver) {
 		}
 		prev = &cur
 	}
+}
+
+var pinSeedOnce sync.Once
+
+// pinRapidSeedInCI derives rapid's seed from the commit under test in CI. An
+// in-place retry replays rapid's failfile, but a job re-run gets a fresh
+// checkout and would otherwise draw new cases, passing over a real failure.
+// An explicit -rapid.seed or RAPID_SEED wins; local runs stay random.
+func pinRapidSeedInCI(t *testing.T) {
+	t.Helper()
+	sha := os.Getenv("GITHUB_SHA")
+	if sha == "" {
+		return
+	}
+	pinSeedOnce.Do(func() {
+		f := flag.Lookup("rapid.seed")
+		if f == nil || f.Value.String() != "0" {
+			return
+		}
+		h := fnv.New64a()
+		_, _ = h.Write([]byte(sha))
+		// rapid treats 0 as "random".
+		seed := max(h.Sum64(), 1)
+		require.NoError(t, flag.Set("rapid.seed", strconv.FormatUint(seed, 10)))
+		t.Logf("rapid seed derived from GITHUB_SHA=%s: -rapid.seed=%d", sha, seed)
+	})
 }
