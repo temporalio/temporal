@@ -279,7 +279,11 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 				},
 				&cli.StringFlag{
 					Name:  FlagVisibilityQuery,
-					Usage: "Visibility query to select workflows",
+					Usage: "Visibility query to select workflows. With --all-namespaces, the query cannot filter on custom search attributes; only system and predefined search attributes are supported. Set an accurate query (e.g. WorkflowType, TaskQueue, StartTime) so only the necessary executions are selected",
+				},
+				&cli.BoolFlag{
+					Name:  FlagAllNamespaces,
+					Usage: "Select executions in all namespaces, including temporal-system; requires --query. --namespace, TEMPORAL_CLI_NAMESPACE, --workflow-id and --run-id are ignored",
 				},
 				&cli.StringFlag{
 					Name:  FlagReason,

@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -33,7 +32,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
-	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 const (
@@ -46,8 +44,7 @@ const (
 )
 
 var (
-	errNamespaceMismatch            = errors.New("namespace mismatch")
-	errAdminBatchNamespaceNotSystem = errors.New("admin batches should run in the system namespace")
+	errNamespaceMismatch = errors.New("namespace mismatch")
 
 	batchQuotaRequest = quotas.Request{
 		Token: 1,
@@ -68,6 +65,9 @@ type batchProcessorConfig struct {
 	// executions to process, set instead of initialExecutions when the request
 	// targets activity executions directly rather than via a visibility query.
 	initialTargetExecutions []*commonpb.Execution
+	// allNamespaces is set for a refresh tasks admin batch across all namespaces, which lists executions
+	// through the Visibility Admin API instead of in targetNamespace.
+	allNamespaces bool
 }
 
 // batchWorkerProcessor defines the interface for different worker processor types
@@ -83,17 +83,24 @@ type batchWorkerProcessor func(
 
 // page represents a page of workflow executions to be processed
 type page struct {
-	// executionInfos holds workflow executions for workflow batch operations;
-	// targetExecutionInfo holds activity executions for activity batch
-	// operations (terminate/cancel/delete activities). Exactly one is populated.
-	executionInfos      []*workflowpb.WorkflowExecutionInfo
-	targetExecutionInfo []*commonpb.Execution
-	submittedCount      int
-	successCount        int
-	errorCount          int
-	nextPageToken       []byte
-	pageNumber          int
-	prev, next          *page
+	// executionInfos holds workflow executions, and targetExecutionInfo holds
+	// activity executions for terminate/cancel/delete activity batches. Both user
+	// batches and single-namespace admin batches use these fields.
+	//
+	// crossNamespaceExecutionInfos holds results from the Visibility Admin API
+	// for admin tasks across all namespaces (currently only task refresh).
+	// Each result includes the target namespace ID and archetype ID needed to
+	// route the task.
+	// Only one execution slice is populated per page.
+	executionInfos               []*workflowpb.WorkflowExecutionInfo
+	targetExecutionInfo          []*commonpb.Execution
+	crossNamespaceExecutionInfos []*adminservice.VisibilityExecutionInfo
+	submittedCount               int
+	successCount                 int
+	errorCount                   int
+	nextPageToken                []byte
+	pageNumber                   int
+	prev, next                   *page
 }
 
 // hasNext returns true if there are more pages to fetch
@@ -101,13 +108,13 @@ func (p *page) hasNext() bool {
 	return len(p.nextPageToken) > 0
 }
 
-// length returns the number of executions in this page. For activity batch
-// operations the executions are held in targetExecutionInfo; for all other
-// batch types they are held in executionInfos. Only one of the two is ever
-// populated for a given page.
+// length returns the number of executions in this page. Exactly one execution slice is populated.
 func (p *page) length() int {
 	if len(p.targetExecutionInfo) > 0 {
 		return len(p.targetExecutionInfo)
+	}
+	if len(p.crossNamespaceExecutionInfos) > 0 {
+		return len(p.crossNamespaceExecutionInfos)
 	}
 	return len(p.executionInfos)
 }
@@ -127,9 +134,12 @@ func (p *page) nextTask() task {
 		attempts: 1,
 		page:     p,
 	}
-	if len(p.targetExecutionInfo) > 0 {
+	switch {
+	case len(p.targetExecutionInfo) > 0:
 		t.targetExecution = p.targetExecutionInfo[p.submittedCount]
-	} else {
+	case len(p.crossNamespaceExecutionInfos) > 0:
+		t.crossNamespaceExecutionInfo = p.crossNamespaceExecutionInfos[p.submittedCount]
+	default:
 		t.executionInfo = p.executionInfos[p.submittedCount]
 	}
 	return t
@@ -250,6 +260,12 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 ) (HeartBeatDetails, error) {
 
 	concurrency := int(math.Max(1, float64(config.concurrency)))
+	fetchNextPage := func(pageToken []byte, pageNumber int) (*page, error) {
+		if config.allNamespaces {
+			return fetchAllNamespacesPage(ctx, a.AdminClient, config, pageToken, pageNumber)
+		}
+		return fetchPage(ctx, sdkClient, config, pageToken, pageNumber)
+	}
 
 	taskCh := make(chan task, concurrency)
 	respCh := make(chan taskResponse, concurrency)
@@ -321,7 +337,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	} else {
 		// Fetch page of executions if needed
 		var err error
-		p, err = fetchPage(ctx, sdkClient, config, config.initialPageToken, hbd.CurrentPage)
+		p, err = fetchNextPage(config.initialPageToken, hbd.CurrentPage)
 		if err != nil {
 			metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 			return HeartBeatDetails{}, fmt.Errorf("failed to fetch next page: %w", err)
@@ -331,7 +347,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	for {
 		// Check if we need to fetch next page
 		if p.hasNext() && p.allSubmitted() {
-			nextPage, err := fetchPage(ctx, sdkClient, config, p.nextPageToken, p.pageNumber+1)
+			nextPage, err := fetchNextPage(p.nextPageToken, p.pageNumber+1)
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				return HeartBeatDetails{}, fmt.Errorf("failed to fetch next page: %w", err)
@@ -400,6 +416,7 @@ func (a *activities) checkAndGetTargetNamespace(batchParams *batchspb.BatchOpera
 			return "", errAdminBatchNamespaceNotSystem
 		}
 		adminReq := batchParams.GetAdminRequest()
+		// Empty for a refresh across all namespaces.
 		return adminReq.Namespace, nil
 	}
 	// user batch
@@ -410,15 +427,6 @@ func (a *activities) checkAndGetTargetNamespace(batchParams *batchspb.BatchOpera
 		return "", errNamespaceMismatch
 	}
 	return a.namespace.String(), nil
-}
-
-func isAdminRequest(batchParams *batchspb.BatchOperationInput) bool {
-	return batchParams.AdminRequest != nil
-}
-
-func isAdminDelegatedRequest(batchParams *batchspb.BatchOperationInput) bool {
-	_, ok := batchParams.GetAdminRequest().GetOperation().(*adminservice.StartAdminBatchOperationRequest_DelegationOperation)
-	return ok
 }
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
@@ -480,7 +488,13 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		if len(visibilityQuery) > 0 {
 			var count int64
 			var err error
-			if isActivityBatchType(batchParams.BatchType) {
+			if allNamespaces(batchParams) {
+				var resp *adminservice.CountExecutionsResponse
+				resp, err = a.AdminClient.CountExecutions(ctx, &adminservice.CountExecutionsRequest{Query: visibilityQuery})
+				if err == nil {
+					count = resp.GetCount()
+				}
+			} else if isActivityBatchType(batchParams.BatchType) {
 				// Activity batch types operate on activity executions, which are
 				// counted via CountActivityExecutions rather than CountWorkflow.
 				var resp *workflowservice.CountActivityExecutionsResponse
@@ -523,6 +537,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		initialPageToken:        hbd.PageToken,
 		initialExecutions:       executions,
 		initialTargetExecutions: targetExecutions,
+		allNamespaces:           allNamespaces(batchParams),
 	}
 
 	// Create a wrapper for the task processor
@@ -572,21 +587,6 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 	}
 }
 
-func (a *activities) adjustQueryAdminBatchType(
-	batchParams *batchspb.BatchOperationInput,
-) string {
-	adminReq := batchParams.GetAdminRequest()
-	// if a user batch is delegated as an admin batch
-	if isAdminDelegatedRequest(batchParams) {
-		batchType := batchParams.BatchType
-		return a.adjustQueryBatchTypeEnum(adminReq.GetVisibilityQuery(), batchType)
-	}
-	// other admin batch:
-	// RefreshWorkflowTasks applies to both open and closed workflows,
-	// so no additional filter is needed - return query as-is.
-	return adminReq.GetVisibilityQuery()
-}
-
 // getOperationRPS returns the rate for a batch operation.
 // It is the requested RPS (if set), capped by the configured RPS.
 func getOperationRPS(maxRPS, requestedRPS float64) float64 {
@@ -634,7 +634,7 @@ func (a *activities) startTaskProcessor(
 				return
 			}
 
-			if task.executionInfo == nil && task.targetExecution == nil {
+			if task.executionInfo == nil && task.targetExecution == nil && task.crossNamespaceExecutionInfo == nil {
 				continue
 			}
 
@@ -999,36 +999,6 @@ func isRetryableTaskError(err error, batchOperation *batchspb.BatchOperationInpu
 		isNonRetryableError(err, batchOperation.BatchType) ||
 		slices.Contains(batchOperation.NonRetryableErrors, err.Error())
 	return !nonRetryable
-}
-
-func (a *activities) processAdminTask(
-	ctx context.Context,
-	batchOperation *batchspb.BatchOperationInput,
-	task task,
-	limiter quotas.RequestRateLimiter,
-) error {
-	adminReq := batchOperation.AdminRequest
-	switch adminReq.Operation.(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
-		return processTask(ctx, limiter, task,
-			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(executionInfo)
-				if err != nil {
-					return fmt.Errorf("archetypeID extraction error: %w", err)
-				}
-				_, err = a.HistoryClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-					NamespaceId: batchOperation.NamespaceId,
-					ArchetypeId: uint32(archetypeID),
-					Request: &adminservice.RefreshWorkflowTasksRequest{
-						NamespaceId: batchOperation.NamespaceId,
-						Execution:   executionInfo.Execution,
-					},
-				})
-				return err
-			})
-	default:
-		return fmt.Errorf("unknown admin batch type: %T", adminReq.Operation)
-	}
 }
 
 func processTask(

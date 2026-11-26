@@ -90,6 +90,14 @@ func (t *batchTestWorkflowClient) CountActivityExecutions(
 	return &workflowservice.CountActivityExecutionsResponse{Count: 5}, nil
 }
 
+func (t *batchTestAdminClient) CountExecutions(
+	_ context.Context,
+	request *adminservice.CountExecutionsRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.CountExecutionsResponse, error) {
+	return &adminservice.CountExecutionsResponse{Count: 2}, nil
+}
+
 func (t *batchTestAdminClient) StartAdminBatchOperation(
 	_ context.Context,
 	request *adminservice.StartAdminBatchOperationRequest,
@@ -347,6 +355,101 @@ func (s *batchCommandTestSuite) TestAdminBatchRefreshTasksConfirmationShowsClust
 			s.Contains(s.output.String(), "A batch workflow will be started in \"temporal-system\"")
 			s.Contains(s.output.String(), "Continue? [y/N]:")
 			s.Equal("my-job", s.client.admin.lastRequest.GetJobId())
+		})
+	}
+}
+
+func (s *batchCommandTestSuite) SetupSubTest() {
+	previousAssertions := s.Assertions
+	s.Assertions = require.New(s.T())
+	s.T().Cleanup(func() {
+		s.Assertions = previousAssertions
+	})
+}
+
+func (s *batchCommandTestSuite) TestAdminAllNamespacesBatchRefreshTasks() {
+	s.Run("starts one batch across all namespaces", func() {
+		s.output.Reset()
+		s.client.admin.lastRequest = nil
+		s.NoError(s.app.Run([]string{
+			"tdbg", "--yes", "execution", "refresh-tasks", "--all-namespaces",
+			"--query", "WorkflowType='MyWorkflow' AND TemporalScheduledById='s' AND TemporalScheduleId='s' AND ExecutionStatus='Running' AND TemporalNamespaceDivision IS NULL",
+			"--reason", "refresh", "--job-id", "my-job",
+		}))
+		s.True(s.client.admin.lastRequest.GetRefreshTasksOperation().GetAllNamespaces())
+		s.Empty(s.client.admin.lastRequest.GetNamespace())
+	})
+
+	s.Run("confirmation shows the count across all namespaces", func() {
+		s.output.Reset()
+		flags := flag.NewFlagSet("refresh-tasks", flag.ContinueOnError)
+		flags.Bool(FlagAllNamespaces, true, "")
+		flags.String(FlagVisibilityQuery, "A=B", "")
+		flags.String(FlagReason, "refresh", "")
+		ctx := cli.NewContext(s.app, flags, nil)
+		ctx.Context = context.Background()
+		prompter := NewPrompter(ctx, func(params *PrompterParams) {
+			params.Writer = &s.output
+			params.Reader = strings.NewReader("y\n")
+			params.Exiter = func(int) { s.T().FailNow() }
+		})
+
+		s.Require().NoError(AdminAllNamespacesBatchRefreshWorkflowTasks(ctx, s.client, prompter))
+		s.Contains(s.output.String(), "refresh tasks for 2 execution(s)")
+		s.Contains(s.output.String(), `in all namespaces, including "temporal-system"`)
+		s.Contains(s.output.String(), "--namespace, --workflow-id and --run-id are ignored")
+		s.Contains(s.output.String(), "Reminder: use system or predefined search attributes to narrow the query down")
+	})
+
+	s.Run("calls out that custom search attributes are not supported", func() {
+		s.client.admin.lastRequest = nil
+		err := s.app.Run([]string{
+			"tdbg", "--yes", "execution", "refresh-tasks", "--all-namespaces",
+			"--query", "WorkflowType='MyWorkflow' AND (CustomerId='abc' OR Keyword01='x')", "--reason", "refresh",
+		})
+		s.ErrorContains(err, "invalid --query for --all-namespaces: a query across all namespaces cannot filter on custom search attributes; only system and predefined search attributes are supported, got: CustomerId, Keyword01")
+		s.Nil(s.client.admin.lastRequest)
+	})
+
+	s.Run("ignores --namespace with --all-namespaces", func() {
+		s.client.admin.lastRequest = nil
+		s.NoError(s.app.Run([]string{
+			"tdbg", "--namespace", "ns-1", "--yes", "execution", "refresh-tasks", "--all-namespaces",
+			"--query", "WorkflowType='MyWorkflow'", "--reason", "refresh",
+		}))
+		s.True(s.client.admin.lastRequest.GetRefreshTasksOperation().GetAllNamespaces())
+		s.Empty(s.client.admin.lastRequest.GetNamespace())
+	})
+
+	s.Run("rejects a missing query with --all-namespaces", func() {
+		s.client.admin.lastRequest = nil
+		err := s.app.Run([]string{
+			"tdbg", "--yes", "execution", "refresh-tasks", "--all-namespaces", "--reason", "refresh",
+		})
+		s.ErrorContains(err, "--all-namespaces requires --query")
+		s.Nil(s.client.admin.lastRequest)
+	})
+
+	for _, tc := range []struct {
+		name  string
+		flags []string
+	}{
+		{name: "workflow ID", flags: []string{"--workflow-id", "wf"}},
+		{name: "run ID", flags: []string{"--run-id", "run"}},
+		{name: "workflow and run IDs", flags: []string{"--workflow-id", "wf", "--run-id", "run"}},
+	} {
+		s.Run("ignores "+tc.name+" with --all-namespaces", func() {
+			s.client.admin.lastRequest = nil
+			args := []string{
+				"tdbg", "--namespace", "ns-1", "--yes", "execution", "refresh-tasks", "--all-namespaces",
+				"--query", "WorkflowType='MyWorkflow'", "--reason", "refresh",
+			}
+			args = append(args, tc.flags...)
+			s.NoError(s.app.Run(args))
+			s.True(s.client.admin.lastRequest.GetRefreshTasksOperation().GetAllNamespaces())
+			s.Equal("WorkflowType='MyWorkflow'", s.client.admin.lastRequest.GetVisibilityQuery())
+			s.Empty(s.client.admin.lastRequest.GetNamespace())
+			s.Empty(s.client.admin.lastRequest.GetExecutions())
 		})
 	}
 }

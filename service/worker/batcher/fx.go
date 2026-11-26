@@ -25,6 +25,9 @@ const (
 	BatchWFTypeProtobufName = "temporal-sys-batch-workflow-protobuf"
 	NamespaceDivision       = "TemporalBatcher"
 	AdminNamespaceDivision  = "TemporalAdminBatcher"
+	// AllNamespacesJobIDPrefix prefixes the job ID of an admin batch that runs across all namespaces,
+	// in place of the target namespace used by a single-namespace admin batch.
+	AllNamespacesJobIDPrefix = "all-namespaces-"
 )
 
 type (

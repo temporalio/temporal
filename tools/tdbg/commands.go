@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -698,6 +699,16 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 }
 
 func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	if c.Bool(FlagAllNamespaces) {
+		query := c.String(FlagVisibilityQuery)
+		if strings.TrimSpace(query) == "" {
+			return errors.New("--all-namespaces requires --query")
+		}
+		if err := batcher.ValidateAllNamespacesQuery(query); err != nil {
+			return fmt.Errorf("invalid --query for --all-namespaces: %w", err)
+		}
+		return AdminAllNamespacesBatchRefreshWorkflowTasks(c, clientFactory, prompter)
+	}
 	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
 		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
 	}
@@ -768,12 +779,9 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 		return err
 	}
 
-	jobID := c.String(FlagJobID)
-	if jobID == "" {
-		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
-	}
-	if strings.Contains(jobID, ":") {
-		return fmt.Errorf("job ID %q cannot contain ':'; use '-' or '_' instead", jobID)
+	jobID, err := refreshTasksJobID(c)
+	if err != nil {
+		return err
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -784,15 +792,9 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	if err != nil {
 		return fmt.Errorf("unable to describe namespace %q: %w", nsName, err)
 	}
-	clusterRole := "active"
-	if nsResp.GetIsGlobalNamespace() {
-		clusterResp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
-		if err != nil {
-			return fmt.Errorf("unable to describe cluster: %w", err)
-		}
-		if nsResp.GetReplicationConfig().GetActiveClusterName() != clusterResp.GetClusterName() {
-			clusterRole = "passive"
-		}
+	clusterRole, err := clusterRoleForNamespace(ctx, adminClient, nsResp)
+	if err != nil {
+		return err
 	}
 
 	// Count workflows matching the query to confirm with user
@@ -808,7 +810,10 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 		clusterRole, nsName, primitives.SystemLocalNamespace, countResp.GetCount(), query)
 	prompter.Prompt(msg)
 
-	resp, err := adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	// The confirmation can outlast ctx's deadline.
+	startCtx, startCancel := newContext(c)
+	defer startCancel()
+	resp, err := adminClient.StartAdminBatchOperation(startCtx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
 		VisibilityQuery: query,
 		JobId:           jobID,
@@ -825,6 +830,90 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", resp.GetWorkflowId())
 	return nil
+}
+
+// AdminAllNamespacesBatchRefreshWorkflowTasks starts one batch job that refreshes workflow tasks for
+// the executions matching a query in all namespaces. It ignores --namespace, --workflow-id, and --run-id.
+func AdminAllNamespacesBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	query, err := getRequiredOption(c, FlagVisibilityQuery)
+	if err != nil {
+		return err
+	}
+	reason, err := getRequiredOption(c, FlagReason)
+	if err != nil {
+		return err
+	}
+	jobID, err := refreshTasksJobID(c)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	// The batch lists executions with the Visibility Admin API, so count with it too.
+	countResp, err := adminClient.CountExecutions(ctx, &adminservice.CountExecutionsRequest{Query: query})
+	if err != nil {
+		return fmt.Errorf("unable to count executions: %w", err)
+	}
+
+	msg := fmt.Sprintf("A batch workflow will be started in %q to refresh tasks for %d execution(s) matching query %q in all namespaces, including %q.\n"+
+		"With --all-namespaces, --namespace, --workflow-id and --run-id are ignored.\n"+
+		"Reminder: use system or predefined search attributes to narrow the query down to only the necessary executions as much as possible.\n"+
+		"Continue?",
+		primitives.SystemLocalNamespace, countResp.GetCount(), query, primitives.SystemLocalNamespace)
+	prompter.Prompt(msg)
+
+	// The confirmation can outlast ctx's deadline.
+	startCtx, startCancel := newContext(c)
+	defer startCancel()
+	resp, err := adminClient.StartAdminBatchOperation(startCtx, &adminservice.StartAdminBatchOperationRequest{
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{AllNamespaces: true},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
+	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", resp.GetWorkflowId())
+	return nil
+}
+
+func refreshTasksJobID(c *cli.Context) (string, error) {
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
+	}
+	if strings.Contains(jobID, ":") {
+		return "", fmt.Errorf("job ID %q cannot contain ':'; use '-' or '_' instead", jobID)
+	}
+	return jobID, nil
+}
+
+// clusterRoleForNamespace reports whether the connected cluster is "active" or "passive" for the namespace.
+func clusterRoleForNamespace(
+	ctx context.Context,
+	adminClient adminservice.AdminServiceClient,
+	nsResp *workflowservice.DescribeNamespaceResponse,
+) (string, error) {
+	if !nsResp.GetIsGlobalNamespace() {
+		return "active", nil
+	}
+	clusterResp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		return "", fmt.Errorf("unable to describe cluster: %w", err)
+	}
+	if nsResp.GetReplicationConfig().GetActiveClusterName() != clusterResp.GetClusterName() {
+		return "passive", nil
+	}
+	return "active", nil
 }
 
 // AdminRebuildMutableState rebuild a workflow mutable state using persisted history events

@@ -391,6 +391,15 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*
 			return ni.namespaceRegistry.GetNamespace(namespaceName)
 		}
 		return nil, nil
+	case *adminservice.StartAdminBatchOperationRequest:
+		// The admin handler validates all-namespaces requests without a namespace lookup.
+		if request.GetRefreshTasksOperation().GetAllNamespaces() {
+			return nil, nil
+		}
+		if namespaceName.IsEmpty() {
+			return nil, errNamespaceNotSet
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	default:
 		// All other APIs.
 		if namespaceName.IsEmpty() {

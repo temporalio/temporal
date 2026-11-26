@@ -1505,12 +1505,18 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 
 	// Admin batch workflows run in the temporal-system namespace to operate on target namespaces.
 	targetNS := adminRequest.GetNamespace()
-	targetNSID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(targetNS))
-	if err != nil {
-		return nil, err
+	var targetNSID string
+	// A refresh across all namespaces leaves targetNSID empty: the worker lists
+	// executions without a namespace and refreshes each one in the namespace that the listing returns.
+	if !adminRequest.GetRefreshTasksOperation().GetAllNamespaces() {
+		nsID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(targetNS))
+		if err != nil {
+			return nil, err
+		}
+		targetNSID = nsID.String()
 	}
+	operateJobID := adminBatchWorkflowID(adminRequest)
 	sysNS, sysNSID := primitives.SystemLocalNamespace, primitives.SystemNamespaceID
-	operateJobID := targetNS + ":" + adminRequest.GetJobId()
 
 	// Admin batch operations only run in the system namespace, so the concurrency limit is global.
 	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation()
@@ -1534,7 +1540,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	// prepare the batch-workflow input
 	batchWfInput := &batchspb.BatchOperationInput{
 		AdminRequest: adminRequest,
-		NamespaceId:  targetNSID.String(),
+		NamespaceId:  targetNSID,
 	}
 	identity := adminRequest.GetIdentity()
 	var batchTypeMemo string
@@ -1612,9 +1618,12 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
 	if params.GetOperation() == nil ||
 		params.GetReason() == "" ||
-		params.GetNamespace() == "" ||
+		(params.GetNamespace() == "" && !params.GetRefreshTasksOperation().GetAllNamespaces()) ||
 		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return serviceerror.NewInvalidArgument("must provide required parameters: Operation, Reason, Namespace, AND one of (Query OR Executions)")
+		return serviceerror.NewInvalidArgument("must provide required parameters: Operation, Reason, one of (Namespace OR RefreshTasksOperation.AllNamespaces), AND one of (Query OR Executions)")
+	}
+	if err := validateAllNamespaces(params); err != nil {
+		return err
 	}
 
 	if len(params.GetJobId()) == 0 {
@@ -1637,6 +1646,32 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	default:
 		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
 	}
+}
+
+// adminBatchWorkflowID keeps the two scopes apart: JobId cannot contain ':', so only a
+// single-namespace workflow ID has one.
+func adminBatchWorkflowID(request *adminservice.StartAdminBatchOperationRequest) string {
+	if request.GetRefreshTasksOperation().GetAllNamespaces() {
+		return batcher.AllNamespacesJobIDPrefix + request.GetJobId()
+	}
+	return request.GetNamespace() + ":" + request.GetJobId()
+}
+
+func validateAllNamespaces(params *adminservice.StartAdminBatchOperationRequest) error {
+	if !params.GetRefreshTasksOperation().GetAllNamespaces() {
+		return nil
+	}
+	if params.GetNamespace() != "" {
+		return serviceerror.NewInvalidArgument("Namespace must be empty when AllNamespaces is true")
+	}
+	if len(params.GetExecutions()) > 0 {
+		return serviceerror.NewInvalidArgument("Executions must be empty when AllNamespaces is true")
+	}
+	// Executions don't carry a namespace, so a refresh across all namespaces must select executions by query.
+	if err := batcher.ValidateAllNamespacesQuery(params.GetVisibilityQuery()); err != nil {
+		return serviceerror.NewInvalidArgument(err.Error())
+	}
+	return nil
 }
 
 // checkTargetNamespaceActive reports whether this cluster may mutate the target namespace's
