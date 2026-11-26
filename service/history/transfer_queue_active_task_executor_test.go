@@ -307,15 +307,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			}
 			switch {
 			case tc.bound:
-				mutableState.BindExclusiveWorker("sticky-worker", "")
+				mutableState.BindExclusiveWorker("sticky-worker")
 			case tc.droppedSession:
 				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			case tc.session:
-				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}}
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+				mutableState.GetExecutionInfo().StickyTaskQueue = "sticky-worker"
 			default:
 				// A regular activity of a sticky workflow without a session.
-			}
-			if !tc.droppedSession {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 			}
 
@@ -339,7 +338,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 				request.TaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 			}
 			if tc.session && !tc.droppedSession {
-				request.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}, IsExclusiveWorkerAssigned: tc.bound}
+				request.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: tc.bound}
 			}
 			if tc.workerGone {
 				normalRequest := common.CloneProto(request)
@@ -710,7 +709,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			executionInfo := mutableState.GetExecutionInfo()
 			executionInfo.StickyTaskQueue = stickyTaskQueueName
 			if tc.bound {
-				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: stickyTaskQueueName}}
+				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true}
 			}
 			executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
@@ -746,7 +745,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 						s.Equal(enumspb.TASK_QUEUE_KIND_STICKY, request.GetTaskQueue().GetKind())
 						if tc.bound {
 							s.Equal(workflowRunTimeout.AsDuration(), request.GetScheduleToStartTimeout().AsDuration())
-							protorequire.ProtoEqual(s.T(), &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: stickyTaskQueueName}, IsExclusiveWorkerAssigned: true}, request.GetSessionDirective())
+							protorequire.ProtoEqual(s.T(), &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true}, request.GetSessionDirective())
 						}
 						if tc.unavailable {
 							return nil, &serviceerrors.StickyWorkerUnavailable{}

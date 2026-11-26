@@ -654,7 +654,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 
 func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 	scheduledEventID := rand.Int63()
-	sessionInfo := &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: "stable-identity"}}
+	sessionInfo := &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "stable-identity"}
 	event := s.historyBuilder.AddWorkflowTaskStartedEvent(
 		scheduledEventID,
 		testRequestID,

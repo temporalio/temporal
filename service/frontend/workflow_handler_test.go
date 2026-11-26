@@ -7052,9 +7052,12 @@ func (s *WorkflowHandlerSuite) TestStickyActivityPollForwardedToMatching() {
 	wh := s.getWorkflowHandler(s.newConfig())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 	request := &workflowservice.PollActivityTaskQueueRequest{
-		Namespace:      s.testNamespace.String(),
-		TaskQueue:      &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal-queue"},
-		SessionOptions: &sessionpb.WorkerSessionOptions{},
+		Namespace: s.testNamespace.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal-queue"},
+		SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
+			MultiSession: &sessionpb.MultiSessionOptions{},
+		}},
+		WorkerInstanceKey: "sticky-worker",
 	}
 	s.mockMatchingClient.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, req *matchingservice.PollActivityTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
@@ -7078,6 +7081,9 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 	singleSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "sticky-worker"},
 	}}
+	multiSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
+		MultiSession: &sessionpb.MultiSessionOptions{},
+	}}
 	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
 		s.Run(taskType.String(), func() {
 			for _, tc := range []struct {
@@ -7089,7 +7095,7 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 			}{
 				{name: "ordinary normal poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				{name: "ordinary sticky poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY},
-				{name: "nonexclusive session poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: &sessionpb.WorkerSessionOptions{}},
+				{name: "nonexclusive session poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: multiSession},
 				{name: "exclusive session disabled by default", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession, disabled: true},
 				{name: "exclusive session enabled for namespace", namespace: "enabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession},
 			} {
@@ -7109,7 +7115,7 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 					var err error
 					if taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 						request := &workflowservice.PollWorkflowTaskQueueRequest{
-							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options), WorkerInstanceKey: "worker-instance",
+							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options), WorkerInstanceKey: "sticky-worker",
 						}
 						original := common.CloneProto(request)
 						if !tc.disabled {
@@ -7128,7 +7134,7 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 						s.ProtoEqual(original, request)
 					} else {
 						request := &workflowservice.PollActivityTaskQueueRequest{
-							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options), WorkerInstanceKey: "worker-instance",
+							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options), WorkerInstanceKey: "sticky-worker",
 						}
 						original := common.CloneProto(request)
 						if !tc.disabled {

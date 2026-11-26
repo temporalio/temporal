@@ -196,7 +196,7 @@ func TestDoAddWorkflowTask_LoadBalancedRoot(t *testing.T) {
 	request := &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId:      testNamespaceID,
 		TaskQueue:        &taskqueuepb.TaskQueue{Name: testTaskQueueName},
-		SessionDirective: &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "worker"}, IsExclusiveWorkerAssigned: true},
+		SessionDirective: &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true},
 	}
 	response := &matchingservice.AddWorkflowTaskResponse{}
 

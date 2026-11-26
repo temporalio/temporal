@@ -60,28 +60,23 @@ func TestForceTerminateWorkflowRecordsMetric(t *testing.T) {
 	require.Equal(t, string(chasm.ExecutionForceTerminationReasonEventBatchSizeExceedsLimit), recordings[0].Tags["reason"])
 }
 
-// TestTaskSessionDirective names the bound worker (queue and instance key) only on pushes to that worker's sticky queue,
-// for exclusive and non-exclusive bindings alike.
+// TestTaskSessionDirective marks only sticky pushes of a bound workflow, for exclusive and non-exclusive bindings alike.
 func TestTaskSessionDirective(t *testing.T) {
 	t.Parallel()
-	worker := &taskqueuespb.BoundWorkerInfo{WorkerQueue: "worker", InstanceKey: "key"}
 	sticky := &taskqueuepb.TaskQueue{Name: "worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	multi := &persistencespb.SessionState{}
 	for _, tc := range []struct {
 		name         string
 		sessionState *persistencespb.SessionState
 		queue        *taskqueuepb.TaskQueue
 		expected     *taskqueuespb.TaskSessionDirective
 	}{
-		{name: "exclusive binding", sessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: worker}, queue: sticky,
-			expected: &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: worker, IsExclusiveWorkerAssigned: true}},
-		{name: "non-exclusive binding", sessionState: &persistencespb.SessionState{BoundWorkerInfo: worker}, queue: sticky,
-			expected: &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: worker}},
+		{name: "exclusive binding", sessionState: &persistencespb.SessionState{ExclusiveWorker: true}, queue: sticky,
+			expected: &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true}},
+		{name: "non-exclusive binding", sessionState: multi, queue: sticky, expected: &taskqueuespb.TaskSessionDirective{}},
 		{name: "unbound sticky", queue: sticky},
-		{name: "another worker's sticky queue", sessionState: &persistencespb.SessionState{BoundWorkerInfo: worker},
-			queue: &taskqueuepb.TaskQueue{Name: "other", Kind: enumspb.TASK_QUEUE_KIND_STICKY}},
-		{name: "normal fallback", sessionState: &persistencespb.SessionState{BoundWorkerInfo: worker},
-			queue: &taskqueuepb.TaskQueue{Name: "normal", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}},
-		{name: "missing destination", sessionState: &persistencespb.SessionState{BoundWorkerInfo: worker}},
+		{name: "normal fallback", sessionState: multi, queue: &taskqueuepb.TaskQueue{Name: "normal", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}},
+		{name: "missing destination", sessionState: multi},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

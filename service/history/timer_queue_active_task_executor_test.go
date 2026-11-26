@@ -1135,7 +1135,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 
 			if bound {
 				mutableState.SetStickyTaskQueue("S", nil)
-				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true}
 			}
 			wt := addWorkflowTaskScheduledEvent(mutableState)
 			startedEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, mutableState.CurrentTaskQueue().GetName(), uuid.NewString())
@@ -1157,7 +1157,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 					if bound {
 						info := request.UpdateWorkflowMutation.ExecutionInfo
 						s.True(info.GetSessionState().GetExclusiveWorker())
-						s.Equal("S", info.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
 						s.Equal(int32(1), info.GetWorkflowTaskAttemptsSinceLastSuccess())
 						s.Equal("S", info.GetStickyTaskQueue())
 						s.Equal(taskQueueName, info.GetTaskQueue())
@@ -1453,13 +1452,13 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			if tc.session {
 				activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
-			if tc.session && !tc.droppedSession {
-				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}}
-			}
 			if tc.droppedSession {
 				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			} else {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			}
+			if tc.session && !tc.droppedSession {
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			}
 
 			activityInfo.Attempt = 1
@@ -1487,7 +1486,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			expectedRequest := func(taskQueue *taskqueuepb.TaskQueue) *matchingservice.AddActivityTaskRequest {
 				var sessionDirective *taskqueuespb.TaskSessionDirective
 				if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
-					sessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: taskQueue.GetName()}}
+					sessionDirective = &taskqueuespb.TaskSessionDirective{}
 				}
 				return &matchingservice.AddActivityTaskRequest{
 					NamespaceId:            s.namespaceID.String(),

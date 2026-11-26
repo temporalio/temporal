@@ -805,7 +805,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
-			sessionInfo(m.ms.executionInfo.GetSessionState()),
+			m.ms.SessionInfo(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -926,7 +926,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
-			sessionInfo(m.ms.executionInfo.GetSessionState()),
+			m.ms.SessionInfo(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -1000,7 +1000,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
-			sessionInfo(m.ms.executionInfo.GetSessionState()),
+			m.ms.SessionInfo(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -1054,7 +1054,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	// Ordinary sticky failures get one retry on the normal queue before creating a transient task.
 	// Bound workflows keep their binding and increment attempts: an exclusive binding never changes, and a
 	// non-exclusive binding moves only when its worker is gone.
-	if m.ms.ClearStickyTaskQueueUnlessPartOfSession() {
+	if m.ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure) {
 		incrementAttempt = false
 	}
 
@@ -1578,7 +1578,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.BuildIdRedirectCounter,
 			wt.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
-			sessionInfo(m.ms.executionInfo.GetSessionState()),
+			m.ms.SessionInfo(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 

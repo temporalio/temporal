@@ -59,7 +59,6 @@ import (
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -443,7 +442,7 @@ TestWorkflowTaskStartedEventRecordsSessionInfo tests the binding written on work
     by then.
 */
 func (s *mutableStateSuite) TestWorkflowTaskStartedEventRecordsSessionInfo() {
-	exclusive := &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: "S"}}
+	exclusive := &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"}
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	startWorkflow := func() {
 		s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
@@ -487,7 +486,7 @@ func (s *mutableStateSuite) TestWorkflowTaskStartedEventRecordsSessionInfo() {
 		startedEvent, _, err := s.mutableState.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, "request-id", tq, "worker", nil, nil, nil, false, nil, 0, exclusive)
 		s.Require().NoError(err)
 		s.Require().Nil(startedEvent)
-		s.mutableState.BindExclusiveWorker("S", "k")
+		s.mutableState.BindExclusiveWorker("S")
 
 		_, workflowEvents, err := s.mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 
@@ -10582,7 +10581,7 @@ func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
 			},
 		})
 	s.Require().NoError(err)
-	ms.setSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}})
+	ms.BindExclusiveWorker("S")
 	ms.executionInfo.DefaultWorkflowTaskTimeout = durationpb.New(time.Second)
 	ms.executionInfo.WorkflowTaskAttempt = 1
 	wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
@@ -10600,9 +10599,9 @@ func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
 	s.Require().NoError(err)
 	s.True(proto.Equal(ms.GetExecutionInfo().GetSessionState(), reloaded.GetExecutionInfo().GetSessionState()))
 	s.Require().NoError(reloaded.UpdateCurrentVersion(tests.Version, false))
-	reloaded.ClearStickyTaskQueue()
+	reloaded.ClearStickyTaskQueue(historyi.StickyClearForStartedOffStickyQueue)
 	s.Equal("S", reloaded.CurrentTaskQueue().GetName())
-	s.Equal("S", reloaded.GetExecutionInfo().GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
+	s.Equal("S", reloaded.SessionWorkerQueue())
 	wt, err = reloaded.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.Require().NoError(err)
 	s.Equal("S", wt.TaskQueue.GetName())
@@ -10637,44 +10636,160 @@ func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
 }
 
 /*
-TestSetSessionStatePreservesExclusiveBinding tests updates to an existing exclusive binding:
-1. Bind the workflow to worker queue S and its matching sticky destination.
-2. Accept the same binding, but report and reject a different queue, nonexclusive state, or nil state.
-3. Preserve destination S and the normal workflow task queue throughout.
+TestSetStickyTaskQueuePreservesExclusiveBinding tests writes to a workflow bound to a single-session worker:
+1. Bind the workflow to the single-session worker S.
+2. Write the same binding, a different queue, a multi-session binding, or a clear.
+3. The binding, sticky queue S and the normal workflow task queue are kept every time.
 */
-func TestSetSessionStatePreservesExclusiveBinding(t *testing.T) {
+func TestSetStickyTaskQueuePreservesExclusiveBinding(t *testing.T) {
 	t.Parallel()
+	single := &persistencespb.SessionState{ExclusiveWorker: true}
 	for _, tc := range []struct {
-		name     string
-		state    *persistencespb.SessionState
-		rejected bool
+		name  string
+		queue string
+		state *persistencespb.SessionState
 	}{
-		{name: "same binding", state: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}},
-		{name: "different queue", state: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "other"}}, rejected: true},
-		{name: "nonexclusive state", state: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}, rejected: true},
-		{name: "cleared state", rejected: true},
+		{name: "same binding", queue: "S", state: single},
+		{name: "different queue", queue: "other", state: single},
+		{name: "multi-session binding", queue: "S", state: &persistencespb.SessionState{}},
+		{name: "cleared"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-			ms := &MutableStateImpl{logger: logger, executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
-			initial := &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
-			ms.setSessionState(initial)
-			var assertion *testlogger.Expectation
-			if tc.rejected {
-				assertion = logger.Expect(testlogger.Error, "failed assertion: attempted to replace an exclusive worker binding")
-			}
+			ms := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+			ms.BindExclusiveWorker("S")
 
-			ms.setSessionState(tc.state)
+			ms.setStickyTaskQueueAndBinding(tc.queue, durationpb.New(time.Second), tc.state)
 
-			if tc.rejected {
-				require.EqualValues(t, 1, assertion.MatchCount())
-				require.Same(t, initial, ms.GetExecutionInfo().GetSessionState())
-			} else {
-				require.Same(t, tc.state, ms.GetExecutionInfo().GetSessionState())
-			}
+			require.True(t, ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker())
 			require.Equal(t, "S", ms.GetExecutionInfo().GetStickyTaskQueue())
+			require.Nil(t, ms.GetExecutionInfo().GetStickyScheduleToStartTimeout())
 			require.Equal(t, "foo", ms.GetExecutionInfo().GetTaskQueue())
+		})
+	}
+}
+
+/*
+TestSetStickyTaskQueue tests the sticky writer for unbound workflows and workflows bound to a multi-session worker:
+1. An unbound workflow takes any sticky queue and timeout, and a clear removes them, as for any sticky workflow.
+2. A multi-session binding keeps its queue: the same queue is accepted without a timeout, a different one is ignored.
+3. A clear for a binding move releases a multi-session binding.
+*/
+func TestSetStickyTaskQueue(t *testing.T) {
+	t.Parallel()
+	t.Run("unbound", func(t *testing.T) {
+		t.Parallel()
+		ms := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+		ms.SetStickyTaskQueue("W", durationpb.New(time.Second))
+		require.Equal(t, "W", ms.executionInfo.GetStickyTaskQueue())
+		require.Equal(t, time.Second, ms.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+		require.Nil(t, ms.executionInfo.GetSessionState())
+		require.Empty(t, ms.SessionWorkerQueue())
+		ms.ClearStickyTaskQueue(historyi.StickyClearForStartedOffStickyQueue)
+		require.Empty(t, ms.executionInfo.GetStickyTaskQueue())
+		require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
+		require.Nil(t, ms.executionInfo.GetSessionState())
+	})
+	t.Run("multi-session binding", func(t *testing.T) {
+		t.Parallel()
+		ms := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+		ms.setStickyTaskQueueAndBinding("X", durationpb.New(time.Second), &persistencespb.SessionState{})
+		require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
+		ms.SetStickyTaskQueue("X", durationpb.New(time.Second))
+		require.Equal(t, "X", ms.SessionWorkerQueue())
+		require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
+		ms.SetStickyTaskQueue("Y", durationpb.New(time.Second))
+		require.Equal(t, "X", ms.SessionWorkerQueue())
+		ms.ClearStickyTaskQueue(historyi.StickyClearForStartedOffStickyQueue)
+		require.Nil(t, ms.executionInfo.GetSessionState())
+		require.Empty(t, ms.executionInfo.GetStickyTaskQueue())
+		require.Empty(t, ms.SessionWorkerQueue())
+	})
+}
+
+/*
+TestClearStickyTaskQueue tests that the clear reason decides only what happens to a multi-session binding:
+1. A workflow that is not bound is cleared for every reason, as on main, and reports false when nothing was sticky.
+2. A multi-session binding is kept for a task failure, a disabled cache or a state rebuild, and released otherwise.
+3. A single-session binding is never cleared.
+*/
+func TestClearStickyTaskQueue(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name              string
+		reason            historyi.StickyClearReason
+		keepsMultiSession bool
+	}{
+		{name: "workflow task failure", reason: historyi.StickyClearForWorkflowTaskFailure, keepsMultiSession: true},
+		{name: "cache disabled", reason: historyi.StickyClearForCacheDisabled, keepsMultiSession: true},
+		{name: "state rebuild", reason: historyi.StickyClearForStateRebuild, keepsMultiSession: true},
+		{name: "started off sticky queue", reason: historyi.StickyClearForStartedOffStickyQueue},
+		{name: "bound worker lost", reason: historyi.StickyClearForBoundWorkerLost},
+		{name: "versioning", reason: historyi.StickyClearForVersioning},
+		{name: "reset sticky task queue", reason: historyi.StickyClearForResetStickyTaskQueue},
+		{name: "workflow close", reason: historyi.StickyClearForWorkflowClose},
+	} {
+		reason, keepsMultiSession := tc.reason, tc.keepsMultiSession
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			nothingSticky := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+			require.False(t, nothingSticky.ClearStickyTaskQueue(reason))
+
+			// Like main, a clear always writes for an unbound workflow, so a leftover timeout without a queue is dropped.
+			danglingTimeout := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{
+				TaskQueue: "foo", StickyScheduleToStartTimeout: durationpb.New(time.Second),
+			}}
+			require.False(t, danglingTimeout.ClearStickyTaskQueue(reason))
+			require.Nil(t, danglingTimeout.executionInfo.GetStickyScheduleToStartTimeout())
+
+			unbound := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+			unbound.SetStickyTaskQueue("W", durationpb.New(time.Second))
+			require.True(t, unbound.ClearStickyTaskQueue(reason))
+			require.Empty(t, unbound.executionInfo.GetStickyTaskQueue())
+			require.Nil(t, unbound.executionInfo.GetStickyScheduleToStartTimeout())
+
+			multi := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+			multi.setStickyTaskQueueAndBinding("X", nil, &persistencespb.SessionState{})
+			require.Equal(t, !keepsMultiSession, multi.ClearStickyTaskQueue(reason))
+			if keepsMultiSession {
+				require.Equal(t, "X", multi.SessionWorkerQueue())
+			} else {
+				require.Nil(t, multi.executionInfo.GetSessionState())
+				require.Empty(t, multi.executionInfo.GetStickyTaskQueue())
+			}
+
+			single := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+			single.BindExclusiveWorker("S")
+			require.False(t, single.ClearStickyTaskQueue(reason))
+			require.Equal(t, "S", single.SessionWorkerQueue())
+			require.True(t, single.HasExclusiveBinding())
+		})
+	}
+}
+
+// TestSyncExecutionInfoKeepsSessionBinding tests that a standby copy keeps a multi-session binding: stickiness is
+// dropped for an unbound workflow, but a binding is part of the workflow's state.
+func TestSyncExecutionInfoKeepsSessionBinding(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		session *persistencespb.SessionState
+	}{
+		{name: "not bound"},
+		{name: "multi-session binding", session: &persistencespb.SessionState{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			current := &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}
+			ms := &MutableStateImpl{executionInfo: current}
+			incoming := &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo", StickyTaskQueue: "X", SessionState: tc.session}
+			require.NoError(t, ms.syncExecutionInfo(current, incoming, true))
+			if tc.session == nil {
+				require.Empty(t, ms.executionInfo.GetStickyTaskQueue())
+			} else {
+				require.Equal(t, "X", ms.SessionWorkerQueue())
+			}
 		})
 	}
 }
@@ -10759,13 +10874,12 @@ func TestSingleSessionStickyPolicy(t *testing.T) {
 				WorkflowRunTimeout:           durationpb.New(time.Hour),
 			}}
 			if tc.bound {
-				state := &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
-				ms.setSessionState(state)
-				protorequire.ProtoEqual(t, state, ms.executionInfo.GetSessionState())
+				ms.BindExclusiveWorker("S")
+				require.True(t, ms.executionInfo.GetSessionState().GetExclusiveWorker())
 				require.Equal(t, "S", ms.executionInfo.GetStickyTaskQueue())
 				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
 				ms.SetStickyTaskQueue("S", durationpb.New(3*time.Second))
-				require.Equal(t, 3*time.Second, ms.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
 				for _, queueName := range []string{"foo", "S"} {
 					queue, timeout := ms.TaskQueueScheduleToStartTimeout(queueName)
 					require.Equal(t, "S", queue.GetName())
@@ -10778,11 +10892,11 @@ func TestSingleSessionStickyPolicy(t *testing.T) {
 				require.Equal(t, "other", ms.executionInfo.GetStickyTaskQueue())
 			}
 			if tc.bound {
-				require.Equal(t, ms.executionInfo.GetStickyTaskQueue(), ms.executionInfo.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
+				require.Equal(t, "S", ms.SessionWorkerQueue())
 			} else {
 				require.Nil(t, ms.executionInfo.GetSessionState())
 			}
-			ms.ClearStickyTaskQueue()
+			ms.ClearStickyTaskQueue(historyi.StickyClearForStartedOffStickyQueue)
 			if tc.bound {
 				require.Equal(t, "S", ms.executionInfo.GetStickyTaskQueue())
 			} else {
@@ -10790,7 +10904,7 @@ func TestSingleSessionStickyPolicy(t *testing.T) {
 				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
 			}
 			if tc.bound {
-				require.Equal(t, ms.executionInfo.GetStickyTaskQueue(), ms.executionInfo.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
+				require.Equal(t, "S", ms.SessionWorkerQueue())
 			} else {
 				require.Nil(t, ms.executionInfo.GetSessionState())
 			}
@@ -10990,12 +11104,10 @@ func (s *mutableStateSuite) TestNonExclusiveBindingSurvivesWorkflowTaskFailures(
 			},
 		})
 	s.Require().NoError(err)
-	ms.setSessionState(&persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}})
-	ms.SetStickyTaskQueue("X", durationpb.New(5*time.Second))
+	ms.setStickyTaskQueueAndBinding("X", nil, &persistencespb.SessionState{})
 	requireSessionOnX := func() {
-		s.Equal("X", ms.GetExecutionInfo().GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
-		s.Equal("X", ms.GetExecutionInfo().GetStickyTaskQueue())
-		s.Equal(5*time.Second, ms.GetExecutionInfo().GetStickyScheduleToStartTimeout().AsDuration())
+		s.Equal("X", ms.SessionWorkerQueue())
+		s.Nil(ms.GetExecutionInfo().GetStickyScheduleToStartTimeout())
 	}
 	requireScheduleToStartTimer := func() {
 		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
@@ -11139,89 +11251,67 @@ func (s *mutableStateSuite) TestReschedulePendingActivitiesForSessionMove_Nothin
 }
 
 /*
-TestUpdateNonExclusiveWorkerBinding tests how a workflow task start changes a non-exclusive binding:
- 1. Set the session state and sticky queue the workflow had, and the location captured before the start.
+TestUpdateNonExclusiveWorkerBinding tests how a task start changes a non-exclusive binding:
+ 1. Set the session state and sticky queue the workflow had, and the bound worker's queue read before the start.
  2. Apply the starting poller's session options and instance key, with one ready session activity pending.
- 3. A location change sets the location (with the poller's instance key) and its sticky mirror and reschedules the
-    activity; a restart from the normal queue by the same worker only restores the sticky queue; everything else
-    changes nothing.
+ 3. A bind, move or unbind sets the binding and the sticky queue (the worker's instance key, or none) and
+    reschedules the activity; a restart from the normal queue by the same worker only restores the binding;
+    everything else changes nothing.
 */
 func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
-	multiSession := func(address string) *sessionpb.WorkerSessionOptions {
-		return &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
-			MultiSession: &sessionpb.MultiSessionOptions{WorkerAddress: address},
-		}}
-	}
-	bound := func(queue string, instanceKey string) *persistencespb.SessionState {
-		return &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: queue, InstanceKey: instanceKey}}
-	}
-	previousTimeout := durationpb.New(7 * time.Second)
+	multiSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
+		MultiSession: &sessionpb.MultiSessionOptions{},
+	}}
+	multi := &persistencespb.SessionState{}
+	single := &persistencespb.SessionState{ExclusiveWorker: true}
 	for _, tc := range []struct {
-		name                string
-		options             *sessionpb.WorkerSessionOptions
-		sessionState        *persistencespb.SessionState
-		stickyTaskQueue     string
-		previousWorkerQueue string
-		previousTimeout     *durationpb.Duration
-		noInstanceKey       bool
-		wantUpdated         bool
-		wantSessionState    *persistencespb.SessionState
-		wantSticky          string
-		wantStickyTimeout   time.Duration
-		wantReschedule      bool
+		name                      string
+		options                   *sessionpb.WorkerSessionOptions
+		workerInstanceKey         string
+		sessionState              *persistencespb.SessionState
+		stickyTaskQueue           string
+		previousWorkerStickyQueue string
+		wantUpdated               bool
+		wantSessionState          *persistencespb.SessionState
+		wantSticky                string
+		wantReschedule            bool
 	}{
 		{name: "never a session"},
-		{name: "first bind uses default timeout", options: multiSession("X"),
-			wantUpdated: true, wantSessionState: bound("X", "k1"), wantSticky: "X",
-			wantStickyTimeout: defaultSessionStickyScheduleToStartTimeout, wantReschedule: true},
-		{name: "same worker on its sticky queue", options: multiSession("X"), sessionState: bound("X", "k1"),
-			stickyTaskQueue: "X", previousWorkerQueue: "X", previousTimeout: previousTimeout,
-			wantSessionState: bound("X", "k1"), wantSticky: "X", wantStickyTimeout: 7 * time.Second},
-		{name: "same worker on its sticky queue fills a missing instance key", options: multiSession("X"), sessionState: bound("X", ""),
-			stickyTaskQueue: "X", previousWorkerQueue: "X", previousTimeout: previousTimeout,
-			wantUpdated: true, wantSessionState: bound("X", "k1"), wantSticky: "X", wantStickyTimeout: 7 * time.Second},
-		{name: "same worker on its sticky queue keeps an existing instance key", options: multiSession("X"), sessionState: bound("X", "k0"),
-			stickyTaskQueue: "X", previousWorkerQueue: "X", previousTimeout: previousTimeout,
-			wantSessionState: bound("X", "k0"), wantSticky: "X", wantStickyTimeout: 7 * time.Second},
-		{name: "same worker on its sticky queue without an instance key", options: multiSession("X"), sessionState: bound("X", ""),
-			stickyTaskQueue: "X", previousWorkerQueue: "X", previousTimeout: previousTimeout, noInstanceKey: true,
-			wantSessionState: bound("X", ""), wantSticky: "X", wantStickyTimeout: 7 * time.Second},
-		{name: "same worker from normal queue restores sticky", options: multiSession("X"), sessionState: &persistencespb.SessionState{},
-			previousWorkerQueue: "X", previousTimeout: previousTimeout,
-			wantUpdated: true, wantSessionState: bound("X", "k1"), wantSticky: "X", wantStickyTimeout: 7 * time.Second},
-		{name: "move carries previous timeout", options: multiSession("Y"), sessionState: &persistencespb.SessionState{},
-			previousWorkerQueue: "X", previousTimeout: previousTimeout,
-			wantUpdated: true, wantSessionState: bound("Y", "k1"), wantSticky: "Y", wantStickyTimeout: 7 * time.Second, wantReschedule: true},
-		{name: "non-session worker drops the session", sessionState: &persistencespb.SessionState{}, previousWorkerQueue: "X",
+		{name: "first bind", options: multiSession, workerInstanceKey: "X",
+			wantUpdated: true, wantSessionState: multi, wantSticky: "X", wantReschedule: true},
+		{name: "first bind replaces an ordinary sticky queue", options: multiSession, workerInstanceKey: "X", stickyTaskQueue: "W",
+			wantUpdated: true, wantSessionState: multi, wantSticky: "X", wantReschedule: true},
+		{name: "same worker on its sticky queue", options: multiSession, workerInstanceKey: "X", sessionState: multi,
+			stickyTaskQueue: "X", previousWorkerStickyQueue: "X",
+			wantSessionState: multi, wantSticky: "X"},
+		{name: "same worker from normal queue restores the binding", options: multiSession, workerInstanceKey: "X",
+			previousWorkerStickyQueue: "X",
+			wantUpdated:               true, wantSessionState: multi, wantSticky: "X"},
+		{name: "move to another worker", options: multiSession, workerInstanceKey: "Y", previousWorkerStickyQueue: "X",
+			wantUpdated: true, wantSessionState: multi, wantSticky: "Y", wantReschedule: true},
+		{name: "worker without sessions unbinds", workerInstanceKey: "N", previousWorkerStickyQueue: "X",
 			wantUpdated: true, wantReschedule: true},
-		{name: "exclusive session is untouched", options: multiSession("Y"), sessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}},
-			stickyTaskQueue: "S", previousWorkerQueue: "S",
-			wantSessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}, wantSticky: "S"},
+		{name: "exclusive binding is untouched", options: multiSession, workerInstanceKey: "Y", sessionState: single,
+			stickyTaskQueue: "S", previousWorkerStickyQueue: "S",
+			wantSessionState: single, wantSticky: "S"},
 		{name: "single-session poller is untouched", options: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"},
-		}}},
+		}}, workerInstanceKey: "k"},
 	} {
 		s.Run(tc.name, func() {
 			s.SetupTest()
-			s.mutableState.executionInfo.SessionState = tc.sessionState
+			s.mutableState.executionInfo.SessionState = common.CloneProto(tc.sessionState)
 			s.mutableState.executionInfo.StickyTaskQueue = tc.stickyTaskQueue
-			s.mutableState.executionInfo.StickyScheduleToStartTimeout = tc.previousTimeout
 			activity := s.addSessionTestActivity(10, true)
 			stampBefore := activity.Stamp
 
-			instanceKey := "k1"
-			if tc.noInstanceKey {
-				instanceKey = ""
-			}
-			updated, err := s.mutableState.UpdateNonExclusiveWorkerBinding(tc.options, instanceKey, tc.previousWorkerQueue, tc.previousTimeout)
+			updated, err := s.mutableState.UpdateNonExclusiveWorkerBinding(tc.options, tc.workerInstanceKey, tc.previousWorkerStickyQueue)
 
 			s.Require().NoError(err)
 			s.Equal(tc.wantUpdated, updated)
 			protorequire.ProtoEqual(s.T(), tc.wantSessionState, s.mutableState.executionInfo.GetSessionState())
 			s.Equal(tc.wantSticky, s.mutableState.executionInfo.GetStickyTaskQueue())
-			if tc.wantSticky != "" && tc.wantStickyTimeout != 0 {
-				s.Equal(tc.wantStickyTimeout, s.mutableState.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
-			}
+			s.Nil(s.mutableState.executionInfo.GetStickyScheduleToStartTimeout())
 			if tc.wantReschedule {
 				s.Equal(stampBefore+1, activity.Stamp)
 				s.Len(s.activityTransferTasks(), 1)
@@ -11234,8 +11324,8 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 }
 
 /*
-TestSessionInfo tests the binding recorded on history events: nil when unbound, otherwise the worker and whether the
-binding is exclusive. The instance key is never recorded.
+TestSessionInfo tests the binding recorded on history events: nil when unbound, otherwise the bound worker's queue and
+whether the binding is exclusive.
 */
 func (s *mutableStateSuite) TestSessionInfo() {
 	for _, tc := range []struct {
@@ -11246,18 +11336,19 @@ func (s *mutableStateSuite) TestSessionInfo() {
 		{name: "unbound"},
 		{
 			name:         "exclusive",
-			sessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S", InstanceKey: "k"}},
-			want:         &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: "S"}},
+			sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
+			want:         &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"},
 		},
 		{
 			name:         "non-exclusive",
-			sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X", InstanceKey: "k"}},
-			want:         &sessionpb.SessionInfo{BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: "X"}},
+			sessionState: &persistencespb.SessionState{},
+			want:         &sessionpb.SessionInfo{WorkerQueue: "S"},
 		},
 	} {
 		s.Run(tc.name, func() {
 			s.SetupTest()
 			s.mutableState.executionInfo.SessionState = tc.sessionState
+			s.mutableState.executionInfo.StickyTaskQueue = "S"
 
 			protorequire.ProtoEqual(s.T(), tc.want, s.mutableState.SessionInfo())
 		})
@@ -11265,70 +11356,42 @@ func (s *mutableStateSuite) TestSessionInfo() {
 }
 
 /*
-TestApplySessionInfo tests replaying a workflow task started event's binding:
- 1. The workflow starts with some binding.
- 2. Applying the event's binding replaces it, even an exclusive one: history wins.
- 3. The sticky queue mirrors the binding; a non-exclusive binding gets the default sticky timeout and no instance key.
+TestApplySessionInfo tests replaying a history event's binding:
+ 1. The workflow starts with some binding, or none.
+ 2. Applying the event's binding replaces a multi-session binding; no binding unbinds a bound workflow and leaves an
+    unbound one, including its ordinary sticky queue, alone.
+ 3. The sticky queue is the bound worker's queue, with no sticky timeout.
 */
 func (s *mutableStateSuite) TestApplySessionInfo() {
-	exclusive := func(queue string) *sessionpb.SessionInfo {
-		return &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: queue}}
-	}
-	nonExclusive := func(queue string) *sessionpb.SessionInfo {
-		return &sessionpb.SessionInfo{BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: queue}}
-	}
+	multi := &persistencespb.SessionState{}
+	single := &persistencespb.SessionState{ExclusiveWorker: true}
 	for _, tc := range []struct {
-		name              string
-		sessionState      *persistencespb.SessionState
-		info              *sessionpb.SessionInfo
-		wantSessionState  *persistencespb.SessionState
-		wantSticky        string
-		wantStickyTimeout time.Duration
+		name             string
+		sessionState     *persistencespb.SessionState
+		stickyTaskQueue  string
+		info             *sessionpb.SessionInfo
+		wantSessionState *persistencespb.SessionState
+		wantSticky       string
 	}{
-		{
-			name:         "no binding unbinds a bound workflow",
-			sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X", InstanceKey: "k"}},
-		},
-		{name: "no binding leaves an unbound workflow unbound"},
-		{
-			name:             "exclusive",
-			info:             exclusive("S"),
-			wantSessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}},
-			wantSticky:       "S",
-		},
-		{
-			name:              "non-exclusive",
-			info:              nonExclusive("X"),
-			wantSessionState:  &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}},
-			wantSticky:        "X",
-			wantStickyTimeout: defaultSessionStickyScheduleToStartTimeout,
-		},
-		{
-			name:             "history replaces an exclusive binding",
-			sessionState:     &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S", InstanceKey: "k"}},
-			info:             exclusive("S2"),
-			wantSessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S2"}},
-			wantSticky:       "S2",
-		},
-		{
-			name:              "history moves a non-exclusive binding",
-			sessionState:      &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X", InstanceKey: "k"}},
-			info:              nonExclusive("Y"),
-			wantSessionState:  &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "Y"}},
-			wantSticky:        "Y",
-			wantStickyTimeout: defaultSessionStickyScheduleToStartTimeout,
-		},
+		{name: "no binding unbinds a bound workflow", sessionState: multi, stickyTaskQueue: "X"},
+		{name: "no binding leaves an unbound workflow alone", stickyTaskQueue: "W", wantSticky: "W"},
+		{name: "exclusive", info: &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"}, wantSessionState: single, wantSticky: "S"},
+		{name: "non-exclusive", info: &sessionpb.SessionInfo{WorkerQueue: "X"}, wantSessionState: multi, wantSticky: "X"},
+		{name: "same exclusive binding", sessionState: single, stickyTaskQueue: "S",
+			info: &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"}, wantSessionState: single, wantSticky: "S"},
+		{name: "history moves a non-exclusive binding", sessionState: multi, stickyTaskQueue: "X",
+			info: &sessionpb.SessionInfo{WorkerQueue: "Y"}, wantSessionState: multi, wantSticky: "Y"},
 	} {
 		s.Run(tc.name, func() {
 			s.SetupTest()
-			s.mutableState.executionInfo.SessionState = tc.sessionState
-			s.mutableState.executionInfo.StickyTaskQueue = tc.sessionState.GetBoundWorkerInfo().GetWorkerQueue()
+			s.mutableState.executionInfo.SessionState = common.CloneProto(tc.sessionState)
+			s.mutableState.executionInfo.StickyTaskQueue = tc.stickyTaskQueue
 
 			s.mutableState.ApplySessionInfo(tc.info)
 
 			protorequire.ProtoEqual(s.T(), tc.wantSessionState, s.mutableState.executionInfo.GetSessionState())
 			s.Require().Equal(tc.wantSticky, s.mutableState.executionInfo.GetStickyTaskQueue())
-			s.Require().Equal(tc.wantStickyTimeout, s.mutableState.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+			s.Require().Nil(s.mutableState.executionInfo.GetStickyScheduleToStartTimeout())
 		})
 	}
 }
@@ -11414,7 +11477,7 @@ func (s *mutableStateSuite) TestStickyScheduleToStartTimeoutForBoundWorkflow() {
 		s.Run(tc.name, func() {
 			s.SetupTest()
 			if tc.bound {
-				s.mutableState.executionInfo.SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}
+				s.mutableState.executionInfo.SessionState = &persistencespb.SessionState{}
 			}
 			s.mutableState.executionInfo.StickyTaskQueue = "X"
 			s.mutableState.executionInfo.StickyScheduleToStartTimeout = tc.timeout

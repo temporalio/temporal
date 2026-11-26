@@ -1304,18 +1304,21 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 
 /*
 TestQueryWorkflowAssignedStickyWithoutPollers tests queries while the session worker is absent:
-1. Prepare assigned and ordinary sticky queues, both loaded and unloaded, without pollers.
-2. Verify ordinary sticky queues return StickyWorkerUnavailable.
-3. Verify assigned queues load if needed and hold the query until a poller arrives.
-4. Poll the query, answer it, and verify the waiting caller receives the answer.
+ 1. Prepare assigned and ordinary sticky queues, both loaded and unloaded, without pollers.
+ 2. Verify ordinary sticky queues return StickyWorkerUnavailable.
+ 3. Verify queries with an exclusive session directive load the queue if needed and hold the query until a poller
+    arrives, trusting the directive without reading the queue's metadata.
+ 4. Poll the query, answer it, and verify the waiting caller receives the answer.
 */
 func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
 	for _, tc := range []struct {
 		name             string
 		assigned, loaded bool
+		directive        bool // History sends an exclusive session directive
 	}{
-		{name: "assigned unloaded", assigned: true},
-		{name: "assigned loaded", assigned: true, loaded: true},
+		{name: "assigned unloaded", assigned: true, directive: true},
+		{name: "assigned loaded", assigned: true, loaded: true, directive: true},
+		{name: "directive without persisted assignment", directive: true},
 		{name: "ordinary unloaded"},
 		{name: "ordinary loaded", loaded: true},
 	} {
@@ -1346,7 +1349,10 @@ func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
 					Query: &querypb.WorkflowQuery{QueryType: "q"},
 				},
 			}
-			if !tc.assigned {
+			if tc.directive {
+				request.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true}
+			}
+			if !tc.directive {
 				_, err := s.matchingEngine.QueryWorkflow(ctx, request)
 				require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
 				pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
@@ -7551,7 +7557,7 @@ func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 				ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute),
 			}
 			if tc.assigned {
-				request.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: partition.RpcName()}, IsExclusiveWorkerAssigned: true}
+				request.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true}
 			}
 			_, syncMatch, err := s.matchingEngine.AddWorkflowTask(ctx, request)
 			require.False(t, syncMatch)
@@ -7587,26 +7593,21 @@ func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 	}
 }
 
-/*
-TestQueryWorkflowAssignedStickyReadFailure tests the query path's assignment lookup:
-1. Make the sticky queue metadata read fail while dispatching a query.
-2. Verify Matching returns that error without loading a partition.
-*/
-func TestQueryWorkflowAssignedStickyReadFailure(t *testing.T) {
+// TestQueryWorkflowStickyWithoutExclusiveDirective tests that a sticky query for a workflow without an exclusive binding
+// fails at once when the queue has no recent poller, without reading the queue's metadata, as for any sticky query.
+func TestQueryWorkflowStickyWithoutExclusiveDirective(t *testing.T) {
 	t.Parallel()
 	tv := testvars.New(t)
-	store := persistence.NewMockTaskManager(gomock.NewController(t))
-	readErr := serviceerror.NewUnavailable("metadata read failed")
-	store.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
-		NamespaceID: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue().GetName(), TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-	}).Return(nil, readErr)
-	engine := &matchingEngineImpl{taskManager: store, logger: log.NewTestLogger()}
-	response, err := engine.QueryWorkflow(t.Context(), &matchingservice.QueryWorkflowRequest{
-		NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(),
-	})
-	require.ErrorIs(t, err, readErr)
-	require.Nil(t, response)
-	require.Empty(t, engine.partitions)
+	for _, directive := range []*taskqueuespb.TaskSessionDirective{nil, {}} {
+		// The strict mock fails the test on any metadata read.
+		engine := &matchingEngineImpl{taskManager: persistence.NewMockTaskManager(gomock.NewController(t)), logger: log.NewTestLogger()}
+		response, err := engine.QueryWorkflow(t.Context(), &matchingservice.QueryWorkflowRequest{
+			NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), SessionDirective: directive,
+		})
+		require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+		require.Nil(t, response)
+		require.Empty(t, engine.partitions)
+	}
 }
 
 // TestMultiSessionTaskAdmission verifies heartbeat lookup is an additive admission path for a busy multi-session worker,
@@ -7618,7 +7619,6 @@ func (s *matchingEngineSuite) TestMultiSessionTaskAdmission() {
 		name      string
 		mode      string // how the worker polled its sticky queue
 		directive string // the session directive history sends with the task
-		noKey     bool   // the directive names no instance key
 		unloaded  bool
 		recent    bool
 		lookup    bool
@@ -7630,7 +7630,6 @@ func (s *matchingEngineSuite) TestMultiSessionTaskAdmission() {
 		{name: "namespace has no worker observations", mode: "multi-session", directive: "non-exclusive", lookup: true, lookupErr: serviceerror.NewNamespaceNotFound("empty registry")},
 		{name: "registry RPC failure", mode: "multi-session", directive: "non-exclusive", lookup: true, lookupErr: serviceerror.NewUnavailable("registry unavailable")},
 		{name: "ordinary sticky worker", mode: "ordinary"},
-		{name: "directive without instance key", mode: "multi-session", directive: "non-exclusive", noKey: true},
 		{name: "exclusive worker without heartbeat", mode: "exclusive", directive: "exclusive", admitted: true},
 		{name: "exclusive worker missing directive", mode: "exclusive"},
 		{name: "recent multi-session poller", mode: "multi-session", directive: "non-exclusive", recent: true, admitted: true},
@@ -7650,7 +7649,7 @@ func (s *matchingEngineSuite) TestMultiSessionTaskAdmission() {
 				metadata := &pollMetadata{workerInstanceKey: tv.WorkerInstanceKey(), conditions: &matchingservice.PollConditions{NoWait: true}}
 				switch tc.mode {
 				case "multi-session":
-					metadata.sessionOptions = multiSessionOptions(tv.StickyTaskQueue().GetName())
+					metadata.sessionOptions = multiSessionOptions()
 				case "exclusive":
 					require.NoError(t, queue.AssignExclusiveWorker())
 					metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
@@ -7670,17 +7669,13 @@ func (s *matchingEngineSuite) TestMultiSessionTaskAdmission() {
 				if tc.lookup {
 					s.mockMatchingClient.EXPECT().DescribeWorker(gomock.Any(), &matchingservice.DescribeWorkerRequest{
 						NamespaceId: tv.NamespaceID().String(),
-						Request:     &workflowservice.DescribeWorkerRequest{Namespace: s.ns.Name().String(), WorkerInstanceKey: tv.WorkerInstanceKey()},
+						Request:     &workflowservice.DescribeWorkerRequest{Namespace: s.ns.Name().String(), WorkerInstanceKey: partition.RpcName()},
 					}).Return(&matchingservice.DescribeWorkerResponse{}, tc.lookupErr)
 				}
 
 				var sessionDirective *taskqueuespb.TaskSessionDirective
 				if tc.directive != "" {
-					worker := &taskqueuespb.BoundWorkerInfo{WorkerQueue: partition.RpcName(), InstanceKey: tv.WorkerInstanceKey()}
-					if tc.noKey {
-						worker.InstanceKey = ""
-					}
-					sessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: worker, IsExclusiveWorkerAssigned: tc.directive == "exclusive"}
+					sessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: tc.directive == "exclusive"}
 				}
 				if tc.unloaded {
 					s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)
@@ -7756,7 +7751,7 @@ func (s *matchingEngineSuite) TestSingleSessionWorkflowAdmissionUsesRequestConte
 				ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute),
 			}
 			if tc.withContext {
-				request.SessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: partition.RpcName()}, IsExclusiveWorkerAssigned: true}
+				request.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true}
 			}
 			_, syncMatch, err := s.matchingEngine.AddWorkflowTask(ctx, request)
 			if tc.withContext {

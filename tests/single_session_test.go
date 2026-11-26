@@ -13,7 +13,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -24,10 +27,12 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -735,6 +740,249 @@ func TestSingleSessionTaskAddHooks(t *testing.T) {
 		{kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		{kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 	}, keys)
+}
+
+// singleSessionEnv is a workflow acquired by single-session worker S.
+type singleSessionEnv struct {
+	t       *testing.T
+	env     *testcore.TestEnv
+	tv      *testvars.TestVars
+	poller  *taskpoller.TaskPoller
+	session *sessionpb.WorkerSessionOptions
+	// runID is the started workflow's run, and acquiredEventID the completed event of the workflow task that bound S.
+	runID           string
+	acquiredEventID int64
+}
+
+// newSingleSessionEnv starts a workflow and lets single-session worker S acquire it with its first workflow task, which
+// completes with the commands built by commands, if any.
+func newSingleSessionEnv(t *testing.T, workflowTaskTimeout time.Duration, commands func(*testvars.TestVars) []*commandpb.Command) *singleSessionEnv {
+	env := testcore.NewEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+	tv := env.Tv()
+	started, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+		WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+		WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(workflowTaskTimeout),
+	})
+	require.NoError(t, err)
+	e := &singleSessionEnv{
+		t: t, env: env, tv: tv, poller: taskpoller.New(t, env.FrontendClient(), env.Namespace().String()),
+		session: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+		}},
+		runID: started.GetRunId(),
+	}
+	err = e.pollWorkflowTaskOnS(10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		e.acquiredEventID = task.GetStartedEventId() + 1
+		response := &workflowservice.RespondWorkflowTaskCompletedRequest{}
+		if commands != nil {
+			response.Commands = commands(tv)
+		}
+		return response, nil
+	})
+	require.NoError(t, err)
+	return e
+}
+
+// pollWorkflowTaskOnS polls S's sticky queue as S.
+func (e *singleSessionEnv) pollWorkflowTaskOnS(
+	timeout time.Duration,
+	handler func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
+) error {
+	_, err := e.poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue: e.tv.StickyTaskQueue(), SessionOptions: e.session, WorkerInstanceKey: e.tv.WorkerInstanceKey(),
+	}).HandleTask(e.tv, handler, taskpoller.WithTimeout(timeout))
+	return err
+}
+
+// requireNoWorkflowTaskOnNormalQueue requires that a worker without sessions polling the normal queue gets nothing.
+func (e *singleSessionEnv) requireNoWorkflowTaskOnNormalQueue() {
+	_, err := e.poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: e.tv.TaskQueue()}).HandleTask(e.tv,
+		func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			require.FailNow(e.t, "a workflow bound to a single-session worker must not reach the normal queue")
+			return nil, nil
+		}, taskpoller.WithTimeout(stickyPollTimeout))
+	require.Error(e.t, err)
+}
+
+func (e *singleSessionEnv) signal() {
+	_, err := e.env.FrontendClient().SignalWorkflowExecution(e.t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: e.env.Namespace().String(), WorkflowExecution: e.tv.WorkflowExecution(), SignalName: "wake", Identity: "client",
+	})
+	require.NoError(e.t, err)
+}
+
+/*
+TestSingleSessionWorkflowTaskFailureStaysOnWorker tests that a live single-session worker keeps its workflow after a
+failed or timed-out workflow task:
+ 1. Single-session worker S acquires the workflow, and a signal schedules the next workflow task on S.
+ 2. S fails that workflow task, or starts it and never responds so it times out.
+ 3. The retry is delivered on S's sticky queue, never on the normal queue, and S completes it.
+*/
+func TestSingleSessionWorkflowTaskFailureStaysOnWorker(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		// respond fails or abandons the workflow task.
+		respond func(e *singleSessionEnv) (*workflowservice.RespondWorkflowTaskCompletedRequest, error)
+		// abandoned is true when S's late failure is rejected because the task already timed out.
+		abandoned bool
+	}{
+		{name: "failure", respond: func(*singleSessionEnv) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return nil, context.Canceled
+		}},
+		{name: "timeout", respond: func(e *singleSessionEnv) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			await.RequireTrue(e.t, func() bool {
+				for _, event := range e.env.GetHistory(e.env.Namespace().String(), e.tv.WorkflowExecution()) {
+					if event.GetWorkflowTaskTimedOutEventAttributes().GetTimeoutType() == enumspb.TIMEOUT_TYPE_START_TO_CLOSE {
+						return true
+					}
+				}
+				return false
+			}, 10*time.Second, 100*time.Millisecond)
+			return nil, context.Canceled
+		}, abandoned: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newSingleSessionEnv(t, 2*time.Second, nil)
+			e.signal()
+			err := e.pollWorkflowTaskOnS(10*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return tc.respond(e)
+			})
+			if tc.abandoned {
+				require.Error(t, err, "S's late failure is rejected because the task already timed out")
+			} else {
+				require.NoError(t, err, "S reports the workflow task as failed")
+			}
+
+			e.requireNoWorkflowTaskOnNormalQueue()
+			err = e.pollWorkflowTaskOnS(10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				require.Greater(t, task.GetAttempt(), int32(1), "expected the retry of the failed workflow task")
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+			})
+			require.NoError(t, err)
+		})
+	}
+}
+
+/*
+TestSingleSessionUpdateTaskStaysOnWorker tests updates on a workflow bound to a single-session worker:
+ 1. Single-session worker S acquires the workflow.
+ 2. An update creates a speculative workflow task, which is delivered on S's sticky queue, and S fails it.
+ 3. The retry is also delivered on S's sticky queue, never on the normal queue.
+*/
+func TestSingleSessionUpdateTaskStaysOnWorker(t *testing.T) {
+	t.Parallel()
+	e := newSingleSessionEnv(t, 10*time.Second, nil)
+
+	updateCtx, cancelUpdate := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancelUpdate()
+	go func() {
+		_, _ = e.env.FrontendClient().UpdateWorkflowExecution(updateCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace: e.env.Namespace().String(), WorkflowExecution: e.tv.WorkflowExecution(),
+			Request: &updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: e.tv.UpdateID()},
+				Input: &updatepb.Input{Name: "update"},
+			},
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		})
+	}()
+
+	// S fails the update's workflow task, and then fails the retry too, which must also arrive on S's sticky queue.
+	for range 2 {
+		handled := false
+		err := e.pollWorkflowTaskOnS(10*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			handled = true
+			return nil, context.Canceled
+		})
+		require.NoError(t, err)
+		require.True(t, handled)
+	}
+	e.requireNoWorkflowTaskOnNormalQueue()
+}
+
+/*
+TestSingleSessionActivityRetryStaysOnWorker tests that a session activity's retry stays with the single-session worker:
+ 1. Single-session worker S acquires the workflow and schedules a session activity, which is delivered on S's sticky
+    activity queue.
+ 2. S fails the activity with a retryable error.
+ 3. The retry is delivered on S's sticky activity queue as attempt 2.
+*/
+func TestSingleSessionActivityRetryStaysOnWorker(t *testing.T) {
+	t.Parallel()
+	e := newSingleSessionEnv(t, 10*time.Second, func(tv *testvars.TestVars) []*commandpb.Command {
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId: tv.ActivityID(), ActivityType: tv.ActivityType(), TaskQueue: tv.TaskQueue(),
+				ScheduleToCloseTimeout: durationpb.New(time.Minute), StartToCloseTimeout: durationpb.New(10 * time.Second),
+				RetryPolicy:    &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), BackoffCoefficient: 1},
+				SessionOptions: &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
+			}},
+		}}
+	})
+	activityPoller := e.poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: e.tv.StickyTaskQueue(), SessionOptions: e.session, WorkerInstanceKey: e.tv.WorkerInstanceKey(),
+	})
+
+	_, err := activityPoller.HandleTask(e.tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		require.Equal(t, int32(1), task.GetAttempt())
+		return nil, temporal.NewApplicationError("retry", "retryable")
+	}, taskpoller.WithTimeout(10*time.Second))
+	require.NoError(t, err)
+
+	_, err = activityPoller.HandleTask(e.tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		require.Equal(t, e.tv.ActivityID(), task.GetActivityId())
+		require.Equal(t, int32(2), task.GetAttempt(), "expected the retry of the session activity")
+		return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
+	}, taskpoller.WithTimeout(10*time.Second))
+	require.NoError(t, err)
+}
+
+// updateWithPinnedOverride asks to pin execution to a version through UpdateWorkflowExecutionOptions.
+func updateWithPinnedOverride(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) error {
+	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(t.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: execution,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "other-build"},
+			}},
+		}},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	return err
+}
+
+/*
+TestSingleSessionRejectsVersioningOverride tests that a workflow bound to a single-session worker cannot be given a
+versioning override:
+ 1. Single-session worker S acquires the workflow.
+ 2. UpdateWorkflowExecutionOptions pinning the workflow to another version is rejected.
+ 3. The binding is unchanged: the next workflow task is delivered on S's sticky queue, never on the normal queue.
+*/
+func TestSingleSessionRejectsVersioningOverride(t *testing.T) {
+	t.Parallel()
+	e := newSingleSessionEnv(t, 10*time.Second, nil)
+
+	err := updateWithPinnedOverride(t, e.env, e.tv.WorkflowExecution())
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+	require.ErrorContains(t, err, "bound to a worker servicing sessions")
+
+	e.signal()
+	e.requireNoWorkflowTaskOnNormalQueue()
+	err = e.pollWorkflowTaskOnS(10*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	require.NoError(t, err)
 }
 
 /*
