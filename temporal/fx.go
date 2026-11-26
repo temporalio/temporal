@@ -128,8 +128,7 @@ type (
 		MetricsHandler             metrics.Handler
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
-		// FailpointSource holds the failpoint registry, or none if the startup switch did not
-		// enable failpoints.
+		// FailpointSource holds the failpoint registry, or nil if it's not enabled.
 		FailpointSource *failpoint.Registry
 	}
 )
