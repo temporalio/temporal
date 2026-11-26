@@ -63,6 +63,7 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.applyFastForward(propagatedState.GetFastForwardTargetTime())
 	ms.timeSkippingInfoUpdated = true
+	ms.timeSkippingVisibilityUpdated = true
 }
 
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
@@ -72,11 +73,15 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	if tsi == nil {
 		return
 	}
+	previouslyEnabled := tsi.GetConfig().GetEnabled()
 	// we allow setting config to nil in updating tsc
-	ms.executionInfo.TimeSkippingInfo.Config = config
+	tsi.Config = config
 	tsi.SessionSkipCount = 0
 	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
+	if previouslyEnabled != tsi.GetConfig().GetEnabled() {
+		ms.timeSkippingVisibilityUpdated = true
+	}
 }
 
 func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
@@ -195,6 +200,20 @@ func propagateTimeSkippingToNextRun(
 		FastForwardTargetTime:  util.GetFastForwardTargetTime(),
 	}
 	return newTSC, stateProp
+}
+
+// closeTransactionGenerateTimeSkippingVisibilityTask publishes flag changes after time skipping
+// finishes. Visibility task coalescing merges this task with other writes in the transaction.
+func (ms *MutableStateImpl) closeTransactionGenerateTimeSkippingVisibilityTask() error {
+	if !ms.timeSkippingVisibilityUpdated || !ms.IsWorkflow() {
+		return nil
+	}
+	ms.visibilityUpdated = true
+	if err := ms.taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
+		return err
+	}
+	ms.timeSkippingVisibilityUpdated = false
+	return nil
 }
 
 // =============================================================================
@@ -658,6 +677,8 @@ func (ms *MutableStateImpl) executeTimeSkippingTransition(
 	disabledAfterFastForward bool,
 ) {
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	previouslyEnabled := tsi.GetConfig().GetEnabled()
+	previouslyHasSkippedDuration := ms.accumulatedSkippedDuration() > 0
 	if hasSkipTarget {
 		tsi.AccumulatedSkippedDuration = durationpb.New(
 			ms.accumulatedSkippedDuration() + skippedDuration)
@@ -679,6 +700,10 @@ func (ms *MutableStateImpl) executeTimeSkippingTransition(
 			tag.Int32("max-session-skip-count", tsi.GetConfig().GetMaxSessionSkipCount()),
 			tag.Int32("session-skip-count", tsi.GetSessionSkipCount()),
 			tag.Duration("accumulated-skipped-duration", ms.accumulatedSkippedDuration()))
+	}
+	if previouslyEnabled != tsi.GetConfig().GetEnabled() ||
+		previouslyHasSkippedDuration != (ms.accumulatedSkippedDuration() > 0) {
+		ms.timeSkippingVisibilityUpdated = true
 	}
 	ms.timeSkippingInfoUpdated = true
 }

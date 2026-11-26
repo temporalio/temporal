@@ -119,6 +119,13 @@ const (
 	// TemporalExternalPayloadSizeBytes is the total size in bytes of all external payloads
 	// referenced in the entire history tree of the execution.
 	TemporalExternalPayloadSizeBytes = "TemporalExternalPayloadSizeBytes"
+
+	// TimeSkippingEnabled indicates whether time skipping is currently enabled.
+	TimeSkippingEnabled = "TimeSkippingEnabled"
+	// TimeSkippingHasSkippedDuration indicates whether the accumulated skipped duration is positive.
+	TimeSkippingHasSkippedDuration = "TimeSkippingHasSkippedDuration"
+	// TemporalTimeSkippingState stores enabled and has-skipped-duration as two T/F characters.
+	TemporalTimeSkippingState = "TemporalTimeSkippingState"
 )
 
 var (
@@ -187,6 +194,9 @@ var (
 		TemporalUsedWorkerDeploymentVersions: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalExternalPayloadCount:         enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalExternalPayloadSizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
+		TimeSkippingEnabled:                  enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TimeSkippingHasSkippedDuration:       enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalTimeSkippingState:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

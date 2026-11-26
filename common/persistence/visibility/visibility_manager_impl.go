@@ -581,6 +581,23 @@ func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 	}
 
 	customSAs, _ := splitSearchAttributes(internalExecution.SearchAttributes)
+	if statePayload := customSAs.IndexedFields[sadefs.TemporalTimeSkippingState]; statePayload != nil {
+		var state *string
+		if err := payload.Decode(statePayload, &state); err != nil {
+			return nil, err
+		}
+		if state != nil {
+			switch *state {
+			case sadefs.TimeSkippingStateDisabledUnused, sadefs.TimeSkippingStateDisabledUsed,
+				sadefs.TimeSkippingStateEnabledUnused, sadefs.TimeSkippingStateEnabledUsed:
+				customSAs.IndexedFields[sadefs.TimeSkippingEnabled] = sadefs.MustEncodeValue((*state)[0] == 'T', enumspb.INDEXED_VALUE_TYPE_BOOL)
+				customSAs.IndexedFields[sadefs.TimeSkippingHasSkippedDuration] = sadefs.MustEncodeValue((*state)[1] == 'T', enumspb.INDEXED_VALUE_TYPE_BOOL)
+			default:
+				return nil, serviceerror.NewInternalf("invalid time-skipping visibility state: %s", *state)
+			}
+		}
+		delete(customSAs.IndexedFields, sadefs.TemporalTimeSkippingState)
+	}
 	aliasedCustomSAs, err := searchattribute.AliasFields(p.searchAttributesMapperProvider, customSAs, namespaceName.String())
 	if err != nil {
 		return nil, err
