@@ -2466,9 +2466,15 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	ctx context.Context,
 	req *matchingservice.GetTaskQueueUserDataRequest,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
-	partition, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: req.GetTaskQueue()}, req.NamespaceId, req.TaskQueueType)
-	if err != nil {
-		return nil, err
+	var partition tqid.Partition
+	if req.TaskQueuePartition != nil {
+		partition = tqid.PartitionFromPartitionProto(req.TaskQueuePartition, req.NamespaceId)
+	} else {
+		var err error
+		partition, err = tqid.NormalPartitionFromRpcName(req.TaskQueue, req.NamespaceId, req.TaskQueueType)
+		if err != nil {
+			return nil, err
+		}
 	}
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !req.OnlyIfLoaded, loadCauseUserData)
 	if err != nil {

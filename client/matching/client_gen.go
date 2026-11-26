@@ -514,9 +514,15 @@ func (c *clientImpl) GetTaskQueueUserData(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 
-	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
-	if err != nil {
-		return nil, err
+	var p tqid.Partition
+	if request.TaskQueuePartition != nil {
+		p = tqid.PartitionFromPartitionProto(request.TaskQueuePartition, request.NamespaceId)
+	} else {
+		var err error
+		p, err = tqid.NormalPartitionFromRpcName(request.TaskQueue, request.NamespaceId, request.TaskQueueType)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	client, err := c.getClientForTaskQueuePartition(p)

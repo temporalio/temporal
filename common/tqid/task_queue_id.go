@@ -46,6 +46,8 @@ type (
 		// IsRoot always returns false for Sticky partitions
 		IsRoot() bool
 		Kind() enumspb.TaskQueueKind
+		// ToProto preserves the task queue, task type, and partition kind.
+		ToProto() *taskqueuespb.TaskQueuePartition
 		IsChild() bool
 		// PersistenceTTL returns the TTL for the partition's persistence metadata.
 		// A zero value means no TTL (metadata persists indefinitely).
@@ -315,6 +317,14 @@ func (s *StickyPartition) SupportsVersioning() bool      { return false }
 func (s *StickyPartition) SupportsPartitions() bool      { return false }
 func (s *StickyPartition) MetricTag(bool) string         { return "__sticky__" }
 
+func (s *StickyPartition) ToProto() *taskqueuespb.TaskQueuePartition {
+	return &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     s.TaskQueue().Name(),
+		TaskQueueType: s.TaskType(),
+		PartitionId:   &taskqueuespb.TaskQueuePartition_StickyName{StickyName: s.StickyName()},
+	}
+}
+
 func (s *StickyPartition) RpcName() string {
 	return s.stickyName
 }
@@ -365,6 +375,14 @@ func (w *WorkerCommandsPartition) SupportsFairness() bool        { return false 
 func (w *WorkerCommandsPartition) SupportsVersioning() bool      { return false }
 func (w *WorkerCommandsPartition) SupportsPartitions() bool      { return false }
 func (w *WorkerCommandsPartition) MetricTag(bool) string         { return "__worker_commands__" }
+
+func (w *WorkerCommandsPartition) ToProto() *taskqueuespb.TaskQueuePartition {
+	return &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     w.TaskQueue().Name(),
+		TaskQueueType: w.TaskType(),
+		PartitionId:   &taskqueuespb.TaskQueuePartition_WorkerCommands{WorkerCommands: &taskqueuespb.WorkerCommandsPartitionId{}},
+	}
+}
 
 func (w *WorkerCommandsPartition) RpcName() string { //nolint:stylecheck,staticcheck // matches Partition interface
 	return w.taskQueue.Name()
@@ -435,6 +453,14 @@ func (p *NormalPartition) ParentPartition(degree int) (*NormalPartition, error) 
 	}
 	parent := (p.partitionId+degree-1)/degree - 1
 	return p.taskQueue.NormalPartition(parent), nil
+}
+
+func (p *NormalPartition) ToProto() *taskqueuespb.TaskQueuePartition {
+	return &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     p.TaskQueue().Name(),
+		TaskQueueType: p.TaskType(),
+		PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(p.PartitionId())},
+	}
 }
 
 func (p *NormalPartition) RpcName() string {

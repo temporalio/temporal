@@ -1970,7 +1970,7 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 // ForceLoadAllChildPartitions force-loads known child (read) partitions in new goroutines.
 // TODO(dp): consider moving this into scaleManager.backgroundWork after auto-scaling is enabled everywhere.
 func (pm *taskQueuePartitionManagerImpl) ForceLoadAllChildPartitions() {
-	if !pm.partition.IsRoot() {
+	if !pm.partition.SupportsPartitions() || !pm.partition.IsRoot() {
 		return
 	}
 

@@ -398,6 +398,20 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	var nsID, tqp, tq, tqt fieldWithPath
 
 	switch t.Name() {
+	case "GetTaskQueueUserDataRequest":
+		// Keep routing compatible with callers that only send the legacy normal partition name.
+		return `var p tqid.Partition
+	if request.TaskQueuePartition != nil {
+		p = tqid.PartitionFromPartitionProto(request.TaskQueuePartition, request.NamespaceId)
+	} else {
+		var err error
+		p, err = tqid.NormalPartitionFromRpcName(request.TaskQueue, request.NamespaceId, request.TaskQueueType)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)`
 	case "GetBuildIdTaskQueueMappingRequest":
 		// Pick a random node for this request, it's not associated with a specific task queue.
 		tq = fieldWithPath{path: "fmt.Sprintf(\"not-applicable-%d\", rand.Int())"}

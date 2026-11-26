@@ -2757,6 +2757,30 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 	s.Nil(res.UserData.GetData())
 }
 
+// A worker-command user-data read must not load normal workflow or numbered partitions.
+func (s *matchingEngineSuite) TestGetTaskQueueUserDataWorkerCommands() {
+	partition := tqid.UnsafeTaskQueueFamily(s.ns.ID().String(), "temporal-sys/worker-commands/worker").
+		TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
+	response, err := s.matchingEngine.GetTaskQueueUserData(s.T().Context(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:        partition.NamespaceId(),
+		TaskQueue:          "ignored-legacy-name",
+		TaskQueueType:      enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		TaskQueuePartition: partition.ToProto(),
+	})
+	s.Require().NoError(err)
+	s.Nil(response.UserData)
+
+	s.matchingEngine.partitionsLock.RLock()
+	defer s.matchingEngine.partitionsLock.RUnlock()
+	var loaded []tqid.Partition
+	for _, pm := range s.matchingEngine.partitions {
+		if pm.Partition().NamespaceId() == partition.NamespaceId() {
+			loaded = append(loaded, pm.Partition())
+		}
+	}
+	s.Equal([]tqid.Partition{partition}, loaded)
+}
+
 func (s *matchingEngineSuite) applyTaskQueueUserDataReplicationEvent(
 	taskQueue string,
 	data *persistencespb.TaskQueueUserData,
