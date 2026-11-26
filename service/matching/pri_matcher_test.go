@@ -1002,10 +1002,10 @@ func (s *PriMatcherSuite) TestSingleSessionNoWaitSkipsForwarder() {
 
 /*
 TestSingleSessionAcquisitionPoll checks the initial acquisition request:
-1. Forward an unassigned session's poll to the normal queue with its original metadata and deadline.
-2. Persist assignment only when the forwarded poll returns a workflow task.
-3. Verify success, empty response, NoWait, RPC failure, and assignment failure without mutating caller metadata. A failed
-   assignment write still returns the acquired task.
+ 1. Forward an unassigned session's poll to the normal queue with its original metadata and deadline.
+ 2. Persist assignment only when the forwarded poll returns a workflow task.
+ 3. Verify success, empty response, NoWait, RPC failure, and assignment failure without mutating caller metadata. A failed
+    assignment write still returns the acquired task.
 */
 func (s *PriMatcherSuite) TestSingleSessionAcquisitionPoll() {
 	for _, tc := range []struct {
