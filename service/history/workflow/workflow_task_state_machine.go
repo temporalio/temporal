@@ -1048,9 +1048,8 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	// Ordinary sticky failures get one retry on the normal queue before creating a transient task.
 	// Single-session failures retain their destination and increment attempts. This is because single-session
 	// workflow and activity tasks, bar the very first one, are only placed on the sticky queue.
-	if m.ms.IsStickyTaskQueueSet() && !m.ms.executionInfo.GetSessionState().GetExclusiveWorker() {
+	if m.ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure) {
 		incrementAttempt = false
-		m.ms.ClearStickyTaskQueue()
 	}
 
 	newAttemptsSinceLastSuccess := m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess

@@ -84,6 +84,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
+	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -1159,7 +1160,8 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey()); err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetWorkerVersionCapabilities()); err != nil {
 		return nil, err
 	}
 	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
@@ -1421,7 +1423,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey()); err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetWorkerVersionCapabilities()); err != nil {
 		return nil, err
 	}
 	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
@@ -8048,7 +8051,12 @@ func (wh *WorkflowHandler) checkExclusiveWorkerSessionsEnabled(namespaceName str
 	return nil
 }
 
-func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQueue *taskqueuepb.TaskQueue, workerInstanceKey string) error {
+func validateWorkerSessionOptions(
+	options *sessionpb.WorkerSessionOptions,
+	taskQueue *taskqueuepb.TaskQueue,
+	workerInstanceKey string,
+	versionCapabilities *commonpb.WorkerVersionCapabilities,
+) error {
 	if options == nil {
 		return nil
 	}
@@ -8056,16 +8064,25 @@ func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQ
 		return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
 	}
 	if singleSession := options.GetSingleSession(); singleSession != nil {
-		stableIdentity := singleSession.GetStableIdentity()
-		if stableIdentity == "" {
+		if workerInstanceKey == "" {
+			// Matching looks a session worker up by its instance key in its heartbeat registry.
+			return serviceerror.NewInvalidArgument("session worker instance key is required")
+		}
+		if singleSession.GetStableIdentity() == "" {
 			return serviceerror.NewInvalidArgument("single-session stable identity is required")
 		}
-		if taskQueue.GetName() != stableIdentity {
-			return serviceerror.NewInvalidArgument("single-session sticky queue must match stable identity")
+		if versionCapabilities.GetUseVersioning() {
+			// TODO (Shivam): Bindings of single-session workers do not follow build-ID or deployment-series versioning
+			// (MTC-934).
+			return serviceerror.NewInvalidArgument("single-session workers do not support this worker versioning mode yet")
 		}
-		if workerInstanceKey == "" {
-			// A session binding records the worker's instance key; Matching looks the worker up by it in its heartbeat registry.
-			return serviceerror.NewInvalidArgument("session worker instance key is required")
+		workerStickyQueue := taskqueue.SessionWorkerStickyQueue(options, workerInstanceKey)
+		if workerStickyQueue == taskQueue.GetNormalName() {
+			return serviceerror.NewInvalidArgument("session worker's sticky queue must not be the normal task queue")
+		}
+		if taskQueue.GetName() != workerStickyQueue {
+			return serviceerror.NewInvalidArgument(
+				"session worker's sticky queue must be named after its instance key (multi-session) or stable identity (single-session)")
 		}
 	}
 	return nil

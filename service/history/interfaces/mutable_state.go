@@ -39,6 +39,36 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// StickyClearReason is why a caller clears the workflow's sticky queue. It decides whether a binding to a multi-session
+// worker is released. A workflow not bound to a session worker is always cleared, and a binding to a single-session
+// worker is never cleared.
+type StickyClearReason int
+
+const (
+	// StickyClearForWorkflowTaskFailure means the workflow task on the sticky worker failed or timed out, including a
+	// speculative task. The bound worker is still the right one, so its binding is kept.
+	StickyClearForWorkflowTaskFailure StickyClearReason = iota
+	// StickyClearForCacheDisabled means the worker completed a task without sticky attributes. It has no cache, but it
+	// is still the bound worker, so its binding is kept.
+	StickyClearForCacheDisabled
+	// StickyClearForStateRebuild means this cluster's copy of the workflow was rebuilt from history or replicated from
+	// the active cluster. Stickiness is local to the cluster that recorded it, so it is dropped here, but the binding is
+	// part of the workflow's state and is kept.
+	StickyClearForStateRebuild
+	// StickyClearForStartedOffStickyQueue means a worker started the task from a queue other than the sticky queue, so
+	// the sticky worker did not take it. A workflow bound to a multi-session worker is unbound here.
+	StickyClearForStartedOffStickyQueue
+	// StickyClearForVersioning means the workflow moves to another deployment version or build ID; the bound worker may
+	// be on the old one, so the binding is released.
+	// TODO (Shivam): Multi-session workers do not support worker versioning yet; revisit how a versioning change
+	// releases and reschedules a multi-session binding in public preview (MTC-934).
+	StickyClearForVersioning
+	// StickyClearForResetStickyTaskQueue means the ResetStickyTaskQueue API was called.
+	StickyClearForResetStickyTaskQueue
+	// StickyClearForWorkflowClose means the workflow closed, so the binding is released.
+	StickyClearForWorkflowClose
+)
+
 type (
 	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState) error
 
@@ -238,10 +268,14 @@ type (
 		GetApproximatePersistedSize() int
 
 		CurrentTaskQueue() *taskqueuepb.TaskQueue
-		SetSessionState(state *persistencespb.SessionState)
+		BindExclusiveWorker(stableIdentity string)
 		SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration)
-		ClearStickyTaskQueue()
+		// ClearStickyTaskQueue clears the workflow's sticky queue for reason and reports whether it did.
+		ClearStickyTaskQueue(reason StickyClearReason) bool
 		IsStickyTaskQueueSet() bool
+		SessionWorkerQueue() string
+		// HasExclusiveBinding reports whether the workflow is bound to a single-session worker.
+		HasExclusiveBinding() bool
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 
 		IsWorkflowExecutionRunning() bool
