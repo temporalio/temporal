@@ -57,12 +57,11 @@ type (
 		Failpoints Failpoints `yaml:"failpoints"`
 	}
 
-	// Failpoints configures failpoints, which let tests make server code fail or stall. They are
-	// installed only if Enabled is true. The server reads it once at startup, from this static config
-	// only: no environment variable or dynamic config setting enables failpoints.
+	// Failpoints make server code fail or stall for chaos testing.
+	// They are installed only if Enabled is true. The server reads it once at startup.
 	Failpoints struct {
-		// Enabled installs failpoints and logs a warning at startup. It is false by default, and then
-		// nothing about failpoints is active.
+		// Enabled installs failpoints and logs a warning at startup.
+		// It is false by default, and then nothing about failpoints is active.
 		Enabled bool `yaml:"enabled"`
 	}
 
