@@ -53,13 +53,16 @@ registry.Set(fp)
 require.EqualError(t, svc.Charge(ctx), "card declined")
 ```
 
-Each action setter accepts an optional `Trigger` (`SkipFirst`, `MaxFires`) to limit which
-executions fire. Without one, the failpoint fires on every execution. `fp.SetTrigger(t)` replaces
-the trigger without changing the action, and `fp.Stats()` / `fp.TotalFires()` inspect execution
-and fire counts.
+Each action setter (`Return`, `Panic`, `Call`, `Block`, `Pause`, `On`) accepts an optional
+`Trigger` (`SkipFirst`, `MaxFires`) to limit which executions fire. Without one, the failpoint
+fires on every execution. `fp.SetTrigger(t)` replaces the trigger without changing the action (for
+`Block` it also releases held executions and rearms), and `fp.Stats()` / `fp.TotalFires()` inspect
+execution and fire counts.
 
-Use `fp.On()` for switch-style failpoints, `fp.Disable()` to turn a failpoint off, and
-`registry.Delete(key)` to detach it from the registry.
+Use `fp.On()` for switch-style failpoints, `fp.Block()` + `fp.Wait(ctx)` to synchronize on an
+execution reaching a point, `fp.Pause(d)` to delay executions, `fp.Disable()` to turn a failpoint
+off and release held executions, `registry.Swap(fp)` when replacing an entry that may hold blocked
+executions, and `registry.Delete(key)` to detach it from the registry.
 
 ## Default policy (BUGGIFY)
 

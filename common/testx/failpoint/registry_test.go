@@ -49,3 +49,26 @@ func (s *registrySuite) TestSetRejectsNilAndEmptyKey() {
 	s.Nil(registry.Get(nil))
 	s.Same(fp, registry.Get(intKey))
 }
+
+func (s *registrySuite) TestSwapReleasesDisplacedBlock() {
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp1.Block()
+	s.Nil(registry.Swap(fp1))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = failpoint.CheckError(registry, key1)
+	}()
+	s.NoError(fp1.Wait(s.Context()))
+
+	// Replacing a registered block returns the displaced entry so the caller can release it.
+	fp2 := failpoint.NewFailpoint[error](key1)
+	displaced := registry.Swap(fp2)
+	s.Same(fp1, displaced)
+	s.Same(fp2, registry.Get(key1))
+
+	displaced.Disable()
+	s.Rcv(done)
+}

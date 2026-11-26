@@ -119,16 +119,28 @@ func (r *Registry) lookupLocked(key keyID) (entry, bool) {
 }
 
 // Set registers fp for its key, replacing the failpoint registered for the key, if any. It panics
-// if fp is nil or its key has an empty name.
+// if fp is nil or its key has an empty name. Callers replacing a failpoint that may hold blocked
+// executions should use Swap and call Disable on the displaced entry so those executions are not
+// stranded.
 func (r *Registry) Set(fp entry) {
+	r.Swap(fp)
+}
+
+// Swap registers fp for its key and returns the displaced failpoint, or nil if none was
+// registered. It panics if fp is nil or its key has an empty name. If the displaced failpoint may
+// hold blocked or paused executions, the caller must call Disable on it to release them.
+func (r *Registry) Swap(fp entry) entry {
 	validateEntry(fp)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	prev := r.failpoints[fp.id()]
 	r.failpoints[fp.id()] = fp
 	r.setCountLocked()
+	return prev
 }
 
-// Delete removes a failpoint from the registry.
+// Delete removes a failpoint from the registry. It only detaches the failpoint: it doesn't disable
+// it, so call Disable on the failpoint to release the executions it holds.
 func (r *Registry) Delete(key AnyKey) {
 	if key == nil {
 		return
