@@ -26,9 +26,10 @@ import (
 
 const (
 	// This key is used by controllers who manage deployment versions.
-	metadataKeyController    = "temporal.io/controller"
-	defaultVisibilityRefresh = 5 * time.Minute
-	defaultVisibilityGrace   = 3 * time.Minute
+	metadataKeyController        = "temporal.io/controller"
+	defaultVisibilityRefresh     = 5 * time.Minute
+	defaultVisibilityGrace       = 3 * time.Minute
+	drainageRefreshLoopVersionID = "drainage-refresh-loop"
 )
 
 type (
@@ -1120,6 +1121,126 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 }
 
 func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
+	if d.VersionState.GetDrainageInfo().GetStatus() != enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+		return // only refresh when status is draining
+	}
+
+	if workflow.GetVersion(ctx, drainageRefreshLoopVersionID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		d.refreshDrainageInfoLegacy(ctx)
+		return
+	}
+
+	hasRefreshedInRun := false
+	var lastRefreshWorkflowTime time.Time
+
+	for {
+		if d.shouldStopDrainageRefresh(ctx) {
+			return
+		}
+
+		interval, err := d.getDrainageRefreshInterval(ctx)
+		if err != nil {
+			d.logger.Error("could not calculate drainage refresh interval", tag.Error(err))
+			d.setStateChanged()
+			return
+		}
+
+		lastChecked := d.VersionState.GetDrainageInfo().LastCheckedTime.AsTime()
+		if hasRefreshedInRun {
+			lastChecked = lastRefreshWorkflowTime
+		}
+		timeSinceLastRefresh := workflow.Now(ctx).Sub(lastChecked)
+		if interval > timeSinceLastRefresh {
+			if err = workflow.Sleep(ctx, interval-timeSinceLastRefresh); err != nil {
+				d.logger.Error("error while trying to sleep", tag.Error(err))
+				d.setStateChanged()
+				return
+			}
+		}
+
+		if d.shouldStopDrainageRefresh(ctx) {
+			return
+		}
+
+		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+		var a *VersionActivities
+		var newInfo *deploymentpb.VersionDrainageInfo
+		err = workflow.ExecuteActivity(
+			activityCtx,
+			a.GetVersionDrainageStatus,
+			d.VersionState.Version,
+		).Get(ctx, &newInfo)
+		if err != nil {
+			d.logger.Error("could not get version drainage status", tag.Error(err))
+			d.setStateChanged()
+			return
+		}
+
+		hasRefreshedInRun = true
+		lastRefreshWorkflowTime = workflow.Now(ctx)
+
+		statusChanged, err := d.applyDrainageRefreshResult(ctx, newInfo)
+		if err != nil {
+			d.logger.Error("could not get workflow lock", tag.Error(err))
+			d.setStateChanged()
+			return
+		}
+		if statusChanged {
+			return
+		}
+	}
+}
+
+func (d *VersionWorkflowRunner) shouldStopDrainageRefresh(ctx workflow.Context) bool {
+	return d.deleteVersion ||
+		d.forceCAN ||
+		workflow.GetInfo(ctx).GetContinueAsNewSuggested() ||
+		d.VersionState.GetDrainageInfo().GetStatus() != enumspb.VERSION_DRAINAGE_STATUS_DRAINING
+}
+
+func (d *VersionWorkflowRunner) getDrainageRefreshInterval(ctx workflow.Context) (time.Duration, error) {
+	drainage := d.VersionState.GetDrainageInfo()
+	if drainage.LastCheckedTime.AsTime().Equal(drainage.LastChangedTime.AsTime()) {
+		// this is the first update, so we wait according to the grace period config
+		return getSafeDurationConfig(ctx, "getVisibilityGracePeriod", d.unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
+	}
+	// this is a subsequent check, we wait according to the refresh interval
+	return getSafeDurationConfig(ctx, "getDrainageRefreshInterval", d.unsafeRefreshIntervalGetter, defaultVisibilityRefresh)
+}
+
+func (d *VersionWorkflowRunner) applyDrainageRefreshResult(ctx workflow.Context, newInfo *deploymentpb.VersionDrainageInfo) (bool, error) {
+	if d.hasMinVersion(VersionDataRevisionNumber) {
+		// Need to lock so there is no race condition with setCurrent/Ramping
+		if err := d.lock.Lock(ctx); err != nil {
+			return false, err
+		}
+		defer d.lock.Unlock()
+
+		// By this time, it is possible that the status is not draining anymore, so check again.
+		if d.VersionState.GetDrainageInfo().GetStatus() != enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+			return false, nil
+		}
+	}
+
+	if d.VersionState.DrainageInfo == nil {
+		d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
+	}
+
+	d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
+	if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
+		d.VersionState.DrainageInfo.Status = newInfo.Status
+		d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
+
+		// Update the status of the version according to the drainage status
+		d.updateVersionStatusAfterDrainageStatusChange(ctx, newInfo.Status)
+		d.syncSummary(ctx)
+		d.setStateChanged()
+		return true, nil
+	}
+	return false, nil
+}
+
+func (d *VersionWorkflowRunner) refreshDrainageInfoLegacy(ctx workflow.Context) {
 	if d.VersionState.GetDrainageInfo().GetStatus() != enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 		return // only refresh when status is draining
 	}

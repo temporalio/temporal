@@ -3081,3 +3081,189 @@ func (s *VersionWorkflowSuite) Test_SyncValidationStatus_FailedValidation() {
 
 	s.True(s.env.IsWorkflowCompleted())
 }
+
+
+// Test_DrainageRefresh_DoesNotContinueAsNewWhileDraining verifies that repeated drainage checks
+// returning DRAINING update state in-place without signaling the deployment workflow or triggering
+// continue-as-new, and only signal and continue-as-new once the status transitions to DRAINED.
+func (s *VersionWorkflowSuite) Test_DrainageRefresh_DoesNotContinueAsNewWhileDraining() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).
+		Return(&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil).Maybe()
+	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	var refreshCalls atomic.Int32
+	s.env.OnActivity(a.GetVersionDrainageStatus, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
+			call := refreshCalls.Add(1)
+			status := enumspb.VERSION_DRAINAGE_STATUS_DRAINING
+			if call >= 4 {
+				status = enumspb.VERSION_DRAINAGE_STATUS_DRAINED
+			}
+			return &deploymentpb.VersionDrainageInfo{
+				Status:          status,
+				LastCheckedTime: timestamppb.New(s.env.Now()),
+			}, nil
+		},
+	)
+
+	var summarySignals atomic.Int32
+	s.env.OnSignalExternalWorkflow(
+		mock.Anything,
+		GenerateDeploymentWorkflowID(tv.DeploymentSeries()),
+		"",
+		SyncVersionSummarySignal,
+		mock.Anything,
+	).Return(nil).Run(func(args mock.Arguments) {
+		summarySignals.Add(1)
+	}).Once()
+
+	start := timestamppb.New(s.env.Now())
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+				LastCheckedTime: start,
+				LastChangedTime: start,
+			},
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.Equal(int32(4), refreshCalls.Load())
+	s.Equal(int32(1), summarySignals.Load())
+
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+}
+
+// Test_DrainageRefresh_UpdatesLastCheckedTimeWithoutSignalingDeployment verifies that an unchanged
+// DRAINING check updates LastCheckedTime locally for DescribeVersion queries without signaling
+// the parent deployment workflow.
+func (s *VersionWorkflowSuite) Test_DrainageRefresh_UpdatesLastCheckedTimeWithoutSignalingDeployment() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).
+		Return(&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil).Maybe()
+	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	firstCheckTime := timestamppb.New(s.env.Now().Add(3 * time.Minute))
+	var refreshCalls atomic.Int32
+	s.env.OnActivity(a.GetVersionDrainageStatus, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
+			call := refreshCalls.Add(1)
+			if call == 1 {
+				return &deploymentpb.VersionDrainageInfo{
+					Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+					LastCheckedTime: firstCheckTime,
+				}, nil
+			}
+			return &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+				LastCheckedTime: timestamppb.New(s.env.Now()),
+			}, nil
+		},
+	)
+
+	var summarySignals atomic.Int32
+	s.env.OnSignalExternalWorkflow(
+		mock.Anything,
+		GenerateDeploymentWorkflowID(tv.DeploymentSeries()),
+		"",
+		SyncVersionSummarySignal,
+		mock.Anything,
+	).Return(nil).Run(func(args mock.Arguments) {
+		summarySignals.Add(1)
+	}).Once()
+
+	// Query after the first DRAINING refresh (3m grace period) and before the second refresh (3m + 5m).
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(int32(1), refreshCalls.Load())
+		s.Equal(int32(0), summarySignals.Load())
+
+		queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+		val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+		s.Require().NoError(err)
+		s.Require().NoError(val.Get(queryResp))
+		s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINING, queryResp.VersionState.GetDrainageInfo().GetStatus())
+		s.Equal(firstCheckTime.AsTime(), queryResp.VersionState.GetDrainageInfo().GetLastCheckedTime().AsTime())
+	}, 4*time.Minute)
+
+	start := timestamppb.New(s.env.Now())
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+				LastCheckedTime: start,
+				LastChangedTime: start,
+			},
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.Equal(int32(2), refreshCalls.Load())
+	s.Equal(int32(1), summarySignals.Load())
+}
+
+// Test_DrainageRefresh_StopsOnActivityErrorAndContinuesAsNew verifies that if GetVersionDrainageStatus
+// fails after retries, the workflow exits the refresh loop and continues-as-new rather than spinning.
+func (s *VersionWorkflowSuite) Test_DrainageRefresh_StopsOnActivityErrorAndContinuesAsNew() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.OnActivity(a.GetVersionDrainageStatus, mock.Anything, mock.Anything).Return(
+		nil, temporal.NewNonRetryableApplicationError("visibility unavailable", "VisibilityError", nil),
+	).Once()
+
+	start := timestamppb.New(s.env.Now())
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+				LastCheckedTime: start,
+				LastChangedTime: start,
+			},
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+}
