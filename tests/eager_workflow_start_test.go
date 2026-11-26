@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -301,6 +302,12 @@ func (s *EagerWorkflowTestSuite) startBackloggedWorkflow(env *testcore.TestEnv) 
 		Identity:     "test",
 	})
 	s.NoError(err)
+	s.awaitBacklog(env)
+	return backloggedWorkflowID
+}
+
+// awaitBacklog waits until the task queue reports a workflow task backlog.
+func (s *EagerWorkflowTestSuite) awaitBacklog(env *testcore.TestEnv) {
 	s.Await(func(s *EagerWorkflowTestSuite) {
 		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
@@ -311,7 +318,6 @@ func (s *EagerWorkflowTestSuite) startBackloggedWorkflow(env *testcore.TestEnv) 
 		s.NoError(err)
 		s.GreaterOrEqual(response.GetStats().GetApproximateBacklogCount(), int64(1))
 	}, 10*time.Second, 100*time.Millisecond)
-	return backloggedWorkflowID
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenBacklogExists() {
@@ -330,6 +336,54 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenBacklogExis
 	}
 	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
 	s.Equal("ok", result)
+}
+
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenWorkerVersionBacklogExists() {
+	env := &VersioningTestEnv{TestEnv: s.newBacklogEnv()}
+	tv := env.Tv().WithTaskQueue(s.defaultTaskQueue().GetName())
+	// Add the worker's version to the task queue without making it current, so the default queue stays empty.
+	env.updateTaskQueueDeploymentData(s, tv, false, 0, false, 0, tqTypeWf)
+
+	// A workflow pinned to the worker's version puts its task in that version's backlog.
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.NewString(),
+		Namespace:    env.Namespace().String(),
+		WorkflowId:   s.defaultWorkflowID() + "-backlogged",
+		WorkflowType: &commonpb.WorkflowType{Name: "Workflow"},
+		TaskQueue:    s.defaultTaskQueue(),
+		Identity:     "test",
+		VersioningOverride: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  tv.ExternalDeploymentVersion(),
+			},
+		}},
+	})
+	s.NoError(err)
+	s.awaitBacklog(env.TestEnv)
+
+	response := s.startEagerWorkflow(env.TestEnv, &workflowservice.StartWorkflowExecutionRequest{
+		EagerWorkerDeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.Nil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response contained a workflow task")
+}
+
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenWorkerVersionDiffersFromOverride() {
+	env := &VersioningTestEnv{TestEnv: s.newBacklogEnv()}
+	tv := env.Tv().WithTaskQueue(s.defaultTaskQueue().GetName())
+	env.updateTaskQueueDeploymentData(s, tv, false, 0, false, 0, tqTypeWf)
+
+	// The queue has no backlog, so Matching would grant this. Only the version mismatch denies it.
+	response := s.startEagerWorkflow(env.TestEnv, &workflowservice.StartWorkflowExecutionRequest{
+		EagerWorkerDeploymentOptions: tv.WithBuildIDNumber(2).WorkerDeploymentOptions(true),
+		VersioningOverride: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  tv.ExternalDeploymentVersion(),
+			},
+		}},
+	})
+	s.Nil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response contained a workflow task")
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartDoesNotReturnDispatchedTask() {

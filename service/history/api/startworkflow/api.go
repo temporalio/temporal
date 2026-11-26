@@ -12,6 +12,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -47,6 +49,7 @@ const (
 	eagerStartDeniedReasonFirstWorkflowTaskBackoff metrics.ReasonString = "first_workflow_task_backoff"
 	eagerStartDeniedReasonTaskAlreadyDispatched    metrics.ReasonString = "task_already_dispatched"
 	eagerStartDeniedReasonDispatchNotGranted       metrics.ReasonString = "dispatch_not_granted"
+	eagerStartDeniedReasonWorkerVersionMismatch    metrics.ReasonString = "worker_version_mismatch"
 	orphanedChildReplacementReplaced                                    = "replaced"
 )
 
@@ -166,37 +169,64 @@ func (s *Starter) prepare(ctx context.Context) error {
 		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(1)
 
 		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
-		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
-			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
-				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDynamicConfigDisabled))
+		if reason := s.eagerStartDeniedReason(ctx); reason != "" {
+			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).Record(1, metrics.ReasonTag(reason))
 			request.RequestEagerExecution = false
-		} else if s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
-			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
-				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
-			request.RequestEagerExecution = false
-		} else if s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) {
-			// Matching grants are best-effort. On a denial or any Matching failure, start the workflow
-			// normally instead of failing the start request.
-			if !s.grantEagerWorkflowDispatch(ctx) {
-				metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
-					Record(1, metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted))
-				request.RequestEagerExecution = false
-			}
 		}
 	}
 	return nil
+}
+
+// eagerStartDeniedReason returns why the workflow can't start eagerly, or an empty string if it can.
+func (s *Starter) eagerStartDeniedReason(ctx context.Context) metrics.ReasonString {
+	namespaceName := s.namespace.Name().String()
+	if !s.shardContext.GetConfig().EnableEagerWorkflowStart(namespaceName) {
+		return eagerStartDeniedReasonDynamicConfigDisabled
+	}
+	if s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
+		return eagerStartDeniedReasonFirstWorkflowTaskBackoff
+	}
+	if !s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(namespaceName) {
+		return ""
+	}
+	if s.eagerWorkerVersionMismatch() {
+		return eagerStartDeniedReasonWorkerVersionMismatch
+	}
+	// Matching grants are best-effort. On a denial or any Matching failure, start the workflow
+	// normally instead of failing the start request.
+	if !s.grantEagerWorkflowDispatch(ctx) {
+		return eagerStartDeniedReasonDispatchNotGranted
+	}
+	return ""
+}
+
+// overrideTargetVersion returns the version the versioning override routes the first workflow task to, if any.
+func (s *Starter) overrideTargetVersion() *deploymentspb.WorkerDeploymentVersion {
+	return worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
+		worker_versioning.GetOverrideTargetDeploymentVersion(s.request.StartRequest.GetVersioningOverride()),
+	))
+}
+
+// eagerWorkerVersionMismatch returns true if the override routes the first workflow task to a version the eager
+// worker isn't on. A request without the worker's deployment options can't be checked and doesn't count as a mismatch.
+func (s *Starter) eagerWorkerVersionMismatch() bool {
+	options := s.request.StartRequest.GetEagerWorkerDeploymentOptions()
+	overrideVersion := s.overrideTargetVersion()
+	if options == nil || overrideVersion == nil {
+		return false
+	}
+	return !proto.Equal(overrideVersion, worker_versioning.DeploymentVersionFromOptions(options))
 }
 
 // grantEagerWorkflowDispatch asks Matching whether the first workflow task may be dispatched eagerly.
 // TODO: Reconcile the Matching grant when the start does not create a new execution.
 func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
 	request := s.request.StartRequest
-	// Pinned and pending one-time overrides route the first workflow task to their target version.
-	// TODO: When there's no override, send the version from EagerWorkerDeploymentOptions (sent by the Go SDK since
-	// sdk-go#2075), so Matching also checks the versioned queue's backlog.
-	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
-		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
-	))
+	// Check the backlog of the override's target version if there is one, otherwise the eager worker's version.
+	version := s.overrideTargetVersion()
+	if version == nil {
+		version = worker_versioning.DeploymentVersionFromOptions(request.GetEagerWorkerDeploymentOptions())
+	}
 	// Same tags as the activity eager paths, which have no workflow type.
 	metrics.EagerDispatchRequestsSent.With(workflow.GetPerTaskQueueFamilyScope(
 		s.shardContext.GetMetricsHandler(),
