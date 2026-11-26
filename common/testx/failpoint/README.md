@@ -55,3 +55,10 @@ require.EqualError(t, svc.Charge(ctx), "card declined")
 
 Use `fp.On()` for switch-style failpoints, `fp.Disable()` to turn a failpoint off, and
 `registry.Delete(key)` to detach it from the registry.
+
+## Default policy (BUGGIFY)
+
+`Registry.SetPolicy` installs a `Policy` that decides `CheckError` and `ExecuteSwitch` call sites
+when no explicit failpoint is registered for a key. Explicitly registered failpoints always take
+precedence over the policy, even when disabled. Subpackage [`buggify`](./buggify) implements a
+seeded probabilistic policy on top of this interface.

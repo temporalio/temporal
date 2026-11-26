@@ -32,6 +32,10 @@ type Registry struct {
 	// count is the number of failpoints. It is updated under mu, and read without it by Get and
 	// lookup, so a lookup in an empty registry doesn't take the lock.
 	count atomic.Int64
+
+	// policy is the active Policy, guarded by mu. mayFire caches MayFire and is updated under mu.
+	policy  Policy
+	mayFire atomic.Bool
 }
 
 // NewRegistry creates a new failpoint registry for testing.
@@ -51,20 +55,54 @@ func (r *Registry) Get(key AnyKey) entry {
 	return r.failpoints[key.id()]
 }
 
-// setCountLocked updates count after a change of the failpoints. The caller must hold r.mu.
-func (r *Registry) setCountLocked() {
-	r.count.Store(int64(len(r.failpoints)))
+// MayFire reports whether any failpoint is registered or a Policy is set (see SetPolicy). It
+// doesn't take the registry's lock, so call sites that do work before they execute a failpoint can
+// skip it cheaply while it is false.
+func (r *Registry) MayFire() bool {
+	return r.mayFire.Load()
 }
 
-// lookup returns the failpoint registered for key or, for a scoped key, for the unscoped key,
-// from one snapshot of the registry.
-func (r *Registry) lookup(key keyID) (entry, bool) {
-	if r.count.Load() == 0 {
-		return nil, false
+// SetPolicy installs p as the Policy of the registry, replacing any previous policy. Pass nil to
+// clear it. A nil policy is not consulted and doesn't make the registry MayFire.
+func (r *Registry) SetPolicy(p Policy) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.policy = p
+	r.updateMayFireLocked()
+}
+
+// Policy returns the installed Policy, or nil.
+func (r *Registry) Policy() Policy {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.policy
+}
+
+// setCountLocked updates count and mayFire after a change of the failpoints. The caller must hold
+// r.mu.
+func (r *Registry) setCountLocked() {
+	r.count.Store(int64(len(r.failpoints)))
+	r.updateMayFireLocked()
+}
+
+// updateMayFireLocked publishes mayFire after a change of the failpoints or of the policy. The
+// caller must hold r.mu.
+func (r *Registry) updateMayFireLocked() {
+	r.mayFire.Store(len(r.failpoints) > 0 || r.policy != nil)
+}
+
+// lookupOrPolicy returns the failpoint registered for key (or, for a scoped key, for the unscoped
+// key), or the installed Policy when nothing is registered, from one snapshot of the registry.
+func (r *Registry) lookupOrPolicy(key keyID) (entry, Policy, bool) {
+	if !r.mayFire.Load() {
+		return nil, nil, false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.lookupLocked(key)
+	if fp, ok := r.lookupLocked(key); ok {
+		return fp, nil, true
+	}
+	return nil, r.policy, false
 }
 
 // lookupLocked is lookup for a caller that holds r.mu.
