@@ -7619,7 +7619,6 @@ func (s *matchingEngineSuite) TestDescribeStickyTaskQueueStats() {
 			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
 			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
 			sessionDirective := &taskqueuespb.TaskSessionDirective{
-				BoundWorkerInfo:           &taskqueuespb.BoundWorkerInfo{WorkerQueue: partition.RpcName()},
 				IsExclusiveWorkerAssigned: true,
 			}
 			var syncMatch bool
