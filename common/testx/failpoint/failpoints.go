@@ -46,8 +46,8 @@ func (f *Failpoint[T]) Return(value T) {
 	f.value = value
 }
 
-// On configures the failpoint to fire without a value. Execute reports that it fired and returns
-// the zero value of T.
+// On activates the failpoint as a boolean switch (e.g. to force an alternate code path).
+// ExecuteSwitch returns true; Execute returns the zero value of T and true.
 func (f *Failpoint[T]) On() {
 	f.mu.Lock()
 	defer f.mu.Unlock()

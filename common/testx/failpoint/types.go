@@ -9,7 +9,8 @@ const (
 	ActionUnspecified Action = iota
 	ActionOff
 	ActionReturn
-	// ActionOn fires without a value. Switch-style call sites check it with ExecuteSwitch.
+	// ActionOn activates a boolean switch failpoint (e.g. "skip sync match" or "use smaller batch")
+	// without returning a specific value or error. Call sites check it with ExecuteSwitch.
 	ActionOn
 )
 

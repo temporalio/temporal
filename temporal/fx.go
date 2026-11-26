@@ -322,6 +322,17 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}, nil
 }
 
+// resolveFailpoints reads the static startup switch once and returns the failpoint registry that
+// the server's services share, or nil if disabled. When enabled, it logs a warning.
+func resolveFailpoints(enabled bool, logger log.Logger) *failpoint.Registry {
+	if !enabled {
+		return nil
+	}
+	logger.Warn("FAILPOINTS ARE ENABLED (failpoints.enabled in the static config): tests and tools can make " +
+		"this server fail, stall or return errors. This is not meant for production use.")
+	return failpoint.NewRegistry()
+}
+
 // Start temporal server.
 // This function should be called only once, Server doesn't support multiple restarts.
 func (s *ServerFx) Start() error {

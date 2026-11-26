@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/grpc"
 )
 
@@ -240,6 +241,15 @@ func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 func WithTestHooks(testHooks testhooks.TestHooks) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.testHooks = &testHooks
+	})
+}
+
+// WithFailpointSource sets the failpoint registry of the server, enabling failpoints without the
+// failpoints.enabled static config switch.
+// NOTE: this option is for tests only.
+func WithFailpointSource(registry *failpoint.Registry) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.failpointSource = registry
 	})
 }
 
