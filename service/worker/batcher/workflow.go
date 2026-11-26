@@ -103,10 +103,10 @@ type (
 	task struct {
 		// the workflow execution to process
 		executionInfo *workflowpb.WorkflowExecutionInfo
-		// the activity target execution to process, set instead of
-		// executionInfo for activity batch operations (terminate/cancel/delete activities)
+		// the non-workflow target execution to process, set instead of
+		// executionInfo for batch operations that target them (e.g. terminate/cancel/delete activities)
 		targetExecution *commonpb.Execution
-		// the number of attempts to process the workflow execution
+		// the number of attempts to process the execution
 		attempts int
 		// reference to the page this task belongs to (for tracking page completion)
 		page *page
@@ -173,6 +173,32 @@ func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) er
 	return workflow.UpsertMemo(ctx, memo)
 }
 
+// targetExecutionType returns the type of execution the batch operation type
+// operates on. Keep in sync with TargetExecutionTypeForRequest.
+func targetExecutionType(batchType enumspb.BatchOperationType) enumspb.ExecutionType {
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
+		return enumspb.EXECUTION_TYPE_ACTIVITY
+	default:
+		return enumspb.EXECUTION_TYPE_WORKFLOW
+	}
+}
+
+// TargetExecutionTypeForRequest returns the type of execution the request's
+// operation targets. Keep in sync with targetExecutionType.
+func TargetExecutionTypeForRequest(request *workflowservice.StartBatchOperationRequest) enumspb.ExecutionType {
+	switch request.GetOperation().(type) {
+	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
+		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
+		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+		return enumspb.EXECUTION_TYPE_ACTIVITY
+	default:
+		return enumspb.EXECUTION_TYPE_WORKFLOW
+	}
+}
+
 // nolint:revive,cognitive-complexity
 func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) error {
 	numTargetSelectors := 0
@@ -207,16 +233,8 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		return serviceerror.NewInvalidArgument("visibility query, executions, and target executions are mutually exclusive")
 	}
 	if targetExecutions := params.GetTargetExecutions(); len(targetExecutions) > 0 {
-		// TerminateActivitiesOperation/DeleteActivitiesOperation/CancelActivitiesOperation
-		// target standalone activity executions; every other operation targets workflow
-		// executions. Reject target executions that do not match the operation.
-		expectedType := enumspb.EXECUTION_TYPE_WORKFLOW
-		switch params.GetOperation().(type) {
-		case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
-			*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
-			*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
-			expectedType = enumspb.EXECUTION_TYPE_ACTIVITY
-		}
+		// Reject target executions that do not match the operation.
+		expectedType := TargetExecutionTypeForRequest(params)
 		for i, execution := range targetExecutions {
 			if execution.GetType() != expectedType {
 				return serviceerror.NewInvalidArgumentf(

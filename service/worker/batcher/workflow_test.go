@@ -217,6 +217,70 @@ func (s *batcherSuite) TestSetDefaultParams() {
 	}
 }
 
+func (s *batcherSuite) TestTargetExecutionType() {
+	for _, tc := range []struct {
+		batchType enumspb.BatchOperationType
+		expected  enumspb.ExecutionType
+	}{
+		{enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED, enumspb.EXECUTION_TYPE_WORKFLOW},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, enumspb.EXECUTION_TYPE_WORKFLOW},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, enumspb.EXECUTION_TYPE_WORKFLOW},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, enumspb.EXECUTION_TYPE_WORKFLOW},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{enumspb.BATCH_OPERATION_TYPE_DELETE, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, enumspb.EXECUTION_TYPE_WORKFLOW},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{enumspb.BATCH_OPERATION_TYPE_RESET, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, enumspb.EXECUTION_TYPE_WORKFLOW},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, enumspb.EXECUTION_TYPE_WORKFLOW},
+		// Activity operations on workflows target the owning workflow execution.
+		{enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
+		{enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
+		{enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
+	} {
+		s.Run(tc.batchType.String(), func() {
+			s.Equal(tc.expected, targetExecutionType(tc.batchType))
+		})
+	}
+}
+
+func (s *batcherSuite) TestTargetExecutionTypeForRequest() {
+	for _, tc := range []struct {
+		name     string
+		request  *workflowservice.StartBatchOperationRequest
+		expected enumspb.ExecutionType
+	}{
+		{"unset", &workflowservice.StartBatchOperationRequest{}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"terminate workflows", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"signal workflows", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"cancel workflows", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"delete workflows", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_DeletionOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"reset workflows", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"update workflow options", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"unpause activities on workflows", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"reset activities on workflows", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_ResetActivitiesOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"update activity options on workflows", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{}}, enumspb.EXECUTION_TYPE_WORKFLOW},
+		{"terminate activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
+		{"cancel activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_CancelActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
+		{"delete activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
+	} {
+		s.Run(tc.name, func() {
+			s.Equal(tc.expected, TargetExecutionTypeForRequest(tc.request))
+		})
+	}
+}
+
 // TestBatchActivityOptions_IndependentPerCall verifies the activity options are
 // built per call and share no mutable state, so concurrent batch workflows on a
 // worker cannot race on them or pick up each other's heartbeat timeout.

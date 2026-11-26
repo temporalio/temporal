@@ -1015,7 +1015,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_AdminBatchRouting() {
 	targetNamespace := "target-namespace"
 
 	testTask := func(batchType enumspb.BatchOperationType) task {
-		if isActivityBatchType(batchType) {
+		if targetExecutionType(batchType) == enumspb.EXECUTION_TYPE_ACTIVITY {
 			testPage := &page{
 				targetExecutionInfo: []*commonpb.Execution{{
 					Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
@@ -1997,6 +1997,51 @@ func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
 
 	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
 	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
+}
+
+func (s *activitiesSuite) TestFetchPage_ListErrors() {
+	invalidArgument := serviceerror.NewInvalidArgument("bad query")
+	unavailable := serviceerror.NewUnavailable("try again")
+	for _, tc := range []struct {
+		name              string
+		batchType         enumspb.BatchOperationType
+		listErr           error
+		expectNonRetrying bool
+	}{
+		{"workflow invalid argument is non-retryable", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, invalidArgument, true},
+		{"activity invalid argument is non-retryable", enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, invalidArgument, true},
+		{"workflow other error passes through", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, unavailable, false},
+		{"activity other error passes through", enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, unavailable, false},
+	} {
+		s.Run(tc.name, func() {
+			mockSdk := &mocks.Client{}
+			if tc.batchType == enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY {
+				mockSdk.On("WorkflowService").Return(s.mockFrontendClient)
+				s.mockFrontendClient.EXPECT().ListActivityExecutions(gomock.Any(), gomock.Any()).Return(nil, tc.listErr)
+			} else {
+				mockSdk.On("ListWorkflow", mock.Anything, mock.Anything).Return(nil, tc.listErr).Once()
+			}
+			defer mockSdk.AssertExpectations(s.T())
+			config := batchProcessorConfig{
+				targetNamespace: "test-namespace",
+				adjustedQuery:   "A=B",
+				batchType:       tc.batchType,
+			}
+
+			_, err := fetchPage(context.Background(), mockSdk, config, nil, 0)
+
+			if !tc.expectNonRetrying {
+				s.Require().ErrorIs(err, tc.listErr)
+				_, isAppErr := errors.AsType[*temporal.ApplicationError](err)
+				s.False(isAppErr)
+				return
+			}
+			appErr, ok := errors.AsType[*temporal.ApplicationError](err)
+			s.Require().True(ok)
+			s.True(appErr.NonRetryable())
+			s.Equal("InvalidArgument", appErr.Type())
+		})
+	}
 }
 
 func (s *activitiesSuite) TestGetOperationRPS() {

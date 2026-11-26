@@ -6150,14 +6150,7 @@ func batchOperationExecutionsFromRequest(request *workflowservice.StartBatchOper
 	if len(executions) == 0 {
 		return nil
 	}
-	executionType := enumspb.EXECUTION_TYPE_WORKFLOW
-	switch request.GetOperation().(type) {
-	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
-		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
-		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
-		executionType = enumspb.EXECUTION_TYPE_ACTIVITY
-	default:
-	}
+	executionType := batcher.TargetExecutionTypeForRequest(request)
 	result := make([]*commonpb.Execution, 0, len(executions))
 	for _, execution := range executions {
 		result = append(result, &commonpb.Execution{
