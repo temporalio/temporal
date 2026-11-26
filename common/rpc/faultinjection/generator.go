@@ -237,18 +237,17 @@ func (r *CallbackGenerator[Req, Resp]) generate(ctx context.Context, operation s
 	return nil
 }
 
-// ScopeFromRequest returns the namespace scope from req.
+// ScopeFromRequest returns the namespace scope from req. It has the ID and the name of the
+// namespace if the request carries both, such as the ListTaskQueuePartitions request that the
+// frontend sends to matching, so a failpoint of either can fire for it, the ID first.
 func ScopeFromRequest(req any) Scope {
 	if request, ok := req.(faultScopeGetter); ok {
 		return request.FaultScope()
 	}
-	if namespaceID := namespaceIDFromRequest(req); namespaceID != "" {
-		return Scope{NamespaceID: namespace.ID(namespaceID)}
+	return Scope{
+		NamespaceID:   namespace.ID(namespaceIDFromRequest(req)),
+		NamespaceName: namespace.Name(namespaceNameFromRequest(req)),
 	}
-	if namespaceName := namespaceNameFromRequest(req); namespaceName != "" {
-		return Scope{NamespaceName: namespace.Name(namespaceName)}
-	}
-	return Scope{}
 }
 
 func namespaceIDFromRequest(req any) string {
