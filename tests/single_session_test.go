@@ -1064,11 +1064,32 @@ func TestSingleSessionBindingSurvivesRebuild(t *testing.T) {
 }
 
 /*
+TestSingleSessionBindingSurvivesResetToAcquisition tests a reset to the workflow task that bound the worker:
+ 1. A single-session worker acquires the workflow from the normal queue and completes its first workflow task.
+ 2. The workflow is reset to that workflow task. The task was scheduled on the normal queue, so the binding can only
+    come back from the worker queue recorded on its started event.
+ 3. The reset run's workflow task is delivered to the same worker's sticky queue.
+*/
+func TestSingleSessionBindingSurvivesResetToAcquisition(t *testing.T) {
+	t.Parallel()
+	e := newSingleSessionEnv(t, 10*time.Second, nil)
+
+	resetRunID := resetWorkflowTo(t, e.env, &commonpb.WorkflowExecution{WorkflowId: e.tv.WorkflowID(), RunId: e.runID}, e.acquiredEventID)
+
+	err := e.pollWorkflowTaskOnS(10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Equal(t, resetRunID, task.GetWorkflowExecution().GetRunId(), "expected the reset run's task")
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	require.NoError(t, err)
+}
+
+/*
 TestSingleSessionInheritedByNextRun tests that an exclusive binding survives a new run of the workflow:
  1. A single-session worker acquires the workflow and closes the run with a continue-as-new, a failure under a retry
     policy, or a completion under a cron schedule.
  2. The next run's first workflow task is delivered to the same worker's sticky queue. Without the inherited binding it
-    would go to the normal queue, where the single-session worker can no longer acquire work.
+    would go to the normal queue, where the single-session worker can no longer acquire work. A cron run does not
+    inherit the binding, so its first workflow task goes to the normal queue.
 */
 func TestSingleSessionInheritedByNextRun(t *testing.T) {
 	t.Parallel()
@@ -1100,6 +1121,9 @@ func TestSingleSessionInheritedByNextRun(t *testing.T) {
 			}, taskpoller.WithContext(t.Context()))
 			require.NoError(t, err)
 
+			if tc.unbound {
+				poller = taskpoller.New(t, client, namespace).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: tv.TaskQueue()})
+			}
 			_, err = poller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				require.NotEqual(t, started.GetRunId(), task.GetWorkflowExecution().GetRunId(), "expected the next run's task")
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
@@ -1152,7 +1176,7 @@ func TestSingleSessionInheritedBindingSurvivesRebuild(t *testing.T) {
 	history := env.SdkClient().GetWorkflowHistory(t.Context(), newRun.GetWorkflowId(), newRun.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	startedEvent, err := history.Next()
 	require.NoError(t, err)
-	protorequire.ProtoEqual(t, &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: stableIdentity}},
+	protorequire.ProtoEqual(t, &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: stableIdentity},
 		startedEvent.GetWorkflowExecutionStartedEventAttributes().GetInheritedSessionInfo())
 	_, err = env.AdminClient().RebuildMutableState(t.Context(), &adminservice.RebuildMutableStateRequest{
 		Namespace: namespace, Execution: newRun,

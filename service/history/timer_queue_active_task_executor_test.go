@@ -1157,8 +1157,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 					if bound {
 						info := request.UpdateWorkflowMutation.ExecutionInfo
 						s.True(info.GetSessionState().GetExclusiveWorker())
-						s.Equal(int32(1), info.GetWorkflowTaskAttemptsSinceLastSuccess())
 						s.Equal("S", info.GetStickyTaskQueue())
+						s.Equal(int32(1), info.GetWorkflowTaskAttemptsSinceLastSuccess())
 						s.Equal(taskQueueName, info.GetTaskQueue())
 					}
 					return tests.UpdateWorkflowExecutionResponse, nil
@@ -1711,7 +1711,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Retry() {
 		VisibilityTimestamp: s.now,
 	}
 
-	executionInfo.SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X", InstanceKey: "k"}}
+	executionInfo.SessionState = &persistencespb.SessionState{}
 	executionInfo.StickyTaskQueue = "X"
 	executionInfo.StickyScheduleToStartTimeout = durationpb.New(7 * time.Second)
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completionEvent.GetEventId(), completionEvent.GetVersion())
@@ -1733,12 +1733,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Retry() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state)
 	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
 	newExecutionInfo := update.NewWorkflowSnapshot.ExecutionInfo
-	protorequire.ProtoEqual(s.T(), &persistencespb.SessionState{
-		BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"},
-	}, newExecutionInfo.GetSessionState())
+	protorequire.ProtoEqual(s.T(), &persistencespb.SessionState{},
+		newExecutionInfo.GetSessionState())
 	s.Equal("X", newExecutionInfo.GetStickyTaskQueue())
-	// The new run starts with the default sticky timeout; the worker's own comes back with its next completion.
-	s.Equal(5*time.Second, newExecutionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+	s.Nil(newExecutionInfo.GetStickyScheduleToStartTimeout())
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Cron() {

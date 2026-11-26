@@ -957,7 +957,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
-	// Closing the run clears a non-exclusive binding in place, so a retry or cron run inherits a copy.
+	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
+	// starts unbound.
 	sessionInfo := handler.mutableState.SessionInfo()
 
 	// Always add workflow completed event to this one
@@ -1022,7 +1023,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
-	// Closing the run clears a non-exclusive binding in place, so a retry or cron run inherits a copy.
+	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
+	// starts unbound.
 	sessionInfo := handler.mutableState.SessionInfo()
 
 	// Always add workflow failed event

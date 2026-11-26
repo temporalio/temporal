@@ -93,13 +93,8 @@ const (
 	// Retained size for one activity failure once the limit MutableStateActivityFailureTotalSizeLimitError is exceeded.
 	minRetainedActivityFailureSize = 128
 
-	// defaultSessionStickyScheduleToStartTimeout is used when a workflow gets a non-exclusive binding to a worker before
-	// that worker has reported its sticky schedule-to-start timeout, which only arrives with a task completion.
-	// In practice, this default timeout is only used for non-exclusive bindings on the very first workflow task of a
-	// workflow that is bound to a worker or if the user has set a 0 value for the sticky schedule-to-start timeout.
-	// It is also used until the worker's next task completion after a binding is rebuilt from history (reset,
-	// rebuild) or inherited by a new run (continue-as-new, retry, cron), since history does not record the worker's
-	// timeout.
+	// defaultSessionStickyScheduleToStartTimeout is the schedule-to-start timeout of a sticky task of a workflow bound to
+	// a multi-session worker: a bound workflow stores no sticky timeout, and a missing or 0 timeout would loop.
 	defaultSessionStickyScheduleToStartTimeout = 5 * time.Second
 )
 
@@ -3093,8 +3088,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	var inheritedSessionInfo *sessionpb.SessionInfo
 	// The new run keeps the binding only if it stays on the same task queue: the bound worker polls this task queue,
-	// not the one the new run moved to.
-	if taskQueue == previousExecutionInfo.GetTaskQueue() {
+	// not the one the new run moved to. A cron run starts unbound.
+	if taskQueue == previousExecutionInfo.GetTaskQueue() && command.GetInitiator() != enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
 		inheritedSessionInfo = previousExecutionState.SessionInfo()
 	}
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -3508,7 +3503,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.VersioningInfo.ContinueAsNewInitialVersioningBehavior = event.GetInheritedAutoUpgradeInfo().GetContinueAsNewInitialVersioningBehavior()
 	}
 
-	// A new run of a bound workflow (continue-as-new, retry, cron) stays on the previous run's worker.
+	// A new run of a bound workflow (continue-as-new or retry) stays on the previous run's worker.
 	if inheritedSessionInfo := event.GetInheritedSessionInfo(); inheritedSessionInfo != nil {
 		ms.ApplySessionInfo(inheritedSessionInfo)
 	}
