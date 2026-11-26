@@ -119,6 +119,12 @@ const (
 	// TemporalExternalPayloadSizeBytes is the total size in bytes of all external payloads
 	// referenced in the entire history tree of the execution.
 	TemporalExternalPayloadSizeBytes = "TemporalExternalPayloadSizeBytes"
+
+	// TemporalTimeSkippingEnabled indicates whether time skipping is currently enabled.
+	TemporalTimeSkippingEnabled = "TemporalTimeSkippingEnabled"
+	// TemporalTimeSkippingAccumulatedDuration is the execution's total skipped duration in nanoseconds,
+	// including skipped duration inherited at execution start.
+	TemporalTimeSkippingAccumulatedDuration = "TemporalTimeSkippingAccumulatedDuration"
 )
 
 var (
@@ -172,21 +178,23 @@ var (
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		// This SA is deprecated as of Versioning GA. Instead, users should use one of the following SAs for different purposes:
 		// TemporalWorkflowVersioningBehavior, TemporalWorkerDeployment, TemporalWorkerDeploymentVersion, TemporalUsedWorkerDeploymentVersions.
-		BuildIds:                             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BatcherNamespace:                     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherUser:                          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalScheduledStartTime:           enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalScheduledById:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalSchedulePaused:               enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalNamespaceDivision:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalPauseInfo:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalReportedProblems:             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalWorkerDeploymentVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalWorkflowVersioningBehavior:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalWorkerDeployment:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalUsedWorkerDeploymentVersions: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalExternalPayloadCount:         enumspb.INDEXED_VALUE_TYPE_INT,
-		TemporalExternalPayloadSizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
+		BuildIds:                                enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:                        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime:              enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:                  enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:               enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:                       enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:                enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalWorkerDeploymentVersion:         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkflowVersioningBehavior:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkerDeployment:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalUsedWorkerDeploymentVersions:    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalExternalPayloadCount:            enumspb.INDEXED_VALUE_TYPE_INT,
+		TemporalExternalPayloadSizeBytes:        enumspb.INDEXED_VALUE_TYPE_INT,
+		TemporalTimeSkippingEnabled:             enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalTimeSkippingAccumulatedDuration: enumspb.INDEXED_VALUE_TYPE_INT,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

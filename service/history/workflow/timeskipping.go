@@ -73,7 +73,7 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 		return
 	}
 	// we allow setting config to nil in updating tsc
-	ms.executionInfo.TimeSkippingInfo.Config = config
+	tsi.Config = config
 	tsi.SessionSkipCount = 0
 	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
@@ -195,6 +195,20 @@ func propagateTimeSkippingToNextRun(
 		FastForwardTargetTime:  util.GetFastForwardTargetTime(),
 	}
 	return newTSC, stateProp
+}
+
+// upsertVisibilityOnTimeSkippingChange updates visibility when time-skipping info first appears
+// or its enabled flag changes. The task executor reads the values when the task runs.
+func (ms *MutableStateImpl) upsertVisibilityOnTimeSkippingChange(previouslyInitialized, previouslyEnabled bool) error {
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if !ms.IsWorkflow() || tsi == nil {
+		return nil
+	}
+	if previouslyInitialized && tsi.GetConfig().GetEnabled() == previouslyEnabled {
+		return nil
+	}
+	ms.visibilityUpdated = true
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
 // =============================================================================
@@ -603,12 +617,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	if hasSkipTarget {
 		skippedDuration = attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
 	}
+	previouslyEnabled := NewTimeSkippingInfoUtil(tsi).IsEnabled()
 	ms.executeTimeSkippingTransition(
 		skippedDuration,
 		hasSkipTarget,
 		attr.GetDisabledAfterFastForward(),
 	)
-	return nil
+	return ms.upsertVisibilityOnTimeSkippingChange(true, previouslyEnabled)
 }
 
 func (ms *MutableStateImpl) regenerateTimerTasksForWorkflowTimeSkipping(
