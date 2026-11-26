@@ -328,6 +328,87 @@ type LatencyHealthChecksPerPercentile struct {
 	PercentileSettings []LatencyHealthCheckSettings
 }
 
+// ReplicationStreamImplementationSettings selects replication stream implementations. Streams
+// that match no rule use the legacy implementation.
+type ReplicationStreamImplementationSettings struct {
+	// Sender rules apply to streams this cluster sends to remote clusters.
+	Sender []ReplicationStreamImplementationRule
+	// Receiver rules apply to streams this cluster receives from remote clusters.
+	Receiver []ReplicationStreamImplementationRule
+}
+
+// ReplicationStreamImplementationRule selects the implementation for streams with one remote
+// cluster on a subset of local shards.
+type ReplicationStreamImplementationRule struct {
+	// RemoteCluster is the name of the remote cluster.
+	RemoteCluster string
+	// Implementation is "legacy" or "lane".
+	Implementation string
+	// ShardIDs lists the local shards the rule applies to. Set either ShardIDs or ShardPercent.
+	ShardIDs []int32
+	// ShardPercent applies the rule to this percentage of local shards, from 1 to 100,
+	// rounded up to a whole shard. It selects the lowest shard IDs; increasing it only adds shards.
+	ShardPercent int
+	// DecodeError is set by the setting's converter when the rule cannot be decoded, for example
+	// when ShardPercent is quoted. The converter then keeps only RemoteCluster, so the rule is
+	// invalid for that remote cluster alone. It is not meant to be set in dynamic config.
+	DecodeError error `mapstructure:"-"`
+}
+
+// convertReplicationStreamImplementationSettings decodes each rule on its own. With
+// ConvertStructure, one rule that fails to decode would make the whole value fall back to the
+// default and select legacy for every remote cluster. Here the rule keeps its RemoteCluster and
+// gets a DecodeError instead.
+func convertReplicationStreamImplementationSettings(v any) (ReplicationStreamImplementationSettings, error) {
+	if settings, ok := v.(ReplicationStreamImplementationSettings); ok {
+		return settings, nil
+	}
+	raw, err := ConvertStructure(struct{ Sender, Receiver any }{})(v)
+	if err != nil {
+		return ReplicationStreamImplementationSettings{}, err
+	}
+	return ReplicationStreamImplementationSettings{
+		Sender:   convertEachElement(raw.Sender, invalidStreamImplementationRule),
+		Receiver: convertEachElement(raw.Receiver, invalidStreamImplementationRule),
+	}, nil
+}
+
+func invalidStreamImplementationRule(raw any, err error) ReplicationStreamImplementationRule {
+	return ReplicationStreamImplementationRule{RemoteCluster: decodedRemoteCluster(raw), DecodeError: err}
+}
+
+// convertEachElement decodes a list one element at a time. An element that fails to decode is
+// replaced by invalid(raw, err). A value that is not a list becomes a single invalid element.
+func convertEachElement[T any](v any, invalid func(raw any, err error) T) []T {
+	if typed, ok := v.([]T); ok {
+		return typed
+	}
+	list, err := ConvertStructure[[]any](nil)(v)
+	if err != nil {
+		return []T{invalid(v, fmt.Errorf("not a list: %w", err))}
+	}
+	var zero T
+	var elements []T
+	for _, raw := range list {
+		element, err := ConvertStructure(zero)(raw)
+		if err != nil {
+			element = invalid(raw, err)
+		}
+		elements = append(elements, element)
+	}
+	return elements
+}
+
+// decodedRemoteCluster returns the RemoteCluster of a value that failed to decode, or "" if its
+// RemoteCluster is missing or does not decode either.
+func decodedRemoteCluster(raw any) string {
+	named, err := ConvertStructure(struct{ RemoteCluster string }{})(raw)
+	if err != nil {
+		return ""
+	}
+	return named.RemoteCluster
+}
+
 const (
 	HistoryReplicationRateLimiterScopeAll                  = "all"
 	HistoryReplicationRateLimiterScopeOpenForceReplication = "openForceReplication"
