@@ -115,7 +115,7 @@ func nextBackoffInterval(
 // Helpers for creating new retry/cron workflows:
 
 // SetupNewWorkflowForRetryOrCron builds the next run of a retried or cron workflow. previousSessionInfo is read before
-// the previous run closed, because closing clears a non-exclusive binding.
+// the previous run closed, because closing clears a non-exclusive binding. Only a retry inherits it.
 func SetupNewWorkflowForRetryOrCron(
 	ctx context.Context,
 	previousMutableState historyi.MutableState,
@@ -312,8 +312,8 @@ func SetupNewWorkflowForRetryOrCron(
 		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
 	}
 	// The new run keeps the binding only if it stays on the same task queue: the bound worker polls this task queue,
-	// not the one the new run moved to.
-	if taskQueue == previousExecutionInfo.GetTaskQueue() {
+	// not the one the new run moved to. A cron run starts unbound.
+	if taskQueue == previousExecutionInfo.GetTaskQueue() && initiator != enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
 		req.InheritedSessionInfo = previousSessionInfo
 	}
 

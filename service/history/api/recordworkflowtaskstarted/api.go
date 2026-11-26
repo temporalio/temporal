@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -81,11 +82,10 @@ func Invoke(
 
 			singleSession := req.PollRequest.GetSessionOptions().GetSingleSession()
 			stableIdentity := singleSession.GetStableIdentity()
-			executionInfo := mutableState.GetExecutionInfo()
 			// An unbound execution can acquire the polling session's stable identity.
 			// Once bound, every start request, including retries, must identify the same session.
-			sessionState := executionInfo.GetSessionState()
-			if sessionState.GetExclusiveWorker() && (stableIdentity == "" || stableIdentity != sessionState.GetBoundWorkerInfo().GetWorkerQueue()) {
+			exclusivelyBound := mutableState.HasExclusiveBinding()
+			if exclusivelyBound && (stableIdentity == "" || stableIdentity != mutableState.SessionWorkerQueue()) {
 				return nil, serviceerrors.NewObsoleteMatchingTask("workflow is bound to another single-session destination")
 			}
 
@@ -132,10 +132,8 @@ func Invoke(
 			currentTaskQueue := mutableState.CurrentTaskQueue()
 			pollerTaskQueue := req.PollRequest.TaskQueue
 
-			// The clear below also clears the non-exclusive binding; we need to save these values so that we can
-			// understand if this workflow is dispatched as a session or not.
-			previousStickyTimeout := executionInfo.GetStickyScheduleToStartTimeout()
-			previousWorkerQueue := sessionState.GetBoundWorkerInfo().GetWorkerQueue()
+			// The clear below also clears a non-exclusive binding, so read the bound worker's sticky queue first.
+			previousWorkerStickyQueue := mutableState.SessionWorkerQueue()
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
 				currentTaskQueue.GetName() != pollerTaskQueue.GetName() {
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
@@ -148,7 +146,7 @@ func Invoke(
 				}
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
 				// and sticky queue never has partition, so it does not matter.
-				mutableState.ClearStickyTaskQueue()
+				mutableState.ClearStickyTaskQueue(historyi.StickyClearForStartedOffStickyQueue)
 			}
 
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_NORMAL &&
@@ -179,10 +177,8 @@ func Invoke(
 			// The worker this workflow is bound to once this task starts, recorded on the started event. Mutable state
 			// is only updated further below, by BindExclusiveWorker and UpdateNonExclusiveWorkerBinding.
 			var sessionInfo *sessionpb.SessionInfo
-			if singleSession != nil {
-				sessionInfo = &sessionpb.SessionInfo{ExclusiveWorker: true, BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: stableIdentity}}
-			} else if workerAddress := req.PollRequest.GetSessionOptions().GetMultiSession().GetWorkerAddress(); workerAddress != "" {
-				sessionInfo = &sessionpb.SessionInfo{BoundWorkerInfo: &sessionpb.BoundWorkerInfo{WorkerQueue: workerAddress}}
+			if workerQueue := taskqueue.SessionWorkerStickyQueue(req.PollRequest.GetSessionOptions(), req.PollRequest.GetWorkerInstanceKey()); workerQueue != "" {
+				sessionInfo = &sessionpb.SessionInfo{ExclusiveWorker: singleSession != nil, WorkerQueue: workerQueue}
 			}
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
@@ -202,10 +198,10 @@ func Invoke(
 				return nil, err
 			}
 
-			newSingleSessionBinding := singleSession != nil && !sessionState.GetExclusiveWorker()
+			newSingleSessionBinding := singleSession != nil && !exclusivelyBound
 			if newSingleSessionBinding {
 				// Bind after the task start is accepted so both changes commit in the same transaction.
-				mutableState.BindExclusiveWorker(stableIdentity, req.PollRequest.GetWorkerInstanceKey())
+				mutableState.BindExclusiveWorker(stableIdentity)
 				// TODO (Shivam): A single-session worker can acquire a workflow that already has a non-exclusive binding.
 				// Its session activities stay queued at the previously bound worker. Decide how exclusive and non-exclusive
 				// workers on one task queue interact (reschedule, reject the acquisition, or keep unsupported).
@@ -283,8 +279,7 @@ func Invoke(
 			bindingUpdated, err := mutableState.UpdateNonExclusiveWorkerBinding(
 				req.PollRequest.GetSessionOptions(),
 				req.PollRequest.GetWorkerInstanceKey(),
-				previousWorkerQueue,
-				previousStickyTimeout,
+				previousWorkerStickyQueue,
 			)
 			if err != nil {
 				return nil, err

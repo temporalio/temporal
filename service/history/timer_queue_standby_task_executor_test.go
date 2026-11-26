@@ -1972,8 +1972,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 		if sessionDropped {
 			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 		} else {
-			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}}
-			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+			mutableState.GetExecutionInfo().StickyTaskQueue = "sticky-worker"
 			expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 		}
 	}
@@ -2019,7 +2019,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
 	var sessionDirective *taskqueuespb.TaskSessionDirective
 	if expectedTaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		sessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: expectedTaskQueue.GetName()}}
+		sessionDirective = &taskqueuespb.TaskSessionDirective{}
 	}
 	s.mockMatchingClient.EXPECT().AddActivityTask(
 		gomock.Any(),
