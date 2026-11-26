@@ -84,7 +84,7 @@ func TestPoll_OldGeneration(t *testing.T) {
 	}}
 	before := common.CloneProto(limiter.ConcurrencyState)
 
-	generation, tokens, ready := limiter.poll(time.Now(), 1, 1)
+	generation, tokens, ready := limiter.poll(time.Now(), 1, 200, 1)
 
 	require.Equal(t, int64(2), generation)
 	require.Zero(t, tokens)
@@ -99,7 +99,7 @@ func TestPoll_FutureGeneration(t *testing.T) {
 	}}
 	before := common.CloneProto(limiter.ConcurrencyState)
 
-	generation, tokens, ready := limiter.poll(time.Now(), 3, 1)
+	generation, tokens, ready := limiter.poll(time.Now(), 3, 200, 1)
 
 	require.Zero(t, generation)
 	require.Zero(t, tokens)
@@ -115,7 +115,7 @@ func TestPoll_WakeAllReturnsAvailableCapacity(t *testing.T) {
 	}}
 	before := common.CloneProto(limiter.ConcurrencyState)
 
-	generation, tokens, ready := limiter.poll(time.Now(), 2, 3)
+	generation, tokens, ready := limiter.poll(time.Now(), 2, 200, 3)
 
 	require.Equal(t, int64(2), generation)
 	require.Equal(t, int32(2), tokens)
@@ -130,7 +130,7 @@ func TestPoll_WakeTokensCappedByRequest(t *testing.T) {
 	}}
 	before := common.CloneProto(limiter.ConcurrencyState)
 
-	generation, tokens, ready := limiter.poll(time.Now(), 2, 1)
+	generation, tokens, ready := limiter.poll(time.Now(), 2, 200, 1)
 
 	require.Equal(t, int64(2), generation)
 	require.Equal(t, int32(1), tokens)
@@ -145,7 +145,7 @@ func TestPoll_WaitsUntilWakeStateAdvances(t *testing.T) {
 	}}
 	before := common.CloneProto(limiter.ConcurrencyState)
 
-	generation, tokens, ready := limiter.poll(time.Now(), 2, 1)
+	generation, tokens, ready := limiter.poll(time.Now(), 2, 200, 1)
 
 	require.Zero(t, generation)
 	require.Zero(t, tokens)
@@ -162,7 +162,7 @@ func TestPoll_ExpiredReservationWakesWithoutTransition(t *testing.T) {
 	}}
 	before := common.CloneProto(limiter.ConcurrencyState)
 
-	generation, tokens, ready := limiter.poll(now, 2, 1)
+	generation, tokens, ready := limiter.poll(now, 2, 200, 1)
 
 	require.Equal(t, int64(2), generation)
 	require.Equal(t, int32(1), tokens)
@@ -179,7 +179,7 @@ func TestPoll_UnexpiredReservationKeepsWaiterBlocked(t *testing.T) {
 	}}
 	before := common.CloneProto(limiter.ConcurrencyState)
 
-	generation, tokens, ready := limiter.poll(now, 2, 1)
+	generation, tokens, ready := limiter.poll(now, 2, 200, 1)
 
 	require.Zero(t, generation)
 	require.Zero(t, tokens)
@@ -195,7 +195,7 @@ func TestPoll_WokenGenerationStaysReadyAfterCapacityConsumed(t *testing.T) {
 	}}
 	before := common.CloneProto(limiter.ConcurrencyState)
 
-	generation, tokens, ready := limiter.poll(time.Now(), 2, 1)
+	generation, tokens, ready := limiter.poll(time.Now(), 2, 200, 1)
 
 	require.Equal(t, int64(2), generation)
 	require.Zero(t, tokens)
@@ -207,12 +207,16 @@ func TestIncrementGenerationResetsWakeState(t *testing.T) {
 	t.Parallel()
 	c := newTestComponent(1)
 	c.Generation = 3
+	c.WakeUpTo = 100
+	c.WakeStage = 4
 	c.WakeAll = true
 
 	c.incrementGeneration()
 
 	require.Equal(t, int64(4), c.Generation)
 	require.False(t, c.WakeAll)
+	require.Zero(t, c.WakeUpTo)
+	require.Zero(t, c.WakeStage)
 }
 
 func TestUpdateConfigRequiresNewerVersion(t *testing.T) {
@@ -249,4 +253,54 @@ func TestLimitDecreaseRetainsCommittedSlots(t *testing.T) {
 	c.release("second")
 	require.Equal(t, int32(1), c.availableSlots())
 	require.True(t, c.reserve("third", now, defaultReserveTimeout))
+}
+
+func TestPoll_SelectedWaiter(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	limiter := &Component{ConcurrencyState: &fcpb.ConcurrencyState{
+		Config: &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 3}, Generation: 2, WakeUpTo: 100,
+		Slots: []*fcpb.ConcurrencyState_Slot{{SlotId: "committed", Committed: true}},
+	}}
+	before := common.CloneProto(limiter.ConcurrencyState)
+
+	generation, tokens, ready := limiter.poll(now, 2, 50, 3)
+
+	require.Equal(t, int64(2), generation)
+	require.Equal(t, int32(2), tokens)
+	require.True(t, ready)
+	protorequire.ProtoEqual(t, before, limiter.ConcurrencyState)
+}
+
+func TestPoll_UnselectedWaiter(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	limiter := &Component{ConcurrencyState: &fcpb.ConcurrencyState{
+		Config: &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1}, Generation: 2, WakeUpTo: 100,
+	}}
+	before := common.CloneProto(limiter.ConcurrencyState)
+
+	generation, tokens, ready := limiter.poll(now, 2, 200, 1)
+
+	require.Zero(t, generation)
+	require.Zero(t, tokens)
+	require.False(t, ready)
+	protorequire.ProtoEqual(t, before, limiter.ConcurrencyState)
+}
+
+func TestPoll_ExpirationDoesNotBypassStagingWithStoredCapacity(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	limiter := &Component{ConcurrencyState: &fcpb.ConcurrencyState{
+		Config: &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 2}, Generation: 2,
+		Slots: []*fcpb.ConcurrencyState_Slot{{SlotId: "expired", Expires: timestamppb.New(now.Add(-2 * time.Second))}},
+	}}
+	before := common.CloneProto(limiter.ConcurrencyState)
+
+	generation, tokens, ready := limiter.poll(now, 2, 200, 2)
+
+	require.Zero(t, generation)
+	require.Zero(t, tokens)
+	require.False(t, ready)
+	protorequire.ProtoEqual(t, before, limiter.ConcurrencyState)
 }

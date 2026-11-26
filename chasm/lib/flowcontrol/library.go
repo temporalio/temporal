@@ -10,14 +10,17 @@ import (
 type library struct {
 	chasm.UnimplementedLibrary
 
-	concurrencyHandler *concurrency.Handler
+	concurrencyHandler           *concurrency.Handler
+	concurrencyStagedWakeHandler *concurrency.StagedWakeHandler
 }
 
 func newLibrary(
 	concurrencyHandler *concurrency.Handler,
+	concurrencyStagedWakeHandler *concurrency.StagedWakeHandler,
 ) *library {
 	return &library{
-		concurrencyHandler: concurrencyHandler,
+		concurrencyHandler:           concurrencyHandler,
+		concurrencyStagedWakeHandler: concurrencyStagedWakeHandler,
 	}
 }
 
@@ -32,6 +35,16 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 		chasm.NewRegistrableComponent[*concurrency.Component](
 			"concurrency_limiter",
 			// chasm.WithBusinessIDAlias("ConcurrencyLimiterId"), // TODO(fc): enable visibility?
+		),
+	}
+}
+
+func (l *library) Tasks() []*chasm.RegistrableTask {
+	return []*chasm.RegistrableTask{
+		chasm.NewRegistrablePureTask(
+			"concurrency_staged_wake",
+			l.concurrencyStagedWakeHandler,
+			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace),
 		),
 	}
 }
