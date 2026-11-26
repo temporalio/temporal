@@ -3,6 +3,7 @@ package recordactivitytaskstarted
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -320,11 +322,27 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 		StartedTime:      timestamppb.Now(),
 		Attempt:          1,
 		StartedClock:     startedClock,
+		// Timeouts updated after scheduling, e.g. via UpdateActivityOptions.
+		ScheduleToCloseTimeout: durationpb.New(time.Minute),
+		ScheduleToStartTimeout: durationpb.New(40 * time.Second),
+		StartToCloseTimeout:    durationpb.New(30 * time.Second),
+		HeartbeatTimeout:       durationpb.New(10 * time.Second),
 	}
 
 	mockMS.EXPECT().GetActivityInfo(scheduledEventID).Return(ai, true)
 	mockMS.EXPECT().GetActivityScheduledEvent(gomock.Any(), scheduledEventID).Return(
-		&historypb.HistoryEvent{EventId: scheduledEventID}, nil,
+		&historypb.HistoryEvent{
+			EventId: scheduledEventID,
+			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+					ActivityId:             "test-activity-id",
+					ScheduleToCloseTimeout: durationpb.New(20 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(15 * time.Second),
+					StartToCloseTimeout:    durationpb.New(5 * time.Second),
+					HeartbeatTimeout:       durationpb.New(2 * time.Second),
+				},
+			},
+		}, nil,
 	)
 	mockMS.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
 
@@ -376,4 +394,23 @@ func TestRecordActivityTaskStarted_DuplicateRequest_WithStartedClock(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, rejectCodeAccepted, code)
 	require.Equal(t, storedClock, resp.Clock, "Should return the stored StartedClock")
+}
+
+// TestRecordActivityTaskStarted_ReturnsCurrentTimeouts verifies that the returned scheduled event
+// carries the current activity timeouts from mutable state rather than the originally scheduled ones.
+func TestRecordActivityTaskStarted_ReturnsCurrentTimeouts(t *testing.T) {
+	storedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100}
+	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, storedClock)
+
+	resp, code, err := recordActivityTaskStarted(
+		context.Background(), mockShard, mockMS, request, nil, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, rejectCodeAccepted, code)
+	attributes := resp.GetScheduledEvent().GetActivityTaskScheduledEventAttributes()
+	require.Equal(t, "test-activity-id", attributes.GetActivityId())
+	require.Equal(t, time.Minute, attributes.GetScheduleToCloseTimeout().AsDuration())
+	require.Equal(t, 40*time.Second, attributes.GetScheduleToStartTimeout().AsDuration())
+	require.Equal(t, 30*time.Second, attributes.GetStartToCloseTimeout().AsDuration())
+	require.Equal(t, 10*time.Second, attributes.GetHeartbeatTimeout().AsDuration())
 }

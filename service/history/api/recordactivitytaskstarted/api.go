@@ -140,6 +140,16 @@ func recordActivityTaskStarted(
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}
+	if attributes := scheduledEvent.GetActivityTaskScheduledEventAttributes(); attributes != nil {
+		// Activity options may have been updated after scheduling (e.g. via UpdateActivityOptions).
+		// Return the current timeouts from mutable state. Clone to avoid mutating the cached event.
+		scheduledEvent = common.CloneProto(scheduledEvent)
+		attributes = scheduledEvent.GetActivityTaskScheduledEventAttributes()
+		attributes.ScheduleToCloseTimeout = ai.ScheduleToCloseTimeout
+		attributes.ScheduleToStartTimeout = ai.ScheduleToStartTimeout
+		attributes.StartToCloseTimeout = ai.StartToCloseTimeout
+		attributes.HeartbeatTimeout = ai.HeartbeatTimeout
+	}
 
 	response := &historyservice.RecordActivityTaskStartedResponse{
 		ScheduledEvent:              scheduledEvent,

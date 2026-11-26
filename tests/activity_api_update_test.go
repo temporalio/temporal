@@ -11,6 +11,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -188,6 +189,66 @@ func (s *ActivityAPIUpdateSuite) TestClient() {
 				err = workflowRun.Get(ctx, &out)
 
 				s.NoError(err)
+			})
+
+			s.Run("ChangeStartToCloseVisibleOnRetry", func(s *ActivityAPIUpdateSuite) {
+				env := testcore.NewEnv(s.T())
+
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				activityUpdated := make(chan struct{})
+				var startedActivityCount atomic.Int32
+				startToCloseTimeouts := make(chan time.Duration, 2)
+				activityFunction := func(ctx context.Context) (string, error) {
+					startToCloseTimeouts <- activity.GetInfo(ctx).StartToCloseTimeout
+					if startedActivityCount.Add(1) == 1 {
+						s.Rcv(activityUpdated)
+						return "", errors.New("bad-luck-please-retry")
+					}
+					return "done!", nil
+				}
+
+				workflowFn := func(ctx workflow.Context) error {
+					return workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+						ActivityID:            "activity-id",
+						DisableEagerExecution: true,
+						StartToCloseTimeout:   10 * time.Minute,
+						RetryPolicy:           &temporal.RetryPolicy{InitialInterval: time.Second, MaximumAttempts: 2},
+					}), activityFunction).Get(ctx, nil)
+				}
+				env.SdkWorker().RegisterWorkflow(workflowFn)
+				env.SdkWorker().RegisterActivity(activityFunction)
+
+				workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+					ID:        activityUpdateWorkflowID,
+					TaskQueue: env.WorkerTaskQueue(),
+				}, workflowFn)
+				s.NoError(err)
+
+				s.Await(func(s *ActivityAPIUpdateSuite) {
+					description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+					s.NoError(err)
+					s.Len(description.GetPendingActivities(), 1)
+					s.Equal(enumspb.PENDING_ACTIVITY_STATE_STARTED, description.GetPendingActivities()[0].GetState())
+				}, 10*time.Second, 500*time.Millisecond)
+
+				_, err = api.update(ctx, env, workflowRun.GetID(), "activity-id",
+					&activitypb.ActivityOptions{StartToCloseTimeout: durationpb.New(20 * time.Minute)},
+					[]string{"start_to_close_timeout"},
+					false,
+				)
+				s.NoError(err)
+
+				select {
+				case activityUpdated <- struct{}{}:
+				case <-ctx.Done():
+					s.FailNow("timed out waiting for activity to receive update signal")
+				}
+
+				s.NoError(workflowRun.Get(ctx, nil))
+				s.Equal(10*time.Minute, <-startToCloseTimeouts)
+				s.Equal(20*time.Minute, <-startToCloseTimeouts)
 			})
 
 			s.Run("ChangeScheduleToClose", func(s *ActivityAPIUpdateSuite) {
