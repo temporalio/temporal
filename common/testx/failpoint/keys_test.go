@@ -63,3 +63,24 @@ func (s *keySuite) TestReserveKeyPrefixPanicsOnConflicts() {
 	s.Equal("test.declared-first.key", declaredFirst.Name())
 	s.Panics(func() { failpoint.ReserveKeyPrefix[error]("test.declared-first.") })
 }
+
+func (s *keySuite) TestErrorKey() {
+	prefix := failpoint.ReserveKeyPrefix[error]("test.errorkey:")
+	failpoint.ReserveKeyPrefix[int]("test.intkey:")
+
+	got, err := failpoint.ErrorKey("test.key1", "ns")
+	s.NoError(err)
+	s.Equal(key1.ForScope("ns"), got)
+	got, err = failpoint.ErrorKey("test.errorkey:x", "")
+	s.NoError(err)
+	s.Equal(prefix.Key("x"), got)
+
+	_, err = failpoint.ErrorKey("test.int", "")
+	s.ErrorContains(err, `key "test.int" has the value type int, not error`)
+	_, err = failpoint.ErrorKey("test.intkey:x", "")
+	s.ErrorContains(err, "not error")
+	_, err = failpoint.ErrorKey("test.undeclared", "")
+	s.ErrorContains(err, `unknown key "test.undeclared"`)
+	_, err = failpoint.ErrorKey("", "")
+	s.ErrorContains(err, "unknown key")
+}

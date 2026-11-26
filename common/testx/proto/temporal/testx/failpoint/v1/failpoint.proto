@@ -1,0 +1,211 @@
+syntax = "proto3";
+
+package temporal.testx.failpoint.v1;
+
+option go_package = "go.temporal.io/testx/failpoint/failpointpb";
+
+// FailpointService configures the failpoints of a process from another process.
+// Processes only serve it when they enable failpoints, for example only in test builds.
+service FailpointService {
+  // DisableFailpoint disables a failpoint, allowing normal execution.
+  rpc DisableFailpoint(DisableFailpointRequest) returns (DisableFailpointResponse);
+
+  // DisableAllFailpoints disables and removes all failpoints.
+  rpc DisableAllFailpoints(DisableAllFailpointsRequest) returns (DisableAllFailpointsResponse);
+
+  // InjectPanic configures a failpoint to panic with a specified value.
+  rpc InjectPanic(InjectPanicRequest) returns (InjectPanicResponse);
+
+  // InjectBlock configures a failpoint to block until unblocked.
+  rpc InjectBlock(InjectBlockRequest) returns (InjectBlockResponse);
+
+  // InjectReturn configures a failpoint to return an error.
+  rpc InjectReturn(InjectReturnRequest) returns (InjectReturnResponse);
+
+  // WaitForBlock waits until an execution reaches a block failpoint. It fails with NotFound if
+  // the failpoint is not registered, and with FailedPrecondition if it is not configured to block
+  // or is disabled or reconfigured before an execution reaches the block.
+  rpc WaitForBlock(WaitForBlockRequest) returns (WaitForBlockResponse);
+
+  // ListFailpoints returns information about all registered failpoints.
+  rpc ListFailpoints(ListFailpointsRequest) returns (ListFailpointsResponse);
+
+  // DescribeRegistry returns the identity of the failpoint registry behind the service. Services
+  // in one process can share a registry; a fan-out uses the identity to apply each request to
+  // every registry once.
+  rpc DescribeRegistry(DescribeRegistryRequest) returns (DescribeRegistryResponse);
+}
+
+// Action defines what a failpoint should do when triggered.
+enum Action {
+  // ACTION_UNSPECIFIED is invalid and should not be used.
+  ACTION_UNSPECIFIED = 0;
+  // ACTION_OFF disables the failpoint.
+  ACTION_OFF = 1;
+  // ACTION_RETURN causes the failpoint to deliver the specified value(s).
+  ACTION_RETURN = 2;
+  // ACTION_PANIC causes the failpoint to panic.
+  ACTION_PANIC = 3;
+  // ACTION_BLOCK causes the failpoint to hang until the failpoint is disabled.
+  ACTION_BLOCK = 4;
+  // ACTION_PAUSE causes the failpoint to sleep for a specified duration.
+  ACTION_PAUSE = 5;
+  // ACTION_CALL causes the failpoint to call a specified function.
+  ACTION_CALL = 6;
+  // ACTION_ON causes the failpoint to fire without a value.
+  ACTION_ON = 7;
+}
+
+// Recurrence specifies how many times a failpoint should trigger. A failpoint has one trigger that
+// limits which executions fire, and the protocol only sets its maximum number of fires, see
+// RECURRENCE_ONCE and RECURRENCE_ALWAYS. Other trigger limits, such as a probability or skipping the
+// first executions, are not part of the protocol.
+enum Recurrence {
+  // RECURRENCE_UNSPECIFIED means RECURRENCE_ALWAYS.
+  RECURRENCE_UNSPECIFIED = 0;
+  // RECURRENCE_ONCE limits the trigger of the failpoint to one fire. The failpoint keeps its action
+  // after the fire, so it can be listed as enabled although it no longer fires; a block holds
+  // exactly one execution and later executions pass.
+  RECURRENCE_ONCE = 1;
+  // RECURRENCE_ALWAYS sets no limit: the failpoint triggers every time.
+  RECURRENCE_ALWAYS = 2;
+}
+
+// DisableFailpointRequest specifies which failpoint to disable.
+message DisableFailpointRequest {
+  // name is the name of the failpoint to disable.
+  string name = 1;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
+}
+
+// DisableFailpointResponse is returned after disabling a failpoint.
+message DisableFailpointResponse {}
+
+// DisableAllFailpointsRequest disables all failpoints.
+message DisableAllFailpointsRequest {}
+
+// DisableAllFailpointsResponse is returned after disabling all failpoints.
+message DisableAllFailpointsResponse {}
+
+// InjectPanicRequest configures a failpoint to panic.
+message InjectPanicRequest {
+  // name is the name of the failpoint to configure.
+  string name = 1;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
+  // panic_value is the message of the error that the failpoint panics with.
+  string panic_value = 3;
+  // recurrence limits the trigger to one fire (RECURRENCE_ONCE) or sets no limit.
+  Recurrence recurrence = 4;
+}
+
+// InjectPanicResponse is returned after configuring a panic failpoint.
+message InjectPanicResponse {}
+
+// InjectBlockRequest configures a failpoint to block.
+message InjectBlockRequest {
+  // name is the name of the failpoint to configure.
+  string name = 1;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
+  // recurrence limits the trigger to one fire (RECURRENCE_ONCE) or sets no limit.
+  Recurrence recurrence = 3;
+}
+
+// InjectBlockResponse is returned after configuring a block failpoint.
+message InjectBlockResponse {}
+
+// WaitForBlockRequest specifies which block failpoint to wait for.
+message WaitForBlockRequest {
+  // name is the name of the failpoint to wait for.
+  string name = 1;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
+}
+
+// WaitForBlockResponse is returned when a block failpoint is triggered.
+message WaitForBlockResponse {}
+
+// InjectReturnRequest configures a failpoint to return an error.
+message InjectReturnRequest {
+  // name is the name of the failpoint to configure.
+  string name = 1;
+  // scope scopes the key, for example to a tenant. Empty means all scopes.
+  string scope = 2;
+  // error_message is the error message for the returned error.
+  string error_message = 3;
+  // recurrence limits the trigger to one fire (RECURRENCE_ONCE) or sets no limit.
+  Recurrence recurrence = 4;
+  // error_name is the name of an error in the failpoint error catalog to return, with
+  // error_message as its message. Empty means a plain error with error_message.
+  string error_name = 5;
+}
+
+// InjectReturnResponse is returned after configuring a return failpoint.
+message InjectReturnResponse {}
+
+// ListFailpointsRequest requests a list of all failpoints.
+message ListFailpointsRequest {}
+
+// ListFailpointsResponse contains information about all failpoints.
+message ListFailpointsResponse {
+  // failpoints is the list of failpoint information.
+  repeated FailpointInfo failpoints = 1;
+  // fallback_keys are the counters of the key names that the registry's fallback saw, if it
+  // counts them, such as seeded random fault activation, sorted by name.
+  repeated FallbackKeyInfo fallback_keys = 2;
+  // fallback_keys_omitted is the number of fallback_keys, from the end of the list, that the service
+  // left out to keep the response within its size limit.
+  int64 fallback_keys_omitted = 3;
+  // failpoints_omitted is the number of failpoints, from the end of the list, that the service left
+  // out to keep the response within its size limit. The service fills the response with failpoints
+  // first.
+  int64 failpoints_omitted = 4;
+}
+
+// FallbackKeyInfo counts the executions of a key name that a registry's fallback saw, in all
+// scopes.
+message FallbackKeyInfo {
+  // name is the key name.
+  string name = 1;
+  // activated reports whether the fallback acts on the key name at all.
+  bool activated = 2;
+  // executions is the number of executions of the key name, activated or not, with nothing registered.
+  int64 executions = 3;
+  // fires is the number of those executions that the fallback fired.
+  int64 fires = 4;
+  // hosts are the hosts that serve the registry, as in FailpointInfo.
+  repeated string hosts = 5;
+}
+
+// FailpointInfo describes the state of a failpoint.
+message FailpointInfo {
+  // name is the failpoint name.
+  string name = 1;
+  // scope is the scope the failpoint is scoped to. Empty means all scopes.
+  string scope = 2;
+  // enabled indicates whether the failpoint has an action. A failpoint whose trigger is spent, such
+  // as one with RECURRENCE_ONCE after its fire, still has its action and is listed as enabled.
+  bool enabled = 3;
+  // action describes what the failpoint does.
+  Action action = 4;
+  // recurrence is RECURRENCE_ONCE if the trigger of the failpoint limits it to one fire, and
+  // RECURRENCE_ALWAYS otherwise. The listing leaves out the other limits of a trigger, such as a
+  // probability, skipping the first executions or a maximum of more than one fire, which only rules
+  // and in-process code can set.
+  Recurrence recurrence = 5;
+  // hosts are the hosts that serve the registry the failpoint is registered in. A server that
+  // only reports its own failpoints leaves it empty; a fan-out fills it in for every entry.
+  repeated string hosts = 6;
+}
+
+// DescribeRegistryRequest requests the identity of the failpoint registry.
+message DescribeRegistryRequest {}
+
+// DescribeRegistryResponse identifies a failpoint registry.
+message DescribeRegistryResponse {
+  // registry_id is a random identifier of the registry. Services that return the same
+  // registry_id share the registry.
+  string registry_id = 1;
+}

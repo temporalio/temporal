@@ -347,6 +347,9 @@ require.NoError(t, fp.Wait(ctx))                 // ... until it arrives ...
 fp.Disable()                                     // ... then release it.
 ```
 
+`Wait` returns `failpoint.ErrNotBlocking` if the failpoint is not configured to block, or is
+disabled before an execution arrives, so a test can't go on without the ordering it asked for.
+
 The test fails if the failpoint never fired, so a wrong key, scope or configuration can't pass
 unnoticed; pass `testcore.MayNotFire()` to opt out. Use `testcore.InjectFailpointIn` to inject into
 another cluster of the test, such as the standby cluster of a replication test, and

@@ -1,0 +1,8 @@
+version: v1
+plugins:
+  - name: go
+    out: .
+    opt: module=go.temporal.io/testx
+  - name: go-grpc
+    out: .
+    opt: module=go.temporal.io/testx

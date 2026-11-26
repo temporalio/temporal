@@ -73,11 +73,16 @@ executions, and `registry.Delete(key)` to detach it from the registry.
 A `RuleSet` keeps the failpoints of a registry in line with a list of `Rule`s, for example ones
 loaded from a configuration file. Rules name errors registered with `RegisterError` and keys
 declared with `NewKey` or with a reserved prefix. `Apply` creates, reconfigures and removes the
-failpoints that the set created without overwriting failpoints registered by other code.
+failpoints that the set created without overwriting failpoints registered by other code. The set's
+failpoints report `Info.Managed`, and the `failpointgrpc` service refuses to change them.
 
 ## Default policy (BUGGIFY)
 
 `Registry.SetPolicy` installs a `Policy` that decides `CheckError` and `ExecuteSwitch` call sites
 when no explicit failpoint is registered for a key. Explicitly registered failpoints always take
-precedence over the policy, even when disabled. Subpackage [`buggify`](./buggify) implements a
-seeded probabilistic policy on top of this interface.
+precedence over the policy, even when disabled. While nothing is registered and no policy is set,
+`registry.MayFire()` is false and executions cost one atomic load. Subpackage [`buggify`](./buggify)
+implements a seeded probabilistic policy on top of this interface.
+
+To configure failpoints in another process, serve the registry over gRPC with
+[`failpointgrpc`](failpointgrpc). Nothing else in testx imports it.

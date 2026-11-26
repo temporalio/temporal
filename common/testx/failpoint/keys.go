@@ -51,6 +51,8 @@ type keyKind struct {
 	accepts func(err error) bool
 	// newFailpoint creates a failpoint of the type of the key.
 	newFailpoint func(id keyID) ruleTarget
+	// typ is the value type of the key.
+	typ reflect.Type
 }
 
 // reservedPrefix is a prefix that ReserveKeyPrefix reserved, and the kind of every key under it.
@@ -73,8 +75,11 @@ func kindOf[T any]() keyKind {
 			return ok
 		},
 		newFailpoint: func(id keyID) ruleTarget {
-			return NewFailpoint(Key[T]{name: id.name, scope: id.scope})
+			fp := NewFailpoint(Key[T]{name: id.name, scope: id.scope})
+			fp.managed = true
+			return fp
 		},
+		typ: reflect.TypeFor[T](),
 	}
 }
 
@@ -98,6 +103,20 @@ func lookupKind(name string) (keyKind, error) {
 	}
 	return keyKind{}, fmt.Errorf("unknown key %q, declared keys are %s and keys with the prefixes %s",
 		name, strings.Join(slices.Sorted(maps.Keys(keyKinds)), ", "), strings.Join(slices.Sorted(slices.Values(prefixes)), ", "))
+}
+
+// ErrorKey returns the key of the failpoint that a request from another process names, such as one
+// of a failpointgrpc service. The name must be that of a key declared with NewKey[error], or have
+// a prefix reserved with ReserveKeyPrefix[error], as the key of a Rule must be declared.
+func ErrorKey(name, scope string) (Key[error], error) {
+	kind, err := lookupKind(name)
+	if err != nil {
+		return Key[error]{}, err
+	}
+	if kind.typ != reflect.TypeFor[error]() {
+		return Key[error]{}, fmt.Errorf("key %q has the value type %v, not error", name, kind.typ)
+	}
+	return Key[error]{name: name, scope: scope}, nil
 }
 
 // KeyPrefix builds the keys of the failpoints that code names at run time, such as from the method

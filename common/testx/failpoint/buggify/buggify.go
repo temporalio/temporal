@@ -3,6 +3,7 @@ package buggify
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,9 @@ type Buggify struct {
 	observer atomic.Pointer[func(Event)]
 	// events holds the decisions that the observer has yet to receive.
 	events eventQueue
+
+	// counting is set by CountExecutions. Executions count themselves for Stats only while it is set.
+	counting atomic.Bool
 
 	// mu serializes Set.
 	mu sync.Mutex
@@ -52,7 +56,7 @@ func (b *Buggify) Set(config Config) error {
 	case !config.Enabled():
 		current = nil
 	case current == nil || !reflect.DeepEqual(current.config, config):
-		current = &run{config: config, names: make(map[string]*nameState)}
+		current = &run{config: config, names: make(map[string]*nameState), counting: &b.counting}
 	default:
 	}
 	b.current.Store(current)
@@ -253,9 +257,41 @@ func (q *eventQueue) drain(deliver func(Event)) {
 	}
 }
 
+// NameStats counts the executions of a key name that BUGGIFY saw, in all scopes.
+type NameStats struct {
+	Name string
+	// Activated reports whether BUGGIFY acts on the name at all.
+	Activated bool
+	// Executions counts the executions of the name, activated or not, with nothing registered for
+	// it, and Fires those that BUGGIFY fired.
+	Executions int64
+	Fires      int64
+}
+
+// CountExecutions makes BUGGIFY count the executions and fires of each key name for Stats, from now
+// on. The counters are off by default, since every execution of a selected name would otherwise add
+// to counters that all scopes of the name share. Call it before the traffic that Stats should
+// cover.
+func (b *Buggify) CountExecutions() {
+	b.counting.Store(true)
+}
+
+// Stats returns the counters of the key names that the configuration selected, since it was last
+// set, sorted by name. The names are listed and their activation is reported while BUGGIFY is
+// enabled, but the executions and fires only count from CountExecutions on. It is empty while
+// BUGGIFY is disabled.
+func (b *Buggify) Stats() []NameStats {
+	s := b.current.Load()
+	if s == nil {
+		return nil
+	}
+	return s.stats()
+}
+
 // Error returns the error that BUGGIFY injects into this execution of name in scope, or nil. It is
 // nil if the key is not activated or the execution doesn't fire, or if the configuration names no
-// error for the key. It implements failpoint.Policy; call sites use failpoint.CheckError.
+// error for the key. It implements failpoint.Policy; call sites use failpoint.CheckError or
+// failpoint.ExecuteInOrder.
 func (b *Buggify) Error(name, scope string) error {
 	s := b.current.Load()
 	if s == nil {
@@ -263,7 +299,13 @@ func (b *Buggify) Error(name, scope string) error {
 	}
 	defer b.deliver()
 	k := s.lookup(name, b.emit)
-	if k == nil || !k.activated || k.newError == nil {
+	if k == nil {
+		return nil
+	}
+	if b.counting.Load() {
+		k.executions.Add(1)
+	}
+	if !k.activated || k.newError == nil {
 		return nil
 	}
 	if !s.fire(b.emit, name, scope, k, failpoint.ActionReturn) {
@@ -284,7 +326,13 @@ func (b *Buggify) Switch(name, scope string) bool {
 	}
 	defer b.deliver()
 	k := s.lookup(name, b.emit)
-	if k == nil || !k.activated {
+	if k == nil {
+		return false
+	}
+	if b.counting.Load() {
+		k.executions.Add(1)
+	}
+	if !k.activated {
 		return false
 	}
 	return s.fire(b.emit, name, scope, k, failpoint.ActionOn)
@@ -303,6 +351,8 @@ const (
 // run is the BUGGIFY state of a registry for one configuration.
 type run struct {
 	config Config
+	// counting is the flag of the Buggify, see CountExecutions.
+	counting *atomic.Bool
 
 	// mu guards the fields below and the counters of every nameState.
 	mu sync.Mutex
@@ -325,6 +375,10 @@ type nameState struct {
 	newError  func(msg string) error
 	// nameMix is the hash of the name that its draws use (see Config.Draw), computed once.
 	nameMix uint64
+	// executions and fires count the executions of the name in all scopes and those that fired,
+	// see NameStats.
+	executions atomic.Int64
+	fires      atomic.Int64
 	// counters holds an executionCounter per scope, "" for executions without a scope. It is
 	// guarded by run.mu.
 	counters map[string]*executionCounter
@@ -386,6 +440,9 @@ func (s *run) fire(emit func(Event), name, scope string, k *nameState, action fa
 	if draw(s.config.Seed, k.nameMix^scopeMix, counter.n) >= k.fire {
 		return false
 	}
+	if s.counting.Load() {
+		k.fires.Add(1)
+	}
 	emit(Event{Kind: EventFire, Name: name, Scope: scope, Action: action, ExecutionNumber: int64(counter.n)})
 	return true
 }
@@ -413,4 +470,22 @@ func (s *run) counter(emit func(Event), k *nameState, scope string) (*executionC
 	s.scopeCount++
 	s.mu.Unlock()
 	return c, c.scopeMix
+}
+
+// stats returns the counters of the names that the configuration selected, sorted by name.
+func (s *run) stats() []NameStats {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stats := make([]NameStats, 0, len(s.names))
+	for name, k := range s.names {
+		if k == nil {
+			continue
+		}
+		// An execution counts itself before its fire, so reading fires first keeps fires <=
+		// executions.
+		fires := k.fires.Load()
+		stats = append(stats, NameStats{Name: name, Activated: k.activated, Executions: k.executions.Load(), Fires: fires})
+	}
+	slices.SortFunc(stats, func(a, b NameStats) int { return strings.Compare(a.Name, b.Name) })
+	return stats
 }

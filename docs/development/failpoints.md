@@ -34,7 +34,9 @@ test process has its own. A cluster runs BUGGIFY only if its test asks for it; s
 
 The server does not serve a gRPC API to configure failpoints. Tests configure the failpoints of
 their cluster in process, and a server or test cluster is configured from outside through the
-`testing.failpointRules` dynamic config setting.
+`testing.failpointRules` dynamic config setting. The `go.temporal.io/testx/failpoint/failpointgrpc`
+package can serve a registry over gRPC for a process that needs it, but nothing in the server
+installs it.
 
 ## Failpoint rules
 

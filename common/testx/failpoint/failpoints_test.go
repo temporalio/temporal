@@ -151,6 +151,58 @@ func (s *failpointSuite) TestBlock() {
 		})
 	})
 
+	s.Run("wait not blocking", func(s *failpointSuite) {
+		s.Run("unconfigured", func(s *failpointSuite) {
+			fp := failpoint.NewFailpoint[error](key1)
+			s.ErrorIs(fp.Wait(s.Context()), failpoint.ErrNotBlocking)
+		})
+		s.Run("another action", func(s *failpointSuite) {
+			fp := failpoint.NewFailpoint[error](key1)
+			fp.Return(errors.New("injected"))
+			s.ErrorIs(fp.Wait(s.Context()), failpoint.ErrNotBlocking)
+		})
+		s.Run("reconfigured while waiting", func(s *failpointSuite) {
+			fp := failpoint.NewFailpoint[error](key1)
+			fp.Block()
+			waited := make(chan error, 1)
+			go func() { waited <- fp.Wait(s.Context()) }()
+			fp.Return(errors.New("injected"))
+			s.ErrorIs(s.Rcv(waited), failpoint.ErrNotBlocking)
+		})
+		s.Run("an execution holds a block of one fire", func(s *failpointSuite) {
+			fp := failpoint.NewFailpoint[error](key1)
+			fp.Block(failpoint.Trigger{MaxFires: 1})
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, _ = fp.Execute()
+			}()
+			s.NoError(fp.Wait(s.Context()))
+			s.NoError(fp.Wait(s.Context()), "Wait succeeds while the execution is held")
+			fp.Disable()
+			s.Rcv(done)
+		})
+	})
+
+	// Info reports the block and its trigger while a block of one fire holds an execution, and Off
+	// after Disable released it.
+	s.Run("info block holds execution", func(s *failpointSuite) {
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Block(failpoint.Trigger{MaxFires: 1})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, _ = fp.Execute()
+		}()
+		s.NoError(fp.Wait(s.Context()))
+
+		s.Equal(failpoint.Info{Key: key1, Action: failpoint.ActionBlock, Trigger: failpoint.Trigger{MaxFires: 1}}, fp.Info())
+
+		fp.Disable()
+		s.Rcv(done)
+		s.Equal(failpoint.Info{Key: key1, Action: failpoint.ActionOff, Trigger: failpoint.Trigger{MaxFires: 1}}, fp.Info())
+	})
+
 	// Calling Block while a goroutine is blocked wakes it via disableLocked closing the old blockCh.
 	s.Run("block called twice wakes blocked goroutine", func(s *failpointSuite) {
 		f := new(failpoint.Failpoint[struct{}])

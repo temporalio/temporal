@@ -109,3 +109,9 @@ precedes its fires. The observer can execute keys, including the key of its even
 those executions are delivered after it returns, and an execution doesn't wait for an observer that
 another goroutine runs. So an event can be delivered on another goroutine than the execution that
 it is about, and after that execution returned.
+
+`b.Stats()` and the `ListFailpoints` RPC of [`failpointgrpc`](../failpointgrpc) report each key
+name's activation, executions and fires, so a run can show it reached the keys it claims to stress.
+The counters are off by default, since they add to counters that all scopes of a name share on
+every execution. `b.CountExecutions()` starts them, and `failpointgrpc.NewServer` calls it when
+given `failpointgrpc.WithBuggify(b)`.

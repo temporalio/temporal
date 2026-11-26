@@ -369,6 +369,18 @@ func TestRuleSet_InvalidRulesChangeNothing(t *testing.T) {
 	}
 }
 
+func TestRuleSet_ManagedFailpointsAreReported(t *testing.T) {
+	t.Parallel()
+	registry := failpoint.NewRegistry()
+	own := failpoint.NewFailpoint(ruleKeys.Key("own"))
+	registry.Set(own)
+	set := failpoint.NewRuleSet(registry)
+	require.NoError(t, applyRules(set, []failpoint.Rule{{Key: "rule:a", Action: failpoint.ActionOn}}))
+
+	require.False(t, registry.Get(ruleKeys.Key("own")).Info().Managed)
+	require.True(t, registry.Get(ruleKeys.Key("a")).Info().Managed)
+}
+
 func TestRuleSet_Close(t *testing.T) {
 	t.Parallel()
 	registry := failpoint.NewRegistry()

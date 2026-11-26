@@ -1,6 +1,7 @@
 package failpoint_test
 
 import (
+	"errors"
 	"testing"
 
 	"go.temporal.io/testx/failpoint"
@@ -94,4 +95,56 @@ func (s *registrySuite) TestCompareAndDelete() {
 	s.True(registry.CompareAndDelete(fp1))
 	s.Nil(registry.Get(key1))
 	s.False(registry.CompareAndDelete(fp1))
+}
+
+func (s *registrySuite) TestID() {
+	a, b := failpoint.NewRegistry(), failpoint.NewRegistry()
+	id := a.ID()
+	s.NotEmpty(id)
+	s.Equal(id, a.ID())
+	s.NotEqual(id, b.ID())
+}
+
+func (s *registrySuite) TestInfos() {
+	registry := failpoint.NewRegistry()
+	s.Empty(registry.Infos())
+	fp1 := failpoint.NewFailpoint[error](key1.ForScope("ns"))
+	fp1.Block(failpoint.Trigger{MaxFires: 1})
+	fp2 := failpoint.NewFailpoint[error](key2)
+	fp2.Return(errors.New("injected"))
+	registry.Set(fp2)
+	registry.Set(fp1)
+
+	s.Equal([]failpoint.Info{
+		{Key: key1.ForScope("ns"), Action: failpoint.ActionBlock, Trigger: failpoint.Trigger{MaxFires: 1}},
+		{Key: key2, Action: failpoint.ActionReturn},
+	}, registry.Infos())
+	s.Equal(fp2.Info(), registry.Get(key2).Info())
+}
+
+func (s *registrySuite) TestDeleteFunc() {
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp1.Block()
+	fp2 := failpoint.NewFailpoint[error](key2)
+	fp2.Block()
+	registry.Set(fp1)
+	registry.Set(fp2)
+	released := make(chan struct{})
+	go func() {
+		defer close(released)
+		_, _ = fp1.Execute()
+	}()
+	s.NoError(fp1.Wait(s.Context()))
+
+	registry.DeleteFunc(func(info failpoint.Info) bool { return info.Key.Name() == key1.Name() })
+
+	s.Rcv(released)
+	s.Nil(registry.Get(key1))
+	s.Same(fp2, registry.Get(key2))
+	s.Len(registry.Infos(), 1)
+	s.True(registry.MayFire())
+	registry.DeleteFunc(func(failpoint.Info) bool { return true })
+	s.Empty(registry.Infos())
+	s.False(registry.MayFire())
 }

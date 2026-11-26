@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// Info describes the state of a failpoint.
+type Info struct {
+	Key AnyKey
+	// Action is ActionOff for a failpoint without an action.
+	Action Action
+	// Trigger limits which executions fire.
+	Trigger Trigger
+	// Managed reports whether a RuleSet configures the failpoint, so other code should leave it
+	// alone.
+	Managed bool
+}
+
 // Failpoint is used to inject failures and timing control into code paths for testing.
 // They begin without an action and are configured with one. To turn a failpoint off and release
 // the executions it holds, call Disable. Removing it from its Registry with Registry.Delete only
@@ -50,6 +62,9 @@ type Failpoint[T any] struct {
 	blockCh   chan struct{}
 	arrivedCh chan struct{}
 	arrived   bool
+
+	// managed is set when a RuleSet creates the failpoint, see Info.
+	managed bool
 
 	// trigger limits which executions fire; rng is set when trigger has a probability, and seed is
 	// the seed of rng.
@@ -172,6 +187,18 @@ func (f *Failpoint[T]) Seed() int64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.seed
+}
+
+// Info returns the state of the failpoint.
+func (f *Failpoint[T]) Info() Info {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return Info{
+		Key:     f.key,
+		Action:  f.action,
+		Trigger: f.trigger,
+		Managed: f.managed,
+	}
 }
 
 // Stats returns how often the configured failpoint executed and how often it fired since its

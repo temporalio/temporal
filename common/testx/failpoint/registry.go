@@ -1,6 +1,10 @@
 package failpoint
 
 import (
+	"context"
+	"crypto/rand"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -10,6 +14,10 @@ import (
 // key whose type it has.
 type entry interface {
 	Disable()
+	// Info returns the state of the failpoint.
+	Info() Info
+	// Wait waits until an execution reaches the failpoint's block, see Failpoint.Wait.
+	Wait(ctx context.Context) error
 	id() keyID
 }
 
@@ -27,6 +35,9 @@ func validateEntry(fp entry) {
 // Registry manages failpoint instances.
 // It provides thread-safe operations to register and query failpoints.
 type Registry struct {
+	// id identifies the registry, see ID.
+	id string
+
 	// configMu serializes Atomically calls. It is separate from mu, so configuring a failpoint
 	// that is busy, such as one that pauses, doesn't block the lookups of executions.
 	configMu   sync.Mutex
@@ -44,8 +55,15 @@ type Registry struct {
 // NewRegistry creates a new failpoint registry for testing.
 func NewRegistry() *Registry {
 	return &Registry{
+		id:         rand.Text(),
 		failpoints: make(map[keyID]entry),
 	}
+}
+
+// ID returns a random identifier of the registry, so that processes that serve the same registry
+// can tell.
+func (r *Registry) ID() string {
+	return r.id
 }
 
 // Get retrieves a failpoint by key. Returns nil if not found.
@@ -234,5 +252,31 @@ func (r *Registry) Delete(key AnyKey) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.failpoints, key.id())
+	r.setCountLocked()
+}
+
+// Infos returns the state of every registered failpoint, sorted by key.
+func (r *Registry) Infos() []Info {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	infos := make([]Info, 0, len(r.failpoints))
+	for _, fp := range r.failpoints {
+		infos = append(infos, fp.Info())
+	}
+	slices.SortFunc(infos, func(a, b Info) int { return strings.Compare(a.Key.String(), b.Key.String()) })
+	return infos
+}
+
+// DeleteFunc removes and disables the failpoints whose state del reports true for, as one change.
+// del must not call the registry.
+func (r *Registry) DeleteFunc(del func(Info) bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, fp := range r.failpoints {
+		if del(fp.Info()) {
+			delete(r.failpoints, id)
+			fp.Disable()
+		}
+	}
 	r.setCountLocked()
 }

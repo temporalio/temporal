@@ -41,6 +41,18 @@ jobs:
       - name: Check testx go.mod is tidy
         run: go mod tidy -diff
 
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
+
+      - name: Check testx generated protos are up to date
+        run: |
+          make proto
+          git diff --exit-code -- . || { echo "::error::run 'make proto' in common/testx and commit the result"; exit 1; }
+
       - name: Test testx
         run: make test
 

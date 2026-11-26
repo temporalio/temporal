@@ -765,3 +765,37 @@ func TestBuggify_StopObservingIsBoundedByItsContext(t *testing.T) {
 	// The observer that was blocked returns, and the events that it has not received are dropped.
 	await.RequireTrue(t, func() bool { return len(received()) == 1 }, 10*time.Second, time.Millisecond)
 }
+
+func TestBuggify_Stats(t *testing.T) {
+	t.Parallel()
+
+	config := alwaysConfig()
+	config.Keys = []buggify.Key{{Match: "2"}, config.Keys[0]}
+	registry, b, _ := newBuggifyRegistry(t, config)
+	require.Equal(t, []buggify.NameStats(nil), buggify.New(failpoint.NewRegistry()).Stats(), "disabled")
+
+	// Executions before CountExecutions are not counted.
+	require.ErrorIs(t, failpoint.CheckError(registry, key1.ForScope("ns-1")), errBuggify)
+	require.Equal(t, []buggify.NameStats{{Name: "1", Activated: true}}, b.Stats())
+	b.CountExecutions()
+
+	require.ErrorIs(t, failpoint.CheckError(registry, key1.ForScope("ns-1")), errBuggify)
+	require.ErrorIs(t, failpoint.CheckError(registry, key1.ForScope("ns-2")), errBuggify)
+	require.NoError(t, failpoint.CheckError(registry, key2))
+	require.ErrorIs(t, failpoint.CheckError(registry, key3.ForScope("ns")), errBuggify)
+
+	// An execution that a failpoint takes isn't BUGGIFY's.
+	fp := failpoint.NewFailpoint(key100)
+	fp.Return(errors.New("registered"))
+	registry.Set(fp)
+	require.Error(t, failpoint.CheckError(registry, key100))
+
+	require.Equal(t, []buggify.NameStats{
+		{Name: "1", Activated: true, Executions: 2, Fires: 2},
+		{Name: "2", Executions: 1},
+		{Name: "3", Activated: true, Executions: 1, Fires: 1},
+	}, b.Stats())
+
+	require.True(t, failpoint.ExecuteSwitch(registry, anyKey))
+	require.Contains(t, b.Stats(), buggify.NameStats{Name: "any", Activated: true, Executions: 1, Fires: 1})
+}
