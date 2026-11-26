@@ -3,6 +3,7 @@ package session
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 
@@ -55,21 +56,11 @@ func createConnection(
 	d driver.Driver,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	var db *sqlx.DB
-	var err error
-
-	if cfg.PasswordCommand != nil {
-		db, err = d.CreateRefreshableConnection(func() (string, error) {
-			return buildDSN(cfg, resolver)
-		})
-	} else {
-		var dsn string
-		dsn, err = buildDSN(cfg, resolver)
-		if err != nil {
-			return nil, err
-		}
-		db, err = d.CreateConnection(dsn)
-	}
+	cfgCopy := *cfg
+	cfgCopy.ConnectAttributes = maps.Clone(cfg.ConnectAttributes)
+	db, err := d.CreateRefreshableConnection(func() (string, error) {
+		return buildDSN(&cfgCopy, resolver)
+	})
 	if err != nil {
 		return nil, err
 	}

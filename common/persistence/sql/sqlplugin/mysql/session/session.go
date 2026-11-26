@@ -67,38 +67,34 @@ func createConnection(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	err := registerTLSConfig(cfg)
-	if err != nil {
-		return nil, err
+	cfgCopy := *cfg
+	cfgCopy.ConnectAttributes = maps.Clone(cfg.ConnectAttributes)
+	useCustomTLS := cfg.TLS != nil && cfg.TLS.Enabled &&
+		(cfg.ConnectAttributes["tls"] == "" || cfg.ConnectAttributes["tls"] == customTLSName)
+	if useCustomTLS {
+		delete(cfgCopy.ConnectAttributes, "tls")
 	}
-
-	var db *sqlx.DB
-	if cfg.PasswordCommand != nil {
-		c := sqlplugin.NewRefreshingConnector(
-			func() (string, error) {
-				return buildDSN(dbKind, cfg, resolver)
-			},
-			func(dsn string) (driver.Connector, error) {
-				return mysql.MySQLDriver{}.OpenConnector(dsn)
-			},
-			mysql.MySQLDriver{},
-		)
-		db = sqlx.NewDb(sql.OpenDB(c), driverName)
-		if err := db.Ping(); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-	} else {
-		var dsn string
-		dsn, err = buildDSN(dbKind, cfg, resolver)
-		if err != nil {
-			return nil, err
-		}
-		db, err = sqlx.Connect(driverName, dsn)
-		if err != nil {
-			return nil, err
-		}
-	}
+	c := sqlplugin.NewRefreshingConnector(
+		func() (string, error) {
+			return buildDSN(dbKind, &cfgCopy, resolver)
+		},
+		func(dsn string) (driver.Connector, error) {
+			mysqlConfig, err := mysql.ParseDSN(dsn)
+			if err != nil {
+				return nil, err
+			}
+			tlsConfig, err := buildTLSConfig(cfgCopy.TLS)
+			if err != nil {
+				return nil, err
+			}
+			if useCustomTLS {
+				mysqlConfig.TLS = tlsConfig
+			}
+			return mysql.NewConnector(mysqlConfig)
+		},
+		mysql.MySQLDriver{},
+	)
+	db := sqlx.NewDb(sql.OpenDB(c), driverName)
 	if cfg.MaxConns > 0 {
 		db.SetMaxOpenConns(cfg.MaxConns)
 	}
@@ -205,55 +201,29 @@ func sanitizeAttr(inkey string, invalue string) (string, string) {
 	}
 }
 
-func registerTLSConfig(cfg *config.SQL) error {
-	if cfg.TLS == nil || !cfg.TLS.Enabled {
-		return nil
+func buildTLSConfig(cfg *auth.TLS) (*tls.Config, error) {
+	if cfg == nil || !cfg.Enabled {
+		return nil, nil
 	}
 
-	// TODO: create a way to set MinVersion and CipherSuites via cfg.
-	tlsConfig := auth.NewTLSConfigForServer(cfg.TLS.ServerName, cfg.TLS.EnableHostVerification)
-
-	if cfg.TLS.CaFile != "" {
+	tlsConfig := auth.NewTLSConfigForServer(cfg.ServerName, cfg.EnableHostVerification)
+	if cfg.CaFile != "" {
 		rootCertPool := x509.NewCertPool()
-		pem, err := os.ReadFile(cfg.TLS.CaFile)
+		pem, err := os.ReadFile(cfg.CaFile)
 		if err != nil {
-			return fmt.Errorf("failed to load CA files: %v", err)
+			return nil, fmt.Errorf("failed to load CA files: %w", err)
 		}
-		if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
-			return fmt.Errorf("failed to append CA file")
+		if !rootCertPool.AppendCertsFromPEM(pem) {
+			return nil, errors.New("failed to append CA file")
 		}
 		tlsConfig.RootCAs = rootCertPool
 	}
-
-	if cfg.TLS.CertFile != "" && cfg.TLS.KeyFile != "" {
-		clientCert := make([]tls.Certificate, 0, 1)
-		certs, err := tls.LoadX509KeyPair(
-			cfg.TLS.CertFile,
-			cfg.TLS.KeyFile,
-		)
+	if cfg.CertFile != "" && cfg.KeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
-			return fmt.Errorf("failed to load tls x509 key pair: %v", err)
+			return nil, fmt.Errorf("failed to load tls x509 key pair: %w", err)
 		}
-		clientCert = append(clientCert, certs)
-		tlsConfig.Certificates = clientCert
+		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
-
-	// In order to use the TLS configuration you need to register it. Once registered you use it by specifying
-	// `tls` in the connect attributes.
-	err := mysql.RegisterTLSConfig(customTLSName, tlsConfig)
-	if err != nil {
-		return fmt.Errorf("failed to register tls config: %v", err)
-	}
-
-	if cfg.ConnectAttributes == nil {
-		cfg.ConnectAttributes = map[string]string{}
-	}
-
-	// If no `tls` connect attribute is provided then we override it to our newly registered tls config automatically.
-	// This allows users to simply provide a tls config without needing to remember to also set the connect attribute
-	if cfg.ConnectAttributes["tls"] == "" {
-		cfg.ConnectAttributes["tls"] = customTLSName
-	}
-
-	return nil
+	return tlsConfig, nil
 }

@@ -87,23 +87,19 @@ func (p *plugin) createDBConnection(
 	}
 
 	// Database name not provided, try defaults.
-	// Use a shallow copy so that the session's refreshable-connection closure
-	// (which captures the config pointer) sees the correct DatabaseName on
-	// reconnect
-	cfgCopy := *cfg
-
 	var errors []error
 	for _, databaseName := range defaultDatabaseNames {
+		cfgCopy := *cfg
 		cfgCopy.DatabaseName = databaseName
-		if postgresqlSession, err := session.NewSession(
-			&cfgCopy,
-			p.driver,
-			resolver,
-		); err == nil {
-			return postgresqlSession.DB, nil
-		} else {
-			errors = append(errors, err)
+		postgresqlSession, err := session.NewSession(&cfgCopy, p.driver, resolver)
+		if err == nil {
+			err = postgresqlSession.Ping()
+			if err == nil {
+				return postgresqlSession.DB, nil
+			}
+			postgresqlSession.Close()
 		}
+		errors = append(errors, err)
 	}
 	return nil, serviceerror.NewUnavailable(
 		fmt.Sprintf("unable to connect to DB, tried default DB names: %v, errors: %v", strings.Join(defaultDatabaseNames, ","), errors),

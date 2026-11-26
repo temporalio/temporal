@@ -68,7 +68,7 @@ func NewDatabaseHandle(
 	return handle
 }
 
-// Close and reopen the underlying database connection
+// Refresh the underlying database connections.
 func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 	h.Lock()
 	defer h.Unlock()
@@ -84,11 +84,6 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 			// Another goroutine already reconnected
 			return prevConn
 		}
-
-		h.db.Store(nil)
-		// Store `nil` to prevent other goroutines from slamming the now-unusable database with
-		// transactions we know will fail
-		go prevConn.Close()
 	}
 
 	metrics.PersistenceSessionRefreshAttempts.With(h.metrics).Record(1)
@@ -100,10 +95,22 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 			tag.Duration("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := h.metrics.WithTags(metrics.FailureTag("throttle"))
 		metrics.PersistenceSessionRefreshFailures.With(handler).Record(1)
-		return nil
+		return prevConn
 	}
 
 	h.lastRefresh = now
+	if prevConn != nil {
+		if refresher, ok := prevConn.Driver().(interface{ Refresh() }); ok {
+			refresher.Refresh()
+			return prevConn
+		}
+		h.db.Store(nil)
+		go func() {
+			if err := prevConn.Close(); err != nil {
+				h.logger.Warn("sql handle: unable to close database connection pool", tag.Error(err))
+			}
+		}()
+	}
 	newConn, err := h.connect()
 	if err != nil {
 		h.logger.Error("sql handle: unable to refresh database connection pool", tag.Error(err))
@@ -155,6 +162,16 @@ func (h *DatabaseHandle) Conn() Conn {
 }
 
 func (h *DatabaseHandle) ConvertError(err error) error {
+	dialErr, dialFailure := errors.AsType[*connectError](err)
+	if dialFailure {
+		err = dialErr.err
+		if dialErr.reportable && dialErr.reported.CompareAndSwap(false, true) {
+			h.logger.Error("sql handle: unable to open database connection", tag.Error(err))
+			metrics.PersistenceSessionRefreshAttempts.With(h.metrics).Record(1)
+			handler := h.metrics.WithTags(metrics.FailureTag("error"))
+			metrics.PersistenceSessionRefreshFailures.With(handler).Record(1)
+		}
+	}
 	if h.needsRefresh(err) ||
 		errors.Is(err, driver.ErrBadConn) ||
 		errors.Is(err, io.ErrUnexpectedEOF) ||
@@ -162,7 +179,9 @@ func (h *DatabaseHandle) ConvertError(err error) error {
 		errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, syscall.ECONNREFUSED) {
-		h.reconnect(true)
+		if !dialFailure {
+			h.reconnect(true)
+		}
 		return serviceerror.NewUnavailablef("database connection lost: %s", err.Error())
 	}
 	return err
