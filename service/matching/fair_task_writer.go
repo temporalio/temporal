@@ -177,8 +177,8 @@ func (w *fairTaskWriter) taskWriterLoop() {
 		select {
 		case <-w.backlogMgr.tqCtx.Done():
 			if emittedKeyCount {
-				// zero the gauge so a stale value doesn't persist after unload
-				w.recordFairnessKeyCountGauge(0)
+				// clear the gauge so a stale value doesn't persist after unload
+				w.clearFairnessKeyCountGauge()
 			}
 			return
 		case req := <-w.appendCh:
@@ -291,11 +291,22 @@ func (w *fairTaskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, erro
 // gauges, it's only meaningful when broken down by partition (gauges from different partitions
 // can't be aggregated).
 func (w *fairTaskWriter) recordFairnessKeyCountGauge(count int64) {
-	if !w.config.BreakdownMetricsByTaskQueue() || !w.config.BreakdownMetricsByPartition() ||
-		(w.db.queue.IsVersioned() && !w.config.BreakdownMetricsByBuildID()) {
+	if !w.shouldEmitFairnessKeyCountGauge() {
 		return
 	}
 	metrics.FairnessKeyCountEstimate.With(w.backlogMgr.metricsHandler).Record(float64(count))
+}
+
+func (w *fairTaskWriter) clearFairnessKeyCountGauge() {
+	if !w.shouldEmitFairnessKeyCountGauge() {
+		return
+	}
+	clearGauge(w.config.RemoveGaugesOnUnload(), metrics.FairnessKeyCountEstimate.With(w.backlogMgr.metricsHandler))
+}
+
+func (w *fairTaskWriter) shouldEmitFairnessKeyCountGauge() bool {
+	return w.config.BreakdownMetricsByTaskQueue() && w.config.BreakdownMetricsByPartition() &&
+		(!w.db.queue.IsVersioned() || w.config.BreakdownMetricsByBuildID())
 }
 
 // getFairnessKeyCountEstimate returns the estimated number of distinct fairness keys for a
