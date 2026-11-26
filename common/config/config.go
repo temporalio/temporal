@@ -53,7 +53,7 @@ type (
 		ExporterConfig telemetry.ExportConfig `yaml:"otel"`
 		// Visibility related config
 		Visibility Visibility `yaml:"visibility"`
-		// Failpoints is the static switch for failpoints, see Failpoints
+		// Failpoints related config
 		Failpoints Failpoints `yaml:"failpoints"`
 	}
 
