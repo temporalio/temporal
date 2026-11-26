@@ -44,19 +44,60 @@ func isSchedulerSentinel(ctx context.Context, namespaceID, scheduleID string) (b
 	)
 }
 
+// replaceOwnSentinel closes a sentinel that was written on behalf of the same
+// CreateSchedule request (by a V1-path frontend during a mixed-version window),
+// so the real scheduler can take the key. The CHASM path wins this tiebreak;
+// the V1 path defers (see the frontend's createScheduleWorkflow).
+func replaceOwnSentinel(ctx context.Context, namespaceID, scheduleID, runID string) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](chasm.ExecutionKey{
+			NamespaceID: namespaceID,
+			BusinessID:  scheduleID,
+			RunID:       runID,
+		}),
+		func(s *Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			if !s.IsSentinel() {
+				return struct{}{}, serviceerror.NewAlreadyExistsf("schedule %q is already registered", scheduleID)
+			}
+			if !s.Closed {
+				s.getOrCreateEventLog(ctx).LogEvent(ctx, "sentinel closed: replaced by CHASM create from the same request")
+				s.Closed = true
+			}
+			return struct{}{}, nil
+		},
+		struct{}{},
+	)
+	return err
+}
+
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	_, err = chasm.StartExecution(
-		ctx,
-		chasm.ExecutionKey{
-			NamespaceID: req.NamespaceId,
-			BusinessID:  req.FrontendRequest.ScheduleId,
-		},
-		CreateScheduler,
-		req,
-		chasm.WithRequestID(req.FrontendRequest.RequestId),
-	)
+	requestID := req.FrontendRequest.RequestId
+	start := func() error {
+		_, err := chasm.StartExecution(
+			ctx,
+			chasm.ExecutionKey{
+				NamespaceID: req.NamespaceId,
+				BusinessID:  req.FrontendRequest.ScheduleId,
+			},
+			CreateScheduler,
+			req,
+			chasm.WithRequestID(requestID),
+		)
+		return err
+	}
+
+	err = start()
+	if alreadyStarted, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok &&
+		requestID != "" && alreadyStarted.CurrentRequestID == SentinelRequestID(requestID) {
+		h.logger.Info("CreateSchedule replacing sentinel written by the same request",
+			tag.ScheduleID(req.FrontendRequest.ScheduleId))
+		if err = replaceOwnSentinel(ctx, req.NamespaceId, req.FrontendRequest.ScheduleId, alreadyStarted.CurrentRunID); err == nil {
+			err = start()
+		}
+	}
 
 	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 		// Check if the existing schedule is a sentinel.
@@ -128,9 +169,15 @@ func (h *handler) CreateSentinel(ctx context.Context, req *schedulerpb.CreateSen
 		},
 		CreateSentinelFn,
 		req,
+		chasm.WithRequestID(SentinelRequestID(req.RequestId)),
 	)
 
-	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
+	if alreadyStarted, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
+		// A real scheduler created by this same CreateSchedule request means an
+		// earlier attempt already succeeded on the CHASM path.
+		if req.RequestId != "" && alreadyStarted.CurrentRequestID == req.RequestId {
+			return &schedulerpb.CreateSentinelResponse{CreatedByRequest: true}, nil
+		}
 		// If a sentinel already exists, succeed idempotently.
 		// If a real scheduler exists, fail.
 		_, readErr := chasm.ReadComponent(

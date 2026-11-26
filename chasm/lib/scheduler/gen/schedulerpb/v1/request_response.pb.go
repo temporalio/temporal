@@ -697,9 +697,13 @@ func (*CreateFromMigrationStateResponse) Descriptor() ([]byte, []int) {
 type CreateSentinelRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
-	NamespaceId   string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Namespace     string `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	ScheduleId    string `protobuf:"bytes,3,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Namespace   string `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	ScheduleId  string `protobuf:"bytes,3,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	// The CreateSchedule request ID this sentinel is written on behalf of. When
+	// set, a CHASM create retried with the same request ID recognizes (and
+	// replaces) this sentinel instead of treating it as a foreign reservation.
+	RequestId     string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -755,10 +759,21 @@ func (x *CreateSentinelRequest) GetScheduleId() string {
 	return ""
 }
 
+func (x *CreateSentinelRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
 type CreateSentinelResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// True when the key already holds a real scheduler created by the same
+	// CreateSchedule request (request_id): a retry that already succeeded on the
+	// CHASM path.
+	CreatedByRequest bool `protobuf:"varint,1,opt,name=created_by_request,json=createdByRequest,proto3" json:"created_by_request,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CreateSentinelResponse) Reset() {
@@ -789,6 +804,13 @@ func (x *CreateSentinelResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use CreateSentinelResponse.ProtoReflect.Descriptor instead.
 func (*CreateSentinelResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CreateSentinelResponse) GetCreatedByRequest() bool {
+	if x != nil {
+		return x.CreatedByRequest
+	}
+	return false
 }
 
 type MigrateToWorkflowRequest struct {
@@ -937,13 +959,16 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_r
 	"\x1fCreateFromMigrationStateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12[\n" +
 	"\x05state\x18\x02 \x01(\v2E.temporal.server.chasm.lib.scheduler.proto.v1.SchedulerMigrationStateR\x05state\"\"\n" +
-	" CreateFromMigrationStateResponse\"y\n" +
+	" CreateFromMigrationStateResponse\"\x98\x01\n" +
 	"\x15CreateSentinelRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vschedule_id\x18\x03 \x01(\tR\n" +
-	"scheduleId\"\x18\n" +
-	"\x16CreateSentinelResponse\"\x99\x01\n" +
+	"scheduleId\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\"F\n" +
+	"\x16CreateSentinelResponse\x12,\n" +
+	"\x12created_by_request\x18\x01 \x01(\bR\x10createdByRequest\"\x99\x01\n" +
 	"\x18MigrateToWorkflowRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +

@@ -84,6 +84,17 @@ func TestCHASMSchedulerRoutingAndCreationGates(t *testing.T) {
 	}
 }
 
+func TestCHASMSchedulerCreationEnabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	wh := &WorkflowHandler{config: NewConfig(dc.NewNoopCollection(), 1)}
+	ctx := context.Background()
+
+	require.True(t, wh.chasmSchedulerCreationEnabled(ctx, "test-namespace", "test-schedule"))
+	require.True(t, wh.chasmSchedulerEnabled(ctx, "test-namespace"))
+	require.True(t, wh.scheduleSentinelsEnabled("test-namespace"))
+}
+
 func TestListSchedulesChasmPreservesV2ScheduleIDs(t *testing.T) {
 	controller := gomock.NewController(t)
 	chasmVisibilityManager := chasm.NewMockVisibilityManager(controller)

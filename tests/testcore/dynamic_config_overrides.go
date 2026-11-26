@@ -80,11 +80,10 @@ var (
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
 
-		// CHASM scheduler rollout percents default to 0 in production; in tests we
-		// dial them to 100 so existing tests that only flip the binary enable flag
-		// continue to route every schedule through CHASM. Tests that want to
-		// exercise the percent gate can override per-test.
-		dynamicconfig.CHASMSchedulerCreationRolloutPercent.Key():  100,
+		// The CHASM scheduler migration rollout percent defaults to 0 in production;
+		// in tests we dial it to 100 so tests that only flip the binary enable flag
+		// migrate every schedule. Tests that want to exercise the percent gate can
+		// override per-test.
 		dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Key(): 100,
 	}
 )

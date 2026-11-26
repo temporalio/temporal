@@ -89,6 +89,11 @@ func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 
 func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv {
 	t.Helper()
+	// CHASM creation is on by default; these tests opt into V2 via the experiment
+	// header, so pin V1 creation unless the caller overrides it.
+	opts = append([]testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
+	}, opts...)
 	opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}))
 	env := testcore.NewEnv(t, opts...)
 	t.Cleanup(func() {
@@ -6108,6 +6113,52 @@ func (s *ScheduleSuite) TestUpdateScheduleBlobSizeLimit(chasmEnabled bool) {
 	})
 	var invalidArgBlob *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgBlob)
+}
+
+// TestScheduleCreationDefaultsToCHASM verifies that, with no dynamic config
+// overrides or experiment header, CreateSchedule lands on the CHASM scheduler.
+func (s *ScheduleCHASMSuite) TestScheduleCreationDefaultsToCHASM() {
+	t := s.T()
+	// Bypass newScheduleEnv, which pins V1 creation.
+	env := testcore.NewEnv(t)
+	nsName := env.Namespace().String()
+	sid := testcore.RandomizeStr("sched-default-chasm")
+
+	_, err := env.FrontendClient().CreateSchedule(s.Context(), &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   testcore.RandomizeStr("wid"),
+						WorkflowType: &commonpb.WorkflowType{Name: testcore.RandomizeStr("wt")},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		Identity:  testcore.RandomizeStr("identity"),
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(s.Context(), &schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     env.NamespaceID().String(),
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		})
+		s.NoError(err)
+	}, 15*time.Second, 250*time.Millisecond, "schedule %q should be created on CHASM by default", sid)
+
+	_, err = env.FrontendClient().DeleteSchedule(s.Context(), &workflowservice.DeleteScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
 }
 
 // TestScheduleCreationRolloutPercent verifies that
