@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -669,7 +670,12 @@ func (tm *priTaskMatcher) pollForSingleSessionWorker(ctx context.Context, pollMe
 		return nil, err
 	}
 	if err := tm.assignExclusiveWorker(); err != nil {
-		return nil, err
+		// The workflow is acquired, but persisting this queue's exclusive assignment failed. Returning the error would
+		// drop a task History already started for this worker, so the task is returned and the failure is logged:
+		// until the next metadata write succeeds, the assignment exists only in memory, and losing this partition
+		// before then would let the stable identity acquire a second workflow.
+		tm.logger.Warn("Failed to persist the exclusive worker assignment; it is held in memory until the next metadata write",
+			tag.Error(err))
 	}
 	return task, nil
 }
