@@ -1304,18 +1304,21 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 
 /*
 TestQueryWorkflowAssignedStickyWithoutPollers tests queries while the session worker is absent:
-1. Prepare assigned and ordinary sticky queues, both loaded and unloaded, without pollers.
-2. Verify ordinary sticky queues return StickyWorkerUnavailable.
-3. Verify assigned queues load if needed and hold the query until a poller arrives.
-4. Poll the query, answer it, and verify the waiting caller receives the answer.
+ 1. Prepare assigned and ordinary sticky queues, both loaded and unloaded, without pollers.
+ 2. Verify ordinary sticky queues return StickyWorkerUnavailable.
+ 3. Verify queries with an exclusive session directive load the queue if needed and hold the query until a poller
+    arrives, trusting the directive without reading the queue's metadata.
+ 4. Poll the query, answer it, and verify the waiting caller receives the answer.
 */
 func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
 	for _, tc := range []struct {
 		name             string
 		assigned, loaded bool
+		directive        bool // History sends an exclusive session directive
 	}{
-		{name: "assigned unloaded", assigned: true},
-		{name: "assigned loaded", assigned: true, loaded: true},
+		{name: "assigned unloaded", assigned: true, directive: true},
+		{name: "assigned loaded", assigned: true, loaded: true, directive: true},
+		{name: "directive without persisted assignment", directive: true},
 		{name: "ordinary unloaded"},
 		{name: "ordinary loaded", loaded: true},
 	} {
@@ -1346,7 +1349,10 @@ func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
 					Query: &querypb.WorkflowQuery{QueryType: "q"},
 				},
 			}
-			if !tc.assigned {
+			if tc.directive {
+				request.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: true}
+			}
+			if !tc.directive {
 				_, err := s.matchingEngine.QueryWorkflow(ctx, request)
 				require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
 				pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)

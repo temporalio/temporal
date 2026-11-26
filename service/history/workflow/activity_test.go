@@ -15,7 +15,6 @@ import (
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
@@ -691,21 +690,23 @@ func (s *activitySuite) TestActivitySessionMembershipSurvivesHistoryAndRetry() {
 
 func (s *activitySuite) TestActivityTaskQueue() {
 	inSession := &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
+	multiSession := &persistencespb.SessionState{}
 	for _, tc := range []struct {
 		name          string
 		activityState *persistencespb.ActivitySessionState
 		sessionState  *persistencespb.SessionState
 		wantSticky    bool
 	}{
-		{name: "not a session activity", sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}},
-		{name: "empty activity session state", activityState: &persistencespb.ActivitySessionState{}, sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}},
-		{name: "session activity follows the bound worker", activityState: inSession, sessionState: &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}, wantSticky: true},
-		{name: "exclusive binding", activityState: inSession, sessionState: &persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "X"}}, wantSticky: true},
-		{name: "unbound workflow uses the normal queue", activityState: inSession, sessionState: &persistencespb.SessionState{}},
+		{name: "not a session activity", sessionState: multiSession},
+		{name: "empty activity session state", activityState: &persistencespb.ActivitySessionState{}, sessionState: multiSession},
+		{name: "session activity follows the bound worker", activityState: inSession, sessionState: multiSession, wantSticky: true},
+		{name: "exclusive binding", activityState: inSession, sessionState: &persistencespb.SessionState{ExclusiveWorker: true}, wantSticky: true},
+		{name: "unbound workflow uses the normal queue", activityState: inSession},
 	} {
 		s.Run(tc.name, func() {
 			s.SetupTest()
 			s.mutableState.GetExecutionInfo().SessionState = tc.sessionState
+			s.mutableState.GetExecutionInfo().StickyTaskQueue = "X"
 			ai := &persistencespb.ActivityInfo{TaskQueue: "task-queue", SessionState: tc.activityState}
 			expected := &taskqueuepb.TaskQueue{Name: "task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 			if tc.wantSticky {

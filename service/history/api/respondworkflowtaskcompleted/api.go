@@ -214,11 +214,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	executionInfo := ms.GetExecutionInfo()
-	sessionState := executionInfo.GetSessionState()
-	if sessionState.GetExclusiveWorker() {
+	if ms.HasExclusiveBinding() {
 		requestedStickyQueue := request.GetStickyAttributes().GetWorkerTaskQueue()
-		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != sessionState.GetBoundWorkerInfo().GetWorkerQueue() {
+		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != ms.SessionWorkerQueue() {
 			releaseLeaseWithError = false
 			return nil, serviceerror.NewInvalidArgument("workflow is bound to another single-session destination")
 		}
@@ -366,7 +364,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				return nil, err
 			}
 			// A slow but alive bound worker keeps the binding; only its death moves the workflow.
-			ms.ClearStickyTaskQueueUnlessPartOfSession()
+			ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure)
 			wtHeartbeatTimedOut = true
 		}
 	}
@@ -385,7 +383,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
 		// The binding, not the worker's cache, decides where a bound workflow's tasks go.
-		ms.ClearStickyTaskQueueUnlessPartOfSession()
+		ms.ClearStickyTaskQueue(historyi.StickyClearForCacheDisabled)
 	} else {
 		metrics.CompleteWorkflowTaskWithStickyEnabledCounter.With(handler.metricsHandler).Record(
 			1,
@@ -1213,7 +1211,7 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 	if err != nil {
 		return err
 	}
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure)
 	err = wfContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 	if err != nil {
 		return err
