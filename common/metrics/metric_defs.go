@@ -1889,6 +1889,20 @@ var (
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
 	WorkflowTargetVersionChangedCount                 = NewCounterDef("workflow_target_version_changed_count")
 
+	// Workflow sessions
+	WorkflowBoundToSessionWorkerCounter = NewCounterDef(
+		"workflow_bound_to_session_worker",
+		WithDescription("Workflows that use sessions, by session mode: counted once per workflow, when a single-session worker acquires it or a multi-session worker binds it before its first workflow task completes. Later binding changes are counted by workflow_binding_change."),
+	)
+	WorkflowBindingChangeCounter = NewCounterDef(
+		"workflow_binding_change",
+		WithDescription("Binding changes of workflows on multi-session workers after their first bind, by change: move (bound to another worker, or bound again after an unbind) or unbind (the bound worker is gone, or a worker without sessions took over)."),
+	)
+	SessionWorkerQueueDrainCounter = NewCounterDef(
+		"session_worker_queue_drain",
+		WithDescription("Drains of a dead multi-session worker's sticky queue, by outcome: completed (emptied and unloaded), stopped (ended early; the drain is best effort), or start_failed."),
+	)
+
 	// Continue-as-new
 	WorkflowContinueAsNewCount        = NewCounterDef("workflow_continue_as_new_count")
 	WorkflowSuggestContinueAsNewCount = NewCounterDef("workflow_suggest_continue_as_new_count")

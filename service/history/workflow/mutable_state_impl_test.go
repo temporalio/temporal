@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payloads"
@@ -10703,7 +10704,10 @@ func TestSetStickyTaskQueuePreservesExclusiveBinding(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ms := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+			ms := &MutableStateImpl{
+				executionInfo:  &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"},
+				namespaceEntry: tests.LocalNamespaceEntry, metricsHandler: metrics.NoopMetricsHandler,
+			}
 			ms.BindExclusiveWorker("S")
 
 			ms.setStickyTaskQueueAndBinding(tc.queue, durationpb.New(time.Second), tc.state)
@@ -10806,7 +10810,10 @@ func TestClearStickyTaskQueue(t *testing.T) {
 				require.Empty(t, multi.executionInfo.GetStickyTaskQueue())
 			}
 
-			single := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+			single := &MutableStateImpl{
+				executionInfo:  &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"},
+				namespaceEntry: tests.LocalNamespaceEntry, metricsHandler: metrics.NoopMetricsHandler,
+			}
 			single.BindExclusiveWorker("S")
 			require.False(t, single.ClearStickyTaskQueue(reason))
 			require.Equal(t, "S", single.SessionWorkerQueue())
@@ -10915,11 +10922,14 @@ func TestSingleSessionStickyPolicy(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ms := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{
-				TaskQueue: "foo", StickyTaskQueue: tc.stickyQueue,
-				StickyScheduleToStartTimeout: durationpb.New(time.Second),
-				WorkflowRunTimeout:           durationpb.New(time.Hour),
-			}}
+			ms := &MutableStateImpl{
+				executionInfo: &persistencespb.WorkflowExecutionInfo{
+					TaskQueue: "foo", StickyTaskQueue: tc.stickyQueue,
+					StickyScheduleToStartTimeout: durationpb.New(time.Second),
+					WorkflowRunTimeout:           durationpb.New(time.Hour),
+				},
+				namespaceEntry: tests.LocalNamespaceEntry, metricsHandler: metrics.NoopMetricsHandler,
+			}
 			if tc.bound {
 				ms.BindExclusiveWorker("S")
 				require.True(t, ms.executionInfo.GetSessionState().GetExclusiveWorker())
@@ -11314,12 +11324,17 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 		wantSessionState          *persistencespb.SessionState
 		wantSticky                string
 		wantReschedule            bool
+		completedWorkflowTask     bool
+		wantAdopted               bool   // recorded on WorkflowBoundToSessionWorkerCounter
+		wantChange                string // recorded on WorkflowBindingChangeCounter
 	}{
 		{name: "never a session"},
 		{name: "first bind", options: multiSession, workerInstanceKey: "X",
-			wantUpdated: true, wantSessionState: multi, wantSticky: "X", wantReschedule: true},
+			wantUpdated: true, wantSessionState: multi, wantSticky: "X", wantReschedule: true, wantAdopted: true},
 		{name: "first bind replaces an ordinary sticky queue", options: multiSession, workerInstanceKey: "X", stickyTaskQueue: "W",
-			wantUpdated: true, wantSessionState: multi, wantSticky: "X", wantReschedule: true},
+			wantUpdated: true, wantSessionState: multi, wantSticky: "X", wantReschedule: true, wantAdopted: true},
+		{name: "bind after the first workflow task is a move", options: multiSession, workerInstanceKey: "X", completedWorkflowTask: true,
+			wantUpdated: true, wantSessionState: multi, wantSticky: "X", wantReschedule: true, wantChange: "move"},
 		{name: "same worker on its sticky queue", options: multiSession, workerInstanceKey: "X", sessionState: multi,
 			stickyTaskQueue: "X", previousWorkerStickyQueue: "X",
 			wantSessionState: multi, wantSticky: "X"},
@@ -11327,11 +11342,11 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 			previousWorkerStickyQueue: "X",
 			wantSessionState:          multi, wantSticky: "X"},
 		{name: "move to another worker", options: multiSession, workerInstanceKey: "Y", previousWorkerStickyQueue: "X",
-			wantUpdated: true, wantSessionState: multi, wantSticky: "Y", wantReschedule: true},
+			wantUpdated: true, wantSessionState: multi, wantSticky: "Y", wantReschedule: true, wantChange: "move"},
 		{name: "worker without sessions unbinds", workerInstanceKey: "N", previousWorkerStickyQueue: "X",
-			wantUpdated: true, wantReschedule: true},
+			wantUpdated: true, wantReschedule: true, wantChange: "unbind"},
 		{name: "drained worker is unbound without a start", sessionState: multi, stickyTaskQueue: "X",
-			previousWorkerStickyQueue: "X", wantUpdated: true, wantReschedule: true},
+			previousWorkerStickyQueue: "X", wantUpdated: true, wantReschedule: true, wantChange: "unbind"},
 		{name: "exclusive binding is untouched", options: multiSession, workerInstanceKey: "Y", sessionState: single,
 			stickyTaskQueue: "S", previousWorkerStickyQueue: "S",
 			wantSessionState: single, wantSticky: "S"},
@@ -11343,8 +11358,15 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 			s.SetupTest()
 			s.mutableState.executionInfo.SessionState = common.CloneProto(tc.sessionState)
 			s.mutableState.executionInfo.StickyTaskQueue = tc.stickyTaskQueue
+			if tc.completedWorkflowTask {
+				s.mutableState.executionInfo.LastCompletedWorkflowTaskStartedEventId = 3
+			}
 			activity := s.addSessionTestActivity(10, true)
 			stampBefore := activity.Stamp
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.mutableState.metricsHandler = metricsHandler
 
 			updated, err := s.mutableState.UpdateNonExclusiveWorkerBinding(tc.options, tc.workerInstanceKey, tc.previousWorkerStickyQueue)
 
@@ -11360,8 +11382,45 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 				s.Equal(stampBefore, activity.Stamp)
 				s.Empty(s.activityTransferTasks())
 			}
+			adoptions := capture.SnapshotMetric(metrics.WorkflowBoundToSessionWorkerCounter.Name())
+			if tc.wantAdopted {
+				s.Require().Len(adoptions, 1)
+				s.Equal(int64(1), adoptions[0].Value)
+				s.Equal("multi", adoptions[0].Tags["session_mode"])
+			} else {
+				s.Empty(adoptions)
+			}
+			changes := capture.SnapshotMetric(metrics.WorkflowBindingChangeCounter.Name())
+			if tc.wantChange != "" {
+				s.Require().Len(changes, 1)
+				s.Equal(int64(1), changes[0].Value)
+				s.Equal(tc.wantChange, changes[0].Tags["change"])
+			} else {
+				s.Empty(changes)
+			}
 		})
 	}
+}
+
+/*
+TestBindExclusiveWorkerCountsBinding tests that a single-session acquisition is counted once:
+ 1. Bind an unbound workflow to single-session worker S: one recording with session_mode single.
+ 2. Bind it again, as a retried acquisition would: no further recording, since the workflow was already bound.
+*/
+func (s *mutableStateSuite) TestBindExclusiveWorkerCountsBinding() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mutableState.metricsHandler = metricsHandler
+
+	s.mutableState.BindExclusiveWorker("S")
+	s.mutableState.BindExclusiveWorker("S")
+
+	recordings := capture.SnapshotMetric(metrics.WorkflowBoundToSessionWorkerCounter.Name())
+	s.Require().Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal("single", recordings[0].Tags["session_mode"])
+	s.True(s.mutableState.HasExclusiveBinding())
 }
 
 /*

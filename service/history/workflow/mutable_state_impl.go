@@ -1500,7 +1500,31 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 
 // BindExclusiveWorker binds the workflow to a single-session worker, whose sticky queue is its stable identity.
 func (ms *MutableStateImpl) BindExclusiveWorker(stableIdentity string) {
+	if !ms.HasExclusiveBinding() {
+		ms.recordSessionBound(true)
+	}
 	ms.setStickyTaskQueueAndBinding(stableIdentity, nil, &persistencespb.SessionState{ExclusiveWorker: true})
+}
+
+// recordSessionBound counts a workflow that starts using sessions; each workflow is counted once.
+func (ms *MutableStateImpl) recordSessionBound(exclusive bool) {
+	metrics.WorkflowBoundToSessionWorkerCounter.With(ms.metricsHandler).Record(1,
+		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+		metrics.SessionModeTag(exclusive),
+	)
+}
+
+const (
+	bindingChangeMove   = "move"
+	bindingChangeUnbind = "unbind"
+)
+
+// recordBindingChange counts a change of a workflow's binding to a multi-session worker after its first bind.
+func (ms *MutableStateImpl) recordBindingChange(change string) {
+	metrics.WorkflowBindingChangeCounter.With(ms.metricsHandler).Record(1,
+		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+		metrics.BindingChangeTag(change),
+	)
 }
 
 // setStickyTaskQueueAndBinding is the only writer of the sticky queue and the session binding. For a workflow bound
@@ -1632,6 +1656,7 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 		return false, nil
 	case newWorkerStickyQueue == "":
 		// Unbind: a worker that can't service sessions took over, or the bound worker was reported dead.
+		ms.recordBindingChange(bindingChangeUnbind)
 		ms.ClearStickyTaskQueue(historyi.StickyClearForBoundWorkerLost)
 	case newWorkerStickyQueue == previousWorkerStickyQueue:
 		// Restore: the bound worker started the task from the normal queue (Matching briefly saw it as dead, or after a
@@ -1641,6 +1666,11 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 		return false, nil
 	default:
 		// Bind or move: first bind, rebind after an unbind, or move to another worker.
+		if previousWorkerStickyQueue == "" && !ms.HasCompletedAnyWorkflowTask() {
+			ms.recordSessionBound(false)
+		} else {
+			ms.recordBindingChange(bindingChangeMove)
+		}
 		ms.setStickyTaskQueueAndBinding(newWorkerStickyQueue, nil, &persistencespb.SessionState{})
 	}
 	// A workflow task start leaves nothing to reschedule here: its own task is already started. An activity start

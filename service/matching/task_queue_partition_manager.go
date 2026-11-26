@@ -2103,9 +2103,11 @@ func (pm *taskQueuePartitionManagerImpl) StartSessionWorkerQueueDrain() {
 	}
 	dbq.StartSessionWorkerQueueDrain(func(drained bool) {
 		if drained {
+			recordSessionWorkerQueueDrain(pm.engine.metricsHandler, pm.ns.Name().String(), sessionWorkerQueueDrainCompleted)
 			pm.unloadFromEngine(unloadCauseSessionWorkerQueueDrained)
 			return
 		}
+		recordSessionWorkerQueueDrain(pm.engine.metricsHandler, pm.ns.Name().String(), sessionWorkerQueueDrainStopped)
 		pm.sessionWorkerQueueDraining.Store(false)
 	})
 }

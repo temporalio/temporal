@@ -7735,6 +7735,15 @@ func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
 			t := s.T()
 			ctx := t.Context()
 			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			// The engine reads its metrics handler from background goroutines, so a capturing engine is built
+			// before it starts rather than swapped in.
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.matchingEngine.Stop()
+			s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
+			s.matchingEngine.metricsHandler = metricsHandler
+			s.matchingEngine.Start()
 			require.NoError(t, addTask(ctx, tv, taskType))
 
 			release := make(chan struct{})
@@ -7755,6 +7764,10 @@ func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
 
 			close(release)
 			await.RequireTrue(t, func() bool { return loaded(ctx, tv, taskType) == nil }, 10*time.Second, 50*time.Millisecond)
+			recordings := capture.SnapshotMetric(metrics.SessionWorkerQueueDrainCounter.Name())
+			require.Len(t, recordings, 1, "a completed drain is counted once")
+			require.Equal(t, sessionWorkerQueueDrainCompleted, recordings[0].Tags["outcome"])
+			require.Equal(t, s.ns.Name().String(), recordings[0].Tags["namespace"])
 		})
 	}
 

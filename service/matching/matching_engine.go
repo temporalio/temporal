@@ -3031,6 +3031,7 @@ func (e *matchingEngineImpl) DrainSessionWorkerQueue(
 	// No metadata means nothing was ever queued, and an exclusive worker's tasks wait for its replacement.
 	info, err := e.persistedTaskQueueInfo(ctx, partition)
 	if err != nil {
+		recordSessionWorkerQueueDrain(e.metricsHandler, ns.Name().String(), sessionWorkerQueueDrainStartFailed)
 		return nil, err
 	}
 	if info == nil || info.GetExclusiveWorkerAssignment() != nil {
@@ -3039,10 +3040,24 @@ func (e *matchingEngineImpl) DrainSessionWorkerQueue(
 	// An unload at any point stops the drain part-way; the drain is best effort.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseSessionWorkerQueueDrain)
 	if err != nil {
+		recordSessionWorkerQueueDrain(e.metricsHandler, ns.Name().String(), sessionWorkerQueueDrainStartFailed)
 		return nil, err
 	}
 	pm.StartSessionWorkerQueueDrain()
 	return &matchingservice.DrainSessionWorkerQueueResponse{}, nil
+}
+
+// Outcomes of a session worker queue drain, recorded on SessionWorkerQueueDrainCounter.
+const (
+	sessionWorkerQueueDrainCompleted   = "completed"
+	sessionWorkerQueueDrainStopped     = "stopped"
+	sessionWorkerQueueDrainStartFailed = "start_failed"
+)
+
+// recordSessionWorkerQueueDrain counts a drain's outcome. Only the namespace is tagged: a worker's queue name is
+// unbounded.
+func recordSessionWorkerQueueDrain(handler metrics.Handler, namespaceName string, outcome string) {
+	metrics.SessionWorkerQueueDrainCounter.With(handler).Record(1, metrics.NamespaceTag(namespaceName), metrics.OutcomeTag(outcome))
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
