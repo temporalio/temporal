@@ -2440,6 +2440,12 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 		64,
 		`MemoryTimerProcessorSchedulerWorkerCount is the number of workers in the task scheduler for in memory timer processor.`,
 	)
+	MemoryTimerProcessorChasmWakeupSchedulerWorkerCount = NewGlobalIntSetting(
+		"history.memoryTimerProcessorChasmWakeupSchedulerWorkerCount",
+		64,
+		`MemoryTimerProcessorChasmWakeupSchedulerWorkerCount is the number of workers that run CHASM wake-ups in the
+in memory timer processor.`,
+	)
 
 	TransferTaskBatchSize = NewGlobalIntSetting(
 		"history.transferTaskBatchSize",

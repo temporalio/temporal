@@ -116,6 +116,20 @@ func (mr *MockChasmTreeMockRecorder) ArchetypeID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ArchetypeID", reflect.TypeOf((*MockChasmTree)(nil).ArchetypeID))
 }
 
+// ArmMemoryWakeup mocks base method.
+func (m *MockChasmTree) ArmMemoryWakeup() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ArmMemoryWakeup")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ArmMemoryWakeup indicates an expected call of ArmMemoryWakeup.
+func (mr *MockChasmTreeMockRecorder) ArmMemoryWakeup() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ArmMemoryWakeup", reflect.TypeOf((*MockChasmTree)(nil).ArmMemoryWakeup))
+}
+
 // CloseTransaction mocks base method.
 func (m *MockChasmTree) CloseTransaction(ctx context.Context, isActive bool) (chasm.NodesMutation, error) {
 	m.ctrl.T.Helper()
@@ -284,6 +298,21 @@ func (m *MockChasmTree) RefreshTasks() error {
 func (mr *MockChasmTreeMockRecorder) RefreshTasks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockChasmTree)(nil).RefreshTasks))
+}
+
+// RunMemoryWakeup mocks base method.
+func (m *MockChasmTree) RunMemoryWakeup(ctx context.Context, wakeup *tasks.ChasmMemoryWakeupTask, now time.Time) (chasm.MemoryWakeupResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunMemoryWakeup", ctx, wakeup, now)
+	ret0, _ := ret[0].(chasm.MemoryWakeupResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RunMemoryWakeup indicates an expected call of RunMemoryWakeup.
+func (mr *MockChasmTreeMockRecorder) RunMemoryWakeup(ctx, wakeup, now any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunMemoryWakeup", reflect.TypeOf((*MockChasmTree)(nil).RunMemoryWakeup), ctx, wakeup, now)
 }
 
 // Snapshot mocks base method.

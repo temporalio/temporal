@@ -7635,6 +7635,27 @@ func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
 
+// AddMemoryWakeup implements chasm.NodeBackend.
+func (ms *MutableStateImpl) AddMemoryWakeup(
+	fireTime time.Time,
+) (*tasks.ChasmMemoryWakeupTask, error) {
+	taskID, err := ms.shard.GenerateTaskID()
+	if err != nil {
+		return nil, err
+	}
+	task := &tasks.ChasmMemoryWakeupTask{
+		WorkflowKey: ms.GetWorkflowKey(),
+		// fireTime is in the execution's logical time; the in-memory queue runs on wall-clock.
+		VisibilityTimestamp: ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(fireTime),
+		TaskID:              taskID,
+		ArchetypeID:         ms.ChasmTree().ArchetypeID(),
+	}
+	if err := ms.shard.AddChasmMemoryWakeup(task); err != nil {
+		return nil, err
+	}
+	return task, nil
+}
+
 func (ms *MutableStateImpl) CheckSpeculativeWorkflowTaskTimeoutTask(
 	task *tasks.WorkflowTaskTimeoutTask,
 ) bool {
