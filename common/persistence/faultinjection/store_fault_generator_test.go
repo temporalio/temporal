@@ -163,3 +163,56 @@ func TestFaultInjection_StoreNotConfigured(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp2)
 }
+
+func TestFaultInjection_RuntimeInjectors(t *testing.T) {
+	t.Parallel()
+
+	request := &persistence.GetWorkflowExecutionRequest{NamespaceID: "ns"}
+	var calls []string
+	record := func(name string, err error) config.FaultInjector {
+		return func(target config.FaultInjectionTarget) error {
+			require.Equal(t, config.FaultInjectionTarget{Store: config.ExecutionStoreName, Method: "GetWorkflowExecution", Request: request}, target)
+			calls = append(calls, name)
+			return err
+		}
+	}
+	errExtra := errors.New("extra")
+
+	ctrl := gomock.NewController(t)
+	baseFactory := mock.NewMockDataStoreFactory(ctrl)
+	baseStore := mock.NewMockExecutionStore(ctrl)
+	baseFactory.EXPECT().NewExecutionStore().Return(baseStore, nil)
+
+	// The injector of the config runs first, then the injectors passed to the factory, until one fails.
+	factory := NewFaultInjectionDatastoreFactory(
+		&config.FaultInjection{Injector: record("config", nil)},
+		baseFactory,
+		record("first", nil),
+		nil,
+		record("second", errExtra),
+		record("third", nil),
+	)
+	store, err := factory.NewExecutionStore()
+	require.NoError(t, err)
+
+	_, err = store.GetWorkflowExecution(context.Background(), request)
+	require.ErrorContains(t, err, errExtra.Error())
+	require.Equal(t, []string{"config", "first", "second"}, calls)
+}
+
+func TestFaultInjection_RuntimeInjectorWithoutConfig(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	baseFactory := mock.NewMockDataStoreFactory(ctrl)
+	baseStore := mock.NewMockExecutionStore(ctrl)
+	baseFactory.EXPECT().NewExecutionStore().Return(baseStore, nil)
+
+	errInjected := errors.New("injected")
+	factory := NewFaultInjectionDatastoreFactory(nil, baseFactory, func(config.FaultInjectionTarget) error { return errInjected })
+	store, err := factory.NewExecutionStore()
+	require.NoError(t, err)
+
+	_, err = store.GetWorkflowExecution(context.Background(), &persistence.GetWorkflowExecutionRequest{})
+	require.ErrorContains(t, err, errInjected.Error())
+}
