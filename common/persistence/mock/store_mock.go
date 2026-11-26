@@ -282,6 +282,21 @@ func (mr *MockShardStoreMockRecorder) GetOrCreateShard(ctx, request any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateShard", reflect.TypeOf((*MockShardStore)(nil).GetOrCreateShard), ctx, request)
 }
 
+// GetShard mocks base method.
+func (m *MockShardStore) GetShard(ctx context.Context, request *persistence.GetShardRequest) (*persistence.InternalGetShardResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShard", ctx, request)
+	ret0, _ := ret[0].(*persistence.InternalGetShardResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetShard indicates an expected call of GetShard.
+func (mr *MockShardStoreMockRecorder) GetShard(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockShardStore)(nil).GetShard), ctx, request)
+}
+
 // UpdateShard mocks base method.
 func (m *MockShardStore) UpdateShard(ctx context.Context, request *persistence.InternalUpdateShardRequest) error {
 	m.ctrl.T.Helper()

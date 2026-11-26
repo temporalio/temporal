@@ -49,6 +49,15 @@ func (d faultInjectionShardStore) GetOrCreateShard(ctx context.Context, request 
 	return
 }
 
+// GetShard wraps ShardStore.GetShard.
+func (d faultInjectionShardStore) GetShard(ctx context.Context, request *_sourcePersistence.GetShardRequest) (ip1 *_sourcePersistence.InternalGetShardResponse, err error) {
+	err = d.generator.generate("GetShard", request).inject(func() error {
+		ip1, err = d.ShardStore.GetShard(ctx, request)
+		return err
+	})
+	return
+}
+
 // UpdateShard wraps ShardStore.UpdateShard.
 func (d faultInjectionShardStore) UpdateShard(ctx context.Context, request *_sourcePersistence.InternalUpdateShardRequest) (err error) {
 	err = d.generator.generate("UpdateShard", request).inject(func() error {

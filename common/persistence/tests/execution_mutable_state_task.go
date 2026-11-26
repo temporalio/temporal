@@ -93,6 +93,7 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 			RangeId: 1,
 			Owner:   "test-shard-owner",
 		},
+		LifecycleContext: s.Ctx,
 	})
 	s.NoError(err)
 	previousRangeID := resp.ShardInfo.RangeId

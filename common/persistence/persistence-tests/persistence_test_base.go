@@ -321,6 +321,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	_, err = s.ShardMgr.GetOrCreateShard(context.Background(), &persistence.GetOrCreateShardRequest{
 		ShardID:          shardID,
 		InitialShardInfo: s.ShardInfo,
+		LifecycleContext: context.Background(),
 	})
 	s.fatalOnError("CreateShard", err)
 
