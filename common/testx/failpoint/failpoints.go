@@ -29,7 +29,7 @@ type Failpoint[T any] struct {
 	key      Key[T]
 	action   Action
 	value    T
-	callback func() T
+	callback func(arg any) T
 	pauseDur time.Duration
 	// pauseCh is closed to end the pauses of the current configuration early.
 	pauseCh chan struct{}
@@ -87,7 +87,7 @@ func New[T any](key Key[T]) *Failpoint[T] {
 type settings[T any] struct {
 	action   Action
 	value    T
-	callback func() T
+	callback func(arg any) T
 	pauseDur time.Duration
 }
 
@@ -239,6 +239,13 @@ func (f *Failpoint[T]) Return(value T, trigger ...Trigger) {
 // don't wait for callbacks that already started. The optional trigger limits which executions
 // fire, see Failpoint.
 func (f *Failpoint[T]) Call(fn func() T, trigger ...Trigger) {
+	f.CallWithArg(func(any) T { return fn() }, trigger...)
+}
+
+// CallWithArg is Call with a callback that receives the argument of the execution, which the call
+// site passes via ExecuteOptions.Arg, for example the request it is about to handle. Executions
+// without an argument pass nil.
+func (f *Failpoint[T]) CallWithArg(fn func(arg any) T, trigger ...Trigger) {
 	f.installTrigger(settings[T]{action: ActionCall, callback: fn}, trigger)
 }
 
@@ -266,15 +273,22 @@ func (f *Failpoint[T]) Pause(dur time.Duration, trigger ...Trigger) {
 // Execute executes the failpoint. It returns the configured value and whether the failpoint set it.
 // A failpoint configured with On returns the zero value of T and true.
 func (f *Failpoint[T]) Execute() (value T, set bool) {
+	value, set, _ = f.execute(nil)
+	return value, set
+}
+
+// execute is Execute that passes arg to a callback. It also reports whether the failpoint fired,
+// with any action.
+func (f *Failpoint[T]) execute(arg any) (value T, set, fired bool) {
 	f.mu.Lock()
 	if f.action <= ActionNone {
 		f.mu.Unlock()
-		return value, false
+		return value, false, false
 	}
 	action := f.action
 	if !f.fireLocked() {
 		f.mu.Unlock()
-		return value, false
+		return value, false, false
 	}
 
 	// Non-Block actions capture their arguments under the lock, and run without it, so concurrent
@@ -286,9 +300,9 @@ func (f *Failpoint[T]) Execute() (value T, set bool) {
 
 		switch action {
 		case ActionReturn, ActionOn:
-			return configured, true
+			return configured, true, true
 		case ActionCall:
-			return callback(), true
+			return callback(arg), true, true
 		case ActionPause:
 			timer := time.NewTimer(pauseDur)
 			defer timer.Stop()
@@ -298,7 +312,7 @@ func (f *Failpoint[T]) Execute() (value T, set bool) {
 			}
 		default:
 		}
-		return value, false
+		return value, false, true
 	}
 
 	// Mark the first arrival for this block configuration and release the lock while parked.
@@ -310,7 +324,7 @@ func (f *Failpoint[T]) Execute() (value T, set bool) {
 	f.mu.Unlock()
 
 	<-blockCh
-	return value, false
+	return value, false, true
 }
 
 func (f *Failpoint[T]) id() keyID {

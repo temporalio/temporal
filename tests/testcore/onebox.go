@@ -32,10 +32,6 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/rpc/grpcfaults"
-	"go.temporal.io/server/common/rpc/httpfaults"
-	"go.temporal.io/server/common/testing/grpcfaultstest"
-	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/temporal"
@@ -70,8 +66,6 @@ type (
 
 		replicationStreamRecorder *ReplicationStreamRecorder
 		historyTaskRecorder       *HistoryTaskRecorder
-		grpcFaultGenerator        *grpcfaults.CallbackGenerator
-		httpFaultGenerator        *httpfaults.CallbackGenerator
 
 		callbackLock sync.RWMutex
 		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
@@ -138,8 +132,6 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		workerConfig:              params.WorkerConfig,
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
 	}
-	impl.grpcFaultGenerator = grpcfaultstest.NewCallbackGenerator(impl.testHooks)
-	impl.httpFaultGenerator = httpfaultstest.NewCallbackGenerator(impl.testHooks)
 
 	// Base options are independent of which services this test cluster starts.
 	// [Start] adds the per-service config and static host map.
@@ -361,14 +353,6 @@ func (c *temporalImpl) ChasmContext(ctx context.Context) (context.Context, error
 
 func (c *temporalImpl) GetHistoryTaskRecorder() *HistoryTaskRecorder {
 	return c.historyTaskRecorder
-}
-
-func (c *temporalImpl) GetGRPCFaultGenerator() *grpcfaults.CallbackGenerator {
-	return c.grpcFaultGenerator
-}
-
-func (c *temporalImpl) GetHTTPFaultGenerator() *httpfaults.CallbackGenerator {
-	return c.httpFaultGenerator
 }
 
 func (c *temporalImpl) TLSConfigProvider() *encryption.FixedTLSConfigProvider {

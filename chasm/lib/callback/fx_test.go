@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/log"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/testing/testhooks"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/mock/gomock"
 )
@@ -46,7 +45,7 @@ func TestHTTPCallerProviderRejectsRedirects(t *testing.T) {
 				nil,
 				log.NewNoopLogger(),
 				nil,
-				testhooks.NewTestHooks(),
+				nil,
 				&Config{InspectSourceHeader: dynamicconfig.GetBoolPropertyFn(false)},
 			)
 			require.NoError(t, err)

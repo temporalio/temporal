@@ -6,6 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/failpointadapter"
+	"go.temporal.io/server/common/testing/grpcfailpoints"
+	"go.temporal.io/server/common/testing/httpfailpoints"
 	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/fx"
@@ -46,6 +49,29 @@ func TestFailpointRegistryStartupSwitch(t *testing.T) {
 			} else {
 				require.Equal(t, []string{tc.wantMessage}, messages)
 			}
+		})
+	}
+}
+
+// TestFailpointsGenerators checks that transport fault generators are only installed
+// when failpoints are enabled.
+func TestFailpointsGenerators(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		want    bool
+	}{
+		{name: "disabled"},
+		{name: "enabled", enabled: true, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			registry := newFailpointRegistryIfEnabled(tc.enabled, log.NewNoopLogger())
+
+			require.Equal(t, tc.want, grpcfailpoints.NewGenerator(registry, failpointadapter.Namespaces{}, false) != nil)
+			require.Equal(t, tc.want, httpfailpoints.NewGenerator(registry, failpointadapter.Namespaces{}) != nil)
 		})
 	}
 }
