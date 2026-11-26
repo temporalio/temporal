@@ -17,4 +17,7 @@ COPY --chmod=755 ./scripts/sh/entrypoint.sh /etc/temporal/entrypoint.sh
 WORKDIR /etc/temporal
 USER temporal
 
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s \
+    CMD ["/etc/temporal/entrypoint.sh", "healthcheck"]
+
 CMD [ "/etc/temporal/entrypoint.sh" ]
