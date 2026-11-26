@@ -35,27 +35,7 @@ func (s *registrySuite) TestSetGetDelete() {
 	s.Nil(registry.Get(key1))
 }
 
-func (s *registrySuite) TestSetUnwrapsEmbeddedFailpoint() {
-	type wrapped struct {
-		*failpoint.Failpoint[int]
-	}
-
-	registry := failpoint.NewRegistry()
-	fp := failpoint.NewFailpoint[int](intKey)
-	fp.Return(7)
-	registry.Set(wrapped{Failpoint: fp})
-
-	s.Same(fp, registry.Get(intKey))
-	got, fired := failpoint.Execute(registry, intKey)
-	s.True(fired)
-	s.Equal(7, got)
-}
-
 func (s *registrySuite) TestSetRejectsNilAndEmptyKey() {
-	type wrapped struct {
-		*failpoint.Failpoint[int]
-	}
-
 	registry := failpoint.NewRegistry()
 	fp := failpoint.NewFailpoint[int](intKey)
 	fp.Return(42)
@@ -63,7 +43,6 @@ func (s *registrySuite) TestSetRejectsNilAndEmptyKey() {
 
 	s.Panics(func() { registry.Set(nil) })
 	s.Panics(func() { registry.Set((*failpoint.Failpoint[int])(nil)) })
-	s.Panics(func() { registry.Set(wrapped{}) })
 	s.Panics(func() { registry.Set(new(failpoint.Failpoint[int])) })
 	s.Panics(func() { registry.Set(failpoint.NewFailpoint(failpoint.Key[int]{})) })
 

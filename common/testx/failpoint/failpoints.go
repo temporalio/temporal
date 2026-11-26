@@ -75,10 +75,3 @@ func (f *Failpoint[T]) Execute() (t T, fired bool) {
 func (f *Failpoint[T]) id() keyID {
 	return f.key.id()
 }
-
-func (f *Failpoint[T]) unwrap() entry {
-	if f == nil {
-		return nil
-	}
-	return f
-}

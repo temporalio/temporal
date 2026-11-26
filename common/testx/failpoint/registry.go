@@ -11,15 +11,9 @@ import (
 type entry interface {
 	Disable()
 	id() keyID
-	// unwrap returns the underlying *Failpoint[T] so a struct that embeds *Failpoint[T] still
-	// registers as the concrete *Failpoint[T] that Execute expects.
-	unwrap() entry
 }
 
-func unwrapEntry(fp entry) entry {
-	if fp != nil {
-		fp = fp.unwrap()
-	}
+func validateEntry(fp entry) {
 	if fp == nil {
 		//nolint:forbidigo // registering a nil failpoint is a programming error
 		panic("failpoint: nil failpoint")
@@ -28,7 +22,6 @@ func unwrapEntry(fp entry) entry {
 		//nolint:forbidigo // registering a failpoint with an empty key name is a programming error
 		panic("failpoint: empty key name")
 	}
-	return fp
 }
 
 // Registry manages failpoint instances.
@@ -109,7 +102,7 @@ func (r *Registry) lookupLocked(key keyID) (entry, bool) {
 // Set registers fp for its key, replacing the failpoint registered for the key, if any. It panics
 // if fp is nil or its key has an empty name.
 func (r *Registry) Set(fp entry) {
-	fp = unwrapEntry(fp)
+	validateEntry(fp)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.failpoints[fp.id()] = fp
