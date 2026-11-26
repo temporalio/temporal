@@ -7,9 +7,12 @@ type Action int32
 
 const (
 	ActionUnspecified Action = iota
+	// ActionOff disables the failpoint so executions do not fire.
 	ActionOff
+	// ActionReturn fires and returns a configured value of type T (typically an error).
+	// Call sites retrieve it with Execute or CheckError.
 	ActionReturn
-	// ActionOn activates a boolean switch failpoint (e.g. "skip sync match" or "use smaller batch")
+	// ActionOn activates a boolean switch failpoint (e.g. "skip cache" or "use smaller batch")
 	// without returning a specific value or error. Call sites check it with ExecuteSwitch.
 	ActionOn
 )
