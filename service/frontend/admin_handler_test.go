@@ -1677,7 +1677,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			TargetCluster:  "test-target-cluster",
 		},
 	}
-	defaultWorkflowExecution := workflowservice.DescribeWorkflowExecutionResponse{
+	defaultWorkflowExecution := &workflowservice.DescribeWorkflowExecutionResponse{
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
@@ -1686,15 +1686,15 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 		name                  string
 		err                   error
 		progressQueryResponse dlq.ProgressQueryResponse
-		workflowExecution     workflowservice.DescribeWorkflowExecutionResponse
-		expectedResponse      adminservice.DescribeDLQJobResponse
+		workflowExecution     *workflowservice.DescribeWorkflowExecutionResponse
+		expectedResponse      *adminservice.DescribeDLQJobResponse
 	}{
 		{
 			name:                  "MergeRunning",
 			err:                   nil,
 			progressQueryResponse: defaultMergeQueryResponse,
 			workflowExecution:     defaultWorkflowExecution,
-			expectedResponse: adminservice.DescribeDLQJobResponse{
+			expectedResponse: &adminservice.DescribeDLQJobResponse{
 				DlqKey: &commonspb.HistoryDLQKey{
 					TaskCategory:  1,
 					SourceCluster: "test-source-cluster",
@@ -1710,12 +1710,12 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			name:                  "MergeFinished",
 			err:                   nil,
 			progressQueryResponse: defaultMergeQueryResponse,
-			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+			workflowExecution: &workflowservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				},
 			},
-			expectedResponse: adminservice.DescribeDLQJobResponse{
+			expectedResponse: &adminservice.DescribeDLQJobResponse{
 				DlqKey: &commonspb.HistoryDLQKey{
 					TaskCategory:  1,
 					SourceCluster: "test-source-cluster",
@@ -1731,12 +1731,12 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			name:                  "MergeFailed",
 			err:                   nil,
 			progressQueryResponse: defaultMergeQueryResponse,
-			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+			workflowExecution: &workflowservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 				},
 			},
-			expectedResponse: adminservice.DescribeDLQJobResponse{
+			expectedResponse: &adminservice.DescribeDLQJobResponse{
 				DlqKey: &commonspb.HistoryDLQKey{
 					TaskCategory:  1,
 					SourceCluster: "test-source-cluster",
@@ -1753,7 +1753,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			err:                   nil,
 			progressQueryResponse: defaultPurgeQueryResponse,
 			workflowExecution:     defaultWorkflowExecution,
-			expectedResponse: adminservice.DescribeDLQJobResponse{
+			expectedResponse: &adminservice.DescribeDLQJobResponse{
 				DlqKey: &commonspb.HistoryDLQKey{
 					TaskCategory:  1,
 					SourceCluster: "test-source-cluster",
@@ -1792,7 +1792,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			if tc.err != nil {
 				describeExpectation.Return(nil, tc.err)
 			} else {
-				describeExpectation.Return(&tc.workflowExecution, nil)
+				describeExpectation.Return(tc.workflowExecution, nil)
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{
@@ -1804,7 +1804,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			}
 			s.NoError(err)
 			s.NotNil(response)
-			s.EqualValues(tc.expectedResponse, *response)
+			s.ProtoEqual(tc.expectedResponse, response)
 		})
 	}
 }
@@ -1821,7 +1821,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 		name              string
 		terminateErr      error
 		describeErr       error
-		workflowExecution workflowservice.DescribeWorkflowExecutionResponse
+		workflowExecution *workflowservice.DescribeWorkflowExecutionResponse
 		terminateCalls    int
 		expectedCancelled bool
 	}{
@@ -1829,7 +1829,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 			name:         "SuccessForRunningWorkflow",
 			terminateErr: nil,
 			describeErr:  nil,
-			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+			workflowExecution: &workflowservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
@@ -1841,7 +1841,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 			name:         "SuccessForCompletedWorkflow",
 			terminateErr: nil,
 			describeErr:  nil,
-			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+			workflowExecution: &workflowservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				},
@@ -1853,7 +1853,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 			name:         "TerminateWorkflowFailed",
 			terminateErr: serviceerror.NewNotFound("example sdk terminate workflow failure"),
 			describeErr:  nil,
-			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+			workflowExecution: &workflowservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
@@ -1865,7 +1865,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 			name:         "DescribeWorkflowFailed",
 			terminateErr: nil,
 			describeErr:  serviceerror.NewNotFound("example sdk describe workflow failure"),
-			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+			workflowExecution: &workflowservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
@@ -1898,7 +1898,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 			if tc.describeErr != nil {
 				describeExpectation.Return(nil, tc.describeErr)
 			} else {
-				describeExpectation.Return(&tc.workflowExecution, nil)
+				describeExpectation.Return(tc.workflowExecution, nil)
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{
